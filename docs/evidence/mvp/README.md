@@ -2,6 +2,12 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 Escape cancellation and menu Settings repair
+
+Two owner-reported regressions were reproduced in the routing structure. The recording indicator advertised Escape cancellation, and `DefaultShortcut.cancelDictation` existed, but `AppModel` never registered it. SuperMac now registers bare Escape through the sole global shortcut coordinator only during Recording and Transcribing, routes it to `DictationService.cancel()`, and unregisters it before insertion, on idle/failure, and when Dictation is disabled. Deterministic coverage pins those phase boundaries, and a real Carbon registration test confirms macOS accepts the temporary unmodified Escape binding. Physical microphone cancellation remains owner acceptance.
+
+The status item's Settings action previously posted a notification consumed by a listener inside the Settings window. Closing that window removed the listener, leaving the menu action inert. The status controller now retains a SwiftUI `openWindow` route configured while the initial scene is alive; the status menu's actual `NSMenuItem`, Dock reopen delegate, and Key Bumps menu panel use that persistent route. A regression invokes the real menu item and proves it reaches the retained opener. Closing the signed Debug window and reopening through the application route recreated Home; direct physical selection of the crowded status item remains owner acceptance. The complete deterministic suite passed 100/100, Debug and Release builds passed, and the Release bundle passed strict signing verification.
+
 ## 2026-09-12 Dictation and Clipboard History separation
 
 Source tracing confirmed that completed Dictation uses the system pasteboard as temporary transport before sending Command-V, which previously allowed the Clipboard monitor to ingest the transcript into its separate history. Clipboard History now suppresses the exact pasteboard change produced by automatic Dictation insertion and by Paste from the Dictation tab. The suppression is one-change scoped: an ordinary later copy of identical text is captured normally, and the explicit Copy action remains ordinary clipboard activity. A named-pasteboard regression proves both the exclusion and subsequent capture without touching the user's clipboard.

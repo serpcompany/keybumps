@@ -45,6 +45,34 @@ final class SuperMacFeatureTests: XCTestCase {
         )
     }
 
+    func testDictationEscapeIsCapturedOnlyWhileCancellationCanStillPreventInsertion() {
+        XCTAssertFalse(DictationEscapeRegistration.shouldRegister(for: .idle))
+        XCTAssertTrue(DictationEscapeRegistration.shouldRegister(for: .recording))
+        XCTAssertTrue(DictationEscapeRegistration.shouldRegister(for: .transcribing))
+        XCTAssertFalse(DictationEscapeRegistration.shouldRegister(for: .inserting))
+        XCTAssertFalse(DictationEscapeRegistration.shouldRegister(for: .failed("Example")))
+    }
+
+    func testUnmodifiedEscapeCanBeRegisteredAsATemporaryGlobalShortcut() {
+        let coordinator = GlobalShortcutCoordinator()
+        let owner = "test.dictation.escape"
+        defer { coordinator.unregister(owner: owner) }
+
+        XCTAssertTrue(
+            coordinator.register(owner: owner, binding: DefaultShortcut.cancelDictation) {}
+        )
+    }
+
+    func testStatusItemSettingsUsesItsPersistentlyConfiguredWindowOpener() {
+        var openCount = 0
+        let controller = NativeStatusItemController()
+        controller.configureOpenMainWindow { openCount += 1 }
+
+        controller.makeMenu().performActionForItem(at: 0)
+
+        XCTAssertEqual(openCount, 1)
+    }
+
     func testWindowShortcutCustomizationPersistsAndMovesDuplicateBinding() {
         let suite = "SuperMacWindowShortcuts-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

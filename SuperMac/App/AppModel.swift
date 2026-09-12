@@ -21,6 +21,14 @@ enum DictationShortcutRouting {
     }
 }
 
+enum DictationEscapeRegistration {
+    static let ownerID = "dictation.cancel"
+
+    static func shouldRegister(for phase: DictationPhase) -> Bool {
+        phase == .recording || phase == .transcribing
+    }
+}
+
 @MainActor @Observable
 final class AppModel {
     let releaseLane = ReleaseLane.current
@@ -79,6 +87,7 @@ final class AppModel {
         dictation.onPhaseChange = { [weak self] phase in
             guard let self else { return }
             self.dictationIndicator.update(phase)
+            self.updateDictationEscapeRegistration(for: phase)
         }
         refreshDetectorState()
     }
@@ -138,6 +147,19 @@ final class AppModel {
             }
         case .toggleDictation:
             dictation.toggle()
+        }
+    }
+
+    private func updateDictationEscapeRegistration(for phase: DictationPhase) {
+        guard DictationEscapeRegistration.shouldRegister(for: phase) else {
+            shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
+            return
+        }
+        shortcuts.register(
+            owner: DictationEscapeRegistration.ownerID,
+            binding: DefaultShortcut.cancelDictation
+        ) { [weak self] in
+            self?.dictation.cancel()
         }
     }
 
@@ -271,6 +293,7 @@ final class AppModel {
             clipboard.stop()
         case .dictation:
             dictation.cancel()
+            shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
         case .windowManagement:
             windows.stop()
         case .shortcutCoaching:

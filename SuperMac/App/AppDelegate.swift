@@ -5,6 +5,7 @@ extension Notification.Name {
     static let openMainWindow = Notification.Name("SuperMac.openMainWindow")
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
@@ -12,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            NotificationCenter.default.post(name: .openMainWindow, object: nil)
+            NativeStatusItemController.shared.openSettings()
         }
         return true
     }

@@ -11,12 +11,11 @@ struct SuperMacApp: App {
                 .environment(model)
                 .task {
                     model.start()
-                    NativeStatusItemController.shared.install()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     model.refreshPermissions()
                 }
-                .modifier(OpenMainWindowListener())
+                .modifier(MainWindowRoutingModifier())
         }
         .defaultSize(width: 920, height: 640)
         .commands {
@@ -29,14 +28,23 @@ struct SuperMacApp: App {
     }
 }
 
-private struct OpenMainWindowListener: ViewModifier {
+private struct MainWindowRoutingModifier: ViewModifier {
     @Environment(\.openWindow) private var openWindow
 
     func body(content: Content) -> some View {
-        content.onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
-            openWindow(id: "main")
-            NSApplication.shared.activate(ignoringOtherApps: true)
-        }
+        content
+            .onAppear {
+                NativeStatusItemController.shared.configureOpenMainWindow(openMainWindow)
+                NativeStatusItemController.shared.install()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
+                openMainWindow()
+            }
+    }
+
+    private func openMainWindow() {
+        openWindow(id: "main")
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
 

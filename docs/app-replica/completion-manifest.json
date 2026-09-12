@@ -64,6 +64,19 @@
       }
     },
     {
+      "id": "dictation.escape.global-cancellation",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "inferred",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/product/mvp-prd.md#3-dictation"],
+        "candidate": ["SuperMac/App/AppModel.swift", "SuperMac/Infrastructure/GlobalShortcutCoordinator.swift", "SuperMac/Dictation/DictationService.swift"],
+        "comparison": [],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-escape-cancellation-and-menu-settings-repair"]
+      }
+    },
+    {
       "id": "dictation.archive.folder-per-recording",
       "kind": "behavior",
       "in_scope": true,
@@ -243,6 +256,19 @@
         "candidate": ["SuperMac/Infrastructure/SystemServices.swift", "SuperMac/Views/SettingsRootView.swift"],
         "comparison": [],
         "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+      }
+    },
+    {
+      "id": "shell.status-settings-reopens-window",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "inferred",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/product/user-journeys.md#uj-11--dock-menu-bar-conflicts-and-launch-at-login"],
+        "candidate": ["SuperMac/App/NativeStatusItemController.swift", "SuperMac/App/SuperMacApp.swift", "SuperMac/App/AppDelegate.swift"],
+        "comparison": [],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-escape-cancellation-and-menu-settings-repair"]
       }
     }
   ]

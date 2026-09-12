@@ -20,12 +20,12 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 | UJ-03 | Home readiness and recovery | Runtime verified for truthful Ready/Setup Needed states and working navigation/open actions. | Recheck after all permissions are granted. |
 | UJ-04 | Quick Search | Runtime verified for opening, focus, a real installed-app result, launch, and Escape dismissal; palette state is automated. | Physical `Command-Space`, file/folder open, Command-Return reveal, outside-click dismissal, and focus return need owner acceptance. |
 | UJ-05 | Clipboard History | Signed runtime panel opening and bounded local-store behavior are verified; retention, duplicate collapse, and persistence are automated. | Private-content selection/paste, deletion, clearing, restart, and disabled monitoring need owner acceptance. |
-| UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, and recovery state have automated coverage. | English/Japanese speech, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
+| UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, temporary global Escape registration, and recovery state have automated coverage. | Physical Escape during English/Japanese recording, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
 | UJ-07 | Window Management | Exact selected shortcut map, customization, persistence, representative geometry, drag guards, and restore behavior are automated; shortcut recording UI has signed-runtime evidence. | Every assigned shortcut, repeated sizing, multi-display movement, and every drag-to-snap/unsnap region need owner acceptance with Accessibility enabled. |
 | UJ-08 | Key Bumps | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
 | UJ-09 | Shared Command Palette | Runtime verified for the Search surface and Escape; Search/Clipboard/Dictation tab order and reset behavior are automated. | Physical global routing and privacy-safe checks of Clipboard/Dictation selection and paste remain. |
 | UJ-10 | Capability controls and settings | Enablement persistence, shortcut release, teardown, and major settings routes are automated or runtime inspected. | Owner should confirm the combined app remains understandable during normal daily use. |
-| UJ-11 | Dock, menu bar, conflicts, and launch at login | Dock/sidebar shell and status-item contract are automated or runtime verified; conflict detection is implemented. | Login-session relaunch, crowded-menu-bar visibility, and quitting each reference app from onboarding need owner acceptance. |
+| UJ-11 | Dock, menu bar, conflicts, and launch at login | Dock/sidebar shell and status-item contract are automated or runtime verified; the real Settings menu item routes through a persistent window opener; conflict detection is implemented. | Physical status-item selection, login-session relaunch, crowded-menu-bar visibility, and quitting each reference app from onboarding need owner acceptance. |
 | UJ-12 | Updates, licensing, and distribution | The local preview truthfully reports that updates are not configured and contains no fake activation. | Production licensing, update feed, notarization, packaging, installed artifact, and distribution are deferred. |
 
 ## UJ-01 — First launch and onboarding
@@ -93,7 +93,7 @@ Clipboard content stays local. Automatic fresh-Dictation insertion and Paste fro
 2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default).
 3. A visible Recording indicator appears while audio is captured.
 4. Recording automatically stops at the selected duration limit—five minutes by default—or the user presses the configured Dictation shortcut again to stop sooner.
-5. SuperMac transcribes the completed local WAV and inserts the result at the original cursor; pressing Escape cancels without insertion.
+5. While Recording or Transcribing, press Escape from any app to cancel without insertion. Once insertion begins, SuperMac releases Escape so it does not consume an ordinary key unnecessarily.
 6. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted. A failed transcription retains its audio with an explicit failure state.
 7. If insertion fails, recover the last transcript from Dictation settings.
 8. Open Dictation History—or the Command Palette's Dictation tab—to search transcript cards, click anywhere in a card's padded header to expand it, play/pause the original recording, paste or copy text, translate through the on-device target-language picker, play/stop the translated text with an installed target-language voice, reveal the recording folder, or delete recordings. Clear History requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged; translated speech is not saved as another recording.
@@ -148,7 +148,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 
 1. The app is visible in the Dock and application switcher by default.
 2. The menu-bar item contains Settings, the disabled local-preview update item, and Quit SuperMac.
-3. Closing Settings leaves the companion running; clicking the Dock icon or Settings reopens the window.
+3. Closing Settings leaves the companion running; clicking the Dock icon or the menu-bar Settings item recreates, raises, and focuses the window.
 4. Launch at Login can be enabled or disabled from General, with macOS approval status shown truthfully.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.
 

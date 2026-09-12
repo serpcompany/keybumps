@@ -108,6 +108,8 @@ Keep the menu deliberately minimal:
 - Check for Updates…
 - Quit SuperMac
 
+Settings must reopen and raise the main window even after the user has closed it; the menu action cannot depend on a listener owned only by that closed window.
+
 Do not duplicate feature commands in this menu for MVP.
 
 ### First launch
@@ -180,7 +182,7 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - First press starts recording.
 - Second press stops recording, transcribes locally, and inserts at the current text cursor.
 - The temporary pasteboard write used for automatic insertion is transport only and must not create a duplicate Clipboard History entry.
-- Escape cancels without inserting text.
+- Escape is registered as a temporary global cancellation key while Recording or Transcribing and cancels without inserting text. It is released before insertion and whenever Dictation becomes idle or disabled.
 - Show a small non-disruptive floating indicator for Recording and Transcribing.
 - Hide the indicator after successful insertion or cancellation.
 - Preserve the destination's focus as reliably as macOS permits.

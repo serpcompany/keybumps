@@ -60,7 +60,7 @@ struct MenuInboxView: View {
             }
             Spacer()
             Button("Open Settings…") {
-                NotificationCenter.default.post(name: .openMainWindow, object: nil)
+                NativeStatusItemController.shared.openSettings()
             }
             .keyboardShortcut(",", modifiers: .command)
         }
