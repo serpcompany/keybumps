@@ -2,6 +2,14 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 per-recording dictation archive
+
+Read-only black-box inspection of Superwhisper 2.18.3 confirmed 9,939 timestamp recording directories, each containing `meta.json` and `output.wav`. Only metadata key/type structure and WAV technical properties were inspected; private transcript values were not copied into repository evidence.
+
+SuperMac now independently stores each completed recording under `~/Documents/SuperMac/recordings/<timestamp>/` with original minimal metadata and a playable WAV. Storage tests proved paired file creation, newest-first reload without a 25-entry cap, collision-safe timestamp naming, exact-directory deletion, and the absence of a monolithic `dictation-history.json` index.
+
+The exact signed Debug app produced a real timestamp directory containing both files. `afinfo` verified the candidate audio as a playable mono WAVE file; its current native capture format is 44.1 kHz Float32, a deliberate implementation difference from the inspected reference's 16 kHz Int16 file. The dedicated History screen displayed the saved transcript card, duration, language, audio progress, copy, Finder reveal, and delete controls. Runtime search reached its no-results state, local play changed to Pause with advancing progress, natural completion returned to Play, relaunch reloaded the entry, and Reveal opened the exact timestamp directory in Finder. The full deterministic suite passed 89/89 after implementation. Full owner acceptance and unrelated completion-manifest rows remain unresolved.
+
 ## 2026-09-12 SuperMac identity reset
 
 The owner renamed the pre-release product to **SuperMac** and explicitly requested a fresh identity. The current signed artifact is `.derived/Build/Products/Debug/SuperMac.app` with bundle identifier `com.serp.supermac`. The repository, Xcode project, schemes, targets, module, executable, source/test roots, assets, and current documentation were subsequently normalized to the SuperMac name.
@@ -60,8 +68,8 @@ The owner requested one Alfred/Raycast-inspired launcher surface with three tabs
 - Command-Space routes to Search in the application model; Shift-Command-Space routes to Clipboard. The Dictation settings screen opens the third tab.
 - Search retained real local Spotlight-backed results. In signed runtime, typing `Safari` produced the installed Safari application result and Return opened Safari.
 - Clipboard displayed the existing ten-item local store inside the unified palette. Its live content contained private user text, so no Clipboard screenshot was retained.
-- `DictationHistoryService` persists the latest 25 completed transcripts with language and timestamp. Dictation records a transcript before attempting insertion, so failed pastes remain visible in history and recovery.
-- The final deterministic suite passed 76/76 tests, including tab order/default state and bounded Dictation History persistence.
+- This paragraph records the earlier monolithic transcript-only implementation. The later per-recording archive evidence below supersedes its persistence design.
+- The earlier deterministic suite passed 76/76 tests, including tab order/default state and the then-current bounded Dictation History persistence.
 - `scripts/build-and-run.sh` was corrected to launch the actual `SuperMac.app` product path.
 
 Privacy-safe artifacts:

@@ -25,8 +25,8 @@ The Option-Space session that records speech, transcribes locally, and inserts t
 _Avoid_: Voice guide, assistant
 
 **Dictation History**:
-The bounded local record of completed Dictation transcripts shown in the Command Palette.
-_Avoid_: Cloud transcript, audio history
+The local per-recording archive of completed Dictation transcripts and playable audio, shown in its dedicated History screen and exposed for transcript reuse in the Command Palette.
+_Avoid_: Cloud transcript, monolithic history file
 
 **Window Management**:
 Rectangle-derived window movement and sizing under the owner's selected shortcuts.

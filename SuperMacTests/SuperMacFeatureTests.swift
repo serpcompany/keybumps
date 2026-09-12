@@ -313,20 +313,83 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 10)
     }
 
-    func testDictationHistoryPersistsAndKeepsTheNewestTwentyFiveSessions() {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-history-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: url) }
-        let service = DictationHistoryService(storageURL: url)
+    func testDictationHistoryStoresOneMetadataAndAudioPairPerRecording() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-recordings-\(UUID().uuidString)")
+        let sourceAudio = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-source-\(UUID().uuidString).wav")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: sourceAudio)
+        }
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: sourceAudio)
+        let service = DictationHistoryService(recordingsDirectoryURL: root)
+        let capturedAt = Date(timeIntervalSince1970: 1_763_015_623)
+
+        let entry = try service.record(
+            "A saved dictation",
+            language: "en-US",
+            capturedAt: capturedAt,
+            duration: 1.5,
+            audioSourceURL: sourceAudio
+        )
+
+        XCTAssertEqual(entry.id, "1763015623")
+        XCTAssertEqual(entry.text, "A saved dictation")
+        XCTAssertEqual(entry.language, "en-US")
+        XCTAssertEqual(entry.duration, 1.5)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: entry.metadataURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(entry.audioURL).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("dictation-history.json").path))
+
+        let secondEntry = try service.record(
+            "Another dictation from the same second",
+            language: "ja-JP",
+            capturedAt: capturedAt,
+            duration: 2,
+            audioSourceURL: sourceAudio
+        )
+        XCTAssertEqual(secondEntry.id, "1763015623-2")
+
+        let reloaded = DictationHistoryService(recordingsDirectoryURL: root)
+        XCTAssertEqual(reloaded.entries.map(\.id), ["1763015623-2", "1763015623"])
+
+        reloaded.delete(try XCTUnwrap(reloaded.entries.first { $0.id == entry.id }))
+        XCTAssertEqual(reloaded.entries.map(\.id), ["1763015623-2"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: entry.directoryURL.path))
+        reloaded.clear()
+        XCTAssertTrue(reloaded.entries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: secondEntry.directoryURL.path))
+    }
+
+    func testDictationHistoryKeepsAllRecordingDirectoriesNewestFirst() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-recordings-\(UUID().uuidString)")
+        let sourceAudio = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-source-\(UUID().uuidString).wav")
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: sourceAudio)
+        }
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: sourceAudio)
+        let service = DictationHistoryService(recordingsDirectoryURL: root)
 
         for number in 0..<27 {
-            service.record("dictation \(number)", language: number.isMultiple(of: 2) ? "en-US" : "ja-JP")
+            try service.record(
+                "dictation \(number)",
+                language: number.isMultiple(of: 2) ? "en-US" : "ja-JP",
+                capturedAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(number)),
+                duration: Double(number),
+                audioSourceURL: sourceAudio
+            )
         }
 
-        XCTAssertEqual(service.entries.count, 25)
+        XCTAssertEqual(service.entries.count, 27)
         XCTAssertEqual(service.entries.first?.text, "dictation 26")
-        XCTAssertEqual(service.entries.first?.language, "en-US")
-        XCTAssertFalse(service.entries.contains { $0.text == "dictation 0" })
-        XCTAssertEqual(DictationHistoryService(storageURL: url).entries, service.entries)
+        XCTAssertEqual(service.entries.last?.text, "dictation 0")
+    }
+
+    func testDictationHistoryCopiesTranscriptWithoutUsingARealClipboard() {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("SuperMacDictationCopy-\(UUID().uuidString)"))
+
+        XCTAssertTrue(DictationHistoryClipboard.copy("Copied dictation", to: pasteboard))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Copied dictation")
     }
 
     func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {

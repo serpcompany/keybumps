@@ -4,10 +4,10 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case home = "Home", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
+    case home = "Home", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation", dictationHistory = "Dictation History"
     case windows = "Window Management", coaching = "Shortcut Coaching", permissions = "Permissions", general = "General", about = "About"
     var id: String { rawValue }
-    var icon: String { switch self { case .home: "house"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
+    var icon: String { switch self { case .home: "house"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .dictationHistory: "clock.arrow.circlepath"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -74,6 +74,7 @@ struct SettingsRootView: View {
                 case .search: QuickSearchSettingsView()
                 case .clipboard: ClipboardSettingsView()
                 case .dictation: DictationSettingsView()
+                case .dictationHistory: DictationHistoryView()
                 case .windows: WindowSettingsView()
                 case .coaching: ShortcutCoachingSettingsView()
                 case .permissions: PermissionsView()
@@ -97,6 +98,7 @@ struct SettingsRootView: View {
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
+        .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in navigation.navigate(to: .dictationHistory) }
     }
 
     private var selectionBinding: Binding<SettingsSection?> {
@@ -271,7 +273,7 @@ private struct DictationSettingsView: View {
             Section("Status") {
                 LabeledContent("Dictation", value: model.dictation.phase.label)
                 LabeledContent("Saved dictations", value: "\(model.dictationHistory.entries.count)")
-                Button("Open Dictation History") { model.showDictationHistory() }
+                Button("Open Dictation History") { NotificationCenter.default.post(name: .openDictationHistory, object: nil) }
                 if let error = model.dictation.lastError { Text(error).foregroundStyle(.orange) }
                 if model.dictation.recoveredTranscript != nil {
                     Text("The latest transcript is kept locally so it can be recovered if insertion fails.")
@@ -622,6 +624,7 @@ private struct PermissionRow: View {
 
 extension Notification.Name {
     static let openPermissions = Notification.Name("SuperMac.openPermissions")
+    static let openDictationHistory = Notification.Name("SuperMac.openDictationHistory")
 }
 
 @MainActor @Observable

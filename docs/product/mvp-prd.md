@@ -186,7 +186,9 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Automatic per-recording language detection is deferred.
 - Dictation remains local and useful offline after any required model installation.
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
-- Persist a bounded local Dictation History and expose it as the third Command Palette tab.
+- Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
+- Provide a searchable Dictation History screen with real local playback, duration/progress, copy, reveal in Finder, individual delete, and clear-all controls.
+- Keep transcript reuse available from the third Command Palette tab.
 
 Apple's on-device speech implementation in the SERPy donor is the starting candidate because the owner found it acceptable. Another local model is allowed only when measured accuracy, latency, offline behavior, cancellation, and resource cost are better. Model branding is not a requirement.
 

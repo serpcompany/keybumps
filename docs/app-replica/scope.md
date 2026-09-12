@@ -39,6 +39,22 @@ Observed configuration:
 
 Automatic per-recording language detection, rewriting modes, cloud services, file transcription, system-audio recording, speaker identification, vocabulary tooling, statistics, and the remainder of Superwhisper are outside this reference slice unless later selected explicitly.
 
+### Per-recording history and storage slice
+
+On 2026-09-12, the owner added Superwhisper's local per-recording archive and History presentation to the selected slice. Read-only inspection used Superwhisper 2.18.3 at `/Applications/superwhisper.app`; private transcript and prompt values were not copied or displayed.
+
+Observed storage behavior:
+
+- The reference root is `~/Documents/superwhisper/recordings`.
+- Each completed recording has a Unix-timestamp directory.
+- Every observed recording directory contains `meta.json` and `output.wav`; 9,939 matching pairs were present.
+- The inspected WAV was mono, 16 kHz, signed 16-bit PCM. SuperMac guarantees a standard playable local WAV but does not claim identical encoding until differential audio-format verification passes.
+- Reference metadata includes timing, duration, selected language/model/mode, transcript/result fields, segments, device, and optional processing context. SuperMac stores only fields it actually produces and never fabricates reference model, mode, prompt, speaker, translation, or system-audio metadata.
+
+SuperMac's original product path is `~/Documents/SuperMac/recordings/<unix-timestamp>/`, with one `meta.json` and one `output.wav` for every successfully transcribed recording. Metadata contains the stable recording ID, capture date, duration, selected language, transcript, audio filename, and SuperMac version. Existing reference files remain untouched and are never imported automatically.
+
+The selected History surface uses original SuperMac styling while adopting the observed hierarchy: searchable transcript cards, a compact playable audio strip with duration, copy, reveal/info, and delete controls. Search, play/pause, copy, reveal, individual deletion, clear-all, reload persistence, and missing-audio handling must be real. Superwhisper branding, exact artwork, waveform data, segmented/reprocessing modes, analytics, cloud/model details, and pixel-identical styling remain excluded.
+
 ## Rectangle configuration reference
 
 The installed Rectangle app, rather than the Window Manager prototype, is the source for the owner's starting Window Management configuration.

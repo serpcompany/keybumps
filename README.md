@@ -2,6 +2,8 @@
 
 SuperMac is a native macOS utility combining local Quick Search, bounded Clipboard History, on-device Dictation, Window Management, and Shortcut Coaching in one app. Search, Clipboard History, and Dictation History share one three-tab keyboard-first Command Palette.
 
+Each completed dictation is stored locally under `~/Documents/SuperMac/recordings/<timestamp>/` with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
+
 ## Build and run
 
 Requirements: Apple Silicon Mac, macOS 14.2+, Xcode, and XcodeGen.

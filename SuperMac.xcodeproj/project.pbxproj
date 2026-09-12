@@ -15,6 +15,7 @@
 		187E6DE7C76E9035BB57C6C2 /* PresentationWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA7CB636F8938DE2ADC7AE2 /* PresentationWindowController.swift */; };
 		1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B06DF9E1F28BCAC34392C78B /* SharedViews.swift */; };
 		2F2DACC19C833EF41ADBD702 /* ChromeActionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C166318C53B0BFACE88EC23 /* ChromeActionAdapter.swift */; };
+		3CC2F1521D5D9DA5985DF178 /* DictationAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3890AA7A2ED495DF7406F94 /* DictationAudioPlayer.swift */; };
 		4485C0E7B6169A3006A83E35 /* AppPresenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1263F60CBD0F2902CB20582 /* AppPresenceController.swift */; };
 		48338CA9E74F84BA913AB753 /* QuickSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */; };
 		5300BBA1A5D216BB896E83C5 /* MenuInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E3FF4B2C9E74E32242A4AB /* MenuInboxView.swift */; };
@@ -50,6 +51,7 @@
 		E09625837E0C77B15DEEE22D /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E05E454796B21B5BE7C33D8 /* SettingsRootView.swift */; };
 		E29927A40173419DC2A94C2E /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF75D2E998EDF7DC502EE98 /* AccessibilitySnapshotter.swift */; };
 		E6DF6BFB45E567621DA64B0F /* SuperMacFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99DF39DEF1A3A5EBE5AA54BF /* SuperMacFeatureTests.swift */; };
+		EC2FFB34F79A71D08629C95F /* DictationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706B4B469058348551AFE583 /* DictationHistoryView.swift */; };
 		F78B977DFCD21A997E90BED0 /* ActionCorrelator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A39FD515AB2244E626687C8 /* ActionCorrelator.swift */; };
 		FB62B9325E7785FDEEB501B4 /* Capability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842BC96677905E5FD541225A /* Capability.swift */; };
 /* End PBXBuildFile section */
@@ -83,6 +85,7 @@
 		622B0F6D27EE05F4FCA662F4 /* ShortcutFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFormatter.swift; sourceTree = "<group>"; };
 		693B2BEFF4340566A2E73421 /* ShortcutCoachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCoachTests.swift; sourceTree = "<group>"; };
 		6B0462EFDE8CD0087CBCC711 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		706B4B469058348551AFE583 /* DictationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryView.swift; sourceTree = "<group>"; };
 		751041DE9F75C902026B8BB7 /* CoachingEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingEvent.swift; sourceTree = "<group>"; };
 		797FD303CEC7148DD772B296 /* DictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationService.swift; sourceTree = "<group>"; };
 		79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchService.swift; sourceTree = "<group>"; };
@@ -106,6 +109,7 @@
 		CCF75D2E998EDF7DC502EE98 /* AccessibilitySnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySnapshotter.swift; sourceTree = "<group>"; };
 		D121EE0800846D3507A1B184 /* PointerEventMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerEventMonitor.swift; sourceTree = "<group>"; };
 		D1263F60CBD0F2902CB20582 /* AppPresenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPresenceController.swift; sourceTree = "<group>"; };
+		D3890AA7A2ED495DF7406F94 /* DictationAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationAudioPlayer.swift; sourceTree = "<group>"; };
 		D6AB39FCFF8951FC4C3F93C7 /* StandardWindowControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWindowControlTests.swift; sourceTree = "<group>"; };
 		D7795FFAAF894657E10D9722 /* SuperMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuperMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E3AA941067E1BDE2DDDA9025 /* WindowAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAction.swift; sourceTree = "<group>"; };
@@ -157,6 +161,7 @@
 		8FF4081C3F22777FFFFAAF2E /* Dictation */ = {
 			isa = PBXGroup;
 			children = (
+				D3890AA7A2ED495DF7406F94 /* DictationAudioPlayer.swift */,
 				BFF7AF91CCE5203106F1AB54 /* DictationHistoryService.swift */,
 				B50956405C3010608E9006C7 /* DictationIndicatorController.swift */,
 				797FD303CEC7148DD772B296 /* DictationService.swift */,
@@ -188,6 +193,7 @@
 		A9B8CAD289507DB8B25DB9A8 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				706B4B469058348551AFE583 /* DictationHistoryView.swift */,
 				60E3FF4B2C9E74E32242A4AB /* MenuInboxView.swift */,
 				9E05E454796B21B5BE7C33D8 /* SettingsRootView.swift */,
 				B06DF9E1F28BCAC34392C78B /* SharedViews.swift */,
@@ -405,7 +411,9 @@
 				BBA68BFD1B6B9C15B5D2ED28 /* ClipboardHistoryService.swift in Sources */,
 				BD161316A7D761C8706A4943 /* CoachingEvent.swift in Sources */,
 				6BB2A830F7178C5B696A3038 /* CommandPaletteController.swift in Sources */,
+				3CC2F1521D5D9DA5985DF178 /* DictationAudioPlayer.swift in Sources */,
 				B40701549089FE74B959D48E /* DictationHistoryService.swift in Sources */,
+				EC2FFB34F79A71D08629C95F /* DictationHistoryView.swift in Sources */,
 				91CEDF357F8B72C9E3DE79EF /* DictationIndicatorController.swift in Sources */,
 				A98C3F743448B3F422780FAE /* DictationService.swift in Sources */,
 				88CC14F3049EF838ECAA0680 /* FinderTrashMonitor.swift in Sources */,

@@ -55,6 +55,9 @@ final class DictationService {
     private var receivedFinal = false
     private var inputTapInstalled = false
     private var destination: DictationInsertionTarget?
+    private var audioFile: AVAudioFile?
+    private var activeRecording: PendingDictationRecording?
+    private var recordingStartedAt: Date?
     private let recoveryURL: URL
     private let history: DictationHistoryService
 
@@ -123,7 +126,23 @@ final class DictationService {
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { fail("The microphone has no usable audio format."); return }
-        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in request.append(buffer) }
+        var preparedRecording: PendingDictationRecording?
+        do {
+            let recording = try history.prepareRecording()
+            preparedRecording = recording
+            let audioFile = try AVAudioFile(forWriting: recording.audioURL, settings: format.settings)
+            activeRecording = recording
+            recordingStartedAt = recording.capturedAt
+            self.audioFile = audioFile
+            input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
+                request.append(buffer)
+                try? audioFile.write(from: buffer)
+            }
+        } catch {
+            if let preparedRecording { history.discard(preparedRecording) }
+            fail("The local recording file could not be created.")
+            return
+        }
         inputTapInstalled = true
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in self?.receive(result: result, error: error) }
@@ -158,13 +177,23 @@ final class DictationService {
 
     private func stopAndInsert() async {
         setPhase(.transcribing)
+        let recording = activeRecording
+        let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         stopAudio()
         request?.endAudio()
         do {
             let transcript = try await waitForTranscript()
             try transcript.write(to: recoveryURL, atomically: true, encoding: .utf8)
             recoveredTranscript = transcript
-            history.record(transcript, language: selectedLanguage)
+            guard let recording else { throw CocoaError(.fileNoSuchFile) }
+            try history.completeRecording(
+                recording,
+                text: transcript,
+                language: selectedLanguage,
+                duration: duration
+            )
+            activeRecording = nil
+            recordingStartedAt = nil
             setPhase(.inserting)
             try await paste(transcript)
             cleanup()
@@ -233,12 +262,18 @@ final class DictationService {
             audioEngine.inputNode.removeTap(onBus: 0)
             inputTapInstalled = false
         }
+        audioFile = nil
     }
 
     private func cleanup() {
         stopAudio()
         task?.cancel(); task = nil
         request = nil
+        if let activeRecording {
+            history.discard(activeRecording)
+            self.activeRecording = nil
+        }
+        recordingStartedAt = nil
     }
 
     private func fail(_ message: String) { lastError = message; setPhase(.failed(message)) }

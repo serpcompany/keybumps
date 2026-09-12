@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "claim": "bounded-slice",
-  "scope_statement": "Make the SuperMac launcher more like Alfred or Raycast, with three tabs: Search by default, Clipboard History, and Dictation History.",
+  "scope_statement": "Implement the selected SuperMac command palette plus a Superwhisper-inspired local per-recording dictation archive with metadata, playable WAV audio, and searchable history cards.",
   "inventory_complete": true,
   "primary_workflow_passed": true,
   "installed_artifact_verified": false,
@@ -11,6 +11,45 @@
     "verifier": ""
   },
   "rows": [
+    {
+      "id": "dictation.archive.folder-per-recording",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
+        "candidate": ["SuperMac/Dictation/DictationHistoryService.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
+      }
+    },
+    {
+      "id": "dictation.archive.playable-audio",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
+        "candidate": ["SuperMac/Dictation/DictationService.swift", "SuperMac/Dictation/DictationAudioPlayer.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
+      }
+    },
+    {
+      "id": "dictation.history.searchable-audio-cards",
+      "kind": "both",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
+        "candidate": ["SuperMac/Views/SettingsRootView.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
+      }
+    },
     {
       "id": "palette.search.default",
       "kind": "both",

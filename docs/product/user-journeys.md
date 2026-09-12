@@ -20,7 +20,7 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 | UJ-03 | Home readiness and recovery | Runtime verified for truthful Ready/Setup Needed states and working navigation/open actions. | Recheck after all permissions are granted. |
 | UJ-04 | Quick Search | Runtime verified for opening, focus, a real installed-app result, launch, and Escape dismissal; palette state is automated. | Physical `Command-Space`, file/folder open, Command-Return reveal, outside-click dismissal, and focus return need owner acceptance. |
 | UJ-05 | Clipboard History | Signed runtime panel opening and bounded local-store behavior are verified; retention, duplicate collapse, and persistence are automated. | Private-content selection/paste, deletion, clearing, restart, and disabled monitoring need owner acceptance. |
-| UJ-06 | Dictation and Dictation History | Language availability, bounded history persistence, cancellation/teardown paths, and recovery state have automated coverage. | Microphone/Speech consent, physical `Option-Space`, English/Japanese speech, local transcription, insertion, offline operation, and failed-insertion recovery need owner acceptance. |
+| UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, and recovery state have automated coverage. | English/Japanese speech, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
 | UJ-07 | Window Management | Exact selected shortcut map, customization, persistence, representative geometry, drag guards, and restore behavior are automated; shortcut recording UI has signed-runtime evidence. | Every assigned shortcut, repeated sizing, multi-display movement, and every drag-to-snap/unsnap region need owner acceptance with Accessibility enabled. |
 | UJ-08 | Shortcut Coaching | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
 | UJ-09 | Shared Command Palette | Runtime verified for the Search surface and Escape; Search/Clipboard/Dictation tab order and reset behavior are automated. | Physical global routing and privacy-safe checks of Clipboard/Dictation selection and paste remain. |
@@ -93,9 +93,9 @@ Clipboard content stays local. Recent copied secrets remain until removed or dis
 2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default).
 3. A visible Recording indicator appears while audio is captured.
 4. Press the configured Dictation shortcut again to stop, transcribe locally, and insert at the original cursor; or press Escape to cancel without insertion.
-5. The transcript is recorded in bounded local Dictation History before insertion is attempted.
+5. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted.
 6. If insertion fails, recover the last transcript from Dictation settings.
-7. Open the Dictation tab to filter and reuse previous dictations.
+7. Open Dictation History to search transcript cards, play/pause audio, copy text, reveal the recording folder, or delete recordings. The Command Palette's Dictation tab remains available for quick transcript reuse.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 
