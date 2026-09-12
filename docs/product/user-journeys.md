@@ -82,7 +82,7 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Home/settings.
 3. The shared palette opens on Clipboard with the newest item first and at most ten items.
 4. Filter the local history, select an item, and paste it into the previously focused destination when safe.
-5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed.
+5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed. The confirmation appears over the palette; cancelling or confirming leaves the palette open and shows the resulting history state.
 6. Disable Clipboard History to stop monitoring and release its shortcut without silently erasing retained items.
 
 Clipboard content stays local. Automatic fresh-Dictation insertion and Paste from Dictation History do not create Clipboard History entries; explicitly copying text does. Recent copied secrets remain until removed or displaced, so committed screenshots and logs must not contain item text.

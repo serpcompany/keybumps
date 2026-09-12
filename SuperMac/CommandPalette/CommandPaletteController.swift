@@ -61,6 +61,12 @@ private final class CommandPalettePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+enum CommandPaletteDismissalPolicy {
+    static func shouldDismiss(isPresentingConfirmation: Bool) -> Bool {
+        !isPresentingConfirmation
+    }
+}
+
 @MainActor
 final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let search = QuickSearchModel()
@@ -72,6 +78,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
+    private var isPresentingConfirmation = false
 
     init(clipboard: ClipboardHistoryService, dictationHistory: DictationHistoryService) {
         self.clipboard = clipboard
@@ -107,6 +114,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     func dismiss() {
         panel?.orderOut(nil)
+        isPresentingConfirmation = false
         removeMonitors()
     }
 
@@ -117,7 +125,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        dismiss()
+        if CommandPaletteDismissalPolicy.shouldDismiss(
+            isPresentingConfirmation: isPresentingConfirmation
+        ) {
+            dismiss()
+        }
     }
 
     private func makePanel() {
@@ -146,6 +158,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 activateSearchResult: open,
                 revealSearchResult: reveal,
                 pasteText: paste,
+                confirmationPresentationChanged: { [weak self] isPresented in
+                    self?.isPresentingConfirmation = isPresented
+                },
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
@@ -227,7 +242,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             Task { @MainActor in self?.dismiss() }
         }
         localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
-            if event.window !== self?.panel { self?.dismiss() }
+            guard let self else { return event }
+            if event.window !== self.panel,
+               CommandPaletteDismissalPolicy.shouldDismiss(
+                   isPresentingConfirmation: self.isPresentingConfirmation
+               ) {
+                self.dismiss()
+            }
             return event
         }
     }
@@ -328,6 +349,7 @@ private struct CommandPaletteView: View {
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
     let pasteText: (String, Bool) -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
 
     @FocusState private var inputFocused: Bool
@@ -384,7 +406,8 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 choose: { pasteText($0, false) },
                 delete: clipboard.delete,
-                clear: clipboard.clear
+                clear: clipboard.clear,
+                confirmationPresentationChanged: confirmationPresentationChanged
             )
         case .dictation:
             DictationResultsView(
@@ -393,7 +416,8 @@ private struct CommandPaletteView: View {
                 select: { state.selection = $0 },
                 choose: { pasteText($0, true) },
                 delete: dictationHistory.delete,
-                clear: dictationHistory.clear
+                clear: dictationHistory.clear,
+                confirmationPresentationChanged: confirmationPresentationChanged
             )
         }
     }
@@ -556,6 +580,7 @@ private struct ClipboardResultsView: View {
     let choose: (String) -> Void
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
 
     var body: some View {
         HistoryResultsContainer(
@@ -567,6 +592,7 @@ private struct ClipboardResultsView: View {
             choose: { choose($0.text) },
             delete: delete,
             clear: clear,
+            confirmationPresentationChanged: confirmationPresentationChanged,
             subtitle: { Text($0.capturedAt, style: .relative) }
         )
     }
@@ -579,6 +605,7 @@ private struct DictationResultsView: View {
     let choose: (String) -> Void
     let delete: (DictationHistoryEntry) -> Void
     let clear: () -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
     @State private var audioPlayer = DictationAudioPlayer()
 
     var body: some View {
@@ -597,7 +624,8 @@ private struct DictationResultsView: View {
                             confirmationTitle: "Clear all dictation history?",
                             confirmationMessage: "This permanently removes every SuperMac recording directory, transcript, and audio file.",
                             destructiveActionTitle: "Clear All Recordings",
-                            disabled: entries.isEmpty
+                            disabled: entries.isEmpty,
+                            confirmationPresentationChanged: confirmationPresentationChanged
                         ) {
                             audioPlayer.stop()
                             clear()
@@ -658,6 +686,7 @@ private struct HistoryResultsContainer<Entry: Identifiable, Subtitle: View>: Vie
     let choose: (Entry) -> Void
     let delete: (Entry) -> Void
     let clear: () -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
     @ViewBuilder let subtitle: (Entry) -> Subtitle
 
     var body: some View {
@@ -677,6 +706,7 @@ private struct HistoryResultsContainer<Entry: Identifiable, Subtitle: View>: Vie
                             confirmationMessage: "This permanently removes all clipboard items saved by SuperMac.",
                             destructiveActionTitle: "Clear Clipboard History",
                             disabled: entries.isEmpty,
+                            confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
                     }

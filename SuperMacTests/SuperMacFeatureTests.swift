@@ -568,6 +568,15 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(state.selection, 0)
     }
 
+    func testCommandPaletteKeepsItsWindowOpenForHistoryConfirmationSheet() {
+        XCTAssertFalse(
+            CommandPaletteDismissalPolicy.shouldDismiss(isPresentingConfirmation: true)
+        )
+        XCTAssertTrue(
+            CommandPaletteDismissalPolicy.shouldDismiss(isPresentingConfirmation: false)
+        )
+    }
+
     func testSelectedRectangleShortcutProfileIsExactAndUnique() {
         let assigned = SuperMacWindowAction.allCases.compactMap { action in action.defaultShortcut.map { (action, $0) } }
         XCTAssertEqual(assigned.count, 29)

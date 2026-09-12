@@ -318,6 +318,7 @@ struct HistoryClearButton: View {
     let confirmationMessage: String
     let destructiveActionTitle: String
     let disabled: Bool
+    var confirmationPresentationChanged: (Bool) -> Void = { _ in }
     let clear: () -> Void
 
     @State private var showsConfirmation = false
@@ -329,6 +330,12 @@ struct HistoryClearButton: View {
         .buttonStyle(.bordered)
         .controlSize(.regular)
         .disabled(disabled)
+        .onChange(of: showsConfirmation) {
+            confirmationPresentationChanged(showsConfirmation)
+        }
+        .onDisappear {
+            if showsConfirmation { confirmationPresentationChanged(false) }
+        }
         .alert(confirmationTitle, isPresented: $showsConfirmation) {
             Button(destructiveActionTitle, role: .destructive, action: clear)
             Button("Cancel", role: .cancel) {}

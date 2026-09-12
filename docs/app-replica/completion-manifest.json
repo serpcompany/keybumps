@@ -155,6 +155,19 @@
       }
     },
     {
+      "id": "palette.history-confirmation-retains-window",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/product/mvp-prd.md#2-clipboard-history"],
+        "candidate": ["SuperMac/CommandPalette/CommandPaletteController.swift", "SuperMac/Views/DictationHistoryView.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-history-interaction-repair"]
+      }
+    },
+    {
       "id": "palette.dictation.tab",
       "kind": "both",
       "in_scope": true,

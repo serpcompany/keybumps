@@ -165,7 +165,7 @@ User outcome: recover and reuse the most recent copied text through the Clipboar
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
 - Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Paste from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
-- Provide deletion and a native Clear History control that requires destructive confirmation before removing all items.
+- Provide deletion and a native Clear History control that requires destructive confirmation before removing all items. Opening, cancelling, or confirming that alert must not dismiss the Command Palette.
 - Disabling the capability stops monitoring but does not silently erase retained items.
 - No images, files, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
 
