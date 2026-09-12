@@ -2,6 +2,6 @@
 set -euo pipefail
 cd "${0:A:h}/.."
 xcodegen generate
-xcodebuild -project SERPCompanion.xcodeproj -scheme SERPCompanion -configuration Debug -derivedDataPath .derived build
-killall SERPCompanion 2>/dev/null || true
+xcodebuild -project SuperMac.xcodeproj -scheme SuperMac -configuration Debug -derivedDataPath .derived build
+killall SuperMac 2>/dev/null || true
 open -n '.derived/Build/Products/Debug/SuperMac.app'

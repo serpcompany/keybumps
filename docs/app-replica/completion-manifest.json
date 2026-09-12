@@ -58,7 +58,7 @@
       "exercised": false,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#alfred-reference-slice"],
-        "candidate": ["SERPCompanion/App/AppModel.swift"],
+        "candidate": ["SuperMac/App/AppModel.swift"],
         "comparison": [],
         "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
       }
@@ -84,7 +84,7 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/product/mvp-prd.md#shared-command-palette"],
-        "candidate": ["SERPCompanionTests/CompanionFeatureTests.swift"],
+        "candidate": ["SuperMacTests/SuperMacFeatureTests.swift"],
         "comparison": [],
         "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
       }
@@ -123,9 +123,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/evidence/heyclicky-1.0.48/reference/permission-drag-helper.png"],
-        "candidate": ["SERPCompanion/Permissions/PermissionDragAssistantController.swift"],
+        "candidate": ["SuperMac/Permissions/PermissionDragAssistantController.swift"],
         "comparison": [],
-        "behavior": ["SERPCompanionTests/CompanionFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
       }
     },
     {
@@ -136,9 +136,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#heyclicky-permission-helper-slice"],
-        "candidate": ["SERPCompanion/Infrastructure/SystemServices.swift", "SERPCompanion/Views/SettingsRootView.swift"],
+        "candidate": ["SuperMac/Infrastructure/SystemServices.swift", "SuperMac/Views/SettingsRootView.swift"],
         "comparison": [],
-        "behavior": ["SERPCompanionTests/CompanionFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
       }
     }
   ]

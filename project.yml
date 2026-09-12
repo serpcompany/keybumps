@@ -1,4 +1,4 @@
-name: SERPCompanion
+name: SuperMac
 configs:
   Debug: debug
   Release: release
@@ -15,17 +15,17 @@ settings:
     CURRENT_PROJECT_VERSION: 1
     ENABLE_HARDENED_RUNTIME: YES
 targets:
-  SERPCompanion:
+  SuperMac:
     type: application
     platform: macOS
     sources:
-      - SERPCompanion
+      - SuperMac
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.supermac
         PRODUCT_NAME: SuperMac
-        PRODUCT_MODULE_NAME: SERPCompanion
-        EXECUTABLE_NAME: SERPCompanion
+        PRODUCT_MODULE_NAME: SuperMac
+        EXECUTABLE_NAME: SuperMac
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: SuperMac
         INFOPLIST_KEY_CFBundleName: SuperMac
@@ -36,38 +36,38 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 SERP. All rights reserved.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_ENTITLEMENTS: SERPCompanion/Resources/SuperMac.entitlements
+        CODE_SIGN_ENTITLEMENTS: SuperMac/Resources/SuperMac.entitlements
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 847HR8U8D9
         ENABLE_APP_SANDBOX: NO
-  SERPCompanionTests:
+  SuperMacTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - SERPCompanionTests
+      - SuperMacTests
     dependencies:
-      - target: SERPCompanion
+      - target: SuperMac
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.supermac.tests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 847HR8U8D9
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SuperMac.app/Contents/MacOS/SERPCompanion"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SuperMac.app/Contents/MacOS/SuperMac"
         BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
-  SERPCompanion:
+  SuperMac:
     build:
       targets:
-        SERPCompanion: all
-        SERPCompanionTests: [test]
+        SuperMac: all
+        SuperMacTests: [test]
     test:
       targets:
-        - SERPCompanionTests
-  SERPCompanion-Release:
+        - SuperMacTests
+  SuperMac-Release:
     build:
       targets:
-        SERPCompanion: all
+        SuperMac: all
     run:
       config: Release
     archive:

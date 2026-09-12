@@ -14,7 +14,7 @@ Run deterministic tests:
 
 ```sh
 xcodegen generate
-xcodebuild -project SERPCompanion.xcodeproj -scheme SERPCompanion -configuration Debug -derivedDataPath .derived test
+xcodebuild -project SuperMac.xcodeproj -scheme SuperMac -configuration Debug -derivedDataPath .derived test
 ```
 
 The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.

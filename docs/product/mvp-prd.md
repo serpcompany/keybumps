@@ -35,7 +35,7 @@ Read these before editing:
 2. [`docs/adr/0001-one-companion-with-enabled-capabilities.md`](../adr/0001-one-companion-with-enabled-capabilities.md) — one-app product shape.
 3. [`docs/adr/0002-direct-local-only-commercial-product.md`](../adr/0002-direct-local-only-commercial-product.md) — distribution and privacy boundary.
 4. [`docs/adr/0003-one-online-activation-then-offline-validation.md`](../adr/0003-one-online-activation-then-offline-validation.md) — licensing decision and deferred details.
-5. [`docs/adr/0004-new-canonical-serp-companion-repository.md`](../adr/0004-new-canonical-serp-companion-repository.md) — new-repository decision.
+5. [`docs/adr/0004-new-canonical-supermac-repository.md`](../adr/0004-new-canonical-supermac-repository.md) — new-repository decision.
 6. [`docs/app-replica/scope.md`](../app-replica/scope.md) — frozen reference versions, exact Rectangle shortcuts, observed settings, and selected reference slices.
 
 Treat the reference scope as authoritative when this PRD summarizes rather than repeats detailed mappings.
@@ -330,7 +330,7 @@ Select and document an owned update feed and signing mechanism before treating u
 Use one native macOS Xcode project with a thin composition/lifecycle target and independently testable feature boundaries. A sensible dependency direction is:
 
 ```text
-SERPCompanionApp
+SuperMacApp
     ├── SharedCore
     ├── SharedMac
     ├── SharedUI

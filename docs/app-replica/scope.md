@@ -125,7 +125,7 @@ The owner confirmed that Alfred Clipboard History is invoked separately with `Sh
 
 ## Unified command-palette reference slice
 
-On 2026-09-12, the owner requested that the SuperMac launcher use a denser Alfred/Raycast-style command-palette hierarchy while remaining an original SERP design. The bounded slice contains exactly three palette tabs: Search as the default, Clipboard History, and Dictation History. Raycast is not installed on the reference Mac; current official Raycast product pages are design references only. Alfred 5.7.3 remains the locally observed reference for compact launcher geometry and immediate keyboard focus.
+On 2026-09-12, the owner requested that the SuperMac launcher use a denser Alfred/Raycast-style command-palette hierarchy while remaining an original SuperMac design. The bounded slice contains exactly three palette tabs: Search as the default, Clipboard History, and Dictation History. Raycast is not installed on the reference Mac; current official Raycast product pages are design references only. Alfred 5.7.3 remains the locally observed reference for compact launcher geometry and immediate keyboard focus.
 
 Selected traits are a single centered floating surface, a dominant search field, compact keyboard-first result rows, visible tab switching, strong selected-row treatment, and concise keyboard hints. Raycast and Alfred names, icons, illustrations, themes, proprietary interactions, broader feature sets, and exact pixel styling are excluded.
 
@@ -139,7 +139,7 @@ During onboarding, SuperMac detects conflicting running copies of Alfred, Rectan
 
 On 2026-09-12, the owner supplied a HeyClicky screenshot showing its Accessibility setup experience. The app opens the exact System Settings privacy list and floats a helper near the bottom of that window. The helper says “I’m HeyClicky — drag me into the list above” and presents the signed application as a large draggable row.
 
-SuperMac adopts this narrow interaction for Accessibility and Input Monitoring with original SERP branding and copy. The dragged payload must be the running signed `SuperMac.app` bundle as a public file URL; the helper does not grant or toggle consent. Microphone and Speech Recognition continue through their native system prompts because they are not add-an-app list permissions. Exact HeyClicky styling, identity, iconography, copy, and other permission or product behavior remain excluded.
+SuperMac adopts this narrow interaction for Accessibility and Input Monitoring with original SuperMac branding and copy. The dragged payload must be the running signed `SuperMac.app` bundle as a public file URL; the helper does not grant or toggle consent. Microphone and Speech Recognition continue through their native system prompts because they are not add-an-app list permissions. Exact HeyClicky styling, identity, iconography, copy, and other permission or product behavior remain excluded.
 
 ## Product and distribution boundary
 

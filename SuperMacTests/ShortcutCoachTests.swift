@@ -1,0 +1,626 @@
+import AppKit
+import Carbon.HIToolbox
+import Observation
+import XCTest
+@testable import SuperMac
+
+private final class MemoryPersistence: EventPersistence {
+    var stored: [CoachingEvent]
+    init(stored: [CoachingEvent] = []) { self.stored = stored }
+    func load() throws -> [CoachingEvent] { stored }
+    func save(_ events: [CoachingEvent]) throws { stored = events }
+}
+
+@MainActor
+private final class SpyAdapter: ChannelDelivering {
+    private(set) var events: [CoachingEvent] = []
+    var error: Error?
+
+    func deliver(_ event: CoachingEvent) async throws {
+        if let error { throw error }
+        events.append(event)
+    }
+}
+
+private enum TestError: Error { case expected }
+
+private final class StatusItemActionTarget: NSObject {
+    @objc func activate(_ sender: NSStatusBarButton) {}
+}
+
+@MainActor
+private final class StubNativeNotificationCenter: NativeNotificationCenterClient {
+    var status: NativeNotificationAuthorization
+    var requestedStatus: NativeNotificationAuthorization?
+    var requestResult = true
+    private(set) var requestCount = 0
+    private(set) var added: [(identifier: String, title: String, body: String)] = []
+
+    init(status: NativeNotificationAuthorization) {
+        self.status = status
+    }
+
+    func authorizationStatus() async -> NativeNotificationAuthorization {
+        status
+    }
+
+    func requestAuthorization() async throws -> Bool {
+        requestCount += 1
+        if let requestedStatus { status = requestedStatus }
+        return requestResult
+    }
+
+    func add(identifier: String, title: String, body: String) async throws {
+        added.append((identifier, title, body))
+    }
+}
+
+@MainActor
+private final class StubKeyboardEventMonitor: KeyboardEventMonitoring {
+    private var handler: (() -> Bool)?
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    func startDismissalHandler(_ handler: @escaping () -> Bool) {
+        startCount += 1
+        self.handler = handler
+    }
+
+    func stop() {
+        stopCount += 1
+        handler = nil
+    }
+
+    func sendDismissalCommand() -> Bool {
+        handler?() ?? false
+    }
+}
+
+private final class StubDetectorPermissions: DetectorPermissionProviding {
+    var isAccessibilityTrusted: Bool
+    var isInputMonitoringAuthorized: Bool
+    private(set) var accessibilityRequestCount = 0
+    private(set) var inputMonitoringRequestCount = 0
+    var grantsAccessibilityOnRequest = false
+    var grantsInputMonitoringOnRequest = false
+
+    init(accessibility: Bool, inputMonitoring: Bool) {
+        isAccessibilityTrusted = accessibility
+        isInputMonitoringAuthorized = inputMonitoring
+    }
+
+    func requestAccessibility() {
+        accessibilityRequestCount += 1
+        if grantsAccessibilityOnRequest { isAccessibilityTrusted = true }
+    }
+
+    func requestInputMonitoring() {
+        inputMonitoringRequestCount += 1
+        if grantsInputMonitoringOnRequest { isInputMonitoringAuthorized = true }
+    }
+}
+
+private final class StubPointerMonitor: PointerEventMonitoring {
+    var onSample: ((PointerSample) -> Void)?
+    var onTapRecovered: (() -> Void)?
+    var shouldStart = true
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    func start() -> Bool {
+        startCount += 1
+        return shouldStart
+    }
+
+    func stop() {
+        stopCount += 1
+    }
+}
+
+@MainActor
+private struct StubPresenceController: AppPresenceControlling {
+    func apply(showInDockAndSwitcher: Bool) {}
+}
+
+@MainActor
+final class ShortcutCoachTests: XCTestCase {
+    func testPresentationPreviewDoesNotPersistSyntheticEvent() async {
+        let inbox = InboxStore(persistence: MemoryPersistence())
+        let adapter = SpyAdapter()
+        let service = NotificationDeliveryService(inbox: inbox, adapters: [.topRightToast: adapter])
+
+        let outcome = await service.preview(.sample, through: .topRightToast)
+
+        XCTAssertEqual(outcome, .delivered)
+        XCTAssertEqual(adapter.events, [.sample])
+        XCTAssertTrue(inbox.events.isEmpty)
+    }
+
+    func testAppModelPublishesPermissionAndStatusSnapshotsAfterRequestsAndRetry() async {
+        let suite = "ShortcutCoachTests-permissions-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let permissions = StubDetectorPermissions(accessibility: false, inputMonitoring: false)
+        permissions.grantsAccessibilityOnRequest = true
+        permissions.grantsInputMonitoringOnRequest = true
+        let detector = ManualActionDetector(monitor: StubPointerMonitor(), permissions: permissions)
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.didCompleteOnboarding = true
+        let model = AppModel(
+            releaseLane: .full,
+            preferences: preferences,
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: detector,
+            presenter: PresentationWindowController()
+        )
+        model.start()
+
+        let accessibilityChanged = expectation(description: "Accessibility snapshot changed")
+        withObservationTracking {
+            _ = model.isAccessibilityTrusted
+            _ = model.detectorStatus
+        } onChange: {
+            accessibilityChanged.fulfill()
+        }
+        model.requestAccessibilityPermission()
+        await fulfillment(of: [accessibilityChanged], timeout: 1)
+        XCTAssertTrue(model.isAccessibilityTrusted)
+        XCTAssertFalse(model.isInputMonitoringAuthorized)
+        XCTAssertEqual(model.detectorStatus, .permissionRequired([.inputMonitoring]))
+
+        let inputMonitoringChanged = expectation(description: "Input Monitoring snapshot changed")
+        withObservationTracking {
+            _ = model.isInputMonitoringAuthorized
+            _ = model.detectorStatus
+        } onChange: {
+            inputMonitoringChanged.fulfill()
+        }
+        model.requestInputMonitoringPermission()
+        await fulfillment(of: [inputMonitoringChanged], timeout: 1)
+        XCTAssertTrue(model.isInputMonitoringAuthorized)
+        XCTAssertEqual(model.detectorStatus, .monitoring)
+    }
+
+    func testDetectorRequiresAccessibilityBeforeStartingPointerMonitor() {
+        let permissions = StubDetectorPermissions(accessibility: false, inputMonitoring: true)
+        let monitor = StubPointerMonitor()
+        let detector = ManualActionDetector(monitor: monitor, permissions: permissions)
+
+        detector.start()
+
+        XCTAssertEqual(detector.status, .permissionRequired([.accessibility]))
+        XCTAssertEqual(monitor.startCount, 0)
+    }
+
+    func testDetectorRequiresInputMonitoringBeforeStartingPointerMonitor() {
+        let permissions = StubDetectorPermissions(accessibility: true, inputMonitoring: false)
+        let monitor = StubPointerMonitor()
+        let detector = ManualActionDetector(monitor: monitor, permissions: permissions)
+
+        detector.start()
+
+        XCTAssertEqual(detector.status, .permissionRequired([.inputMonitoring]))
+        XCTAssertEqual(monitor.startCount, 0)
+    }
+
+    func testDetectorReportsMonitoringOnlyAfterBothPermissionsAndTapStartSucceed() {
+        let permissions = StubDetectorPermissions(accessibility: true, inputMonitoring: true)
+        let monitor = StubPointerMonitor()
+        let detector = ManualActionDetector(monitor: monitor, permissions: permissions)
+
+        detector.start()
+
+        XCTAssertEqual(detector.status, .monitoring)
+        XCTAssertEqual(monitor.startCount, 1)
+    }
+
+    func testDetectorStopsReportingMonitoringWhenPermissionBecomesStale() {
+        let permissions = StubDetectorPermissions(accessibility: true, inputMonitoring: true)
+        let detector = ManualActionDetector(monitor: StubPointerMonitor(), permissions: permissions)
+        detector.start()
+
+        permissions.isInputMonitoringAuthorized = false
+
+        XCTAssertEqual(detector.status, .permissionRequired([.inputMonitoring]))
+    }
+
+    func testDetectorPermissionRequestsUseTheirSystemPermissionSeams() {
+        let permissions = StubDetectorPermissions(accessibility: false, inputMonitoring: false)
+        let detector = ManualActionDetector(monitor: StubPointerMonitor(), permissions: permissions)
+
+        detector.requestAccessibilityPermission()
+        detector.requestInputMonitoringPermission()
+
+        XCTAssertEqual(permissions.accessibilityRequestCount, 1)
+        XCTAssertEqual(permissions.inputMonitoringRequestCount, 1)
+    }
+
+    func testDeliveryRecordsOnceAndFansOutToSelectedChannels() async {
+        let persistence = MemoryPersistence()
+        let inbox = InboxStore(persistence: persistence)
+        let toast = SpyAdapter()
+        let sound = SpyAdapter()
+        let service = NotificationDeliveryService(inbox: inbox, adapters: [
+            .topRightToast: toast,
+            .sound: sound
+        ])
+        let event = CoachingEvent.sample
+
+        let report = await service.deliver(event, through: [.topRightToast, .sound])
+
+        XCTAssertTrue(report.inboxRecorded)
+        XCTAssertEqual(inbox.events, [event])
+        XCTAssertEqual(persistence.stored, [event])
+        XCTAssertEqual(toast.events, [event])
+        XCTAssertEqual(sound.events, [event])
+        XCTAssertEqual(report.outcomes[.topRightToast], .delivered)
+        XCTAssertEqual(report.outcomes[.sound], .delivered)
+    }
+
+    func testDeliveryReportsOneAdapterFailureWithoutDroppingHistory() async {
+        let inbox = InboxStore(persistence: MemoryPersistence())
+        let failing = SpyAdapter()
+        failing.error = TestError.expected
+        let service = NotificationDeliveryService(inbox: inbox, adapters: [.sound: failing])
+
+        let report = await service.deliver(.sample, through: [.sound])
+
+        XCTAssertTrue(report.inboxRecorded)
+        XCTAssertEqual(inbox.events.count, 1)
+        guard case .failed = report.outcomes[.sound] else {
+            return XCTFail("Expected a per-channel failure")
+        }
+    }
+
+    func testNativeNotificationDeliversExactEventCopyWhenAlreadyAuthorized() async throws {
+        let center = StubNativeNotificationCenter(status: .authorized)
+        let adapter = NativeNotificationAdapter(center: center)
+        let event = CoachingEvent.sample
+
+        try await adapter.deliver(event)
+
+        XCTAssertEqual(center.requestCount, 0)
+        XCTAssertEqual(center.added.count, 1)
+        XCTAssertEqual(center.added.first?.identifier, event.id.uuidString)
+        XCTAssertEqual(center.added.first?.title, event.coachingTitle)
+        XCTAssertEqual(center.added.first?.body, event.coachingBody)
+    }
+
+    func testNativeNotificationRequestsUndeterminedAuthorizationBeforeDelivery() async throws {
+        let center = StubNativeNotificationCenter(status: .notDetermined)
+        center.requestedStatus = .provisional
+        let adapter = NativeNotificationAdapter(center: center)
+
+        try await adapter.deliver(.sample)
+
+        XCTAssertEqual(center.requestCount, 1)
+        XCTAssertEqual(center.added.count, 1)
+    }
+
+    func testNativeNotificationDoesNotSubmitWhenAuthorizationIsDenied() async {
+        for status in [NativeNotificationAuthorization.denied, .unknown] {
+            let center = StubNativeNotificationCenter(status: status)
+            let adapter = NativeNotificationAdapter(center: center)
+
+            do {
+                try await adapter.deliver(.sample)
+                XCTFail("Expected denied authorization to fail")
+            } catch {
+                XCTAssertEqual(error as? DeliveryAdapterError, .notificationsDenied)
+            }
+            XCTAssertEqual(center.requestCount, 0)
+            XCTAssertTrue(center.added.isEmpty)
+        }
+    }
+
+    func testNativeNotificationHonorsARejectedAuthorizationRequest() async {
+        let center = StubNativeNotificationCenter(status: .notDetermined)
+        center.requestResult = false
+        let adapter = NativeNotificationAdapter(center: center)
+
+        do {
+            try await adapter.deliver(.sample)
+            XCTFail("Expected rejected authorization to fail")
+        } catch {
+            XCTAssertEqual(error as? DeliveryAdapterError, .notificationsDenied)
+        }
+        XCTAssertEqual(center.requestCount, 1)
+        XCTAssertTrue(center.added.isEmpty)
+    }
+
+    func testDockBadgeWritesCurrentUnreadCount() async throws {
+        var label: String?
+        let adapter = DockBadgeAdapter(unreadCount: { 12 }, setBadgeLabel: { label = $0 })
+
+        try await adapter.deliver(.sample)
+
+        XCTAssertEqual(label, "12")
+    }
+
+    func testDockBounceRequestsInformationalAttention() async throws {
+        var requestedType: NSApplication.RequestUserAttentionType?
+        let adapter = DockBounceAdapter(requestAttention: { requestedType = $0 })
+
+        try await adapter.deliver(.sample)
+
+        XCTAssertEqual(requestedType, .informationalRequest)
+    }
+
+    func testSoundInvokesGlassAndReportsUnavailablePlayback() async throws {
+        var playedName: NSSound.Name?
+        let successful = SoundAdapter(playSound: {
+            playedName = $0
+            return true
+        })
+        try await successful.deliver(.sample)
+        XCTAssertEqual(playedName, NSSound.Name("Glass"))
+
+        let unavailable = SoundAdapter(playSound: { _ in false })
+        do {
+            try await unavailable.deliver(.sample)
+            XCTFail("Expected unavailable sound to fail")
+        } catch {
+            XCTAssertEqual(error as? DeliveryAdapterError, .soundUnavailable)
+        }
+    }
+
+    func testEscapeDismissesCustomPanelsAndStopsBeingConsumedAfterCleanup() {
+        let keyboard = StubKeyboardEventMonitor()
+        let controller = PresentationWindowController(keyboardMonitor: keyboard)
+
+        controller.show(event: .sample, style: .topRightToast)
+        controller.show(event: .sample, style: .pointerCard)
+        XCTAssertEqual(controller.activeChannels, [.topRightToast, .pointerCard])
+        XCTAssertTrue(keyboard.sendDismissalCommand())
+        XCTAssertTrue(controller.activeChannels.isEmpty)
+        XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
+        XCTAssertFalse(keyboard.sendDismissalCommand())
+    }
+
+    func testLocalKeyboardMonitorRecognizesEscapeButPassesThroughOtherKeys() throws {
+        let escape = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\u{1b}",
+            charactersIgnoringModifiers: "\u{1b}",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Escape)
+        ))
+        let returnKey = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            characters: "\r",
+            charactersIgnoringModifiers: "\r",
+            isARepeat: false,
+            keyCode: UInt16(kVK_Return)
+        ))
+
+        XCTAssertTrue(LocalKeyboardEventMonitor.isDismissalEvent(escape))
+        XCTAssertFalse(LocalKeyboardEventMonitor.isDismissalEvent(returnKey))
+    }
+
+    func testExclusivePresentationsReplacePeersWithoutAffectingOtherAnchors() {
+        let controller = PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor())
+
+        controller.show(event: .sample, style: .topRightToast)
+        controller.show(event: .sample, style: .topCenterShelf)
+        controller.show(event: .sample, style: .decisionBanner)
+
+        XCTAssertEqual(controller.activeChannels, [.topRightToast, .decisionBanner])
+        XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast, .decisionBanner])
+
+        controller.show(event: .sample, style: .cursorHalo)
+        controller.show(event: .sample, style: .pointerCard)
+        XCTAssertEqual(controller.activeChannels, [.topRightToast, .decisionBanner, .pointerCard])
+    }
+
+    func testButtonDismissalUsesCanonicalPanelAndTaskCleanup() {
+        let controller = PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor())
+        controller.show(event: .sample, style: .decisionBanner)
+
+        let buttonAction = controller.dismissalAction(for: .decisionBanner)
+        buttonAction()
+
+        XCTAssertTrue(controller.activeChannels.isEmpty)
+        XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
+    }
+
+    func testInboxUnreadAndPersistenceLifecycle() throws {
+        let persistence = MemoryPersistence()
+        let inbox = InboxStore(persistence: persistence)
+        let first = CoachingEvent(applicationName: "Finder", actionTitle: "New Window", shortcut: "⌘N")
+        let second = CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
+
+        try inbox.append(first)
+        try inbox.append(second)
+        XCTAssertEqual(inbox.unreadCount, 2)
+
+        inbox.markRead(first.id)
+        XCTAssertEqual(inbox.unreadCount, 1)
+        XCTAssertEqual(InboxStore(persistence: persistence).events.count, 2)
+
+        inbox.markAllRead()
+        XCTAssertEqual(inbox.unreadCount, 0)
+
+        inbox.clear()
+        XCTAssertTrue(persistence.stored.isEmpty)
+    }
+
+    func testPreferencesDefaultToVisiblePresenceAndPersistChannelCombinations() {
+        let suite = "ShortcutCoachTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertTrue(preferences.showInDockAndSwitcher)
+        XCTAssertEqual(preferences.selectedChannels, [.topRightToast, .dockBadge])
+
+        preferences.set(.sound, enabled: true)
+        preferences.set(.topRightToast, enabled: false)
+        preferences.showInDockAndSwitcher = false
+
+        let restored = AppPreferences(defaults: defaults)
+        XCTAssertFalse(restored.showInDockAndSwitcher)
+        XCTAssertEqual(restored.selectedChannels, [.dockBadge, .sound])
+    }
+
+    func testSelectingAnExclusiveChannelDisablesItsConflictingPeers() {
+        let suite = "ShortcutCoachTests-overlap-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        preferences.set(.topCenterShelf, enabled: true)
+        preferences.set(.statusFeedback, enabled: true)
+        preferences.set(.decisionBanner, enabled: true)
+
+        XCTAssertTrue(preferences.selectedChannels.contains(.topRightToast))
+        XCTAssertEqual(
+            preferences.selectedChannels.intersection(PresentationOverlapPolicy.topCenterChannels),
+            [.decisionBanner]
+        )
+
+        preferences.set(.cursorHalo, enabled: true)
+        preferences.set(.pointerCard, enabled: true)
+        XCTAssertEqual(
+            preferences.selectedChannels.intersection(PresentationOverlapPolicy.pointerChannels),
+            [.pointerCard]
+        )
+    }
+
+    func testPersistedConflictingPresentationGroupsAreNormalizedAndRewritten() {
+        let suite = "ShortcutCoachTests-normalized-overlap-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set([
+            NotificationChannel.statusFeedback.rawValue,
+            NotificationChannel.topCenterShelf.rawValue,
+            NotificationChannel.decisionBanner.rawValue,
+            NotificationChannel.cursorHalo.rawValue,
+            NotificationChannel.pointerCard.rawValue,
+            NotificationChannel.sound.rawValue
+        ], forKey: "selectedNotificationChannels")
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.selectedChannels, [.decisionBanner, .pointerCard, .sound])
+        XCTAssertEqual(
+            defaults.array(forKey: "selectedNotificationChannels") as? [String],
+            ["decisionBanner", "pointerCard", "sound"]
+        )
+    }
+
+    func testReduceMotionSkipsStatusFeedbackDelay() {
+        XCTAssertEqual(
+            PresentationMotionPolicy.statusFeedbackDelayNanoseconds(reduceMotion: false),
+            700_000_000
+        )
+        XCTAssertEqual(
+            PresentationMotionPolicy.statusFeedbackDelayNanoseconds(reduceMotion: true),
+            0
+        )
+    }
+
+    func testPreferencesMigrateFromEitherPreviousBundleIdentity() {
+        for sourceIndex in 0..<2 {
+            let currentSuite = "ShortcutCoachTests-current-\(UUID().uuidString)"
+            let oldestSuite = "ShortcutCoachTests-oldest-\(UUID().uuidString)"
+            let recentSuite = "ShortcutCoachTests-recent-\(UUID().uuidString)"
+            let current = UserDefaults(suiteName: currentSuite)!
+            let oldest = UserDefaults(suiteName: oldestSuite)!
+            let recent = UserDefaults(suiteName: recentSuite)!
+            defer {
+                current.removePersistentDomain(forName: currentSuite)
+                oldest.removePersistentDomain(forName: oldestSuite)
+                recent.removePersistentDomain(forName: recentSuite)
+            }
+            let source = [recent, oldest][sourceIndex]
+            source.set([NotificationChannel.topCenterShelf.rawValue, NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+            source.set(false, forKey: "showInDockAndSwitcher")
+
+            let migrated = AppPreferences(defaults: current, legacyDefaults: [recent, oldest])
+
+            XCTAssertEqual(migrated.selectedChannels, [.topCenterShelf, .sound])
+            XCTAssertFalse(migrated.showInDockAndSwitcher)
+            XCTAssertEqual(current.array(forKey: "selectedNotificationChannels") as? [String], ["sound", "topCenterShelf"])
+            XCTAssertEqual(current.bool(forKey: "showInDockAndSwitcher"), false)
+        }
+    }
+
+    func testSuperMacBrandingConfiguresTheActualStatusBarButtonContract() {
+        XCTAssertTrue(ProductIdentity.legacyBundleIdentifiers.isEmpty)
+        let button = NSStatusBarButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        let target = StatusItemActionTarget()
+
+        StatusItemBranding.configure(
+            button,
+            target: target,
+            action: #selector(StatusItemActionTarget.activate(_:))
+        )
+
+        XCTAssertEqual(ProductIdentity.statusItemImageName, "SuperMacMenuBarMark")
+        XCTAssertNotNil(button.image)
+        XCTAssertEqual(button.image?.isTemplate, true)
+        XCTAssertEqual(button.image?.size, NSSize(width: 17, height: 17))
+        // NSStatusBarButton normalizes .imageOnly to .imageOverlaps. The empty
+        // title is the observable contract that leaves only the image visible.
+        XCTAssertEqual(button.imagePosition, .imageOverlaps)
+        XCTAssertEqual(button.title, "")
+        XCTAssertEqual(button.toolTip, "SuperMac")
+        XCTAssertEqual(button.accessibilityLabel(), "SuperMac")
+        XCTAssertTrue(button.target === target)
+        XCTAssertEqual(button.action, #selector(StatusItemActionTarget.activate(_:)))
+    }
+
+    func testReleaseLanesHaveSeparateIdentitiesAndCapabilities() {
+        XCTAssertEqual(ReleaseLane.full.productName, "SuperMac")
+        XCTAssertEqual(ReleaseLane.full.bundleIdentifier, "com.serp.supermac")
+        XCTAssertTrue(ReleaseLane.full.supportsManualActionDetection)
+        XCTAssertFalse(ReleaseLane.full.showsFullVersionCTA)
+    }
+
+    func testLiteShortcutCatalogIsUsefulAndSearchable() {
+        XCTAssertGreaterThanOrEqual(ShortcutCatalog.tips.count, 12)
+        XCTAssertTrue(ShortcutCatalog.applications.contains("Finder"))
+        XCTAssertTrue(ShortcutCatalog.applications.contains("Google Chrome"))
+        XCTAssertEqual(
+            ShortcutCatalog.matching(searchText: "trash", application: "Finder").map(\.shortcut),
+            ["⌘Delete"]
+        )
+        XCTAssertTrue(
+            ShortcutCatalog.matching(searchText: "copy", application: "Safari")
+                .contains(where: { $0.applicationName == "General" })
+        )
+    }
+
+    func testEveryPresentationChannelHasStableCopyAndIdentity() {
+        XCTAssertEqual(Set(NotificationChannel.allCases.map(\.id)).count, NotificationChannel.allCases.count)
+        for channel in NotificationChannel.allCases {
+            XCTAssertFalse(channel.title.isEmpty)
+            XCTAssertFalse(channel.summary.isEmpty)
+            XCTAssertFalse(channel.systemImage.isEmpty)
+        }
+    }
+
+    func testShortcutFormatterUsesAccessibilityModifierBits() {
+        XCTAssertEqual(ShortcutFormatter.format(command: "n", modifiers: 0), "⌘N")
+        XCTAssertEqual(ShortcutFormatter.format(command: "t", modifiers: 1), "⇧⌘T")
+        XCTAssertEqual(ShortcutFormatter.format(command: "f", modifiers: 2 | 4), "⌃⌥⌘F")
+        XCTAssertEqual(ShortcutFormatter.format(command: "a", modifiers: 8), "A")
+    }
+
+    func testCoachingCopyUsesTheDetectedEvent() {
+        let event = CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
+        XCTAssertEqual(event.coachingTitle, "Try ⌘T next time")
+        XCTAssertEqual(event.coachingBody, "New Tab in Safari")
+    }
+}

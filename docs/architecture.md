@@ -1,6 +1,6 @@
 # Architecture
 
-`SERPCompanionApp` and `AppModel` own composition and lifecycle. Feature services own behavior but never create another app delegate, status item, Settings scene, updater, license system, or launch-at-login controller.
+`SuperMacApp` and `AppModel` own composition and lifecycle. Feature services own behavior but never create another app delegate, status item, Settings scene, updater, license system, or launch-at-login controller.
 
 The shared `GlobalShortcutCoordinator` is the sole Carbon hot-key registrar. `AppPreferences` persists the editable Quick Search, Clipboard History, Dictation, and Window Management bindings; assigning one key combination removes it from any previous owner before the coordinator re-registers the complete valid set. `PermissionCoordinator` centralizes truthful permission state and recovery. Each capability stops its service and releases its shortcut when disabled.
 

@@ -4,7 +4,7 @@ status: accepted
 
 # ADR 0003: One companion with independently enabled capabilities
 
-The product, named SERP Companion, will be installed and experienced as one sellable macOS app rather than a launcher for several separately visible utilities. It will behave as a quiet companion with one Dock icon, one normal macOS Settings window organized by a sidebar, and a `Command-Space` Quick Search surface for applications, files, and folders. Clicking the Dock icon opens Settings/Home, and the app launches at login by default. Its menu-bar menu remains deliberately limited to Settings, Check for Updates, and Quit rather than duplicating feature commands.
+The product, named SuperMac, will be installed and experienced as one sellable macOS app rather than a launcher for several separately visible utilities. It will behave as a quiet companion with one Dock icon, one normal macOS Settings window organized by a sidebar, and a `Command-Space` Quick Search surface for applications, files, and folders. Clicking the Dock icon opens Settings/Home, and the app launches at login by default. Its menu-bar menu remains deliberately limited to Settings, Check for Updates, and Quit rather than duplicating feature commands.
 
 Shortcut Coaching, Dictation, Window Management, Quick Search, and Clipboard History will be independently controllable capabilities under the companion's shared identity and permissions experience. They begin enabled for a simpler first-run experience, Home displays one master switch per capability, and each capability's sidebar screen owns its detailed settings. A capability that the user disables releases its global shortcuts and stops its active monitoring.
 
