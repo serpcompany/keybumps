@@ -774,6 +774,7 @@ private struct DictationResultsView: View {
                                         isTranscribing: retryingEntryID == entry.id,
                                         toggleExpansion: { select(index) },
                                         togglePlayback: { audioPlayer.toggle(entry) },
+                                        seekPlayback: { audioPlayer.seek(entry, to: $0) },
                                         decreasePlaybackRate: audioPlayer.decreasePlaybackRate,
                                         increasePlaybackRate: audioPlayer.increasePlaybackRate,
                                         transcribe: { transcribe(entry) },

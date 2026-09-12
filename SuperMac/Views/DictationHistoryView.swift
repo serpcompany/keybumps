@@ -95,6 +95,7 @@ struct DictationHistoryView: View {
                                 }
                             },
                             togglePlayback: { audioPlayer.toggle(entry) },
+                            seekPlayback: { audioPlayer.seek(entry, to: $0) },
                             decreasePlaybackRate: audioPlayer.decreasePlaybackRate,
                             increasePlaybackRate: audioPlayer.increasePlaybackRate,
                             transcribe: { Task { await model.dictation.transcribe(entry) } },
@@ -161,6 +162,7 @@ struct DictationHistoryCard: View {
     let isTranscribing: Bool
     let toggleExpansion: () -> Void
     let togglePlayback: () -> Void
+    let seekPlayback: (Double) -> Void
     let decreasePlaybackRate: () -> Void
     let increasePlaybackRate: () -> Void
     let transcribe: () -> Void
@@ -207,51 +209,18 @@ struct DictationHistoryCard: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 12) {
-                        Button(action: togglePlayback) {
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 32, height: 32)
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(entry.audioURL == nil)
-                        .accessibilityLabel(isPlaying ? "Pause recording" : "Play recording")
-
-                        RecordingWaveform(
-                            audioURL: entry.audioURL,
-                            progress: progress
-                        )
-                        .accessibilityLabel("Audio progress")
-                        .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
-
-                        Text(Self.durationFormatter.string(from: entry.duration) ?? "0:00")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 3) {
-                            Button(action: decreasePlaybackRate) {
-                                Image(systemName: "minus")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Slow down audio")
-
-                            Text(Self.rateLabel(playbackRate))
-                                .font(.caption.monospacedDigit().weight(.medium))
-                                .frame(minWidth: 34)
-
-                            Button(action: increasePlaybackRate) {
-                                Image(systemName: "plus")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Speed up audio")
-                        }
-                        .disabled(entry.audioURL == nil)
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(height: 58)
-                    .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 10))
+                    DictationAudioTransportView(
+                        isPlaying: isPlaying,
+                        isActive: progress > 0 || isPlaying,
+                        progress: progress,
+                        duration: entry.duration,
+                        playbackRate: playbackRate,
+                        hasAudio: entry.audioURL != nil,
+                        togglePlayback: togglePlayback,
+                        seekPlayback: seekPlayback,
+                        decreasePlaybackRate: decreasePlaybackRate,
+                        increasePlaybackRate: increasePlaybackRate
+                    )
 
                     HStack(spacing: 12) {
                         Text("Original")
@@ -348,17 +317,94 @@ struct DictationHistoryCard: View {
         .animation(.easeInOut(duration: 0.18), value: isExpanded)
     }
 
-    private static let durationFormatter: DateComponentsFormatter = {
+    fileprivate static let durationFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.minute, .second]
         formatter.zeroFormattingBehavior = [.pad]
         return formatter
     }()
 
-    private static func rateLabel(_ rate: Float) -> String {
-        rate == rate.rounded()
-            ? "\(Int(rate))×"
-            : "\(rate.formatted(.number.precision(.fractionLength(2))))×"
+}
+
+private struct DictationAudioTransportView: View {
+    let isPlaying: Bool
+    let isActive: Bool
+    let progress: Double
+    let duration: TimeInterval
+    let playbackRate: Float
+    let hasAudio: Bool
+    let togglePlayback: () -> Void
+    let seekPlayback: (Double) -> Void
+    let decreasePlaybackRate: () -> Void
+    let increasePlaybackRate: () -> Void
+
+    var body: some View {
+        GroupBox {
+            HStack(spacing: 10) {
+                ControlGroup {
+                    Button(action: togglePlayback) {
+                        Label(
+                            isPlaying ? "Pause" : "Play",
+                            systemImage: isPlaying ? "pause.fill" : "play.fill"
+                        )
+                        .labelStyle(.iconOnly)
+                    }
+                    .help(isPlaying ? "Pause recording" : "Play recording")
+                    .accessibilityLabel(isPlaying ? "Pause recording" : "Play recording")
+
+                    Button(action: decreasePlaybackRate) {
+                        Label("Slower", systemImage: "minus")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Slow down audio")
+                    .accessibilityLabel("Slow down audio")
+
+                    Button(action: increasePlaybackRate) {
+                        Label("Faster", systemImage: "plus")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Speed up audio")
+                    .accessibilityLabel("Speed up audio")
+                }
+                .controlSize(.small)
+                .disabled(!hasAudio)
+
+                Text(rateLabel)
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .frame(minWidth: 34)
+                    .accessibilityLabel("Playback speed")
+                    .accessibilityValue(rateLabel)
+
+                Slider(
+                    value: Binding(get: { progress }, set: seekPlayback),
+                    in: 0...1
+                ) {
+                    Text("Playback position")
+                }
+                .labelsHidden()
+                .disabled(!hasAudio || !isActive)
+                .accessibilityLabel("Playback position")
+                .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
+
+                Text(timeLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+        }
+    }
+
+    private var rateLabel: String {
+        playbackRate == playbackRate.rounded()
+            ? "\(Int(playbackRate))×"
+            : "\(playbackRate.formatted(.number.precision(.fractionLength(2))))×"
+    }
+
+    private var timeLabel: String {
+        let elapsed = duration * progress
+        let elapsedLabel = DictationHistoryCard.durationFormatter.string(from: elapsed) ?? "0:00"
+        let durationLabel = DictationHistoryCard.durationFormatter.string(from: duration) ?? "0:00"
+        return "\(elapsedLabel) / \(durationLabel)"
     }
 }
 

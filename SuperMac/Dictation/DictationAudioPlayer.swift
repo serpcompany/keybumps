@@ -67,6 +67,13 @@ final class DictationAudioPlayer {
         activeEntryID == entry.id ? progress : 0
     }
 
+    func seek(_ entry: DictationHistoryEntry, to progress: Double) {
+        guard activeEntryID == entry.id, let player else { return }
+        let boundedProgress = min(max(progress, 0), 1)
+        player.currentTime = player.duration * boundedProgress
+        self.progress = boundedProgress
+    }
+
     func decreasePlaybackRate() {
         setPlaybackRate(DictationPlaybackRate.slower(than: playbackRate))
     }
