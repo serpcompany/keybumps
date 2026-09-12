@@ -4,3 +4,4 @@
 *.xcresult
 xcuserdata/
 DerivedData/
+dist/
