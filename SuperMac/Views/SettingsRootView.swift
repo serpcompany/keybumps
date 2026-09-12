@@ -173,7 +173,7 @@ private struct HomeView: View {
         if !missing.isEmpty { return "Needs \(missing.map(\.title).joined(separator: " and "))" }
         return switch capability {
         case .quickSearch: shortcutDetail(for: .quickSearch, action: "search apps, files, and folders")
-        case .clipboardHistory: shortcutDetail(for: .clipboardHistory, action: "open your latest 10 copied text items")
+        case .clipboardHistory: shortcutDetail(for: .clipboardHistory, action: "open your latest 10 copied text and image items")
         case .dictation: shortcutDetail(for: .dictation, action: "start or stop local dictation")
         case .windowManagement: "Your Rectangle shortcut profile is active"
         case .shortcutCoaching: "Supported manual actions are being monitored"
@@ -250,7 +250,7 @@ private struct ClipboardSettingsView: View {
                     disabled: model.clipboard.entries.isEmpty,
                     clear: model.clipboard.clear
                 )
-                Text("The latest ten text items are stored only on this Mac. Copied secrets remain until removed or displaced.").foregroundStyle(.secondary)
+                Text("The latest ten text or image items are stored only on this Mac. Image media is capped at 50 MB per item. Copied secrets remain until removed or displaced.").foregroundStyle(.secondary)
             }
         }.formStyle(.grouped).navigationTitle("Clipboard History")
     }
@@ -319,48 +319,177 @@ private struct WindowSettingsView: View {
     @State private var recorder = ShortcutRecorderState()
 
     var body: some View {
-        Form {
-            CapabilityControl(capability: .windowManagement)
-            Section("Status") {
-                LabeledContent("Window Management", value: model.windows.isAccessibilityGranted ? "Ready" : "Setup Needed")
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                Toggle("Enable Window Management", isOn: Binding(
+                    get: { model.preferences.enabledCapabilities.contains(.windowManagement) },
+                    set: { model.setCapability(.windowManagement, enabled: $0) }
+                ))
+                Spacer()
+                Label(
+                    model.windows.isAccessibilityGranted ? "Ready" : "Setup Needed",
+                    systemImage: model.windows.isAccessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(model.windows.isAccessibilityGranted ? .green : .orange)
                 if !model.windows.isAccessibilityGranted {
-                    Text("Accessibility access is required to move and resize windows in other apps.").foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
-                }
-            }
-            Section {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Click a shortcut, then press a new combination. Press Delete to clear it or Escape to cancel.")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
                     .disabled(recorder.identifier != nil)
-                ForEach(SuperMacWindowAction.allCases) { action in
-                    HStack {
-                        Text(action.title)
-                        Spacer()
-                        Button(recorder.identifier == action.rawValue ? "Press shortcut…" : (model.preferences.windowShortcut(for: action)?.displayName ?? "Record Shortcut")) {
-                            recorder.begin(
-                                identifier: action.rawValue,
-                                suspend: { model.beginShortcutRecording() },
-                                capture: { binding in model.finishWindowShortcutRecording(binding, for: action) },
-                                cancel: { model.cancelShortcutRecording() }
-                            )
-                        }
-                        .accessibilityLabel("Record shortcut for \(action.title)")
-                        .disabled(recorder.identifier != nil && recorder.identifier != action.rawValue)
-                        Button("Clear") { model.finishWindowShortcutRecording(nil, for: action) }
-                            .disabled(model.preferences.windowShortcut(for: action) == nil || recorder.identifier != nil)
-                            .accessibilityLabel("Clear shortcut for \(action.title)")
-                    }
+            }
+            .padding(16)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 18) {
+                    Text("Click a shortcut to record a new combination. Press Delete to clear it or Escape to cancel.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    shortcutColumns(
+                        leading: WindowSettingsLayout.primaryLeading,
+                        trailing: WindowSettingsLayout.primaryTrailing
+                    )
+
+                    Divider()
+
+                    shortcutColumns(
+                        leading: WindowSettingsLayout.secondaryLeading,
+                        trailing: WindowSettingsLayout.secondaryTrailing
+                    )
                 }
-            } header: { Text("Window shortcuts") }
+                .padding(18)
+            }
+
             if let error = recorder.error {
-                Section { Text(error).font(.caption).foregroundStyle(.orange) }
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 12)
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Window Management")
+    }
+
+    private func shortcutColumns(
+        leading: [SuperMacWindowAction],
+        trailing: [SuperMacWindowAction]
+    ) -> some View {
+        HStack(alignment: .top, spacing: 30) {
+            WindowShortcutColumn(
+                actions: leading,
+                activeRecorderID: recorder.identifier,
+                binding: model.preferences.windowShortcut,
+                record: beginRecording,
+                clear: clearShortcut
+            )
+            WindowShortcutColumn(
+                actions: trailing,
+                activeRecorderID: recorder.identifier,
+                binding: model.preferences.windowShortcut,
+                record: beginRecording,
+                clear: clearShortcut
+            )
+        }
+    }
+
+    private func beginRecording(_ action: SuperMacWindowAction) {
+        recorder.begin(
+            identifier: action.rawValue,
+            suspend: { model.beginShortcutRecording() },
+            capture: { binding in model.finishWindowShortcutRecording(binding, for: action) },
+            cancel: { model.cancelShortcutRecording() }
+        )
+    }
+
+    private func clearShortcut(_ action: SuperMacWindowAction) {
+        model.finishWindowShortcutRecording(nil, for: action)
+    }
+}
+
+private struct WindowShortcutColumn: View {
+    let actions: [SuperMacWindowAction]
+    let activeRecorderID: String?
+    let binding: (SuperMacWindowAction) -> ShortcutBinding?
+    let record: (SuperMacWindowAction) -> Void
+    let clear: (SuperMacWindowAction) -> Void
+
+    var body: some View {
+        VStack(spacing: 7) {
+            ForEach(actions) { action in
+                let shortcut = binding(action)
+                HStack(spacing: 8) {
+                    Text(action.title)
+                        .font(.callout)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+
+                    WindowActionPreviewView(action: action)
+                        .frame(width: 25, height: 18)
+
+                    Button(activeRecorderID == action.rawValue ? "Press shortcut…" : (shortcut?.displayName ?? "Record Shortcut")) {
+                        record(action)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .frame(width: 126)
+                    .disabled(activeRecorderID != nil && activeRecorderID != action.rawValue)
+                    .accessibilityLabel("Record shortcut for \(action.title)")
+
+                    Button {
+                        clear(action)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(shortcut == nil || activeRecorderID != nil)
+                    .help("Clear \(action.title) shortcut")
+                    .accessibilityLabel("Clear shortcut for \(action.title)")
+                }
+                .frame(minHeight: 25)
+                .padding(.top, action.startsSettingsSubgroup ? 9 : 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct WindowActionPreviewView: View {
+    let action: SuperMacWindowAction
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(.secondary.opacity(0.75), lineWidth: 1)
+            if let preview = action.preview {
+                switch preview {
+                case .region(let region):
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(.secondary.opacity(0.75))
+                            .frame(
+                                width: geometry.size.width * region.width,
+                                height: geometry.size.height * region.height
+                            )
+                            .offset(
+                                x: geometry.size.width * region.minX,
+                                y: geometry.size.height * region.minY
+                            )
+                    }
+                    .padding(2)
+                case .symbol(let name):
+                    Image(systemName: name)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 

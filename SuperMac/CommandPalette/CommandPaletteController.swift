@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import Observation
 import SwiftUI
 
@@ -157,7 +158,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
-                pasteText: paste,
+                pasteClipboardEntry: pasteClipboardEntry,
+                pasteDictationText: { [weak self] text in
+                    self?.paste(text, suppressClipboardHistory: true)
+                },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
                 },
@@ -283,7 +287,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.text.localizedCaseInsensitiveContains(query) }
+        return clipboard.entries.filter { $0.searchableText.localizedCaseInsensitiveContains(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -301,7 +305,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             reveal ? self.reveal(result) : open(result)
         case .clipboard:
             guard filteredClipboard.indices.contains(state.selection) else { return }
-            paste(filteredClipboard[state.selection].text, suppressClipboardHistory: false)
+            pasteClipboardEntry(filteredClipboard[state.selection])
         case .dictation:
             guard filteredDictations.indices.contains(state.selection) else { return }
             paste(filteredDictations[state.selection].text, suppressClipboardHistory: true)
@@ -324,6 +328,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
+        finishPaste(to: target)
+    }
+
+    private func pasteClipboardEntry(_ entry: ClipboardEntry) {
+        let target = destination
+        guard clipboard.restore(entry) else { return }
+        finishPaste(to: target)
+    }
+
+    private func finishPaste(to target: NSRunningApplication?) {
         dismiss()
         target?.activate(options: [])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -348,7 +362,8 @@ private struct CommandPaletteView: View {
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
-    let pasteText: (String, Bool) -> Void
+    let pasteClipboardEntry: (ClipboardEntry) -> Void
+    let pasteDictationText: (String) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
 
@@ -404,7 +419,7 @@ private struct CommandPaletteView: View {
             ClipboardResultsView(
                 entries: filteredClipboard,
                 selection: state.selection,
-                choose: { pasteText($0, false) },
+                choose: pasteClipboardEntry,
                 delete: clipboard.delete,
                 clear: clipboard.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -414,7 +429,7 @@ private struct CommandPaletteView: View {
                 entries: filteredDictations,
                 selection: state.selection,
                 select: { state.selection = $0 },
-                choose: { pasteText($0, true) },
+                choose: pasteDictationText,
                 delete: dictationHistory.delete,
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -425,7 +440,7 @@ private struct CommandPaletteView: View {
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.text.localizedCaseInsensitiveContains(query) }
+        return clipboard.entries.filter { $0.searchableText.localizedCaseInsensitiveContains(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -577,24 +592,123 @@ private struct SearchResultsView: View {
 private struct ClipboardResultsView: View {
     let entries: [ClipboardEntry]
     let selection: Int
-    let choose: (String) -> Void
+    let choose: (ClipboardEntry) -> Void
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
 
     var body: some View {
-        HistoryResultsContainer(
-            entries: entries,
-            selection: selection,
-            emptyTitle: "No copied text yet",
-            emptyImage: "clipboard",
-            text: { $0.text },
-            choose: { choose($0.text) },
-            delete: delete,
-            clear: clear,
-            confirmationPresentationChanged: confirmationPresentationChanged,
-            subtitle: { Text($0.capturedAt, style: .relative) }
-        )
+        PaletteResultsContainer {
+            if entries.isEmpty {
+                PaletteEmptyState(title: "No clipboard items yet", systemImage: "clipboard")
+            } else {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Recent")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        HistoryClearButton(
+                            title: "Clear History",
+                            confirmationTitle: "Clear clipboard history?",
+                            confirmationMessage: "This permanently removes all clipboard items and image previews saved by SuperMac.",
+                            destructiveActionTitle: "Clear Clipboard History",
+                            disabled: entries.isEmpty,
+                            confirmationPresentationChanged: confirmationPresentationChanged,
+                            clear: clear
+                        )
+                    }
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+
+                    List(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                        HStack(spacing: 10) {
+                            Button { choose(entry) } label: {
+                                HStack(spacing: 12) {
+                                    ClipboardEntryPreview(entry: entry)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(entry.displayText)
+                                            .lineLimit(entry.kind == .image ? 1 : 2)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        HStack(spacing: 5) {
+                                            Text(entry.kind == .image ? "Image" : "Text")
+                                            Text("·")
+                                            Text(entry.capturedAt, style: .relative)
+                                        }
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            Button(role: .destructive) { delete(entry) } label: {
+                                Image(systemName: "trash")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Delete history item \(index + 1)")
+                        }
+                        .listRowInsets(.init())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+        }
+    }
+}
+
+private struct ClipboardEntryPreview: View {
+    let entry: ClipboardEntry
+    @State private var thumbnail: NSImage?
+
+    var body: some View {
+        Group {
+            if entry.kind == .image, let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: entry.kind == .image ? "photo" : "doc.text")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 58, height: 42)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+        .clipShape(.rect(cornerRadius: 7))
+        .accessibilityLabel(entry.kind == .image ? "Copied image preview" : "Copied text")
+        .task(id: entry.mediaPath) {
+            guard entry.kind == .image, let imageURL = entry.imageURL else {
+                thumbnail = nil
+                return
+            }
+            thumbnail = await Self.loadThumbnail(from: imageURL)
+        }
+    }
+
+    private static func loadThumbnail(from url: URL) async -> NSImage? {
+        await Task.detached(priority: .utility) {
+            let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions as CFDictionary) else {
+                return nil
+            }
+            let thumbnailOptions: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 160,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true
+            ]
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary) else {
+                return nil
+            }
+            return NSImage(cgImage: image, size: .zero)
+        }.value
     }
 }
 
@@ -675,81 +789,6 @@ private struct DictationResultsView: View {
             if selection >= entries.count { select(max(0, entries.count - 1)) }
         }
     }
-}
-
-private struct HistoryResultsContainer<Entry: Identifiable, Subtitle: View>: View {
-    let entries: [Entry]
-    let selection: Int
-    let emptyTitle: String
-    let emptyImage: String
-    let text: (Entry) -> String
-    let choose: (Entry) -> Void
-    let delete: (Entry) -> Void
-    let clear: () -> Void
-    let confirmationPresentationChanged: (Bool) -> Void
-    @ViewBuilder let subtitle: (Entry) -> Subtitle
-
-    var body: some View {
-        PaletteResultsContainer {
-            if entries.isEmpty {
-                PaletteEmptyState(title: emptyTitle, systemImage: emptyImage)
-            } else {
-                VStack(spacing: 0) {
-                    HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        HistoryClearButton(
-                            title: "Clear History",
-                            confirmationTitle: "Clear clipboard history?",
-                            confirmationMessage: "This permanently removes all clipboard items saved by SuperMac.",
-                            destructiveActionTitle: "Clear Clipboard History",
-                            disabled: entries.isEmpty,
-                            confirmationPresentationChanged: confirmationPresentationChanged,
-                            clear: clear
-                        )
-                    }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
-
-                    List(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        HStack(spacing: 10) {
-                            Button {
-                                choose(entry)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(text(entry))
-                                        .lineLimit(2)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    subtitle(entry)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            Button(role: .destructive) {
-                                delete(entry)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Delete history item \(index + 1)")
-                        }
-                        .listRowInsets(.init())
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                }
-            }
-        }
-    }
-
 }
 
 private struct PaletteResultsContainer<Content: View>: View {

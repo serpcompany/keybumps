@@ -121,6 +121,8 @@ Observed behavioral preferences:
 
 The assigned shortcut mappings shown in the owner-supplied Appshot are the confirmed starting Window Management profile. Repeated sizing and display movement plus Rectangle-style drag-to-snap are also selected for MVP. Todo Mode and the green-stoplight override are explicitly excluded; other observed Rectangle preferences remain reference evidence rather than confirmed SuperMac MVP scope.
 
+On 2026-09-12, the owner selected Rectangle's Shortcuts-screen layout as a bounded visual reference for SuperMac Window Management settings. SuperMac adopts the compact action name + footprint diagram + shortcut recorder + clear-control rows, two aligned columns, and divider between primary and fractional layouts. The surrounding SuperMac sidebar, capability/status header, colors, typography, identity, and supported-action set remain original. Rectangle rows for actions SuperMac cannot execute are not presented as working controls.
+
 ## Alfred reference slice
 
 Only the owner's Spotlight-like search journey is in scope as a behavioral reference:
@@ -141,7 +143,7 @@ SuperMac adopts `Command-Space`, launch at login, and app/file/folder search as 
 
 The selected Quick Search behavior is a centered floating search panel with results underneath. Arrow keys change selection, Return opens the selected application, file, or folder, Command-Return reveals a file in Finder, and Escape or clicking elsewhere dismisses the panel.
 
-The owner confirmed that Alfred Clipboard History is invoked separately with `Shift-Command-Space`. SuperMac adopts that shortcut for its own locally persisted ten-item text history without otherwise claiming Alfred Clipboard History parity.
+The owner confirmed that Alfred Clipboard History is invoked separately with `Shift-Command-Space`. SuperMac adopts that shortcut for its own locally persisted ten-item text-or-image history without otherwise claiming Alfred Clipboard History parity. PNG, JPEG, HEIC, GIF, and TIFF data receive visible thumbnails and exact-type paste restoration; arbitrary files and audio/video clipboard payloads remain outside this slice.
 
 ## Unified command-palette reference slice
 

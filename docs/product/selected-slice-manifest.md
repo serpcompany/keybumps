@@ -3,7 +3,7 @@
 - [ ] Stable signed shell under `com.serp.supermac`
 - [ ] Capability toggles acquire and release services
 - [ ] Command-Space Quick Search: apps, files, folders
-- [ ] Shift-Command-Space Clipboard History: ten text items
+- [ ] Shift-Command-Space Clipboard History: ten text or image items with visual previews
 - [ ] Option-Space Dictation: visible recording/transcribing, local insertion, Escape cancellation
 - [ ] Owner-selected Rectangle shortcut profile and drag-to-snap
 - [ ] Current Key Bumps behavior and durable presentations

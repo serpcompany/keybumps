@@ -157,21 +157,21 @@ Completion criterion: from another app, `Command-Space` can find and open a know
 
 ### 2. Clipboard History
 
-User outcome: recover and reuse the most recent copied text through the Clipboard tab of the shared Command Palette.
+User outcome: recover and reuse the most recent copied text or image through the Clipboard tab of the shared Command Palette.
 
 - Default global shortcut: `Shift-Command-Space`; user-recordable and clearable in Clipboard History settings.
-- Capture text clipboard changes while the capability is enabled.
-- Persist only the ten most recent text items locally.
+- Capture text plus PNG, JPEG, HEIC, GIF, and TIFF clipboard changes while the capability is enabled.
+- Persist only the ten most recent text or image items locally. Store image payloads as separate local media files capped at 50 MB each rather than embedding binary data in the history JSON.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
 - Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Paste from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
 - Provide deletion and a native Clear History control that requires destructive confirmation before removing all items. Opening, cancelling, or confirming that alert must not dismiss the Command Palette.
 - Disabling the capability stops monitoring but does not silently erase retained items.
-- No images, files, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
+- No arbitrary copied files, audio/video media, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
 
 The product owner deliberately chose the simplest bounded implementation. Document clearly that recent copied secrets may remain in the ten-item local history until removed or displaced.
 
-Completion criterion: copy more than ten distinct text values across ordinary applications; verify ordering, duplicate collapse, ten-item eviction, selection/paste behavior, persistence across app restart, deletion, clearing, and disabled monitoring from the exact signed build.
+Completion criterion: copy more than ten distinct text/image values across ordinary applications; verify visible image previews, exact image paste restoration, ordering, duplicate collapse, ten-item/media-file eviction, persistence across app restart, deletion, clearing, and disabled monitoring from the exact signed build.
 
 ### 3. Dictation
 
@@ -219,7 +219,7 @@ User outcome: replace the owner's actual Rectangle configuration without learnin
 - Include Rectangle-style drag-to-snap.
 - Restore the prior window size when unsnapping.
 - Preserve zero-pixel gaps for the starting profile.
-- Retain configurable shortcuts in the Window Management settings screen.
+- Present configurable shortcuts in a Rectangle-inspired two-column settings grid with a visual footprint for each action, the shortcut recorder, and a clear control. Every supported action appears exactly once; unsupported Rectangle-only actions remain absent.
 
 Explicitly excluded from MVP:
 

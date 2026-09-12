@@ -1,4 +1,4 @@
-# Selected dictation archive parity ledger
+# Selected product-slice parity ledger
 
 Reference: Superwhisper 2.18.3 (`com.superduper.superwhisper`) on 2026-09-12. Candidate: SuperMac (`com.serp.supermac`). Private reference transcript values were not inspected or copied.
 
@@ -27,3 +27,19 @@ Reference: Superwhisper 2.18.3 (`com.superduper.superwhisper`) on 2026-09-12. Ca
 | Command Palette Dictation | Playing audio | Switch tab or close | Ephemeral player state | Not observed | Stop playback when rich Dictation results disappear | Pass, structural |
 
 The selected slice is reconstructed and exercised. Full product parity remains out of scope; the completion manifest still records unrelated unresolved rows and the lack of installed-artifact and independent verification.
+
+## Window Management settings layout
+
+| Surface | State | Interaction | Persistence boundary | Reference observation | SuperMac acceptance | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| Window settings | Default | Review shortcuts | Existing shortcut preferences | Two compact columns with action footprint, recorder, and clear control | Same information hierarchy inside SuperMac sidebar and status header | Reconstructed; runtime inspected |
+| Window settings | Assigned/unassigned | Record or clear | Existing shortcut preferences | Assigned keys show glyphs; empty keys say Record Shortcut | Existing working recorder and clear behavior retained for every supported action | Pass, automated behavior |
+| Window settings | Full list | Scroll | View only | Primary layouts above divider; fractional layouts below | All 30 supported actions appear once in four ordered groups | Pass, automated inventory |
+
+## Clipboard rich-media history
+
+| Surface | State | Interaction | Persistence boundary | Reference observation | SuperMac acceptance | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| Clipboard palette | Copied image | Review | Separate local media file plus history metadata | Rich clipboard history requested by owner | Thumbnail, Image label, relative time, and selected-row treatment | Reconstructed; runtime image pending |
+| Clipboard palette | Selected image | Return/click | System pasteboard | Rich clipboard history requested by owner | Restore original image bytes and pasteboard media type | Pass, automated named pasteboard |
+| Clipboard store | Relaunch/delete/evict/clear | Manage history | Application Support | Bounded history requested by owner | Ten total entries; image file reloads and is removed with lifecycle | Pass, automated storage |

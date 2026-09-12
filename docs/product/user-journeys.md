@@ -78,14 +78,14 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 
 ## UJ-05 — Clipboard History
 
-1. Copy text in ordinary applications while Clipboard History is enabled.
+1. Copy text or a supported image in ordinary applications while Clipboard History is enabled.
 2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Home/settings.
-3. The shared palette opens on Clipboard with the newest item first and at most ten items.
-4. Filter the local history, select an item, and paste it into the previously focused destination when safe.
+3. The shared palette opens on Clipboard with the newest item first and at most ten items. Image entries show a visual thumbnail and media label.
+4. Filter the local history, select a text or image item, and paste its original representation into the previously focused destination when safe.
 5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed. The confirmation appears over the palette; cancelling or confirming leaves the palette open and shows the resulting history state.
 6. Disable Clipboard History to stop monitoring and release its shortcut without silently erasing retained items.
 
-Clipboard content stays local. Automatic fresh-Dictation insertion and Paste from Dictation History do not create Clipboard History entries; explicitly copying text does. Recent copied secrets remain until removed or displaced, so committed screenshots and logs must not contain item text.
+Clipboard content stays local. Supported image payloads are stored as separate local media files and removed with their entry, on eviction, or when history is cleared. Automatic fresh-Dictation insertion and Paste from Dictation History do not create Clipboard History entries; explicitly copying content does. Recent copied secrets and images remain until removed or displaced, so committed screenshots and logs must not contain their content.
 
 ## UJ-06 — Dictation and Dictation History
 
@@ -111,7 +111,7 @@ If Dictation permissions are missing, pressing the shortcut first shows a SuperM
 3. Confirm the frontmost resizable window reaches the requested half, third, sixth, fourth, three-fourths, center, maximize, resize, restore, or display position.
 4. Repeat sizing commands where the selected behavior cycles.
 5. Drag a window into each selected snap region, then drag it away and confirm its previous frame is restored.
-6. Record, clear, cancel, or restore shortcuts in Window Management settings.
+6. Use the two-column Rectangle-inspired settings grid to identify actions visually, then record, clear, cancel, or restore shortcuts.
 
 Disabling Window Management stops drag monitoring and releases every owned window shortcut.
 

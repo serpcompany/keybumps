@@ -2,6 +2,12 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 Rectangle-style settings and image Clipboard History
+
+The owner supplied a current Rectangle Shortcuts Appshot and selected its compact two-column settings hierarchy as a bounded visual reference. SuperMac's Window Management screen now presents its own 30 supported actions in four exhaustive groups: primary positioning and sizing above a divider, fractional layouts below, with an original SwiftUI footprint diagram, working shortcut recorder, and clear control on every row. Signed-runtime inspection confirmed the two-column layout, assigned/unassigned states, status header, Restore Defaults, scrolling, and all 30 accessible action controls. Rectangle-only actions that SuperMac does not implement were not rendered as fake controls; exact pixel parity and the reference toolbar remain out of scope.
+
+Clipboard History now captures PNG, JPEG, HEIC, GIF, and TIFF data up to 50 MB per item. Metadata stays in the bounded ten-entry JSON index while original image bytes are stored as separate local media files. The Clipboard palette shows a downsampled thumbnail, media label, and timestamp, and selecting the entry restores the original pasteboard type before pasting. Named-pasteboard tests proved capture, persisted reload, preview-file presence, exact byte restoration, media-file deletion, and backward-compatible loading of the earlier text-only JSON without reading or replacing the user's clipboard. The complete deterministic suite passed 104/104 and Debug and Release builds passed. Signed-runtime image-row acceptance remains pending until the owner copies a non-private image through the live app.
+
 ## 2026-09-12 Escape cancellation and menu Settings repair
 
 Two owner-reported regressions were reproduced in the routing structure. The recording indicator advertised Escape cancellation, and `DefaultShortcut.cancelDictation` existed, but `AppModel` never registered it. SuperMac now registers bare Escape through the sole global shortcut coordinator only during Recording and Transcribing, routes it to `DictationService.cancel()`, and unregisters it before insertion, on idle/failure, and when Dictation is disabled. Deterministic coverage pins those phase boundaries, and a real Carbon registration test confirms macOS accepts the temporary unmodified Escape binding. Physical microphone cancellation remains owner acceptance.

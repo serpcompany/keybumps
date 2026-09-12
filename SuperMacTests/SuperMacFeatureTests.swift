@@ -374,6 +374,60 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 10)
     }
 
+    func testClipboardPersistsPreviewsAndRestoresCopiedImages() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-rich-\(UUID().uuidString)")
+        let storageURL = root.appendingPathComponent("history.json")
+        let mediaURL = root.appendingPathComponent("media", isDirectory: true)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("SuperMacImageClipboard-\(UUID().uuidString)"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII="))
+        let service = ClipboardHistoryService(
+            storageURL: storageURL,
+            pasteboard: pasteboard,
+            mediaDirectoryURL: mediaURL
+        )
+
+        pasteboard.clearContents()
+        pasteboard.setData(png, forType: .png)
+        service.pollForTesting()
+
+        let entry = try XCTUnwrap(service.entries.first)
+        XCTAssertEqual(entry.kind, .image)
+        XCTAssertEqual(entry.displayText, "Image")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(entry.imageURL).path))
+        XCTAssertEqual(
+            ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL).entries.first,
+            entry
+        )
+
+        pasteboard.clearContents()
+        service.restore(entry)
+        XCTAssertEqual(pasteboard.data(forType: .png), png)
+
+        let imageURL = try XCTUnwrap(entry.imageURL)
+        service.delete(entry)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imageURL.path))
+    }
+
+    func testClipboardLoadsLegacyTextOnlyHistory() throws {
+        struct LegacyClipboardEntry: Encodable {
+            let id: UUID
+            let text: String
+            let capturedAt: Date
+        }
+
+        let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-legacy-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let legacy = LegacyClipboardEntry(id: UUID(), text: "Legacy text", capturedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        try JSONEncoder().encode([legacy]).write(to: storageURL)
+
+        let loaded = ClipboardHistoryService(storageURL: storageURL)
+
+        XCTAssertEqual(loaded.entries.first?.id, legacy.id)
+        XCTAssertEqual(loaded.entries.first?.text, "Legacy text")
+        XCTAssertEqual(loaded.entries.first?.kind, .text)
+    }
+
     func testAutomaticDictationPasteIsExcludedFromClipboardHistoryOnlyOnce() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("SuperMacDictationSuppression-\(UUID().uuidString)"))
@@ -584,6 +638,21 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(SuperMacWindowAction.lastFourth.defaultShortcut?.keyCode, 119)
         XCTAssertNil(SuperMacWindowAction.upperRight.defaultShortcut)
         XCTAssertEqual(Set(assigned.map { "\($0.1.keyCode)-\($0.1.modifiers)" }).count, assigned.count)
+    }
+
+    func testRectangleStyleSettingsLayoutContainsEverySupportedActionExactlyOnce() {
+        XCTAssertEqual(
+            WindowSettingsLayout.primaryLeading,
+            [.left, .right, .centerHalf, .top, .bottom, .upperLeft, .upperRight, .lowerLeft, .lowerRight]
+        )
+        XCTAssertEqual(
+            WindowSettingsLayout.primaryTrailing,
+            [.maximize, .smaller, .larger, .center, .restore, .nextDisplay, .previousDisplay]
+        )
+        let displayed = WindowSettingsLayout.allGroups.flatMap { $0 }
+        XCTAssertEqual(displayed.count, SuperMacWindowAction.allCases.count)
+        XCTAssertEqual(Set(displayed), Set(SuperMacWindowAction.allCases))
+        XCTAssertTrue(SuperMacWindowAction.allCases.allSatisfy { $0.preview != nil })
     }
 
     func testWindowGeometryCoversOwnerSlices() {

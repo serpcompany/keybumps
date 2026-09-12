@@ -233,6 +233,32 @@
       }
     },
     {
+      "id": "clipboard.image-history-preview-and-paste",
+      "kind": "both",
+      "in_scope": true,
+      "status": "inferred",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
+        "candidate": ["SuperMac/Clipboard/ClipboardHistoryService.swift", "SuperMac/CommandPalette/CommandPaletteController.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md#clipboard-rich-media-history"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-rectangle-style-settings-and-image-clipboard-history"]
+      }
+    },
+    {
+      "id": "window.settings.rectangle-style-layout",
+      "kind": "both",
+      "in_scope": true,
+      "status": "inferred",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#rectangle-configuration-reference"],
+        "candidate": ["SuperMac/Views/SettingsRootView.swift", "SuperMac/WindowManagement/WindowAction.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md#window-management-settings-layout"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-rectangle-style-settings-and-image-clipboard-history"]
+      }
+    },
+    {
       "id": "permissions.system-pane-helper",
       "kind": "both",
       "in_scope": true,
