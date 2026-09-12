@@ -9,6 +9,7 @@ struct DictationRecordingMetadata: Codable, Equatable {
     let result: String
     let audioFile: String
     let appVersion: String
+    let transcriptionError: String?
 }
 
 struct PendingDictationRecording: Equatable {
@@ -25,6 +26,7 @@ struct DictationHistoryEntry: Identifiable, Equatable {
 
     var id: String { metadata.id }
     var text: String { metadata.result }
+    var displayText: String { text.isEmpty ? "Transcription unavailable" : text }
     var language: String { metadata.languageSelected }
     var capturedAt: Date { metadata.datetime }
     var duration: TimeInterval { metadata.duration }
@@ -91,10 +93,11 @@ final class DictationHistoryService {
         _ recording: PendingDictationRecording,
         text: String,
         language: String,
-        duration: TimeInterval
+        duration: TimeInterval,
+        transcriptionError: String? = nil
     ) throws -> DictationHistoryEntry {
         let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !transcript.isEmpty else {
+        guard !transcript.isEmpty || transcriptionError != nil else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
         guard fileManager.fileExists(atPath: recording.audioURL.path) else {
@@ -108,7 +111,8 @@ final class DictationHistoryService {
             languageSelected: language,
             result: transcript,
             audioFile: recording.audioURL.lastPathComponent,
-            appVersion: appVersion
+            appVersion: appVersion,
+            transcriptionError: transcriptionError
         )
         let metadataURL = recording.directoryURL.appendingPathComponent("meta.json")
         let encoder = JSONEncoder()

@@ -175,6 +175,7 @@ Completion criterion: copy more than ten distinct text values across ordinary ap
 User outcome: replace the owner's transparent Superwhisper voice-to-text workflow.
 
 - Default global shortcut: `Option-Space` toggles recording; user-recordable and clearable in Dictation settings.
+- Default maximum recording length: five minutes, with 10, 15, 30, and 60-minute choices plus No Limit in Dictation settings.
 - First press starts recording.
 - Second press stops recording, transcribes locally, and inserts at the current text cursor.
 - Escape cancels without inserting text.
@@ -185,6 +186,8 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Provide a Settings language selector populated only with languages genuinely supported by the chosen local engine.
 - Automatic per-recording language detection is deferred.
 - Dictation remains local and useful offline after any required model installation.
+- Record the full continuous WAV first and transcribe the completed file so an early live-recognition final result cannot truncate a longer session.
+- Preserve the WAV in Dictation History with an explicit failure state when transcription fails or times out.
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
 - Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
 - Provide a searchable Dictation History screen with real local playback, duration/progress, copy, reveal in Finder, individual delete, and clear-all controls.

@@ -300,6 +300,29 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertFalse(AppPreferences(defaults: defaults).enabledCapabilities.contains(.dictation))
     }
 
+    func testDictationDurationDefaultsToFiveMinutesAndPersistsLongerChoices() {
+        let suite = "SuperMacDictationDuration-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let first = AppPreferences(defaults: defaults)
+        XCTAssertEqual(first.dictationDurationLimit, .fiveMinutes)
+        XCTAssertEqual(first.dictationDurationLimit.seconds, 300)
+        XCTAssertEqual(
+            DictationDurationLimit.allCases,
+            [.fiveMinutes, .tenMinutes, .fifteenMinutes, .thirtyMinutes, .sixtyMinutes, .unlimited]
+        )
+
+        first.dictationDurationLimit = .thirtyMinutes
+        XCTAssertEqual(AppPreferences(defaults: defaults).dictationDurationLimit, .thirtyMinutes)
+        first.dictationDurationLimit = .unlimited
+        XCTAssertNil(AppPreferences(defaults: defaults).dictationDurationLimit.seconds)
+    }
+
+    func testDictationTranscribesTheCompletedAudioArchiveRatherThanAnEarlyLiveResult() {
+        XCTAssertEqual(DictationTranscriptionPlan.source, .completedAudioFile)
+    }
+
     func testClipboardKeepsTenAndCollapsesDuplicates() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -390,6 +413,30 @@ final class SuperMacFeatureTests: XCTestCase {
 
         XCTAssertTrue(DictationHistoryClipboard.copy("Copied dictation", to: pasteboard))
         XCTAssertEqual(pasteboard.string(forType: .string), "Copied dictation")
+    }
+
+    func testDictationHistoryPreservesAudioWhenTranscriptionFails() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("failed-dictation-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = DictationHistoryService(recordingsDirectoryURL: root)
+        let pending = try service.prepareRecording(capturedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: pending.audioURL)
+
+        let entry = try service.completeRecording(
+            pending,
+            text: "",
+            language: "en-US",
+            duration: 300,
+            transcriptionError: "Recognition unavailable"
+        )
+
+        XCTAssertEqual(entry.displayText, "Transcription unavailable")
+        XCTAssertEqual(entry.metadata.transcriptionError, "Recognition unavailable")
+        XCTAssertNotNil(entry.audioURL)
+        let reloaded = try XCTUnwrap(DictationHistoryService(recordingsDirectoryURL: root).entries.first)
+        XCTAssertEqual(reloaded.metadata, entry.metadata)
+        XCTAssertEqual(reloaded.directoryURL.standardizedFileURL, entry.directoryURL.standardizedFileURL)
+        XCTAssertEqual(reloaded.audioURL?.standardizedFileURL, entry.audioURL?.standardizedFileURL)
     }
 
     func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {

@@ -266,9 +266,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
+        let reusableEntries = dictationHistory.entries.filter { !$0.text.isEmpty }
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return dictationHistory.entries }
-        return dictationHistory.entries.filter { $0.text.localizedCaseInsensitiveContains(query) }
+        guard !query.isEmpty else { return reusableEntries }
+        return reusableEntries.filter { $0.text.localizedCaseInsensitiveContains(query) }
     }
 
     private func activateSelection(reveal: Bool) {
@@ -402,9 +403,10 @@ private struct CommandPaletteView: View {
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
+        let reusableEntries = dictationHistory.entries.filter { !$0.text.isEmpty }
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return dictationHistory.entries }
-        return dictationHistory.entries.filter { $0.text.localizedCaseInsensitiveContains(query) }
+        guard !query.isEmpty else { return reusableEntries }
+        return reusableEntries.filter { $0.text.localizedCaseInsensitiveContains(query) }
     }
 }
 

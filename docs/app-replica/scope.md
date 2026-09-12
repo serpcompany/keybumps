@@ -176,6 +176,8 @@ Dictation may use Apple Speech or another accurate local model; the acceptance t
 
 Dictation uses `Option-Space` to start and stop. A small floating indicator visibly distinguishes Recording from Transcribing, disappears after successful insertion, and cancels without pasting when the user presses Escape.
 
+The default maximum recording length is five minutes. Dictation settings offer 10, 15, 30, and 60 minutes plus No Limit. Reaching a finite limit automatically stops capture and begins transcription. SuperMac records one continuous WAV and transcribes that completed local file rather than treating an early final result from a live recognition task as the entire dictation. If transcription fails, the audio remains available in Dictation History with an explicit failure state.
+
 ## Shortcut Coaching acceptance boundary
 
 The first SuperMac release retains Shortcut Coach's current Accessibility and Input Monitoring permission requirements and its currently supported action coverage. Additional permission does not imply additional recognition coverage; new supported actions can arrive through later verified updates.

@@ -12,6 +12,19 @@
   },
   "rows": [
     {
+      "id": "dictation.duration.completed-file-transcription",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#dictation-acceptance-boundary"],
+        "candidate": ["SuperMac/Dictation/DictationService.swift", "SuperMac/Infrastructure/AppPreferences.swift", "SuperMac/Views/SettingsRootView.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-long-dictation-boundary"]
+      }
+    },
+    {
       "id": "dictation.archive.folder-per-recording",
       "kind": "behavior",
       "in_scope": true,

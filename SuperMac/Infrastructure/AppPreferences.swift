@@ -9,6 +9,7 @@ final class AppPreferences {
         static let showInDockAndSwitcher = "showInDockAndSwitcher"
         static let enabledCapabilities = "enabledCapabilities"
         static let dictationLanguage = "dictationLanguage"
+        static let dictationDurationLimit = "dictationDurationLimit"
         static let didCompleteOnboarding = "didCompleteOnboarding"
         static let capabilityShortcuts = "capabilityShortcuts"
         static let windowShortcuts = "windowShortcuts"
@@ -32,6 +33,10 @@ final class AppPreferences {
         didSet { defaults.set(dictationLanguage, forKey: Key.dictationLanguage) }
     }
 
+    var dictationDurationLimit: DictationDurationLimit {
+        didSet { defaults.set(dictationDurationLimit.rawValue, forKey: Key.dictationDurationLimit) }
+    }
+
     var didCompleteOnboarding: Bool {
         didSet { defaults.set(didCompleteOnboarding, forKey: Key.didCompleteOnboarding) }
     }
@@ -52,6 +57,12 @@ final class AppPreferences {
             enabledCapabilities = Set(Capability.allCases)
         }
         dictationLanguage = defaults.string(forKey: Key.dictationLanguage) ?? "en-US"
+        if defaults.object(forKey: Key.dictationDurationLimit) != nil,
+           let storedLimit = DictationDurationLimit(rawValue: defaults.integer(forKey: Key.dictationDurationLimit)) {
+            dictationDurationLimit = storedLimit
+        } else {
+            dictationDurationLimit = .fiveMinutes
+        }
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            let decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

@@ -270,6 +270,25 @@ private struct DictationSettingsView: View {
                 }
                 Text("Only languages with Apple on-device recognition on this Mac are shown.").foregroundStyle(.secondary)
             }
+            Section("Recording length") {
+                Picker(
+                    "Maximum recording length",
+                    selection: Binding(
+                        get: { model.preferences.dictationDurationLimit },
+                        set: { model.setDictationDurationLimit($0) }
+                    )
+                ) {
+                    ForEach(DictationDurationLimit.allCases) { limit in
+                        Text(limit.title).tag(limit)
+                    }
+                }
+                .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
+                Text("SuperMac stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut.")
+                    .foregroundStyle(.secondary)
+                Text("Long recordings use more disk space and may take longer to transcribe. If transcription fails, SuperMac keeps the audio in Dictation History.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Status") {
                 LabeledContent("Dictation", value: model.dictation.phase.label)
                 LabeledContent("Saved dictations", value: "\(model.dictationHistory.entries.count)")

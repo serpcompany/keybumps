@@ -4,6 +4,8 @@ SuperMac is a native macOS utility combining local Quick Search, bounded Clipboa
 
 Each completed dictation is stored locally under `~/Documents/SuperMac/recordings/<timestamp>/` with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
 
+Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. SuperMac transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session.
+
 ## Build and run
 
 Requirements: Apple Silicon Mac, macOS 14.2+, Xcode, and XcodeGen.

@@ -120,7 +120,7 @@ private struct DictationHistoryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(entry.text)
+            Text(entry.displayText)
                 .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,6 +153,10 @@ private struct DictationHistoryCard: View {
                 Text(Locale.current.localizedString(forIdentifier: entry.language) ?? entry.language)
                 if entry.audioURL == nil {
                     Text("· Audio unavailable")
+                }
+                if entry.metadata.transcriptionError != nil {
+                    Text("· Transcription failed")
+                        .foregroundStyle(.orange)
                 }
                 Spacer()
                 Button(action: copy) { Image(systemName: "doc.on.doc") }

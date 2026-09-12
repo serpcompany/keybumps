@@ -92,10 +92,11 @@ Clipboard content stays local. Recent copied secrets remain until removed or dis
 1. Choose an available on-device recognition language in Dictation settings.
 2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default).
 3. A visible Recording indicator appears while audio is captured.
-4. Press the configured Dictation shortcut again to stop, transcribe locally, and insert at the original cursor; or press Escape to cancel without insertion.
-5. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted.
-6. If insertion fails, recover the last transcript from Dictation settings.
-7. Open Dictation History to search transcript cards, play/pause audio, copy text, reveal the recording folder, or delete recordings. The Command Palette's Dictation tab remains available for quick transcript reuse.
+4. Recording automatically stops at the selected duration limit—five minutes by default—or the user presses the configured Dictation shortcut again to stop sooner.
+5. SuperMac transcribes the completed local WAV and inserts the result at the original cursor; pressing Escape cancels without insertion.
+6. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted. A failed transcription retains its audio with an explicit failure state.
+7. If insertion fails, recover the last transcript from Dictation settings.
+8. Open Dictation History to search transcript cards, play/pause audio, copy text, reveal the recording folder, or delete recordings. The Command Palette's Dictation tab remains available for quick transcript reuse.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 

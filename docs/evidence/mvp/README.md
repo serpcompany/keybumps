@@ -10,6 +10,12 @@ SuperMac now independently stores each completed recording under `~/Documents/Su
 
 The exact signed Debug app produced a real timestamp directory containing both files. `afinfo` verified the candidate audio as a playable mono WAVE file; its current native capture format is 44.1 kHz Float32, a deliberate implementation difference from the inspected reference's 16 kHz Int16 file. The dedicated History screen displayed the saved transcript card, duration, language, audio progress, copy, Finder reveal, and delete controls. Runtime search reached its no-results state, local play changed to Pause with advancing progress, natural completion returned to Play, relaunch reloaded the entry, and Reveal opened the exact timestamp directory in Finder. The full deterministic suite passed 89/89 after implementation. Full owner acceptance and unrelated completion-manifest rows remain unresolved.
 
+## 2026-09-12 long dictation boundary
+
+Source inspection confirmed the earlier build had no intentional maximum recording duration but used one live `SFSpeechRecognitionTask`, accepted its first final result as the session result, and used a fixed five-second finalization fallback. SuperMac now records one continuous WAV and starts an on-device `SFSpeechURLRecognitionRequest` only after capture stops. The default duration limit is five minutes and persisted settings expose 10, 15, 30, and 60 minutes plus No Limit. A 120-second transcription timeout prevents indefinite Transcribing state; failed transcription preserves the audio archive with an explicit failure marker.
+
+A signed runtime recording produced a 9.7-second WAV. Completed-file transcription contained both the synthetic beginning and ending markers, and the generated verification directory was then moved to Trash. Deterministic tests cover the five-minute default, persistence of longer and unlimited choices, completed-file transcription strategy, and failed-transcription audio preservation.
+
 ## 2026-09-12 SuperMac identity reset
 
 The owner renamed the pre-release product to **SuperMac** and explicitly requested a fresh identity. The current signed artifact is `.derived/Build/Products/Debug/SuperMac.app` with bundle identifier `com.serp.supermac`. The repository, Xcode project, schemes, targets, module, executable, source/test roots, assets, and current documentation were subsequently normalized to the SuperMac name.

@@ -5,6 +5,9 @@ Reference: Superwhisper 2.18.3 (`com.superduper.superwhisper`) on 2026-09-12. Ca
 | Surface | State | Interaction | Persistence boundary | Reference observation | SuperMac acceptance | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | Documents archive | Completed dictation | Finish recording | One timestamp directory | `meta.json` plus `output.wav` | `~/Documents/SuperMac/recordings/<timestamp>/` contains both files | Pass |
+| Dictation settings | Default and customized duration | Select maximum length | User defaults | Five-minute reference default reported by owner | Default 5 minutes; 10, 15, 30, 60 minutes and No Limit persist | Pass |
+| Dictation engine | Pause or early recognition final | Stop recording | Completed local WAV | Reference supports multi-minute dictation | Transcribe the completed WAV rather than an early live final result | Pass |
+| Dictation engine | Recognition failure or timeout | Finish recording | Recording directory | Not observed | Preserve playable WAV with explicit failed-transcription metadata | Deliberate difference, pass |
 | Documents archive | Relaunch | Load history | Directory enumeration | Recording folders remain available | Entries reload newest-first without a monolithic index | Pass |
 | History | Populated | Search | In-memory filtered metadata | Search field filters transcript cards | Case-insensitive transcript search | Pass |
 | History card | Idle audio | Play | Local WAV | Play button and duration strip | Play real `output.wav`; show progress and duration | Pass |

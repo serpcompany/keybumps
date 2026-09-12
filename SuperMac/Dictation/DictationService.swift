@@ -19,6 +19,37 @@ enum DictationPhase: Equatable {
     }
 }
 
+enum DictationDurationLimit: Int, CaseIterable, Identifiable {
+    case fiveMinutes = 300
+    case tenMinutes = 600
+    case fifteenMinutes = 900
+    case thirtyMinutes = 1_800
+    case sixtyMinutes = 3_600
+    case unlimited = 0
+
+    var id: Int { rawValue }
+    var seconds: TimeInterval? { self == .unlimited ? nil : TimeInterval(rawValue) }
+
+    var title: String {
+        switch self {
+        case .fiveMinutes: "5 minutes"
+        case .tenMinutes: "10 minutes"
+        case .fifteenMinutes: "15 minutes"
+        case .thirtyMinutes: "30 minutes"
+        case .sixtyMinutes: "60 minutes"
+        case .unlimited: "No limit"
+        }
+    }
+}
+
+enum DictationTranscriptionSource: Equatable {
+    case completedAudioFile
+}
+
+enum DictationTranscriptionPlan {
+    static let source = DictationTranscriptionSource.completedAudioFile
+}
+
 struct DictationInsertionTarget: Equatable {
     let processIdentifier: pid_t
     private let bundleIdentifier: String?
@@ -48,25 +79,28 @@ final class DictationService {
     var onPhaseChange: ((DictationPhase) -> Void)?
 
     private let audioEngine = AVAudioEngine()
-    private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var completion: CheckedContinuation<String, Error>?
     private var latestTranscript = ""
-    private var receivedFinal = false
     private var inputTapInstalled = false
     private var destination: DictationInsertionTarget?
     private var audioFile: AVAudioFile?
     private var activeRecording: PendingDictationRecording?
     private var recordingStartedAt: Date?
+    @ObservationIgnored private var durationTimer: Timer?
+    @ObservationIgnored private var transcriptionTimeoutTask: Task<Void, Never>?
     private let recoveryURL: URL
     private let history: DictationHistoryService
+    var durationLimit: DictationDurationLimit
 
     init(
         language: String,
+        durationLimit: DictationDurationLimit = .fiveMinutes,
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil
     ) {
         selectedLanguage = language
+        self.durationLimit = durationLimit
         let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SuperMac", isDirectory: true)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let recoveryURL = directory.appendingPathComponent("last-dictation.txt")
@@ -109,19 +143,13 @@ final class DictationService {
             fail("Microphone and Speech Recognition permissions are required.")
             return
         }
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguage)), recognizer.supportsOnDeviceRecognition else {
+        guard SFSpeechRecognizer(locale: Locale(identifier: selectedLanguage))?.supportsOnDeviceRecognition == true else {
             fail("On-device speech is unavailable for \(selectedLanguage).")
             return
         }
         lastError = nil
         destination = NSWorkspace.shared.frontmostApplication.map(DictationInsertionTarget.init)
         latestTranscript = ""
-        receivedFinal = false
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = true
-        request.addsPunctuation = true
-        self.request = request
 
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -135,7 +163,6 @@ final class DictationService {
             recordingStartedAt = recording.capturedAt
             self.audioFile = audioFile
             input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
-                request.append(buffer)
                 try? audioFile.write(from: buffer)
             }
         } catch {
@@ -144,13 +171,11 @@ final class DictationService {
             return
         }
         inputTapInstalled = true
-        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor in self?.receive(result: result, error: error) }
-        }
         audioEngine.prepare()
         do {
             try audioEngine.start()
             setPhase(.recording)
+            scheduleDurationLimit()
         } catch { cleanup(); fail("The microphone could not start.") }
     }
 
@@ -179,13 +204,14 @@ final class DictationService {
         setPhase(.transcribing)
         let recording = activeRecording
         let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        durationTimer?.invalidate()
+        durationTimer = nil
         stopAudio()
-        request?.endAudio()
         do {
-            let transcript = try await waitForTranscript()
+            guard let recording else { throw CocoaError(.fileNoSuchFile) }
+            let transcript = try await transcribeCompletedAudio(at: recording.audioURL)
             try transcript.write(to: recoveryURL, atomically: true, encoding: .utf8)
             recoveredTranscript = transcript
-            guard let recording else { throw CocoaError(.fileNoSuchFile) }
             try history.completeRecording(
                 recording,
                 text: transcript,
@@ -201,18 +227,50 @@ final class DictationService {
         } catch is CancellationError {
             cleanup(); setPhase(.idle)
         } catch {
-            cleanup(); fail(error.localizedDescription)
+            if let recording = activeRecording {
+                _ = try? history.completeRecording(
+                    recording,
+                    text: latestTranscript,
+                    language: selectedLanguage,
+                    duration: duration,
+                    transcriptionError: error.localizedDescription
+                )
+                activeRecording = nil
+                recordingStartedAt = nil
+                cleanup()
+                fail("Transcription failed. The audio recording was preserved in Dictation History.")
+            } else {
+                cleanup(); fail(error.localizedDescription)
+            }
         }
     }
 
-    private func waitForTranscript() async throws -> String {
-        if receivedFinal { return try validatedTranscript() }
+    private func transcribeCompletedAudio(at audioURL: URL) async throws -> String {
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguage)),
+              recognizer.supportsOnDeviceRecognition else {
+            throw NSError(domain: "SuperMac.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "On-device speech is unavailable for \(selectedLanguage)."])
+        }
+        latestTranscript = ""
+        let request = SFSpeechURLRecognitionRequest(url: audioURL)
+        request.requiresOnDeviceRecognition = true
+        request.shouldReportPartialResults = true
+        request.addsPunctuation = true
+
         return try await withCheckedThrowingContinuation { continuation in
             completion = continuation
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(5))
+            task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+                Task { @MainActor in self?.receive(result: result, error: error) }
+            }
+            transcriptionTimeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(120))
                 guard !Task.isCancelled else { return }
-                await MainActor.run { self?.finishRecognition() }
+                await MainActor.run {
+                    self?.finishRecognition(error: NSError(
+                        domain: "SuperMac.Dictation",
+                        code: 6,
+                        userInfo: [NSLocalizedDescriptionKey: "Transcription took too long. The audio recording was preserved."]
+                    ))
+                }
             }
         }
     }
@@ -220,13 +278,21 @@ final class DictationService {
     private func receive(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result {
             latestTranscript = result.bestTranscription.formattedString
-            if result.isFinal { receivedFinal = true; finishRecognition() }
-        } else if error != nil, completion != nil { finishRecognition() }
+            if result.isFinal { finishRecognition() }
+        } else if let error, completion != nil {
+            finishRecognition(error: error)
+        }
     }
 
-    private func finishRecognition() {
+    private func finishRecognition(error: Error? = nil) {
         guard let completion else { return }
         self.completion = nil
+        transcriptionTimeoutTask?.cancel()
+        transcriptionTimeoutTask = nil
+        if let error, latestTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            completion.resume(throwing: error)
+            return
+        }
         do { completion.resume(returning: try validatedTranscript()) }
         catch { completion.resume(throwing: error) }
     }
@@ -266,14 +332,28 @@ final class DictationService {
     }
 
     private func cleanup() {
+        durationTimer?.invalidate()
+        durationTimer = nil
+        transcriptionTimeoutTask?.cancel()
+        transcriptionTimeoutTask = nil
         stopAudio()
         task?.cancel(); task = nil
-        request = nil
         if let activeRecording {
             history.discard(activeRecording)
             self.activeRecording = nil
         }
         recordingStartedAt = nil
+    }
+
+    private func scheduleDurationLimit() {
+        durationTimer?.invalidate()
+        guard let seconds = durationLimit.seconds else { return }
+        durationTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.phase == .recording else { return }
+                await self.stopAndInsert()
+            }
+        }
     }
 
     private func fail(_ message: String) { lastError = message; setPhase(.failed(message)) }

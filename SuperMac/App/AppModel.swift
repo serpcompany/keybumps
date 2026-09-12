@@ -65,7 +65,11 @@ final class AppModel {
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
-        dictation = DictationService(language: preferences.dictationLanguage, history: dictationHistory)
+        dictation = DictationService(
+            language: preferences.dictationLanguage,
+            durationLimit: preferences.dictationDurationLimit,
+            history: dictationHistory
+        )
         commandPalette = CommandPaletteController(clipboard: clipboard, dictationHistory: dictationHistory)
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .dockBadge: DockBadgeAdapter { inbox.unreadCount }, .dockBounce: DockBounceAdapter(), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
@@ -216,6 +220,10 @@ final class AppModel {
         }
     }
     func setDictationLanguage(_ language: String) { preferences.dictationLanguage = language; dictation.selectedLanguage = language }
+    func setDictationDurationLimit(_ limit: DictationDurationLimit) {
+        preferences.dictationDurationLimit = limit
+        dictation.durationLimit = limit
+    }
     func beginShortcutRecording() { shortcuts.unregisterAll() }
     func finishCapabilityShortcutRecording(_ binding: ShortcutBinding?, for shortcut: CapabilityShortcut) {
         preferences.setCapabilityShortcut(binding, for: shortcut)
