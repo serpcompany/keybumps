@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import SwiftUI
 import Translation
 
@@ -586,76 +585,5 @@ private struct LocalDictationTranslationView: View {
     private func displayName(for language: Locale.Language) -> String {
         Locale.current.localizedString(forIdentifier: language.minimalIdentifier)
             ?? language.minimalIdentifier
-    }
-}
-
-private struct RecordingWaveform: View {
-    let audioURL: URL?
-    let progress: Double
-    @State private var samples = Array(repeating: 0.22, count: 64)
-
-    var body: some View {
-        Canvas { context, size in
-            let spacing: CGFloat = 2
-            let barWidth = max(1, (size.width - spacing * CGFloat(samples.count - 1)) / CGFloat(samples.count))
-            for (index, sample) in samples.enumerated() {
-                let height = max(3, size.height * CGFloat(sample))
-                let x = CGFloat(index) * (barWidth + spacing)
-                let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
-                let normalizedPosition = Double(index + 1) / Double(samples.count)
-                context.fill(
-                    Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                    with: .color(normalizedPosition <= progress ? .accentColor : .secondary.opacity(0.45))
-                )
-            }
-        }
-        .frame(height: 30)
-        .task(id: audioURL) {
-            guard let audioURL else { return }
-            samples = await AudioWaveformSampler.samples(at: audioURL, count: samples.count)
-        }
-    }
-}
-
-private enum AudioWaveformSampler {
-    static func samples(at audioURL: URL, count: Int) async -> [Double] {
-        await Task.detached(priority: .utility) {
-            guard count > 0,
-                  let file = try? AVAudioFile(forReading: audioURL),
-                  file.length > 0 else {
-                return Array(repeating: 0.22, count: max(0, count))
-            }
-
-            let frameCount: AVAudioFrameCount = 2_048
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCount) else {
-                return Array(repeating: 0.22, count: count)
-            }
-
-            var values: [Double] = []
-            values.reserveCapacity(count)
-            for index in 0..<count {
-                let fraction = Double(index) / Double(max(1, count - 1))
-                let position = min(
-                    max(0, file.length - AVAudioFramePosition(frameCount)),
-                    AVAudioFramePosition(Double(file.length) * fraction)
-                )
-                file.framePosition = position
-                buffer.frameLength = 0
-                try? file.read(into: buffer, frameCount: frameCount)
-                guard let channel = buffer.floatChannelData?.pointee, buffer.frameLength > 0 else {
-                    values.append(0.12)
-                    continue
-                }
-                var peak: Float = 0
-                for frame in 0..<Int(buffer.frameLength) {
-                    peak = max(peak, abs(channel[frame]))
-                }
-                values.append(Double(peak))
-            }
-
-            let maximum = values.max() ?? 0
-            guard maximum > 0 else { return Array(repeating: 0.12, count: count) }
-            return values.map { max(0.10, min(1, $0 / maximum)) }
-        }.value
     }
 }
