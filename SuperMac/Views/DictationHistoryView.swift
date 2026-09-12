@@ -466,19 +466,34 @@ private struct LocalDictationTranslationView: View {
                     Text(translatedText)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if speechPlayer.isPreparing {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("Preparing translated audio…")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    } else if let audioURL = speechPlayer.audioURL {
+                        DictationAudioTransportView(
+                            isPlaying: speechPlayer.playback.isPlaying,
+                            progress: speechPlayer.playback.progress,
+                            duration: speechPlayer.duration,
+                            playbackRate: speechPlayer.playback.playbackRate,
+                            hasAudio: true,
+                            audioURL: audioURL,
+                            togglePlayback: {
+                                speechPlayer.playback.toggle(
+                                    id: audioURL.lastPathComponent,
+                                    audioURL: audioURL
+                                )
+                            },
+                            setPlaybackRate: speechPlayer.playback.setPlaybackRate
+                        )
+                    }
+
                     HStack {
                         Spacer()
-                        Button(
-                            speechPlayer.isSpeaking ? "Stop Audio" : "Play Translation",
-                            systemImage: speechPlayer.isSpeaking ? "stop.fill" : "speaker.wave.2.fill"
-                        ) {
-                            speechPlayer.toggle(
-                                text: translatedText,
-                                languageIdentifier: targetIdentifier
-                            )
-                        }
-                        .buttonStyle(.borderless)
-
                         Button("Copy Translation", systemImage: "doc.on.doc") {
                             DictationHistoryClipboard.copy(translatedText)
                         }
@@ -506,15 +521,20 @@ private struct LocalDictationTranslationView: View {
         .padding(12)
         .background(.black.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
         .task { await loadSupportedTargets() }
-        .onChange(of: targetIdentifier) { _, _ in speechPlayer.stop() }
-        .onDisappear { speechPlayer.stop() }
+        .onChange(of: targetIdentifier) { _, _ in speechPlayer.clear() }
+        .onDisappear { speechPlayer.clear() }
         .translationTask(configuration) { session in
             do {
                 try await session.prepareTranslation()
                 let response = try await session.translate(sourceText)
                 translatedText = response.targetText
                 errorMessage = nil
+                await speechPlayer.prepare(
+                    text: response.targetText,
+                    languageIdentifier: targetIdentifier
+                )
             } catch {
+                speechPlayer.clear()
                 errorMessage = "Translation could not be completed. Check that the selected language model is available."
             }
             isTranslating = false
@@ -523,7 +543,7 @@ private struct LocalDictationTranslationView: View {
 
     private func triggerTranslation() {
         guard !targetIdentifier.isEmpty else { return }
-        speechPlayer.stop()
+        speechPlayer.clear()
         isTranslating = true
         translatedText = nil
         errorMessage = nil

@@ -758,6 +758,22 @@ final class SuperMacFeatureTests: XCTestCase {
         )
     }
 
+    func testTranslatedSpeechProducesTemporaryPlayableAudioAndCleansItUp() async throws {
+        let speech = TranslatedSpeechPlayer()
+
+        await speech.prepare(text: "A short local audio fixture.", languageIdentifier: "en-US")
+
+        let audioURL = try XCTUnwrap(speech.audioURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: audioURL.path))
+        XCTAssertGreaterThan(speech.duration, 0)
+        XCTAssertGreaterThan(try AVAudioFile(forReading: audioURL).length, 0)
+        XCTAssertFalse(speech.isPreparing)
+
+        speech.clear()
+        XCTAssertNil(speech.audioURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
+    }
+
     func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)

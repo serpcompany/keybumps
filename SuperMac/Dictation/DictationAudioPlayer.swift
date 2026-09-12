@@ -19,8 +19,12 @@ final class DictationAudioPlayer {
     @ObservationIgnored private var progressTimer: Timer?
 
     func toggle(_ entry: DictationHistoryEntry) {
-        guard let audioURL = entry.audioURL else { return }
-        if activeEntryID == entry.id, let player {
+        toggle(id: entry.id, audioURL: entry.audioURL)
+    }
+
+    func toggle(id: String, audioURL: URL?) {
+        guard let audioURL else { return }
+        if activeEntryID == id, let player {
             player.isPlaying ? pause() : resume()
             return
         }
@@ -36,7 +40,7 @@ final class DictationAudioPlayer {
             }
             self.player = player
             player.rate = playbackRate
-            activeEntryID = entry.id
+            activeEntryID = id
             isPlaying = true
             lastError = nil
             startProgressTimer()

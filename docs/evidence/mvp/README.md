@@ -72,7 +72,7 @@ Runtime QA first rejected `translationPresentation` after its own privacy UI war
 
 ### Local translated-speech playback
 
-The inline translation result now exposes Play Translation and Stop Audio. SuperMac selects an installed macOS speech voice by exact target locale when possible, then by base language, and stops synthesized speech when the target changes or the translation panel closes. The generated speech is played on demand and is not written into the per-recording archive. A deterministic regression covers exact-locale selection, base-language fallback, and the unavailable-voice result. Audible runtime acceptance remains pending because the translation model needed to produce the current target-language result was not installed during verification.
+The inline translation result now uses the same waveform transport as original audio: play/pause, waveform progress, duration, and the shared playback-speed picker. SuperMac selects an installed macOS speech voice by exact target locale when possible, then by base language, renders the translated speech to an ephemeral WAV, and deletes it when the target changes or the translation panel closes. Generated speech is not written into the per-recording archive. A deterministic end-to-end regression synthesizes a non-private fixture, verifies a playable non-empty temporary audio file and duration, then verifies cleanup; existing tests cover exact-locale selection, base-language fallback, and unavailable voices. Audible translated playback remains owner acceptance.
 
 ## 2026-09-12 SuperMac identity reset
 
