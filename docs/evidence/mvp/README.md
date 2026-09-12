@@ -2,6 +2,10 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 Dictation and Clipboard History separation
+
+Source tracing confirmed that completed Dictation uses the system pasteboard as temporary transport before sending Command-V, which previously allowed the Clipboard monitor to ingest the transcript into its separate history. Clipboard History now suppresses the exact pasteboard change produced by automatic Dictation insertion and by Paste from the Dictation tab. The suppression is one-change scoped: an ordinary later copy of identical text is captured normally, and the explicit Copy action remains ordinary clipboard activity. A named-pasteboard regression proves both the exclusion and subsequent capture without touching the user's clipboard.
+
 ## 2026-09-12 history interaction repair
 
 The dedicated Dictation History screen and both Command Palette history tabs now share one native bordered Clear History control. Clipboard and Dictation bulk deletion each presents content-specific destructive confirmation and Cancel; runtime inspection opened the Clipboard confirmation and Cancel returned to the populated palette without deleting its items. Dictation cards now make the complete padded header a SwiftUI `Button` target, add hover feedback, and expose an accessibility hint. Runtime accordion hit-area acceptance remains pending because the current signed app had no non-private Dictation entry available for interaction.

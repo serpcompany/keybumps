@@ -129,6 +129,19 @@
       }
     },
     {
+      "id": "clipboard.excludes-dictation-transport",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/product/mvp-prd.md#2-clipboard-history"],
+        "candidate": ["SuperMac/Clipboard/ClipboardHistoryService.swift", "SuperMac/Dictation/DictationService.swift", "SuperMac/CommandPalette/CommandPaletteController.swift"],
+        "comparison": [],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-dictation-and-clipboard-history-separation"]
+      }
+    },
+    {
       "id": "palette.dictation.tab",
       "kind": "both",
       "in_scope": true,

@@ -162,6 +162,7 @@ User outcome: recover and reuse the most recent copied text through the Clipboar
 - Persist only the ten most recent text items locally.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
+- Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Paste from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
 - Provide deletion and a native Clear History control that requires destructive confirmation before removing all items.
 - Disabling the capability stops monitoring but does not silently erase retained items.
 - No images, files, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
@@ -178,6 +179,7 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Default maximum recording length: five minutes, with 10, 15, 30, and 60-minute choices plus No Limit in Dictation settings.
 - First press starts recording.
 - Second press stops recording, transcribes locally, and inserts at the current text cursor.
+- The temporary pasteboard write used for automatic insertion is transport only and must not create a duplicate Clipboard History entry.
 - Escape cancels without inserting text.
 - Show a small non-disruptive floating indicator for Recording and Transcribing.
 - Hide the indicator after successful insertion or cancellation.

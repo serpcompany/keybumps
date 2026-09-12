@@ -13,13 +13,21 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 final class ClipboardHistoryService {
     private(set) var entries: [ClipboardEntry] = []
     private var timer: Timer?
-    private var lastChangeCount = NSPasteboard.general.changeCount
+    private var lastChangeCount: Int
+    private var suppressedChangeCount: Int?
     private let storageURL: URL
+    private let pasteboard: NSPasteboard
 
-    init(fileManager: FileManager = .default, storageURL: URL? = nil) {
+    init(
+        fileManager: FileManager = .default,
+        storageURL: URL? = nil,
+        pasteboard: NSPasteboard = .general
+    ) {
         let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SuperMac", isDirectory: true)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         self.storageURL = storageURL ?? directory.appendingPathComponent("clipboard-history.json")
+        self.pasteboard = pasteboard
+        lastChangeCount = pasteboard.changeCount
         if let data = try? Data(contentsOf: self.storageURL), let decoded = try? JSONDecoder().decode([ClipboardEntry].self, from: data) {
             entries = Array(decoded.prefix(10))
         }
@@ -27,7 +35,8 @@ final class ClipboardHistoryService {
 
     func start() {
         guard timer == nil else { return }
-        lastChangeCount = NSPasteboard.general.changeCount
+        lastChangeCount = pasteboard.changeCount
+        suppressedChangeCount = nil
         timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.poll() }
         }
@@ -43,20 +52,33 @@ final class ClipboardHistoryService {
     func clear() { entries.removeAll(); persist() }
 
     func restore(_ entry: ClipboardEntry) {
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(entry.text, forType: .string)
         lastChangeCount = pasteboard.changeCount
+        suppressedChangeCount = nil
     }
 
     func ingestForTesting(_ text: String) {
         ingest(text)
     }
 
+    func pollForTesting() {
+        poll()
+    }
+
+    func suppressCurrentChange() {
+        suppressedChangeCount = pasteboard.changeCount
+    }
+
     private func poll() {
-        let pasteboard = NSPasteboard.general
-        guard pasteboard.changeCount != lastChangeCount else { return }
-        lastChangeCount = pasteboard.changeCount
+        let changeCount = pasteboard.changeCount
+        guard changeCount != lastChangeCount else { return }
+        lastChangeCount = changeCount
+        if suppressedChangeCount == changeCount {
+            suppressedChangeCount = nil
+            return
+        }
+        suppressedChangeCount = nil
         guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
         ingest(text)
     }

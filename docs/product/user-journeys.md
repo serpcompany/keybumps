@@ -85,7 +85,7 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed.
 6. Disable Clipboard History to stop monitoring and release its shortcut without silently erasing retained items.
 
-Clipboard content stays local. Recent copied secrets remain until removed or displaced, so committed screenshots and logs must not contain item text.
+Clipboard content stays local. Automatic fresh-Dictation insertion and Paste from Dictation History do not create Clipboard History entries; explicitly copying text does. Recent copied secrets remain until removed or displaced, so committed screenshots and logs must not contain item text.
 
 ## UJ-06 — Dictation and Dictation History
 
@@ -97,6 +97,8 @@ Clipboard content stays local. Recent copied secrets remain until removed or dis
 6. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted. A failed transcription retains its audio with an explicit failure state.
 7. If insertion fails, recover the last transcript from Dictation settings.
 8. Open Dictation History—or the Command Palette's Dictation tab—to search transcript cards, click anywhere in a card's padded header to expand it, play/pause the original recording, paste or copy text, translate through the on-device target-language picker, play/stop the translated text with an installed target-language voice, reveal the recording folder, or delete recordings. Clear History requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged; translated speech is not saved as another recording.
+
+Automatic insertion after recording and the explicit Paste action in Dictation History use the pasteboard only as delivery transport. Neither creates a duplicate in Clipboard History. Choosing Copy is an intentional clipboard action and remains eligible for Clipboard History.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 

@@ -17,8 +17,8 @@ The default Command Palette tab for finding local applications, files, and folde
 _Avoid_: Web search, workflow launcher
 
 **Clipboard History**:
-The Command Palette tab containing the ten most recent local text clipboard items.
-_Avoid_: Permanent clipboard archive
+The Command Palette tab containing the ten most recent user-originated local text clipboard items. SuperMac's temporary pasteboard writes for automatic Dictation delivery are not clipboard activity.
+_Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Dictation**:
 The Option-Space session that records speech, transcribes locally, and inserts text at the original cursor.

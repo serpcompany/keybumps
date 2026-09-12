@@ -68,7 +68,8 @@ final class AppModel {
         dictation = DictationService(
             language: preferences.dictationLanguage,
             durationLimit: preferences.dictationDurationLimit,
-            history: dictationHistory
+            history: dictationHistory,
+            didWritePasteboard: clipboard.suppressCurrentChange
         )
         commandPalette = CommandPaletteController(clipboard: clipboard, dictationHistory: dictationHistory)
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .dockBadge: DockBadgeAdapter { inbox.unreadCount }, .dockBounce: DockBounceAdapter(), .sound: SoundAdapter()]

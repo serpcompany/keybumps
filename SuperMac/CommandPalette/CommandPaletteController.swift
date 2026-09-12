@@ -280,10 +280,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             reveal ? self.reveal(result) : open(result)
         case .clipboard:
             guard filteredClipboard.indices.contains(state.selection) else { return }
-            paste(filteredClipboard[state.selection].text)
+            paste(filteredClipboard[state.selection].text, suppressClipboardHistory: false)
         case .dictation:
             guard filteredDictations.indices.contains(state.selection) else { return }
-            paste(filteredDictations[state.selection].text)
+            paste(filteredDictations[state.selection].text, suppressClipboardHistory: true)
         }
     }
 
@@ -297,11 +297,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([result.url])
     }
 
-    private func paste(_ text: String) {
+    private func paste(_ text: String, suppressClipboardHistory: Bool) {
         let target = destination
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
+        if suppressClipboardHistory { clipboard.suppressCurrentChange() }
         dismiss()
         target?.activate(options: [])
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -326,7 +327,7 @@ private struct CommandPaletteView: View {
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
-    let pasteText: (String) -> Void
+    let pasteText: (String, Bool) -> Void
     let dismiss: () -> Void
 
     @FocusState private var inputFocused: Bool
@@ -381,7 +382,7 @@ private struct CommandPaletteView: View {
             ClipboardResultsView(
                 entries: filteredClipboard,
                 selection: state.selection,
-                choose: pasteText,
+                choose: { pasteText($0, false) },
                 delete: clipboard.delete,
                 clear: clipboard.clear
             )
@@ -390,7 +391,7 @@ private struct CommandPaletteView: View {
                 entries: filteredDictations,
                 selection: state.selection,
                 select: { state.selection = $0 },
-                choose: pasteText,
+                choose: { pasteText($0, true) },
                 delete: dictationHistory.delete,
                 clear: dictationHistory.clear
             )

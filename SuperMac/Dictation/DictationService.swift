@@ -95,13 +95,15 @@ final class DictationService {
     @ObservationIgnored private var transcriptionTimeoutTask: Task<Void, Never>?
     private let recoveryURL: URL
     private let history: DictationHistoryService
+    private let didWritePasteboard: () -> Void
     var durationLimit: DictationDurationLimit
 
     init(
         language: String,
         durationLimit: DictationDurationLimit = .fiveMinutes,
         fileManager: FileManager = .default,
-        history: DictationHistoryService? = nil
+        history: DictationHistoryService? = nil,
+        didWritePasteboard: @escaping () -> Void = {}
     ) {
         selectedLanguage = language
         self.durationLimit = durationLimit
@@ -110,6 +112,7 @@ final class DictationService {
         let recoveryURL = directory.appendingPathComponent("last-dictation.txt")
         self.recoveryURL = recoveryURL
         self.history = history ?? DictationHistoryService(fileManager: fileManager)
+        self.didWritePasteboard = didWritePasteboard
         recoveredTranscript = try? String(contentsOf: recoveryURL, encoding: .utf8)
     }
 
@@ -321,8 +324,11 @@ final class DictationService {
         }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string),
-              let source = CGEventSource(stateID: .combinedSessionState),
+        guard pasteboard.setString(text, forType: .string) else {
+            throw NSError(domain: "SuperMac.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])
+        }
+        didWritePasteboard()
+        guard let source = CGEventSource(stateID: .combinedSessionState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
             throw NSError(domain: "SuperMac.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])

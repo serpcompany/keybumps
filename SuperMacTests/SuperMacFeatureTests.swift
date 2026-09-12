@@ -346,6 +346,24 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 10)
     }
 
+    func testAutomaticDictationPasteIsExcludedFromClipboardHistoryOnlyOnce() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("SuperMacDictationSuppression-\(UUID().uuidString)"))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let service = ClipboardHistoryService(storageURL: url, pasteboard: pasteboard)
+
+        pasteboard.clearContents()
+        pasteboard.setString("automatic dictation", forType: .string)
+        service.suppressCurrentChange()
+        service.pollForTesting()
+        XCTAssertTrue(service.entries.isEmpty)
+
+        pasteboard.clearContents()
+        pasteboard.setString("automatic dictation", forType: .string)
+        service.pollForTesting()
+        XCTAssertEqual(service.entries.map(\.text), ["automatic dictation"])
+    }
+
     func testDictationHistoryStoresOneMetadataAndAudioPairPerRecording() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-recordings-\(UUID().uuidString)")
         let sourceAudio = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-source-\(UUID().uuidString).wav")
