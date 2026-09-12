@@ -32,10 +32,9 @@ struct CoachingEventRow: View {
 struct EmptyInboxView: View {
     var body: some View {
         ContentUnavailableView(
-            "No coaching yet",
+            "No key bumps yet",
             systemImage: "keyboard",
             description: Text("Manual actions with known shortcuts will appear here.")
         )
     }
 }
-

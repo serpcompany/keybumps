@@ -32,10 +32,10 @@ enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable 
     var summary: String {
         switch self {
         case .nativeBanner: "A Notification Center alert that remains available to macOS."
-        case .topRightToast: "A compact coaching card near the top-right corner."
+        case .topRightToast: "A compact key-bump card near the top-right corner."
         case .topCenterShelf: "A prominent expandable shelf centered at the top."
         case .cursorHalo: "A short visual pulse around the action location."
-        case .pointerCard: "A coaching card anchored beside the action location."
+        case .pointerCard: "A key-bump card anchored beside the action location."
         case .statusFeedback: "A brief evaluating-to-success progress presentation."
         case .decisionBanner: "A wide prompt with explicit action buttons."
         case .dockBadge: "Updates the Dock icon with the unread count."

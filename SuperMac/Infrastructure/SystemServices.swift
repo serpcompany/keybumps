@@ -26,7 +26,7 @@ enum MacPermission: String, CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .accessibility: "Lets Window Management resize other apps and lets Dictation return text to the original cursor."
-        case .inputMonitoring: "Lets Shortcut Coaching recognize supported mouse and keyboard actions outside SuperMac."
+        case .inputMonitoring: "Lets Key Bumps recognize supported mouse and keyboard actions outside SuperMac."
         case .microphone: "Lets Dictation record only while its recording indicator is visible."
         case .speechRecognition: "Lets Apple transcribe Dictation locally on this Mac."
         }

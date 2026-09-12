@@ -32,9 +32,9 @@ _Avoid_: Cloud transcript, monolithic history file
 Rectangle-derived window movement and sizing under the owner's selected shortcuts.
 _Avoid_: Rectangle app
 
-**Shortcut Coaching**:
+**Key Bumps**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.
-_Avoid_: Keylume app
+_Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
 
 **Development License Adapter**:
 An explicit non-production local gate used only to exercise onboarding before a commerce provider is chosen.

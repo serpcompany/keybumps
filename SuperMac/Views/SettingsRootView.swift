@@ -5,7 +5,7 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case home = "Home", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation", dictationHistory = "Dictation History"
-    case windows = "Window Management", coaching = "Shortcut Coaching", permissions = "Permissions", general = "General", about = "About"
+    case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General", about = "About"
     var id: String { rawValue }
     var icon: String { switch self { case .home: "house"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .dictationHistory: "clock.arrow.circlepath"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
 }
@@ -76,7 +76,7 @@ struct SettingsRootView: View {
                 case .dictation: DictationSettingsView()
                 case .dictationHistory: DictationHistoryView()
                 case .windows: WindowSettingsView()
-                case .coaching: ShortcutCoachingSettingsView()
+                case .coaching: KeyBumpsSettingsView()
                 case .permissions: PermissionsView()
                 case .general: GeneralView()
                 case .about: AboutView()
@@ -357,14 +357,14 @@ private struct WindowSettingsView: View {
     }
 }
 
-private struct ShortcutCoachingSettingsView: View {
+private struct KeyBumpsSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         Form {
             CapabilityControl(capability: .shortcutCoaching)
             if !model.missingPermissions(for: .shortcutCoaching).isEmpty {
                 Section("Setup required") {
-                    Text("Shortcut Coaching needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
+                    Text("Key Bumps needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
             }
@@ -374,7 +374,7 @@ private struct ShortcutCoachingSettingsView: View {
                     Button("Retry Monitoring") { model.retryDetection() }
                         .disabled(!model.missingPermissions(for: .shortcutCoaching).isEmpty)
                 }
-                Button("Send Test Coaching Event") { Task { await model.deliverSample() } }
+                Button("Send Test Key Bump") { Task { await model.deliverSample() } }
             }
             Section("Presentation channels") {
                 ForEach(NotificationChannel.allCases) { channel in
@@ -384,9 +384,9 @@ private struct ShortcutCoachingSettingsView: View {
             Section("History") {
                 LabeledContent("Events", value: "\(model.inbox.events.count)")
                 Button("Mark All Read") { model.markAllRead() }.disabled(model.unreadCount == 0)
-                Button("Clear Coaching History", role: .destructive) { model.clearHistory() }.disabled(model.inbox.events.isEmpty)
+                Button("Clear Key Bumps History", role: .destructive) { model.clearHistory() }.disabled(model.inbox.events.isEmpty)
             }
-            Section("Coaching Inbox") {
+            Section("Key Bumps History") {
                 if model.inbox.events.isEmpty {
                     Text("Manual actions with known shortcuts will appear here.")
                         .foregroundStyle(.secondary)
@@ -404,7 +404,7 @@ private struct ShortcutCoachingSettingsView: View {
                     LabeledContent("\(tip.applicationName): \(tip.actionTitle)", value: tip.shortcut)
                 }
             }
-        }.formStyle(.grouped).navigationTitle("Shortcut Coaching")
+        }.formStyle(.grouped).navigationTitle("Key Bumps")
     }
     private var detectorText: String { switch model.detectorStatus { case .stopped: "Stopped"; case .permissionRequired: "Permission Required"; case .monitoring: "Monitoring"; case .failed(let message): "Failed: \(message)" } }
 }

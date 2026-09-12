@@ -6,4 +6,4 @@ The shared `GlobalShortcutCoordinator` is the sole Carbon hot-key registrar. `Ap
 
 `CommandPaletteController` owns one floating keyboard-first surface for Quick Search, Clipboard History, and Dictation History. Command-Space and Shift-Command-Space route into different tabs of that same surface. Clipboard retains bounded JSON persistence. `DictationHistoryService` owns the independently stored `~/Documents/SuperMac/recordings/<timestamp>/meta.json` and `output.wav` pairs; the dedicated Dictation History screen owns browsing and playback presentation.
 
-Shortcut Coaching retains its donor separation between Detection, Delivery, Infrastructure, Domain, and Views. Window frame calculations remain pure and separately testable from Accessibility execution. Dictation owns no guide or assistant behavior.
+Key Bumps retains its donor separation between Detection, Delivery, Infrastructure, Domain, and Views. Window frame calculations remain pure and separately testable from Accessibility execution. Dictation owns no guide or assistant behavior.

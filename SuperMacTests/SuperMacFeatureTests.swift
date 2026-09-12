@@ -98,6 +98,13 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertNil(migrated.capabilityShortcut(for: .dictation))
     }
 
+    func testKeyBumpsIsTheCanonicalUserFacingCapabilityName() {
+        XCTAssertEqual(Capability.shortcutCoaching.title, "Key Bumps")
+        XCTAssertEqual(SettingsSection.coaching.rawValue, "Key Bumps")
+        XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Key Bumps"))
+        XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
+    }
+
     func testPermissionRecoveryActionsNeverLeaveARequiredPermissionInert() {
         for permission in MacPermission.allCases {
             XCTAssertEqual(

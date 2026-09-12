@@ -76,7 +76,7 @@ The capabilities are:
 2. Clipboard History
 3. Dictation
 4. Window Management
-5. Shortcut Coaching
+5. Key Bumps
 
 All begin enabled. Settings/Home is a readiness dashboard with truthful status and setup/open actions. Enable/disable controls live in each capability's own sidebar screen. Disabling a capability immediately stops the resources it actually owns, such as monitors, panels, recordings, and global shortcuts.
 
@@ -91,7 +91,7 @@ Use a native macOS sidebar with these conceptual destinations:
 - Clipboard History
 - Dictation
 - Window Management
-- Shortcut Coaching
+- Key Bumps
 - Permissions
 - General
 - About
@@ -227,16 +227,16 @@ Use Window Manager's independently identified MIT-licensed fork as the code dono
 
 Completion criterion: exercise every assigned shortcut against normal resizable windows, verify the resulting frame on one display and across displays where applicable, prove repeated-command behavior, and physically verify each selected drag-to-snap region. Unit tests for calculations support but do not replace installed runtime proof.
 
-### 5. Shortcut Coaching
+### 5. Key Bumps
 
-User outcome: retain the current Shortcut Coach foundation inside SuperMac.
+User outcome: provide the old Shortcut Coach foundation inside SuperMac under the Key Bumps name.
 
 Bring across the current full-product behavior:
 
 - supported manual-action detection;
-- durable coaching history and unread state;
+- durable key-bump history and unread state;
 - presentation-channel selection and previews;
-- coaching inbox;
+- Key Bumps history;
 - app-presence behavior;
 - permissions and diagnostics;
 - current supported action catalog.
@@ -249,7 +249,7 @@ Use the existing Shortcut Coach architecture and verification documents as the c
 - [`docs/product/feature-inventory.md`](feature-inventory.md)
 - [`docs/verification.md`](../verification.md)
 
-Completion criterion: from the exact signed SuperMac build, a physical supported manual action in Finder and a supported action in Chrome each produce one correct durable coaching event and the selected presentation output. Synthetic previews do not satisfy detector acceptance.
+Completion criterion: from the exact signed SuperMac build, a physical supported manual action in Finder and a supported action in Chrome each produce one correct durable key bump and the selected presentation output. Synthetic previews do not satisfy detector acceptance.
 
 ## Shared system requirements
 
@@ -284,13 +284,13 @@ Required permissions by capability:
 | Clipboard History | None for ordinary pasteboard monitoring |
 | Dictation | Microphone, Speech Recognition, and conditional Accessibility for insertion |
 | Window Management | Accessibility |
-| Shortcut Coaching | Accessibility and Input Monitoring |
+| Key Bumps | Accessibility and Input Monitoring |
 
 ### Privacy and storage
 
 - User content and processing remain local.
 - No account, sync, analytics backend, application server, cloud transcription, or hosted history.
-- No clipboard, dictated text, search terms, coaching history, or filenames in telemetry or committed evidence.
+- No clipboard, dictated text, search terms, Key Bumps history, or filenames in telemetry or committed evidence.
 - Start all histories clean; do not import historical user content from donor/reference apps.
 - Use distinct SuperMac storage paths and preference domains.
 - Keep logs structural: state, duration, stage, error category, and recovery—not private content.
@@ -345,7 +345,7 @@ SuperMacApp
     ├── ClipboardFeature
     ├── DictationFeature
     ├── WindowManagementFeature
-    └── ShortcutCoachingFeature
+    └── KeyBumpsFeature
 ```
 
 The exact targets/packages are implementation discretion. Preserve these ownership rules:
@@ -356,7 +356,7 @@ The exact targets/packages are implementation discretion. Preserve these ownersh
 - each feature owns its domain behavior and detailed settings;
 - no feature creates a second app delegate, status item, Settings scene, updater, license system, or launch-at-login controller;
 - dictation never depends on guide/assistant code;
-- Shortcut Coaching detection never owns presentation history;
+- Key Bumps detection never owns presentation history;
 - Window Management calculations remain independently testable from Accessibility execution.
 
 Prefer extracting coherent donor modules over mechanically copying entire application targets.
@@ -397,9 +397,9 @@ Extract selected Rectangle behavior from the Window Manager donor and integrate 
 
 Completion criterion: the complete assigned shortcut profile and drag-to-snap acceptance pass without Rectangle running.
 
-### Phase 5 — Shortcut Coaching
+### Phase 5 — Key Bumps
 
-Move the current full Shortcut Coach feature into the shared shell without broadening coverage.
+Move the old Shortcut Coach feature into the shared shell as Key Bumps without broadening coverage.
 
 Completion criterion: current Finder and Chrome physical-action journeys pass without the old Shortcut Coach running.
 
@@ -441,7 +441,7 @@ Never promote a lower layer as proof of a higher one. In particular:
 - a build is not proof of window movement or dictation;
 - a synthetic transcript is not proof of microphone capture;
 - unit-tested window calculations are not proof of Accessibility execution;
-- presentation previews are not proof of physical Shortcut Coaching detection;
+- presentation previews are not proof of physical Key Bumps detection;
 - a launched `.app` is not proof of the installed/notarized artifact;
 - one successful workflow is not complete reference-app parity.
 
@@ -467,7 +467,7 @@ The functional MVP is complete when one stable signed SuperMac build, with the f
 - `Shift-Command-Space` recalls the bounded persistent text clipboard history.
 - `Option-Space` records, transcribes locally, and inserts dictated text; Escape cancels.
 - every assigned Rectangle shortcut and selected drag-to-snap behavior works.
-- current supported Finder and Chrome actions generate correct coaching events.
+- current supported Finder and Chrome actions generate correct key bumps.
 - Home switches stop and restart each capability without duplicate hotkeys or monitors.
 - skipped permissions remain recoverable and do not disable unrelated capabilities.
 - quitting/relaunching preserves intended preferences and histories.

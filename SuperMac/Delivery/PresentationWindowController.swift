@@ -245,7 +245,7 @@ struct CoachingPresentationView: View {
         }
         .padding(4)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Shortcut coaching. \(event.actionTitle). Try \(event.shortcut) next time.")
+        .accessibilityLabel("Key Bump. \(event.actionTitle). Try \(event.shortcut) next time.")
         .task {
             guard style == .statusFeedback else { return }
             let delay = PresentationMotionPolicy.statusFeedbackDelayNanoseconds(reduceMotion: reduceMotion)

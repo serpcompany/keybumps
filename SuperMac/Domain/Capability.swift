@@ -15,7 +15,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
         case .clipboardHistory: "Clipboard History"
         case .dictation: "Dictation"
         case .windowManagement: "Window Management"
-        case .shortcutCoaching: "Shortcut Coaching"
+        case .shortcutCoaching: "Key Bumps"
         }
     }
 

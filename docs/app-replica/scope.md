@@ -151,7 +151,7 @@ Selected traits are a single centered floating surface, a dominant search field,
 
 ## Migration boundary
 
-SuperMac starts with empty Shortcut Coaching, Dictation, and Clipboard histories. Existing historical content from Shortcut Coach, SERPy, Superwhisper, and Alfred is not imported. The owner-selected shortcuts and behavior form the new product defaults, while the old applications and their data remain untouched so rollback is possible.
+SuperMac starts with empty Key Bumps, Dictation, and Clipboard histories. Existing historical content from Shortcut Coach, SERPy, Superwhisper, and Alfred is not imported. The owner-selected shortcuts and behavior form the new product defaults, while the old applications and their data remain untouched so rollback is possible.
 
 During onboarding, SuperMac detects conflicting running copies of Alfred, Rectangle, and Superwhisper, identifies the shortcuts they occupy, and offers to quit them. It explains how to disable their launch-at-login settings but does not uninstall them, delete their data, or silently modify their configuration.
 
@@ -182,9 +182,9 @@ Dictation uses `Option-Space` to start and stop. A small floating indicator visi
 
 The default maximum recording length is five minutes. Dictation settings offer 10, 15, 30, and 60 minutes plus No Limit. Reaching a finite limit automatically stops capture and begins transcription. SuperMac records one continuous WAV and transcribes that completed local file rather than treating an early final result from a live recognition task as the entire dictation. If transcription fails, the audio remains available in Dictation History with an explicit failure state.
 
-## Shortcut Coaching acceptance boundary
+## Key Bumps acceptance boundary
 
-The first SuperMac release retains Shortcut Coach's current Accessibility and Input Monitoring permission requirements and its currently supported action coverage. Additional permission does not imply additional recognition coverage; new supported actions can arrive through later verified updates.
+The first SuperMac release presents this capability as Key Bumps while retaining the old Shortcut Coach donor's Accessibility and Input Monitoring permission requirements and currently supported action coverage. Additional permission does not imply additional recognition coverage; new supported actions can arrive through later verified updates.
 
 ## Decision gate
 

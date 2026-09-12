@@ -36,7 +36,7 @@ struct AccessibilitySnapshot: Codable, Equatable, Sendable {
 
 final class AccessibilitySnapshotter {
     // AppKit's in-process accessibility implementation is main-thread-bound.
-    // A global click can land on Shortcut Coach itself, so all AX hit-testing
+    // A global click can land on SuperMac itself, so all AX hit-testing
     // must share the main queue rather than racing from detector worker queues.
     private let queue = DispatchQueue.main
 

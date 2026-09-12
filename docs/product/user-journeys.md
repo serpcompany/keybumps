@@ -22,7 +22,7 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 | UJ-05 | Clipboard History | Signed runtime panel opening and bounded local-store behavior are verified; retention, duplicate collapse, and persistence are automated. | Private-content selection/paste, deletion, clearing, restart, and disabled monitoring need owner acceptance. |
 | UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, and recovery state have automated coverage. | English/Japanese speech, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
 | UJ-07 | Window Management | Exact selected shortcut map, customization, persistence, representative geometry, drag guards, and restore behavior are automated; shortcut recording UI has signed-runtime evidence. | Every assigned shortcut, repeated sizing, multi-display movement, and every drag-to-snap/unsnap region need owner acceptance with Accessibility enabled. |
-| UJ-08 | Shortcut Coaching | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
+| UJ-08 | Key Bumps | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
 | UJ-09 | Shared Command Palette | Runtime verified for the Search surface and Escape; Search/Clipboard/Dictation tab order and reset behavior are automated. | Physical global routing and privacy-safe checks of Clipboard/Dictation selection and paste remain. |
 | UJ-10 | Capability controls and settings | Enablement persistence, shortcut release, teardown, and major settings routes are automated or runtime inspected. | Owner should confirm the combined app remains understandable during normal daily use. |
 | UJ-11 | Dock, menu bar, conflicts, and launch at login | Dock/sidebar shell and status-item contract are automated or runtime verified; conflict detection is implemented. | Login-session relaunch, crowded-menu-bar visibility, and quitting each reference app from onboarding need owner acceptance. |
@@ -62,7 +62,7 @@ The Permissions screen keeps `Review individual permissions` collapsed by defaul
 2. Each capability reports Ready, Setup Needed, or Off from actual capability and permission state.
 3. Quick Search and Clipboard open directly when ready.
 4. A feature's Grant Permission action begins that feature's permission sequence immediately without navigating away from Home.
-5. Ready Dictation, Window Management, and Shortcut Coaching route to their settings.
+5. Ready Dictation, Window Management, and Key Bumps route to their settings.
 6. Off features route to their capability screen, where they can be enabled.
 
 ## UJ-04 — Quick Search
@@ -113,16 +113,16 @@ If Dictation permissions are missing, pressing the shortcut first shows a SuperM
 
 Disabling Window Management stops drag monitoring and releases every owned window shortcut.
 
-## UJ-08 — Shortcut Coaching
+## UJ-08 — Key Bumps
 
-1. Grant Accessibility and Input Monitoring and keep Shortcut Coaching enabled.
+1. Grant Accessibility and Input Monitoring and keep Key Bumps enabled.
 2. Perform a supported manual action in Finder or Chrome.
 3. The detector emits exactly one event only after the action's required postcondition is observed.
-4. The event is written once to the Coaching Inbox and unread count.
+4. The event is written once to Key Bumps history and the unread count.
 5. Selected presentation channels deliver their transient output independently.
 6. Review and mark events read; preview channels without creating durable history; clear history when desired.
 
-Ambiguous, stale, modified, unsafe, or unverified gestures must produce no coaching event. Disabling Shortcut Coaching stops monitoring.
+Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key bump. Disabling Key Bumps stops monitoring.
 
 ## UJ-09 — Shared Command Palette
 
@@ -134,7 +134,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no coach
 
 ## UJ-10 — Capability controls and settings
 
-1. Use the native sidebar to reach Home, Quick Search, Clipboard History, Dictation, Window Management, Shortcut Coaching, Permissions, General, and About.
+1. Use the native sidebar to reach Home, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, General, and About.
 2. Use the toolbar Back button or Command-[ to return through previously visited Settings screens.
 3. Enable or disable each capability only from its own screen.
 4. Disabling immediately tears down its active panel, monitor, recording, drag behavior, or shortcuts as applicable.
@@ -163,4 +163,4 @@ Run this only from the intended installed, signed artifact after granting the re
 3. Complete the physical acceptance items in UJ-04 through UJ-08, using non-sensitive test text.
 4. Disable and re-enable every capability, confirming resource teardown and restoration.
 5. Relaunch the Mac login session and confirm menu-bar, Dock, settings, histories, preferences, and shortcuts recover correctly.
-6. Record pass/fail evidence without filenames, clipboard values, transcripts, or private coaching content.
+6. Record pass/fail evidence without filenames, clipboard values, transcripts, or private Key Bumps content.
