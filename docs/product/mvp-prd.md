@@ -191,8 +191,9 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
 - Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
 - Provide a searchable Dictation History screen with real local playback, duration/progress, copy, reveal in Finder, individual delete, and clear-all controls.
-- Add a Translate action to expanded transcript cards using Apple's on-device Translation presentation, with system-managed source/target language selection and language downloads. Preserve the original transcript.
+- Add a Translate action to expanded transcript cards using Apple's custom on-device `TranslationSession`, with a supported target-language picker and system-managed language downloads. Preserve the original transcript and do not use the system presentation that may process content remotely.
 - Keep transcript reuse available from the third Command Palette tab.
+- Render the same rich accordion item in the Command Palette Dictation tab so the selected result can be reviewed, pasted, copied, played, translated, revealed, or deleted without opening Settings.
 
 Apple's on-device speech implementation in the SERPy donor is the starting candidate because the owner found it acceptable. Another local model is allowed only when measured accuracy, latency, offline behavior, cancellation, and resource cost are better. Model branding is not a requirement.
 

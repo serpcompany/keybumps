@@ -24,9 +24,9 @@ The accordion state regression passed, the full deterministic suite passed 93/93
 
 ## 2026-09-12 native transcript translation
 
-SuperMac adds an original Translate action to each expanded transcript card using SwiftUI's native `translationPresentation` on macOS 14.4 and newer. The system presentation owns source/target language selection, language-model availability and download UI, translated output, and copy behavior. The original transcript and `meta.json` remain unchanged. Earlier supported macOS versions show an unavailable action rather than a fake control.
+SuperMac adds an original Translate action to each expanded transcript card using Apple's custom `TranslationSession` on macOS 15 and newer. SuperMac presents the supported target-language picker and inline translated output while Apple manages on-device language-model availability and downloads. The original transcript and `meta.json` remain unchanged. macOS 14 shows an unavailable action rather than a fake control.
 
-The deterministic eligibility regression passed. From the exact signed Debug app, the Translate transcript control was visible on the expanded card, opened a native popover anchored to Dictation History, and closed cleanly. No model download was accepted, no transcript was replaced, and private transcript text was redacted from verification output.
+Runtime QA first rejected `translationPresentation` after its own privacy UI warned that selected content could be sent to Apple. That implementation was removed before commit. The replacement uses `TranslationSession`, which Apple documents as processing translation content on device. From the exact signed Debug app, the rich Command Palette Dictation card exposed Paste, Copy, Translate, info/reveal, delete, waveform, and playback controls. Translate opened the inline local panel, loaded compatible targets, and selected Japanese by default for an English recording. `LanguageAvailability` reported the English-to-Japanese pair as supported but not yet installed. No model download was accepted, so translated-output runtime acceptance remains pending; no transcript was replaced and private transcript text was redacted from verification output.
 
 ## 2026-09-12 SuperMac identity reset
 

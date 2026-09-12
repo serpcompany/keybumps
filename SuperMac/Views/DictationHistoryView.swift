@@ -100,6 +100,8 @@ struct DictationHistoryView: View {
                                 }
                             },
                             togglePlayback: { audioPlayer.toggle(entry) },
+                            primaryActionTitle: nil,
+                            primaryAction: nil,
                             copy: { copy(entry.text) },
                             reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },
                             delete: {
@@ -139,31 +141,35 @@ enum DictationTranslationPolicy {
     static func canTranslate(_ text: String) -> Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    static func preferredTargetIdentifier(
+        sourceIdentifier: String,
+        supportedIdentifiers: [String]
+    ) -> String? {
+        let source = Locale.Language(identifier: sourceIdentifier)
+        let preferred = source.languageCode?.identifier == "ja" ? "en" : "ja"
+        return supportedIdentifiers.first(where: {
+            Locale.Language(identifier: $0).languageCode?.identifier == preferred
+        }) ?? supportedIdentifiers.first
+    }
 }
 
-private struct DictationHistoryCard: View {
+struct DictationHistoryCard: View {
     let entry: DictationHistoryEntry
     let isExpanded: Bool
     let isPlaying: Bool
     let progress: Double
     let toggleExpansion: () -> Void
     let togglePlayback: () -> Void
+    let primaryActionTitle: String?
+    let primaryAction: (() -> Void)?
     let copy: () -> Void
     let reveal: () -> Void
     let delete: () -> Void
     @State private var showsTranslation = false
 
-    @ViewBuilder
     var body: some View {
-        if #available(macOS 14.4, *) {
-            cardContent
-                .translationPresentation(
-                    isPresented: $showsTranslation,
-                    text: entry.text
-                )
-        } else {
-            cardContent
-        }
+        cardContent
     }
 
     private var cardContent: some View {
@@ -226,11 +232,17 @@ private struct DictationHistoryCard: View {
                             Text("Transcription failed").foregroundStyle(.orange)
                         }
                         Spacer()
+                        if let primaryActionTitle, let primaryAction {
+                            Button(primaryActionTitle, systemImage: "return", action: primaryAction)
+                                .buttonStyle(.borderless)
+                                .help("Paste transcript")
+                                .accessibilityLabel("Paste transcript")
+                        }
                         Button(action: copy) { Image(systemName: "doc.on.doc") }
                             .buttonStyle(.borderless)
                             .help("Copy transcript")
                             .accessibilityLabel("Copy transcript")
-                        if #available(macOS 14.4, *) {
+                        if #available(macOS 15.0, *) {
                             Button {
                                 showsTranslation = true
                             } label: {
@@ -244,7 +256,7 @@ private struct DictationHistoryCard: View {
                             Button(action: {}) { Image(systemName: "translate") }
                                 .buttonStyle(.borderless)
                                 .disabled(true)
-                                .help("Translation requires macOS 14.4 or newer")
+                                .help("On-device translation requires macOS 15 or newer")
                                 .accessibilityLabel("Translation unavailable")
                         }
                         Button(action: reveal) { Image(systemName: "info.circle") }
@@ -257,6 +269,21 @@ private struct DictationHistoryCard: View {
                             .accessibilityLabel("Delete recording")
                     }
                     .font(.callout)
+
+                    if showsTranslation {
+                        if #available(macOS 15.0, *) {
+                            LocalDictationTranslationView(
+                                sourceText: entry.text,
+                                sourceLanguageIdentifier: entry.language,
+                                close: { showsTranslation = false }
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        } else {
+                            Text("On-device translation requires macOS 15 or newer.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 .padding(.top, 18)
                 .transition(.opacity.combined(with: .move(edge: .top)))
@@ -280,6 +307,133 @@ private struct DictationHistoryCard: View {
         formatter.zeroFormattingBehavior = [.pad]
         return formatter
     }()
+}
+
+@available(macOS 15.0, *)
+private struct LocalDictationTranslationView: View {
+    let sourceText: String
+    let sourceLanguageIdentifier: String
+    let close: () -> Void
+
+    @State private var supportedTargets: [Locale.Language] = []
+    @State private var targetIdentifier = ""
+    @State private var translatedText: String?
+    @State private var errorMessage: String?
+    @State private var isTranslating = false
+    @State private var configuration: TranslationSession.Configuration?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label("Translate to", systemImage: "translate")
+                    .font(.callout.weight(.semibold))
+                Picker("Target language", selection: $targetIdentifier) {
+                    ForEach(supportedTargets, id: \.minimalIdentifier) { language in
+                        Text(displayName(for: language)).tag(language.minimalIdentifier)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 220)
+                .disabled(supportedTargets.isEmpty || isTranslating)
+
+                Button(isTranslating ? "Translating…" : "Translate") {
+                    triggerTranslation()
+                }
+                .disabled(targetIdentifier.isEmpty || isTranslating)
+
+                Spacer()
+                Button(action: close) { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless)
+                    .help("Close translation")
+                    .accessibilityLabel("Close translation")
+            }
+
+            if supportedTargets.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading supported languages…")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            if let translatedText {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(translatedText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        Spacer()
+                        Button("Copy Translation", systemImage: "doc.on.doc") {
+                            DictationHistoryClipboard.copy(translatedText)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            Text("Translation runs on this Mac. A language model may need to be downloaded the first time.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(12)
+        .background(.black.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+        .task { await loadSupportedTargets() }
+        .translationTask(configuration) { session in
+            do {
+                try await session.prepareTranslation()
+                let response = try await session.translate(sourceText)
+                translatedText = response.targetText
+                errorMessage = nil
+            } catch {
+                errorMessage = "Translation could not be completed. Check that the selected language model is available."
+            }
+            isTranslating = false
+        }
+    }
+
+    private func triggerTranslation() {
+        guard !targetIdentifier.isEmpty else { return }
+        isTranslating = true
+        translatedText = nil
+        errorMessage = nil
+        let source = Locale.Language(identifier: sourceLanguageIdentifier)
+        let target = Locale.Language(identifier: targetIdentifier)
+        if configuration?.source == source, configuration?.target == target {
+            configuration?.invalidate()
+        } else {
+            configuration = TranslationSession.Configuration(source: source, target: target)
+        }
+    }
+
+    private func loadSupportedTargets() async {
+        let source = Locale.Language(identifier: sourceLanguageIdentifier)
+        let availability = LanguageAvailability()
+        let supported = await availability.supportedLanguages
+        var compatible: [Locale.Language] = []
+        for language in supported where !language.isEquivalent(to: source) {
+            let status = await availability.status(from: source, to: language)
+            if status != .unsupported { compatible.append(language) }
+        }
+        supportedTargets = compatible.sorted {
+            displayName(for: $0).localizedCaseInsensitiveCompare(displayName(for: $1)) == .orderedAscending
+        }
+        targetIdentifier = DictationTranslationPolicy.preferredTargetIdentifier(
+            sourceIdentifier: sourceLanguageIdentifier,
+            supportedIdentifiers: supportedTargets.map(\.minimalIdentifier)
+        ) ?? ""
+    }
+
+    private func displayName(for language: Locale.Language) -> String {
+        Locale.current.localizedString(forIdentifier: language.minimalIdentifier)
+            ?? language.minimalIdentifier
+    }
 }
 
 private struct RecordingWaveform: View {

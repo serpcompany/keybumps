@@ -389,6 +389,7 @@ private struct CommandPaletteView: View {
             DictationResultsView(
                 entries: filteredDictations,
                 selection: state.selection,
+                select: { state.selection = $0 },
                 choose: pasteText,
                 delete: dictationHistory.delete,
                 clear: dictationHistory.clear
@@ -573,28 +574,73 @@ private struct ClipboardResultsView: View {
 private struct DictationResultsView: View {
     let entries: [DictationHistoryEntry]
     let selection: Int
+    let select: (Int) -> Void
     let choose: (String) -> Void
     let delete: (DictationHistoryEntry) -> Void
     let clear: () -> Void
+    @State private var audioPlayer = DictationAudioPlayer()
 
     var body: some View {
-        HistoryResultsContainer(
-            entries: entries,
-            selection: selection,
-            emptyTitle: "Your dictated text will appear here",
-            emptyImage: "waveform",
-            text: { $0.text },
-            choose: { choose($0.text) },
-            delete: delete,
-            clear: clear,
-            subtitle: { entry in
-                HStack(spacing: 5) {
-                    Text(Locale.current.localizedString(forIdentifier: entry.language) ?? entry.language)
-                    Text("·")
-                    Text(entry.capturedAt, style: .relative)
+        PaletteResultsContainer {
+            if entries.isEmpty {
+                PaletteEmptyState(title: "Your dictated text will appear here", systemImage: "waveform")
+            } else {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Recent")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Clear History", systemImage: "trash", role: .destructive) {
+                            audioPlayer.stop()
+                            clear()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                    }
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 9) {
+                                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                    DictationHistoryCard(
+                                        entry: entry,
+                                        isExpanded: index == selection,
+                                        isPlaying: audioPlayer.activeEntryID == entry.id && audioPlayer.isPlaying,
+                                        progress: audioPlayer.progress(for: entry),
+                                        toggleExpansion: { select(index) },
+                                        togglePlayback: { audioPlayer.toggle(entry) },
+                                        primaryActionTitle: "Paste",
+                                        primaryAction: { choose(entry.text) },
+                                        copy: { DictationHistoryClipboard.copy(entry.text) },
+                                        reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },
+                                        delete: {
+                                            if audioPlayer.activeEntryID == entry.id { audioPlayer.stop() }
+                                            delete(entry)
+                                        }
+                                    )
+                                    .id(entry.id)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 12)
+                        }
+                        .onChange(of: selection) {
+                            guard entries.indices.contains(selection) else { return }
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                proxy.scrollTo(entries[selection].id, anchor: .center)
+                            }
+                        }
+                    }
                 }
             }
-        )
+        }
+        .onDisappear { audioPlayer.stop() }
+        .onChange(of: entries.map(\.id)) {
+            if selection >= entries.count { select(max(0, entries.count - 1)) }
+        }
     }
 }
 

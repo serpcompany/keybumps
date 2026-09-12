@@ -456,6 +456,20 @@ final class SuperMacFeatureTests: XCTestCase {
     func testDictationTranslationRequiresRealTranscriptText() {
         XCTAssertTrue(DictationTranslationPolicy.canTranslate("Translate this"))
         XCTAssertFalse(DictationTranslationPolicy.canTranslate("  \n "))
+        XCTAssertEqual(
+            DictationTranslationPolicy.preferredTargetIdentifier(
+                sourceIdentifier: "en-US",
+                supportedIdentifiers: ["fr", "ja", "es"]
+            ),
+            "ja"
+        )
+        XCTAssertEqual(
+            DictationTranslationPolicy.preferredTargetIdentifier(
+                sourceIdentifier: "ja-JP",
+                supportedIdentifiers: ["fr", "en-US", "es"]
+            ),
+            "en-US"
+        )
     }
 
     func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {

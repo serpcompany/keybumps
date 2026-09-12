@@ -12,10 +12,23 @@
   },
   "rows": [
     {
-      "id": "dictation.history.native-translation",
+      "id": "palette.dictation.rich-history-card",
       "kind": "both",
       "in_scope": true,
       "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
+        "candidate": ["SuperMac/CommandPalette/CommandPaletteController.swift", "SuperMac/Views/DictationHistoryView.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-native-transcript-translation"]
+      }
+    },
+    {
+      "id": "dictation.history.native-translation",
+      "kind": "both",
+      "in_scope": true,
+      "status": "inferred",
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
