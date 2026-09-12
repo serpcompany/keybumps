@@ -321,6 +321,9 @@ final class SuperMacFeatureTests: XCTestCase {
 
     func testDictationTranscribesTheCompletedAudioArchiveRatherThanAnEarlyLiveResult() {
         XCTAssertEqual(DictationTranscriptionPlan.source, .completedAudioFile)
+        XCTAssertEqual(DictationTranscriptionPlan.timeout(forRecordedDuration: 10), 120)
+        XCTAssertEqual(DictationTranscriptionPlan.timeout(forRecordedDuration: 300), 600)
+        XCTAssertEqual(DictationTranscriptionPlan.timeout(forRecordedDuration: 3_600), 7_200)
     }
 
     func testClipboardKeepsTenAndCollapsesDuplicates() {

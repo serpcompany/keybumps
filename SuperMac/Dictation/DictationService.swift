@@ -48,6 +48,10 @@ enum DictationTranscriptionSource: Equatable {
 
 enum DictationTranscriptionPlan {
     static let source = DictationTranscriptionSource.completedAudioFile
+
+    static func timeout(forRecordedDuration duration: TimeInterval) -> TimeInterval {
+        max(120, duration * 2)
+    }
 }
 
 struct DictationInsertionTarget: Equatable {
@@ -209,7 +213,10 @@ final class DictationService {
         stopAudio()
         do {
             guard let recording else { throw CocoaError(.fileNoSuchFile) }
-            let transcript = try await transcribeCompletedAudio(at: recording.audioURL)
+            let transcript = try await transcribeCompletedAudio(
+                at: recording.audioURL,
+                recordedDuration: duration
+            )
             try transcript.write(to: recoveryURL, atomically: true, encoding: .utf8)
             recoveredTranscript = transcript
             try history.completeRecording(
@@ -245,7 +252,7 @@ final class DictationService {
         }
     }
 
-    private func transcribeCompletedAudio(at audioURL: URL) async throws -> String {
+    private func transcribeCompletedAudio(at audioURL: URL, recordedDuration: TimeInterval) async throws -> String {
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguage)),
               recognizer.supportsOnDeviceRecognition else {
             throw NSError(domain: "SuperMac.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "On-device speech is unavailable for \(selectedLanguage)."])
@@ -262,7 +269,9 @@ final class DictationService {
                 Task { @MainActor in self?.receive(result: result, error: error) }
             }
             transcriptionTimeoutTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(120))
+                try? await Task.sleep(for: .seconds(
+                    DictationTranscriptionPlan.timeout(forRecordedDuration: recordedDuration)
+                ))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     self?.finishRecognition(error: NSError(
