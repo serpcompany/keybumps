@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "claim": "bounded-slice",
+  "scope_statement": "Make the SuperMac launcher more like Alfred or Raycast, with three tabs: Search by default, Clipboard History, and Dictation History.",
+  "inventory_complete": true,
+  "primary_workflow_passed": true,
+  "installed_artifact_verified": false,
+  "independent_verification": {
+    "required": true,
+    "passed": false,
+    "verifier": ""
+  },
+  "rows": [
+    {
+      "id": "palette.search.default",
+      "kind": "both",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/evidence/mvp/runtime/reference-alfred-empty.png"],
+        "candidate": ["docs/evidence/mvp/runtime/command-palette-search.png", "docs/evidence/mvp/runtime/command-palette-search-result.png"],
+        "comparison": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
+      }
+    },
+    {
+      "id": "palette.clipboard.tab",
+      "kind": "both",
+      "in_scope": true,
+      "status": "unresolved",
+      "exercised": true,
+      "evidence": {
+        "reference": ["https://www.raycast.com/core-features/clipboard-history"],
+        "candidate": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"],
+        "comparison": [],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
+      }
+    },
+    {
+      "id": "palette.dictation.tab",
+      "kind": "both",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
+        "candidate": ["docs/evidence/mvp/runtime/command-palette-dictation.png"],
+        "comparison": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
+      }
+    },
+    {
+      "id": "palette.hotkeys.route-tabs",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "inferred",
+      "exercised": false,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#alfred-reference-slice"],
+        "candidate": ["SERPCompanion/App/AppModel.swift"],
+        "comparison": [],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
+      }
+    },
+    {
+      "id": "palette.keyboard-navigation",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
+        "candidate": ["docs/evidence/mvp/runtime/command-palette-search-result.png", "docs/evidence/mvp/runtime/command-palette-dictation.png"],
+        "comparison": [],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
+      }
+    },
+    {
+      "id": "palette.history-persistence",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/product/mvp-prd.md#shared-command-palette"],
+        "candidate": ["SERPCompanionTests/CompanionFeatureTests.swift"],
+        "comparison": [],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
+      }
+    },
+    {
+      "id": "palette.original-identity",
+      "kind": "visual",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/evidence/mvp/runtime/reference-alfred-empty.png", "https://www.raycast.com/"],
+        "candidate": ["docs/evidence/mvp/runtime/command-palette-search.png", "docs/evidence/mvp/runtime/command-palette-dictation.png"],
+        "comparison": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
+        "behavior": []
+      }
+    },
+    {
+      "id": "permissions.system-pane-helper",
+      "kind": "both",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/evidence/heyclicky-1.0.48/reference/permission-drag-helper.png"],
+        "candidate": ["docs/app-replica/evidence/heyclicky-1.0.48/candidate/permission-drag-helper.png"],
+        "comparison": ["docs/app-replica/scope.md#heyclicky-permission-helper-slice"],
+        "behavior": ["docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+      }
+    },
+    {
+      "id": "permissions.app-bundle-drag-payload",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/evidence/heyclicky-1.0.48/reference/permission-drag-helper.png"],
+        "candidate": ["SERPCompanion/Permissions/PermissionDragAssistantController.swift"],
+        "comparison": [],
+        "behavior": ["SERPCompanionTests/CompanionFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+      }
+    },
+    {
+      "id": "permissions.native-consent-separation",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#heyclicky-permission-helper-slice"],
+        "candidate": ["SERPCompanion/Infrastructure/SystemServices.swift", "SERPCompanion/Views/SettingsRootView.swift"],
+        "comparison": [],
+        "behavior": ["SERPCompanionTests/CompanionFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+      }
+    }
+  ]
+}

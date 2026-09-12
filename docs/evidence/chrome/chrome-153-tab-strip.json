@@ -1,0 +1,15 @@
+{
+  "chromeVersion": "153.0.8010.12",
+  "capturedOn": "2026-09-04",
+  "bundleIdentifier": "com.google.Chrome",
+  "sanitization": "Only generic browser-chrome roles, control names, actions, selected state, and sibling order are retained.",
+  "controls": [
+    {"case": "active-tab", "role": "AXRadioButton", "selected": true, "parentRole": "AXTabGroup"},
+    {"case": "inactive-tab", "role": "AXRadioButton", "selected": false, "parentRole": "AXTabGroup"},
+    {"case": "active-tab-close", "role": "AXButton", "name": "Close", "actions": ["AXPress"], "ancestorRole": "AXRadioButton", "ancestorSelected": true},
+    {"case": "inactive-tab-close", "role": "AXButton", "name": "Close", "actions": ["AXPress"], "ancestorRole": "AXRadioButton", "ancestorSelected": false},
+    {"case": "new-tab", "role": "AXButton", "name": "New Tab", "actions": ["AXPress"], "nearbyRole": "AXTabGroup"}
+  ],
+  "verification": {"boundedRequery": "implemented", "observerNotification": "not-characterized"},
+  "excludedDataClasses": ["page-content", "private-tab-titles", "browsing-data"]
+}

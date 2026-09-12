@@ -1,0 +1,74 @@
+name: SERPCompanion
+configs:
+  Debug: debug
+  Release: release
+options:
+  bundleIdPrefix: com.serp
+  deploymentTarget:
+    macOS: "14.2"
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.2"
+    ARCHS: arm64
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  SERPCompanion:
+    type: application
+    platform: macOS
+    sources:
+      - SERPCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.serp.supermac
+        PRODUCT_NAME: SuperMac
+        PRODUCT_MODULE_NAME: SERPCompanion
+        EXECUTABLE_NAME: SERPCompanion
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: SuperMac
+        INFOPLIST_KEY_CFBundleName: SuperMac
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_LSUIElement: NO
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: SuperMac records audio only while Dictation is visibly active and transcribes it on this Mac.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: SuperMac uses Apple's on-device speech recognition for Dictation.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 SERP. All rights reserved.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: SERPCompanion/Resources/SuperMac.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 847HR8U8D9
+        ENABLE_APP_SANDBOX: NO
+  SERPCompanionTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - SERPCompanionTests
+    dependencies:
+      - target: SERPCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.serp.supermac.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 847HR8U8D9
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SuperMac.app/Contents/MacOS/SERPCompanion"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  SERPCompanion:
+    build:
+      targets:
+        SERPCompanion: all
+        SERPCompanionTests: [test]
+    test:
+      targets:
+        - SERPCompanionTests
+  SERPCompanion-Release:
+    build:
+      targets:
+        SERPCompanion: all
+    run:
+      config: Release
+    archive:
+      config: Release

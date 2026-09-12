@@ -1,0 +1,63 @@
+{
+  "chromeVersion": "153.0.8010.12",
+  "capturedOn": "2026-09-04",
+  "bundleIdentifier": "com.google.Chrome",
+  "source": "Agent-run physical acceptance recorded on issue 14",
+  "sanitization": "Retains only pointer phases, generic Chrome control roles, Press support, live Settings command resolution, tab counts, and a derived destination class.",
+  "observations": [
+    {
+      "phase": "down",
+      "time": 1.0,
+      "x": 1180,
+      "y": 90,
+      "hit": {"token": "menu-button", "role": "AXButton", "name": "Chrome menu", "actions": ["AXPress"]},
+      "tabCount": 2,
+      "settingsShortcut": "resolved:⌘,",
+      "destination": "other"
+    },
+    {
+      "phase": "up",
+      "time": 1.1,
+      "x": 1180,
+      "y": 90,
+      "hit": {"token": "menu-button", "role": "AXButton", "name": "Chrome menu", "actions": ["AXPress"]},
+      "tabCount": 2,
+      "settingsShortcut": "resolved:⌘,",
+      "destination": "other"
+    },
+    {
+      "phase": "down",
+      "time": 2.0,
+      "x": 1090,
+      "y": 610,
+      "hit": {"token": "settings-item", "role": "AXMenuItem", "name": "Settings", "actions": ["AXPress"]},
+      "tabCount": 2,
+      "settingsShortcut": "resolved:⌘,",
+      "destination": "other"
+    },
+    {
+      "phase": "up",
+      "time": 2.1,
+      "x": 1090,
+      "y": 610,
+      "hit": {"token": "settings-item", "role": "AXMenuItem", "name": "Settings", "actions": ["AXPress"]},
+      "tabCount": 2,
+      "settingsShortcut": "resolved:⌘,",
+      "destination": "other"
+    },
+    {
+      "phase": "post",
+      "time": 2.3,
+      "x": 1090,
+      "y": 610,
+      "hit": {"token": "browser-content", "role": "AXGroup", "name": null, "actions": []},
+      "tabCount": 3,
+      "settingsShortcut": "resolved:⌘,",
+      "destination": "settings"
+    }
+  ],
+  "expectedEvents": [
+    {"applicationName": "Google Chrome", "actionTitle": "Settings", "shortcut": "⌘,"}
+  ],
+  "excludedDataClasses": ["page-content", "tab-titles", "address-values", "account-data", "profile-data", "browsing-data"]
+}
