@@ -580,18 +580,8 @@ private struct PermissionsView: View {
 }
 
 private struct GeneralView: View {
-    @Environment(AppModel.self) private var model
     var body: some View {
         Form {
-            Section("Startup") {
-                LabeledContent("Launch at Login", value: model.launchAtLogin.statusText)
-                HStack {
-                    Button("Enable") { model.launchAtLogin.setEnabled(true) }
-                        .disabled(model.launchAtLogin.statusText == "Enabled")
-                    Button("Disable") { model.launchAtLogin.setEnabled(false) }
-                        .disabled(model.launchAtLogin.statusText == "Disabled")
-                }
-            }
             Section("Updates") {
                 LabeledContent("Automatic updates", value: "Not configured")
                 Text("This local preview has no release feed, so update controls are intentionally unavailable. Updates will be enabled only in a signed distributable release.").foregroundStyle(.secondary)

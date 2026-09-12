@@ -98,7 +98,7 @@ Use a native macOS sidebar with these conceptual destinations:
 
 Exact labels, order, and visual polish are reversible implementation details. The window must remain understandable without documentation.
 
-Clicking the Dock icon opens Settings/Home. SuperMac launches at login by default, with a General setting to disable it.
+Clicking the Dock icon opens Settings/Home. SuperMac registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
 
 ### Menu bar
 

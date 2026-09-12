@@ -2,6 +2,10 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 native Login Items ownership
+
+The owner removed the redundant Startup section from SuperMac General settings. SuperMac still registers Launch at Login during onboarding, but it does not force registration again on every launch and no longer exposes parallel Enable/Disable buttons or status text. Users manage the resulting login item through macOS System Settings. The full deterministic suite passed 110/110 after removal, and Debug and Release builds passed.
+
 ## 2026-09-12 redundant native permission prompt removal
 
 Owner runtime feedback showed Apple's `Device Control and Data Access` prompt appearing before SuperMac's custom Accessibility helper. Source tracing found the guided coordinator still invoked `AXIsProcessTrustedWithOptions(prompt: true)` for Accessibility and `CGRequestListenEventAccess()` for Input Monitoring, with two older detector/window entry points capable of invoking the same native requests. Accessibility and Input Monitoring recovery now uses only silent preflight APIs, the correct System Settings deep link, and the draggable SuperMac helper. Microphone and Speech Recognition retain their required native prompts. Focused routing tests passed, and a static search confirms no native Accessibility/Input Monitoring request calls remain. Fresh missing-permission runtime acceptance remains an owner step because resetting TCC state would alter system security settings.
