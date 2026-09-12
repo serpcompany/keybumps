@@ -591,12 +591,16 @@ private struct DictationResultsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Clear History", systemImage: "trash", role: .destructive) {
+                        HistoryClearButton(
+                            title: "Clear History",
+                            confirmationTitle: "Clear all dictation history?",
+                            confirmationMessage: "This permanently removes every SuperMac recording directory, transcript, and audio file.",
+                            destructiveActionTitle: "Clear All Recordings",
+                            disabled: entries.isEmpty
+                        ) {
                             audioPlayer.stop()
                             clear()
                         }
-                        .buttonStyle(.plain)
-                        .font(.caption)
                     }
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)
@@ -666,9 +670,14 @@ private struct HistoryResultsContainer<Entry: Identifiable, Subtitle: View>: Vie
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Clear History", systemImage: "trash", role: .destructive, action: clear)
-                            .buttonStyle(.plain)
-                            .font(.caption)
+                        HistoryClearButton(
+                            title: "Clear History",
+                            confirmationTitle: "Clear clipboard history?",
+                            confirmationMessage: "This permanently removes all clipboard items saved by SuperMac.",
+                            destructiveActionTitle: "Clear Clipboard History",
+                            disabled: entries.isEmpty,
+                            clear: clear
+                        )
                     }
                     .padding(.horizontal, 13)
                     .padding(.vertical, 8)

@@ -162,7 +162,7 @@ User outcome: recover and reuse the most recent copied text through the Clipboar
 - Persist only the ten most recent text items locally.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
-- Provide deletion and Clear History controls.
+- Provide deletion and a native Clear History control that requires destructive confirmation before removing all items.
 - Disabling the capability stops monitoring but does not silently erase retained items.
 - No images, files, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
 
@@ -190,10 +190,10 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Preserve the WAV in Dictation History with an explicit failure state when transcription fails or times out.
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
 - Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
-- Provide a searchable Dictation History screen with real local playback, duration/progress, copy, reveal in Finder, individual delete, and clear-all controls.
+- Provide a searchable Dictation History screen with real local playback, duration/progress, copy, reveal in Finder, individual delete, and a native clear-all control that requires destructive confirmation.
 - Add a Translate action to expanded transcript cards using Apple's custom on-device `TranslationSession`, with a supported target-language picker and system-managed language downloads. Let the user play or stop the translated text through an installed macOS voice matched to the target language. Preserve the original transcript, do not persist generated speech, and do not use the system presentation that may process content remotely.
 - Keep transcript reuse available from the third Command Palette tab.
-- Render the same rich accordion item in the Command Palette Dictation tab so the selected result can be reviewed, pasted, copied, played, translated, heard in the target language, revealed, or deleted without opening Settings.
+- Render the same rich accordion item in the Command Palette Dictation tab so the selected result can be reviewed, pasted, copied, played, translated, heard in the target language, revealed, or deleted without opening Settings. The entire padded accordion header is a button target with hover feedback rather than limiting expansion to its text.
 
 Apple's on-device speech implementation in the SERPy donor is the starting candidate because the owner found it acceptable. Another local model is allowed only when measured accuracy, latency, offline behavior, cancellation, and resource cost are better. Model branding is not a requirement.
 

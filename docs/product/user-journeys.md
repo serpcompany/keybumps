@@ -82,7 +82,7 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Home/settings.
 3. The shared palette opens on Clipboard with the newest item first and at most ten items.
 4. Filter the local history, select an item, and paste it into the previously focused destination when safe.
-5. Delete an item or clear all history from settings.
+5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed.
 6. Disable Clipboard History to stop monitoring and release its shortcut without silently erasing retained items.
 
 Clipboard content stays local. Recent copied secrets remain until removed or displaced, so committed screenshots and logs must not contain item text.
@@ -96,7 +96,7 @@ Clipboard content stays local. Recent copied secrets remain until removed or dis
 5. SuperMac transcribes the completed local WAV and inserts the result at the original cursor; pressing Escape cancels without insertion.
 6. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted. A failed transcription retains its audio with an explicit failure state.
 7. If insertion fails, recover the last transcript from Dictation settings.
-8. Open Dictation History—or the Command Palette's Dictation tab—to search transcript cards, expand the selected result, play/pause the original recording, paste or copy text, translate through the on-device target-language picker, play/stop the translated text with an installed target-language voice, reveal the recording folder, or delete recordings. Translation and translated speech leave the original transcript unchanged; translated speech is not saved as another recording.
+8. Open Dictation History—or the Command Palette's Dictation tab—to search transcript cards, click anywhere in a card's padded header to expand it, play/pause the original recording, paste or copy text, translate through the on-device target-language picker, play/stop the translated text with an installed target-language voice, reveal the recording folder, or delete recordings. Clear History requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged; translated speech is not saved as another recording.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 

@@ -242,7 +242,14 @@ private struct ClipboardSettingsView: View {
                 Button("Open Clipboard History") { model.showClipboardHistory() }
                     .disabled(!model.preferences.enabledCapabilities.contains(.clipboardHistory))
                 LabeledContent("Stored items", value: "\(model.clipboard.entries.count) of 10")
-                Button("Clear History", role: .destructive) { model.clipboard.clear() }.disabled(model.clipboard.entries.isEmpty)
+                HistoryClearButton(
+                    title: "Clear History",
+                    confirmationTitle: "Clear clipboard history?",
+                    confirmationMessage: "This permanently removes all clipboard items saved by SuperMac.",
+                    destructiveActionTitle: "Clear Clipboard History",
+                    disabled: model.clipboard.entries.isEmpty,
+                    clear: model.clipboard.clear
+                )
                 Text("The latest ten text items are stored only on this Mac. Copied secrets remain until removed or displaced.").foregroundStyle(.secondary)
             }
         }.formStyle(.grouped).navigationTitle("Clipboard History")
@@ -384,7 +391,14 @@ private struct KeyBumpsSettingsView: View {
             Section("History") {
                 LabeledContent("Events", value: "\(model.inbox.events.count)")
                 Button("Mark All Read") { model.markAllRead() }.disabled(model.unreadCount == 0)
-                Button("Clear Key Bumps History", role: .destructive) { model.clearHistory() }.disabled(model.inbox.events.isEmpty)
+                HistoryClearButton(
+                    title: "Clear Key Bumps History",
+                    confirmationTitle: "Clear Key Bumps history?",
+                    confirmationMessage: "This permanently removes all saved Key Bumps events.",
+                    destructiveActionTitle: "Clear Key Bumps History",
+                    disabled: model.inbox.events.isEmpty,
+                    clear: model.clearHistory
+                )
             }
             Section("Key Bumps History") {
                 if model.inbox.events.isEmpty {

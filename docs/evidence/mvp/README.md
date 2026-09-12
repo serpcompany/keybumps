@@ -2,6 +2,10 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 history interaction repair
+
+The dedicated Dictation History screen and both Command Palette history tabs now share one native bordered Clear History control. Clipboard and Dictation bulk deletion each presents content-specific destructive confirmation and Cancel; runtime inspection opened the Clipboard confirmation and Cancel returned to the populated palette without deleting its items. Dictation cards now make the complete padded header a SwiftUI `Button` target, add hover feedback, and expose an accessibility hint. Runtime accordion hit-area acceptance remains pending because the current signed app had no non-private Dictation entry available for interaction.
+
 ## 2026-09-12 Key Bumps product naming
 
 The owner selected **Key Bumps** as the SuperMac name for the capability previously presented as Shortcut Coaching. Current user-facing capability titles, sidebar and navigation labels, permission explanations, empty/history states, test and clear actions, presentation descriptions, and accessibility copy use Key Bumps or the singular key bump. Historical references to the old Shortcut Coach donor app remain unchanged where needed for provenance. Internal persisted identifiers and the existing history filename also remain stable so this branding change does not reset settings or local history. A deterministic naming regression pins the canonical capability, sidebar, and permission copy. The full suite passed 96/96, Debug and Release builds passed, and signed-runtime accessibility inspection confirmed Key Bumps on Home, in the sidebar, as the settings title, on its enable switch, and on its test, clear-history, and history-section controls. No private history content was retained as evidence.

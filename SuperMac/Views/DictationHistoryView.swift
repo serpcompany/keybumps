@@ -15,7 +15,6 @@ struct DictationHistoryView: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
     @State private var audioPlayer = DictationAudioPlayer()
-    @State private var showsClearConfirmation = false
     @State private var expansion = DictationHistoryExpansion()
 
     var body: some View {
@@ -32,18 +31,6 @@ struct DictationHistoryView: View {
             }
         }
         .onDisappear { audioPlayer.stop() }
-        .confirmationDialog(
-            "Clear all dictation history?",
-            isPresented: $showsClearConfirmation
-        ) {
-            Button("Clear All Recordings", role: .destructive) {
-                audioPlayer.stop()
-                model.dictationHistory.clear()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently removes every SuperMac recording directory, transcript, and audio file.")
-        }
     }
 
     private var header: some View {
@@ -61,10 +48,16 @@ struct DictationHistoryView: View {
             Button("Open Recordings Folder", systemImage: "folder") {
                 NSWorkspace.shared.open(model.dictationHistory.recordingsDirectoryURL)
             }
-            Button("Clear All", role: .destructive) {
-                showsClearConfirmation = true
+            HistoryClearButton(
+                title: "Clear History",
+                confirmationTitle: "Clear all dictation history?",
+                confirmationMessage: "This permanently removes every SuperMac recording directory, transcript, and audio file.",
+                destructiveActionTitle: "Clear All Recordings",
+                disabled: model.dictationHistory.entries.isEmpty
+            ) {
+                audioPlayer.stop()
+                model.dictationHistory.clear()
             }
-            .disabled(model.dictationHistory.entries.isEmpty)
         }
         .padding(16)
     }
@@ -167,6 +160,7 @@ struct DictationHistoryCard: View {
     let reveal: () -> Void
     let delete: () -> Void
     @State private var showsTranslation = false
+    @State private var isHeaderHovered = false
 
     var body: some View {
         cardContent
@@ -187,10 +181,19 @@ struct DictationHistoryCard: View {
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .padding(.top, 3)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .background(
+                    isHeaderHovered ? Color.white.opacity(0.055) : .clear,
+                    in: RoundedRectangle(cornerRadius: 18)
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { isHeaderHovered = $0 }
             .accessibilityLabel("\(isExpanded ? "Collapse" : "Expand") dictation")
+            .accessibilityHint("Shows or hides this recording's audio and actions")
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
@@ -285,11 +288,11 @@ struct DictationHistoryCard: View {
                         }
                     }
                 }
-                .padding(.top, 18)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(18)
         .background(
             isExpanded ? Color.white.opacity(0.105) : Color.white.opacity(0.055),
             in: RoundedRectangle(cornerRadius: 18)
@@ -307,6 +310,32 @@ struct DictationHistoryCard: View {
         formatter.zeroFormattingBehavior = [.pad]
         return formatter
     }()
+}
+
+struct HistoryClearButton: View {
+    let title: String
+    let confirmationTitle: String
+    let confirmationMessage: String
+    let destructiveActionTitle: String
+    let disabled: Bool
+    let clear: () -> Void
+
+    @State private var showsConfirmation = false
+
+    var body: some View {
+        Button(title, systemImage: "trash", role: .destructive) {
+            showsConfirmation = true
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .disabled(disabled)
+        .alert(confirmationTitle, isPresented: $showsConfirmation) {
+            Button(destructiveActionTitle, role: .destructive, action: clear)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(confirmationMessage)
+        }
+    }
 }
 
 @available(macOS 15.0, *)
