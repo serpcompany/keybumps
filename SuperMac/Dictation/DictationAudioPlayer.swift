@@ -4,14 +4,6 @@ import Observation
 
 enum DictationPlaybackRate {
     static let steps: [Float] = [0.5, 0.75, 1, 1.25, 1.5, 2]
-
-    static func slower(than rate: Float) -> Float {
-        steps.last(where: { $0 < rate }) ?? steps[0]
-    }
-
-    static func faster(than rate: Float) -> Float {
-        steps.first(where: { $0 > rate }) ?? steps[steps.count - 1]
-    }
 }
 
 @MainActor
@@ -67,22 +59,8 @@ final class DictationAudioPlayer {
         activeEntryID == entry.id ? progress : 0
     }
 
-    func seek(_ entry: DictationHistoryEntry, to progress: Double) {
-        guard activeEntryID == entry.id, let player else { return }
-        let boundedProgress = min(max(progress, 0), 1)
-        player.currentTime = player.duration * boundedProgress
-        self.progress = boundedProgress
-    }
-
-    func decreasePlaybackRate() {
-        setPlaybackRate(DictationPlaybackRate.slower(than: playbackRate))
-    }
-
-    func increasePlaybackRate() {
-        setPlaybackRate(DictationPlaybackRate.faster(than: playbackRate))
-    }
-
-    private func setPlaybackRate(_ rate: Float) {
+    func setPlaybackRate(_ rate: Float) {
+        guard DictationPlaybackRate.steps.contains(rate) else { return }
         playbackRate = rate
         player?.rate = rate
     }

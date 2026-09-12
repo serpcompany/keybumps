@@ -689,11 +689,14 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: cancelled.directoryURL.path))
     }
 
-    func testDictationPlaybackRateStepsAreBounded() {
-        XCTAssertEqual(DictationPlaybackRate.slower(than: 1), 0.75)
-        XCTAssertEqual(DictationPlaybackRate.slower(than: 0.5), 0.5)
-        XCTAssertEqual(DictationPlaybackRate.faster(than: 1), 1.25)
-        XCTAssertEqual(DictationPlaybackRate.faster(than: 2), 2)
+    func testDictationPlaybackRatePickerUsesOnlySupportedRates() {
+        XCTAssertEqual(DictationPlaybackRate.steps, [0.5, 0.75, 1, 1.25, 1.5, 2])
+
+        let player = DictationAudioPlayer()
+        player.setPlaybackRate(1.5)
+        XCTAssertEqual(player.playbackRate, 1.5)
+        player.setPlaybackRate(3)
+        XCTAssertEqual(player.playbackRate, 1.5)
     }
 
     func testDictationHistoryAccordionKeepsOnlyOneExpandedRecording() {

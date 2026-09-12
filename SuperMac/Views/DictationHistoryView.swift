@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 import Translation
 
@@ -94,9 +95,7 @@ struct DictationHistoryView: View {
                                 }
                             },
                             togglePlayback: { audioPlayer.toggle(entry) },
-                            seekPlayback: { audioPlayer.seek(entry, to: $0) },
-                            decreasePlaybackRate: audioPlayer.decreasePlaybackRate,
-                            increasePlaybackRate: audioPlayer.increasePlaybackRate,
+                            setPlaybackRate: audioPlayer.setPlaybackRate,
                             transcribe: { Task { await model.dictation.transcribe(entry) } },
                             primaryActionTitle: nil,
                             primaryAction: nil,
@@ -161,9 +160,7 @@ struct DictationHistoryCard: View {
     let isTranscribing: Bool
     let toggleExpansion: () -> Void
     let togglePlayback: () -> Void
-    let seekPlayback: (Double) -> Void
-    let decreasePlaybackRate: () -> Void
-    let increasePlaybackRate: () -> Void
+    let setPlaybackRate: (Float) -> Void
     let transcribe: () -> Void
     let primaryActionTitle: String?
     let primaryAction: (() -> Void)?
@@ -210,15 +207,13 @@ struct DictationHistoryCard: View {
                 VStack(alignment: .leading, spacing: 14) {
                     DictationAudioTransportView(
                         isPlaying: isPlaying,
-                        isActive: progress > 0 || isPlaying,
                         progress: progress,
                         duration: entry.duration,
                         playbackRate: playbackRate,
                         hasAudio: entry.audioURL != nil,
+                        audioURL: entry.audioURL,
                         togglePlayback: togglePlayback,
-                        seekPlayback: seekPlayback,
-                        decreasePlaybackRate: decreasePlaybackRate,
-                        increasePlaybackRate: increasePlaybackRate
+                        setPlaybackRate: setPlaybackRate
                     )
 
                     HStack(spacing: 12) {
@@ -327,83 +322,60 @@ struct DictationHistoryCard: View {
 
 private struct DictationAudioTransportView: View {
     let isPlaying: Bool
-    let isActive: Bool
     let progress: Double
     let duration: TimeInterval
     let playbackRate: Float
     let hasAudio: Bool
+    let audioURL: URL?
     let togglePlayback: () -> Void
-    let seekPlayback: (Double) -> Void
-    let decreasePlaybackRate: () -> Void
-    let increasePlaybackRate: () -> Void
+    let setPlaybackRate: (Float) -> Void
 
     var body: some View {
-        GroupBox {
-            HStack(spacing: 10) {
-                ControlGroup {
-                    Button(action: togglePlayback) {
-                        Label(
-                            isPlaying ? "Pause" : "Play",
-                            systemImage: isPlaying ? "pause.fill" : "play.fill"
-                        )
-                        .labelStyle(.iconOnly)
-                    }
-                    .help(isPlaying ? "Pause recording" : "Play recording")
-                    .accessibilityLabel(isPlaying ? "Pause recording" : "Play recording")
+        HStack(spacing: 10) {
+            Button(action: togglePlayback) {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!hasAudio)
+            .help(isPlaying ? "Pause recording" : "Play recording")
+            .accessibilityLabel(isPlaying ? "Pause recording" : "Play recording")
 
-                    Button(action: decreasePlaybackRate) {
-                        Label("Slower", systemImage: "minus")
-                            .labelStyle(.iconOnly)
-                    }
-                    .help("Slow down audio")
-                    .accessibilityLabel("Slow down audio")
-
-                    Button(action: increasePlaybackRate) {
-                        Label("Faster", systemImage: "plus")
-                            .labelStyle(.iconOnly)
-                    }
-                    .help("Speed up audio")
-                    .accessibilityLabel("Speed up audio")
+            Picker(
+                "Playback speed",
+                selection: Binding(get: { playbackRate }, set: setPlaybackRate)
+            ) {
+                ForEach(DictationPlaybackRate.steps, id: \.self) { rate in
+                    Text(Self.rateLabel(rate)).tag(rate)
                 }
-                .controlSize(.small)
-                .disabled(!hasAudio)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .disabled(!hasAudio)
+            .help("Playback speed")
+            .accessibilityLabel("Playback speed")
 
-                Text(rateLabel)
-                    .font(.caption.monospacedDigit().weight(.medium))
-                    .frame(minWidth: 34)
-                    .accessibilityLabel("Playback speed")
-                    .accessibilityValue(rateLabel)
-
-                Slider(
-                    value: Binding(get: { progress }, set: seekPlayback),
-                    in: 0...1
-                ) {
-                    Text("Playback position")
-                }
-                .labelsHidden()
-                .disabled(!hasAudio || !isActive)
-                .accessibilityLabel("Playback position")
+            RecordingWaveform(audioURL: audioURL, progress: progress)
+                .accessibilityLabel("Audio progress")
                 .accessibilityValue(progress.formatted(.percent.precision(.fractionLength(0))))
 
-                Text(timeLabel)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .fixedSize()
-            }
+            Text(DictationHistoryCard.durationFormatter.string(from: duration) ?? "0:00")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .fixedSize()
         }
+        .padding(.horizontal, 12)
+        .frame(height: 58)
+        .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private var rateLabel: String {
-        playbackRate == playbackRate.rounded()
-            ? "\(Int(playbackRate))×"
-            : "\(playbackRate.formatted(.number.precision(.fractionLength(2))))×"
-    }
-
-    private var timeLabel: String {
-        let elapsed = duration * progress
-        let elapsedLabel = DictationHistoryCard.durationFormatter.string(from: elapsed) ?? "0:00"
-        let durationLabel = DictationHistoryCard.durationFormatter.string(from: duration) ?? "0:00"
-        return "\(elapsedLabel) / \(durationLabel)"
+    private static func rateLabel(_ rate: Float) -> String {
+        rate == rate.rounded()
+            ? "\(Int(rate))×"
+            : "\(rate.formatted(.number.precision(.fractionLength(2))))×"
     }
 }
 
@@ -585,5 +557,76 @@ private struct LocalDictationTranslationView: View {
     private func displayName(for language: Locale.Language) -> String {
         Locale.current.localizedString(forIdentifier: language.minimalIdentifier)
             ?? language.minimalIdentifier
+    }
+}
+
+private struct RecordingWaveform: View {
+    let audioURL: URL?
+    let progress: Double
+    @State private var samples = Array(repeating: 0.22, count: 64)
+
+    var body: some View {
+        Canvas { context, size in
+            let spacing: CGFloat = 2
+            let barWidth = max(1, (size.width - spacing * CGFloat(samples.count - 1)) / CGFloat(samples.count))
+            for (index, sample) in samples.enumerated() {
+                let height = max(3, size.height * CGFloat(sample))
+                let x = CGFloat(index) * (barWidth + spacing)
+                let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
+                let normalizedPosition = Double(index + 1) / Double(samples.count)
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                    with: .color(normalizedPosition <= progress ? .accentColor : .secondary.opacity(0.45))
+                )
+            }
+        }
+        .frame(height: 30)
+        .task(id: audioURL) {
+            guard let audioURL else { return }
+            samples = await AudioWaveformSampler.samples(at: audioURL, count: samples.count)
+        }
+    }
+}
+
+private enum AudioWaveformSampler {
+    static func samples(at audioURL: URL, count: Int) async -> [Double] {
+        await Task.detached(priority: .utility) {
+            guard count > 0,
+                  let file = try? AVAudioFile(forReading: audioURL),
+                  file.length > 0 else {
+                return Array(repeating: 0.22, count: max(0, count))
+            }
+
+            let frameCount: AVAudioFrameCount = 2_048
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCount) else {
+                return Array(repeating: 0.22, count: count)
+            }
+
+            var values: [Double] = []
+            values.reserveCapacity(count)
+            for index in 0..<count {
+                let fraction = Double(index) / Double(max(1, count - 1))
+                let position = min(
+                    max(0, file.length - AVAudioFramePosition(frameCount)),
+                    AVAudioFramePosition(Double(file.length) * fraction)
+                )
+                file.framePosition = position
+                buffer.frameLength = 0
+                try? file.read(into: buffer, frameCount: frameCount)
+                guard let channel = buffer.floatChannelData?.pointee, buffer.frameLength > 0 else {
+                    values.append(0.12)
+                    continue
+                }
+                var peak: Float = 0
+                for frame in 0..<Int(buffer.frameLength) {
+                    peak = max(peak, abs(channel[frame]))
+                }
+                values.append(Double(peak))
+            }
+
+            let maximum = values.max() ?? 0
+            guard maximum > 0 else { return Array(repeating: 0.12, count: count) }
+            return values.map { max(0.10, min(1, $0 / maximum)) }
+        }.value
     }
 }
