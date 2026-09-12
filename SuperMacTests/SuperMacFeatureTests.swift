@@ -442,6 +442,17 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(reloaded.audioURL?.standardizedFileURL, entry.audioURL?.standardizedFileURL)
     }
 
+    func testDictationHistoryAccordionKeepsOnlyOneExpandedRecording() {
+        var expansion = DictationHistoryExpansion()
+
+        expansion.toggle("first")
+        XCTAssertEqual(expansion.expandedEntryID, "first")
+        expansion.toggle("second")
+        XCTAssertEqual(expansion.expandedEntryID, "second")
+        expansion.toggle("second")
+        XCTAssertNil(expansion.expandedEntryID)
+    }
+
     func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)

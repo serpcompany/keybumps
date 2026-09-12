@@ -16,6 +16,12 @@ Source inspection confirmed the earlier build had no intentional maximum recordi
 
 A signed runtime recording produced a 9.7-second WAV. Completed-file transcription contained both the synthetic beginning and ending markers, and the generated verification directory was then moved to Trash. Deterministic tests cover the five-minute default, persistence of longer and unlimited choices, completed-file transcription strategy, and failed-transcription audio preservation.
 
+## 2026-09-12 accordion history cards
+
+The owner clarified the selected Superwhisper History hierarchy with a screenshot: collapsed rows are transcript previews, while one selected row expands to combine the full transcript with its audio and actions. SuperMac now uses that accordion structure with original styling. The first entry expands on entry to History, selecting another card collapses the prior selection, and the expanded card shows a real WAV-derived waveform, play/pause, progress, duration, an Original label, copy, Finder reveal/info, and delete. Segmented and reprocessing controls remain absent because SuperMac does not implement those capabilities.
+
+The accordion state regression passed, the full deterministic suite passed 93/93, and signed runtime accessibility inspection confirmed exactly one expanded card with the audio/control region while peer cards remained collapsed. Private transcript text was redacted from verification output and no reference data was modified.
+
 ## 2026-09-12 SuperMac identity reset
 
 The owner renamed the pre-release product to **SuperMac** and explicitly requested a fresh identity. The current signed artifact is `.derived/Build/Products/Debug/SuperMac.app` with bundle identifier `com.serp.supermac`. The repository, Xcode project, schemes, targets, module, executable, source/test roots, assets, and current documentation were subsequently normalized to the SuperMac name.

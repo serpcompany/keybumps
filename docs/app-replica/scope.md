@@ -53,7 +53,7 @@ Observed storage behavior:
 
 SuperMac's original product path is `~/Documents/SuperMac/recordings/<unix-timestamp>/`, with one `meta.json` and one `output.wav` for every successfully transcribed recording. Metadata contains the stable recording ID, capture date, duration, selected language, transcript, audio filename, and SuperMac version. Existing reference files remain untouched and are never imported automatically.
 
-The selected History surface uses original SuperMac styling while adopting the observed hierarchy: searchable transcript cards, a compact playable audio strip with duration, copy, reveal/info, and delete controls. Search, play/pause, copy, reveal, individual deletion, clear-all, reload persistence, and missing-audio handling must be real. Superwhisper branding, exact artwork, waveform data, segmented/reprocessing modes, analytics, cloud/model details, and pixel-identical styling remain excluded.
+The selected History surface uses original SuperMac styling while adopting the observed hierarchy: collapsed cards show a two-line transcript preview; selecting one expands it and collapses the previous selection; the expanded card shows the full transcript, a compact playable audio strip with a waveform and duration, an Original label, copy, reveal/info, and delete controls. Search, expansion, play/pause, copy, reveal, individual deletion, clear-all, reload persistence, and missing-audio handling must be real. The waveform is derived from SuperMac's own WAV rather than copied reference pixels. Superwhisper branding, exact artwork, segmented/reprocessing modes, analytics, cloud/model details, and pixel-identical styling remain excluded.
 
 ## Rectangle configuration reference
 

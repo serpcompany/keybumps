@@ -10,6 +10,8 @@ Reference: Superwhisper 2.18.3 (`com.superduper.superwhisper`) on 2026-09-12. Ca
 | Dictation engine | Recognition failure or timeout | Finish recording | Recording directory | Not observed | Preserve playable WAV with explicit failed-transcription metadata | Deliberate difference, pass |
 | Documents archive | Relaunch | Load history | Directory enumeration | Recording folders remain available | Entries reload newest-first without a monolithic index | Pass |
 | History | Populated | Search | In-memory filtered metadata | Search field filters transcript cards | Case-insensitive transcript search | Pass |
+| History card | Collapsed | Select card | Expansion state | Two-line transcript preview expands on selection | Expand selected card and collapse the previous card | Pass |
+| History card | Expanded | Review item | Metadata and audio pair | Full transcript appears above audio and actions | Full transcript, real waveform/audio, duration, Original label, and working actions | Pass |
 | History card | Idle audio | Play | Local WAV | Play button and duration strip | Play real `output.wav`; show progress and duration | Pass |
 | History card | Playing audio | Pause/resume | Player state | Audio control changes state | Only one recording plays at a time | Pass |
 | History card | Available item | Copy transcript | Pasteboard | Copy action is exposed | Exact local transcript is copied | Pass, automated seam |
