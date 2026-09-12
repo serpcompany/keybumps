@@ -321,6 +321,7 @@ private struct LocalDictationTranslationView: View {
     @State private var errorMessage: String?
     @State private var isTranslating = false
     @State private var configuration: TranslationSession.Configuration?
+    @State private var speechPlayer = TranslatedSpeechPlayer()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -364,6 +365,17 @@ private struct LocalDictationTranslationView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     HStack {
                         Spacer()
+                        Button(
+                            speechPlayer.isSpeaking ? "Stop Audio" : "Play Translation",
+                            systemImage: speechPlayer.isSpeaking ? "stop.fill" : "speaker.wave.2.fill"
+                        ) {
+                            speechPlayer.toggle(
+                                text: translatedText,
+                                languageIdentifier: targetIdentifier
+                            )
+                        }
+                        .buttonStyle(.borderless)
+
                         Button("Copy Translation", systemImage: "doc.on.doc") {
                             DictationHistoryClipboard.copy(translatedText)
                         }
@@ -378,6 +390,12 @@ private struct LocalDictationTranslationView: View {
                     .foregroundStyle(.orange)
             }
 
+            if let speechError = speechPlayer.lastError {
+                Text(speechError)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
             Text("Translation runs on this Mac. A language model may need to be downloaded the first time.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -385,6 +403,8 @@ private struct LocalDictationTranslationView: View {
         .padding(12)
         .background(.black.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
         .task { await loadSupportedTargets() }
+        .onChange(of: targetIdentifier) { _, _ in speechPlayer.stop() }
+        .onDisappear { speechPlayer.stop() }
         .translationTask(configuration) { session in
             do {
                 try await session.prepareTranslation()
@@ -400,6 +420,7 @@ private struct LocalDictationTranslationView: View {
 
     private func triggerTranslation() {
         guard !targetIdentifier.isEmpty else { return }
+        speechPlayer.stop()
         isTranslating = true
         translatedText = nil
         errorMessage = nil

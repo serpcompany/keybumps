@@ -35,6 +35,7 @@
 		91CEDF357F8B72C9E3DE79EF /* DictationIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50956405C3010608E9006C7 /* DictationIndicatorController.swift */; };
 		92E6B3EED451DCB6CC28356A /* ProductIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC8E02410AD7693C5667BB0 /* ProductIdentity.swift */; };
 		9811CCC694AC65A6418FBD98 /* WindowManagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7F01062D6A9BFA8A23FC52 /* WindowManagementService.swift */; };
+		98717D28224C1EF1BC213F94 /* TranslatedSpeechPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F988472005A1AEAE4AFC6A8A /* TranslatedSpeechPlayer.swift */; };
 		9A123083B9AA78A72E107ED3 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B18988CAC32C575BC5CCDB /* AppPreferences.swift */; };
 		9BFFF7DC990D0C62398C2EE7 /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFA8CF3E1AE35E9218D553E /* NativeStatusItemController.swift */; };
 		A96DFACD4867B4B8F5619492 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B0462EFDE8CD0087CBCC711 /* Assets.xcassets */; };
@@ -117,6 +118,7 @@
 		F450E0E0BDC74C58716AC0B9 /* SystemChannelAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChannelAdapters.swift; sourceTree = "<group>"; };
 		F57F110363DEA2571C92D002 /* PresentationEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationEvidenceTests.swift; sourceTree = "<group>"; };
 		F8064DB57B1E1DDD769BECC1 /* ChromeActionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionDetectionTests.swift; sourceTree = "<group>"; };
+		F988472005A1AEAE4AFC6A8A /* TranslatedSpeechPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatedSpeechPlayer.swift; sourceTree = "<group>"; };
 		FFC8E02410AD7693C5667BB0 /* ProductIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductIdentity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -165,6 +167,7 @@
 				BFF7AF91CCE5203106F1AB54 /* DictationHistoryService.swift */,
 				B50956405C3010608E9006C7 /* DictationIndicatorController.swift */,
 				797FD303CEC7148DD772B296 /* DictationService.swift */,
+				F988472005A1AEAE4AFC6A8A /* TranslatedSpeechPlayer.swift */,
 			);
 			path = Dictation;
 			sourceTree = "<group>";
@@ -437,6 +440,7 @@
 				5A474A9F1CC0A3DFF5C06267 /* SuperMacApp.swift in Sources */,
 				7BA149D9B58AA723E8FF7AED /* SystemChannelAdapters.swift in Sources */,
 				0F173B8EEE34731BFC2BB46C /* SystemServices.swift in Sources */,
+				98717D28224C1EF1BC213F94 /* TranslatedSpeechPlayer.swift in Sources */,
 				B42DB96F46AA57F2B916D84E /* WindowAction.swift in Sources */,
 				909548FF1DFC40ED148C19F2 /* WindowGeometry.swift in Sources */,
 				9811CCC694AC65A6418FBD98 /* WindowManagementService.swift in Sources */,

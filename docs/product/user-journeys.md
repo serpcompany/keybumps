@@ -96,7 +96,7 @@ Clipboard content stays local. Recent copied secrets remain until removed or dis
 5. SuperMac transcribes the completed local WAV and inserts the result at the original cursor; pressing Escape cancels without insertion.
 6. The transcript and captured audio are saved under `~/Documents/SuperMac/recordings/<timestamp>/` as `meta.json` and `output.wav` before insertion is attempted. A failed transcription retains its audio with an explicit failure state.
 7. If insertion fails, recover the last transcript from Dictation settings.
-8. Open Dictation History—or the Command Palette's Dictation tab—to search transcript cards, expand the selected result, play/pause audio, paste or copy text, translate through the on-device target-language picker, reveal the recording folder, or delete recordings. Translation leaves the original transcript unchanged.
+8. Open Dictation History—or the Command Palette's Dictation tab—to search transcript cards, expand the selected result, play/pause the original recording, paste or copy text, translate through the on-device target-language picker, play/stop the translated text with an installed target-language voice, reveal the recording folder, or delete recordings. Translation and translated speech leave the original transcript unchanged; translated speech is not saved as another recording.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 

@@ -28,6 +28,10 @@ SuperMac adds an original Translate action to each expanded transcript card usin
 
 Runtime QA first rejected `translationPresentation` after its own privacy UI warned that selected content could be sent to Apple. That implementation was removed before commit. The replacement uses `TranslationSession`, which Apple documents as processing translation content on device. From the exact signed Debug app, the rich Command Palette Dictation card exposed Paste, Copy, Translate, info/reveal, delete, waveform, and playback controls. Translate opened the inline local panel, loaded compatible targets, and selected Japanese by default for an English recording. `LanguageAvailability` reported the English-to-Japanese pair as supported but not yet installed. No model download was accepted, so translated-output runtime acceptance remains pending; no transcript was replaced and private transcript text was redacted from verification output.
 
+### Local translated-speech playback
+
+The inline translation result now exposes Play Translation and Stop Audio. SuperMac selects an installed macOS speech voice by exact target locale when possible, then by base language, and stops synthesized speech when the target changes or the translation panel closes. The generated speech is played on demand and is not written into the per-recording archive. A deterministic regression covers exact-locale selection, base-language fallback, and the unavailable-voice result. Audible runtime acceptance remains pending because the translation model needed to produce the current target-language result was not installed during verification.
+
 ## 2026-09-12 SuperMac identity reset
 
 The owner renamed the pre-release product to **SuperMac** and explicitly requested a fresh identity. The current signed artifact is `.derived/Build/Products/Debug/SuperMac.app` with bundle identifier `com.serp.supermac`. The repository, Xcode project, schemes, targets, module, executable, source/test roots, assets, and current documentation were subsequently normalized to the SuperMac name.

@@ -38,6 +38,19 @@
       }
     },
     {
+      "id": "dictation.translation.local-speech-playback",
+      "kind": "behavior",
+      "in_scope": true,
+      "status": "inferred",
+      "exercised": false,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
+        "candidate": ["SuperMac/Dictation/TranslatedSpeechPlayer.swift", "SuperMac/Views/DictationHistoryView.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#local-translated-speech-playback"]
+      }
+    },
+    {
       "id": "dictation.duration.completed-file-transcription",
       "kind": "behavior",
       "in_scope": true,

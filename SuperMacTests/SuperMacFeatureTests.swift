@@ -472,6 +472,35 @@ final class SuperMacFeatureTests: XCTestCase {
         )
     }
 
+    func testTranslatedSpeechSelectsAnInstalledVoiceForTheTargetLanguage() {
+        let voices = [
+            TranslationSpeechVoiceDescriptor(identifier: "english-us", language: "en-US"),
+            TranslationSpeechVoiceDescriptor(identifier: "japanese", language: "ja-JP"),
+            TranslationSpeechVoiceDescriptor(identifier: "english-uk", language: "en-GB")
+        ]
+
+        XCTAssertEqual(
+            TranslationSpeechVoiceSelector.preferredVoiceIdentifier(
+                targetLanguageIdentifier: "ja",
+                supportedVoices: voices
+            ),
+            "japanese"
+        )
+        XCTAssertEqual(
+            TranslationSpeechVoiceSelector.preferredVoiceIdentifier(
+                targetLanguageIdentifier: "en-GB",
+                supportedVoices: voices
+            ),
+            "english-uk"
+        )
+        XCTAssertNil(
+            TranslationSpeechVoiceSelector.preferredVoiceIdentifier(
+                targetLanguageIdentifier: "fr",
+                supportedVoices: voices
+            )
+        )
+    }
+
     func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
