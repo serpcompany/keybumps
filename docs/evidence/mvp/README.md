@@ -22,6 +22,12 @@ The owner clarified the selected Superwhisper History hierarchy with a screensho
 
 The accordion state regression passed, the full deterministic suite passed 93/93, and signed runtime accessibility inspection confirmed exactly one expanded card with the audio/control region while peer cards remained collapsed. Private transcript text was redacted from verification output and no reference data was modified.
 
+## 2026-09-12 native transcript translation
+
+SuperMac adds an original Translate action to each expanded transcript card using SwiftUI's native `translationPresentation` on macOS 14.4 and newer. The system presentation owns source/target language selection, language-model availability and download UI, translated output, and copy behavior. The original transcript and `meta.json` remain unchanged. Earlier supported macOS versions show an unavailable action rather than a fake control.
+
+The deterministic eligibility regression passed. From the exact signed Debug app, the Translate transcript control was visible on the expanded card, opened a native popover anchored to Dictation History, and closed cleanly. No model download was accepted, no transcript was replaced, and private transcript text was redacted from verification output.
+
 ## 2026-09-12 SuperMac identity reset
 
 The owner renamed the pre-release product to **SuperMac** and explicitly requested a fresh identity. The current signed artifact is `.derived/Build/Products/Debug/SuperMac.app` with bundle identifier `com.serp.supermac`. The repository, Xcode project, schemes, targets, module, executable, source/test roots, assets, and current documentation were subsequently normalized to the SuperMac name.

@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import SwiftUI
+import Translation
 
 struct DictationHistoryExpansion: Equatable {
     private(set) var expandedEntryID: String?
@@ -134,6 +135,12 @@ enum DictationHistoryClipboard {
     }
 }
 
+enum DictationTranslationPolicy {
+    static func canTranslate(_ text: String) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 private struct DictationHistoryCard: View {
     let entry: DictationHistoryEntry
     let isExpanded: Bool
@@ -144,8 +151,22 @@ private struct DictationHistoryCard: View {
     let copy: () -> Void
     let reveal: () -> Void
     let delete: () -> Void
+    @State private var showsTranslation = false
 
+    @ViewBuilder
     var body: some View {
+        if #available(macOS 14.4, *) {
+            cardContent
+                .translationPresentation(
+                    isPresented: $showsTranslation,
+                    text: entry.text
+                )
+        } else {
+            cardContent
+        }
+    }
+
+    private var cardContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: toggleExpansion) {
                 HStack(alignment: .top, spacing: 12) {
@@ -209,6 +230,23 @@ private struct DictationHistoryCard: View {
                             .buttonStyle(.borderless)
                             .help("Copy transcript")
                             .accessibilityLabel("Copy transcript")
+                        if #available(macOS 14.4, *) {
+                            Button {
+                                showsTranslation = true
+                            } label: {
+                                Image(systemName: "translate")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(!DictationTranslationPolicy.canTranslate(entry.text))
+                            .help("Translate transcript")
+                            .accessibilityLabel("Translate transcript")
+                        } else {
+                            Button(action: {}) { Image(systemName: "translate") }
+                                .buttonStyle(.borderless)
+                                .disabled(true)
+                                .help("Translation requires macOS 14.4 or newer")
+                                .accessibilityLabel("Translation unavailable")
+                        }
                         Button(action: reveal) { Image(systemName: "info.circle") }
                             .buttonStyle(.borderless)
                             .help("Reveal recording in Finder")

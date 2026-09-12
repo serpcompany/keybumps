@@ -55,6 +55,8 @@ SuperMac's original product path is `~/Documents/SuperMac/recordings/<unix-times
 
 The selected History surface uses original SuperMac styling while adopting the observed hierarchy: collapsed cards show a two-line transcript preview; selecting one expands it and collapses the previous selection; the expanded card shows the full transcript, a compact playable audio strip with a waveform and duration, an Original label, copy, reveal/info, and delete controls. Search, expansion, play/pause, copy, reveal, individual deletion, clear-all, reload persistence, and missing-audio handling must be real. The waveform is derived from SuperMac's own WAV rather than copied reference pixels. Superwhisper branding, exact artwork, segmented/reprocessing modes, analytics, cloud/model details, and pixel-identical styling remain excluded.
 
+SuperMac adds an original Translate action to the expanded card. On macOS 14.4 or newer it opens Apple's native Translation presentation anchored to that transcript, providing source/target language selection, any required system language-model flow, translated output, and system copy controls. Translation content is processed on device. SuperMac does not overwrite or persist a translated variant in `meta.json`; the original transcript remains authoritative. On macOS 14.2–14.3 the action is visibly unavailable.
+
 ## Rectangle configuration reference
 
 The installed Rectangle app, rather than the Window Manager prototype, is the source for the owner's starting Window Management configuration.

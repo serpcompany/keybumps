@@ -12,6 +12,19 @@
   },
   "rows": [
     {
+      "id": "dictation.history.native-translation",
+      "kind": "both",
+      "in_scope": true,
+      "status": "pass",
+      "exercised": true,
+      "evidence": {
+        "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
+        "candidate": ["SuperMac/Views/DictationHistoryView.swift"],
+        "comparison": ["docs/app-replica/parity-ledger.md"],
+        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-native-transcript-translation"]
+      }
+    },
+    {
       "id": "dictation.duration.completed-file-transcription",
       "kind": "behavior",
       "in_scope": true,
