@@ -60,14 +60,12 @@ enum PermissionAuthorizationState: String, Equatable {
 enum PermissionRecoveryAction: Equatable {
     case none
     case request
-    case requestAndOpenSystemSettings
     case openSystemSettings
 
     var buttonTitle: String? {
         switch self {
         case .none: nil
         case .request: "Request Access…"
-        case .requestAndOpenSystemSettings: "Open System Settings…"
         case .openSystemSettings: "Open System Settings…"
         }
     }
@@ -88,7 +86,7 @@ enum PermissionRecoveryPresentation: Equatable {
             .none
         case .request:
             .nativePrompt
-        case .requestAndOpenSystemSettings, .openSystemSettings:
+        case .openSystemSettings:
             permission.usesApplicationDragAssistant ? .applicationDrag : .enableSwitch
         }
     }
@@ -173,7 +171,7 @@ final class PermissionCoordinator {
         guard state != .granted else { return .none }
         switch permission {
         case .accessibility, .inputMonitoring:
-            return .requestAndOpenSystemSettings
+            return .openSystemSettings
         case .microphone, .speechRecognition:
             return state == .notDetermined ? .request : .openSystemSettings
         }
@@ -201,20 +199,6 @@ final class PermissionCoordinator {
                 break
             }
             refresh()
-        case .requestAndOpenSystemSettings:
-            switch permission {
-            case .accessibility:
-                let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-                _ = AXIsProcessTrustedWithOptions(options)
-            case .inputMonitoring:
-                _ = CGRequestListenEventAccess()
-            case .microphone, .speechRecognition:
-                break
-            }
-            refresh()
-            if !state(for: permission).isGranted {
-                openSettings(permission)
-            }
         }
     }
 

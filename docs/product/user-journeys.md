@@ -47,7 +47,7 @@ Expected recovery: a skipped permission keeps the related feature enabled but ma
 The required order is Accessibility, Input Monitoring, Microphone, then Speech Recognition. Permissions already granted—or needed only by disabled capabilities—are skipped.
 
 1. The walkthrough shows one missing permission and `completed of total` progress.
-2. Accessibility or Input Monitoring opens the exact System Settings list and shows the compact draggable SuperMac card.
+2. Accessibility or Input Monitoring silently checks current status, opens the exact System Settings list, and shows the compact draggable SuperMac card without first displaying a competing native permission dialog.
 3. The drag card dismisses only after an accepted drop; a cancelled drag remains retryable.
 4. The user enables SuperMac in macOS and returns to the app.
 5. App activation refreshes the real permission state and automatically presents the next missing step.

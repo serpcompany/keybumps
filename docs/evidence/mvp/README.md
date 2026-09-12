@@ -2,6 +2,10 @@
 
 This directory records structural, non-private validation for the exact local build. Physical OS journeys remain explicitly distinct from deterministic tests.
 
+## 2026-09-12 redundant native permission prompt removal
+
+Owner runtime feedback showed Apple's `Device Control and Data Access` prompt appearing before SuperMac's custom Accessibility helper. Source tracing found the guided coordinator still invoked `AXIsProcessTrustedWithOptions(prompt: true)` for Accessibility and `CGRequestListenEventAccess()` for Input Monitoring, with two older detector/window entry points capable of invoking the same native requests. Accessibility and Input Monitoring recovery now uses only silent preflight APIs, the correct System Settings deep link, and the draggable SuperMac helper. Microphone and Speech Recognition retain their required native prompts. Focused routing tests passed, and a static search confirms no native Accessibility/Input Monitoring request calls remain. Fresh missing-permission runtime acceptance remains an owner step because resetting TCC state would alter system security settings.
+
 ## 2026-09-12 Rectangle-style settings and image Clipboard History
 
 The owner supplied a current Rectangle Shortcuts Appshot and selected its compact two-column settings hierarchy as a bounded visual reference. SuperMac's Window Management screen now presents its own 30 supported actions in four exhaustive groups: primary positioning and sizing above a divider, fractional layouts below, with an original SwiftUI footprint diagram, working shortcut recorder, and clear control on every row. Signed-runtime inspection confirmed the two-column layout, assigned/unassigned states, status header, Restore Defaults, scrolling, and all 30 accessible action controls. Rectangle-only actions that SuperMac does not implement were not rendered as fake controls; exact pixel parity and the reference toolbar remain out of scope.

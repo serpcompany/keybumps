@@ -147,15 +147,22 @@ final class SuperMacFeatureTests: XCTestCase {
         }
         XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .microphone, state: .notDetermined), .request)
         XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .speechRecognition, state: .notDetermined), .request)
-        XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .accessibility, state: .required), .requestAndOpenSystemSettings)
-        XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .inputMonitoring, state: .required), .requestAndOpenSystemSettings)
+        XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .accessibility, state: .required), .openSystemSettings)
+        XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .inputMonitoring, state: .required), .openSystemSettings)
     }
 
     func testEverySystemSettingsRecoveryShowsTheMatchingVisibleAssistant() {
         XCTAssertEqual(
             PermissionRecoveryPresentation.resolve(
                 permission: .accessibility,
-                action: .requestAndOpenSystemSettings
+                action: .openSystemSettings
+            ),
+            .applicationDrag
+        )
+        XCTAssertEqual(
+            PermissionRecoveryPresentation.resolve(
+                permission: .inputMonitoring,
+                action: .openSystemSettings
             ),
             .applicationDrag
         )

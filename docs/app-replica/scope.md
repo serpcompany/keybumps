@@ -161,7 +161,7 @@ During onboarding, SuperMac detects conflicting running copies of Alfred, Rectan
 
 On 2026-09-12, the owner supplied a HeyClicky screenshot showing its Accessibility setup experience. The app opens the exact System Settings privacy list and floats a helper near the bottom of that window. The helper says “I’m HeyClicky — drag me into the list above” and presents the signed application as a large draggable row.
 
-SuperMac adopts this narrow interaction for Accessibility and Input Monitoring with original SuperMac branding and copy. The dragged payload must be the running signed `SuperMac.app` bundle as a public file URL; the helper does not grant or toggle consent. Microphone and Speech Recognition continue through their native system prompts because they are not add-an-app list permissions. Exact HeyClicky styling, identity, iconography, copy, and other permission or product behavior remain excluded.
+SuperMac adopts this narrow interaction for Accessibility and Input Monitoring with original SuperMac branding and copy. The dragged payload must be the running signed `SuperMac.app` bundle as a public file URL; the helper does not grant or toggle consent. These two guided permissions use silent status preflights and must not also invoke Apple's native request dialogs. Microphone and Speech Recognition continue through their native system prompts because they are not add-an-app list permissions. Exact HeyClicky styling, identity, iconography, copy, and other permission or product behavior remain excluded.
 
 ## Product and distribution boundary
 

@@ -41,7 +41,7 @@ final class WindowManagementService {
     }
 
     func requestAccessibility() {
-        AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+        _ = AXIsProcessTrusted()
     }
 
     func perform(_ action: SuperMacWindowAction) {

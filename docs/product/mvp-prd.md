@@ -278,7 +278,7 @@ Pressing the Dictation shortcut without Microphone or Speech Recognition access 
 
 One permission coordinator reports capability requirements and current state. The guided setup should make macOS's Security & Privacy steps as direct as public APIs allow, using clear drag/open guidance and deep links where appropriate. The app may guide users but must not claim to bypass or silently grant macOS-controlled consent.
 
-Accessibility and Input Monitoring use the HeyClicky-inspired bounded setup journey recorded in `docs/app-replica/scope.md`: open the exact System Settings list, keep a nonactivating helper visible above it, and let the user drag the signed SuperMac app bundle into the list. Microphone and Speech Recognition use their native consent prompts. Every path refreshes truthful permission state after the user returns.
+Accessibility and Input Monitoring use only the HeyClicky-inspired bounded setup journey recorded in `docs/app-replica/scope.md`: silently preflight current status, open the exact System Settings list, keep a nonactivating helper visible above it, and let the user drag the signed SuperMac app bundle into the list. SuperMac must not also invoke the native Accessibility `AXIsProcessTrustedWithOptions(prompt: true)` or `CGRequestListenEventAccess()` dialogs for those permissions. Microphone and Speech Recognition use their required native consent prompts. Every path refreshes truthful permission state after the user returns.
 
 Required permissions by capability:
 
