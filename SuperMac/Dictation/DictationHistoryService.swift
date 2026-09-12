@@ -1,5 +1,14 @@
+import AVFoundation
 import Foundation
 import Observation
+
+enum DictationRecordingState: String, Codable, Equatable {
+    case recording
+    case transcribing
+    case completed
+    case interrupted
+    case failed
+}
 
 struct DictationRecordingMetadata: Codable, Equatable {
     let id: String
@@ -10,6 +19,7 @@ struct DictationRecordingMetadata: Codable, Equatable {
     let audioFile: String
     let appVersion: String
     let transcriptionError: String?
+    let state: DictationRecordingState?
 }
 
 struct PendingDictationRecording: Equatable {
@@ -26,11 +36,22 @@ struct DictationHistoryEntry: Identifiable, Equatable {
 
     var id: String { metadata.id }
     var text: String { metadata.result }
-    var displayText: String { text.isEmpty ? "Transcription unavailable" : text }
+    var displayText: String {
+        if !text.isEmpty { return text }
+        return state == .interrupted
+            ? "Recording interrupted — transcript unavailable"
+            : "Transcription unavailable"
+    }
     var language: String { metadata.languageSelected }
     var capturedAt: Date { metadata.datetime }
     var duration: TimeInterval { metadata.duration }
     var metadataURL: URL { directoryURL.appendingPathComponent("meta.json") }
+    var state: DictationRecordingState {
+        metadata.state ?? (metadata.transcriptionError == nil ? .completed : .failed)
+    }
+    var canTranscribe: Bool {
+        audioURL != nil && (state == .failed || state == .interrupted)
+    }
 }
 
 @MainActor
@@ -41,6 +62,7 @@ final class DictationHistoryService {
 
     private let fileManager: FileManager
     private let appVersion: String
+    private var activeRecordingIDs: Set<String> = []
 
     init(
         fileManager: FileManager = .default,
@@ -63,13 +85,13 @@ final class DictationHistoryService {
             options: [.skipsHiddenFiles]
         )) ?? []
 
-        entries = directories.compactMap(loadEntry).sorted { left, right in
+        entries = directories.compactMap(loadOrRecoverEntry).sorted { left, right in
             if left.capturedAt == right.capturedAt { return left.id > right.id }
             return left.capturedAt > right.capturedAt
         }
     }
 
-    func prepareRecording(capturedAt: Date = .now) throws -> PendingDictationRecording {
+    func prepareRecording(capturedAt: Date = .now, language: String = "en-US") throws -> PendingDictationRecording {
         let baseID = String(Int(capturedAt.timeIntervalSince1970))
         var id = baseID
         var suffix = 2
@@ -80,12 +102,61 @@ final class DictationHistoryService {
             directory = recordingsDirectoryURL.appendingPathComponent(id, isDirectory: true)
         }
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        return PendingDictationRecording(
+        let recording = PendingDictationRecording(
             id: id,
             capturedAt: capturedAt,
             directoryURL: directory,
             audioURL: directory.appendingPathComponent("output.wav")
         )
+        do {
+            try persist(DictationRecordingMetadata(
+                id: recording.id,
+                datetime: recording.capturedAt,
+                duration: 0,
+                languageSelected: language,
+                result: "",
+                audioFile: recording.audioURL.lastPathComponent,
+                appVersion: appVersion,
+                transcriptionError: nil,
+                state: .recording
+            ), in: recording.directoryURL)
+        } catch {
+            try? fileManager.removeItem(at: recording.directoryURL)
+            throw error
+        }
+        activeRecordingIDs.insert(recording.id)
+        return recording
+    }
+
+    func markTranscribing(_ recording: PendingDictationRecording, language: String, duration: TimeInterval) throws {
+        try persist(DictationRecordingMetadata(
+            id: recording.id,
+            datetime: recording.capturedAt,
+            duration: max(0, duration),
+            languageSelected: language,
+            result: "",
+            audioFile: recording.audioURL.lastPathComponent,
+            appVersion: appVersion,
+            transcriptionError: nil,
+            state: .transcribing
+        ), in: recording.directoryURL)
+    }
+
+    func markTranscribing(_ entry: DictationHistoryEntry, language: String) throws {
+        let metadata = DictationRecordingMetadata(
+            id: entry.id,
+            datetime: entry.capturedAt,
+            duration: entry.duration,
+            languageSelected: language,
+            result: entry.text,
+            audioFile: entry.metadata.audioFile,
+            appVersion: entry.metadata.appVersion,
+            transcriptionError: nil,
+            state: .transcribing
+        )
+        try persist(metadata, in: entry.directoryURL)
+        activeRecordingIDs.insert(entry.id)
+        replaceEntry(metadata: metadata, directoryURL: entry.directoryURL, audioURL: entry.audioURL)
     }
 
     @discardableResult
@@ -112,13 +183,11 @@ final class DictationHistoryService {
             result: transcript,
             audioFile: recording.audioURL.lastPathComponent,
             appVersion: appVersion,
-            transcriptionError: transcriptionError
+            transcriptionError: transcriptionError,
+            state: transcriptionError == nil ? .completed : .failed
         )
-        let metadataURL = recording.directoryURL.appendingPathComponent("meta.json")
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(metadata).write(to: metadataURL, options: .atomic)
+        try persist(metadata, in: recording.directoryURL)
+        activeRecordingIDs.remove(recording.id)
 
         let entry = DictationHistoryEntry(
             metadata: metadata,
@@ -128,6 +197,28 @@ final class DictationHistoryService {
         entries.removeAll { $0.id == entry.id }
         entries.insert(entry, at: 0)
         return entry
+    }
+
+    @discardableResult
+    func completeTranscription(
+        of entry: DictationHistoryEntry,
+        text: String,
+        language: String,
+        transcriptionError: String? = nil
+    ) throws -> DictationHistoryEntry {
+        let recording = PendingDictationRecording(
+            id: entry.id,
+            capturedAt: entry.capturedAt,
+            directoryURL: entry.directoryURL,
+            audioURL: entry.directoryURL.appendingPathComponent(entry.metadata.audioFile)
+        )
+        return try completeRecording(
+            recording,
+            text: text,
+            language: language,
+            duration: entry.duration,
+            transcriptionError: transcriptionError
+        )
     }
 
     @discardableResult
@@ -156,6 +247,7 @@ final class DictationHistoryService {
     }
 
     func discard(_ recording: PendingDictationRecording) {
+        activeRecordingIDs.remove(recording.id)
         try? fileManager.removeItem(at: recording.directoryURL)
     }
 
@@ -181,19 +273,101 @@ final class DictationHistoryService {
         refresh()
     }
 
-    private func loadEntry(from directoryURL: URL) -> DictationHistoryEntry? {
+    private func loadOrRecoverEntry(from directoryURL: URL) -> DictationHistoryEntry? {
         let metadataURL = directoryURL.appendingPathComponent("meta.json")
-        guard let data = try? Data(contentsOf: metadataURL) else { return nil }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let metadata = try? decoder.decode(DictationRecordingMetadata.self, from: data) else {
-            return nil
+        let audioURL = directoryURL.appendingPathComponent("output.wav")
+        let audioDuration = playableAudioDuration(at: audioURL)
+
+        if let data = try? Data(contentsOf: metadataURL) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            guard var metadata = try? decoder.decode(DictationRecordingMetadata.self, from: data) else {
+                return nil
+            }
+            if metadata.state == .recording || metadata.state == .transcribing {
+                if activeRecordingIDs.contains(metadata.id) {
+                    return entries.first(where: { $0.id == metadata.id })
+                }
+                metadata = interruptedMetadata(
+                    id: metadata.id,
+                    capturedAt: metadata.datetime,
+                    duration: audioDuration ?? metadata.duration,
+                    language: metadata.languageSelected,
+                    audioFile: metadata.audioFile
+                )
+                try? persist(metadata, in: directoryURL)
+            }
+            let storedAudioURL = directoryURL.appendingPathComponent(metadata.audioFile)
+            return DictationHistoryEntry(
+                metadata: metadata,
+                directoryURL: directoryURL,
+                audioURL: fileManager.fileExists(atPath: storedAudioURL.path) ? storedAudioURL : nil
+            )
         }
-        let audioURL = directoryURL.appendingPathComponent(metadata.audioFile)
-        return DictationHistoryEntry(
-            metadata: metadata,
-            directoryURL: directoryURL,
-            audioURL: fileManager.fileExists(atPath: audioURL.path) ? audioURL : nil
+
+        guard let audioDuration else { return nil }
+        let id = directoryURL.lastPathComponent
+        let capturedAt = id.split(separator: "-").first
+            .flatMap { TimeInterval($0) }
+            .map(Date.init(timeIntervalSince1970:))
+            ?? (try? audioURL.resourceValues(forKeys: [.creationDateKey]).creationDate)
+            ?? .now
+        let metadata = interruptedMetadata(
+            id: id,
+            capturedAt: capturedAt,
+            duration: audioDuration,
+            language: "und",
+            audioFile: audioURL.lastPathComponent
         )
+        try? persist(metadata, in: directoryURL)
+        return DictationHistoryEntry(metadata: metadata, directoryURL: directoryURL, audioURL: audioURL)
+    }
+
+    private func interruptedMetadata(
+        id: String,
+        capturedAt: Date,
+        duration: TimeInterval,
+        language: String,
+        audioFile: String
+    ) -> DictationRecordingMetadata {
+        DictationRecordingMetadata(
+            id: id,
+            datetime: capturedAt,
+            duration: max(0, duration),
+            languageSelected: language,
+            result: "",
+            audioFile: audioFile,
+            appVersion: appVersion,
+            transcriptionError: "Recording was interrupted before transcription finished.",
+            state: .interrupted
+        )
+    }
+
+    private func playableAudioDuration(at url: URL) -> TimeInterval? {
+        guard fileManager.fileExists(atPath: url.path),
+              let file = try? AVAudioFile(forReading: url),
+              file.length > 0,
+              file.processingFormat.sampleRate > 0 else { return nil }
+        return Double(file.length) / file.processingFormat.sampleRate
+    }
+
+    private func persist(_ metadata: DictationRecordingMetadata, in directoryURL: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(metadata).write(
+            to: directoryURL.appendingPathComponent("meta.json"),
+            options: .atomic
+        )
+    }
+
+    private func replaceEntry(metadata: DictationRecordingMetadata, directoryURL: URL, audioURL: URL?) {
+        let entry = DictationHistoryEntry(metadata: metadata, directoryURL: directoryURL, audioURL: audioURL)
+        entries.removeAll { $0.id == entry.id }
+        entries.append(entry)
+        entries.sort { left, right in
+            if left.capturedAt == right.capturedAt { return left.id > right.id }
+            return left.capturedAt > right.capturedAt
+        }
     }
 }

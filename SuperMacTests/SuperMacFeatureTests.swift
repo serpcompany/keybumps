@@ -1,3 +1,4 @@
+import AVFoundation
 import Carbon.HIToolbox
 import Security
 import XCTest
@@ -368,6 +369,71 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(DictationTranscriptionPlan.timeout(forRecordedDuration: 3_600), 7_200)
     }
 
+    func testDictationJoinsRecognitionSpansInsteadOfKeepingOnlyTheFinalWords() {
+        var assembler = DictationTranscriptAssembler()
+
+        assembler.receive(.init(
+            text: "Opening sentence.",
+            segmentStart: 0.39,
+            segmentEnd: 1.89,
+            isFinal: false
+        ))
+        assembler.receive(.init(
+            text: "This",
+            segmentStart: 0,
+            segmentEnd: 0,
+            isFinal: false
+        ))
+        assembler.receive(.init(
+            text: "This is the much longer middle portion",
+            segmentStart: 0,
+            segmentEnd: 0,
+            isFinal: false
+        ))
+        assembler.receive(.init(
+            text: "This is the much longer middle portion of the dictation.",
+            segmentStart: 3.84,
+            segmentEnd: 20.52,
+            isFinal: false
+        ))
+        assembler.receive(.init(
+            text: "These",
+            segmentStart: 0,
+            segmentEnd: 0,
+            isFinal: false
+        ))
+        assembler.receive(.init(
+            text: "These are the final seven words spoken.",
+            segmentStart: 22.26,
+            segmentEnd: 24.87,
+            isFinal: true
+        ))
+
+        XCTAssertEqual(
+            assembler.transcript,
+            "Opening sentence. This is the much longer middle portion of the dictation. These are the final seven words spoken."
+        )
+    }
+
+    func testDictationTreatsSmallPartialRevisionsAsOneSpan() {
+        var assembler = DictationTranscriptAssembler()
+
+        assembler.receive(.init(
+            text: "A sentence that is still being recognized now",
+            segmentStart: 0,
+            segmentEnd: 0,
+            isFinal: false
+        ))
+        assembler.receive(.init(
+            text: "A sentence that is still being recognized.",
+            segmentStart: 0.4,
+            segmentEnd: 4.8,
+            isFinal: true
+        ))
+
+        XCTAssertEqual(assembler.transcript, "A sentence that is still being recognized.")
+    }
+
     func testClipboardKeepsTenAndCollapsesDuplicates() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -556,6 +622,80 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(reloaded.audioURL?.standardizedFileURL, entry.audioURL?.standardizedFileURL)
     }
 
+    func testPendingDictationIsRecoveredAndCompletedInTheSameHistoryEntry() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pending-dictation-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = DictationHistoryService(recordingsDirectoryURL: root)
+        let pending = try service.prepareRecording(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            language: "ja-JP"
+        )
+        try writeTestWAV(to: pending.audioURL)
+        service.refresh()
+        XCTAssertTrue(service.entries.isEmpty, "A live recording must not be recovered before relaunch")
+
+        let recoveredService = DictationHistoryService(recordingsDirectoryURL: root)
+        let recovered = try XCTUnwrap(recoveredService.entries.first)
+        XCTAssertEqual(recovered.id, pending.id)
+        XCTAssertEqual(recovered.state, .interrupted)
+        XCTAssertEqual(recovered.language, "ja-JP")
+        XCTAssertTrue(recovered.text.isEmpty)
+        XCTAssertTrue(recovered.canTranscribe)
+        XCTAssertGreaterThan(recovered.duration, 0)
+
+        try recoveredService.markTranscribing(recovered, language: recovered.language)
+        recoveredService.refresh()
+        XCTAssertEqual(recoveredService.entries.first?.state, .transcribing)
+
+        let completed = try recoveredService.completeTranscription(
+            of: recovered,
+            text: "Recovered transcript",
+            language: recovered.language
+        )
+        XCTAssertEqual(completed.id, pending.id)
+        XCTAssertEqual(completed.state, .completed)
+        XCTAssertEqual(completed.text, "Recovered transcript")
+        XCTAssertFalse(completed.canTranscribe)
+
+        let reloaded = try XCTUnwrap(DictationHistoryService(recordingsDirectoryURL: root).entries.first)
+        XCTAssertEqual(reloaded.id, pending.id)
+        XCTAssertEqual(reloaded.state, .completed)
+        XCTAssertEqual(reloaded.text, "Recovered transcript")
+    }
+
+    func testLegacyAudioOnlyRecordingIsRecoveredButIntentionalCancellationIsNot() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("orphan-dictation-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let orphanDirectory = root.appendingPathComponent("1700000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: orphanDirectory, withIntermediateDirectories: true)
+        try writeTestWAV(to: orphanDirectory.appendingPathComponent("output.wav"))
+
+        let service = DictationHistoryService(recordingsDirectoryURL: root)
+        let recovered = try XCTUnwrap(service.entries.first)
+        XCTAssertEqual(recovered.id, "1700000000")
+        XCTAssertEqual(recovered.state, .interrupted)
+        XCTAssertEqual(recovered.language, "und")
+        XCTAssertTrue(recovered.canTranscribe)
+
+        let cancelled = try service.prepareRecording(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_001),
+            language: "en-US"
+        )
+        try writeTestWAV(to: cancelled.audioURL)
+        service.discard(cancelled)
+        service.refresh()
+
+        XCTAssertEqual(service.entries.map(\.id), ["1700000000"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cancelled.directoryURL.path))
+    }
+
+    func testDictationPlaybackRateStepsAreBounded() {
+        XCTAssertEqual(DictationPlaybackRate.slower(than: 1), 0.75)
+        XCTAssertEqual(DictationPlaybackRate.slower(than: 0.5), 0.5)
+        XCTAssertEqual(DictationPlaybackRate.faster(than: 1), 1.25)
+        XCTAssertEqual(DictationPlaybackRate.faster(than: 2), 2)
+    }
+
     func testDictationHistoryAccordionKeepsOnlyOneExpandedRecording() {
         var expansion = DictationHistoryExpansion()
 
@@ -669,5 +809,16 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(WindowGeometry.frame(for: .centerThird, in: screen, current: current), CGRect(x: 400, y: 0, width: 400, height: 900))
         XCTAssertEqual(WindowGeometry.frame(for: .bottomRightSixth, in: screen, current: current), CGRect(x: 800, y: 0, width: 400, height: 450))
         XCTAssertEqual(WindowGeometry.frame(for: .lastThreeFourths, in: screen, current: current), CGRect(x: 300, y: 0, width: 900, height: 900))
+    }
+
+    private func writeTestWAV(to url: URL) throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1_600))
+        buffer.frameLength = 1_600
+        if let channel = buffer.floatChannelData?.pointee {
+            channel.initialize(repeating: 0, count: Int(buffer.frameLength))
+        }
+        try file.write(from: buffer)
     }
 }

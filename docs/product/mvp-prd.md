@@ -191,13 +191,14 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Automatic per-recording language detection is deferred.
 - Dictation remains local and useful offline after any required model installation.
 - Record the full continuous WAV first and transcribe the completed file so an early live-recognition final result cannot truncate a longer session.
-- Preserve the WAV in Dictation History with an explicit failure state when transcription fails or times out.
+- Write pending metadata when recording begins and preserve the continuously written WAV when the app/process is unexpectedly interrupted. On relaunch, recover pending recordings and legacy playable audio-only folders into Dictation History with an explicit interrupted state. Intentional Escape cancellation remains a discard action.
+- Preserve the WAV in Dictation History with an explicit failure state when transcription fails or times out. Interrupted and failed entries provide a local Transcribe action that retries the completed audio file and updates the same history item.
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
 - Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
-- Provide a searchable Dictation History screen with real local playback, duration/progress, copy, reveal in Finder, individual delete, and a native clear-all control that requires destructive confirmation.
+- Provide a searchable Dictation History screen with real local playback, duration/progress, 0.5× through 2× speed controls, copy, reveal in Finder, individual delete, and a native clear-all control that requires destructive confirmation.
 - Add a Translate action to expanded transcript cards using Apple's custom on-device `TranslationSession`, with a supported target-language picker and system-managed language downloads. Let the user play or stop the translated text through an installed macOS voice matched to the target language. Preserve the original transcript, do not persist generated speech, and do not use the system presentation that may process content remotely.
 - Keep transcript reuse available from the third Command Palette tab.
-- Render the same rich accordion item in the Command Palette Dictation tab so the selected result can be reviewed, pasted, copied, played, translated, heard in the target language, revealed, or deleted without opening Settings. The entire padded accordion header is a button target with hover feedback rather than limiting expansion to its text.
+- Render the same rich accordion item in the Command Palette Dictation tab so completed and interrupted results can be reviewed, transcribed when needed, pasted, copied, played at an adjustable speed, translated, heard in the target language, revealed, or deleted without opening Settings. The entire padded accordion header is a button target with hover feedback rather than limiting expansion to its text.
 
 Apple's on-device speech implementation in the SERPy donor is the starting candidate because the owner found it acceptable. Another local model is allowed only when measured accuracy, latency, offline behavior, cancellation, and resource cost are better. Model branding is not a requirement.
 

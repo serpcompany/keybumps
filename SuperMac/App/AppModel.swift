@@ -79,7 +79,11 @@ final class AppModel {
             history: dictationHistory,
             didWritePasteboard: clipboard.suppressCurrentChange
         )
-        commandPalette = CommandPaletteController(clipboard: clipboard, dictationHistory: dictationHistory)
+        commandPalette = CommandPaletteController(
+            clipboard: clipboard,
+            dictationHistory: dictationHistory,
+            dictationService: dictation
+        )
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .dockBadge: DockBadgeAdapter { inbox.unreadCount }, .dockBounce: DockBounceAdapter(), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)

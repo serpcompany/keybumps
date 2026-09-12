@@ -54,6 +54,68 @@ enum DictationTranscriptionPlan {
     }
 }
 
+struct DictationTranscriptUpdate: Equatable {
+    let text: String
+    let segmentStart: TimeInterval
+    let segmentEnd: TimeInterval
+    let isFinal: Bool
+
+    fileprivate var normalizedText: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    fileprivate var hasStableTiming: Bool {
+        segmentEnd > segmentStart && segmentEnd > 0
+    }
+}
+
+struct DictationTranscriptAssembler {
+    private var completedSpans: [String] = []
+    private var activeUpdate: DictationTranscriptUpdate?
+
+    var transcript: String {
+        (completedSpans + [activeUpdate?.normalizedText].compactMap { $0 })
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    mutating func receive(_ update: DictationTranscriptUpdate) {
+        guard !update.normalizedText.isEmpty else { return }
+
+        if let activeUpdate, beginsNewSpan(after: activeUpdate, with: update) {
+            commit(activeUpdate)
+        }
+        activeUpdate = update
+
+        if update.isFinal {
+            commit(update)
+            activeUpdate = nil
+        }
+    }
+
+    private func beginsNewSpan(
+        after previous: DictationTranscriptUpdate,
+        with incoming: DictationTranscriptUpdate
+    ) -> Bool {
+        if previous.hasStableTiming,
+           incoming.hasStableTiming,
+           incoming.segmentStart > previous.segmentEnd {
+            return true
+        }
+
+        let previousCount = previous.normalizedText.count
+        let incomingCount = incoming.normalizedText.count
+        return previous.hasStableTiming && incomingCount * 2 < previousCount
+    }
+
+    private mutating func commit(_ update: DictationTranscriptUpdate) {
+        let text = update.normalizedText
+        guard !text.isEmpty, completedSpans.last != text else { return }
+        completedSpans.append(text)
+    }
+}
+
 struct DictationInsertionTarget: Equatable {
     let processIdentifier: pid_t
     private let bundleIdentifier: String?
@@ -79,13 +141,14 @@ final class DictationService {
     private(set) var phase: DictationPhase = .idle
     private(set) var lastError: String?
     private(set) var recoveredTranscript: String?
+    private(set) var retryingEntryID: String?
     var selectedLanguage: String
     var onPhaseChange: ((DictationPhase) -> Void)?
 
     private let audioEngine = AVAudioEngine()
     private var task: SFSpeechRecognitionTask?
     private var completion: CheckedContinuation<String, Error>?
-    private var latestTranscript = ""
+    private var transcriptAssembler = DictationTranscriptAssembler()
     private var inputTapInstalled = false
     private var destination: DictationInsertionTarget?
     private var audioFile: AVAudioFile?
@@ -146,6 +209,7 @@ final class DictationService {
 
     func start() {
         guard phase == .idle || isFailed else { return }
+        guard retryingEntryID == nil else { return }
         guard microphoneGranted, speechGranted else {
             fail("Microphone and Speech Recognition permissions are required.")
             return
@@ -156,14 +220,14 @@ final class DictationService {
         }
         lastError = nil
         destination = NSWorkspace.shared.frontmostApplication.map(DictationInsertionTarget.init)
-        latestTranscript = ""
+        transcriptAssembler = DictationTranscriptAssembler()
 
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { fail("The microphone has no usable audio format."); return }
         var preparedRecording: PendingDictationRecording?
         do {
-            let recording = try history.prepareRecording()
+            let recording = try history.prepareRecording(language: selectedLanguage)
             preparedRecording = recording
             let audioFile = try AVAudioFile(forWriting: recording.audioURL, settings: format.settings)
             activeRecording = recording
@@ -187,7 +251,7 @@ final class DictationService {
     }
 
     func cancel() {
-        guard phase != .idle else { return }
+        guard phase != .idle || retryingEntryID != nil else { return }
         completion?.resume(throwing: CancellationError())
         completion = nil
         cleanup()
@@ -205,6 +269,49 @@ final class DictationService {
         recoveredTranscript = nil
     }
 
+    func transcribe(_ entry: DictationHistoryEntry) async {
+        guard retryingEntryID == nil,
+              phase == .idle || isFailed,
+              entry.canTranscribe,
+              let audioURL = entry.audioURL else { return }
+
+        let language = entry.language == "und" ? selectedLanguage : entry.language
+        retryingEntryID = entry.id
+        lastError = nil
+        do {
+            try history.markTranscribing(entry, language: language)
+            let transcript = try await transcribeCompletedAudio(
+                at: audioURL,
+                recordedDuration: entry.duration
+            )
+            _ = try history.completeTranscription(
+                of: entry,
+                text: transcript,
+                language: language
+            )
+        } catch is CancellationError {
+            _ = try? history.completeTranscription(
+                of: entry,
+                text: transcriptAssembler.transcript,
+                language: language,
+                transcriptionError: "Transcription was cancelled."
+            )
+        } catch {
+            _ = try? history.completeTranscription(
+                of: entry,
+                text: transcriptAssembler.transcript,
+                language: language,
+                transcriptionError: error.localizedDescription
+            )
+            lastError = "Transcription failed. The audio recording was preserved."
+        }
+        task?.cancel()
+        task = nil
+        transcriptionTimeoutTask?.cancel()
+        transcriptionTimeoutTask = nil
+        retryingEntryID = nil
+    }
+
     private var isFailed: Bool { if case .failed = phase { true } else { false } }
 
     private func stopAndInsert() async {
@@ -216,6 +323,11 @@ final class DictationService {
         stopAudio()
         do {
             guard let recording else { throw CocoaError(.fileNoSuchFile) }
+            try history.markTranscribing(
+                recording,
+                language: selectedLanguage,
+                duration: duration
+            )
             let transcript = try await transcribeCompletedAudio(
                 at: recording.audioURL,
                 recordedDuration: duration
@@ -240,7 +352,7 @@ final class DictationService {
             if let recording = activeRecording {
                 _ = try? history.completeRecording(
                     recording,
-                    text: latestTranscript,
+                    text: transcriptAssembler.transcript,
                     language: selectedLanguage,
                     duration: duration,
                     transcriptionError: error.localizedDescription
@@ -260,7 +372,7 @@ final class DictationService {
               recognizer.supportsOnDeviceRecognition else {
             throw NSError(domain: "SuperMac.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "On-device speech is unavailable for \(selectedLanguage)."])
         }
-        latestTranscript = ""
+        transcriptAssembler = DictationTranscriptAssembler()
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.requiresOnDeviceRecognition = true
         request.shouldReportPartialResults = true
@@ -289,7 +401,13 @@ final class DictationService {
 
     private func receive(result: SFSpeechRecognitionResult?, error: Error?) {
         if let result {
-            latestTranscript = result.bestTranscription.formattedString
+            let segments = result.bestTranscription.segments
+            transcriptAssembler.receive(DictationTranscriptUpdate(
+                text: result.bestTranscription.formattedString,
+                segmentStart: segments.first?.timestamp ?? 0,
+                segmentEnd: segments.last.map { $0.timestamp + $0.duration } ?? 0,
+                isFinal: result.isFinal
+            ))
             if result.isFinal { finishRecognition() }
         } else if let error, completion != nil {
             finishRecognition(error: error)
@@ -301,7 +419,7 @@ final class DictationService {
         self.completion = nil
         transcriptionTimeoutTask?.cancel()
         transcriptionTimeoutTask = nil
-        if let error, latestTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let error {
             completion.resume(throwing: error)
             return
         }
@@ -310,7 +428,7 @@ final class DictationService {
     }
 
     private func validatedTranscript() throws -> String {
-        let text = latestTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = transcriptAssembler.transcript
         guard !text.isEmpty else { throw NSError(domain: "SuperMac.Dictation", code: 1, userInfo: [NSLocalizedDescriptionKey: "No speech was detected."]) }
         return text
     }

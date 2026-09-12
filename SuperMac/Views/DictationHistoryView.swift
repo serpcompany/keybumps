@@ -83,6 +83,8 @@ struct DictationHistoryView: View {
                             isExpanded: expansion.expandedEntryID == entry.id,
                             isPlaying: audioPlayer.activeEntryID == entry.id && audioPlayer.isPlaying,
                             progress: audioPlayer.progress(for: entry),
+                            playbackRate: audioPlayer.playbackRate,
+                            isTranscribing: model.dictation.retryingEntryID == entry.id,
                             toggleExpansion: {
                                 if expansion.expandedEntryID == entry.id,
                                    audioPlayer.activeEntryID == entry.id {
@@ -93,6 +95,9 @@ struct DictationHistoryView: View {
                                 }
                             },
                             togglePlayback: { audioPlayer.toggle(entry) },
+                            decreasePlaybackRate: audioPlayer.decreasePlaybackRate,
+                            increasePlaybackRate: audioPlayer.increasePlaybackRate,
+                            transcribe: { Task { await model.dictation.transcribe(entry) } },
                             primaryActionTitle: nil,
                             primaryAction: nil,
                             copy: { copy(entry.text) },
@@ -152,8 +157,13 @@ struct DictationHistoryCard: View {
     let isExpanded: Bool
     let isPlaying: Bool
     let progress: Double
+    let playbackRate: Float
+    let isTranscribing: Bool
     let toggleExpansion: () -> Void
     let togglePlayback: () -> Void
+    let decreasePlaybackRate: () -> Void
+    let increasePlaybackRate: () -> Void
+    let transcribe: () -> Void
     let primaryActionTitle: String?
     let primaryAction: (() -> Void)?
     let copy: () -> Void
@@ -217,6 +227,27 @@ struct DictationHistoryCard: View {
                         Text(Self.durationFormatter.string(from: entry.duration) ?? "0:00")
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
+
+                        HStack(spacing: 3) {
+                            Button(action: decreasePlaybackRate) {
+                                Image(systemName: "minus")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Slow down audio")
+
+                            Text(Self.rateLabel(playbackRate))
+                                .font(.caption.monospacedDigit().weight(.medium))
+                                .frame(minWidth: 34)
+
+                            Button(action: increasePlaybackRate) {
+                                Image(systemName: "plus")
+                                    .frame(width: 24, height: 24)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Speed up audio")
+                        }
+                        .disabled(entry.audioURL == nil)
                     }
                     .padding(.horizontal, 12)
                     .frame(height: 58)
@@ -231,8 +262,20 @@ struct DictationHistoryCard: View {
                         if entry.audioURL == nil {
                             Text("Audio unavailable").foregroundStyle(.secondary)
                         }
-                        if entry.metadata.transcriptionError != nil {
+                        if entry.state == .interrupted {
+                            Text("Recording interrupted").foregroundStyle(.orange)
+                        } else if entry.state == .failed {
                             Text("Transcription failed").foregroundStyle(.orange)
+                        }
+                        if entry.canTranscribe || isTranscribing {
+                            Button(
+                                isTranscribing ? "Transcribing…" : "Transcribe",
+                                systemImage: "waveform.badge.magnifyingglass",
+                                action: transcribe
+                            )
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(isTranscribing)
                         }
                         Spacer()
                         if let primaryActionTitle, let primaryAction {
@@ -243,6 +286,7 @@ struct DictationHistoryCard: View {
                         }
                         Button(action: copy) { Image(systemName: "doc.on.doc") }
                             .buttonStyle(.borderless)
+                            .disabled(entry.text.isEmpty)
                             .help("Copy transcript")
                             .accessibilityLabel("Copy transcript")
                         if #available(macOS 15.0, *) {
@@ -310,6 +354,12 @@ struct DictationHistoryCard: View {
         formatter.zeroFormattingBehavior = [.pad]
         return formatter
     }()
+
+    private static func rateLabel(_ rate: Float) -> String {
+        rate == rate.rounded()
+            ? "\(Int(rate))×"
+            : "\(rate.formatted(.number.precision(.fractionLength(2))))×"
+    }
 }
 
 struct HistoryClearButton: View {

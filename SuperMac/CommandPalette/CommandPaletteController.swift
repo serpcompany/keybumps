@@ -73,6 +73,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let search = QuickSearchModel()
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
+    private let dictationService: DictationService
     private let state = CommandPaletteState()
     private var panel: NSPanel?
     private weak var destination: NSRunningApplication?
@@ -81,9 +82,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
 
-    init(clipboard: ClipboardHistoryService, dictationHistory: DictationHistoryService) {
+    init(
+        clipboard: ClipboardHistoryService,
+        dictationHistory: DictationHistoryService,
+        dictationService: DictationService
+    ) {
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
+        self.dictationService = dictationService
     }
 
     func toggle(_ tab: CommandPaletteTab) {
@@ -155,6 +161,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 search: search,
                 clipboard: clipboard,
                 dictationHistory: dictationHistory,
+                dictationService: dictationService,
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
@@ -308,7 +315,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             pasteClipboardEntry(filteredClipboard[state.selection])
         case .dictation:
             guard filteredDictations.indices.contains(state.selection) else { return }
-            paste(filteredDictations[state.selection].text, suppressClipboardHistory: true)
+            let text = filteredDictations[state.selection].text
+            guard !text.isEmpty else { return }
+            paste(text, suppressClipboardHistory: true)
         }
     }
 
@@ -359,6 +368,7 @@ private struct CommandPaletteView: View {
     @Bindable var search: QuickSearchModel
     @Bindable var clipboard: ClipboardHistoryService
     @Bindable var dictationHistory: DictationHistoryService
+    @Bindable var dictationService: DictationService
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
@@ -430,6 +440,8 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 select: { state.selection = $0 },
                 choose: pasteDictationText,
+                transcribe: { entry in Task { await dictationService.transcribe(entry) } },
+                retryingEntryID: dictationService.retryingEntryID,
                 delete: dictationHistory.delete,
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -444,10 +456,9 @@ private struct CommandPaletteView: View {
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
-        let reusableEntries = dictationHistory.entries.filter { !$0.text.isEmpty }
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return reusableEntries }
-        return reusableEntries.filter { $0.text.localizedCaseInsensitiveContains(query) }
+        guard !query.isEmpty else { return dictationHistory.entries }
+        return dictationHistory.entries.filter { $0.displayText.localizedCaseInsensitiveContains(query) }
     }
 }
 
@@ -717,6 +728,8 @@ private struct DictationResultsView: View {
     let selection: Int
     let select: (Int) -> Void
     let choose: (String) -> Void
+    let transcribe: (DictationHistoryEntry) -> Void
+    let retryingEntryID: String?
     let delete: (DictationHistoryEntry) -> Void
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -757,10 +770,15 @@ private struct DictationResultsView: View {
                                         isExpanded: index == selection,
                                         isPlaying: audioPlayer.activeEntryID == entry.id && audioPlayer.isPlaying,
                                         progress: audioPlayer.progress(for: entry),
+                                        playbackRate: audioPlayer.playbackRate,
+                                        isTranscribing: retryingEntryID == entry.id,
                                         toggleExpansion: { select(index) },
                                         togglePlayback: { audioPlayer.toggle(entry) },
+                                        decreasePlaybackRate: audioPlayer.decreasePlaybackRate,
+                                        increasePlaybackRate: audioPlayer.increasePlaybackRate,
+                                        transcribe: { transcribe(entry) },
                                         primaryActionTitle: "Paste",
-                                        primaryAction: { choose(entry.text) },
+                                        primaryAction: entry.text.isEmpty ? nil : { choose(entry.text) },
                                         copy: { DictationHistoryClipboard.copy(entry.text) },
                                         reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },
                                         delete: {

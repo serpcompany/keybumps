@@ -44,6 +44,18 @@ Source inspection confirmed the earlier build had no intentional maximum recordi
 
 A signed runtime recording produced a 9.7-second WAV. Completed-file transcription contained both the synthetic beginning and ending markers, and the generated verification directory was then moved to Trash. Deterministic tests cover the five-minute default, persistence of longer and unlimited choices, completed-file transcription strategy, and failed-transcription audio preservation.
 
+## 2026-09-12 multi-span dictation assembly
+
+An owner-provided 24.9-second recording reproduced a truncation where the saved transcript contained only the final seven words even though the WAV retained speech throughout. Privacy-safe callback instrumentation showed that Apple's on-device recognizer emitted 68 updates across three separate timestamp spans; the last callback covered only the final span. SuperMac had been replacing its transcript candidate on every update, so the final span overwrote the opening and middle spans.
+
+SuperMac now detects recognition-span resets, retains completed spans, and joins them in callback/audio order before validation, persistence, and insertion. The regression fixture models the observed short reset callbacks between three synthetic spans and asserts that all three survive; a companion fixture prevents ordinary partial-result revisions from being duplicated. Replaying the original WAV through the repaired signed Debug app retained 51 recognized words from 0.39 through 24.87 seconds while Apple's final callback still contained only seven words. No spoken text, transcript value, or recording identifier was written into repository evidence. The full deterministic suite passed 106/106 after the repair.
+
+## 2026-09-12 interrupted recording recovery and playback speed
+
+GitHub issue #4 defines the crash-recovery, manual transcription, and playback-speed slice. SuperMac now writes pending lifecycle metadata before audio capture begins, keeps live recording/retry identifiers in memory so an ordinary History refresh cannot misclassify them, and converts stale recording/transcribing metadata into an interrupted entry after a new process launches. It also reconstructs metadata for a legacy audio-only directory when its WAV is playable. Intentional cancellation still removes its pending directory.
+
+Interrupted and failed entries appear in both shared history-card surfaces with a local Transcribe action; a retry marks the same item as transcribing and then updates that item to completed or failed without replacing its audio. The shared audio player exposes bounded 0.5×, 0.75×, 1×, 1.25×, 1.5×, and 2× controls and applies rate changes to active playback. Deterministic tests cover live-session suppression, relaunch recovery, legacy-orphan recovery, same-item completion, intentional cancellation, rate bounds, and the earlier multi-span repair. The full suite passed 109/109, the Release build passed, and its app bundle passed strict signature verification. Physical force-quit recovery, manual retry, and audible speed changes remain owner acceptance.
+
 ## 2026-09-12 accordion history cards
 
 The owner clarified the selected Superwhisper History hierarchy with a screenshot: collapsed rows are transcript previews, while one selected row expands to combine the full transcript with its audio and actions. SuperMac now uses that accordion structure with original styling. The first entry expands on entry to History, selecting another card collapses the prior selection, and the expanded card shows a real WAV-derived waveform, play/pause, progress, duration, an Original label, copy, Finder reveal/info, and delete. Segmented and reprocessing controls remain absent because SuperMac does not implement those capabilities.
