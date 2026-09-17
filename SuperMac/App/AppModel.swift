@@ -42,6 +42,8 @@ final class AppModel {
     let launchAtLogin = LaunchAtLoginController()
     let conflicts = ConflictDetector()
     let dictation: DictationService
+    let updater: any UpdateControlling
+    let updateSafetyPolicy: UpdateInstallationSafetyPolicy
     private let delivery: NotificationDeliveryService
     private let nativeNotificationCenter: any NativeNotificationCenterClient
     private let detector: ManualActionDetector
@@ -60,6 +62,7 @@ final class AppModel {
     private(set) var isStarted = false
     private(set) var isPermissionWalkthroughActive = false
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
+    private(set) var updateSnapshot: UpdateSnapshot
     var unreadCount: Int { inbox.unreadCount }
     var nativeNotificationNeedsAttention: Bool {
         guard preferences.selectedChannels.contains(.nativeBanner) else { return false }
@@ -87,11 +90,17 @@ final class AppModel {
         presenceController: any AppPresenceControlling,
         detector: ManualActionDetector,
         presenter: PresentationWindowController,
-        nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil
+        nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
+        updater injectedUpdater: (any UpdateControlling)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
         self.nativeNotificationCenter = nativeNotificationCenter
+        let updateSafetyPolicy = UpdateInstallationSafetyPolicy()
+        self.updateSafetyPolicy = updateSafetyPolicy
+        let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
+        self.updater = updater
+        self.updateSnapshot = updater.snapshot
         let clipboard = ClipboardHistoryService()
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
@@ -117,7 +126,11 @@ final class AppModel {
             guard let self else { return }
             self.dictationIndicator.update(phase)
             self.updateDictationEscapeRegistration(for: phase)
+            self.updateSafetyPolicy.update(dictationPhase: phase)
+            ApplicationTerminationGuard.shared.update(dictationPhase: phase)
+            self.updater.installationSafetyDidChange()
         }
+        updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         refreshDetectorState()
     }
 
@@ -128,7 +141,12 @@ final class AppModel {
         if preferences.didCompleteOnboarding { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
         Task { await refreshNotificationPermission() }
+        updater.start()
     }
+
+    func checkForUpdates() { updater.checkNow() }
+    func setAutomaticallyChecksForUpdates(_ enabled: Bool) { updater.setAutomaticallyChecks(enabled) }
+    func restartToUpdate() { updater.restartWhenSafe() }
 
     func completeOnboarding() {
         preferences.didCompleteOnboarding = true

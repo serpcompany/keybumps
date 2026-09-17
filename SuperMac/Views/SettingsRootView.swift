@@ -689,11 +689,35 @@ private struct NotificationPermissionRow: View {
 }
 
 private struct GeneralView: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
         Form {
             Section("Updates") {
-                LabeledContent("Automatic updates", value: "Not configured")
-                Text("This local preview has no release feed, so update controls are intentionally unavailable. Updates will be enabled only in a signed distributable release.").foregroundStyle(.secondary)
+                Toggle(
+                    "Automatically check for updates",
+                    isOn: Binding(
+                        get: { model.updateSnapshot.automaticallyChecks },
+                        set: model.setAutomaticallyChecksForUpdates
+                    )
+                )
+                .disabled(!model.updateSnapshot.canCheck)
+
+                LabeledContent("Status", value: model.updateSnapshot.status.summary)
+
+                HStack {
+                    Button("Check for Updates…") { model.checkForUpdates() }
+                        .disabled(!model.updateSnapshot.canCheck)
+                    if model.updateSnapshot.status.readyVersion != nil {
+                        Button("Restart to Update") { model.restartToUpdate() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                }
+
+                if case .unavailable = model.updateSnapshot.status {
+                    Text("This build does not contain a configured update feed. SuperMac remains fully usable offline.")
+                        .foregroundStyle(.secondary)
+                }
             }
         }.formStyle(.grouped).navigationTitle("General")
     }

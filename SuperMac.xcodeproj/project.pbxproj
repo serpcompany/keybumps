@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		02616B8277F6E19177358C2B /* NotificationDeliveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADE70860A30377DD7E7E3B2 /* NotificationDeliveryService.swift */; };
 		08C07BABCDF840920981C39E /* ShortcutFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622B0F6D27EE05F4FCA662F4 /* ShortcutFormatter.swift */; };
+		08F4D2532E291F60FC83D958 /* UpdateControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */; };
 		0F173B8EEE34731BFC2BB46C /* SystemServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374F0E123136211939751EBD /* SystemServices.swift */; };
 		10BF68EF4B2FCD67176B78E5 /* PointerEventMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D121EE0800846D3507A1B184 /* PointerEventMonitor.swift */; };
 		10E38342515AA764D84F979D /* ChromeActionDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8064DB57B1E1DDD769BECC1 /* ChromeActionDetectionTests.swift */; };
 		187E6DE7C76E9035BB57C6C2 /* PresentationWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA7CB636F8938DE2ADC7AE2 /* PresentationWindowController.swift */; };
 		1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B06DF9E1F28BCAC34392C78B /* SharedViews.swift */; };
+		230E9EC0C94164772A13BAB0 /* SparkleUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2C2F9376E2BB9E5C58E632 /* SparkleUpdateController.swift */; };
 		2F2DACC19C833EF41ADBD702 /* ChromeActionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C166318C53B0BFACE88EC23 /* ChromeActionAdapter.swift */; };
 		3CC2F1521D5D9DA5985DF178 /* DictationAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3890AA7A2ED495DF7406F94 /* DictationAudioPlayer.swift */; };
 		4485C0E7B6169A3006A83E35 /* AppPresenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1263F60CBD0F2902CB20582 /* AppPresenceController.swift */; };
@@ -47,6 +49,8 @@
 		B75B94A8EE220ED1CE6BC757 /* GlobalShortcutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BFA3CEB2DACC39047B00175 /* GlobalShortcutCoordinator.swift */; };
 		BBA68BFD1B6B9C15B5D2ED28 /* ClipboardHistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA63C9C8EB22D30080ECBC01 /* ClipboardHistoryService.swift */; };
 		BD161316A7D761C8706A4943 /* CoachingEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751041DE9F75C902026B8BB7 /* CoachingEvent.swift */; };
+		C9B8D580B8E1E4ECB44A5B6D /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89ABD0D4EE31D549315662E4 /* UpdateController.swift */; };
+		CA72E0A35C37024162259B5B /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 253E6B887F2F9A4D86D9705C /* Sparkle */; };
 		D632A48B79BA759590A960F3 /* ShortcutCoachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693B2BEFF4340566A2E73421 /* ShortcutCoachTests.swift */; };
 		D6EEE376BED64257604D8727 /* RecentItemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E3CD33F55E7ED6FD7447DF8 /* RecentItemStore.swift */; };
 		DD2E133AF9A7FFBBCE04176F /* InboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C950B36CEF4429972BA91B8 /* InboxStore.swift */; };
@@ -76,6 +80,7 @@
 		1A345711CDDED027099E273D /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
 		1B693B5DB877A0D2D65233AB /* ShortcutCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCatalog.swift; sourceTree = "<group>"; };
 		1D1127D1CBB6DF74B0C9DC4E /* SuperMac-AppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SuperMac-AppStore.entitlements"; sourceTree = "<group>"; };
+		25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateControllerTests.swift; sourceTree = "<group>"; };
 		2C7F01062D6A9BFA8A23FC52 /* WindowManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementService.swift; sourceTree = "<group>"; };
 		2C950B36CEF4429972BA91B8 /* InboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxStore.swift; sourceTree = "<group>"; };
 		374F0E123136211939751EBD /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
@@ -93,9 +98,12 @@
 		751041DE9F75C902026B8BB7 /* CoachingEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingEvent.swift; sourceTree = "<group>"; };
 		797FD303CEC7148DD772B296 /* DictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationService.swift; sourceTree = "<group>"; };
 		79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchService.swift; sourceTree = "<group>"; };
+		7F2C2F9376E2BB9E5C58E632 /* SparkleUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateController.swift; sourceTree = "<group>"; };
 		842BC96677905E5FD541225A /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
+		89ABD0D4EE31D549315662E4 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		92B18988CAC32C575BC5CCDB /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		9340D19AA59A8D0E867E2EE1 /* SuperMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuperMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		93ACB7EEE409602FAD54275F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		99DF39DEF1A3A5EBE5AA54BF /* SuperMacFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperMacFeatureTests.swift; sourceTree = "<group>"; };
 		9A39FD515AB2244E626687C8 /* ActionCorrelator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionCorrelator.swift; sourceTree = "<group>"; };
 		9BA7CB636F8938DE2ADC7AE2 /* PresentationWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationWindowController.swift; sourceTree = "<group>"; };
@@ -125,6 +133,17 @@
 		F988472005A1AEAE4AFC6A8A /* TranslatedSpeechPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatedSpeechPlayer.swift; sourceTree = "<group>"; };
 		FFC8E02410AD7693C5667BB0 /* ProductIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductIdentity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		79A59671C79FFA6412267151 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CA72E0A35C37024162259B5B /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		3F62FFC446BB2709D6F89E4D = {
@@ -176,6 +195,15 @@
 				F988472005A1AEAE4AFC6A8A /* TranslatedSpeechPlayer.swift */,
 			);
 			path = Dictation;
+			sourceTree = "<group>";
+		};
+		9517FE268DAB6978DD8AE43D /* Updates */ = {
+			isa = PBXGroup;
+			children = (
+				7F2C2F9376E2BB9E5C58E632 /* SparkleUpdateController.swift */,
+				89ABD0D4EE31D549315662E4 /* UpdateController.swift */,
+			);
+			path = Updates;
 			sourceTree = "<group>";
 		};
 		96D0EB049EE5542F883C0E39 /* Infrastructure */ = {
@@ -232,6 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				6B0462EFDE8CD0087CBCC711 /* Assets.xcassets */,
+				93ACB7EEE409602FAD54275F /* Info.plist */,
 				1D1127D1CBB6DF74B0C9DC4E /* SuperMac-AppStore.entitlements */,
 				C2403AFE407303A9488970CC /* SuperMac.entitlements */,
 			);
@@ -279,6 +308,7 @@
 				693B2BEFF4340566A2E73421 /* ShortcutCoachTests.swift */,
 				D6AB39FCFF8951FC4C3F93C7 /* StandardWindowControlTests.swift */,
 				99DF39DEF1A3A5EBE5AA54BF /* SuperMacFeatureTests.swift */,
+				25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */,
 			);
 			path = SuperMacTests;
 			sourceTree = "<group>";
@@ -297,6 +327,7 @@
 				C13F4A9B9107E3B0973948A3 /* Permissions */,
 				65E36344E655062E5781CB7E /* QuickSearch */,
 				BD34068FFD5C61C64F9F6B2D /* Resources */,
+				9517FE268DAB6978DD8AE43D /* Updates */,
 				A9B8CAD289507DB8B25DB9A8 /* Views */,
 				B624C559DEE42C8D883D100A /* WindowManagement */,
 			);
@@ -342,6 +373,7 @@
 			buildPhases = (
 				B6E1A623E2E0D601FC98124E /* Sources */,
 				3B0C1C5F050921A9789D3D68 /* Resources */,
+				79A59671C79FFA6412267151 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -349,6 +381,7 @@
 			);
 			name = SuperMac;
 			packageProductDependencies = (
+				253E6B887F2F9A4D86D9705C /* Sparkle */,
 			);
 			productName = SuperMac;
 			productReference = 9340D19AA59A8D0E867E2EE1 /* SuperMac.app */;
@@ -383,6 +416,9 @@
 			);
 			mainGroup = 3F62FFC446BB2709D6F89E4D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CAC0865FE2BC96E329E2A299 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
@@ -444,11 +480,13 @@
 				1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */,
 				881298FF4FFAEFBD96A747EE /* ShortcutCatalog.swift in Sources */,
 				08C07BABCDF840920981C39E /* ShortcutFormatter.swift in Sources */,
+				230E9EC0C94164772A13BAB0 /* SparkleUpdateController.swift in Sources */,
 				B338B93F3DEBF46EC97E2A0A /* StandardWindowControlMonitor.swift in Sources */,
 				5A474A9F1CC0A3DFF5C06267 /* SuperMacApp.swift in Sources */,
 				7BA149D9B58AA723E8FF7AED /* SystemChannelAdapters.swift in Sources */,
 				0F173B8EEE34731BFC2BB46C /* SystemServices.swift in Sources */,
 				98717D28224C1EF1BC213F94 /* TranslatedSpeechPlayer.swift in Sources */,
+				C9B8D580B8E1E4ECB44A5B6D /* UpdateController.swift in Sources */,
 				B42DB96F46AA57F2B916D84E /* WindowAction.swift in Sources */,
 				909548FF1DFC40ED148C19F2 /* WindowGeometry.swift in Sources */,
 				9811CCC694AC65A6418FBD98 /* WindowManagementService.swift in Sources */,
@@ -465,6 +503,7 @@
 				D632A48B79BA759590A960F3 /* ShortcutCoachTests.swift in Sources */,
 				534C9EA197970F4075B479EB /* StandardWindowControlTests.swift in Sources */,
 				E6DF6BFB45E567621DA64B0F /* SuperMacFeatureTests.swift in Sources */,
+				08F4D2532E291F60FC83D958 /* UpdateControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -508,15 +547,8 @@
 				DEVELOPMENT_TEAM = 847HR8U8D9;
 				ENABLE_APP_SANDBOX = NO;
 				EXECUTABLE_NAME = SuperMac;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = SuperMac;
-				INFOPLIST_KEY_CFBundleName = SuperMac;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_LSUIElement = NO;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 SERP. All rights reserved.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SuperMac records audio only while Dictation is visibly active and transcribes it on this Mac.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SuperMac uses Apple's on-device speech recognition for Dictation.";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SuperMac/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -563,7 +595,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -583,12 +615,14 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
-				MARKETING_VERSION = 0.0.1;
+				MARKETING_VERSION = 0.0.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SUPERMAC_UPDATE_FEED_URL = "";
+				SUPERMAC_UPDATE_PUBLIC_KEY = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.10;
@@ -630,7 +664,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -644,11 +678,13 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
-				MARKETING_VERSION = 0.0.1;
+				MARKETING_VERSION = 0.0.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SUPERMAC_UPDATE_FEED_URL = "";
+				SUPERMAC_UPDATE_PUBLIC_KEY = "";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.10;
@@ -665,15 +701,8 @@
 				DEVELOPMENT_TEAM = 847HR8U8D9;
 				ENABLE_APP_SANDBOX = NO;
 				EXECUTABLE_NAME = SuperMac;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = SuperMac;
-				INFOPLIST_KEY_CFBundleName = SuperMac;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_LSUIElement = NO;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 SERP. All rights reserved.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SuperMac records audio only while Dictation is visibly active and transcribes it on this Mac.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SuperMac uses Apple's on-device speech recognition for Dictation.";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SuperMac/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -735,6 +764,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CAC0865FE2BC96E329E2A299 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		253E6B887F2F9A4D86D9705C /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CAC0865FE2BC96E329E2A299 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 19BDA3B43258BBB3E855822E /* Project object */;
 }

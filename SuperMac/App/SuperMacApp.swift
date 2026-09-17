@@ -42,6 +42,11 @@ private struct MainWindowRoutingModifier: ViewModifier {
                     isVisible: { model.isQuickSearchVisible },
                     setVisible: model.setQuickSearchVisible
                 )
+                NativeStatusItemController.shared.configureUpdater(
+                    snapshot: { model.updateSnapshot },
+                    checkNow: model.checkForUpdates,
+                    restartWhenSafe: model.restartToUpdate
+                )
                 NativeStatusItemController.shared.install()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in

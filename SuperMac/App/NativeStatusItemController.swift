@@ -53,6 +53,11 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     private var quickSearchIsVisible: () -> Bool = { false }
     private var setQuickSearchVisible: (Bool) -> Void = { _ in }
     private var quickSearchWasVisibleWhenMenuOpened = false
+    private var updateSnapshot: () -> UpdateSnapshot = {
+        UpdateSnapshot(status: .unavailable("Updates unavailable"), automaticallyChecks: false, canCheck: false)
+    }
+    private var checkForUpdatesAction: () -> Void = {}
+    private var restartToUpdateAction: () -> Void = {}
 
     init(router: MainWindowRouter? = nil) {
         self.router = router ?? .shared
@@ -69,6 +74,16 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     ) {
         quickSearchIsVisible = isVisible
         setQuickSearchVisible = setVisible
+    }
+
+    func configureUpdater(
+        snapshot: @escaping () -> UpdateSnapshot,
+        checkNow: @escaping () -> Void,
+        restartWhenSafe: @escaping () -> Void
+    ) {
+        updateSnapshot = snapshot
+        checkForUpdatesAction = checkNow
+        restartToUpdateAction = restartWhenSafe
     }
 
     func install() {
@@ -92,17 +107,29 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         menu.autoenablesItems = false
+        populate(menu)
+        return menu
+    }
+
+    private func populate(_ menu: NSMenu) {
+        menu.removeAllItems()
         menu.addItem(withTitle: "Toggle SuperMac", action: #selector(toggleQuickSearch), keyEquivalent: "").target = self
         menu.addItem(.separator())
         let version = menu.addItem(withTitle: AppVersionDisplay.title(), action: nil, keyEquivalent: "")
         version.isEnabled = false
-        let updates = menu.addItem(withTitle: "Check for Updates…", action: nil, keyEquivalent: "")
-        updates.isEnabled = false
+        let snapshot = updateSnapshot()
+        let updates = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        updates.target = self
+        updates.isEnabled = snapshot.canCheck
+        if snapshot.status.readyVersion != nil {
+            let restart = menu.addItem(withTitle: "Restart to Update", action: #selector(restartToUpdate), keyEquivalent: "")
+            restart.target = self
+            restart.isEnabled = true
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit SuperMac", action: #selector(quit), keyEquivalent: "q").target = self
-        return menu
     }
 
     @objc func toggleQuickSearch() {
@@ -113,10 +140,16 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         quickSearchWasVisibleWhenMenuOpened = quickSearchIsVisible()
     }
 
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        populate(menu)
+    }
+
     @objc func openSettings() {
         if !router.open() {
             NotificationCenter.default.post(name: .openMainWindow, object: nil)
         }
     }
+    @objc private func checkForUpdates() { checkForUpdatesAction() }
+    @objc private func restartToUpdate() { restartToUpdateAction() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 }
