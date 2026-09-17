@@ -34,7 +34,7 @@ private struct MainWindowRoutingModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear {
-                NativeStatusItemController.shared.configureOpenMainWindow(openMainWindow)
+                MainWindowRouter.shared.configure(openMainWindow)
                 NativeStatusItemController.shared.install()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
@@ -50,12 +50,10 @@ private struct MainWindowRoutingModifier: ViewModifier {
 
 private struct OpenMainWindowButton: View {
     let title: String
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Button(title) {
-            openWindow(id: "main")
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            MainWindowRouter.shared.open()
         }
     }
 }

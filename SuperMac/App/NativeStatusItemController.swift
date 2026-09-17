@@ -1,14 +1,45 @@
 import AppKit
 
 @MainActor
+final class MainWindowRouter {
+    static let shared = MainWindowRouter()
+
+    private var opener: (() -> Void)?
+    private let activate: () -> Void
+
+    init(activate: (() -> Void)? = nil) {
+        self.activate = activate ?? {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func configure(_ opener: @escaping () -> Void) {
+        self.opener = opener
+    }
+
+    @discardableResult
+    func open() -> Bool {
+        guard let opener else { return false }
+        opener()
+        activate()
+        return true
+    }
+}
+
+@MainActor
 final class NativeStatusItemController: NSObject {
     static let shared = NativeStatusItemController()
 
     private var statusItem: NSStatusItem?
-    private var openMainWindow: (() -> Void)?
+    private let router: MainWindowRouter
+
+    init(router: MainWindowRouter? = nil) {
+        self.router = router ?? .shared
+        super.init()
+    }
 
     func configureOpenMainWindow(_ action: @escaping () -> Void) {
-        openMainWindow = action
+        router.configure(action)
     }
 
     func install() {
@@ -45,9 +76,7 @@ final class NativeStatusItemController: NSObject {
     }
 
     @objc func openSettings() {
-        if let openMainWindow {
-            openMainWindow()
-        } else {
+        if !router.open() {
             NotificationCenter.default.post(name: .openMainWindow, object: nil)
         }
     }

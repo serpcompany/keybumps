@@ -557,16 +557,18 @@ private struct KeyBumpsSettingsView: View {
                 ))
                 Button("Preview") { Task { await model.previewSample(channel: channel) } }
             }
-            if let outcome = model.previewOutcome(for: channel) {
-                switch outcome {
-                case .delivered:
-                    Text("Preview sent")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                case .failed(let message):
-                    Text("Preview failed: \(message)")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+            ForEach(model.previewOutcomes(for: channel).keys.sorted(by: { $0.rawValue < $1.rawValue })) { deliveredChannel in
+                if let outcome = model.previewOutcomes(for: channel)[deliveredChannel] {
+                    switch outcome {
+                    case .delivered:
+                        Text("\(deliveredChannel.title) preview sent")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    case .failed(let message):
+                        Text("\(deliveredChannel.title) preview failed: \(message)")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
         }

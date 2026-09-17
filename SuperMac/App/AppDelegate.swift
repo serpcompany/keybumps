@@ -7,6 +7,18 @@ extension Notification.Name {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    private let mainWindowRouter: MainWindowRouter
+
+    override init() {
+        mainWindowRouter = .shared
+        super.init()
+    }
+
+    init(mainWindowRouter: MainWindowRouter) {
+        self.mainWindowRouter = mainWindowRouter
+        super.init()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.configureWindowBehavior()
         UNUserNotificationCenter.current().delegate = self
@@ -17,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        NativeStatusItemController.shared.openSettings()
+        mainWindowRouter.open()
         return false
     }
 

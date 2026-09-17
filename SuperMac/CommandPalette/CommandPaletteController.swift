@@ -56,17 +56,78 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         default: nil
         }
     }
+
+    var labelPresentation: CommandPaletteTabLabel {
+        CommandPaletteTabLabel(shortcut: shortcutLabel, name: title)
+    }
 }
 
-enum KeyBumpsHistoryFilter {
-    static func entries(_ events: [CoachingEvent], matching rawQuery: String) -> [CoachingEvent] {
+struct CommandPaletteTabLabel: Equatable {
+    let shortcut: String
+    let name: String
+    let systemImage: String? = nil
+}
+
+enum KeyBumpsHistoryContent: Equatable {
+    case disabled
+    case empty
+    case entries([CoachingEvent])
+
+    static func resolve(
+        events: [CoachingEvent],
+        query rawQuery: String,
+        isEnabled: Bool
+    ) -> KeyBumpsHistoryContent {
+        guard isEnabled else { return .disabled }
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return events }
-        return events.filter {
+        let matches = query.isEmpty ? events : events.filter {
             $0.actionTitle.localizedCaseInsensitiveContains(query)
                 || $0.applicationName.localizedCaseInsensitiveContains(query)
                 || $0.shortcut.localizedCaseInsensitiveContains(query)
         }
+        return matches.isEmpty ? .empty : .entries(matches)
+    }
+
+    var entries: [CoachingEvent] {
+        guard case .entries(let entries) = self else { return [] }
+        return entries
+    }
+}
+
+@MainActor
+protocol ShortcutPasteboardWriting {
+    func writeShortcut(_ shortcut: String) -> Bool
+}
+
+@MainActor
+struct PasteboardShortcutWriter: ShortcutPasteboardWriting {
+    let pasteboard: NSPasteboard
+
+    init(pasteboard: NSPasteboard = .general) {
+        self.pasteboard = pasteboard
+    }
+
+    func writeShortcut(_ shortcut: String) -> Bool {
+        pasteboard.clearContents()
+        return pasteboard.setString(shortcut, forType: .string)
+    }
+}
+
+@MainActor
+final class KeyBumpsShortcutAction {
+    private let inbox: InboxStore
+    private let pasteboard: any ShortcutPasteboardWriting
+
+    init(inbox: InboxStore, pasteboard: (any ShortcutPasteboardWriting)? = nil) {
+        self.inbox = inbox
+        self.pasteboard = pasteboard ?? PasteboardShortcutWriter()
+    }
+
+    @discardableResult
+    func copyShortcut(from event: CoachingEvent) -> Bool {
+        guard pasteboard.writeShortcut(event.shortcut) else { return false }
+        inbox.markRead(event.id)
+        return true
     }
 }
 
@@ -103,6 +164,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let dictationService: DictationService
     private let inbox: InboxStore
     private let preferences: AppPreferences
+    private let keyBumpsAction: KeyBumpsShortcutAction
     private let state = CommandPaletteState()
     private var panel: NSPanel?
     private weak var destination: NSRunningApplication?
@@ -116,13 +178,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         dictationHistory: DictationHistoryService,
         dictationService: DictationService,
         inbox: InboxStore,
-        preferences: AppPreferences
+        preferences: AppPreferences,
+        shortcutPasteboard: (any ShortcutPasteboardWriting)? = nil
     ) {
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService
         self.inbox = inbox
         self.preferences = preferences
+        keyBumpsAction = KeyBumpsShortcutAction(
+            inbox: inbox,
+            pasteboard: shortcutPasteboard ?? PasteboardShortcutWriter()
+        )
     }
 
     func toggle(_ tab: CommandPaletteTab) {
@@ -203,6 +270,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 pasteClipboardEntry: pasteClipboardEntry,
                 pasteDictationText: { [weak self] text in
                     self?.paste(text, suppressClipboardHistory: true)
+                },
+                copyKeyBumpsShortcut: { [weak self] event in
+                    self?.keyBumpsAction.copyShortcut(from: event)
                 },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
@@ -340,8 +410,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private var filteredKeyBumps: [CoachingEvent] {
-        guard preferences.enabledCapabilities.contains(.shortcutCoaching) else { return [] }
-        return KeyBumpsHistoryFilter.entries(inbox.events, matching: state.historyQuery)
+        keyBumpsContent.entries
+    }
+
+    private var keyBumpsContent: KeyBumpsHistoryContent {
+        KeyBumpsHistoryContent.resolve(
+            events: inbox.events,
+            query: state.historyQuery,
+            isEnabled: preferences.enabledCapabilities.contains(.shortcutCoaching)
+        )
     }
 
     private func activateSelection(reveal: Bool) {
@@ -360,7 +437,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             paste(text, suppressClipboardHistory: true)
         case .keyBumps:
             guard filteredKeyBumps.indices.contains(state.selection) else { return }
-            inbox.markRead(filteredKeyBumps[state.selection].id)
+            keyBumpsAction.copyShortcut(from: filteredKeyBumps[state.selection])
         }
     }
 
@@ -419,6 +496,7 @@ private struct CommandPaletteView: View {
     let revealSearchResult: (QuickSearchResult) -> Void
     let pasteClipboardEntry: (ClipboardEntry) -> Void
     let pasteDictationText: (String) -> Void
+    let copyKeyBumpsShortcut: (CoachingEvent) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
 
@@ -493,10 +571,9 @@ private struct CommandPaletteView: View {
             )
         case .keyBumps:
             KeyBumpsResultsView(
-                entries: filteredKeyBumps,
+                content: keyBumpsContent,
                 selection: state.selection,
-                isEnabled: preferences.enabledCapabilities.contains(.shortcutCoaching),
-                choose: inbox.markRead
+                choose: copyKeyBumpsShortcut
             )
         }
     }
@@ -513,8 +590,12 @@ private struct CommandPaletteView: View {
         return dictationHistory.entries.filter { $0.displayText.localizedCaseInsensitiveContains(query) }
     }
 
-    private var filteredKeyBumps: [CoachingEvent] {
-        KeyBumpsHistoryFilter.entries(inbox.events, matching: state.historyQuery)
+    private var keyBumpsContent: KeyBumpsHistoryContent {
+        KeyBumpsHistoryContent.resolve(
+            events: inbox.events,
+            query: state.historyQuery,
+            isEnabled: preferences.enabledCapabilities.contains(.shortcutCoaching)
+        )
     }
 }
 
@@ -529,10 +610,10 @@ private struct PaletteTabBar: View {
                     select(tab)
                 } label: {
                     HStack(spacing: 7) {
-                        Text(tab.shortcutLabel)
+                        Text(tab.labelPresentation.shortcut)
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
-                        Text(tab.title)
+                        Text(tab.labelPresentation.name)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
@@ -557,20 +638,20 @@ private struct PaletteTabBar: View {
 }
 
 private struct KeyBumpsResultsView: View {
-    let entries: [CoachingEvent]
+    let content: KeyBumpsHistoryContent
     let selection: Int
-    let isEnabled: Bool
-    let choose: (UUID) -> Void
+    let choose: (CoachingEvent) -> Void
 
     var body: some View {
         PaletteResultsContainer {
-            if !isEnabled {
+            switch content {
+            case .disabled:
                 PaletteEmptyState(title: "Key Bumps is turned off", systemImage: "keyboard")
-            } else if entries.isEmpty {
+            case .empty:
                 PaletteEmptyState(title: "No matching Key Bumps", systemImage: "keyboard")
-            } else {
+            case .entries(let entries):
                 List(Array(entries.enumerated()), id: \.element.id) { index, event in
-                    Button { choose(event.id) } label: {
+                    Button { choose(event) } label: {
                         CoachingEventRow(event: event)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
@@ -921,7 +1002,7 @@ private struct PaletteFooter: View {
     var body: some View {
         HStack(spacing: 14) {
             Label("Select", systemImage: "arrow.up.arrow.down")
-            Label(tab == .search ? "Open" : tab == .keyBumps ? "Mark Read" : "Paste", systemImage: "return")
+            Label(tab == .search ? "Open" : tab == .keyBumps ? "Copy Shortcut" : "Paste", systemImage: "return")
             if tab == .search {
                 Label("Reveal", systemImage: "command")
             }

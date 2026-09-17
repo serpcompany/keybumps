@@ -44,6 +44,7 @@ final class AppModel {
     let dictation: DictationService
     private let delivery: NotificationDeliveryService
     private let detector: ManualActionDetector
+    private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
     private let commandPalette: CommandPaletteController
     private let permissionDragAssistant = PermissionDragAssistantController()
@@ -69,7 +70,7 @@ final class AppModel {
     }
 
     init(releaseLane: ReleaseLane = .full, preferences: AppPreferences, inbox: InboxStore, presenceController: any AppPresenceControlling, detector: ManualActionDetector, presenter: PresentationWindowController) {
-        self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
+        self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         let clipboard = ClipboardHistoryService()
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
@@ -280,13 +281,17 @@ final class AppModel {
     func showDictationHistory() { commandPalette.show(.dictation) }
     func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
     func previewSample(channel: NotificationChannel) async {
-        let outcome = await delivery.preview(.sample, through: channel)
+        let channels = PreviewChannelPlan.channels(
+            for: channel,
+            selectedChannels: preferences.selectedChannels
+        )
+        let outcomes = await delivery.preview(.sample, through: channels)
         lastPreviewChannel = channel
-        lastReport = DeliveryReport(eventID: CoachingEvent.sample.id, inboxRecorded: false, outcomes: [channel: outcome])
+        lastReport = DeliveryReport(eventID: CoachingEvent.sample.id, inboxRecorded: false, outcomes: outcomes)
     }
-    func previewOutcome(for channel: NotificationChannel) -> DeliveryOutcome? {
-        guard lastPreviewChannel == channel else { return nil }
-        return lastReport?.outcomes[channel]
+    func previewOutcomes(for channel: NotificationChannel) -> [NotificationChannel: DeliveryOutcome] {
+        guard lastPreviewChannel == channel else { return [:] }
+        return lastReport?.outcomes ?? [:]
     }
     func setChannel(_ channel: NotificationChannel, enabled: Bool) { preferences.set(channel, enabled: enabled) }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }
@@ -310,6 +315,7 @@ final class AppModel {
             windows.stop()
         case .shortcutCoaching:
             detector.stop()
+            presenter.dismissAll()
         }
     }
 }

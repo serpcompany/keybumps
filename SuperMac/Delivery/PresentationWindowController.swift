@@ -10,13 +10,18 @@ protocol KeyboardEventMonitoring: AnyObject {
 
 @MainActor
 final class LocalKeyboardEventMonitor: KeyboardEventMonitoring {
-    private var token: Any?
+    private var localToken: Any?
+    private var globalToken: Any?
 
     func startDismissalHandler(_ handler: @escaping () -> Bool) {
-        guard token == nil else { return }
-        token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        guard localToken == nil, globalToken == nil else { return }
+        localToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard Self.isDismissalEvent(event) else { return event }
             return handler() ? nil : event
+        }
+        globalToken = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            guard Self.isDismissalEvent(event) else { return }
+            Task { @MainActor in _ = handler() }
         }
     }
 
@@ -25,19 +30,30 @@ final class LocalKeyboardEventMonitor: KeyboardEventMonitoring {
     }
 
     func stop() {
-        guard let token else { return }
-        NSEvent.removeMonitor(token)
-        self.token = nil
+        if let localToken { NSEvent.removeMonitor(localToken) }
+        if let globalToken { NSEvent.removeMonitor(globalToken) }
+        localToken = nil
+        globalToken = nil
+    }
+}
+
+@MainActor
+private final class PresentationSession {
+    let panel: NSPanel
+    var dismissalTask: Task<Void, Never>?
+    var remainingDismissalTime: TimeInterval
+    var dismissalStartedAt: Date?
+    var swipeTranslation: NSSize = .zero
+
+    init(panel: NSPanel, remainingDismissalTime: TimeInterval) {
+        self.panel = panel
+        self.remainingDismissalTime = remainingDismissalTime
     }
 }
 
 @MainActor
 final class PresentationWindowController {
-    private var panels: [NotificationChannel: NSPanel] = [:]
-    private var dismissalTasks: [NotificationChannel: Task<Void, Never>] = [:]
-    private var remainingDismissalTime: [NotificationChannel: TimeInterval] = [:]
-    private var dismissalStartedAt: [NotificationChannel: Date] = [:]
-    private var swipeTranslations: [NotificationChannel: NSSize] = [:]
+    private var sessions: [NotificationChannel: PresentationSession] = [:]
     private var scrollMonitor: Any?
     private var localScrollMonitor: Any?
     private let keyboardMonitor: any KeyboardEventMonitoring
@@ -45,6 +61,189 @@ final class PresentationWindowController {
     init(keyboardMonitor: (any KeyboardEventMonitoring)? = nil) {
         let keyboardMonitor = keyboardMonitor ?? LocalKeyboardEventMonitor()
         self.keyboardMonitor = keyboardMonitor
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            stopInteractionMonitors()
+        }
+    }
+
+    func show(event: CoachingEvent, style: NotificationChannel) {
+        guard style != .nativeBanner,
+              style != .dockBadge,
+              style != .dockBounce,
+              style != .sound else { return }
+
+        dismiss(style)
+        if let exclusiveGroup = PresentationOverlapPolicy.exclusiveGroup(containing: style) {
+            for conflictingStyle in exclusiveGroup where conflictingStyle != style {
+                dismiss(conflictingStyle)
+            }
+        }
+
+        let size = panelSize(for: style)
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .statusBar
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.collectionBehavior = panelCollectionBehavior
+        panel.hidesOnDeactivate = false
+        panel.isMovable = false
+        panel.contentView = NSHostingView(rootView: CoachingPresentationView(
+            event: event,
+            style: style,
+            onDismiss: dismissalAction(for: style),
+            onHoverChanged: { [weak self] isHovering in
+                self?.setHovering(isHovering, style: style)
+            }
+        ))
+        panel.setFrameOrigin(origin(for: style, size: size, event: event))
+        panel.orderFrontRegardless()
+        let session = PresentationSession(
+            panel: panel,
+            remainingDismissalTime: dismissalDelay(for: style)
+        )
+        sessions[style] = session
+        startInteractionMonitorsIfNeeded()
+        scheduleDismissal(style, session: session, after: session.remainingDismissalTime)
+    }
+
+    @discardableResult
+    func handleDismissalCommand() -> Bool {
+        guard !sessions.isEmpty else { return false }
+        dismissAll()
+        return true
+    }
+
+    func dismissAll() {
+        for style in Array(sessions.keys) {
+            dismiss(style)
+        }
+    }
+
+    var activeChannels: Set<NotificationChannel> {
+        Set(sessions.keys)
+    }
+
+    var scheduledDismissalChannels: Set<NotificationChannel> {
+        Set(sessions.compactMap { $0.value.dismissalTask == nil ? nil : $0.key })
+    }
+
+    func panelSize(for style: NotificationChannel) -> NSSize {
+        switch style {
+        case .topRightToast: NSSize(width: 360, height: 92)
+        case .topCenterShelf: NSSize(width: 500, height: 112)
+        case .pointerCard: NSSize(width: 320, height: 92)
+        case .statusFeedback: NSSize(width: 300, height: 76)
+        case .decisionBanner: NSSize(width: 700, height: 128)
+        default: NSSize(width: 360, height: 92)
+        }
+    }
+
+    var panelCollectionBehavior: NSWindow.CollectionBehavior {
+        [.canJoinAllSpaces, .fullScreenAuxiliary]
+    }
+
+    func dismissalDelayNanoseconds(for style: NotificationChannel) -> UInt64 {
+        UInt64(dismissalDelay(for: style) * 1_000_000_000)
+    }
+
+    func dismiss(_ style: NotificationChannel) {
+        guard let session = sessions.removeValue(forKey: style) else { return }
+        session.dismissalTask?.cancel()
+        session.dismissalTask = nil
+        session.panel.orderOut(nil)
+        if sessions.isEmpty { stopInteractionMonitors() }
+    }
+
+    func dismissalAction(for style: NotificationChannel) -> () -> Void {
+        { [weak self] in self?.dismiss(style) }
+    }
+
+    func setHovering(_ isHovering: Bool, style: NotificationChannel, now: Date = Date()) {
+        guard let session = sessions[style] else { return }
+        if isHovering {
+            guard let startedAt = session.dismissalStartedAt else { return }
+            session.remainingDismissalTime = ToastDismissalPolicy.remainingDuration(
+                initial: session.remainingDismissalTime,
+                elapsed: now.timeIntervalSince(startedAt)
+            )
+            session.dismissalStartedAt = nil
+            session.dismissalTask?.cancel()
+            session.dismissalTask = nil
+        } else if session.dismissalTask == nil {
+            scheduleDismissal(
+                style,
+                session: session,
+                after: session.remainingDismissalTime,
+                now: now
+            )
+        }
+    }
+
+    var pausedDismissalChannels: Set<NotificationChannel> {
+        Set(sessions.compactMap {
+            $0.value.dismissalStartedAt == nil && $0.value.dismissalTask == nil ? $0.key : nil
+        })
+    }
+
+    private func dismissalDelay(for style: NotificationChannel) -> TimeInterval {
+        style == .decisionBanner ? 8 : 4
+    }
+
+    private func scheduleDismissal(
+        _ style: NotificationChannel,
+        session: PresentationSession,
+        after delay: TimeInterval,
+        now: Date = Date()
+    ) {
+        guard delay > 0 else {
+            dismiss(style)
+            return
+        }
+        session.remainingDismissalTime = delay
+        session.dismissalStartedAt = now
+        session.dismissalTask?.cancel()
+        session.dismissalTask = Task { [weak self, weak session] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, let session else { return }
+            guard sessions[style] === session else { return }
+            dismiss(style)
+        }
+    }
+
+    private func handleTrackpadScroll(
+        deltaX: CGFloat,
+        deltaY: CGFloat,
+        phase: NSEvent.Phase,
+        location: NSPoint
+    ) {
+        guard let (style, session) = sessions.first(where: { $0.value.panel.frame.contains(location) }) else { return }
+        if phase == .began {
+            session.swipeTranslation = .zero
+        }
+        session.swipeTranslation = NSSize(
+            width: session.swipeTranslation.width + deltaX,
+            height: session.swipeTranslation.height + deltaY
+        )
+        if phase == .ended || phase == .cancelled {
+            let translation = session.swipeTranslation
+            session.swipeTranslation = .zero
+            if ToastDismissalPolicy.shouldDismiss(for: translation) {
+                dismiss(style)
+            }
+        }
+    }
+
+    private func startInteractionMonitorsIfNeeded() {
+        guard sessions.count == 1 else { return }
         keyboardMonitor.startDismissalHandler { [weak self] in
             self?.handleDismissalCommand() ?? false
         }
@@ -73,187 +272,12 @@ final class PresentationWindowController {
         }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            keyboardMonitor.stop()
-            if let scrollMonitor {
-                NSEvent.removeMonitor(scrollMonitor)
-            }
-            if let localScrollMonitor {
-                NSEvent.removeMonitor(localScrollMonitor)
-            }
-        }
-    }
-
-    func show(event: CoachingEvent, style: NotificationChannel) {
-        guard style != .nativeBanner,
-              style != .dockBadge,
-              style != .dockBounce,
-              style != .sound else { return }
-
-        dismissalTasks[style]?.cancel()
-        dismiss(style)
-        if let exclusiveGroup = PresentationOverlapPolicy.exclusiveGroup(containing: style) {
-            for conflictingStyle in exclusiveGroup where conflictingStyle != style {
-                dismiss(conflictingStyle)
-            }
-        }
-
-        let size = panelSize(for: style)
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .statusBar
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.collectionBehavior = panelCollectionBehavior
-        panel.hidesOnDeactivate = false
-        panel.isMovable = false
-        panel.contentView = NSHostingView(rootView: CoachingPresentationView(
-            event: event,
-            style: style,
-            onDismiss: dismissalAction(for: style),
-            onHoverChanged: { [weak self] isHovering in
-                self?.setHovering(isHovering, style: style)
-            },
-            onSwipeEnded: { [weak self] translation in
-                guard ToastDismissalPolicy.shouldDismiss(for: translation) else { return }
-                self?.dismiss(style)
-            }
-        ))
-        panel.setFrameOrigin(origin(for: style, size: size, event: event))
-        panel.orderFrontRegardless()
-        panels[style] = panel
-
-        scheduleDismissal(style, panel: panel, after: dismissalDelay(for: style))
-    }
-
-    @discardableResult
-    func handleDismissalCommand() -> Bool {
-        guard !panels.isEmpty else { return false }
-        dismissAll()
-        return true
-    }
-
-    func dismissAll() {
-        for style in Array(panels.keys) {
-            dismiss(style)
-        }
-    }
-
-    var activeChannels: Set<NotificationChannel> {
-        Set(panels.keys)
-    }
-
-    var scheduledDismissalChannels: Set<NotificationChannel> {
-        Set(dismissalTasks.keys)
-    }
-
-    func panelSize(for style: NotificationChannel) -> NSSize {
-        switch style {
-        case .topRightToast: NSSize(width: 360, height: 92)
-        case .topCenterShelf: NSSize(width: 500, height: 112)
-        case .pointerCard: NSSize(width: 320, height: 92)
-        case .statusFeedback: NSSize(width: 300, height: 76)
-        case .decisionBanner: NSSize(width: 700, height: 128)
-        default: NSSize(width: 360, height: 92)
-        }
-    }
-
-    var panelCollectionBehavior: NSWindow.CollectionBehavior {
-        [.canJoinAllSpaces, .fullScreenAuxiliary]
-    }
-
-    func dismissalDelayNanoseconds(for style: NotificationChannel) -> UInt64 {
-        UInt64(dismissalDelay(for: style) * 1_000_000_000)
-    }
-
-    func dismiss(_ style: NotificationChannel) {
-        dismissalTasks[style]?.cancel()
-        dismissalTasks[style] = nil
-        remainingDismissalTime[style] = nil
-        dismissalStartedAt[style] = nil
-        swipeTranslations[style] = nil
-        panels[style]?.orderOut(nil)
-        panels[style] = nil
-    }
-
-    func dismissalAction(for style: NotificationChannel) -> () -> Void {
-        { [weak self] in self?.dismiss(style) }
-    }
-
-    func setHovering(_ isHovering: Bool, style: NotificationChannel, now: Date = Date()) {
-        guard let panel = panels[style] else { return }
-        if isHovering {
-            guard let startedAt = dismissalStartedAt[style],
-                  let remaining = remainingDismissalTime[style] else { return }
-            remainingDismissalTime[style] = ToastDismissalPolicy.remainingDuration(
-                initial: remaining,
-                elapsed: now.timeIntervalSince(startedAt)
-            )
-            dismissalStartedAt[style] = nil
-            dismissalTasks[style]?.cancel()
-            dismissalTasks[style] = nil
-        } else if dismissalTasks[style] == nil,
-                  let remaining = remainingDismissalTime[style] {
-            scheduleDismissal(style, panel: panel, after: remaining, now: now)
-        }
-    }
-
-    var pausedDismissalChannels: Set<NotificationChannel> {
-        Set(remainingDismissalTime.keys).subtracting(dismissalTasks.keys)
-    }
-
-    private func dismissalDelay(for style: NotificationChannel) -> TimeInterval {
-        style == .decisionBanner ? 8 : 4
-    }
-
-    private func scheduleDismissal(
-        _ style: NotificationChannel,
-        panel: NSPanel,
-        after delay: TimeInterval,
-        now: Date = Date()
-    ) {
-        guard delay > 0 else {
-            dismiss(style)
-            return
-        }
-        remainingDismissalTime[style] = delay
-        dismissalStartedAt[style] = now
-        dismissalTasks[style]?.cancel()
-        dismissalTasks[style] = Task { [weak self, weak panel] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self, let panel else { return }
-            guard panels[style] === panel else { return }
-            dismiss(style)
-        }
-    }
-
-    private func handleTrackpadScroll(
-        deltaX: CGFloat,
-        deltaY: CGFloat,
-        phase: NSEvent.Phase,
-        location: NSPoint
-    ) {
-        guard let style = panels.first(where: { $0.value.frame.contains(location) })?.key else { return }
-        if phase == .began {
-            swipeTranslations[style] = .zero
-        }
-        let current = swipeTranslations[style] ?? .zero
-        swipeTranslations[style] = NSSize(
-            width: current.width + deltaX,
-            height: current.height + deltaY
-        )
-        if phase == .ended || phase == .cancelled {
-            let translation = swipeTranslations.removeValue(forKey: style) ?? .zero
-            if ToastDismissalPolicy.shouldDismiss(for: translation) {
-                dismiss(style)
-            }
-        }
+    private func stopInteractionMonitors() {
+        keyboardMonitor.stop()
+        if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+        if let localScrollMonitor { NSEvent.removeMonitor(localScrollMonitor) }
+        scrollMonitor = nil
+        localScrollMonitor = nil
     }
 
     private func origin(for style: NotificationChannel, size: NSSize, event: CoachingEvent) -> NSPoint {
@@ -309,7 +333,6 @@ struct CoachingPresentationView: View {
     let style: NotificationChannel
     let onDismiss: () -> Void
     var onHoverChanged: (Bool) -> Void = { _ in }
-    var onSwipeEnded: (NSSize) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var statusCompleted = false
 
@@ -337,12 +360,6 @@ struct CoachingPresentationView: View {
         .padding(4)
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 12)
-                .onEnded { value in
-                    onSwipeEnded(NSSize(width: value.translation.width, height: value.translation.height))
-                }
-        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Key Bump. \(event.actionTitle). Try \(event.shortcut) next time.")
         .task {

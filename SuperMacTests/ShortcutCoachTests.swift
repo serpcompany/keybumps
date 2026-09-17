@@ -152,6 +152,38 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertTrue(inbox.events.isEmpty)
     }
 
+    func testPreviewPlanAddsSelectedSoundWithoutDoublePlayingDirectSoundPreview() async {
+        XCTAssertEqual(
+            PreviewChannelPlan.channels(for: .topRightToast, selectedChannels: [.topRightToast]),
+            [.topRightToast]
+        )
+        XCTAssertEqual(
+            PreviewChannelPlan.channels(for: .topRightToast, selectedChannels: [.topRightToast, .sound]),
+            [.topRightToast, .sound]
+        )
+        XCTAssertEqual(
+            PreviewChannelPlan.channels(for: .sound, selectedChannels: [.sound]),
+            [.sound]
+        )
+
+        let inbox = InboxStore(persistence: MemoryPersistence())
+        let toast = SpyAdapter()
+        let sound = SpyAdapter()
+        let service = NotificationDeliveryService(
+            inbox: inbox,
+            adapters: [.topRightToast: toast, .sound: sound]
+        )
+
+        let combined = await service.preview(.sample, through: [.topRightToast, .sound])
+        XCTAssertEqual(combined, [.topRightToast: .delivered, .sound: .delivered])
+        XCTAssertEqual(toast.events.count, 1)
+        XCTAssertEqual(sound.events.count, 1)
+        XCTAssertTrue(inbox.events.isEmpty)
+
+        _ = await service.preview(.sample, through: PreviewChannelPlan.channels(for: .sound, selectedChannels: [.sound]))
+        XCTAssertEqual(sound.events.count, 2, "Direct Sound preview must play once, not once as both primary and companion")
+    }
+
     func testAppModelPublishesPermissionAndStatusSnapshotsAfterRequestsAndRetry() async {
         let suite = "ShortcutCoachTests-permissions-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -385,13 +417,53 @@ final class ShortcutCoachTests: XCTestCase {
         let keyboard = StubKeyboardEventMonitor()
         let controller = PresentationWindowController(keyboardMonitor: keyboard)
 
+        XCTAssertEqual(keyboard.startCount, 0)
+
         controller.show(event: .sample, style: .topRightToast)
         controller.show(event: .sample, style: .pointerCard)
+        XCTAssertEqual(keyboard.startCount, 1, "All active presentations share one Escape monitor")
         XCTAssertEqual(controller.activeChannels, [.topRightToast, .pointerCard])
         XCTAssertTrue(keyboard.sendDismissalCommand())
         XCTAssertTrue(controller.activeChannels.isEmpty)
         XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
+        XCTAssertEqual(keyboard.stopCount, 1, "The monitor must stop when the final panel closes")
         XCTAssertFalse(keyboard.sendDismissalCommand())
+    }
+
+    func testDismissingOneOfSeveralPanelsKeepsInteractionMonitorUntilTheLastCloses() {
+        let keyboard = StubKeyboardEventMonitor()
+        let controller = PresentationWindowController(keyboardMonitor: keyboard)
+        controller.show(event: .sample, style: .topRightToast)
+        controller.show(event: .sample, style: .pointerCard)
+
+        controller.dismiss(.topRightToast)
+        XCTAssertEqual(keyboard.stopCount, 0)
+        controller.dismiss(.pointerCard)
+        XCTAssertEqual(keyboard.stopCount, 1)
+    }
+
+    func testDisablingKeyBumpsDismissesPresentationsAndStopsInteractionMonitors() {
+        let suite = "ShortcutCoachTests-disable-presentations-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.didCompleteOnboarding = true
+        let keyboard = StubKeyboardEventMonitor()
+        let presenter = PresentationWindowController(keyboardMonitor: keyboard)
+        let model = AppModel(
+            releaseLane: .full,
+            preferences: preferences,
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            presenter: presenter
+        )
+        presenter.show(event: .sample, style: .topRightToast)
+
+        model.setCapability(.shortcutCoaching, enabled: false)
+
+        XCTAssertTrue(presenter.activeChannels.isEmpty)
+        XCTAssertEqual(keyboard.stopCount, 1)
     }
 
     func testLocalKeyboardMonitorRecognizesEscapeButPassesThroughOtherKeys() throws {
@@ -499,6 +571,25 @@ final class ShortcutCoachTests: XCTestCase {
 
         inbox.clear()
         XCTAssertTrue(persistence.stored.isEmpty)
+    }
+
+    func testKeyBumpsCopyShortcutUsesInjectedNamedPasteboardAndMarksRead() throws {
+        let persistence = MemoryPersistence()
+        let inbox = InboxStore(persistence: persistence)
+        let event = CoachingEvent(applicationName: "Fixture App", actionTitle: "Fixture Action", shortcut: "⌘⇧F")
+        try inbox.append(event)
+        let generalChangeCount = NSPasteboard.general.changeCount
+        let pasteboard = NSPasteboard(name: .init("SuperMacTests-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let action = KeyBumpsShortcutAction(
+            inbox: inbox,
+            pasteboard: PasteboardShortcutWriter(pasteboard: pasteboard)
+        )
+
+        XCTAssertTrue(action.copyShortcut(from: event))
+        XCTAssertEqual(pasteboard.string(forType: .string), "⌘⇧F")
+        XCTAssertTrue(try XCTUnwrap(inbox.events.first).isRead)
+        XCTAssertEqual(NSPasteboard.general.changeCount, generalChangeCount)
     }
 
     func testPreferencesDefaultToVisiblePresenceAndPersistChannelCombinations() {

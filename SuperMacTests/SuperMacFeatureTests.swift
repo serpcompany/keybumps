@@ -64,14 +64,24 @@ final class SuperMacFeatureTests: XCTestCase {
         )
     }
 
-    func testStatusItemSettingsUsesItsPersistentlyConfiguredWindowOpener() {
+    func testEveryMainWindowRouteReusesOneConfiguredOpener() {
         var openCount = 0
-        let controller = NativeStatusItemController()
-        controller.configureOpenMainWindow { openCount += 1 }
+        var activationCount = 0
+        let router = MainWindowRouter { activationCount += 1 }
+        router.configure { openCount += 1 }
+        let statusController = NativeStatusItemController(router: router)
+        let appDelegate = AppDelegate(mainWindowRouter: router)
 
-        controller.makeMenu().performActionForItem(at: 0)
+        statusController.makeMenu().performActionForItem(at: 0)
+        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: true))
+        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: false))
+        XCTAssertTrue(router.open()) // Command-comma uses this same route.
 
-        XCTAssertEqual(openCount, 1)
+        XCTAssertEqual(openCount, 4)
+        XCTAssertEqual(activationCount, 4)
+        NSWindow.allowsAutomaticWindowTabbing = true
+        AppDelegate.configureWindowBehavior()
+        XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
     }
 
     func testWindowShortcutCustomizationPersistsAndMovesDuplicateBinding() {
@@ -781,6 +791,16 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(state.tab, .search)
         XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyBumps])
         XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4"])
+        XCTAssertEqual(
+            CommandPaletteTab.allCases.map(\.labelPresentation),
+            [
+                CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
+                CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
+                CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Key Bumps")
+            ]
+        )
+        XCTAssertTrue(CommandPaletteTab.allCases.allSatisfy { $0.labelPresentation.systemImage == nil })
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
 
@@ -793,16 +813,18 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(state.selection, 0)
     }
 
-    func testKeyBumpsHistoryFilterMatchesActionApplicationAndShortcut() {
+    func testKeyBumpsHistoryContentCentralizesEnablementAndFiltering() {
         let events = [
             CoachingEvent(applicationName: "Finder", actionTitle: "Open New Window", shortcut: "⌘N"),
             CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
         ]
 
-        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "finder").map(\.applicationName), ["Finder"])
-        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "new tab").map(\.applicationName), ["Safari"])
-        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "⌘N").map(\.applicationName), ["Finder"])
-        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "  "), events)
+        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "finder", isEnabled: true).entries.map(\.applicationName), ["Finder"])
+        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "new tab", isEnabled: true).entries.map(\.applicationName), ["Safari"])
+        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "⌘N", isEnabled: true).entries.map(\.applicationName), ["Finder"])
+        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "  ", isEnabled: true), .entries(events))
+        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "", isEnabled: false), .disabled)
+        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: [], query: "", isEnabled: true), .empty)
     }
 
     func testMainWindowDisablesAutomaticTabbing() {
