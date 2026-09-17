@@ -307,6 +307,18 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertFalse(deniedInputMonitoring.isReady)
         XCTAssertEqual(deniedInputMonitoring.currentPermission, .inputMonitoring)
         XCTAssertTrue(deniedInputMonitoring.requiresRelaunch(.inputMonitoring))
+
+        let staleGrantedInputMonitoring = PermissionReadinessSnapshot.resolve(
+            enabledCapabilities: [.shortcutCoaching],
+            states: allGranted,
+            permissionsRequiringRelaunch: [.inputMonitoring],
+            selectedChannels: [],
+            notificationAuthorization: .authorized
+        )
+        XCTAssertFalse(staleGrantedInputMonitoring.isReady)
+        XCTAssertEqual(staleGrantedInputMonitoring.missingPermissions, [.inputMonitoring])
+        XCTAssertEqual(staleGrantedInputMonitoring.missingCount, 1)
+        XCTAssertEqual(staleGrantedInputMonitoring.currentPermission, .inputMonitoring)
     }
 
     func testPermissionRecoveryActionsNeverLeaveARequiredPermissionInert() {
@@ -965,15 +977,11 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
             [
-                CommandPaletteTabLabel(shortcut: "⌘1", name: "Search", systemImage: "magnifyingglass"),
-                CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard", systemImage: "clipboard"),
-                CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation", systemImage: "waveform"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Key Bumps", systemImage: "keyboard")
+                CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
+                CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
+                CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Key Bumps")
             ]
-        )
-        XCTAssertEqual(
-            CommandPaletteTab.allCases.map(\.labelPresentation.systemImage),
-            ["magnifyingglass", "clipboard", "waveform", "keyboard"]
         )
         XCTAssertEqual(
             CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },

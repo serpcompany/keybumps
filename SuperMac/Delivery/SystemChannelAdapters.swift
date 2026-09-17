@@ -46,6 +46,16 @@ struct NativeNotificationPayload: Equatable {
     }
 }
 
+enum SystemNotificationContentFactory {
+    static func makeContent(for payload: NativeNotificationPayload) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = payload.title
+        content.body = payload.body
+        content.userInfo = payload.userInfo
+        return content
+    }
+}
+
 @MainActor
 protocol NativeNotificationCenterClient {
     func authorizationStatus() async -> NativeNotificationAuthorization
@@ -79,11 +89,7 @@ final class SystemNativeNotificationCenterClient: NativeNotificationCenterClient
     }
 
     func add(identifier: String, payload: NativeNotificationPayload) async throws {
-        let content = UNMutableNotificationContent()
-        content.title = payload.title
-        content.body = payload.body
-        content.sound = .default
-        content.userInfo = payload.userInfo
+        let content = SystemNotificationContentFactory.makeContent(for: payload)
         try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
     }
 }

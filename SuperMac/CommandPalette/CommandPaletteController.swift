@@ -58,7 +58,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     }
 
     var labelPresentation: CommandPaletteTabLabel {
-        CommandPaletteTabLabel(shortcut: shortcutLabel, name: title, systemImage: systemImage)
+        CommandPaletteTabLabel(shortcut: shortcutLabel, name: title)
     }
 
     var primaryActionTitle: String? {
@@ -73,7 +73,6 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 struct CommandPaletteTabLabel: Equatable {
     let shortcut: String
     let name: String
-    let systemImage: String
 }
 
 enum KeyBumpsHistoryContent: Equatable {
@@ -572,10 +571,8 @@ private struct PaletteTabBar: View {
                     select(tab)
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: tab.labelPresentation.systemImage)
-                            .foregroundStyle(.secondary)
-                        Text(tab.labelPresentation.name)
                         ShortcutKeycaps(shortcut: tab.labelPresentation.shortcut, compact: true)
+                        Text(tab.labelPresentation.name)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)

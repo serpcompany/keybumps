@@ -338,6 +338,22 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(center.added.first?.payload.destination, .keyBumpsHistory)
     }
 
+    func testNativeBannerContentDoesNotForceTheSeparateSoundChannel() {
+        let payload = NativeNotificationPayload(
+            title: "Open new window",
+            body: "Finder · ⌘N",
+            destination: .keyBumpsHistory
+        )
+
+        let content = SystemNotificationContentFactory.makeContent(for: payload)
+
+        XCTAssertNil(content.sound)
+        XCTAssertEqual(
+            content.userInfo[NativeNotificationPayload.destinationKey] as? String,
+            AppShellDestination.keyBumpsHistory.rawValue
+        )
+    }
+
     func testNativeNotificationPreviewReportsDeliveryErrorWithoutPersistingHistory() async {
         let center = StubNativeNotificationCenter(status: .authorized)
         center.addError = TestError.expected

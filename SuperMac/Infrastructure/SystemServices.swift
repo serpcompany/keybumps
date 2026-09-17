@@ -184,7 +184,9 @@ struct PermissionReadinessSnapshot: Equatable {
     let notificationAuthorization: NativeNotificationAuthorization
 
     var missingPermissions: [MacPermission] {
-        requiredPermissions.filter { state(for: $0) != .granted }
+        requiredPermissions.filter {
+            state(for: $0) != .granted || permissionsRequiringRelaunch.contains($0)
+        }
     }
 
     var currentPermission: MacPermission? { missingPermissions.first }
