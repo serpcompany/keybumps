@@ -52,6 +52,7 @@ final class SystemNativeNotificationCenterClient: NativeNotificationCenterClient
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+        content.sound = .default
         try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
     }
 }

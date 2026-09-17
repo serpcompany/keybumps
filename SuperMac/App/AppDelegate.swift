@@ -8,14 +8,17 @@ extension Notification.Name {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.configureWindowBehavior()
         UNUserNotificationCenter.current().delegate = self
     }
 
+    static func configureWindowBehavior() {
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            NativeStatusItemController.shared.openSettings()
-        }
-        return true
+        NativeStatusItemController.shared.openSettings()
+        return false
     }
 
     func userNotificationCenter(

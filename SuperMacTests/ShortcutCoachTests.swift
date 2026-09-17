@@ -136,6 +136,22 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertTrue(inbox.events.isEmpty)
     }
 
+    func testSoundPreviewUsesTheConfiguredProductionAdapterWithoutPersistingHistory() async {
+        let inbox = InboxStore(persistence: MemoryPersistence())
+        var playedName: NSSound.Name?
+        let adapter = SoundAdapter { name in
+            playedName = name
+            return true
+        }
+        let service = NotificationDeliveryService(inbox: inbox, adapters: [.sound: adapter])
+
+        let outcome = await service.preview(.sample, through: .sound)
+
+        XCTAssertEqual(outcome, .delivered)
+        XCTAssertEqual(playedName, NSSound.Name("Glass"))
+        XCTAssertTrue(inbox.events.isEmpty)
+    }
+
     func testAppModelPublishesPermissionAndStatusSnapshotsAfterRequestsAndRetry() async {
         let suite = "ShortcutCoachTests-permissions-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -418,7 +434,6 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(controller.activeChannels, [.topRightToast, .decisionBanner])
         XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast, .decisionBanner])
 
-        controller.show(event: .sample, style: .cursorHalo)
         controller.show(event: .sample, style: .pointerCard)
         XCTAssertEqual(controller.activeChannels, [.topRightToast, .decisionBanner, .pointerCard])
     }
@@ -432,6 +447,37 @@ final class ShortcutCoachTests: XCTestCase {
 
         XCTAssertTrue(controller.activeChannels.isEmpty)
         XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
+    }
+
+    func testHoverPausesAndResumesTheExistingDismissalCountdown() {
+        let controller = PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor())
+        controller.show(event: .sample, style: .topRightToast)
+        XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast])
+
+        controller.setHovering(true, style: .topRightToast)
+        XCTAssertEqual(controller.pausedDismissalChannels, [.topRightToast])
+        XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
+
+        controller.setHovering(false, style: .topRightToast)
+        XCTAssertTrue(controller.pausedDismissalChannels.isEmpty)
+        XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast])
+    }
+
+    func testHoverTimingPreservesRemainingDurationInsteadOfResetting() {
+        XCTAssertEqual(
+            ToastDismissalPolicy.remainingDuration(initial: 4, elapsed: 1.25),
+            2.75,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(ToastDismissalPolicy.remainingDuration(initial: 2, elapsed: 7), 0)
+        XCTAssertEqual(ToastDismissalPolicy.remainingDuration(initial: 2, elapsed: -1), 2)
+    }
+
+    func testOnlyIntentionalHorizontalSwipesDismissToasts() {
+        XCTAssertTrue(ToastDismissalPolicy.shouldDismiss(for: NSSize(width: 70, height: 8)))
+        XCTAssertTrue(ToastDismissalPolicy.shouldDismiss(for: NSSize(width: -70, height: 8)))
+        XCTAssertFalse(ToastDismissalPolicy.shouldDismiss(for: NSSize(width: 40, height: 2)))
+        XCTAssertFalse(ToastDismissalPolicy.shouldDismiss(for: NSSize(width: 70, height: 90)))
     }
 
     func testInboxUnreadAndPersistenceLifecycle() throws {
@@ -473,6 +519,19 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(restored.selectedChannels, [.dockBadge, .sound])
     }
 
+    func testLegacyCursorHaloSelectionIsRemovedAndRewritten() {
+        let suite = "ShortcutCoachTests-remove-cursor-halo-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(["cursorHalo", NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.selectedChannels, [.sound])
+        XCTAssertEqual(defaults.stringArray(forKey: "selectedNotificationChannels"), ["sound"])
+        XCTAssertFalse(NotificationChannel.allCases.map(\.rawValue).contains("cursorHalo"))
+    }
+
     func testSelectingAnExclusiveChannelDisablesItsConflictingPeers() {
         let suite = "ShortcutCoachTests-overlap-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -489,7 +548,6 @@ final class ShortcutCoachTests: XCTestCase {
             [.decisionBanner]
         )
 
-        preferences.set(.cursorHalo, enabled: true)
         preferences.set(.pointerCard, enabled: true)
         XCTAssertEqual(
             preferences.selectedChannels.intersection(PresentationOverlapPolicy.pointerChannels),
@@ -505,7 +563,7 @@ final class ShortcutCoachTests: XCTestCase {
             NotificationChannel.statusFeedback.rawValue,
             NotificationChannel.topCenterShelf.rawValue,
             NotificationChannel.decisionBanner.rawValue,
-            NotificationChannel.cursorHalo.rawValue,
+            "cursorHalo",
             NotificationChannel.pointerCard.rawValue,
             NotificationChannel.sound.rawValue
         ], forKey: "selectedNotificationChannels")

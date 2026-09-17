@@ -54,6 +54,7 @@ final class AppModel {
     private(set) var isAccessibilityTrusted = false
     private(set) var isInputMonitoringAuthorized = false
     private(set) var lastReport: DeliveryReport?
+    private(set) var lastPreviewChannel: NotificationChannel?
     private(set) var isStarted = false
     private(set) var isPermissionWalkthroughActive = false
     var unreadCount: Int { inbox.unreadCount }
@@ -82,7 +83,9 @@ final class AppModel {
         commandPalette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
-            dictationService: dictation
+            dictationService: dictation,
+            inbox: inbox,
+            preferences: preferences
         )
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .dockBadge: DockBadgeAdapter { inbox.unreadCount }, .dockBounce: DockBounceAdapter(), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
@@ -278,7 +281,12 @@ final class AppModel {
     func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
     func previewSample(channel: NotificationChannel) async {
         let outcome = await delivery.preview(.sample, through: channel)
+        lastPreviewChannel = channel
         lastReport = DeliveryReport(eventID: CoachingEvent.sample.id, inboxRecorded: false, outcomes: [channel: outcome])
+    }
+    func previewOutcome(for channel: NotificationChannel) -> DeliveryOutcome? {
+        guard lastPreviewChannel == channel else { return nil }
+        return lastReport?.outcomes[channel]
     }
     func setChannel(_ channel: NotificationChannel, enabled: Bool) { preferences.set(channel, enabled: enabled) }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }

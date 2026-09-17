@@ -8,7 +8,6 @@ final class PresentationEvidenceTests: XCTestCase {
     private let visualChannels: [NotificationChannel] = [
         .topRightToast,
         .topCenterShelf,
-        .cursorHalo,
         .pointerCard,
         .statusFeedback,
         .decisionBanner
@@ -42,7 +41,6 @@ final class PresentationEvidenceTests: XCTestCase {
 
         XCTAssertEqual(controller.panelSize(for: .topRightToast), NSSize(width: 360, height: 92))
         XCTAssertEqual(controller.panelSize(for: .topCenterShelf), NSSize(width: 500, height: 112))
-        XCTAssertEqual(controller.panelSize(for: .cursorHalo), NSSize(width: 120, height: 120))
         XCTAssertEqual(controller.panelSize(for: .pointerCard), NSSize(width: 320, height: 92))
         XCTAssertEqual(controller.panelSize(for: .statusFeedback), NSSize(width: 300, height: 76))
         XCTAssertEqual(controller.panelSize(for: .decisionBanner), NSSize(width: 700, height: 128))
@@ -61,15 +59,6 @@ final class PresentationEvidenceTests: XCTestCase {
         )
 
         XCTAssertTrue(secondaryVisible.contains(pointer))
-        XCTAssertEqual(
-            PresentationLayout.origin(
-                for: .cursorHalo,
-                size: NSSize(width: 120, height: 120),
-                visibleFrame: secondaryVisible,
-                pointer: pointer
-            ),
-            NSPoint(x: 1_740, y: 390)
-        )
         XCTAssertEqual(
             PresentationLayout.origin(
                 for: .pointerCard,

@@ -6,7 +6,7 @@ struct SuperMacApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup(ReleaseLane.current.productName, id: "main") {
+        Window(ReleaseLane.current.productName, id: "main") {
             SettingsRootView()
                 .environment(model)
                 .task {

@@ -78,7 +78,7 @@ The capabilities are:
 4. Window Management
 5. Key Bumps
 
-All begin enabled. Settings/Home is a readiness dashboard with truthful status and setup/open actions. Enable/disable controls live in each capability's own sidebar screen. Disabling a capability immediately stops the resources it actually owns, such as monitors, panels, recordings, and global shortcuts.
+All begin enabled. Settings/Setup is a readiness dashboard with truthful status and setup/open actions. Enable/disable controls live in each capability's own sidebar screen. Disabling a capability immediately stops the resources it actually owns, such as monitors, panels, recordings, and global shortcuts.
 
 ## Required user surfaces
 
@@ -86,7 +86,7 @@ All begin enabled. Settings/Home is a readiness dashboard with truthful status a
 
 Use a native macOS sidebar with these conceptual destinations:
 
-- Home
+- Setup
 - Quick Search
 - Clipboard History
 - Dictation
@@ -98,7 +98,7 @@ Use a native macOS sidebar with these conceptual destinations:
 
 Exact labels, order, and visual polish are reversible implementation details. The window must remain understandable without documentation.
 
-Clicking the Dock icon opens Settings/Home. SuperMac registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
+Clicking the Dock icon opens the single reusable Settings/Setup window. SuperMac registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
 
 ### Menu bar
 
@@ -133,7 +133,7 @@ Detect running Alfred, Rectangle, and Superwhisper instances that own the select
 
 ### Shared Command Palette
 
-Quick Search, Clipboard History, and Dictation History share one original SuperMac command palette inspired by Alfred's compact launcher and Raycast's dense keyboard-first hierarchy. Search is the default tab; Clipboard and Dictation are peer tabs. A single dominant input filters the active tab, arrow keys move selection, Return performs the primary action, Escape closes the palette, and Command-1/2/3 switch tabs.
+Quick Search, Clipboard History, Dictation History, and Key Bumps History share one original SuperMac command palette inspired by Alfred's compact launcher and Raycast's dense keyboard-first hierarchy. Search is the default tab; Clipboard, Dictation, and Key Bumps are peer tabs. Tab controls show only their Command-1/2/3/4 shortcut and name. A single dominant input filters the active tab, arrow keys move selection, Return performs the primary action, Escape closes the palette, and Command-1/2/3/4 switch tabs.
 
 Command-Space opens the palette on Search. Shift-Command-Space opens the same palette on Clipboard. The Dictation settings screen opens it on Dictation. Reference product names, assets, themes, proprietary interactions, and broader feature sets remain excluded.
 
@@ -380,7 +380,7 @@ Completion criterion: a fresh clone can build and launch a signed empty SuperMac
 
 ### Phase 1 — Shared shell
 
-Build Settings/Home, capability switches, minimal menu, Dock behavior, launch at login, shared shortcut registry, permission coordinator, and development adapters for licensing/updating.
+Build Settings/Setup, capability switches, minimal menu, Dock behavior, launch at login, shared shortcut registry, permission coordinator, and development adapters for licensing/updating.
 
 Completion criterion: the shell relaunches with stable settings, capabilities correctly acquire/release placeholder bindings, and permission states remain truthful.
 
@@ -473,7 +473,7 @@ The functional MVP is complete when one stable signed SuperMac build, with the f
 - `Option-Space` records, transcribes locally, and inserts dictated text; Escape cancels.
 - every assigned Rectangle shortcut and selected drag-to-snap behavior works.
 - current supported Finder and Chrome actions generate correct key bumps.
-- Home switches stop and restart each capability without duplicate hotkeys or monitors.
+- Capability switches stop and restart each capability without duplicate hotkeys or monitors.
 - skipped permissions remain recoverable and do not disable unrelated capabilities.
 - quitting/relaunching preserves intended preferences and histories.
 - no user content is sent over the network or written into logs/evidence.

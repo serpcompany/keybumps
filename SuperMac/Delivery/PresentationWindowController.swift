@@ -35,6 +35,11 @@ final class LocalKeyboardEventMonitor: KeyboardEventMonitoring {
 final class PresentationWindowController {
     private var panels: [NotificationChannel: NSPanel] = [:]
     private var dismissalTasks: [NotificationChannel: Task<Void, Never>] = [:]
+    private var remainingDismissalTime: [NotificationChannel: TimeInterval] = [:]
+    private var dismissalStartedAt: [NotificationChannel: Date] = [:]
+    private var swipeTranslations: [NotificationChannel: NSSize] = [:]
+    private var scrollMonitor: Any?
+    private var localScrollMonitor: Any?
     private let keyboardMonitor: any KeyboardEventMonitoring
 
     init(keyboardMonitor: (any KeyboardEventMonitoring)? = nil) {
@@ -43,11 +48,40 @@ final class PresentationWindowController {
         keyboardMonitor.startDismissalHandler { [weak self] in
             self?.handleDismissalCommand() ?? false
         }
+        scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            let deltaX = event.scrollingDeltaX
+            let deltaY = event.scrollingDeltaY
+            let phase = event.phase
+            let location = NSEvent.mouseLocation
+            Task { @MainActor in
+                self?.handleTrackpadScroll(
+                    deltaX: deltaX,
+                    deltaY: deltaY,
+                    phase: phase,
+                    location: location
+                )
+            }
+        }
+        localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            self?.handleTrackpadScroll(
+                deltaX: event.scrollingDeltaX,
+                deltaY: event.scrollingDeltaY,
+                phase: event.phase,
+                location: NSEvent.mouseLocation
+            )
+            return event
+        }
     }
 
     deinit {
         MainActor.assumeIsolated {
             keyboardMonitor.stop()
+            if let scrollMonitor {
+                NSEvent.removeMonitor(scrollMonitor)
+            }
+            if let localScrollMonitor {
+                NSEvent.removeMonitor(localScrollMonitor)
+            }
         }
     }
 
@@ -75,27 +109,27 @@ final class PresentationWindowController {
         panel.level = .statusBar
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = style != .cursorHalo
+        panel.hasShadow = true
         panel.collectionBehavior = panelCollectionBehavior
         panel.hidesOnDeactivate = false
         panel.isMovable = false
         panel.contentView = NSHostingView(rootView: CoachingPresentationView(
             event: event,
             style: style,
-            onDismiss: dismissalAction(for: style)
+            onDismiss: dismissalAction(for: style),
+            onHoverChanged: { [weak self] isHovering in
+                self?.setHovering(isHovering, style: style)
+            },
+            onSwipeEnded: { [weak self] translation in
+                guard ToastDismissalPolicy.shouldDismiss(for: translation) else { return }
+                self?.dismiss(style)
+            }
         ))
         panel.setFrameOrigin(origin(for: style, size: size, event: event))
         panel.orderFrontRegardless()
         panels[style] = panel
 
-        dismissalTasks[style] = Task { [weak self, weak panel] in
-            guard let self else { return }
-            let delay = dismissalDelayNanoseconds(for: style)
-            try? await Task.sleep(nanoseconds: delay)
-            guard !Task.isCancelled else { return }
-            guard panels[style] === panel else { return }
-            dismiss(style)
-        }
+        scheduleDismissal(style, panel: panel, after: dismissalDelay(for: style))
     }
 
     @discardableResult
@@ -123,7 +157,6 @@ final class PresentationWindowController {
         switch style {
         case .topRightToast: NSSize(width: 360, height: 92)
         case .topCenterShelf: NSSize(width: 500, height: 112)
-        case .cursorHalo: NSSize(width: 120, height: 120)
         case .pointerCard: NSSize(width: 320, height: 92)
         case .statusFeedback: NSSize(width: 300, height: 76)
         case .decisionBanner: NSSize(width: 700, height: 128)
@@ -136,18 +169,91 @@ final class PresentationWindowController {
     }
 
     func dismissalDelayNanoseconds(for style: NotificationChannel) -> UInt64 {
-        style == .decisionBanner ? 8_000_000_000 : 4_000_000_000
+        UInt64(dismissalDelay(for: style) * 1_000_000_000)
     }
 
     func dismiss(_ style: NotificationChannel) {
         dismissalTasks[style]?.cancel()
         dismissalTasks[style] = nil
+        remainingDismissalTime[style] = nil
+        dismissalStartedAt[style] = nil
+        swipeTranslations[style] = nil
         panels[style]?.orderOut(nil)
         panels[style] = nil
     }
 
     func dismissalAction(for style: NotificationChannel) -> () -> Void {
         { [weak self] in self?.dismiss(style) }
+    }
+
+    func setHovering(_ isHovering: Bool, style: NotificationChannel, now: Date = Date()) {
+        guard let panel = panels[style] else { return }
+        if isHovering {
+            guard let startedAt = dismissalStartedAt[style],
+                  let remaining = remainingDismissalTime[style] else { return }
+            remainingDismissalTime[style] = ToastDismissalPolicy.remainingDuration(
+                initial: remaining,
+                elapsed: now.timeIntervalSince(startedAt)
+            )
+            dismissalStartedAt[style] = nil
+            dismissalTasks[style]?.cancel()
+            dismissalTasks[style] = nil
+        } else if dismissalTasks[style] == nil,
+                  let remaining = remainingDismissalTime[style] {
+            scheduleDismissal(style, panel: panel, after: remaining, now: now)
+        }
+    }
+
+    var pausedDismissalChannels: Set<NotificationChannel> {
+        Set(remainingDismissalTime.keys).subtracting(dismissalTasks.keys)
+    }
+
+    private func dismissalDelay(for style: NotificationChannel) -> TimeInterval {
+        style == .decisionBanner ? 8 : 4
+    }
+
+    private func scheduleDismissal(
+        _ style: NotificationChannel,
+        panel: NSPanel,
+        after delay: TimeInterval,
+        now: Date = Date()
+    ) {
+        guard delay > 0 else {
+            dismiss(style)
+            return
+        }
+        remainingDismissalTime[style] = delay
+        dismissalStartedAt[style] = now
+        dismissalTasks[style]?.cancel()
+        dismissalTasks[style] = Task { [weak self, weak panel] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, let panel else { return }
+            guard panels[style] === panel else { return }
+            dismiss(style)
+        }
+    }
+
+    private func handleTrackpadScroll(
+        deltaX: CGFloat,
+        deltaY: CGFloat,
+        phase: NSEvent.Phase,
+        location: NSPoint
+    ) {
+        guard let style = panels.first(where: { $0.value.frame.contains(location) })?.key else { return }
+        if phase == .began {
+            swipeTranslations[style] = .zero
+        }
+        let current = swipeTranslations[style] ?? .zero
+        swipeTranslations[style] = NSSize(
+            width: current.width + deltaX,
+            height: current.height + deltaY
+        )
+        if phase == .ended || phase == .cancelled {
+            let translation = swipeTranslations.removeValue(forKey: style) ?? .zero
+            if ToastDismissalPolicy.shouldDismiss(for: translation) {
+                dismiss(style)
+            }
+        }
     }
 
     private func origin(for style: NotificationChannel, size: NSSize, event: CoachingEvent) -> NSPoint {
@@ -188,8 +294,6 @@ enum PresentationLayout {
             return NSPoint(x: visible.maxX - size.width - 20, y: visible.maxY - size.height - 20)
         case .topCenterShelf, .decisionBanner, .statusFeedback:
             return NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 16)
-        case .cursorHalo:
-            return NSPoint(x: pointer.x - size.width / 2, y: pointer.y - size.height / 2)
         case .pointerCard:
             let x = min(max(pointer.x + 18, visible.minX), visible.maxX - size.width)
             let y = min(max(pointer.y - size.height / 2, visible.minY), visible.maxY - size.height)
@@ -204,46 +308,41 @@ struct CoachingPresentationView: View {
     let event: CoachingEvent
     let style: NotificationChannel
     let onDismiss: () -> Void
+    var onHoverChanged: (Bool) -> Void = { _ in }
+    var onSwipeEnded: (NSSize) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var statusCompleted = false
 
     var body: some View {
-        Group {
-            if style == .cursorHalo {
-                ZStack {
-                    Circle().stroke(.green.opacity(0.35), lineWidth: 12)
-                    Circle().stroke(.green, lineWidth: 3)
-                    Text(event.shortcut).font(.headline.monospaced()).padding(8).background(.regularMaterial, in: Capsule())
-                }
-                .padding(8)
-            } else if style == .decisionBanner {
-                HStack(spacing: 16) {
-                    Image(systemName: "keyboard.badge.ellipsis").font(.title)
-                    coachingCopy
-                    Spacer()
-                    Button("Not now", action: onDismiss)
-                    Button("Got it", action: onDismiss).buttonStyle(.borderedProminent)
-                }
-                .padding(18)
-                .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 18))
-            } else {
-                HStack(spacing: 14) {
-                    Image(systemName: statusImage)
-                        .font(.title2)
-                        .foregroundStyle(.green)
-                    coachingCopy
-                    Spacer(minLength: 8)
-                    Text(event.shortcut)
-                        .font(.title3.bold().monospaced())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .padding(16)
-                .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
+        HStack(spacing: 14) {
+            Image(systemName: statusImage)
+                .font(.title2)
+                .foregroundStyle(.green)
+            coachingCopy
+            Spacer(minLength: 18)
+            Text(event.shortcut)
+                .font(.title3.bold().monospaced())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .frame(width: 24, height: 24)
             }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Dismiss Key Bump")
         }
+        .padding(16)
+        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(4)
+        .contentShape(Rectangle())
+        .onHover(perform: onHoverChanged)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12)
+                .onEnded { value in
+                    onSwipeEnded(NSSize(width: value.translation.width, height: value.translation.height))
+                }
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Key Bump. \(event.actionTitle). Try \(event.shortcut) next time.")
         .task {
@@ -269,6 +368,19 @@ struct CoachingPresentationView: View {
 
     private var statusImage: String {
         style == .statusFeedback && !statusCompleted ? "ellipsis.circle" : style.systemImage
+    }
+}
+
+enum ToastDismissalPolicy {
+    static let minimumHorizontalSwipe: CGFloat = 60
+
+    static func remainingDuration(initial: TimeInterval, elapsed: TimeInterval) -> TimeInterval {
+        max(0, initial - max(0, elapsed))
+    }
+
+    static func shouldDismiss(for translation: NSSize) -> Bool {
+        abs(translation.width) >= minimumHorizontalSwipe
+            && abs(translation.width) > abs(translation.height)
     }
 }
 

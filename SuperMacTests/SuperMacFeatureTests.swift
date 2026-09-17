@@ -130,6 +130,8 @@ final class SuperMacFeatureTests: XCTestCase {
     func testKeyBumpsIsTheCanonicalUserFacingCapabilityName() {
         XCTAssertEqual(Capability.shortcutCoaching.title, "Key Bumps")
         XCTAssertEqual(SettingsSection.coaching.rawValue, "Key Bumps")
+        XCTAssertEqual(SettingsSection.setup.rawValue, "Setup")
+        XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
         XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Key Bumps"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
     }
@@ -280,27 +282,27 @@ final class SuperMacFeatureTests: XCTestCase {
 
     func testSettingsNavigationBackReturnsThroughVisitedScreensWithoutLooping() {
         var navigation = SettingsNavigationHistory()
-        XCTAssertEqual(navigation.selection, .home)
+        XCTAssertEqual(navigation.selection, .setup)
         XCTAssertFalse(navigation.canGoBack)
 
         navigation.navigate(to: .dictation)
         navigation.navigate(to: .permissions)
         navigation.navigate(to: .permissions)
-        XCTAssertEqual(navigation.backStack, [.home, .dictation])
+        XCTAssertEqual(navigation.backStack, [.setup, .dictation])
 
         navigation.goBack()
         XCTAssertEqual(navigation.selection, .dictation)
         navigation.goBack()
-        XCTAssertEqual(navigation.selection, .home)
+        XCTAssertEqual(navigation.selection, .setup)
         XCTAssertFalse(navigation.canGoBack)
 
         navigation.goBack()
-        XCTAssertEqual(navigation.selection, .home)
+        XCTAssertEqual(navigation.selection, .setup)
     }
 
     func testHomeGrantPermissionStartsTheRelevantFlowWithoutNavigating() {
         XCTAssertEqual(
-            HomeCapabilityAction.resolve(
+            SetupCapabilityAction.resolve(
                 capability: .dictation,
                 isEnabled: true,
                 missingPermissions: [.microphone, .speechRecognition]
@@ -308,7 +310,7 @@ final class SuperMacFeatureTests: XCTestCase {
             .beginPermissionWalkthrough(.dictation)
         )
         XCTAssertEqual(
-            HomeCapabilityAction.resolve(
+            SetupCapabilityAction.resolve(
                 capability: .windowManagement,
                 isEnabled: true,
                 missingPermissions: [.accessibility]
@@ -316,7 +318,7 @@ final class SuperMacFeatureTests: XCTestCase {
             .beginPermissionWalkthrough(.windowManagement)
         )
         XCTAssertEqual(
-            HomeCapabilityAction.resolve(
+            SetupCapabilityAction.resolve(
                 capability: .dictation,
                 isEnabled: false,
                 missingPermissions: [.microphone]
@@ -324,7 +326,7 @@ final class SuperMacFeatureTests: XCTestCase {
             .navigate(.dictation)
         )
         XCTAssertEqual(
-            HomeCapabilityAction.resolve(
+            SetupCapabilityAction.resolve(
                 capability: .quickSearch,
                 isEnabled: true,
                 missingPermissions: []
@@ -774,10 +776,13 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
     }
 
-    func testCommandPaletteHasTheThreeRequestedTabsWithSearchAsDefault() {
+    func testCommandPaletteHasTheFourRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
-        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation])
+        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyBumps])
+        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4"])
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
+        XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
 
         state.historyQuery = "private filter"
         state.selection = 3
@@ -786,6 +791,24 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(state.tab, .dictation)
         XCTAssertEqual(state.historyQuery, "")
         XCTAssertEqual(state.selection, 0)
+    }
+
+    func testKeyBumpsHistoryFilterMatchesActionApplicationAndShortcut() {
+        let events = [
+            CoachingEvent(applicationName: "Finder", actionTitle: "Open New Window", shortcut: "⌘N"),
+            CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
+        ]
+
+        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "finder").map(\.applicationName), ["Finder"])
+        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "new tab").map(\.applicationName), ["Safari"])
+        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "⌘N").map(\.applicationName), ["Finder"])
+        XCTAssertEqual(KeyBumpsHistoryFilter.entries(events, matching: "  "), events)
+    }
+
+    func testMainWindowDisablesAutomaticTabbing() {
+        NSWindow.allowsAutomaticWindowTabbing = true
+        AppDelegate.configureWindowBehavior()
+        XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
     }
 
     func testCommandPaletteKeepsItsWindowOpenForHistoryConfirmationSheet() {

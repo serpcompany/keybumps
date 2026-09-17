@@ -7,6 +7,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case search
     case clipboard
     case dictation
+    case keyBumps
 
     var id: String { rawValue }
 
@@ -15,6 +16,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search"
         case .clipboard: "Clipboard"
         case .dictation: "Dictation"
+        case .keyBumps: "Key Bumps"
         }
     }
 
@@ -23,6 +25,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "magnifyingglass"
         case .clipboard: "clipboard"
         case .dictation: "waveform"
+        case .keyBumps: "keyboard"
         }
     }
 
@@ -31,6 +34,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "⌘1"
         case .clipboard: "⌘2"
         case .dictation: "⌘3"
+        case .keyBumps: "⌘4"
         }
     }
 
@@ -39,6 +43,29 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search apps, files, and folders"
         case .clipboard: "Filter clipboard history"
         case .dictation: "Filter dictation history"
+        case .keyBumps: "Filter Key Bumps history"
+        }
+    }
+
+    static func matchingCommandKey(_ characters: String?) -> CommandPaletteTab? {
+        switch characters {
+        case "1": .search
+        case "2": .clipboard
+        case "3": .dictation
+        case "4": .keyBumps
+        default: nil
+        }
+    }
+}
+
+enum KeyBumpsHistoryFilter {
+    static func entries(_ events: [CoachingEvent], matching rawQuery: String) -> [CoachingEvent] {
+        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return events }
+        return events.filter {
+            $0.actionTitle.localizedCaseInsensitiveContains(query)
+                || $0.applicationName.localizedCaseInsensitiveContains(query)
+                || $0.shortcut.localizedCaseInsensitiveContains(query)
         }
     }
 }
@@ -74,6 +101,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
     private let dictationService: DictationService
+    private let inbox: InboxStore
+    private let preferences: AppPreferences
     private let state = CommandPaletteState()
     private var panel: NSPanel?
     private weak var destination: NSRunningApplication?
@@ -85,11 +114,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     init(
         clipboard: ClipboardHistoryService,
         dictationHistory: DictationHistoryService,
-        dictationService: DictationService
+        dictationService: DictationService,
+        inbox: InboxStore,
+        preferences: AppPreferences
     ) {
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService
+        self.inbox = inbox
+        self.preferences = preferences
     }
 
     func toggle(_ tab: CommandPaletteTab) {
@@ -162,6 +195,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 clipboard: clipboard,
                 dictationHistory: dictationHistory,
                 dictationService: dictationService,
+                inbox: inbox,
+                preferences: preferences,
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
@@ -220,11 +255,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard let self else { return event }
 
             if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
-                switch event.charactersIgnoringModifiers {
-                case "1": self.selectTab(.search); return nil
-                case "2": self.selectTab(.clipboard); return nil
-                case "3": self.selectTab(.dictation); return nil
-                default: break
+                if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers) {
+                    self.selectTab(tab)
+                    return nil
                 }
             }
 
@@ -288,6 +321,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             filteredClipboard.count
         case .dictation:
             filteredDictations.count
+        case .keyBumps:
+            filteredKeyBumps.count
         }
     }
 
@@ -304,6 +339,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         return reusableEntries.filter { $0.text.localizedCaseInsensitiveContains(query) }
     }
 
+    private var filteredKeyBumps: [CoachingEvent] {
+        guard preferences.enabledCapabilities.contains(.shortcutCoaching) else { return [] }
+        return KeyBumpsHistoryFilter.entries(inbox.events, matching: state.historyQuery)
+    }
+
     private func activateSelection(reveal: Bool) {
         switch state.tab {
         case .search:
@@ -318,6 +358,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let text = filteredDictations[state.selection].text
             guard !text.isEmpty else { return }
             paste(text, suppressClipboardHistory: true)
+        case .keyBumps:
+            guard filteredKeyBumps.indices.contains(state.selection) else { return }
+            inbox.markRead(filteredKeyBumps[state.selection].id)
         }
     }
 
@@ -369,6 +412,8 @@ private struct CommandPaletteView: View {
     @Bindable var clipboard: ClipboardHistoryService
     @Bindable var dictationHistory: DictationHistoryService
     @Bindable var dictationService: DictationService
+    @Bindable var inbox: InboxStore
+    @Bindable var preferences: AppPreferences
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
@@ -446,6 +491,13 @@ private struct CommandPaletteView: View {
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
+        case .keyBumps:
+            KeyBumpsResultsView(
+                entries: filteredKeyBumps,
+                selection: state.selection,
+                isEnabled: preferences.enabledCapabilities.contains(.shortcutCoaching),
+                choose: inbox.markRead
+            )
         }
     }
 
@@ -460,6 +512,10 @@ private struct CommandPaletteView: View {
         guard !query.isEmpty else { return dictationHistory.entries }
         return dictationHistory.entries.filter { $0.displayText.localizedCaseInsensitiveContains(query) }
     }
+
+    private var filteredKeyBumps: [CoachingEvent] {
+        KeyBumpsHistoryFilter.entries(inbox.events, matching: state.historyQuery)
+    }
 }
 
 private struct PaletteTabBar: View {
@@ -473,11 +529,10 @@ private struct PaletteTabBar: View {
                     select(tab)
                 } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: tab.systemImage)
-                        Text(tab.title)
                         Text(tab.shortcutLabel)
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
+                        Text(tab.title)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
@@ -498,6 +553,38 @@ private struct PaletteTabBar: View {
         .padding(.vertical, 10)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Palette tabs")
+    }
+}
+
+private struct KeyBumpsResultsView: View {
+    let entries: [CoachingEvent]
+    let selection: Int
+    let isEnabled: Bool
+    let choose: (UUID) -> Void
+
+    var body: some View {
+        PaletteResultsContainer {
+            if !isEnabled {
+                PaletteEmptyState(title: "Key Bumps is turned off", systemImage: "keyboard")
+            } else if entries.isEmpty {
+                PaletteEmptyState(title: "No matching Key Bumps", systemImage: "keyboard")
+            } else {
+                List(Array(entries.enumerated()), id: \.element.id) { index, event in
+                    Button { choose(event.id) } label: {
+                        CoachingEventRow(event: event)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .listRowInsets(.init())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            }
+        }
     }
 }
 
@@ -834,7 +921,7 @@ private struct PaletteFooter: View {
     var body: some View {
         HStack(spacing: 14) {
             Label("Select", systemImage: "arrow.up.arrow.down")
-            Label(tab == .search ? "Open" : "Paste", systemImage: "return")
+            Label(tab == .search ? "Open" : tab == .keyBumps ? "Mark Read" : "Paste", systemImage: "return")
             if tab == .search {
                 Label("Reveal", systemImage: "command")
             }

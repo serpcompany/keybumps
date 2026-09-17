@@ -17,13 +17,13 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 | --- | --- | --- | --- |
 | UJ-01 | First launch and onboarding | Runtime verified for the signed local build; onboarding completion persistence is automated. | Fresh installed-artifact run remains deferred until packaging. |
 | UJ-02 | Guided permission setup | Runtime verified for the ordered current-step UI and Accessibility helper; ordering, skipping, progress, URLs, drag payload, and accepted-drop dismissal are automated. | Owner must grant each permission and observe all four steps advance to completion. |
-| UJ-03 | Home readiness and recovery | Runtime verified for truthful Ready/Setup Needed states and working navigation/open actions. | Recheck after all permissions are granted. |
+| UJ-03 | Setup readiness and recovery | Runtime verified for truthful Ready/Setup Needed states and working navigation/open actions. | Recheck after all permissions are granted. |
 | UJ-04 | Quick Search | Runtime verified for opening, focus, a real installed-app result, launch, and Escape dismissal; palette state is automated. | Physical `Command-Space`, file/folder open, Command-Return reveal, outside-click dismissal, and focus return need owner acceptance. |
 | UJ-05 | Clipboard History | Signed runtime panel opening and bounded local-store behavior are verified; retention, duplicate collapse, and persistence are automated. | Private-content selection/paste, deletion, clearing, restart, and disabled monitoring need owner acceptance. |
 | UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, temporary global Escape registration, and recovery state have automated coverage. | Physical Escape during English/Japanese recording, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
 | UJ-07 | Window Management | Exact selected shortcut map, customization, persistence, representative geometry, drag guards, and restore behavior are automated; shortcut recording UI has signed-runtime evidence. | Every assigned shortcut, repeated sizing, multi-display movement, and every drag-to-snap/unsnap region need owner acceptance with Accessibility enabled. |
 | UJ-08 | Key Bumps | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
-| UJ-09 | Shared Command Palette | Runtime verified for the Search surface and Escape; Search/Clipboard/Dictation tab order and reset behavior are automated. | Physical global routing and privacy-safe checks of Clipboard/Dictation selection and paste remain. |
+| UJ-09 | Shared Command Palette | Search/Clipboard/Dictation/Key Bumps tab order, Command-1/2/3/4 routing, filtering, and reset behavior are automated. | Physical global routing and privacy-safe checks of history selection and paste remain. |
 | UJ-10 | Capability controls and settings | Enablement persistence, shortcut release, teardown, and major settings routes are automated or runtime inspected. | Owner should confirm the combined app remains understandable during normal daily use. |
 | UJ-11 | Dock, menu bar, conflicts, and launch at login | Dock/sidebar shell and status-item contract are automated or runtime verified; the real Settings menu item routes through a persistent window opener; conflict detection is implemented. | Physical status-item selection, login-session relaunch, crowded-menu-bar visibility, and quitting each reference app from onboarding need owner acceptance. |
 | UJ-12 | Updates, licensing, and distribution | The local preview truthfully reports that updates are not configured and contains no fake activation. | Production licensing, update feed, notarization, packaging, installed artifact, and distribution are deferred. |
@@ -38,7 +38,7 @@ Precondition: no completed-onboarding preference for `com.serp.supermac`.
 4. Complete or skip the guided permission sequence.
 5. Review running Alfred, Rectangle, and Superwhisper conflicts; optionally quit the running process without uninstalling it or deleting its data.
 6. Finish onboarding.
-7. The Settings window opens to Home and subsequent launches do not repeat onboarding.
+7. The single reusable Settings window opens to Setup and subsequent launches do not repeat onboarding or create tabs.
 
 Expected recovery: a skipped permission keeps the related feature enabled but marks it Setup Needed and exposes a real recovery action.
 
@@ -56,18 +56,18 @@ The required order is Accessibility, Input Monitoring, Microphone, then Speech R
 
 The Permissions screen keeps `Review individual permissions` collapsed by default so guided setup is primary while individual recovery remains available.
 
-## UJ-03 — Home readiness and recovery
+## UJ-03 — Setup readiness and recovery
 
-1. Open Home from the Dock, menu bar Settings item, or sidebar.
+1. Open Setup from the Dock, menu bar Settings item, or sidebar. Repeated opens focus the same window.
 2. Each capability reports Ready, Setup Needed, or Off from actual capability and permission state.
 3. Quick Search and Clipboard open directly when ready.
-4. A feature's Grant Permission action begins that feature's permission sequence immediately without navigating away from Home.
+4. A feature's Grant Permission action begins that feature's permission sequence immediately without navigating away from Setup.
 5. Ready Dictation, Window Management, and Key Bumps route to their settings.
 6. Off features route to their capability screen, where they can be enabled.
 
 ## UJ-04 — Quick Search
 
-1. Press the configured Quick Search shortcut (`Command-Space` by default), or choose Open Quick Search from Home/Quick Search settings.
+1. Press the configured Quick Search shortcut (`Command-Space` by default), or choose Open Quick Search from Setup/Quick Search settings.
 2. Search opens on the Search tab with immediate input focus.
 3. Type an app, local file, or folder name.
 4. Use arrow keys to select a result.
@@ -79,7 +79,7 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 ## UJ-05 — Clipboard History
 
 1. Copy text or a supported image in ordinary applications while Clipboard History is enabled.
-2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Home/settings.
+2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Setup/settings.
 3. The shared palette opens on Clipboard with the newest item first and at most ten items. Image entries show a visual thumbnail and media label.
 4. Filter the local history, select a text or image item, and paste its original representation into the previously focused destination when safe.
 5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed. The confirmation appears over the palette; cancelling or confirming leaves the palette open and shows the resulting history state.
@@ -122,22 +122,24 @@ Disabling Window Management stops drag monitoring and releases every owned windo
 2. Perform a supported manual action in Finder or Chrome.
 3. The detector emits exactly one event only after the action's required postcondition is observed.
 4. The event is written once to Key Bumps history and the unread count.
-5. Selected presentation channels deliver their transient output independently.
-6. Review and mark events read; preview channels without creating durable history; clear history when desired.
+5. Selected presentation channels deliver their transient output independently. Custom presentations share a visible close button, Escape dismissal, horizontal trackpad-swipe dismissal, and an auto-dismiss timer that pauses while hovered.
+6. Preview visual channels and the separately configured Sound adapter without creating durable history; failed previews report their failure instead of appearing successful.
+7. Review, filter, and mark events read in Settings, the menu panel, or the Command Palette; clear history when desired.
 
 Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key bump. Disabling Key Bumps stops monitoring.
 
 ## UJ-09 — Shared Command Palette
 
-1. Search is the default tab; Clipboard and Dictation are visible peer tabs.
-2. Click tabs or press Command-1/2/3 to switch.
+1. Search is the default tab; Clipboard, Dictation, and Key Bumps are visible peer tabs in that order. Tab controls show the shortcut and name without icons.
+2. Click tabs or press Command-1/2/3/4 to switch.
 3. Switching clears the prior filter, resets selection, and keeps text-input focus.
-4. Arrow keys move selection, Return performs the tab's primary action, and Escape dismisses.
-5. The footer truthfully identifies local-only behavior.
+4. Arrow keys move selection, Return performs the tab's primary action (including marking a Key Bump read), and Escape dismisses.
+5. When Key Bumps is disabled, its tab reports that state instead of presenting stale history as active.
+6. The footer truthfully identifies local-only behavior.
 
 ## UJ-10 — Capability controls and settings
 
-1. Use the native sidebar to reach Home, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, General, and About.
+1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, General, and About.
 2. Use the toolbar Back button or Command-[ to return through previously visited Settings screens.
 3. Enable or disable each capability only from its own screen.
 4. Disabling immediately tears down its active panel, monitor, recording, drag behavior, or shortcuts as applicable.

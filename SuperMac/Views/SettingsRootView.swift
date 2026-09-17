@@ -4,14 +4,14 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case home = "Home", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation", dictationHistory = "Dictation History"
+    case setup = "Setup", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation", dictationHistory = "Dictation History"
     case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General", about = "About"
     var id: String { rawValue }
-    var icon: String { switch self { case .home: "house"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .dictationHistory: "clock.arrow.circlepath"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
+    var icon: String { switch self { case .setup: "checklist"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .dictationHistory: "clock.arrow.circlepath"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
-    private(set) var selection: SettingsSection = .home
+    private(set) var selection: SettingsSection = .setup
     private(set) var backStack: [SettingsSection] = []
 
     var canGoBack: Bool { !backStack.isEmpty }
@@ -28,7 +28,7 @@ struct SettingsNavigationHistory: Equatable {
     }
 }
 
-enum HomeCapabilityAction: Equatable {
+enum SetupCapabilityAction: Equatable {
     case showQuickSearch
     case showClipboardHistory
     case navigate(SettingsSection)
@@ -38,7 +38,7 @@ enum HomeCapabilityAction: Equatable {
         capability: Capability,
         isEnabled: Bool,
         missingPermissions: [MacPermission]
-    ) -> HomeCapabilityAction {
+    ) -> SetupCapabilityAction {
         guard isEnabled else { return .navigate(destination(for: capability)) }
         guard missingPermissions.isEmpty else { return .beginPermissionWalkthrough(capability) }
         return switch capability {
@@ -70,7 +70,7 @@ struct SettingsRootView: View {
         } detail: {
             Group {
                 switch navigation.selection {
-                case .home: HomeView(onNavigate: { navigation.navigate(to: $0) })
+                case .setup: SetupView(onNavigate: { navigation.navigate(to: $0) })
                 case .search: QuickSearchSettingsView()
                 case .clipboard: ClipboardSettingsView()
                 case .dictation: DictationSettingsView()
@@ -112,21 +112,12 @@ struct SettingsRootView: View {
     }
 }
 
-private struct HomeView: View {
+private struct SetupView: View {
     @Environment(AppModel.self) private var model
     let onNavigate: (SettingsSection) -> Void
 
     var body: some View {
         Form {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your Mac companion")
-                        .font(.title2.bold())
-                    Text("Open a tool, or finish the setup it needs. SuperMac never grants macOS permissions silently.")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
             Section("Readiness") {
                 ForEach(Capability.allCases) { capability in
                     HStack(spacing: 14) {
@@ -159,7 +150,7 @@ private struct HomeView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Home")
+        .navigationTitle("Setup")
     }
 
     private func status(for capability: Capability) -> String {
@@ -202,7 +193,7 @@ private struct HomeView: View {
     }
 
     private func performAction(for capability: Capability) {
-        let action = HomeCapabilityAction.resolve(
+        let action = SetupCapabilityAction.resolve(
             capability: capability,
             isEnabled: model.preferences.enabledCapabilities.contains(capability),
             missingPermissions: model.missingPermissions(for: capability)
@@ -504,18 +495,24 @@ private struct KeyBumpsSettingsView: View {
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
             }
-            Section("Detector") {
-                LabeledContent("Status", value: detectorText)
-                if model.detectorStatus != .monitoring {
-                    Button("Retry Monitoring") { model.retryDetection() }
-                        .disabled(!model.missingPermissions(for: .shortcutCoaching).isEmpty)
+            Section("Status") {
+                if model.detectorStatus == .monitoring {
+                    Label("Ready", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else if model.missingPermissions(for: .shortcutCoaching).isEmpty {
+                    Label("Key Bumps needs to reconnect", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Button("Try Again") { model.retryDetection() }
                 }
                 Button("Send Test Key Bump") { Task { await model.deliverSample() } }
             }
             Section("Presentation channels") {
-                ForEach(NotificationChannel.allCases) { channel in
-                    HStack { Toggle(channel.title, isOn: Binding(get: { model.preferences.selectedChannels.contains(channel) }, set: { model.setChannel(channel, enabled: $0) })); Button("Preview") { Task { await model.previewSample(channel: channel) } } }
+                ForEach(NotificationChannel.allCases.filter { $0 != .sound }) { channel in
+                    channelControl(channel)
                 }
+            }
+            Section("Sound") {
+                channelControl(.sound)
             }
             Section("History") {
                 LabeledContent("Events", value: "\(model.inbox.events.count)")
@@ -549,7 +546,31 @@ private struct KeyBumpsSettingsView: View {
             }
         }.formStyle(.grouped).navigationTitle("Key Bumps")
     }
-    private var detectorText: String { switch model.detectorStatus { case .stopped: "Stopped"; case .permissionRequired: "Permission Required"; case .monitoring: "Monitoring"; case .failed(let message): "Failed: \(message)" } }
+
+    @ViewBuilder
+    private func channelControl(_ channel: NotificationChannel) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Toggle(channel.title, isOn: Binding(
+                    get: { model.preferences.selectedChannels.contains(channel) },
+                    set: { model.setChannel(channel, enabled: $0) }
+                ))
+                Button("Preview") { Task { await model.previewSample(channel: channel) } }
+            }
+            if let outcome = model.previewOutcome(for: channel) {
+                switch outcome {
+                case .delivered:
+                    Text("Preview sent")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                case .failed(let message):
+                    Text("Preview failed: \(message)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
 }
 
 private struct PermissionsView: View {
@@ -618,7 +639,7 @@ private struct OnboardingView: View {
                 case 3:
                     VStack(spacing: 12) { Text("Resolve shortcut conflicts").font(.largeTitle.bold()); ForEach(ReferenceApp.allCases) { app in HStack { Text(app.name); Spacer(); if !model.conflicts.isRunning(app) { Text("Not running").foregroundStyle(.secondary) } else { Button("Quit") { model.conflicts.quit(app) } } } } }
                 default:
-                    VStack(spacing: 12) { Text("Ready").font(.largeTitle.bold()); Text("Home will show what is working and what still needs setup.").foregroundStyle(.secondary) }
+                    VStack(spacing: 12) { Text("Ready").font(.largeTitle.bold()); Text("Setup will show what is working and what still needs attention.").foregroundStyle(.secondary) }
                 }
             }.frame(maxWidth: 620)
             Spacer()
@@ -669,19 +690,21 @@ private struct CapabilityControl: View {
                 get: { model.preferences.enabledCapabilities.contains(capability) },
                 set: { model.setCapability(capability, enabled: $0) }
             ))
-            Text(disableExplanation)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let disableExplanation {
+                Text(disableExplanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
-    private var disableExplanation: String {
+    private var disableExplanation: String? {
         switch capability {
         case .quickSearch: "Turning this off closes Quick Search and releases its global shortcut."
         case .clipboardHistory: "Turning this off stops clipboard monitoring, closes its panel, and releases its global shortcut."
         case .dictation: "Turning this off cancels active Dictation and releases its global shortcut."
         case .windowManagement: "Turning this off stops drag-to-snap and releases all window shortcuts."
-        case .shortcutCoaching: "Turning this off stops monitoring supported actions."
+        case .shortcutCoaching: nil
         }
     }
 }

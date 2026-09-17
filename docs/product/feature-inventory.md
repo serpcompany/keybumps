@@ -31,18 +31,18 @@ Durable inbox recording is mandatory and occurs before transient delivery. Users
 | Native macOS Banner | Notification Center banner | Implemented; permission-dependent live acceptance remains |
 | Top-right Toast | Compact custom key-bump card | Implemented; real Finder event notification confirmed by human |
 | Top-center Shelf | Prominent top-center key-bump shelf | Implemented with preview; visual acceptance remains |
-| Cursor Halo | Pulse and shortcut at pointer location | Implemented with preview; visual acceptance remains |
 | Pointer Card | Key-bump card beside pointer location | Implemented with preview; visual acceptance remains |
 | Status Feedback | Brief evaluating-to-success state | Implemented with preview; visual acceptance remains |
 | Decision Banner | Wide prompt with dismiss actions | Implemented with preview; visual acceptance remains |
 | Dock Badge | Shows durable unread count | Implemented; unread behavior tested, Dock capture remains |
 | Dock Bounce | Requests informational attention | Implemented; live acceptance remains |
-| Sound | Plays the system Glass sound | Implemented; live acceptance remains |
+| Sound | Plays the system Glass sound from its separate Sound settings section | Implemented; audible owner acceptance remains |
 
 ## Settings and diagnostics
 
 - Enable or disable each transient presentation channel.
-- Preview each presentation channel with the same delivery service used by detected events.
+- Preview each presentation channel and Sound with the same delivery adapters used by detected events.
+- Close custom presentations with their close button, Escape, or a horizontal trackpad swipe; hover pauses the remaining auto-dismiss duration.
 - Show or hide the app in the Dock and Cmd-Tab together.
 - View Accessibility permission state and request/retry detection.
 - Send a test key bump.
