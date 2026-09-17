@@ -6,8 +6,11 @@ SuperMac uses one Sparkle 2 controller owned by the app shell. Feature modules d
 
 Release archives must be built with both settings below. They are public configuration, not secrets. The project also enables Sparkle's signed-feed and verify-before-extraction requirements, so `generate_appcast` signs both the archive enclosure and the feed itself.
 
-- `SUPERMAC_UPDATE_FEED_URL=https://<owner-origin>/appcast.xml`
+- Production: `SUPERMAC_UPDATE_FEED_URL=https://serpcompany.github.io/supermac-macos-app/updates/appcast.xml`
+- Staging: `SUPERMAC_UPDATE_FEED_URL=https://serpcompany.github.io/supermac-macos-app/updates/staging/appcast.xml`
 - `SUPERMAC_UPDATE_PUBLIC_KEY=<Sparkle Ed25519 public key>`
+
+GitHub Pages currently provides the public origin. Only the generated `public/` site is deployed; the repository and production private key remain private. See `github-pages-update-hosting.md` for the stable URL and migration contract.
 
 An absent or invalid configuration disables the updater truthfully. Debug and tests never use the production feed by default. A Debug fixture can use `SUPERMAC_UPDATE_FIXTURE_FEED_URL=http://127.0.0.1:<port>/appcast.xml`, but its public key must still be injected at build time.
 
@@ -23,10 +26,10 @@ The normal entry point is `scripts/build-update-release.sh`. It refuses a reused
 4. Put the update archive and matching `.md` release notes in a clean staging directory.
 5. Run Sparkle's `generate_appcast` through `scripts/generate-staged-appcast.sh`. The private key stays in Keychain.
 6. Run `scripts/validate-update-release.sh`; it uses Sparkle's official tools and the selected Keychain account to verify that the app's public key matches, then cryptographically verifies the signed feed and archive. It also fails closed on malformed XML, checksum/size drift, identity/version/feed/compatibility, Apple signature, Gatekeeper, or notarization-ticket failures. The fixture-only trust-skip option is never valid release evidence.
-7. Run `scripts/verify-update-publication.sh <appcast> <archive> <notes> <feed-url> --dry-run` to inspect the two-phase order. Upload the archive and release notes first, then use `--verify-live` to download them and compare their exact bytes and hashes to the locally validated artifacts before downloading and byte-comparing the signed appcast. The script deliberately has no credentials or upload implementation.
+7. Run `scripts/verify-update-publication.sh <appcast> <archive> <notes> <feed-url> --dry-run` to inspect the two-phase order. Stage the immutable archive and release notes under `public/updates/staging/`, then stage the signed appcast at `public/updates/staging/appcast.xml`. Commit the complete tree only after local validation; one Pages deployment publishes it atomically. Trigger `Publish SuperMac update site` with the configured Actions-enabled release-operator credential, then use `--verify-live` to download and compare the exact archive, notes, and appcast bytes with the locally validated artifacts.
 8. Install build N in `/Applications`, advertise N+1 on the staged feed, and verify check, download, signature validation, restart, exact N+1 version, and retained non-private fixture preferences. Repeat with active Dictation and confirm restart is refused until Dictation is idle.
 9. Corrupt a copy of the signed archive without regenerating the appcast and confirm Sparkle rejects it. Never weaken verification for this test.
-10. Promote the already-validated files to the production origin, again publishing the appcast last.
+10. Promote the exact already-validated files from `public/updates/staging/` to `public/updates/`, preserving filenames and bytes. Commit the complete production tree, deploy the Pages artifact, and verify the public production archive/notes before accepting the production appcast.
 
 The published `v0.0.1-beta.1` app has no updater. Every existing tester must manually install the first updater-enabled bridge DMG. Builds after that bridge can use this flow.
 
