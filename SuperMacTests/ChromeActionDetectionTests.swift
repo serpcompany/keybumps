@@ -220,7 +220,16 @@ final class ChromeActionDetectionTests: XCTestCase {
     func testChromeSettingsLiveShortcutRequiresKnownEnabledAndModifierMetadata() {
         let settings = node("settings", role: "AXMenuItem", title: "Preferences…", actions: ["AXPress"])
         func observation(enabled: Bool?, modifiers: Int?) -> ChromeMenuCommandObservation {
-            ChromeMenuCommandObservation(node: settings, enabled: enabled, command: ",", modifiers: modifiers)
+            ChromeMenuCommandObservation(
+                node: settings,
+                enabled: enabled,
+                shortcutEvidence: AXShortcutEvidence(
+                    commandCharacter: ",",
+                    modifiers: modifiers,
+                    commandGlyph: nil,
+                    virtualKey: nil
+                )
+            )
         }
 
         XCTAssertEqual(

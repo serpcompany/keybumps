@@ -175,8 +175,15 @@ final class ManualActionDetector {
                     if signature != self.lastMenuSignature || Date().timeIntervalSince(self.lastMenuEmission) > 1 {
                         self.lastMenuSignature = signature
                         self.lastMenuEmission = Date()
-                        self.onEvent?(CoachingEvent(applicationName: snapshot.applicationName, actionTitle: title,
-                                                    shortcut: shortcut, pointerX: sample.location.x, pointerY: sample.location.y))
+                        if let event = CoachingEventFactory.make(
+                            applicationName: snapshot.applicationName,
+                            actionTitle: title,
+                            displayShortcut: shortcut,
+                            pointerX: sample.location.x,
+                            pointerY: sample.location.y
+                        ) {
+                            self.onEvent?(event)
+                        }
                     }
                 } else if case .event(let event) = chromeOutcome {
                     self.onEvent?(event)

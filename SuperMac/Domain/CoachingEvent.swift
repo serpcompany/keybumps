@@ -43,3 +43,39 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
 
     var coachingBody: String { "\(applicationName) · \(shortcut)" }
 }
+
+enum CoachingEventFactory {
+    static func make(
+        applicationName: String,
+        actionTitle: String,
+        shortcutEvidence: AXShortcutEvidence,
+        pointerX: Double? = nil,
+        pointerY: Double? = nil
+    ) -> CoachingEvent? {
+        guard let shortcut = KeyboardShortcutRegistry.resolve(shortcutEvidence) else { return nil }
+        return make(
+            applicationName: applicationName,
+            actionTitle: actionTitle,
+            displayShortcut: shortcut.displayString,
+            pointerX: pointerX,
+            pointerY: pointerY
+        )
+    }
+
+    static func make(
+        applicationName: String,
+        actionTitle: String,
+        displayShortcut: String,
+        pointerX: Double? = nil,
+        pointerY: Double? = nil
+    ) -> CoachingEvent? {
+        guard let shortcut = KeyboardShortcutRegistry.resolve(displayString: displayShortcut) else { return nil }
+        return CoachingEvent(
+            applicationName: applicationName,
+            actionTitle: actionTitle,
+            shortcut: shortcut.displayString,
+            pointerX: pointerX,
+            pointerY: pointerY
+        )
+    }
+}

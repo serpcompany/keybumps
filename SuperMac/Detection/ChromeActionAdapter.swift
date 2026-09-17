@@ -60,25 +60,16 @@ protocol ChromeRuntimeStateReading {
 struct ChromeMenuCommandObservation: Equatable, Sendable {
     let node: AXNodeSnapshot
     let enabled: Bool?
-    let command: String?
-    let modifiers: Int?
-    let commandGlyph: Int?
-    let virtualKey: Int?
+    let shortcutEvidence: AXShortcutEvidence
 
     init(
         node: AXNodeSnapshot,
         enabled: Bool?,
-        command: String?,
-        modifiers: Int?,
-        commandGlyph: Int? = nil,
-        virtualKey: Int? = nil
+        shortcutEvidence: AXShortcutEvidence
     ) {
         self.node = node
         self.enabled = enabled
-        self.command = command
-        self.modifiers = modifiers
-        self.commandGlyph = commandGlyph
-        self.virtualKey = virtualKey
+        self.shortcutEvidence = shortcutEvidence
     }
 }
 
@@ -103,14 +94,7 @@ enum ChromeSettingsSemantics {
             return matches.isEmpty ? .unavailable : .ambiguous
         }
         guard match.enabled == true,
-              let shortcut = KeyboardShortcutRegistry.resolve(
-                AXShortcutEvidence(
-                    commandCharacter: match.command,
-                    modifiers: match.modifiers,
-                    commandGlyph: match.commandGlyph,
-                    virtualKey: match.virtualKey
-                )
-              ) else { return .unavailable }
+              let shortcut = KeyboardShortcutRegistry.resolve(match.shortcutEvidence) else { return .unavailable }
         return .resolved(shortcut.displayString)
     }
 
@@ -155,10 +139,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             observations.append(ChromeMenuCommandObservation(
                 node: node,
                 enabled: attribute(kAXEnabledAttribute, from: element),
-                command: attribute(kAXMenuItemCmdCharAttribute, from: element),
-                modifiers: (attribute(kAXMenuItemCmdModifiersAttribute, from: element) as NSNumber?)?.intValue,
-                commandGlyph: (attribute(kAXMenuItemCmdGlyphAttribute, from: element) as NSNumber?)?.intValue,
-                virtualKey: (attribute(kAXMenuItemCmdVirtualKeyAttribute, from: element) as NSNumber?)?.intValue
+                shortcutEvidence: AXShortcutEvidenceReader.read(from: element)
             ))
         }
         return ChromeSettingsSemantics.resolveShortcut(from: observations)

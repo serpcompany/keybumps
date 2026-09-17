@@ -367,10 +367,7 @@ struct CoachingPresentationView: View {
     }
 
     private var accessibilityCopy: String {
-        let shortcut = KeyboardShortcutRegistry.accessibilityDescription(for: event.shortcut)
-            .map { "Shortcut \($0)" }
-            ?? "Shortcut unavailable"
-        return "Key Bump. \(event.coachingTitle). \(event.applicationName). \(shortcut)."
+        "Key Bump. \(event.coachingTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
     }
 }
 

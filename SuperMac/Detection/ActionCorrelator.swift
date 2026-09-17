@@ -65,13 +65,19 @@ struct ActionCorrelator {
             output = ("Settings", shortcut)
         default: output = nil
         }
-        guard let output else { return nil }
-        let signature = "\(candidate.applicationName)|\(output.0)|\(output.1)"
+        guard let output,
+              let event = CoachingEventFactory.make(
+                applicationName: candidate.applicationName,
+                actionTitle: output.0,
+                displayShortcut: output.1,
+                pointerX: candidate.point.x,
+                pointerY: candidate.point.y
+              ) else { return nil }
+        let signature = "\(event.applicationName)|\(event.actionTitle)|\(event.shortcut)"
         guard signature != lastSignature || timestamp - lastEmissionTimestamp > deduplicationWindow else { return nil }
         lastSignature = signature
         lastEmissionTimestamp = timestamp
-        return CoachingEvent(applicationName: candidate.applicationName, actionTitle: output.0,
-                             shortcut: output.1, pointerX: candidate.point.x, pointerY: candidate.point.y)
+        return event
     }
 
     private func tabStates(

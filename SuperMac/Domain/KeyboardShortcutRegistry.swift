@@ -70,13 +70,6 @@ struct KeyboardGlyphLegendEntry: Identifiable, Equatable, Sendable {
     var id: KeyboardSemanticKey { semanticKey }
 }
 
-#if DEBUG
-struct KeyboardShortcutRegistryValidationFixture: Sendable {
-    let semanticKey: KeyboardSemanticKey
-    let evidence: AXShortcutEvidence
-}
-#endif
-
 enum KeyboardShortcutRegistry {
     // Sources for the values below:
     // - AXAttributeConstants.h: AX menu modifier semantics and the four AX attributes.
@@ -150,70 +143,24 @@ enum KeyboardShortcutRegistry {
         return modifierEntries + primaryEntries
     }()
 
-    #if DEBUG
-    static let validationFixtures: [KeyboardShortcutRegistryValidationFixture] = {
-        definitions.flatMap { definition in
-            let characterFixtures = definition.characters.map {
-                KeyboardShortcutRegistryValidationFixture(
-                    semanticKey: definition.key.semanticKey,
-                    evidence: AXShortcutEvidence(
-                        commandCharacter: $0,
-                        modifiers: 8,
-                        commandGlyph: nil,
-                        virtualKey: nil
-                    )
-                )
-            }
-            let glyphFixtures = definition.glyphs.map {
-                KeyboardShortcutRegistryValidationFixture(
-                    semanticKey: definition.key.semanticKey,
-                    evidence: AXShortcutEvidence(
-                        commandCharacter: nil,
-                        modifiers: 8,
-                        commandGlyph: $0,
-                        virtualKey: nil
-                    )
-                )
-            }
-            let virtualKeyFixtures = definition.virtualKeys.map {
-                KeyboardShortcutRegistryValidationFixture(
-                    semanticKey: definition.key.semanticKey,
-                    evidence: AXShortcutEvidence(
-                        commandCharacter: nil,
-                        modifiers: 8,
-                        commandGlyph: nil,
-                        virtualKey: $0
-                    )
-                )
-            }
-            return characterFixtures + glyphFixtures + virtualKeyFixtures
-        }
-    }()
-    #endif
-
     static func resolve(_ evidence: AXShortcutEvidence) -> CanonicalKeyboardShortcut? {
         guard let modifierMask = evidence.modifiers,
               modifierMask >= 0,
               modifierMask & ~0x0F == 0 else { return nil }
 
         var candidates = Set<KeyboardSemanticKey>()
-        var sawUnsupportedGlyph = false
 
         if let character = evidence.commandCharacter, !character.isEmpty {
             if let definition = definitions.first(where: { $0.characters.contains(character) }) {
                 candidates.insert(definition.key.semanticKey)
             } else if let printable = printableKey(from: character) {
                 candidates.insert(printable.semanticKey)
-            } else {
-                return nil
             }
         }
 
         if let glyph = evidence.commandGlyph, glyph != 0, glyph != 0x61 {
             if let definition = definitions.first(where: { $0.glyphs.contains(glyph) }) {
                 candidates.insert(definition.key.semanticKey)
-            } else {
-                sawUnsupportedGlyph = true
             }
         }
 
@@ -222,7 +169,7 @@ enum KeyboardShortcutRegistry {
             candidates.insert(definition.key.semanticKey)
         }
 
-        guard !sawUnsupportedGlyph, candidates.count == 1, let semanticKey = candidates.first else { return nil }
+        guard candidates.count == 1, let semanticKey = candidates.first else { return nil }
         let primaryKey: KeyboardShortcutKey
         if case .printable(let value) = semanticKey {
             guard let printable = printableKey(from: value) else { return nil }
@@ -268,6 +215,12 @@ enum KeyboardShortcutRegistry {
         resolve(displayString: displayString)?.accessibilityDescription
     }
 
+    static func accessibilityCopy(for displayString: String) -> String {
+        accessibilityDescription(for: displayString)
+            .map { "Shortcut \($0)" }
+            ?? "Shortcut unavailable"
+    }
+
     private static func modifiers(from mask: Int) -> [KeyboardShortcutKey] {
         var result: [KeyboardShortcutKey] = []
         if mask & 4 != 0 { result.append(modifierDefinitions[0]) }
@@ -304,23 +257,5 @@ enum KeyboardShortcutRegistry {
             glyphs: glyphs,
             virtualKeys: virtualKeys
         )
-    }
-}
-
-enum ShortcutFormatter {
-    static func format(
-        command: String?,
-        modifiers: Int?,
-        glyph: Int? = nil,
-        virtualKey: Int? = nil
-    ) -> String? {
-        KeyboardShortcutRegistry.resolve(
-            AXShortcutEvidence(
-                commandCharacter: command,
-                modifiers: modifiers,
-                commandGlyph: glyph,
-                virtualKey: virtualKey
-            )
-        )?.displayString
     }
 }

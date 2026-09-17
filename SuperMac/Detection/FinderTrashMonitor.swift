@@ -83,7 +83,11 @@ struct DragDropActionDetector {
               trace.meaningfulDrag,
               !trace.modifiersPresent,
               trace.postcondition == .removedFromOriginalParent else { return nil }
-        return CoachingEvent(applicationName: "Finder", actionTitle: "Move to Trash", shortcut: "⌘⌫")
+        return CoachingEventFactory.make(
+            applicationName: "Finder",
+            actionTitle: "Move to Trash",
+            displayShortcut: "⌘⌫"
+        )
     }
 }
 

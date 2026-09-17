@@ -23,7 +23,6 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
     let actions: [String]
     let frame: AXFrameSnapshot?
     let menuShortcut: String?
-    let menuShortcutEvidence: AXShortcutEvidence?
 
     init(
         token: String,
@@ -37,8 +36,7 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
         enabled: Bool?,
         actions: [String],
         frame: AXFrameSnapshot?,
-        menuShortcut: String?,
-        menuShortcutEvidence: AXShortcutEvidence? = nil
+        menuShortcut: String?
     ) {
         self.token = token
         self.role = role
@@ -52,7 +50,6 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
         self.actions = actions
         self.frame = frame
         self.menuShortcut = menuShortcut
-        self.menuShortcutEvidence = menuShortcutEvidence
     }
 }
 
@@ -112,16 +109,7 @@ final class AccessibilitySnapshotter {
         else { valueString = nil }
         var actionNames: CFArray?
         let actions = AXUIElementCopyActionNames(element, &actionNames) == .success ? (actionNames as? [String] ?? []) : []
-        let command: String? = attribute(kAXMenuItemCmdCharAttribute, from: element)
-        let modifiers: NSNumber? = attribute(kAXMenuItemCmdModifiersAttribute, from: element)
-        let glyph: NSNumber? = attribute(kAXMenuItemCmdGlyphAttribute, from: element)
-        let virtualKey: NSNumber? = attribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)
-        let shortcutEvidence = AXShortcutEvidence(
-            commandCharacter: command,
-            modifiers: modifiers?.intValue,
-            commandGlyph: glyph?.intValue,
-            virtualKey: virtualKey?.intValue
-        )
+        let shortcutEvidence = AXShortcutEvidenceReader.read(from: element)
         return AXNodeSnapshot(
             token: token(for: element), role: attribute(kAXRoleAttribute, from: element),
             subrole: attribute(kAXSubroleAttribute, from: element), title: attribute(kAXTitleAttribute, from: element),
@@ -129,8 +117,7 @@ final class AccessibilitySnapshotter {
             value: valueString, selected: selected ?? ((rawValue as? NSNumber)?.boolValue),
             enabled: attribute(kAXEnabledAttribute, from: element), actions: actions.sorted(),
             frame: position.flatMap { origin in size.map { AXFrameSnapshot(x: origin.x, y: origin.y, width: $0.width, height: $0.height) } },
-            menuShortcut: KeyboardShortcutRegistry.resolve(shortcutEvidence)?.displayString,
-            menuShortcutEvidence: shortcutEvidence
+            menuShortcut: KeyboardShortcutRegistry.resolve(shortcutEvidence)?.displayString
         )
     }
 

@@ -2,11 +2,9 @@ import SwiftUI
 
 struct ShortcutKeycapPresentation: Equatable {
     let keys: [String]
-    let accessibilityDescription: String?
 
     init(shortcut: String) {
         keys = KeyboardShortcutRegistry.keycapTokens(for: shortcut)
-        accessibilityDescription = KeyboardShortcutRegistry.accessibilityDescription(for: shortcut)
     }
 }
 
@@ -29,13 +27,7 @@ struct ShortcutKeycaps: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            presentationAccessibilityLabel(presentation.accessibilityDescription)
-        )
-    }
-
-    private func presentationAccessibilityLabel(_ description: String?) -> String {
-        description.map { "Shortcut \($0)" } ?? "Shortcut unavailable"
+        .accessibilityLabel(KeyboardShortcutRegistry.accessibilityCopy(for: shortcut))
     }
 }
 
@@ -73,10 +65,7 @@ struct CoachingEventRow: View {
     }
 
     private var shortcutAccessibilityCopy: String {
-        guard let description = KeyboardShortcutRegistry.accessibilityDescription(for: event.shortcut) else {
-            return "Shortcut unavailable"
-        }
-        return "Shortcut \(description)"
+        KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut)
     }
 }
 

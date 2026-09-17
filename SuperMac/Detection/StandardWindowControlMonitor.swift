@@ -93,10 +93,10 @@ struct WindowControlActionDetector {
             title = trace.preFullScreen == true ? "Exit Full Screen" : "Enter Full Screen"
         }
         guard completed else { return nil }
-        return CoachingEvent(
+        return CoachingEventFactory.make(
             applicationName: applicationName,
             actionTitle: title,
-            shortcut: trace.shortcut,
+            displayShortcut: trace.shortcut,
             pointerX: pointer.x,
             pointerY: pointer.y
         )
@@ -324,17 +324,8 @@ final class StandardWindowControlMonitor {
                (!requireEnabled || (attribute(kAXEnabledAttribute, from: element) as Bool?) != false),
                let title: String = attribute(kAXTitleAttribute, from: element),
                menuTitle(title, matches: kind, state: state) {
-                let command: String? = attribute(kAXMenuItemCmdCharAttribute, from: element)
-                let modifiers: NSNumber? = attribute(kAXMenuItemCmdModifiersAttribute, from: element)
-                let glyph: NSNumber? = attribute(kAXMenuItemCmdGlyphAttribute, from: element)
-                let virtualKey: NSNumber? = attribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)
                 if let shortcut = KeyboardShortcutRegistry.resolve(
-                    AXShortcutEvidence(
-                        commandCharacter: command,
-                        modifiers: modifiers?.intValue,
-                        commandGlyph: glyph?.intValue,
-                        virtualKey: virtualKey?.intValue
-                    )
+                    AXShortcutEvidenceReader.read(from: element)
                 ) {
                     matches.append(shortcut.displayString)
                 }
