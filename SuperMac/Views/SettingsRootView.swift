@@ -451,7 +451,9 @@ private struct KeyBumpsSettingsView: View {
                     get: { model.preferences.selectedChannels.contains(channel) },
                     set: { model.setChannel(channel, enabled: $0) }
                 ))
-                Button("Preview") { Task { await model.previewSample(channel: channel) } }
+                if channel.supportsPreview {
+                    Button("Preview") { Task { await model.previewSample(channel: channel) } }
+                }
             }
             ForEach(model.previewOutcomes(for: channel).keys.sorted(by: { $0.rawValue < $1.rawValue })) { deliveredChannel in
                 if let outcome = model.previewOutcomes(for: channel)[deliveredChannel] {
@@ -479,37 +481,18 @@ private struct KeyBumpsSettingsView: View {
 
 private struct PermissionsView: View {
     @Environment(AppModel.self) private var model
-    @State private var reviewingIndividualPermissions = false
+
     var body: some View {
         Form {
-            Section {
-                PermissionWalkthroughView()
+            Section("Readiness") {
+                PermissionReadinessSummaryView()
             }
-            Section {
-                Button {
-                    withAnimation {
-                        reviewingIndividualPermissions.toggle()
+            Section("Permissions") {
+                VStack(spacing: 8) {
+                    ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
+                        PermissionRow(permission: permission, compact: true)
                     }
-                } label: {
-                    HStack {
-                        Image(systemName: "chevron.right")
-                            .rotationEffect(.degrees(reviewingIndividualPermissions ? 90 : 0))
-                        Text("Review individual permissions")
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityValue(reviewingIndividualPermissions ? "Expanded" : "Collapsed")
-
-                if reviewingIndividualPermissions {
-                    VStack(spacing: 8) {
-                        ForEach(MacPermission.allCases) { permission in
-                            PermissionRow(permission: permission, compact: true)
-                        }
-                        NotificationPermissionRow()
-                    }
-                    .padding(.top, 8)
+                    NotificationPermissionRow()
                 }
             }
             Section {
@@ -522,6 +505,26 @@ private struct PermissionsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Permissions")
+    }
+}
+
+private struct PermissionReadinessSummaryView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let readiness = model.permissionReadiness
+        HStack(spacing: 12) {
+            Image(systemName: readiness.isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(readiness.isReady ? .green : .orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(readiness.isReady ? "All required permissions are ready" : "Setup needs attention")
+                    .font(.headline)
+                Text("\(readiness.completedCount) of \(readiness.totalCount) complete")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

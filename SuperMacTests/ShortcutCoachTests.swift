@@ -385,6 +385,35 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(destinations, [.keyBumpsHistory])
     }
 
+    func testNotificationResponseWinsOverQueuedGenericReopen() async {
+        let quickSearchRouter = QuickSearchRouter()
+        let appShellRouter = AppShellRouter()
+        var quickSearchOpenCount = 0
+        var destinations: [AppShellDestination] = []
+        quickSearchRouter.configure { quickSearchOpenCount += 1 }
+        appShellRouter.configure { destinations.append($0) }
+        let delegate = AppDelegate(
+            quickSearchRouter: quickSearchRouter,
+            appShellRouter: appShellRouter
+        )
+
+        XCTAssertFalse(delegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: false))
+        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: NativeNotificationPayload.keyBumpsUserInfo))
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        XCTAssertEqual(destinations, [.keyBumpsHistory])
+        XCTAssertEqual(quickSearchOpenCount, 0, "Notification routing must suppress the queued generic Search reopen")
+    }
+
+    func testOnlyReliablyPreviewableChannelsOfferPreviewControls() {
+        XCTAssertFalse(NotificationChannel.nativeBanner.supportsPreview)
+        XCTAssertTrue(NotificationChannel.topRightToast.supportsPreview)
+        XCTAssertTrue(NotificationChannel.topCenterShelf.supportsPreview)
+        XCTAssertTrue(NotificationChannel.sound.supportsPreview)
+    }
+
     func testNativeNotificationRequestsUndeterminedAuthorizationBeforeDelivery() async throws {
         let center = StubNativeNotificationCenter(status: .notDetermined)
         center.requestedStatus = .provisional

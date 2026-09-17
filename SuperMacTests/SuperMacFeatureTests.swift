@@ -326,6 +326,11 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(staleGrantedInputMonitoring.currentPermission, .inputMonitoring)
     }
 
+    func testPermissionSettingsExposeEveryRecoveryRowWithoutADisclosure() {
+        XCTAssertFalse(PermissionSettingsPresentation.usesDisclosure)
+        XCTAssertEqual(PermissionSettingsPresentation.visiblePermissions, MacPermission.allCases)
+    }
+
     func testPermissionRecoveryActionsNeverLeaveARequiredPermissionInert() {
         for permission in MacPermission.allCases {
             XCTAssertEqual(

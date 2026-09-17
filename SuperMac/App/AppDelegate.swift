@@ -36,7 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         DispatchQueue.main.async { [weak self] in
-            self?.quickSearchRouter.open()
+            guard let self,
+                  !self.appShellRouter.shouldSuppressGenericReopen else { return }
+            self.quickSearchRouter.open()
         }
         return false
     }

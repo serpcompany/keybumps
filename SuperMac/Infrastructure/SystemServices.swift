@@ -176,6 +176,11 @@ struct PermissionSetupProgress: Equatable {
     var isComplete: Bool { currentPermission == nil }
 }
 
+enum PermissionSettingsPresentation {
+    static let usesDisclosure = false
+    static let visiblePermissions = MacPermission.allCases
+}
+
 struct PermissionReadinessSnapshot: Equatable {
     let requiredPermissions: [MacPermission]
     let states: [MacPermission: PermissionAuthorizationState]

@@ -34,6 +34,10 @@ enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable 
         case .sound: "speaker.wave.2"
         }
     }
+
+    var supportsPreview: Bool {
+        self != .nativeBanner
+    }
 }
 
 enum PresentationOverlapPolicy {
