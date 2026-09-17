@@ -80,9 +80,9 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(policy.isSafeToInstall)
         policy.update(dictationPhase: .failed("fixture"))
         XCTAssertTrue(policy.isSafeToInstall)
-        policy.updateApplicationTerminationReadiness(false)
+        policy.updateCriticalOperation(.unsavedWork, active: true)
         XCTAssertFalse(policy.isSafeToInstall)
-        policy.updateApplicationTerminationReadiness(true)
+        policy.updateCriticalOperation(.unsavedWork, active: false)
         XCTAssertTrue(policy.isSafeToInstall)
     }
 
@@ -297,6 +297,7 @@ final class UpdateControllerTests: XCTestCase {
         var operationRan = false
 
         policy.performSynchronousCriticalOperation(
+            .windowAction,
             notify: { safetyChanges.append(policy.isSafeToInstall) },
             operation: {
                 operationRan = true
@@ -307,6 +308,26 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(operationRan)
         XCTAssertEqual(safetyChanges, [false, true])
         XCTAssertTrue(policy.isSafeToInstall)
+    }
+
+    func testWindowDragLifecycleFeedsTheSharedCriticalOperationGate() {
+        var tracker = WindowDragActivityTracker()
+        let policy = UpdateInstallationSafetyPolicy()
+        var notifications: [Bool] = []
+
+        if tracker.setActive(true) {
+            policy.updateCriticalOperation(.windowDrag, active: tracker.isActive)
+            notifications.append(policy.isSafeToInstall)
+        }
+        XCTAssertFalse(policy.isSafeToInstall)
+        XCTAssertFalse(tracker.setActive(true), "Repeated drag events must not duplicate lifecycle notifications")
+
+        if tracker.setActive(false) {
+            policy.updateCriticalOperation(.windowDrag, active: tracker.isActive)
+            notifications.append(policy.isSafeToInstall)
+        }
+        XCTAssertTrue(policy.isSafeToInstall)
+        XCTAssertEqual(notifications, [false, true])
     }
 
     func testUpdaterTelemetryContainsOnlyStructuralFields() {

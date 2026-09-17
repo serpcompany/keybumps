@@ -113,7 +113,9 @@ final class UpdateReleaseScriptTests: XCTestCase {
         for maliciousFixtureURL in [
             "https://example.com/appcast.xml",
             "https://user:password@localhost/appcast.xml",
-            "https://localhost/appcast.xml#fragment"
+            "https://localhost/appcast.xml#fragment",
+            "http://localhost:bad/appcast.xml",
+            "http://local host/appcast.xml"
         ] {
             let result = try run(validator, common + [
                 maliciousFixtureURL, "1", "2", "0.0.2", "/tmp/tools", "fixture", "--skip-apple-trust-for-fixture"
@@ -138,7 +140,9 @@ final class UpdateReleaseScriptTests: XCTestCase {
         for maliciousProductionURL in [
             "https:///appcast.xml",
             "https://user:password@example.com/appcast.xml",
-            "https://example.com/appcast.xml#fragment"
+            "https://example.com/appcast.xml#fragment",
+            "https://example.com:99999/appcast.xml",
+            "https://example .com/appcast.xml"
         ] {
             let result = try run(orchestrator, [
                 "0.0.2", "2", "1", maliciousProductionURL, "public", "notary", "key", "/tmp/tools", "/tmp/output"
@@ -146,6 +150,14 @@ final class UpdateReleaseScriptTests: XCTestCase {
             XCTAssertNotEqual(result.status, 0)
             XCTAssertTrue(result.output.contains("credential-free"))
         }
+
+        let urlHelper = repositoryRoot.appendingPathComponent("scripts/lib/update_url_validation.py")
+        let normalizedParent = try run(
+            URL(fileURLWithPath: "/usr/bin/python3"),
+            [urlHelper.path, "parent", "https://updates.example.com/beta/nested/appcast.xml"]
+        )
+        XCTAssertEqual(normalizedParent.status, 0, normalizedParent.output)
+        XCTAssertEqual(normalizedParent.output.trimmingCharacters(in: .whitespacesAndNewlines), "https://updates.example.com/beta/nested/")
     }
 
     private func run(_ executable: URL, _ arguments: [String]) throws -> (status: Int32, output: String) {

@@ -73,31 +73,39 @@ final class DisabledUpdateController: UpdateControlling {
 final class UpdateInstallationSafetyPolicy {
     static let shared = UpdateInstallationSafetyPolicy()
     private(set) var dictationPhase: DictationPhase = .idle
-    private(set) var isApplicationTerminationReady = true
+    private(set) var activeCriticalOperations: Set<ApplicationCriticalOperation> = []
     var isSafeToInstall: Bool {
-        isApplicationTerminationReady && !dictationPhase.blocksUpdateInstallation
+        activeCriticalOperations.isEmpty && !dictationPhase.blocksUpdateInstallation
     }
 
     func update(dictationPhase: DictationPhase) {
         self.dictationPhase = dictationPhase
     }
 
-    func updateApplicationTerminationReadiness(_ isReady: Bool) {
-        isApplicationTerminationReady = isReady
+    func updateCriticalOperation(_ operation: ApplicationCriticalOperation, active: Bool) {
+        if active { activeCriticalOperations.insert(operation) }
+        else { activeCriticalOperations.remove(operation) }
     }
 
     func performSynchronousCriticalOperation(
+        _ criticalOperation: ApplicationCriticalOperation,
         notify: () -> Void,
         operation: () -> Void
     ) {
-        updateApplicationTerminationReadiness(false)
+        updateCriticalOperation(criticalOperation, active: true)
         notify()
         defer {
-            updateApplicationTerminationReadiness(true)
+            updateCriticalOperation(criticalOperation, active: false)
             notify()
         }
         operation()
     }
+}
+
+enum ApplicationCriticalOperation: Hashable {
+    case windowAction
+    case windowDrag
+    case unsavedWork
 }
 
 extension DictationPhase {

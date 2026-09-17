@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+source "${0:A:h}/lib/update-url-validation.sh"
 
 if (( $# < 3 || $# > 4 )); then
   print -u2 "usage: $0 <archives-directory> <public-download-url-prefix> <sparkle-tools-directory> [keychain-account]"
@@ -14,7 +15,7 @@ generate_appcast_tool="$sparkle_tools_directory/generate_appcast"
 
 [[ -d "$archives_directory" ]] || { print -u2 "archives directory does not exist: $archives_directory"; exit 66; }
 [[ -x "$generate_appcast_tool" ]] || { print -u2 "generate_appcast not found: $generate_appcast_tool"; exit 69; }
-[[ "$download_url_prefix" == https://* || "$download_url_prefix" == http://127.0.0.1:* || "$download_url_prefix" == http://localhost:* ]] || {
+update_url_is_production_https "$download_url_prefix" 2>/dev/null || update_url_is_loopback_fixture "$download_url_prefix" 2>/dev/null || {
   print -u2 "download URL must be public HTTPS or an explicit localhost fixture"
   exit 65
 }

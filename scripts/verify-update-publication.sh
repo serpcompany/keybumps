@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+source "${0:A:h}/lib/update-url-validation.sh"
 
 if (( $# != 5 )); then
   print -u2 "usage: $0 <local-appcast> <local-archive> <local-release-notes> <public-feed-url> <--dry-run|--verify-live>"
@@ -15,7 +16,7 @@ for local_artifact in "$appcast_path" "$archive_path" "$release_notes_path"; do
   [[ -f "$local_artifact" ]] || { print -u2 "missing local artifact: $local_artifact"; exit 66; }
 done
 [[ "$mode" == --dry-run || "$mode" == --verify-live ]] || { print -u2 "mode must be --dry-run or --verify-live"; exit 64; }
-[[ "$public_feed_url" == https://* || "$public_feed_url" == http://127.0.0.1:* || "$public_feed_url" == http://localhost:* ]] || {
+update_url_is_production_https "$public_feed_url" 2>/dev/null || update_url_is_loopback_fixture "$public_feed_url" 2>/dev/null || {
   print -u2 "feed must be public HTTPS or an explicit localhost fixture"
   exit 65
 }

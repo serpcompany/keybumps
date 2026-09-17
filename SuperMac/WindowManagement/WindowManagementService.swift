@@ -3,6 +3,16 @@ import ApplicationServices
 import Foundation
 import Observation
 
+struct WindowDragActivityTracker {
+    private(set) var isActive = false
+
+    mutating func setActive(_ active: Bool) -> Bool {
+        guard isActive != active else { return false }
+        isActive = active
+        return true
+    }
+}
+
 @MainActor
 @Observable
 final class WindowManagementService {
@@ -24,6 +34,8 @@ final class WindowManagementService {
     private var dragMonitor: Any?
     private var dragTarget: DragTarget?
     private var sawWindowDrag = false
+    private var dragActivity = WindowDragActivityTracker()
+    var onDragActivityChange: ((Bool) -> Void)?
 
     var isAccessibilityGranted: Bool { AXIsProcessTrusted() }
 
@@ -38,6 +50,7 @@ final class WindowManagementService {
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor); self.dragMonitor = nil }
         dragTarget = nil
         sawWindowDrag = false
+        updateDragActivity(false)
     }
 
     func requestAccessibility() {
@@ -81,23 +94,36 @@ final class WindowManagementService {
                   let startingFrame = frame(of: target.window) else {
                 dragTarget = nil
                 sawWindowDrag = false
+                updateDragActivity(false)
                 return
             }
             dragTarget = DragTarget(pid: target.pid, window: target.window, startingFrame: startingFrame)
             sawWindowDrag = false
+            updateDragActivity(true)
         case .leftMouseDragged:
-            guard let target = dragTarget, let current = frame(of: target.window) else { return }
+            guard let target = dragTarget, let current = frame(of: target.window) else {
+                dragTarget = nil
+                sawWindowDrag = false
+                updateDragActivity(false)
+                return
+            }
             sawWindowDrag = !approximatelyEqual(current, target.startingFrame)
         case .leftMouseUp:
             defer {
                 dragTarget = nil
                 sawWindowDrag = false
+                updateDragActivity(false)
             }
             guard sawWindowDrag, let target = dragTarget, let current = frame(of: target.window) else { return }
             snap(target: target, current: current, at: NSEvent.mouseLocation)
         default:
             break
         }
+    }
+
+    private func updateDragActivity(_ active: Bool) {
+        guard dragActivity.setActive(active) else { return }
+        onDragActivityChange?(active)
     }
 
     private func snap(target: DragTarget, current: CGRect, at point: CGPoint) {

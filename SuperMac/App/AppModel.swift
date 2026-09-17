@@ -130,6 +130,11 @@ final class AppModel {
             self.updater.installationSafetyDidChange()
         }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
+        windows.onDragActivityChange = { [weak self] isActive in
+            guard let self else { return }
+            self.updateSafetyPolicy.updateCriticalOperation(.windowDrag, active: isActive)
+            self.updater.installationSafetyDidChange()
+        }
         refreshDetectorState()
     }
 
@@ -175,6 +180,7 @@ final class AppModel {
 
     private func performWindowAction(_ action: SuperMacWindowAction) {
         updateSafetyPolicy.performSynchronousCriticalOperation(
+            .windowAction,
             notify: updater.installationSafetyDidChange,
             operation: { windows.perform(action) }
         )
