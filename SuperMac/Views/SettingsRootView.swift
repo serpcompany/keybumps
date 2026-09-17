@@ -5,9 +5,9 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case setup = "Setup", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
-    case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General", about = "About"
+    case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General"
     var id: String { rawValue }
-    var icon: String { switch self { case .setup: "checklist"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
+    var icon: String { switch self { case .setup: "checklist"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -84,7 +84,6 @@ struct SettingsRootView: View {
                 case .coaching: KeyBumpsSettingsView()
                 case .permissions: PermissionsView()
                 case .general: GeneralView()
-                case .about: AboutView()
                 }
             }.environment(model)
         }
@@ -698,10 +697,6 @@ private struct GeneralView: View {
             }
         }.formStyle(.grouped).navigationTitle("General")
     }
-}
-
-private struct AboutView: View {
-    var body: some View { VStack(spacing: 16) { Image(ProductIdentity.inAppBrandImageName).resizable().scaledToFit().frame(width: 100, height: 100); Text("SuperMac").font(.largeTitle.bold()); Text("Functional MVP · local-only").foregroundStyle(.secondary); Text("Window Management includes software derived from Rectangle. See LICENSE.rectangle in the source distribution.").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 460) }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(40).navigationTitle("About") }
 }
 
 private struct OnboardingView: View {

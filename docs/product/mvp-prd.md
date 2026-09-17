@@ -94,16 +94,16 @@ Use a native macOS sidebar with these conceptual destinations:
 - Key Bumps
 - Permissions
 - General
-- About
 
 Exact labels, order, and visual polish are reversible implementation details. The window must remain understandable without documentation.
 
-Clicking the Dock icon opens the single reusable Settings/Setup window. SuperMac registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
+Clicking the Dock icon opens Quick Search. Settings remains a single reusable window opened through Command-comma or the menu-bar menu. SuperMac registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
 
 ### Menu bar
 
 Keep the menu deliberately minimal:
 
+- Open Quick Search
 - Settings…
 - Check for Updates…
 - Quit SuperMac
@@ -167,7 +167,7 @@ User outcome: recover and reuse the most recent copied text or image through the
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
 - Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Paste from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
-- Provide deletion and a native Clear History control that requires destructive confirmation before removing all items. Opening, cancelling, or confirming that alert must not dismiss the Command Palette.
+- Provide deletion and one shared native SwiftUI `Clear All` control that requires destructive confirmation before removing all items. Opening, cancelling, or confirming that alert must not dismiss the Command Palette.
 - Disabling the capability stops monitoring but does not silently erase retained items.
 - No arbitrary copied files, audio/video media, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
 

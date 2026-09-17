@@ -70,22 +70,23 @@ final class SuperMacFeatureTests: XCTestCase {
         let router = MainWindowRouter { activationCount += 1 }
         router.configure { openCount += 1 }
         let statusController = NativeStatusItemController(router: router)
-        let appDelegate = AppDelegate(mainWindowRouter: router)
 
         statusController.makeMenu().performActionForItem(at: 1)
-        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: true))
-        XCTAssertFalse(appDelegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: false))
         XCTAssertTrue(router.open()) // Command-comma uses this same route.
 
-        XCTAssertEqual(openCount, 4)
-        XCTAssertEqual(activationCount, 4)
+        XCTAssertEqual(openCount, 2)
+        XCTAssertEqual(activationCount, 2)
         NSWindow.allowsAutomaticWindowTabbing = true
         AppDelegate.configureWindowBehavior()
         XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
     }
 
     func testStatusItemOffersAndRoutesQuickSearchSeparatelyFromSettings() {
-        let controller = NativeStatusItemController(router: MainWindowRouter())
+        let quickSearchRouter = QuickSearchRouter()
+        let controller = NativeStatusItemController(
+            router: MainWindowRouter(),
+            quickSearchRouter: quickSearchRouter
+        )
         var quickSearchOpenCount = 0
         controller.configureOpenQuickSearch { quickSearchOpenCount += 1 }
 
@@ -97,8 +98,22 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(quickSearchOpenCount, 2)
     }
 
+    func testDockReopenDefaultsToQuickSearchInsteadOfSettings() async {
+        let quickSearchRouter = QuickSearchRouter()
+        var quickSearchOpenCount = 0
+        quickSearchRouter.configure { quickSearchOpenCount += 1 }
+        let delegate = AppDelegate(quickSearchRouter: quickSearchRouter)
+
+        XCTAssertFalse(delegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: true))
+        XCTAssertFalse(delegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: false))
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        XCTAssertEqual(quickSearchOpenCount, 2)
+    }
+
     func testClosingTheSettingsWindowKeepsTheCompanionRunning() {
-        let delegate = AppDelegate(mainWindowRouter: MainWindowRouter())
+        let delegate = AppDelegate(quickSearchRouter: QuickSearchRouter())
 
         XCTAssertFalse(delegate.applicationShouldTerminateAfterLastWindowClosed(.shared))
     }
@@ -162,6 +177,7 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(SettingsSection.setup.rawValue, "Setup")
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
+        XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("About"))
         XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Key Bumps"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
     }
@@ -824,6 +840,10 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
         XCTAssertNil(CommandPaletteTab.keyBumps.primaryActionTitle)
+        XCTAssertEqual(CommandPaletteTab.clipboard.prompt, "Search clipboard history")
+        XCTAssertEqual(CommandPaletteTab.dictation.prompt, "Search dictation history")
+        XCTAssertEqual(CommandPaletteTab.keyBumps.prompt, "Search Key Bumps history")
+        XCTAssertEqual(ClearAllButton.title, "Clear All")
 
         state.historyQuery = "private filter"
         state.selection = 3

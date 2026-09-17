@@ -27,15 +27,37 @@ final class MainWindowRouter {
 }
 
 @MainActor
+final class QuickSearchRouter {
+    static let shared = QuickSearchRouter()
+
+    private var opener: (() -> Void)?
+
+    func configure(_ opener: @escaping () -> Void) {
+        self.opener = opener
+    }
+
+    @discardableResult
+    func open() -> Bool {
+        guard let opener else { return false }
+        opener()
+        return true
+    }
+}
+
+@MainActor
 final class NativeStatusItemController: NSObject {
     static let shared = NativeStatusItemController()
 
     private var statusItem: NSStatusItem?
     private let router: MainWindowRouter
-    private var openQuickSearchAction: (() -> Void)?
+    private let quickSearchRouter: QuickSearchRouter
 
-    init(router: MainWindowRouter? = nil) {
+    init(
+        router: MainWindowRouter? = nil,
+        quickSearchRouter: QuickSearchRouter? = nil
+    ) {
         self.router = router ?? .shared
+        self.quickSearchRouter = quickSearchRouter ?? .shared
         super.init()
     }
 
@@ -44,7 +66,7 @@ final class NativeStatusItemController: NSObject {
     }
 
     func configureOpenQuickSearch(_ action: @escaping () -> Void) {
-        openQuickSearchAction = action
+        quickSearchRouter.configure(action)
     }
 
     func install() {
@@ -91,7 +113,7 @@ final class NativeStatusItemController: NSObject {
     }
 
     @objc func openQuickSearch() {
-        openQuickSearchAction?()
+        quickSearchRouter.open()
     }
 
     @objc func openSettings() {

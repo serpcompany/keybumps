@@ -7,15 +7,15 @@ extension Notification.Name {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    private let mainWindowRouter: MainWindowRouter
+    private let quickSearchRouter: QuickSearchRouter
 
     override init() {
-        mainWindowRouter = .shared
+        quickSearchRouter = .shared
         super.init()
     }
 
-    init(mainWindowRouter: MainWindowRouter) {
-        self.mainWindowRouter = mainWindowRouter
+    init(quickSearchRouter: QuickSearchRouter) {
+        self.quickSearchRouter = quickSearchRouter
         super.init()
     }
 
@@ -29,7 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        mainWindowRouter.open()
+        DispatchQueue.main.async { [weak self] in
+            self?.quickSearchRouter.open()
+        }
         return false
     }
 

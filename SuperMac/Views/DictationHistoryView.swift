@@ -48,11 +48,9 @@ struct DictationHistoryView: View {
             Button("Open Recordings Folder", systemImage: "folder") {
                 NSWorkspace.shared.open(model.dictationHistory.recordingsDirectoryURL)
             }
-            HistoryClearButton(
-                title: "Clear History",
+            ClearAllButton(
                 confirmationTitle: "Clear all dictation history?",
                 confirmationMessage: "This permanently removes every SuperMac recording directory, transcript, and audio file.",
-                destructiveActionTitle: "Clear All Recordings",
                 disabled: model.dictationHistory.entries.isEmpty
             ) {
                 audioPlayer.stop()
@@ -379,11 +377,11 @@ private struct DictationAudioTransportView: View {
     }
 }
 
-struct HistoryClearButton: View {
-    let title: String
+struct ClearAllButton: View {
+    static let title = "Clear All"
+
     let confirmationTitle: String
     let confirmationMessage: String
-    let destructiveActionTitle: String
     let disabled: Bool
     var confirmationPresentationChanged: (Bool) -> Void = { _ in }
     let clear: () -> Void
@@ -391,7 +389,7 @@ struct HistoryClearButton: View {
     @State private var showsConfirmation = false
 
     var body: some View {
-        Button(title, systemImage: "trash", role: .destructive) {
+        Button(Self.title, systemImage: "trash", role: .destructive) {
             showsConfirmation = true
         }
         .buttonStyle(.bordered)
@@ -404,7 +402,7 @@ struct HistoryClearButton: View {
             if showsConfirmation { confirmationPresentationChanged(false) }
         }
         .alert(confirmationTitle, isPresented: $showsConfirmation) {
-            Button(destructiveActionTitle, role: .destructive, action: clear)
+            Button(Self.title, role: .destructive, action: clear)
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(confirmationMessage)

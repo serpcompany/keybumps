@@ -37,7 +37,7 @@ private struct MainWindowRoutingModifier: ViewModifier {
         content
             .onAppear {
                 MainWindowRouter.shared.configure(openMainWindow)
-                NativeStatusItemController.shared.configureOpenQuickSearch(model.showQuickSearch)
+                QuickSearchRouter.shared.configure(model.showQuickSearch)
                 NativeStatusItemController.shared.install()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in

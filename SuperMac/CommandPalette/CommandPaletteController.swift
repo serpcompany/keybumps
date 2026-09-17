@@ -41,9 +41,9 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var prompt: String {
         switch self {
         case .search: "Search apps, files, and folders"
-        case .clipboard: "Filter clipboard history"
-        case .dictation: "Filter dictation history"
-        case .keyBumps: "Filter Key Bumps history"
+        case .clipboard: "Search clipboard history"
+        case .dictation: "Search dictation history"
+        case .keyBumps: "Search Key Bumps history"
         }
     }
 
@@ -632,11 +632,9 @@ private struct KeyBumpsResultsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        HistoryClearButton(
-                            title: "Clear History",
+                        ClearAllButton(
                             confirmationTitle: "Clear Key Bumps history?",
                             confirmationMessage: "This permanently removes all saved Key Bumps events.",
-                            destructiveActionTitle: "Clear Key Bumps History",
                             disabled: entries.isEmpty,
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
@@ -684,12 +682,6 @@ private struct PaletteSearchField: View {
                 TextField(tab.prompt, text: $historyQuery)
                     .focused(focused)
             }
-            Text("esc")
-                .font(.caption.monospaced())
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 5))
         }
         .textFieldStyle(.plain)
         .font(.system(size: 23, weight: .medium))
@@ -724,11 +716,9 @@ private struct SearchResultsView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            HistoryClearButton(
-                                title: "Clear Searches",
+                            ClearAllButton(
                                 confirmationTitle: "Clear recent searches?",
                                 confirmationMessage: "This permanently removes your locally saved Quick Search history.",
-                                destructiveActionTitle: "Clear Recent Searches",
                                 disabled: recentSearches.isEmpty,
                                 confirmationPresentationChanged: confirmationPresentationChanged,
                                 clear: clearRecentSearches
@@ -835,11 +825,9 @@ private struct ClipboardResultsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        HistoryClearButton(
-                            title: "Clear History",
+                        ClearAllButton(
                             confirmationTitle: "Clear clipboard history?",
                             confirmationMessage: "This permanently removes all clipboard items and image previews saved by SuperMac.",
-                            destructiveActionTitle: "Clear Clipboard History",
                             disabled: entries.isEmpty,
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
@@ -962,11 +950,9 @@ private struct DictationResultsView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        HistoryClearButton(
-                            title: "Clear History",
+                        ClearAllButton(
                             confirmationTitle: "Clear all dictation history?",
                             confirmationMessage: "This permanently removes every SuperMac recording directory, transcript, and audio file.",
-                            destructiveActionTitle: "Clear All Recordings",
                             disabled: entries.isEmpty,
                             confirmationPresentationChanged: confirmationPresentationChanged
                         ) {
@@ -1053,11 +1039,7 @@ private struct PaletteFooter: View {
             if let primaryActionTitle = tab.primaryActionTitle {
                 Label(primaryActionTitle, systemImage: "return")
             }
-            if tab == .search {
-                Label("Reveal", systemImage: "command")
-            }
             Spacer()
-            Text("Local only")
         }
         .font(.caption)
         .foregroundStyle(.secondary)

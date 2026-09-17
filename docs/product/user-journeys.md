@@ -58,7 +58,7 @@ The Permissions screen keeps `Review individual permissions` collapsed by defaul
 
 ## UJ-03 — Setup readiness and recovery
 
-1. Open Setup from the Dock, menu bar Settings item, or sidebar. Repeated opens focus the same window.
+1. Open Setup from the menu-bar Settings item, Command-comma, or sidebar. Repeated opens focus the same window.
 2. Each capability reports Ready, Setup Needed, or Off from actual capability and permission state.
 3. Quick Search and Clipboard open directly when ready.
 4. A feature's Grant Permission action begins that feature's permission sequence immediately without navigating away from Setup.
@@ -81,8 +81,8 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 1. Copy text or a supported image in ordinary applications while Clipboard History is enabled.
 2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Setup/settings.
 3. The shared palette opens on Clipboard with the newest item first and at most ten items. Image entries show a visual thumbnail and media label.
-4. Filter the local history, select a text or image item, and paste its original representation into the previously focused destination when safe.
-5. Delete an item, or choose Clear History and explicitly confirm before all saved clipboard items are removed. The confirmation appears over the palette; cancelling or confirming leaves the palette open and shows the resulting history state.
+4. Search the local history, select a text or image item, and paste its original representation into the previously focused destination when safe.
+5. Delete an item, or choose Clear All and explicitly confirm before all saved clipboard items are removed. The confirmation appears over the palette; cancelling or confirming leaves the palette open and shows the resulting history state.
 6. Disable Clipboard History to stop monitoring and release its shortcut without silently erasing retained items.
 
 Clipboard content stays local. Supported image payloads are stored as separate local media files and removed with their entry, on eviction, or when history is cleared. Automatic fresh-Dictation insertion and Paste from Dictation History do not create Clipboard History entries; explicitly copying content does. Recent copied secrets and images remain until removed or displaced, so committed screenshots and logs must not contain their content.
@@ -97,7 +97,7 @@ Clipboard content stays local. Supported image payloads are stored as separate l
 6. Pending metadata and `output.wav` are created under `~/Documents/SuperMac/recordings/<timestamp>/` when capture starts. Successful transcription completes that same metadata before insertion. An unexpected app/process interruption leaves recoverable audio; intentional Escape cancellation discards the pending item.
 7. If insertion fails, recover the last transcript from Dictation settings.
 8. After relaunch, SuperMac scans pending metadata and legacy playable audio-only folders. Recoverable items appear in Dictation History and the Command Palette as Recording interrupted — transcript unavailable; Transcribe retries locally and updates the same item.
-9. Open Dictation History—or the Command Palette's Dictation tab—to search cards, click anywhere in a card's padded header to expand it, play/pause the original recording, adjust playback from 0.5× through 2×, transcribe when needed, paste or copy completed text, translate through the on-device target-language picker, and use the same waveform/playback/speed controls for temporary translated speech generated with an installed target-language voice. Reveal or delete recordings as needed; Clear History requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged, and temporary translated audio is not saved as another recording.
+9. Open the Command Palette's Dictation tab to search cards, click anywhere in a card's padded header to expand it, play/pause the original recording, adjust playback from 0.5× through 2×, transcribe when needed, paste or copy completed text, translate through the on-device target-language picker, and use the same waveform/playback/speed controls for temporary translated speech generated with an installed target-language voice. Reveal or delete recordings as needed; Clear All requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged, and temporary translated audio is not saved as another recording.
 
 Automatic insertion after recording and the explicit Paste action in Dictation History use the pasteboard only as delivery transport. Neither creates a duplicate in Clipboard History. Choosing Copy is an intentional clipboard action and remains eligible for Clipboard History.
 
@@ -140,7 +140,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 
 ## UJ-10 — Capability controls and settings
 
-1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, General, and About.
+1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, and General.
 2. Use the toolbar Back button or Command-[ to return through previously visited Settings screens.
 3. Enable or disable each capability only from its own screen.
 4. Disabling immediately tears down its active panel, monitor, recording, drag behavior, or shortcuts as applicable.
@@ -150,9 +150,9 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 
 ## UJ-11 — Dock, menu bar, conflicts, and launch at login
 
-1. The app is visible in the Dock and application switcher by default.
+1. The app is visible in the Dock and application switcher by default; clicking its Dock icon opens Quick Search rather than Settings.
 2. Left-clicking the menu-bar icon opens Quick Search. Right-clicking it opens a native menu containing Open Quick Search, Settings, the disabled local-preview update item, and Quit SuperMac.
-3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; clicking the Dock icon, the menu-bar Settings item, or Command-comma recreates, raises, and focuses the single Settings window.
+3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; the menu-bar Settings item or Command-comma recreates, raises, and focuses the single Settings window.
 4. SuperMac registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.
 
