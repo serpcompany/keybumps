@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        ApplicationTerminationGuard.shared.isSafeToTerminate ? .terminateNow : .terminateCancel
+        UpdateInstallationSafetyPolicy.shared.isSafeToInstall ? .terminateNow : .terminateCancel
     }
 
     func userNotificationCenter(

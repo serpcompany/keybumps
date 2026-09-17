@@ -708,7 +708,7 @@ private struct GeneralView: View {
                 HStack {
                     Button("Check for Updates…") { model.checkForUpdates() }
                         .disabled(!model.updateSnapshot.canCheck)
-                    if model.updateSnapshot.status.readyVersion != nil {
+                    if model.updateSnapshot.canRestart {
                         Button("Restart to Update") { model.restartToUpdate() }
                             .buttonStyle(.borderedProminent)
                     }

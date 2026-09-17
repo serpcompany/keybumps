@@ -54,7 +54,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     private var setQuickSearchVisible: (Bool) -> Void = { _ in }
     private var quickSearchWasVisibleWhenMenuOpened = false
     private var updateSnapshot: () -> UpdateSnapshot = {
-        UpdateSnapshot(status: .unavailable("Updates unavailable"), automaticallyChecks: false, canCheck: false)
+        UpdateSnapshot(status: .unavailable("Updates unavailable"), automaticallyChecks: false, canCheck: false, canRestart: false)
     }
     private var checkForUpdatesAction: () -> Void = {}
     private var restartToUpdateAction: () -> Void = {}
@@ -121,7 +121,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         let updates = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
         updates.isEnabled = snapshot.canCheck
-        if snapshot.status.readyVersion != nil {
+        if snapshot.canRestart {
             let restart = menu.addItem(withTitle: "Restart to Update", action: #selector(restartToUpdate), keyEquivalent: "")
             restart.target = self
             restart.isEnabled = true

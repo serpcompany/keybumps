@@ -17,24 +17,44 @@ struct SparkleUpdateConfiguration: Equatable {
         let rawFeed = bundle.object(forInfoDictionaryKey: "SUFeedURL") as? String
         #endif
         guard let rawFeed,
-              let feedURL = URL(string: rawFeed),
-              let scheme = feedURL.scheme?.lowercased(),
-              scheme == "https" || (fixtureFeed != nil && scheme == "http"),
+              let feedURL = validatedFeedURL(rawFeed, isFixture: fixtureFeed != nil),
               let publicKey = bundle.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
               !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
         return SparkleUpdateConfiguration(feedURL: feedURL, publicKey: publicKey)
     }
+
+    private static func validatedFeedURL(_ rawValue: String, isFixture: Bool) -> URL? {
+        guard let components = URLComponents(string: rawValue),
+              components.user == nil,
+              components.password == nil,
+              components.fragment == nil,
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(),
+              !host.isEmpty else {
+            return nil
+        }
+        if isFixture {
+            guard (scheme == "http" || scheme == "https"),
+                  ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host) else {
+                return nil
+            }
+        } else {
+            guard scheme == "https" else { return nil }
+        }
+        return components.url
+    }
 }
 
 enum NoUpdateStatusResolver {
     static func status(reasonCode: Int?) -> UpdateStatus {
         switch reasonCode {
+        case 1, 2: .current
         case 3: .failed("This update requires a newer version of macOS")
         case 4: .failed("This update does not support this version of macOS")
         case 5: .failed("This update requires an Apple silicon Mac")
-        default: .current
+        default: .failed("The update check completed without a verifiable result. Try again.")
         }
     }
 }
@@ -65,21 +85,21 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     private(set) var snapshot = UpdateSnapshot(
         status: .idle,
         automaticallyChecks: true,
-        canCheck: false
+        canCheck: false,
+        canRestart: false
     )
     var onChange: ((UpdateSnapshot) -> Void)?
 
     private let configuration: SparkleUpdateConfiguration
-    private let safetyPolicy: UpdateInstallationSafetyPolicy
+    private let installCoordinator: SafeUpdateInstallCoordinator
     private var updaterController: SPUStandardUpdaterController?
-    private var pendingInstallHandler: (() -> Void)?
-    private var pendingVersion: String?
     private var started = false
 
     init(configuration: SparkleUpdateConfiguration, safetyPolicy: UpdateInstallationSafetyPolicy) {
         self.configuration = configuration
-        self.safetyPolicy = safetyPolicy
+        self.installCoordinator = SafeUpdateInstallCoordinator(safetyPolicy: safetyPolicy)
         super.init()
+        installCoordinator.onStatusChange = { [weak self] status in self?.refresh(status: status) }
     }
 
     func start() {
@@ -120,25 +140,18 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     func installationSafetyDidChange() {
-        guard pendingInstallHandler != nil, let pendingVersion else { return }
-        refresh(
-            status: safetyPolicy.isSafeToInstall
-                ? .readyToRestart(version: pendingVersion)
-                : .deferred(version: pendingVersion)
-        )
+        installCoordinator.safetyDidChange()
     }
 
     func restartWhenSafe() {
-        guard let pendingInstallHandler else { return }
-        guard safetyPolicy.isSafeToInstall else {
-            refresh(status: .deferred(version: pendingVersion ?? "available"))
+        guard installCoordinator.hasCallableRestart else {
+            refresh(status: .failed("The update is not ready to restart yet"))
             return
         }
-        pendingInstallHandler()
+        _ = installCoordinator.restartWhenSafe()
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-        pendingVersion = item.displayVersionString
         refresh(status: .available(version: item.displayVersionString))
     }
 
@@ -153,8 +166,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
-        pendingVersion = item.displayVersionString
-        refresh(status: .readyToRestart(version: item.displayVersionString))
+        installCoordinator.recordDownloaded(version: item.displayVersionString)
     }
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: any Error) {
@@ -162,9 +174,11 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
+        installCoordinator.reset()
         let nsError = error as NSError
         guard nsError.code != 1001 else { // Sparkle's documented SUNoUpdateError value.
-            refresh(status: .current)
+            let reasonCode = (nsError.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)?.intValue
+            refresh(status: NoUpdateStatusResolver.status(reasonCode: reasonCode))
             return
         }
         refresh(status: .failed("The update check failed. Try again."))
@@ -175,14 +189,22 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         willInstallUpdateOnQuit item: SUAppcastItem,
         immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
     ) -> Bool {
-        pendingVersion = item.displayVersionString
-        pendingInstallHandler = immediateInstallHandler
-        refresh(
-            status: safetyPolicy.isSafeToInstall
-                ? .readyToRestart(version: item.displayVersionString)
-                : .deferred(version: item.displayVersionString)
+        installCoordinator.captureImmediateInstall(
+            version: item.displayVersionString,
+            handler: immediateInstallHandler
         )
         return true
+    }
+
+    func updater(
+        _ updater: SPUUpdater,
+        shouldPostponeRelaunchForUpdate item: SUAppcastItem,
+        untilInvokingBlock installHandler: @escaping () -> Void
+    ) -> Bool {
+        installCoordinator.shouldPostponeRelaunch(
+            version: item.displayVersionString,
+            handler: installHandler
+        )
     }
 
     func updater(
@@ -199,6 +221,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
             snapshot.automaticallyChecks = updater.automaticallyChecksForUpdates
             snapshot.canCheck = updater.canCheckForUpdates
         }
+        snapshot.canRestart = installCoordinator.hasCallableRestart
         onChange?(snapshot)
     }
 }

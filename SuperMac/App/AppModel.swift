@@ -96,7 +96,7 @@ final class AppModel {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
         self.nativeNotificationCenter = nativeNotificationCenter
-        let updateSafetyPolicy = UpdateInstallationSafetyPolicy()
+        let updateSafetyPolicy = UpdateInstallationSafetyPolicy.shared
         self.updateSafetyPolicy = updateSafetyPolicy
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
         self.updater = updater
@@ -127,7 +127,6 @@ final class AppModel {
             self.dictationIndicator.update(phase)
             self.updateDictationEscapeRegistration(for: phase)
             self.updateSafetyPolicy.update(dictationPhase: phase)
-            ApplicationTerminationGuard.shared.update(dictationPhase: phase)
             self.updater.installationSafetyDidChange()
         }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
