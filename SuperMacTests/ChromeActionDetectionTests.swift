@@ -136,24 +136,35 @@ final class ChromeActionDetectionTests: XCTestCase {
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 2.1), hit: pre))
         let event = correlator.verify(post: makeSnapshot(hit: pre.hit), runtime: runtime(tabs: tabs(count: 3)), at: 2.2)
         XCTAssertEqual(event?.shortcut, "⌘T")
-        XCTAssertEqual(
-            event?.shortcutProvenance,
-            .characterizedDefault(
-                adapterID: ChromeShortcutCatalog.adapterID,
-                compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion
-            )
-        )
-        XCTAssertNil(event?.rawShortcutEvidence)
+        XCTAssertEqual(event?.shortcutProvenance, .liveAX)
+        XCTAssertEqual(event?.rawShortcutEvidence, tryResolvedObservation("⌘T").evidence)
     }
 
     func testCharacterizedTabDefaultsSuppressWhenChromeVersionIsMissingOrMismatched() {
         for incompatibleVersion in [nil, "153.0.8010.11", "154.0.0.0"] as [String?] {
+            let tabState = tabs(count: 2)
+            let selected = tabState.tabs[1]
             let pre = makeSnapshot(
                 applicationVersion: incompatibleVersion,
-                hit: node("new", role: "AXButton", description: "New Tab", actions: ["AXPress"])
+                hit: selected
             )
-            let preRuntime = runtime(tabs: tabs(count: 2), applicationVersion: incompatibleVersion)
-            let postRuntime = runtime(tabs: tabs(count: 3), applicationVersion: incompatibleVersion)
+            let preRuntime = runtime(
+                tabs: tabState,
+                tabShortcuts: .unavailable,
+                applicationVersion: incompatibleVersion
+            )
+            let selectedPost = ChromeTabState(
+                containerToken: tabState.containerToken,
+                tabs: [
+                    node("tab-1", role: "AXRadioButton", selected: false),
+                    node("tab-2", role: "AXRadioButton", selected: true)
+                ]
+            )
+            let postRuntime = runtime(
+                tabs: selectedPost,
+                tabShortcuts: .unavailable,
+                applicationVersion: incompatibleVersion
+            )
             var correlator = ActionCorrelator()
             correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
             XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
@@ -162,6 +173,38 @@ final class ChromeActionDetectionTests: XCTestCase {
                 "Characterized defaults must suppress for version \(incompatibleVersion ?? "missing")"
             )
         }
+    }
+
+    func testDirectTabSelectionUsesVersionedCharacterizedFallbackOnlyWhenLiveEvidenceIsUnavailable() {
+        let tabState = tabs(count: 2)
+        let target = tabState.tabs[1]
+        let pre = makeSnapshot(hit: target)
+        let preRuntime = runtime(tabs: tabState, tabShortcuts: .unavailable)
+        let postTabs = ChromeTabState(
+            containerToken: tabState.containerToken,
+            tabs: [
+                node("tab-1", role: "AXRadioButton", selected: false),
+                node("tab-2", role: "AXRadioButton", selected: true)
+            ]
+        )
+        var correlator = ActionCorrelator()
+        correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
+        XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
+
+        let event = correlator.verify(
+            post: pre,
+            runtime: runtime(tabs: postTabs, tabShortcuts: .unavailable),
+            at: 1.2
+        )
+
+        XCTAssertEqual(event?.shortcut, "⌘2")
+        XCTAssertEqual(
+            event?.shortcutProvenance,
+            .characterizedDefault(
+                adapterID: ChromeShortcutCatalog.adapterID,
+                compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion
+            )
+        )
     }
 
     func testCloseAndSelectionRequireExactPostconditions() {
@@ -367,15 +410,25 @@ final class ChromeActionDetectionTests: XCTestCase {
 
     private func runtime(
         tabs: ChromeTabState? = nil,
+        tabShortcuts: ChromeTabShortcutState? = nil,
         shortcut: LiveShortcutResolution = .unavailable,
         destination: ChromeNavigationDestination = .unavailable,
         applicationVersion: String? = ChromeShortcutCatalog.characterizedChromeVersion
     ) -> ChromeRuntimeState {
         ChromeRuntimeState(
             tabs: tabs,
+            tabShortcuts: tabShortcuts ?? fixtureTabShortcuts(),
             settingsShortcut: shortcut,
             destination: destination,
             applicationVersion: applicationVersion
+        )
+    }
+
+    private func fixtureTabShortcuts() -> ChromeTabShortcutState {
+        ChromeTabShortcutState(
+            newTab: resolved("⌘T"),
+            closeTab: resolved("⌘W"),
+            directSelection: Dictionary(uniqueKeysWithValues: (1...9).map { ($0, resolved("⌘\($0)")) })
         )
     }
 

@@ -28,6 +28,18 @@ struct ChromeTabState: Codable, Equatable, Sendable {
     let tabs: [AXNodeSnapshot]
 }
 
+struct ChromeTabShortcutState: Equatable, Sendable {
+    var newTab: LiveShortcutResolution
+    var closeTab: LiveShortcutResolution
+    var directSelection: [Int: LiveShortcutResolution]
+
+    static let unavailable = ChromeTabShortcutState(
+        newTab: .unavailable,
+        closeTab: .unavailable,
+        directSelection: [:]
+    )
+}
+
 struct LiveShortcutObservation: Codable, Equatable, Sendable {
     let evidence: AXShortcutEvidence
 
@@ -63,17 +75,20 @@ enum ChromeRuntimeRequirement: Equatable, Sendable {
 
 struct ChromeRuntimeState: Equatable, Sendable {
     var tabs: ChromeTabState?
+    var tabShortcuts: ChromeTabShortcutState
     var settingsShortcut: LiveShortcutResolution
     var destination: ChromeNavigationDestination
     var applicationVersion: String?
 
     init(
         tabs: ChromeTabState?,
+        tabShortcuts: ChromeTabShortcutState = .unavailable,
         settingsShortcut: LiveShortcutResolution,
         destination: ChromeNavigationDestination,
         applicationVersion: String? = nil
     ) {
         self.tabs = tabs
+        self.tabShortcuts = tabShortcuts
         self.settingsShortcut = settingsShortcut
         self.destination = destination
         self.applicationVersion = applicationVersion
@@ -81,6 +96,7 @@ struct ChromeRuntimeState: Equatable, Sendable {
 
     static let unavailable = ChromeRuntimeState(
         tabs: nil,
+        tabShortcuts: .unavailable,
         settingsShortcut: .unavailable,
         destination: .unavailable,
         applicationVersion: nil
@@ -159,6 +175,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             guard let window = focusedWindow(of: application) else { return .unavailable }
             return ChromeRuntimeState(
                 tabs: tabState(in: window),
+                tabShortcuts: tabShortcuts(in: application),
                 settingsShortcut: .unavailable,
                 destination: .unavailable,
                 applicationVersion: applicationVersion
@@ -167,6 +184,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             guard let window = focusedWindow(of: application) else { return .unavailable }
             return ChromeRuntimeState(
                 tabs: nil,
+                tabShortcuts: .unavailable,
                 settingsShortcut: settingsShortcut(in: application),
                 destination: navigationDestination(in: window),
                 applicationVersion: applicationVersion
@@ -186,6 +204,46 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             ))
         }
         return ChromeSettingsSemantics.resolveShortcut(from: observations)
+    }
+
+    private func tabShortcuts(in application: AXUIElement) -> ChromeTabShortcutState {
+        guard let menuBar: AXUIElement = attribute(kAXMenuBarAttribute, from: application) else {
+            return .unavailable
+        }
+        var frontier = [menuBar]
+        var observations: [(title: String, shortcut: LiveShortcutObservation)] = []
+        var visited = 0
+        while !frontier.isEmpty && visited < 800 {
+            let element = frontier.removeFirst()
+            visited += 1
+            if (attribute(kAXRoleAttribute, from: element) as String?) == kAXMenuItemRole as String,
+               (attribute(kAXEnabledAttribute, from: element) as Bool?) != false,
+               let title: String = attribute(kAXTitleAttribute, from: element),
+               let shortcut = LiveShortcutObservation(evidence: AXShortcutEvidenceReader.read(from: element)) {
+                observations.append((title, shortcut))
+            }
+            let children: [AXUIElement] = attribute(kAXChildrenAttribute, from: element) ?? []
+            frontier.append(contentsOf: children)
+        }
+
+        func unique(titles: Set<String>) -> LiveShortcutResolution {
+            let matches = observations.filter { titles.contains($0.title.lowercased()) }.map(\.shortcut)
+            if matches.count == 1 { return .resolved(matches[0]) }
+            return matches.isEmpty ? .unavailable : .ambiguous
+        }
+
+        var direct: [Int: LiveShortcutResolution] = [:]
+        for index in 1...9 {
+            let expected = "⌘\(index)"
+            let matches = observations.map(\.shortcut).filter { $0.displayString == expected }
+            if matches.count == 1 { direct[index] = .resolved(matches[0]) }
+            else if matches.count > 1 { direct[index] = .ambiguous }
+        }
+        return ChromeTabShortcutState(
+            newTab: unique(titles: ["new tab"]),
+            closeTab: unique(titles: ["close tab"]),
+            directSelection: direct
+        )
     }
 
     private func navigationDestination(in window: AXUIElement) -> ChromeNavigationDestination {
