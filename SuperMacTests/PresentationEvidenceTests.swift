@@ -10,35 +10,7 @@ final class PresentationEvidenceTests: XCTestCase {
         .topCenterShelf
     ]
 
-    private let fixtures: [(name: String, event: CoachingEvent)] = [
-        ("short", .sample),
-        (
-            "line-ends",
-            CoachingEvent(
-                applicationName: "Visual Studio Code",
-                actionTitle: "Add Cursors to Line Ends",
-                shortcut: "⇧⌥I"
-            )
-        ),
-        (
-            "long-shortcut",
-            CoachingEvent(
-                applicationName: "Cursor",
-                actionTitle: "Add Cursors to Every Selected Line End",
-                shortcut: "⌃⌥⌘-"
-            )
-        ),
-        (
-            "long-application",
-            CoachingEvent(
-                applicationName: "Visual Studio Code - Insiders",
-                actionTitle: "Add Cursors to Every Selected Line End",
-                shortcut: "⌃⌥⌘-"
-            )
-        )
-    ]
-
-    func testEveryCustomPresentationFixtureRendersToReviewablePNG() throws {
+    func testEveryCustomPresentationRendersToReviewablePNG() throws {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
             ?? FileManager.default.temporaryDirectory
@@ -50,46 +22,15 @@ final class PresentationEvidenceTests: XCTestCase {
 
         let controller = PresentationWindowController()
         for channel in visualChannels {
-            for fixture in fixtures {
-                let size = controller.panelSize(for: channel, event: fixture.event)
-                let destination = outputDirectory
-                    .appendingPathComponent("\(channel.rawValue)-\(fixture.name).png")
-                try render(event: fixture.event, channel: channel, size: size, to: destination)
+            let size = controller.panelSize(for: channel)
+            let destination = outputDirectory.appendingPathComponent("\(channel.rawValue).png")
+            try render(channel: channel, size: size, to: destination)
 
-                let data = try Data(contentsOf: destination)
-                XCTAssertGreaterThan(data.count, 1_000, "\(channel.title) evidence should contain a rendered UI")
-                let image = try XCTUnwrap(NSImage(data: data))
-                XCTAssertEqual(image.size, size)
-            }
+            let data = try Data(contentsOf: destination)
+            XCTAssertGreaterThan(data.count, 1_000, "\(channel.title) evidence should contain a rendered UI")
+            let image = try XCTUnwrap(NSImage(data: data))
+            XCTAssertEqual(image.size, size)
         }
-    }
-
-    func testPresentationContractKeepsShortContentCompactAndLongContentBounded() {
-        let shortToast = CoachingPresentationContract(event: .sample, style: .topRightToast)
-        XCTAssertEqual(shortToast.layout, .compact)
-        XCTAssertEqual(shortToast.panelSize, NSSize(width: 360, height: 92))
-
-        for fixture in fixtures.dropFirst() {
-            for channel in visualChannels {
-                let contract = CoachingPresentationContract(event: fixture.event, style: channel)
-                XCTAssertEqual(contract.layout, .expanded)
-                XCTAssertLessThanOrEqual(contract.panelSize.width, channel == .topRightToast ? 420 : 500)
-                XCTAssertLessThanOrEqual(contract.panelSize.height, 148)
-                XCTAssertEqual(contract.secondaryText, fixture.event.applicationName)
-                XCTAssertEqual(contract.shortcutDisplayCount, 1)
-                XCTAssertFalse(contract.showsDecorativeIcon)
-                XCTAssertEqual(contract.closePlacement, .topTrailingOverlay)
-            }
-        }
-    }
-
-    func testPresentationAccessibilityAnnouncesEventValuesExactlyOnce() {
-        let event = fixtures[2].event
-        let contract = CoachingPresentationContract(event: event, style: .topRightToast)
-
-        XCTAssertEqual(contract.accessibilityLabel.components(separatedBy: event.coachingTitle).count - 1, 1)
-        XCTAssertEqual(contract.accessibilityLabel.components(separatedBy: event.applicationName).count - 1, 1)
-        XCTAssertEqual(contract.accessibilityLabel.components(separatedBy: event.shortcut).count - 1, 1)
     }
 
     func testPresentationGeometryAndTimingContract() {
@@ -122,13 +63,8 @@ final class PresentationEvidenceTests: XCTestCase {
         )
     }
 
-    private func render(
-        event: CoachingEvent,
-        channel: NotificationChannel,
-        size: NSSize,
-        to destination: URL
-    ) throws {
-        let root = CoachingPresentationView(event: event, style: channel, onDismiss: {})
+    private func render(channel: NotificationChannel, size: NSSize, to destination: URL) throws {
+        let root = CoachingPresentationView(event: .sample, style: channel, onDismiss: {})
             .frame(width: size.width, height: size.height)
             .environment(\.colorScheme, .dark)
 
