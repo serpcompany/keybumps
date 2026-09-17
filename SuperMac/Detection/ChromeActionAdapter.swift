@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -6,7 +7,7 @@ enum ManualActionKind: Equatable, Sendable {
     case chromeNewTab
     case chromeCloseActiveTab(tabToken: String)
     case chromeSelectTab(tabToken: String, index: Int, tabCount: Int)
-    case chromeSettings(shortcut: String)
+    case chromeSettings(shortcut: LiveShortcutObservation)
 }
 
 struct ManualActionCandidate: Equatable, Sendable {
@@ -27,8 +28,23 @@ struct ChromeTabState: Codable, Equatable, Sendable {
     let tabs: [AXNodeSnapshot]
 }
 
+struct LiveShortcutObservation: Codable, Equatable, Sendable {
+    let evidence: AXShortcutEvidence
+
+    init?(evidence: AXShortcutEvidence) {
+        guard KeyboardShortcutRegistry.resolve(evidence) != nil else { return nil }
+        self.evidence = evidence
+    }
+
+    var canonicalShortcut: CanonicalKeyboardShortcut? {
+        KeyboardShortcutRegistry.resolve(evidence)
+    }
+
+    var displayString: String? { canonicalShortcut?.displayString }
+}
+
 enum LiveShortcutResolution: Codable, Equatable, Sendable {
-    case resolved(String)
+    case resolved(LiveShortcutObservation)
     case unavailable
     case ambiguous
 }
@@ -49,8 +65,26 @@ struct ChromeRuntimeState: Equatable, Sendable {
     var tabs: ChromeTabState?
     var settingsShortcut: LiveShortcutResolution
     var destination: ChromeNavigationDestination
+    var applicationVersion: String?
 
-    static let unavailable = ChromeRuntimeState(tabs: nil, settingsShortcut: .unavailable, destination: .unavailable)
+    init(
+        tabs: ChromeTabState?,
+        settingsShortcut: LiveShortcutResolution,
+        destination: ChromeNavigationDestination,
+        applicationVersion: String? = nil
+    ) {
+        self.tabs = tabs
+        self.settingsShortcut = settingsShortcut
+        self.destination = destination
+        self.applicationVersion = applicationVersion
+    }
+
+    static let unavailable = ChromeRuntimeState(
+        tabs: nil,
+        settingsShortcut: .unavailable,
+        destination: .unavailable,
+        applicationVersion: nil
+    )
 }
 
 protocol ChromeRuntimeStateReading {
@@ -94,8 +128,8 @@ enum ChromeSettingsSemantics {
             return matches.isEmpty ? .unavailable : .ambiguous
         }
         guard match.enabled == true,
-              let shortcut = KeyboardShortcutRegistry.resolve(match.shortcutEvidence) else { return .unavailable }
-        return .resolved(shortcut.displayString)
+              let shortcut = LiveShortcutObservation(evidence: match.shortcutEvidence) else { return .unavailable }
+        return .resolved(shortcut)
     }
 
     private static let settingsTitles: Set<String> = ["settings", "preferences"]
@@ -115,18 +149,27 @@ enum ChromeSettingsSemantics {
 struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
     func read(pid: Int32, requirement: ChromeRuntimeRequirement) -> ChromeRuntimeState {
         let application = AXUIElementCreateApplication(pid)
+        let applicationVersion = NSRunningApplication(processIdentifier: pid)?.bundleURL
+            .flatMap(Bundle.init(url:))?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         switch requirement {
         case .none:
             return .unavailable
         case .tabs:
             guard let window = focusedWindow(of: application) else { return .unavailable }
-            return ChromeRuntimeState(tabs: tabState(in: window), settingsShortcut: .unavailable, destination: .unavailable)
+            return ChromeRuntimeState(
+                tabs: tabState(in: window),
+                settingsShortcut: .unavailable,
+                destination: .unavailable,
+                applicationVersion: applicationVersion
+            )
         case .settings:
             guard let window = focusedWindow(of: application) else { return .unavailable }
             return ChromeRuntimeState(
                 tabs: nil,
                 settingsShortcut: settingsShortcut(in: application),
-                destination: navigationDestination(in: window)
+                destination: navigationDestination(in: window),
+                applicationVersion: applicationVersion
             )
         }
     }
@@ -223,9 +266,20 @@ enum ChromeShortcutCatalog {
     // Static defaults are the explicit fallback characterized against this Chrome build.
     // A later slice can resolve equivalent visible menu items before using these values.
     static let characterizedChromeVersion = "153.0.8010.12"
+    static let adapterID = "chrome-tab-defaults"
     static let newTab = "⌘T"
     static let closeTab = "⌘W"
     static func selectTab(index: Int) -> String { index <= 8 ? "⌘\(index)" : "⌘9" }
+
+    static func isCompatible(
+        snapshotVersion: String?,
+        preRuntimeVersion: String?,
+        postRuntimeVersion: String?
+    ) -> Bool {
+        snapshotVersion == characterizedChromeVersion
+            && preRuntimeVersion == characterizedChromeVersion
+            && postRuntimeVersion == characterizedChromeVersion
+    }
 }
 
 struct ChromeActionAdapter: ApplicationActionAdapter {

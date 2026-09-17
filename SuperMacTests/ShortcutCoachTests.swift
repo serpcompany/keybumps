@@ -1035,6 +1035,8 @@ final class ShortcutCoachTests: XCTestCase {
                 shortcutEvidence: evidence
             )
         )
+        XCTAssertEqual(event.shortcutProvenance, .liveAX)
+        XCTAssertEqual(event.rawShortcutEvidence, evidence)
 
         let encoded = try JSONEncoder().encode(event)
         XCTAssertEqual(try JSONDecoder().decode(CoachingEvent.self, from: encoded), event)
@@ -1059,6 +1061,28 @@ final class ShortcutCoachTests: XCTestCase {
         )
     }
 
+    func testLegacyCoachingEventDecodesWithoutShortcutMetadata() throws {
+        let id = UUID()
+        let json = """
+        {
+          "id": "\(id.uuidString)",
+          "occurredAt": 0,
+          "applicationName": "Finder",
+          "actionTitle": "Open New Window",
+          "shortcut": "⌘N",
+          "isRead": false
+        }
+        """
+
+        let event = try JSONDecoder().decode(CoachingEvent.self, from: Data(json.utf8))
+
+        XCTAssertEqual(event.id, id)
+        XCTAssertEqual(event.shortcut, "⌘N")
+        XCTAssertNil(event.rawShortcutEvidence)
+        XCTAssertEqual(event.shortcutProvenance, .legacyUnknown)
+        XCTAssertEqual(event.canonicalShortcut?.displayString, "⌘N")
+    }
+
     func testCharacterizedChromeShortcutsMustPassRegistryValidation() {
         let supported = [
             ChromeShortcutCatalog.newTab,
@@ -1066,10 +1090,12 @@ final class ShortcutCoachTests: XCTestCase {
         ] + (1...9).map(ChromeShortcutCatalog.selectTab(index:))
         XCTAssertTrue(supported.allSatisfy { KeyboardShortcutRegistry.resolve(displayString: $0) != nil })
         XCTAssertNil(
-            CoachingEventFactory.make(
+            CoachingEventFactory.makeCharacterized(
                 applicationName: "Google Chrome",
                 actionTitle: "Unsupported",
-                displayShortcut: "⌘Not a key"
+                displayShortcut: "⌘Not a key",
+                adapterID: ChromeShortcutCatalog.adapterID,
+                compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion
             )
         )
     }

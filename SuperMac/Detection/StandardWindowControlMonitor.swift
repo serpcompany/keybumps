@@ -37,6 +37,7 @@ struct WindowControlTrace: Codable, Equatable, Sendable {
     let kind: StandardWindowControlKind
     let applicationProfile: WindowControlApplicationProfile
     let shortcut: String
+    let shortcutEvidence: AXShortcutEvidence?
     let prePresent: Bool
     let postPresent: Bool
     let preMinimized: Bool?
@@ -44,6 +45,34 @@ struct WindowControlTrace: Codable, Equatable, Sendable {
     let preFullScreen: Bool?
     let postFullScreen: Bool?
     let frameChanged: Bool
+
+    init(
+        schemaVersion: Int,
+        kind: StandardWindowControlKind,
+        applicationProfile: WindowControlApplicationProfile,
+        shortcut: String,
+        shortcutEvidence: AXShortcutEvidence? = nil,
+        prePresent: Bool,
+        postPresent: Bool,
+        preMinimized: Bool?,
+        postMinimized: Bool?,
+        preFullScreen: Bool?,
+        postFullScreen: Bool?,
+        frameChanged: Bool
+    ) {
+        self.schemaVersion = schemaVersion
+        self.kind = kind
+        self.applicationProfile = applicationProfile
+        self.shortcut = shortcut
+        self.shortcutEvidence = shortcutEvidence
+        self.prePresent = prePresent
+        self.postPresent = postPresent
+        self.preMinimized = preMinimized
+        self.postMinimized = postMinimized
+        self.preFullScreen = preFullScreen
+        self.postFullScreen = postFullScreen
+        self.frameChanged = frameChanged
+    }
 }
 
 struct WindowControlActionDetector {
@@ -67,6 +96,13 @@ struct WindowControlActionDetector {
         !captured.isEmpty && reread == captured
     }
 
+    static func shortcutIsCurrent(
+        _ captured: LiveShortcutObservation,
+        reread: LiveShortcutObservation?
+    ) -> Bool {
+        reread == captured
+    }
+
     static func acceptsWindow(isStandard: Bool?, isModal: Bool?) -> Bool {
         isStandard == true && isModal == false
     }
@@ -78,7 +114,8 @@ struct WindowControlActionDetector {
     ) -> CoachingEvent? {
         guard trace.schemaVersion == Self.currentSchemaVersion,
               trace.prePresent,
-              !trace.shortcut.isEmpty else { return nil }
+              !trace.shortcut.isEmpty,
+              let shortcutEvidence = trace.shortcutEvidence else { return nil }
         let completed: Bool
         let title: String
         switch trace.kind {
@@ -96,7 +133,7 @@ struct WindowControlActionDetector {
         return CoachingEventFactory.make(
             applicationName: applicationName,
             actionTitle: title,
-            displayShortcut: trace.shortcut,
+            shortcutEvidence: shortcutEvidence,
             pointerX: pointer.x,
             pointerY: pointer.y
         )
@@ -124,7 +161,7 @@ final class StandardWindowControlMonitor {
         let window: AXUIElement
         let buttonFrame: CGRect
         let preState: WindowControlState
-        let shortcut: String
+        let shortcut: LiveShortcutObservation
         let pointerDown: CGPoint
         let downTimestamp: TimeInterval
         var maximumTravel: CGFloat = 0
@@ -133,7 +170,7 @@ final class StandardWindowControlMonitor {
         init(kind: StandardWindowControlKind, applicationName: String,
              applicationProfile: WindowControlApplicationProfile, processIdentifier: pid_t,
              application: AXUIElement, window: AXUIElement, buttonFrame: CGRect,
-             preState: WindowControlState, shortcut: String, pointerDown: CGPoint,
+             preState: WindowControlState, shortcut: LiveShortcutObservation, pointerDown: CGPoint,
              downTimestamp: TimeInterval) {
             self.kind = kind
             self.applicationName = applicationName
@@ -273,7 +310,8 @@ final class StandardWindowControlMonitor {
             schemaVersion: WindowControlActionDetector.currentSchemaVersion,
             kind: session.kind,
             applicationProfile: session.applicationProfile,
-            shortcut: session.shortcut,
+            shortcut: session.shortcut.displayString ?? "",
+            shortcutEvidence: session.shortcut.evidence,
             prePresent: session.preState.present,
             postPresent: post.present,
             preMinimized: session.preState.minimized,
@@ -312,11 +350,11 @@ final class StandardWindowControlMonitor {
         in application: AXUIElement,
         state: WindowControlState,
         requireEnabled: Bool
-    ) -> String? {
+    ) -> LiveShortcutObservation? {
         guard let menuBar: AXUIElement = attribute(kAXMenuBarAttribute, from: application) else { return nil }
         var frontier = [menuBar]
         var visited = 0
-        var matches: [String] = []
+        var matches: [LiveShortcutObservation] = []
         while !frontier.isEmpty && visited < 600 {
             let element = frontier.removeFirst()
             visited += 1
@@ -324,16 +362,16 @@ final class StandardWindowControlMonitor {
                (!requireEnabled || (attribute(kAXEnabledAttribute, from: element) as Bool?) != false),
                let title: String = attribute(kAXTitleAttribute, from: element),
                menuTitle(title, matches: kind, state: state) {
-                if let shortcut = KeyboardShortcutRegistry.resolve(
-                    AXShortcutEvidenceReader.read(from: element)
+                if let shortcut = LiveShortcutObservation(
+                    evidence: AXShortcutEvidenceReader.read(from: element)
                 ) {
-                    matches.append(shortcut.displayString)
+                    matches.append(shortcut)
                 }
             }
             let children: [AXUIElement] = attribute(kAXChildrenAttribute, from: element) ?? []
             frontier.append(contentsOf: children)
         }
-        return WindowControlActionDetector.uniqueShortcut(from: matches)
+        return matches.count == 1 ? matches[0] : nil
     }
 
     private func menuTitle(_ title: String, matches kind: StandardWindowControlKind, state: WindowControlState) -> Bool {

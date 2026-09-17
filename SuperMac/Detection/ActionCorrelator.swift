@@ -46,38 +46,71 @@ struct ActionCorrelator {
         guard let candidate else { return nil }
         defer { cancel() }
         guard post.bundleIdentifier == candidate.preSnapshot.bundleIdentifier else { return nil }
-        let output: (String, String)?
+        let event: CoachingEvent?
         switch candidate.kind {
-        case .chromeNewTab where tabStates(candidate.preRuntime, runtime, satisfy: { $1.tabs.count == $0.tabs.count + 1 }):
-            output = ("New Tab", ChromeShortcutCatalog.newTab)
+        case .chromeNewTab
+            where tabStates(candidate.preRuntime, runtime, satisfy: { $1.tabs.count == $0.tabs.count + 1 })
+                && ChromeShortcutCatalog.isCompatible(
+                    snapshotVersion: candidate.preSnapshot.applicationVersion,
+                    preRuntimeVersion: candidate.preRuntime.applicationVersion,
+                    postRuntimeVersion: runtime.applicationVersion
+                ):
+            event = characterizedEvent(title: "New Tab", shortcut: ChromeShortcutCatalog.newTab, candidate: candidate)
         case .chromeCloseActiveTab(let token)
             where tabStates(candidate.preRuntime, runtime, satisfy: {
                 $1.tabs.count == $0.tabs.count - 1 && !$1.tabs.contains(where: { $0.token == token })
-            }):
-            output = ("Close Tab", ChromeShortcutCatalog.closeTab)
+            }) && ChromeShortcutCatalog.isCompatible(
+                snapshotVersion: candidate.preSnapshot.applicationVersion,
+                preRuntimeVersion: candidate.preRuntime.applicationVersion,
+                postRuntimeVersion: runtime.applicationVersion
+            ):
+            event = characterizedEvent(title: "Close Tab", shortcut: ChromeShortcutCatalog.closeTab, candidate: candidate)
         case .chromeSelectTab(let token, let index, let count)
             where tabStates(candidate.preRuntime, runtime, satisfy: {
                 $1.tabs.count == count && $1.tabs.first(where: { $0.token == token })?.selected == true
-            }):
-            output = ("Select Tab \(index)", ChromeShortcutCatalog.selectTab(index: index))
+            }) && ChromeShortcutCatalog.isCompatible(
+                snapshotVersion: candidate.preSnapshot.applicationVersion,
+                preRuntimeVersion: candidate.preRuntime.applicationVersion,
+                postRuntimeVersion: runtime.applicationVersion
+            ):
+            event = characterizedEvent(
+                title: "Select Tab \(index)",
+                shortcut: ChromeShortcutCatalog.selectTab(index: index),
+                candidate: candidate
+            )
         case .chromeSettings(let shortcut)
             where runtime.destination == .settings && runtime.settingsShortcut == .resolved(shortcut):
-            output = ("Settings", shortcut)
-        default: output = nil
-        }
-        guard let output,
-              let event = CoachingEventFactory.make(
+            event = CoachingEventFactory.make(
                 applicationName: candidate.applicationName,
-                actionTitle: output.0,
-                displayShortcut: output.1,
+                actionTitle: "Settings",
+                shortcutEvidence: shortcut.evidence,
                 pointerX: candidate.point.x,
                 pointerY: candidate.point.y
-              ) else { return nil }
+            )
+        default: event = nil
+        }
+        guard let event else { return nil }
         let signature = "\(event.applicationName)|\(event.actionTitle)|\(event.shortcut)"
         guard signature != lastSignature || timestamp - lastEmissionTimestamp > deduplicationWindow else { return nil }
         lastSignature = signature
         lastEmissionTimestamp = timestamp
         return event
+    }
+
+    private func characterizedEvent(
+        title: String,
+        shortcut: String,
+        candidate: ManualActionCandidate
+    ) -> CoachingEvent? {
+        CoachingEventFactory.makeCharacterized(
+            applicationName: candidate.applicationName,
+            actionTitle: title,
+            displayShortcut: shortcut,
+            adapterID: ChromeShortcutCatalog.adapterID,
+            compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion,
+            pointerX: candidate.point.x,
+            pointerY: candidate.point.y
+        )
     }
 
     private func tabStates(

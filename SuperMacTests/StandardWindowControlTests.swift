@@ -8,7 +8,10 @@ final class StandardWindowControlTests: XCTestCase {
     func testMinimizeEmitsOnlyAfterTheSameWindowBecomesMinimized() {
         XCTAssertNil(detector.detect(trace(kind: .minimize), applicationName: "Finder", pointer: .zero))
         let minimized = trace(kind: .minimize, postMinimized: true)
-        XCTAssertEqual(detector.detect(minimized, applicationName: "Finder", pointer: .zero)?.shortcut, "⌘M")
+        let event = detector.detect(minimized, applicationName: "Finder", pointer: .zero)
+        XCTAssertEqual(event?.shortcut, "⌘M")
+        XCTAssertEqual(event?.shortcutProvenance, .liveAX)
+        XCTAssertEqual(event?.rawShortcutEvidence, shortcutEvidence(for: "⌘M"))
     }
 
     func testCloseWindowRequiresTheCapturedWindowToDisappear() {
@@ -98,6 +101,7 @@ final class StandardWindowControlTests: XCTestCase {
             kind: kind,
             applicationProfile: profile,
             shortcut: shortcut,
+            shortcutEvidence: shortcutEvidence(for: shortcut),
             prePresent: true,
             postPresent: postPresent,
             preMinimized: preMinimized,
@@ -105,6 +109,21 @@ final class StandardWindowControlTests: XCTestCase {
             preFullScreen: preFullScreen,
             postFullScreen: postFullScreen,
             frameChanged: frameChanged
+        )
+    }
+
+    private func shortcutEvidence(for shortcut: String) -> AXShortcutEvidence {
+        var modifiers = 0
+        if shortcut.contains("⇧") { modifiers |= 1 }
+        if shortcut.contains("⌥") { modifiers |= 2 }
+        if shortcut.contains("⌃") { modifiers |= 4 }
+        if !shortcut.contains("⌘") { modifiers |= 8 }
+        let command = String(shortcut.last!).lowercased()
+        return AXShortcutEvidence(
+            commandCharacter: command,
+            modifiers: modifiers,
+            commandGlyph: nil,
+            virtualKey: nil
         )
     }
 }

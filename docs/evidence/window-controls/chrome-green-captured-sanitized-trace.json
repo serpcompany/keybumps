@@ -1,1 +1,1 @@
-{"schemaVersion":1,"kind":"fullScreen","applicationProfile":"googleChrome","shortcut":"⌃⌘F","prePresent":true,"postPresent":true,"preMinimized":false,"postMinimized":false,"preFullScreen":false,"postFullScreen":true,"frameChanged":true}
+{"schemaVersion":1,"kind":"fullScreen","applicationProfile":"googleChrome","shortcut":"⌃⌘F","shortcutEvidence":{"commandCharacter":"f","modifiers":4,"commandGlyph":null,"virtualKey":null},"prePresent":true,"postPresent":true,"preMinimized":false,"postMinimized":false,"preFullScreen":false,"postFullScreen":true,"frameChanged":true}

@@ -23,6 +23,7 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
     let actions: [String]
     let frame: AXFrameSnapshot?
     let menuShortcut: String?
+    let menuShortcutEvidence: AXShortcutEvidence?
 
     init(
         token: String,
@@ -36,7 +37,8 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
         enabled: Bool?,
         actions: [String],
         frame: AXFrameSnapshot?,
-        menuShortcut: String?
+        menuShortcut: String?,
+        menuShortcutEvidence: AXShortcutEvidence? = nil
     ) {
         self.token = token
         self.role = role
@@ -50,16 +52,34 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
         self.actions = actions
         self.frame = frame
         self.menuShortcut = menuShortcut
+        self.menuShortcutEvidence = menuShortcutEvidence
     }
 }
 
 struct AccessibilitySnapshot: Codable, Equatable, Sendable {
     let pid: Int32
     let bundleIdentifier: String?
+    let applicationVersion: String?
     let applicationName: String
     let hit: AXNodeSnapshot
     let ancestors: [AXNodeSnapshot]
     var hitAndAncestors: [AXNodeSnapshot] { [hit] + ancestors }
+
+    init(
+        pid: Int32,
+        bundleIdentifier: String?,
+        applicationVersion: String? = nil,
+        applicationName: String,
+        hit: AXNodeSnapshot,
+        ancestors: [AXNodeSnapshot]
+    ) {
+        self.pid = pid
+        self.bundleIdentifier = bundleIdentifier
+        self.applicationVersion = applicationVersion
+        self.applicationName = applicationName
+        self.hit = hit
+        self.ancestors = ancestors
+    }
 }
 
 final class AccessibilitySnapshotter {
@@ -83,6 +103,9 @@ final class AccessibilitySnapshotter {
         guard AXUIElementGetPid(hit, &pid) == .success else { return nil }
         let app = NSRunningApplication(processIdentifier: pid)
         let bundleIdentifier = app?.bundleIdentifier
+        let applicationVersion = app?.bundleURL
+            .flatMap(Bundle.init(url:))?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         var ancestors: [(AXUIElement, AXNodeSnapshot)] = []
         var cursor = hit
         for _ in 0..<8 {
@@ -93,7 +116,7 @@ final class AccessibilitySnapshotter {
             if node.role == kAXApplicationRole as String { break }
         }
         let hitSnapshot = nodeSnapshot(hit)
-        return AccessibilitySnapshot(pid: pid, bundleIdentifier: bundleIdentifier,
+        return AccessibilitySnapshot(pid: pid, bundleIdentifier: bundleIdentifier, applicationVersion: applicationVersion,
                                      applicationName: app?.localizedName ?? "Current app",
                                      hit: hitSnapshot, ancestors: ancestors.map(\.1))
     }
@@ -117,7 +140,8 @@ final class AccessibilitySnapshotter {
             value: valueString, selected: selected ?? ((rawValue as? NSNumber)?.boolValue),
             enabled: attribute(kAXEnabledAttribute, from: element), actions: actions.sorted(),
             frame: position.flatMap { origin in size.map { AXFrameSnapshot(x: origin.x, y: origin.y, width: $0.width, height: $0.height) } },
-            menuShortcut: KeyboardShortcutRegistry.resolve(shortcutEvidence)?.displayString
+            menuShortcut: KeyboardShortcutRegistry.resolve(shortcutEvidence)?.displayString,
+            menuShortcutEvidence: shortcutEvidence
         )
     }
 

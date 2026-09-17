@@ -83,11 +83,9 @@ struct DragDropActionDetector {
               trace.meaningfulDrag,
               !trace.modifiersPresent,
               trace.postcondition == .removedFromOriginalParent else { return nil }
-        return CoachingEventFactory.make(
-            applicationName: "Finder",
-            actionTitle: "Move to Trash",
-            displayShortcut: "⌘⌫"
-        )
+        // Behavior is verified, but a customized Finder shortcut is observable
+        // only from the live menu. Suppress until that evidence is captured.
+        return nil
     }
 }
 

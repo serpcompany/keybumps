@@ -169,6 +169,7 @@ final class ManualActionDetector {
                     }
                 } else if !isChromeSettings,
                    let shortcut = snapshot.hit.menuShortcut,
+                   let shortcutEvidence = snapshot.hit.menuShortcutEvidence,
                    snapshot.hit.role == kAXMenuItemRole as String,
                    let title = snapshot.hit.title, !title.isEmpty {
                     let signature = "\(snapshot.applicationName)|\(title)|\(shortcut)"
@@ -178,7 +179,7 @@ final class ManualActionDetector {
                         if let event = CoachingEventFactory.make(
                             applicationName: snapshot.applicationName,
                             actionTitle: title,
-                            displayShortcut: shortcut,
+                            shortcutEvidence: shortcutEvidence,
                             pointerX: sample.location.x,
                             pointerY: sample.location.y
                         ) {
