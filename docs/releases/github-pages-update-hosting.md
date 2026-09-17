@@ -1,6 +1,6 @@
 # GitHub Pages update hosting
 
-SuperMac temporarily uses GitHub Pages as its public, unauthenticated HTTPS origin for Sparkle update metadata and artifacts. The source repository remains private. GitHub Actions is disabled for the owner account, so Pages publishes from a dedicated `gh-pages` branch containing only generated public files.
+SuperMac temporarily uses GitHub Pages as its public, unauthenticated HTTPS origin for Sparkle update metadata and artifacts. The source repository remains private. The Pages workflow uploads only the generated `public/` directory.
 
 ## Stable URLs
 
@@ -14,11 +14,11 @@ The appcast URLs intentionally return no feed until a signed release candidate i
 
 ## Publication boundary
 
-The orphan `gh-pages` branch mirrors the deployable contents of `public/`; it does not contain the repository checkout, source code, signing keys, credentials, private test data, or build logs. GitHub Pages is configured to publish `/` from that branch.
+The GitHub Actions workflow deploys `public/` as one Pages artifact. It does not publish the repository checkout, source code, signing keys, credentials, private test data, or build logs.
 
-Release preparation must stage immutable ZIP/DMG artifacts and signed release notes before placing the signed `appcast.xml` pointer in the same publication tree. The complete prepared tree is committed and pushed to `gh-pages` only after local validation; assets and notes must exist in the tree before the appcast pointer. The production Sparkle private key remains in the operator Keychain and its encrypted recovery backup; it is never placed under `public/` or on `gh-pages`.
+Release preparation must stage immutable ZIP/DMG artifacts and signed release notes before placing the signed `appcast.xml` pointer in the same Pages artifact. The production Sparkle private key remains in the operator Keychain and its encrypted recovery backup; it is never placed under `public/`.
 
-Until GitHub Actions is enabled, publication is an explicit release-operator step. Future automation may replace the branch push while preserving the stable URLs and assets-first/appcast-last contract.
+The active `devinschumacher` GitHub credential cannot dispatch Actions, so release operators currently trigger this workflow with the configured Actions-enabled `serp-y` organization-admin credential. No credential is stored in the repository or Pages artifact. This operational account constraint may be removed later without changing the public URLs.
 
 ## Migration later
 
