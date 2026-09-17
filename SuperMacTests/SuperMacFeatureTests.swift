@@ -6,6 +6,7 @@ import XCTest
 
 @MainActor
 private final class StubGlobalHotKeyBackend: GlobalHotKeyRegistering {
+    let registrationScope = GlobalHotKeyRegistrationScope.systemWide
     private(set) var activeIdentifiers: Set<UInt32> = []
     private var handler: ((UInt32) -> Void)?
 
@@ -111,6 +112,10 @@ final class SuperMacFeatureTests: XCTestCase {
             backend.send(identifier: identifier)
         }
         XCTAssertEqual(Set(invocations), ["quickSearch", "clipboardHistory"])
+    }
+
+    func testProductionShortcutCoordinatorUsesSystemWideRegistration() {
+        XCTAssertEqual(GlobalShortcutCoordinator().registrationScope, .systemWide)
     }
 
     func testAppShellRestoresEveryConfiguredGlobalShortcutWhenRecordingLosesFocus() {

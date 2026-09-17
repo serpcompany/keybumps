@@ -50,8 +50,14 @@ extension ShortcutBinding {
     }
 }
 
+enum GlobalHotKeyRegistrationScope: Equatable {
+    case systemWide
+    case applicationLocal
+}
+
 @MainActor
 protocol GlobalHotKeyRegistering: AnyObject {
+    var registrationScope: GlobalHotKeyRegistrationScope { get }
     func installHandler(_ handler: @escaping (UInt32) -> Void)
     func register(binding: ShortcutBinding, identifier: UInt32) -> Bool
     func unregister(identifier: UInt32)
@@ -59,6 +65,7 @@ protocol GlobalHotKeyRegistering: AnyObject {
 
 @MainActor
 private final class CarbonGlobalHotKeyBackend: GlobalHotKeyRegistering {
+    let registrationScope = GlobalHotKeyRegistrationScope.systemWide
     private var registrations: [UInt32: EventHotKeyRef] = [:]
     private var eventHandler: EventHandlerRef?
     private var handler: ((UInt32) -> Void)?
@@ -157,6 +164,7 @@ final class GlobalShortcutCoordinator {
 
     var activeOwners: Set<String> { Set(activeIdentifiers.keys) }
     var desiredOwners: Set<String> { Set(desiredRegistrations.keys) }
+    var registrationScope: GlobalHotKeyRegistrationScope { backend.registrationScope }
 
     init(backend: (any GlobalHotKeyRegistering)? = nil) {
         self.backend = backend ?? CarbonGlobalHotKeyBackend()

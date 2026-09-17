@@ -33,7 +33,7 @@ struct ShortcutKeycaps: View {
     var body: some View {
         let keys = ShortcutKeycapPresentation(shortcut: shortcut).keys
         HStack(spacing: compact ? 3 : 6) {
-            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+            ForEach(keys, id: \.self) { key in
                 Text(key)
                     .font(.system(size: compact ? 11 : 15, weight: .semibold, design: .rounded))
                     .frame(
