@@ -123,6 +123,46 @@ struct PermissionRelaunchAdvisor {
     }
 }
 
+struct PermissionRelaunchPlan {
+    let executableURL = URL(fileURLWithPath: "/bin/sh")
+    let arguments: [String]
+
+    init(bundleURL: URL, processIdentifier: pid_t) {
+        let script = """
+        attempts=0
+        while kill -0 "$1" 2>/dev/null; do
+          attempts=$((attempts + 1))
+          [ "$attempts" -ge 150 ] && exit 1
+          sleep 0.1
+        done
+        exec /usr/bin/open -n "$2"
+        """
+        arguments = [
+            "-c",
+            script,
+            "supermac-relaunch",
+            String(processIdentifier),
+            bundleURL.path
+        ]
+    }
+}
+
+enum PermissionRelauncher {
+    static func schedule(
+        bundleURL: URL = Bundle.main.bundleURL,
+        processIdentifier: pid_t = ProcessInfo.processInfo.processIdentifier
+    ) throws {
+        let plan = PermissionRelaunchPlan(
+            bundleURL: bundleURL,
+            processIdentifier: processIdentifier
+        )
+        let helper = Process()
+        helper.executableURL = plan.executableURL
+        helper.arguments = plan.arguments
+        try helper.run()
+    }
+}
+
 struct PermissionSetupProgress: Equatable {
     let requiredPermissions: [MacPermission]
     let grantedPermissions: [MacPermission]

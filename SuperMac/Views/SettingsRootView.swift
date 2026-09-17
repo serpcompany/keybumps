@@ -195,7 +195,7 @@ private struct SetupView: View {
     private func detail(for capability: Capability) -> String {
         guard model.preferences.enabledCapabilities.contains(capability) else { return "Disabled in \(capability.title) settings" }
         if model.requiresPermissionRelaunch(for: capability) {
-            return "Quit and reopen SuperMac to finish applying macOS permissions"
+            return "Restart SuperMac to finish applying macOS permissions"
         }
         let missing = model.missingPermissions(for: capability)
         if !missing.isEmpty { return "Needs \(missing.map(\.title).joined(separator: " and "))" }
@@ -225,7 +225,7 @@ private struct SetupView: View {
 
     private func actionTitle(for capability: Capability) -> String {
         if !model.preferences.enabledCapabilities.contains(capability) { return "Set Up" }
-        if model.requiresPermissionRelaunch(for: capability) { return "Quit SuperMac" }
+        if model.requiresPermissionRelaunch(for: capability) { return "Restart SuperMac" }
         if missingSetupItemCount(for: capability) > 0 { return "Grant Permission" }
         return switch capability {
         case .quickSearch, .clipboardHistory: "Open"
@@ -235,7 +235,7 @@ private struct SetupView: View {
 
     private func performAction(for capability: Capability) {
         if model.requiresPermissionRelaunch(for: capability) {
-            model.quitForPermissionRelaunch()
+            model.restartForPermissionRelaunch()
             return
         }
         if capability == .shortcutCoaching,
@@ -537,9 +537,9 @@ private struct KeyBumpsSettingsView: View {
             CapabilityControl(capability: .shortcutCoaching)
             if model.requiresPermissionRelaunch(for: .shortcutCoaching) {
                 Section("Restart required") {
-                    Text("Quit and reopen SuperMac to finish applying Accessibility or Input Monitoring access.")
+                    Text("Restart SuperMac to finish applying Accessibility or Input Monitoring access.")
                         .foregroundStyle(.secondary)
-                    Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                    Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
                 }
             } else if !model.missingPermissions(for: .shortcutCoaching).isEmpty {
                 Section("Setup required") {
@@ -790,10 +790,10 @@ private struct PermissionWalkthroughView: View {
 
             if let permission = progress.currentPermission {
                 if model.requiresPermissionRelaunch(permission) {
-                    Label("Quit and reopen SuperMac to finish \(permission.title) setup.", systemImage: "arrow.clockwise.circle.fill")
+                    Label("Restart SuperMac to finish \(permission.title) setup.", systemImage: "arrow.clockwise.circle.fill")
                         .font(.headline)
                         .foregroundStyle(.orange)
-                    Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                    Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
                         .buttonStyle(.borderedProminent)
                 } else {
                     PermissionRow(permission: permission, compact: true)
@@ -921,7 +921,7 @@ private struct PermissionRow: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(state.isGranted ? .green : .orange)
             if model.requiresPermissionRelaunch(permission) {
-                Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
             } else if action.buttonTitle != nil {
                 Button(actionTitle(for: action)) { Task { await model.recoverPermission(permission) } }
                     .disabled(model.permissions.activeRequest != nil)

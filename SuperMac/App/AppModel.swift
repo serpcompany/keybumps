@@ -280,9 +280,15 @@ final class AppModel {
         relaunchPromptPermission = nil
     }
 
-    func quitForPermissionRelaunch() {
-        relaunchPromptPermission = nil
-        NSApplication.shared.terminate(nil)
+    func restartForPermissionRelaunch() {
+        guard updateSafetyPolicy.isSafeToInstall else { return }
+        do {
+            try PermissionRelauncher.schedule()
+            relaunchPromptPermission = nil
+            NSApplication.shared.terminate(nil)
+        } catch {
+            // Keep the recovery state visible so the user can retry rather than quitting without a relaunch helper.
+        }
     }
 
     func requiresPermissionRelaunch(_ permission: MacPermission) -> Bool {

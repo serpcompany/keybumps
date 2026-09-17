@@ -299,6 +299,18 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(advisor.permissionsRequiringRelaunch.isEmpty)
     }
 
+    func testPermissionRelaunchPlanWaitsForCurrentProcessThenReopensSameBundle() {
+        let bundleURL = URL(fileURLWithPath: "/Applications/SuperMac.app", isDirectory: true)
+
+        let plan = PermissionRelaunchPlan(bundleURL: bundleURL, processIdentifier: 42)
+
+        XCTAssertEqual(plan.executableURL.path, "/bin/sh")
+        XCTAssertEqual(plan.arguments.suffix(3), ["supermac-relaunch", "42", bundleURL.path])
+        XCTAssertTrue(plan.arguments[1].contains("kill -0"))
+        XCTAssertTrue(plan.arguments[1].contains("/usr/bin/open -n"))
+        XCTAssertTrue(plan.arguments[1].contains("exit 1"), "The detached helper must not wait forever if termination is cancelled")
+    }
+
     func testApplicationBundleDragPayloadRoundTripsAsAFileURL() throws {
         let applicationURL = Bundle.main.bundleURL
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("SuperMacDragPayload-\(UUID().uuidString)"))

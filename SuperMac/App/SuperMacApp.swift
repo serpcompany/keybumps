@@ -17,13 +17,13 @@ struct SuperMacApp: App {
                     Task { await model.refreshNotificationPermission() }
                 }
                 .alert(
-                    "Quit and reopen SuperMac to finish setup",
+                    "Restart SuperMac to finish setup",
                     item: $model.relaunchPromptPermission
                 ) { _ in
                     Button("Not Now", role: .cancel) { model.dismissPermissionRelaunchPrompt() }
-                    Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                    Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
                 } message: { permission in
-                    Text("macOS has not made \(permission.title) available to this running copy of SuperMac. Quit now, then open SuperMac again to finish setup.")
+                    Text("macOS has not made \(permission.title) available to this running copy of SuperMac. Restart now to finish setup.")
                 }
                 .modifier(MainWindowRoutingModifier(model: model))
         }
