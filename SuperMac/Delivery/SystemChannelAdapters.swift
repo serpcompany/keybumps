@@ -29,11 +29,28 @@ enum NativeNotificationAuthorization: Equatable {
     }
 }
 
+enum AppShellDestination: String, Equatable {
+    case keyBumpsHistory
+}
+
+struct NativeNotificationPayload: Equatable {
+    static let destinationKey = "supermac.destination"
+    static let keyBumpsUserInfo = [destinationKey: AppShellDestination.keyBumpsHistory.rawValue]
+
+    let title: String
+    let body: String
+    let destination: AppShellDestination
+
+    var userInfo: [String: String] {
+        [Self.destinationKey: destination.rawValue]
+    }
+}
+
 @MainActor
 protocol NativeNotificationCenterClient {
     func authorizationStatus() async -> NativeNotificationAuthorization
     func requestAuthorization() async throws -> Bool
-    func add(identifier: String, title: String, body: String) async throws
+    func add(identifier: String, payload: NativeNotificationPayload) async throws
 }
 
 @MainActor
@@ -61,10 +78,12 @@ final class SystemNativeNotificationCenterClient: NativeNotificationCenterClient
         try await center.requestAuthorization(options: [.alert, .sound, .badge])
     }
 
-    func add(identifier: String, title: String, body: String) async throws {
+    func add(identifier: String, payload: NativeNotificationPayload) async throws {
         let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
+        content.title = payload.title
+        content.body = payload.body
+        content.sound = .default
+        content.userInfo = payload.userInfo
         try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
     }
 }
@@ -98,8 +117,11 @@ final class NativeNotificationAdapter: ChannelDelivering {
         }
         try await center.add(
             identifier: identifierFactory(),
-            title: event.coachingTitle,
-            body: event.coachingBody
+            payload: NativeNotificationPayload(
+                title: event.coachingTitle,
+                body: event.coachingBody,
+                destination: .keyBumpsHistory
+            )
         )
     }
 }

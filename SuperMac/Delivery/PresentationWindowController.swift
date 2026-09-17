@@ -367,50 +367,6 @@ struct CoachingPresentationView: View {
     }
 }
 
-struct ShortcutKeycapPresentation: Equatable {
-    let keys: [String]
-
-    init(shortcut: String) {
-        let modifiers = Set(["⌘", "⌥", "⌃", "⇧"])
-        var keys: [String] = []
-        var current = ""
-        for character in shortcut {
-            let value = String(character)
-            if modifiers.contains(value) {
-                if !current.isEmpty {
-                    keys.append(current)
-                    current = ""
-                }
-                keys.append(value)
-            } else {
-                current.append(character)
-            }
-        }
-        if !current.isEmpty {
-            keys.append(keys.contains("⇧") ? current.uppercased() : current.lowercased())
-        }
-        self.keys = keys
-    }
-}
-
-private struct ShortcutKeycaps: View {
-    let shortcut: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(ShortcutKeycapPresentation(shortcut: shortcut).keys, id: \.self) { key in
-                Text(key)
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .frame(minWidth: 24, minHeight: 24)
-                    .padding(.horizontal, 3)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Shortcut \(shortcut)")
-    }
-}
-
 enum ToastDismissalPolicy {
     static let minimumHorizontalSwipe: CGFloat = 60
 

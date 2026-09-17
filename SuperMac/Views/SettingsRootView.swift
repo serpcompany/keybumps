@@ -4,14 +4,14 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case setup = "Setup", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
+    case search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
     case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General"
     var id: String { rawValue }
-    var icon: String { switch self { case .setup: "checklist"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
+    var icon: String { switch self { case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
-    private(set) var selection: SettingsSection = .setup
+    private(set) var selection: SettingsSection = .permissions
     private(set) var backStack: [SettingsSection] = []
 
     var canGoBack: Bool { !backStack.isEmpty }
@@ -25,37 +25,6 @@ struct SettingsNavigationHistory: Equatable {
     mutating func goBack() {
         guard let previous = backStack.popLast() else { return }
         selection = previous
-    }
-}
-
-enum SetupCapabilityAction: Equatable {
-    case showQuickSearch
-    case showClipboardHistory
-    case navigate(SettingsSection)
-    case beginPermissionWalkthrough(Capability)
-
-    static func resolve(
-        capability: Capability,
-        isEnabled: Bool,
-        missingPermissions: [MacPermission]
-    ) -> SetupCapabilityAction {
-        guard isEnabled else { return .navigate(destination(for: capability)) }
-        guard missingPermissions.isEmpty else { return .beginPermissionWalkthrough(capability) }
-        return switch capability {
-        case .quickSearch: .showQuickSearch
-        case .clipboardHistory: .showClipboardHistory
-        case .dictation, .windowManagement, .shortcutCoaching: .navigate(destination(for: capability))
-        }
-    }
-
-    private static func destination(for capability: Capability) -> SettingsSection {
-        switch capability {
-        case .quickSearch: .search
-        case .clipboardHistory: .clipboard
-        case .dictation: .dictation
-        case .windowManagement: .windows
-        case .shortcutCoaching: .coaching
-        }
     }
 }
 
@@ -76,7 +45,6 @@ struct SettingsRootView: View {
         } detail: {
             Group {
                 switch navigation.selection {
-                case .setup: SetupView(onNavigate: { navigation.navigate(to: $0) })
                 case .search: QuickSearchSettingsView()
                 case .clipboard: ClipboardSettingsView()
                 case .dictation: DictationSettingsView()
@@ -117,13 +85,13 @@ struct SettingsRootView: View {
 
     private func attentionCount(for section: SettingsSection) -> Int {
         switch section {
-        case .setup, .permissions:
-            model.missingPermissionCount
+        case .permissions:
+            return model.missingPermissionCount
         case .coaching:
-            model.missingPermissions(for: .shortcutCoaching).count
-                + (model.nativeNotificationNeedsAttention ? 1 : 0)
+            guard model.preferences.enabledCapabilities.contains(.shortcutCoaching) else { return 0 }
+            return model.permissionReadiness(for: [.shortcutCoaching]).missingCount
         default:
-            0
+            return 0
         }
     }
 }
@@ -142,128 +110,6 @@ private struct SettingsSidebarRow: View {
                     .accessibilityLabel("\(attentionCount) permission items need attention")
             }
         }
-    }
-}
-
-private struct SetupView: View {
-    @Environment(AppModel.self) private var model
-    let onNavigate: (SettingsSection) -> Void
-
-    var body: some View {
-        Form {
-            Section("Readiness") {
-                ForEach(Capability.allCases) { capability in
-                    HStack(spacing: 14) {
-                        Image(systemName: capability.systemImage)
-                            .frame(width: 24)
-                            .foregroundStyle(.tint)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(capability.title).font(.headline)
-                            Text(detail(for: capability)).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(status(for: capability))
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(statusColor(for: capability))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(statusColor(for: capability).opacity(0.12), in: Capsule())
-                        Button(actionTitle(for: capability)) { performAction(for: capability) }
-                            .accessibilityLabel("\(actionTitle(for: capability)) \(capability.title)")
-                    }
-                    .padding(.vertical, 5)
-                }
-            }
-            if !model.shortcuts.failures.isEmpty {
-                Section("Shortcut conflicts") { ForEach(model.shortcuts.failures.keys.sorted(), id: \.self) { key in Text(model.shortcuts.failures[key] ?? key).foregroundStyle(.orange) } }
-            }
-            Section {
-                Button("Review All Permissions…") { onNavigate(.permissions) }
-                    .accessibilityLabel("Review all permissions")
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Setup")
-    }
-
-    private func status(for capability: Capability) -> String {
-        guard model.preferences.enabledCapabilities.contains(capability) else { return "Off" }
-        if model.requiresPermissionRelaunch(for: capability) { return "Restart Required" }
-        return missingSetupItemCount(for: capability) == 0 ? "Ready" : "Setup Needed"
-    }
-
-    private func detail(for capability: Capability) -> String {
-        guard model.preferences.enabledCapabilities.contains(capability) else { return "Disabled in \(capability.title) settings" }
-        if model.requiresPermissionRelaunch(for: capability) {
-            return "Restart SuperMac to finish applying macOS permissions"
-        }
-        let missing = model.missingPermissions(for: capability)
-        if !missing.isEmpty { return "Needs \(missing.map(\.title).joined(separator: " and "))" }
-        if capability == .shortcutCoaching, model.nativeNotificationNeedsAttention {
-            return "Needs Notifications access for the native banner"
-        }
-        return switch capability {
-        case .quickSearch: shortcutDetail(for: .quickSearch, action: "search apps, files, and folders")
-        case .clipboardHistory: shortcutDetail(for: .clipboardHistory, action: "open your latest 10 copied text and image items")
-        case .dictation: shortcutDetail(for: .dictation, action: "start or stop local dictation")
-        case .windowManagement: "Your Rectangle shortcut profile is active"
-        case .shortcutCoaching: "Supported manual actions are being monitored"
-        }
-    }
-
-    private func shortcutDetail(for shortcut: CapabilityShortcut, action: String) -> String {
-        guard let binding = model.preferences.capabilityShortcut(for: shortcut) else {
-            return "No keyboard shortcut assigned; open from Settings"
-        }
-        return "Press \(binding.displayName) to \(action)"
-    }
-
-    private func statusColor(for capability: Capability) -> Color {
-        if !model.preferences.enabledCapabilities.contains(capability) { return .secondary }
-        return missingSetupItemCount(for: capability) == 0 ? .green : .red
-    }
-
-    private func actionTitle(for capability: Capability) -> String {
-        if !model.preferences.enabledCapabilities.contains(capability) { return "Set Up" }
-        if model.requiresPermissionRelaunch(for: capability) { return "Restart SuperMac" }
-        if missingSetupItemCount(for: capability) > 0 { return "Grant Permission" }
-        return switch capability {
-        case .quickSearch, .clipboardHistory: "Open"
-        case .dictation, .windowManagement, .shortcutCoaching: "Settings"
-        }
-    }
-
-    private func performAction(for capability: Capability) {
-        if model.requiresPermissionRelaunch(for: capability) {
-            model.restartForPermissionRelaunch()
-            return
-        }
-        if capability == .shortcutCoaching,
-           model.missingPermissions(for: capability).isEmpty,
-           model.nativeNotificationNeedsAttention {
-            Task { await model.requestNotificationPermission() }
-            return
-        }
-        let action = SetupCapabilityAction.resolve(
-            capability: capability,
-            isEnabled: model.preferences.enabledCapabilities.contains(capability),
-            missingPermissions: model.missingPermissions(for: capability)
-        )
-        switch action {
-        case .showQuickSearch:
-            model.showQuickSearch()
-        case .showClipboardHistory:
-            model.showClipboardHistory()
-        case .navigate(let section):
-            onNavigate(section)
-        case .beginPermissionWalkthrough(let capability):
-            model.beginPermissionWalkthrough(for: capability)
-        }
-    }
-
-    private func missingSetupItemCount(for capability: Capability) -> Int {
-        model.missingPermissions(for: capability).count
-            + (capability == .shortcutCoaching && model.nativeNotificationNeedsAttention ? 1 : 0)
     }
 }
 
@@ -301,7 +147,8 @@ private struct DictationSettingsView: View {
         Form {
             CapabilityControl(capability: .dictation)
             CapabilityShortcutEditor(shortcut: .dictation)
-            if !model.missingPermissions(for: .dictation).isEmpty {
+            if model.preferences.enabledCapabilities.contains(.dictation),
+               !model.missingPermissions(for: .dictation).isEmpty {
                 Section("Setup required") {
                     Text("Dictation needs Microphone and Speech Recognition access before its shortcut can record.")
                         .foregroundStyle(.secondary)
@@ -356,6 +203,9 @@ private struct WindowSettingsView: View {
     @State private var recorder = ShortcutRecorderState()
 
     var body: some View {
+        let readiness = model.permissionReadiness(for: [.windowManagement])
+        let isEnabled = model.preferences.enabledCapabilities.contains(.windowManagement)
+        let isReady = isEnabled && readiness.isReady
         VStack(spacing: 0) {
             HStack(spacing: 16) {
                 Toggle("Enable Window Management", isOn: Binding(
@@ -364,11 +214,11 @@ private struct WindowSettingsView: View {
                 ))
                 Spacer()
                 Label(
-                    model.windows.isAccessibilityGranted ? "Ready" : "Setup Needed",
-                    systemImage: model.windows.isAccessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                    isEnabled ? (isReady ? "Ready" : "Setup Needed") : "Off",
+                    systemImage: isEnabled ? (isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill") : "power"
                 )
-                .foregroundStyle(model.windows.isAccessibilityGranted ? .green : .orange)
-                if !model.windows.isAccessibilityGranted {
+                .foregroundStyle(isEnabled ? (isReady ? .green : .orange) : .secondary)
+                if isEnabled && !isReady {
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
                 Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
@@ -410,6 +260,7 @@ private struct WindowSettingsView: View {
             }
         }
         .navigationTitle("Window Management")
+        .onDisappear { recorder.cancel() }
     }
 
     private func shortcutColumns(
@@ -533,30 +384,48 @@ private struct WindowActionPreviewView: View {
 private struct KeyBumpsSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
+        let isEnabled = model.preferences.enabledCapabilities.contains(.shortcutCoaching)
+        let readiness = model.permissionReadiness(for: [.shortcutCoaching])
         Form {
             CapabilityControl(capability: .shortcutCoaching)
-            if model.requiresPermissionRelaunch(for: .shortcutCoaching) {
+            if model.preferences.enabledCapabilities.contains(.shortcutCoaching),
+               model.requiresPermissionRelaunch(for: .shortcutCoaching) {
                 Section("Restart required") {
                     Text("Restart SuperMac to finish applying Accessibility or Input Monitoring access.")
                         .foregroundStyle(.secondary)
                     Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
                 }
-            } else if !model.missingPermissions(for: .shortcutCoaching).isEmpty {
+            } else if model.preferences.enabledCapabilities.contains(.shortcutCoaching),
+                      !model.missingPermissions(for: .shortcutCoaching).isEmpty {
                 Section("Setup required") {
                     Text("Key Bumps needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
+            } else if model.preferences.enabledCapabilities.contains(.shortcutCoaching),
+                      model.permissionReadiness(for: [.shortcutCoaching]).nativeNotificationNeedsAttention {
+                Section("Setup required") {
+                    Text("Native macOS Banner needs Notifications access before it can appear.")
+                        .foregroundStyle(.secondary)
+                    Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+                }
             }
             Section("Status") {
-                if model.detectorStatus == .monitoring {
+                if !isEnabled {
+                    Label("Off", systemImage: "power")
+                        .foregroundStyle(.secondary)
+                } else if !readiness.isReady {
+                    Label("Setup Needed", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                } else if model.detectorStatus == .monitoring {
                     Label("Ready", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                } else if model.missingPermissions(for: .shortcutCoaching).isEmpty {
+                } else {
                     Label("Key Bumps needs to reconnect", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
                 Button("Send Test Key Bump") { Task { await model.deliverSample() } }
+                    .disabled(!isEnabled || !readiness.isReady)
             }
             Section("Presentation channels") {
                 ForEach(NotificationChannel.allCases.filter { $0 != .sound }) { channel in
@@ -570,11 +439,6 @@ private struct KeyBumpsSettingsView: View {
                 Button("Open Key Bumps History") { model.showKeyBumpsHistory() }
                 Text("View, filter, and clear detected actions in the quick switcher.")
                     .foregroundStyle(.secondary)
-            }
-            Section("Supported shortcuts") {
-                ForEach(ShortcutCatalog.tips) { tip in
-                    LabeledContent("\(tip.applicationName): \(tip.actionTitle)", value: tip.shortcut)
-                }
             }
         }.formStyle(.grouped).navigationTitle("Key Bumps")
     }
@@ -762,7 +626,7 @@ private struct OnboardingView: View {
                 case 3:
                     VStack(spacing: 12) { Text("Resolve shortcut conflicts").font(.largeTitle.bold()); ForEach(ReferenceApp.allCases) { app in HStack { Text(app.name); Spacer(); if !model.conflicts.isRunning(app) { Text("Not running").foregroundStyle(.secondary) } else { Button("Quit") { model.conflicts.quit(app) } } } } }
                 default:
-                    VStack(spacing: 12) { Text("Ready").font(.largeTitle.bold()); Text("Setup will show what is working and what still needs attention.").foregroundStyle(.secondary) }
+                    VStack(spacing: 12) { Text("Ready").font(.largeTitle.bold()); Text("Permissions shows what is working and what still needs attention.").foregroundStyle(.secondary) }
                 }
             }.frame(maxWidth: 620)
             Spacer()
@@ -776,20 +640,17 @@ private struct PermissionWalkthroughView: View {
     var compact = false
 
     var body: some View {
-        let progress = model.permissionSetupProgress
-        let includesNotifications = model.preferences.selectedChannels.contains(.nativeBanner)
-        let totalCount = progress.totalCount + (includesNotifications ? 1 : 0)
-        let completedCount = totalCount - model.missingPermissionCount
+        let readiness = model.permissionReadiness
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(completedCount) of \(totalCount) complete")
+                Text("\(readiness.completedCount) of \(readiness.totalCount) complete")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
 
-            if let permission = progress.currentPermission {
-                if model.requiresPermissionRelaunch(permission) {
+            if let permission = readiness.currentPermission {
+                if readiness.requiresRelaunch(permission) {
                     Label("Restart SuperMac to finish \(permission.title) setup.", systemImage: "arrow.clockwise.circle.fill")
                         .font(.headline)
                         .foregroundStyle(.orange)
@@ -801,12 +662,12 @@ private struct PermissionWalkthroughView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } else if model.nativeNotificationNeedsAttention {
+            } else if readiness.nativeNotificationNeedsAttention {
                 NotificationPermissionRow()
                 Text("After changing Notification settings, return to SuperMac and choose Refresh Status.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
+            } else if readiness.isReady {
                 Label("All permissions needed by your enabled features are ready.", systemImage: "checkmark.circle.fill")
                     .font(compact ? .headline : .body)
                     .foregroundStyle(.green)
@@ -887,6 +748,7 @@ private struct CapabilityShortcutEditor: View {
                 Text(failure).font(.caption).foregroundStyle(.orange)
             }
         }
+        .onDisappear { recorder.cancel() }
     }
 }
 
@@ -896,7 +758,8 @@ private struct PermissionRow: View {
     var compact = false
 
     var body: some View {
-        let state = model.permissions.state(for: permission)
+        let readiness = model.permissionReadiness
+        let state = readiness.state(for: permission)
         let action = model.permissions.recoveryAction(for: permission)
         Group {
             if compact {
@@ -948,6 +811,7 @@ private final class ShortcutRecorderState {
     private(set) var identifier: String?
     private(set) var error: String?
     private var monitor: Any?
+    private var cancelAction: (() -> Void)?
 
     func begin(
         identifier: String,
@@ -958,6 +822,7 @@ private final class ShortcutRecorderState {
         stopMonitor()
         self.identifier = identifier
         error = nil
+        cancelAction = cancel
         suspend()
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -982,10 +847,18 @@ private final class ShortcutRecorderState {
         }
     }
 
+    func cancel() {
+        guard identifier != nil else { return }
+        let action = cancelAction
+        finish()
+        action?()
+    }
+
     private func finish() {
         stopMonitor()
         identifier = nil
         error = nil
+        cancelAction = nil
     }
 
     private func stopMonitor() {

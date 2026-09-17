@@ -34,7 +34,8 @@ private final class StubNativeNotificationCenter: NativeNotificationCenterClient
     var requestedStatus: NativeNotificationAuthorization?
     var requestResult = true
     private(set) var requestCount = 0
-    private(set) var added: [(identifier: String, title: String, body: String)] = []
+    var addError: Error?
+    private(set) var added: [(identifier: String, payload: NativeNotificationPayload)] = []
 
     init(status: NativeNotificationAuthorization) {
         self.status = status
@@ -50,8 +51,9 @@ private final class StubNativeNotificationCenter: NativeNotificationCenterClient
         return requestResult
     }
 
-    func add(identifier: String, title: String, body: String) async throws {
-        added.append((identifier, title, body))
+    func add(identifier: String, payload: NativeNotificationPayload) async throws {
+        if let addError { throw addError }
+        added.append((identifier, payload))
     }
 }
 
@@ -331,8 +333,40 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(center.requestCount, 0)
         XCTAssertEqual(center.added.count, 1)
         XCTAssertEqual(center.added.first?.identifier, "fresh-preview")
-        XCTAssertEqual(center.added.first?.title, event.coachingTitle)
-        XCTAssertEqual(center.added.first?.body, event.coachingBody)
+        XCTAssertEqual(center.added.first?.payload.title, event.coachingTitle)
+        XCTAssertEqual(center.added.first?.payload.body, event.coachingBody)
+        XCTAssertEqual(center.added.first?.payload.destination, .keyBumpsHistory)
+    }
+
+    func testNativeNotificationPreviewReportsDeliveryErrorWithoutPersistingHistory() async {
+        let center = StubNativeNotificationCenter(status: .authorized)
+        center.addError = TestError.expected
+        let inbox = InboxStore(persistence: MemoryPersistence())
+        let service = NotificationDeliveryService(
+            inbox: inbox,
+            adapters: [.nativeBanner: NativeNotificationAdapter(center: center)]
+        )
+
+        let outcome = await service.preview(.sample, through: .nativeBanner)
+
+        guard case .failed = outcome else { return XCTFail("Expected notification-center rejection to fail") }
+        XCTAssertTrue(inbox.events.isEmpty)
+    }
+
+    func testNotificationResponseRoutesThroughAppShellToKeyBumpsHistory() {
+        let router = AppShellRouter()
+        var destinations: [AppShellDestination] = []
+        let delegate = AppDelegate(
+            quickSearchRouter: QuickSearchRouter(),
+            appShellRouter: router
+        )
+
+        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: NativeNotificationPayload.keyBumpsUserInfo))
+        XCTAssertTrue(destinations.isEmpty, "A cold-launch notification response should wait for app-shell configuration")
+        router.configure { destinations.append($0) }
+        XCTAssertEqual(destinations, [.keyBumpsHistory])
+        XCTAssertFalse(delegate.handleNotificationResponse(userInfo: [:]))
+        XCTAssertEqual(destinations, [.keyBumpsHistory])
     }
 
     func testNativeNotificationRequestsUndeterminedAuthorizationBeforeDelivery() async throws {
@@ -743,7 +777,7 @@ final class ShortcutCoachTests: XCTestCase {
     func testCoachingCopyUsesTheDetectedEvent() {
         let event = CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
         XCTAssertEqual(event.coachingTitle, "New tab")
-        XCTAssertEqual(event.coachingBody, "Safari")
+        XCTAssertEqual(event.coachingBody, "Safari · ⌘T")
     }
 
     func testShortcutKeycapsUseLowercaseLettersUnlessShiftIsPresent() {

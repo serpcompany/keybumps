@@ -16,6 +16,9 @@ struct SuperMacApp: App {
                     model.applicationDidBecomeActive()
                     Task { await model.refreshNotificationPermission() }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                    model.applicationDidResignActive()
+                }
                 .alert(
                     "Restart SuperMac to finish setup",
                     item: $model.relaunchPromptPermission
@@ -47,6 +50,12 @@ private struct MainWindowRoutingModifier: ViewModifier {
             .onAppear {
                 MainWindowRouter.shared.configure(openMainWindow)
                 QuickSearchRouter.shared.configure(model.showQuickSearch)
+                AppShellRouter.shared.configure { destination in
+                    switch destination {
+                    case .keyBumpsHistory:
+                        model.showKeyBumpsHistory()
+                    }
+                }
                 NativeStatusItemController.shared.configureQuickSearch(
                     isVisible: { model.isQuickSearchVisible },
                     setVisible: model.setQuickSearchVisible

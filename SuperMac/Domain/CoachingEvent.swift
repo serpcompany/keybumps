@@ -41,5 +41,5 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         return String(first).uppercased() + actionTitle.dropFirst().lowercased()
     }
 
-    var coachingBody: String { applicationName }
+    var coachingBody: String { "\(applicationName) · \(shortcut)" }
 }

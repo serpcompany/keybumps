@@ -8,14 +8,20 @@ extension Notification.Name {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let quickSearchRouter: QuickSearchRouter
+    private let appShellRouter: AppShellRouter
 
     override init() {
         quickSearchRouter = .shared
+        appShellRouter = .shared
         super.init()
     }
 
-    init(quickSearchRouter: QuickSearchRouter) {
+    init(
+        quickSearchRouter: QuickSearchRouter,
+        appShellRouter: AppShellRouter? = nil
+    ) {
         self.quickSearchRouter = quickSearchRouter
+        self.appShellRouter = appShellRouter ?? .shared
         super.init()
     }
 
@@ -49,5 +55,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .badge])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        _ = handleNotificationResponse(userInfo: response.notification.request.content.userInfo)
+        completionHandler()
+    }
+
+    @discardableResult
+    func handleNotificationResponse(userInfo: [AnyHashable: Any]) -> Bool {
+        guard let rawDestination = userInfo[NativeNotificationPayload.destinationKey] as? String,
+              let destination = AppShellDestination(rawValue: rawDestination) else { return false }
+        return appShellRouter.open(destination)
     }
 }

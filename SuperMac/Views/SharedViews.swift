@@ -1,5 +1,54 @@
 import SwiftUI
 
+struct ShortcutKeycapPresentation: Equatable {
+    let keys: [String]
+
+    init(shortcut: String) {
+        let modifiers = Set(["⌘", "⌥", "⌃", "⇧"])
+        var keys: [String] = []
+        var current = ""
+        for character in shortcut {
+            let value = String(character)
+            if modifiers.contains(value) {
+                if !current.isEmpty {
+                    keys.append(current)
+                    current = ""
+                }
+                keys.append(value)
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.isEmpty {
+            keys.append(keys.contains("⇧") ? current.uppercased() : current.lowercased())
+        }
+        self.keys = keys
+    }
+}
+
+struct ShortcutKeycaps: View {
+    let shortcut: String
+    var compact = false
+
+    var body: some View {
+        let keys = ShortcutKeycapPresentation(shortcut: shortcut).keys
+        HStack(spacing: compact ? 3 : 6) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                Text(key)
+                    .font(.system(size: compact ? 11 : 15, weight: .semibold, design: .rounded))
+                    .frame(
+                        minWidth: compact ? 18 : 24,
+                        minHeight: compact ? 18 : 24
+                    )
+                    .padding(.horizontal, compact ? 1 : 3)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: compact ? 4 : 6))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Shortcut \(shortcut)")
+    }
+}
+
 struct CoachingEventRowPresentation: Equatable {
     let actionTitle: String
     let applicationName: String
@@ -23,11 +72,7 @@ struct CoachingEventRow: View {
                 Text(presentation.applicationName).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(presentation.shortcut)
-                .font(.headline.monospaced())
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+            ShortcutKeycaps(shortcut: presentation.shortcut)
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())

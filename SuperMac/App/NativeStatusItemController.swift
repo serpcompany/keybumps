@@ -45,6 +45,32 @@ final class QuickSearchRouter {
 }
 
 @MainActor
+final class AppShellRouter {
+    static let shared = AppShellRouter()
+
+    private var opener: ((AppShellDestination) -> Void)?
+    private var pendingDestination: AppShellDestination?
+
+    func configure(_ opener: @escaping (AppShellDestination) -> Void) {
+        self.opener = opener
+        if let pendingDestination {
+            self.pendingDestination = nil
+            opener(pendingDestination)
+        }
+    }
+
+    @discardableResult
+    func open(_ destination: AppShellDestination) -> Bool {
+        guard let opener else {
+            pendingDestination = destination
+            return true
+        }
+        opener(destination)
+        return true
+    }
+}
+
+@MainActor
 final class NativeStatusItemController: NSObject, NSMenuDelegate {
     static let shared = NativeStatusItemController()
 

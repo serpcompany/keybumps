@@ -5,6 +5,29 @@ import XCTest
 @testable import SuperMac
 
 @MainActor
+private final class StubGlobalHotKeyBackend: GlobalHotKeyRegistering {
+    private(set) var activeIdentifiers: Set<UInt32> = []
+    private var handler: ((UInt32) -> Void)?
+
+    func installHandler(_ handler: @escaping (UInt32) -> Void) {
+        self.handler = handler
+    }
+
+    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool {
+        activeIdentifiers.insert(identifier)
+        return true
+    }
+
+    func unregister(identifier: UInt32) {
+        activeIdentifiers.remove(identifier)
+    }
+
+    func send(identifier: UInt32) {
+        handler?(identifier)
+    }
+}
+
+@MainActor
 final class SuperMacFeatureTests: XCTestCase {
     func testDictationInsertionTargetCanResolveAStillRunningApplication() throws {
         let currentApplication = NSRunningApplication.current
@@ -62,6 +85,65 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(
             coordinator.register(owner: owner, binding: DefaultShortcut.cancelDictation) {}
         )
+    }
+
+    func testGlobalShortcutsAreRestoredAfterRecordingCancellationAndFocusLoss() {
+        let backend = StubGlobalHotKeyBackend()
+        let coordinator = GlobalShortcutCoordinator(backend: backend)
+        var invocations: [String] = []
+
+        coordinator.register(owner: "quickSearch", binding: DefaultShortcut.quickSearch) {
+            invocations.append("quickSearch")
+        }
+        coordinator.register(owner: "clipboardHistory", binding: DefaultShortcut.clipboard) {
+            invocations.append("clipboardHistory")
+        }
+        XCTAssertEqual(coordinator.activeOwners, ["clipboardHistory", "quickSearch"])
+
+        coordinator.suspendForRecording()
+        XCTAssertTrue(coordinator.activeOwners.isEmpty)
+
+        coordinator.resumeAfterRecording()
+        XCTAssertEqual(coordinator.activeOwners, ["clipboardHistory", "quickSearch"])
+        XCTAssertEqual(coordinator.desiredOwners, ["clipboardHistory", "quickSearch"])
+
+        for identifier in backend.activeIdentifiers.sorted() {
+            backend.send(identifier: identifier)
+        }
+        XCTAssertEqual(Set(invocations), ["quickSearch", "clipboardHistory"])
+    }
+
+    func testAppShellRestoresEveryConfiguredGlobalShortcutWhenRecordingLosesFocus() {
+        let suite = "SuperMacHotKeyFocus-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.didCompleteOnboarding = true
+        preferences.setCapability(.clipboardHistory, enabled: false)
+        preferences.setCapability(.windowManagement, enabled: false)
+        preferences.setCapability(.shortcutCoaching, enabled: false)
+        let backend = StubGlobalHotKeyBackend()
+        let coordinator = GlobalShortcutCoordinator(backend: backend)
+        let model = AppModel(
+            preferences: preferences,
+            inbox: InboxStore(),
+            presenceController: AppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            shortcutCoordinator: coordinator
+        )
+        model.applyCapabilities()
+        let configuredOwners = coordinator.activeOwners
+        XCTAssertTrue(configuredOwners.contains(CapabilityShortcut.quickSearch.ownerID))
+        XCTAssertTrue(configuredOwners.contains(CapabilityShortcut.dictation.ownerID))
+
+        model.beginShortcutRecording()
+        XCTAssertTrue(coordinator.activeOwners.isEmpty)
+        XCTAssertEqual(coordinator.desiredOwners, configuredOwners)
+
+        model.applicationDidResignActive()
+        XCTAssertEqual(coordinator.activeOwners, configuredOwners)
+        XCTAssertEqual(coordinator.desiredOwners, configuredOwners)
     }
 
     func testEveryMainWindowRouteReusesOneConfiguredOpener() {
@@ -187,12 +269,44 @@ final class SuperMacFeatureTests: XCTestCase {
     func testKeyBumpsIsTheCanonicalUserFacingCapabilityName() {
         XCTAssertEqual(Capability.shortcutCoaching.title, "Key Bumps")
         XCTAssertEqual(SettingsSection.coaching.rawValue, "Key Bumps")
-        XCTAssertEqual(SettingsSection.setup.rawValue, "Setup")
+        XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Setup"))
+        XCTAssertEqual(SettingsNavigationHistory().selection, .permissions)
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("About"))
         XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Key Bumps"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
+    }
+
+    func testPermissionReadinessCannotBeCompleteWhileAnyRequiredItemNeedsAttention() {
+        let allGranted = Dictionary(
+            uniqueKeysWithValues: MacPermission.allCases.map { ($0, PermissionAuthorizationState.granted) }
+        )
+        let deniedNotifications = PermissionReadinessSnapshot.resolve(
+            enabledCapabilities: Set(Capability.allCases),
+            states: allGranted,
+            permissionsRequiringRelaunch: [],
+            selectedChannels: [.nativeBanner],
+            notificationAuthorization: .denied
+        )
+
+        XCTAssertFalse(deniedNotifications.isReady)
+        XCTAssertEqual(deniedNotifications.completedCount, deniedNotifications.totalCount - 1)
+        XCTAssertEqual(deniedNotifications.missingCount, 1)
+        XCTAssertTrue(deniedNotifications.nativeNotificationNeedsAttention)
+
+        var oneDenied = allGranted
+        oneDenied[.inputMonitoring] = .denied
+        let deniedInputMonitoring = PermissionReadinessSnapshot.resolve(
+            enabledCapabilities: Set(Capability.allCases),
+            states: oneDenied,
+            permissionsRequiringRelaunch: [.inputMonitoring],
+            selectedChannels: [],
+            notificationAuthorization: .authorized
+        )
+        XCTAssertFalse(deniedInputMonitoring.isReady)
+        XCTAssertEqual(deniedInputMonitoring.currentPermission, .inputMonitoring)
+        XCTAssertTrue(deniedInputMonitoring.requiresRelaunch(.inputMonitoring))
     }
 
     func testPermissionRecoveryActionsNeverLeaveARequiredPermissionInert() {
@@ -384,57 +498,22 @@ final class SuperMacFeatureTests: XCTestCase {
 
     func testSettingsNavigationBackReturnsThroughVisitedScreensWithoutLooping() {
         var navigation = SettingsNavigationHistory()
-        XCTAssertEqual(navigation.selection, .setup)
+        XCTAssertEqual(navigation.selection, .permissions)
         XCTAssertFalse(navigation.canGoBack)
 
         navigation.navigate(to: .dictation)
         navigation.navigate(to: .permissions)
         navigation.navigate(to: .permissions)
-        XCTAssertEqual(navigation.backStack, [.setup, .dictation])
+        XCTAssertEqual(navigation.backStack, [.permissions, .dictation])
 
         navigation.goBack()
         XCTAssertEqual(navigation.selection, .dictation)
         navigation.goBack()
-        XCTAssertEqual(navigation.selection, .setup)
+        XCTAssertEqual(navigation.selection, .permissions)
         XCTAssertFalse(navigation.canGoBack)
 
         navigation.goBack()
-        XCTAssertEqual(navigation.selection, .setup)
-    }
-
-    func testHomeGrantPermissionStartsTheRelevantFlowWithoutNavigating() {
-        XCTAssertEqual(
-            SetupCapabilityAction.resolve(
-                capability: .dictation,
-                isEnabled: true,
-                missingPermissions: [.microphone, .speechRecognition]
-            ),
-            .beginPermissionWalkthrough(.dictation)
-        )
-        XCTAssertEqual(
-            SetupCapabilityAction.resolve(
-                capability: .windowManagement,
-                isEnabled: true,
-                missingPermissions: [.accessibility]
-            ),
-            .beginPermissionWalkthrough(.windowManagement)
-        )
-        XCTAssertEqual(
-            SetupCapabilityAction.resolve(
-                capability: .dictation,
-                isEnabled: false,
-                missingPermissions: [.microphone]
-            ),
-            .navigate(.dictation)
-        )
-        XCTAssertEqual(
-            SetupCapabilityAction.resolve(
-                capability: .quickSearch,
-                isEnabled: true,
-                missingPermissions: []
-            ),
-            .showQuickSearch
-        )
+        XCTAssertEqual(navigation.selection, .permissions)
     }
 
     func testCapabilitiesDefaultEnabledAndPersist() {
@@ -886,13 +965,20 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
             [
-                CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
-                CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
-                CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Key Bumps")
+                CommandPaletteTabLabel(shortcut: "⌘1", name: "Search", systemImage: "magnifyingglass"),
+                CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard", systemImage: "clipboard"),
+                CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation", systemImage: "waveform"),
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Key Bumps", systemImage: "keyboard")
             ]
         )
-        XCTAssertTrue(CommandPaletteTab.allCases.allSatisfy { $0.labelPresentation.systemImage == nil })
+        XCTAssertEqual(
+            CommandPaletteTab.allCases.map(\.labelPresentation.systemImage),
+            ["magnifyingglass", "clipboard", "waveform", "keyboard"]
+        )
+        XCTAssertEqual(
+            CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
+            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"]]
+        )
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
         XCTAssertNil(CommandPaletteTab.keyBumps.primaryActionTitle)

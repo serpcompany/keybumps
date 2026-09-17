@@ -34,7 +34,7 @@ final class AppModel {
     let releaseLane = ReleaseLane.current
     let preferences: AppPreferences
     let inbox: InboxStore
-    let shortcuts = GlobalShortcutCoordinator()
+    let shortcuts: GlobalShortcutCoordinator
     let permissions = PermissionCoordinator()
     let clipboard: ClipboardHistoryService
     let dictationHistory: DictationHistoryService
@@ -67,19 +67,31 @@ final class AppModel {
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
     var unreadCount: Int { inbox.unreadCount }
-    var nativeNotificationNeedsAttention: Bool {
-        guard preferences.selectedChannels.contains(.nativeBanner) else { return false }
-        return !nativeNotificationAuthorization.canPresentAlerts
+    var permissionReadiness: PermissionReadinessSnapshot {
+        permissionReadiness(for: preferences.enabledCapabilities)
     }
-    var missingPermissionCount: Int {
-        permissionSetupProgress.requiredPermissions.filter {
-            !permissions.state(for: $0).isGranted
-        }.count + (nativeNotificationNeedsAttention ? 1 : 0)
-    }
+    var nativeNotificationNeedsAttention: Bool { permissionReadiness.nativeNotificationNeedsAttention }
+    var missingPermissionCount: Int { permissionReadiness.missingCount }
     var permissionSetupProgress: PermissionSetupProgress {
-        PermissionSetupPlan.progress(for: preferences.enabledCapabilities) { permission in
-            permissions.state(for: permission)
-        }
+        let readiness = permissionReadiness
+        return PermissionSetupProgress(
+            requiredPermissions: readiness.requiredPermissions,
+            grantedPermissions: readiness.requiredPermissions.filter {
+                readiness.state(for: $0).isGranted
+            }
+        )
+    }
+
+    func permissionReadiness(for capabilities: Set<Capability>) -> PermissionReadinessSnapshot {
+        PermissionReadinessSnapshot.resolve(
+            enabledCapabilities: capabilities,
+            states: Dictionary(uniqueKeysWithValues: MacPermission.allCases.map {
+                ($0, permissions.state(for: $0))
+            }),
+            permissionsRequiringRelaunch: Set(permissionsRequiringRelaunch),
+            selectedChannels: preferences.selectedChannels,
+            notificationAuthorization: nativeNotificationAuthorization
+        )
     }
 
     convenience init() {
@@ -93,10 +105,12 @@ final class AppModel {
         presenceController: any AppPresenceControlling,
         detector: ManualActionDetector,
         presenter: PresentationWindowController,
+        shortcutCoordinator: GlobalShortcutCoordinator? = nil,
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
         updater injectedUpdater: (any UpdateControlling)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
+        self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
         self.nativeNotificationCenter = nativeNotificationCenter
         let updateSafetyPolicy = UpdateInstallationSafetyPolicy.shared
@@ -276,6 +290,10 @@ final class AppModel {
         }
     }
 
+    func applicationDidResignActive() {
+        cancelShortcutRecording()
+    }
+
     func dismissPermissionRelaunchPrompt() {
         relaunchPromptPermission = nil
     }
@@ -296,8 +314,8 @@ final class AppModel {
     }
 
     func requiresPermissionRelaunch(for capability: Capability) -> Bool {
-        let relevant = PermissionSetupPlan.requiredPermissions(for: [capability])
-        return relevant.contains(where: requiresPermissionRelaunch)
+        let readiness = permissionReadiness(for: [capability])
+        return readiness.requiredPermissions.contains(where: readiness.requiresRelaunch)
     }
 
     func refreshPermissions() {
@@ -358,26 +376,18 @@ final class AppModel {
     func refreshDetectorState() { detectorStatus = detector.status; isAccessibilityTrusted = detector.isAccessibilityTrusted; isInputMonitoringAuthorized = detector.isInputMonitoringAuthorized }
 
     func missingPermissions(for capability: Capability) -> [MacPermission] {
-        switch capability {
-        case .quickSearch, .clipboardHistory:
-            []
-        case .dictation:
-            [.microphone, .speechRecognition].filter { !permissions.state(for: $0).isGranted }
-        case .windowManagement:
-            permissions.accessibilityGranted ? [] : [.accessibility]
-        case .shortcutCoaching:
-            [.accessibility, .inputMonitoring].filter { !permissions.state(for: $0).isGranted }
-        }
+        permissionReadiness(for: [capability]).missingPermissions
     }
     func setDictationLanguage(_ language: String) { preferences.dictationLanguage = language; dictation.selectedLanguage = language }
     func setDictationDurationLimit(_ limit: DictationDurationLimit) {
         preferences.dictationDurationLimit = limit
         dictation.durationLimit = limit
     }
-    func beginShortcutRecording() { shortcuts.unregisterAll() }
+    func beginShortcutRecording() { shortcuts.suspendForRecording() }
     func finishCapabilityShortcutRecording(_ binding: ShortcutBinding?, for shortcut: CapabilityShortcut) {
         preferences.setCapabilityShortcut(binding, for: shortcut)
         applyCapabilities()
+        shortcuts.resumeAfterRecording()
     }
     func restoreDefaultCapabilityShortcut(_ shortcut: CapabilityShortcut) {
         preferences.restoreDefaultCapabilityShortcut(shortcut)
@@ -386,8 +396,12 @@ final class AppModel {
     func finishWindowShortcutRecording(_ binding: ShortcutBinding?, for action: SuperMacWindowAction) {
         preferences.setWindowShortcut(binding, for: action)
         applyCapabilities()
+        shortcuts.resumeAfterRecording()
     }
-    func cancelShortcutRecording() { applyCapabilities() }
+    func cancelShortcutRecording() {
+        guard shortcuts.isSuspendedForRecording else { return }
+        shortcuts.resumeAfterRecording()
+    }
     func restoreDefaultWindowShortcuts() { preferences.restoreDefaultWindowShortcuts(); applyCapabilities() }
     func showQuickSearch() {
         guard preferences.enabledCapabilities.contains(.quickSearch) else { return }

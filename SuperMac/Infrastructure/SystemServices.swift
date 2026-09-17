@@ -6,7 +6,7 @@ import Observation
 import ServiceManagement
 import Speech
 
-enum MacPermission: String, CaseIterable, Identifiable {
+enum MacPermission: String, CaseIterable, Identifiable, Hashable {
     case accessibility
     case inputMonitoring
     case microphone
@@ -174,6 +174,54 @@ struct PermissionSetupProgress: Equatable {
     var completedCount: Int { grantedPermissions.count }
     var totalCount: Int { requiredPermissions.count }
     var isComplete: Bool { currentPermission == nil }
+}
+
+struct PermissionReadinessSnapshot: Equatable {
+    let requiredPermissions: [MacPermission]
+    let states: [MacPermission: PermissionAuthorizationState]
+    let permissionsRequiringRelaunch: Set<MacPermission>
+    let includesNativeNotifications: Bool
+    let notificationAuthorization: NativeNotificationAuthorization
+
+    var missingPermissions: [MacPermission] {
+        requiredPermissions.filter { state(for: $0) != .granted }
+    }
+
+    var currentPermission: MacPermission? { missingPermissions.first }
+    var nativeNotificationNeedsAttention: Bool {
+        includesNativeNotifications && !notificationAuthorization.canPresentAlerts
+    }
+    var missingCount: Int {
+        missingPermissions.count + (nativeNotificationNeedsAttention ? 1 : 0)
+    }
+    var totalCount: Int { requiredPermissions.count + (includesNativeNotifications ? 1 : 0) }
+    var completedCount: Int { totalCount - missingCount }
+    var isReady: Bool { missingCount == 0 }
+
+    func state(for permission: MacPermission) -> PermissionAuthorizationState {
+        states[permission] ?? .required
+    }
+
+    func requiresRelaunch(_ permission: MacPermission) -> Bool {
+        permissionsRequiringRelaunch.contains(permission)
+    }
+
+    static func resolve(
+        enabledCapabilities: Set<Capability>,
+        states: [MacPermission: PermissionAuthorizationState],
+        permissionsRequiringRelaunch: Set<MacPermission>,
+        selectedChannels: Set<NotificationChannel>,
+        notificationAuthorization: NativeNotificationAuthorization
+    ) -> PermissionReadinessSnapshot {
+        PermissionReadinessSnapshot(
+            requiredPermissions: PermissionSetupPlan.requiredPermissions(for: enabledCapabilities),
+            states: states,
+            permissionsRequiringRelaunch: permissionsRequiringRelaunch,
+            includesNativeNotifications: enabledCapabilities.contains(.shortcutCoaching)
+                && selectedChannels.contains(.nativeBanner),
+            notificationAuthorization: notificationAuthorization
+        )
+    }
 }
 
 enum PermissionSetupPlan {
