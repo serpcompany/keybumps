@@ -181,6 +181,28 @@ enum PermissionSettingsPresentation {
     static let visiblePermissions = MacPermission.allCases
 }
 
+enum PermissionSettingsRowAction: Equatable {
+    case restartSuperMac
+    case requestAccess
+    case recoverInSystemSettings
+    case openSystemSettings
+
+    static func resolve(
+        permission: MacPermission,
+        state: PermissionAuthorizationState,
+        requiresRelaunch: Bool
+    ) -> PermissionSettingsRowAction {
+        if requiresRelaunch { return .restartSuperMac }
+        if state.isGranted { return .openSystemSettings }
+        switch permission {
+        case .microphone, .speechRecognition where state == .notDetermined:
+            return .requestAccess
+        case .accessibility, .inputMonitoring, .microphone, .speechRecognition:
+            return .recoverInSystemSettings
+        }
+    }
+}
+
 struct PermissionReadinessSnapshot: Equatable {
     let requiredPermissions: [MacPermission]
     let states: [MacPermission: PermissionAuthorizationState]

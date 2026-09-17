@@ -763,7 +763,11 @@ private struct PermissionRow: View {
     var body: some View {
         let readiness = model.permissionReadiness
         let state = readiness.state(for: permission)
-        let action = model.permissions.recoveryAction(for: permission)
+        let action = PermissionSettingsRowAction.resolve(
+            permission: permission,
+            state: state,
+            requiresRelaunch: model.requiresPermissionRelaunch(permission)
+        )
         Group {
             if compact {
                 content(state: state, action: action)
@@ -776,7 +780,7 @@ private struct PermissionRow: View {
     }
 
     @ViewBuilder
-    private func content(state: PermissionAuthorizationState, action: PermissionRecoveryAction) -> some View {
+    private func content(state: PermissionAuthorizationState, action: PermissionSettingsRowAction) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 if compact { Text(permission.title).font(.headline) }
@@ -786,21 +790,22 @@ private struct PermissionRow: View {
             Text(model.requiresPermissionRelaunch(permission) ? "Restart Required" : state.rawValue)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(state.isGranted ? .green : .orange)
-            if model.requiresPermissionRelaunch(permission) {
+            switch action {
+            case .restartSuperMac:
                 Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
-            } else if action.buttonTitle != nil {
-                Button(actionTitle(for: action)) { Task { await model.recoverPermission(permission) } }
+            case .requestAccess:
+                Button("Request Access…") { Task { await model.recoverPermission(permission) } }
                     .disabled(model.permissions.activeRequest != nil)
-                    .accessibilityLabel("\(actionTitle(for: action)) for \(permission.title)")
+                    .accessibilityLabel("Request access for \(permission.title)")
+            case .recoverInSystemSettings:
+                Button("Open System Settings…") { Task { await model.recoverPermission(permission) } }
+                    .disabled(model.permissions.activeRequest != nil)
+                    .accessibilityLabel("Open System Settings for \(permission.title)")
+            case .openSystemSettings:
+                Button("Open System Settings…") { model.openPermissionSettings(permission) }
+                    .accessibilityLabel("Open System Settings for \(permission.title)")
             }
         }
-    }
-
-    private func actionTitle(for action: PermissionRecoveryAction) -> String {
-        if permission.usesApplicationDragAssistant {
-            return "Add SuperMac…"
-        }
-        return action.buttonTitle ?? "Open System Settings…"
     }
 }
 

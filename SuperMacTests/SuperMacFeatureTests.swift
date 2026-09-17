@@ -349,6 +349,44 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .inputMonitoring, state: .required), .openSystemSettings)
     }
 
+    func testPermissionSettingsRowsAlwaysExposeAUsefulAction() {
+        for permission in MacPermission.allCases {
+            XCTAssertEqual(
+                PermissionSettingsRowAction.resolve(
+                    permission: permission,
+                    state: .granted,
+                    requiresRelaunch: false
+                ),
+                .openSystemSettings
+            )
+        }
+
+        XCTAssertEqual(
+            PermissionSettingsRowAction.resolve(
+                permission: .microphone,
+                state: .notDetermined,
+                requiresRelaunch: false
+            ),
+            .requestAccess
+        )
+        XCTAssertEqual(
+            PermissionSettingsRowAction.resolve(
+                permission: .accessibility,
+                state: .required,
+                requiresRelaunch: false
+            ),
+            .recoverInSystemSettings
+        )
+        XCTAssertEqual(
+            PermissionSettingsRowAction.resolve(
+                permission: .inputMonitoring,
+                state: .granted,
+                requiresRelaunch: true
+            ),
+            .restartSuperMac
+        )
+    }
+
     func testEverySystemSettingsRecoveryShowsTheMatchingVisibleAssistant() {
         XCTAssertEqual(
             PermissionRecoveryPresentation.resolve(

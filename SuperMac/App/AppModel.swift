@@ -441,6 +441,9 @@ final class AppModel {
     func openNotificationSettings() {
         NSWorkspace.shared.open(NotificationSettingsRecovery.url)
     }
+    func openPermissionSettings(_ permission: MacPermission) {
+        permissions.openSettings(permission)
+    }
     func setChannel(_ channel: NotificationChannel, enabled: Bool) {
         preferences.set(channel, enabled: enabled)
         updateMissingPermissionBadge()
