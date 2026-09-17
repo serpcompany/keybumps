@@ -72,7 +72,7 @@ final class SuperMacFeatureTests: XCTestCase {
         let statusController = NativeStatusItemController(router: router)
         let appDelegate = AppDelegate(mainWindowRouter: router)
 
-        statusController.makeMenu().performActionForItem(at: 0)
+        statusController.makeMenu().performActionForItem(at: 1)
         XCTAssertFalse(appDelegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: true))
         XCTAssertFalse(appDelegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: false))
         XCTAssertTrue(router.open()) // Command-comma uses this same route.
@@ -82,6 +82,19 @@ final class SuperMacFeatureTests: XCTestCase {
         NSWindow.allowsAutomaticWindowTabbing = true
         AppDelegate.configureWindowBehavior()
         XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
+    }
+
+    func testStatusItemOffersAndRoutesQuickSearchSeparatelyFromSettings() {
+        let controller = NativeStatusItemController(router: MainWindowRouter())
+        var quickSearchOpenCount = 0
+        controller.configureOpenQuickSearch { quickSearchOpenCount += 1 }
+
+        let menu = controller.makeMenu()
+        XCTAssertEqual(menu.items.prefix(2).map(\.title), ["Open Quick Search", "Settings…"])
+        menu.performActionForItem(at: 0)
+        controller.openQuickSearch()
+
+        XCTAssertEqual(quickSearchOpenCount, 2)
     }
 
     func testClosingTheSettingsWindowKeepsTheCompanionRunning() {
@@ -148,6 +161,7 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(SettingsSection.coaching.rawValue, "Key Bumps")
         XCTAssertEqual(SettingsSection.setup.rawValue, "Setup")
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
+        XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
         XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Key Bumps"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
     }
@@ -848,16 +862,84 @@ final class SuperMacFeatureTests: XCTestCase {
             .appendingPathComponent("quick-search-history-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: storageURL) }
         let store = RecentSearchStore(storageURL: storageURL)
-        let model = QuickSearchModel(recentSearches: store)
+        let result = QuickSearchResult(
+            url: URL(fileURLWithPath: "/Applications/Finder.app"),
+            kind: .application
+        )
+        let model = QuickSearchModel(recentSearches: store, applications: [result])
 
         model.query = "Finder"
         XCTAssertTrue(store.queries.isEmpty, "Typing or highlighting must not record history")
-        model.recordOpenResult(succeeded: false)
+        model.recordOpenResult(result, succeeded: false)
         XCTAssertTrue(store.queries.isEmpty, "A failed open must not record history")
-        model.recordOpenResult(succeeded: true)
+        model.recordOpenResult(result, succeeded: true)
         XCTAssertEqual(store.queries, ["Finder"])
         model.restoreRecentSearch("Terminal")
         XCTAssertEqual(model.query, "Terminal")
+    }
+
+    func testQuickSearchLearnsSuccessfulApplicationLaunchesByFrequencyAndRecency() throws {
+        let storageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("application-usage-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let now = Date(timeIntervalSince1970: 10_000)
+        let usage = ApplicationUsageStore(storageURL: storageURL, now: { now })
+        let terminal = QuickSearchResult(
+            url: URL(fileURLWithPath: "/Applications/Terminal.app"),
+            kind: .application
+        )
+        let iTerm = QuickSearchResult(
+            url: URL(fileURLWithPath: "/Applications/iTerm.app"),
+            kind: .application
+        )
+        let activityMonitor = QuickSearchResult(
+            url: URL(fileURLWithPath: "/Applications/Activity Monitor.app"),
+            kind: .application
+        )
+        let model = QuickSearchModel(
+            recentSearches: RecentSearchStore(
+                storageURL: storageURL.deletingPathExtension().appendingPathExtension("recent.json")
+            ),
+            applicationUsage: usage,
+            applications: [activityMonitor, iTerm, terminal]
+        )
+
+        model.query = "t"
+        XCTAssertEqual(model.results.first, terminal, "Prefix relevance wins before usage is learned")
+
+        model.recordOpenResult(iTerm, succeeded: true)
+        model.recordOpenResult(iTerm, succeeded: true)
+        model.refresh()
+
+        XCTAssertEqual(model.results.first, iTerm, "Repeated recent launches should promote iTerm")
+        XCTAssertEqual(usage.record(for: iTerm.url)?.launchCount, 2)
+        XCTAssertEqual(
+            ApplicationUsageStore(storageURL: storageURL, now: { now }).record(for: iTerm.url)?.launchCount,
+            2
+        )
+    }
+
+    func testQuickSearchDoesNotLearnFromFailedOrNonApplicationOpens() {
+        let storageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("application-usage-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let usage = ApplicationUsageStore(storageURL: storageURL)
+        let app = QuickSearchResult(
+            url: URL(fileURLWithPath: "/Applications/iTerm.app"),
+            kind: .application
+        )
+        let file = QuickSearchResult(
+            url: URL(fileURLWithPath: "/tmp/term.txt"),
+            kind: .file
+        )
+        let model = QuickSearchModel(applicationUsage: usage, applications: [app])
+
+        model.query = "term"
+        model.recordOpenResult(app, succeeded: false)
+        model.recordOpenResult(file, succeeded: true)
+
+        XCTAssertNil(usage.record(for: app.url))
+        XCTAssertNil(usage.record(for: file.url))
     }
 
     func testKeyBumpsPaletteRowsIgnoreReadStateAndTime() {

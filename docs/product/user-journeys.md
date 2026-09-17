@@ -122,9 +122,9 @@ Disabling Window Management stops drag monitoring and releases every owned windo
 2. Perform a supported manual action in Finder or Chrome.
 3. The detector emits exactly one event only after the action's required postcondition is observed.
 4. The event is written once to durable Key Bumps history.
-5. Selected presentation channels deliver their transient output independently. Custom presentations share a visible close button, Escape dismissal, horizontal trackpad-swipe dismissal, and an auto-dismiss timer that pauses while hovered.
+5. Selected presentation channels deliver their transient output independently. Custom presentations show the action and source application with separated shortcut keycaps, and share a top-left close button, Escape dismissal, screen-wide horizontal trackpad-swipe dismissal, and an auto-dismiss timer that pauses while hovered.
 6. Preview retained visual channels without creating durable history; when Sound is selected it plays alongside those previews, while direct Sound preview plays once. Native Banner uses real notification authorization and opens the matching System Settings recovery page when denied. Failed preview adapters report their individual failure instead of appearing successful.
-7. Review and filter events in Settings, the menu panel, or the Command Palette. Palette rows are passive and omit unread dots and changing relative-time counters. Clear Key Bumps history only through an explicit confirmed action.
+7. Review, filter, and clear events only in the Command Palette. Palette rows are native list rows, remain passive, and omit unread dots and changing relative-time counters. Clear Key Bumps history only through an explicit confirmed action.
 
 Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key bump. Disabling Key Bumps stops monitoring.
 
@@ -135,7 +135,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 3. Switching clears the prior filter, resets selection, and keeps text-input focus.
 4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Key Bumps row click changes selection only; Return has no clipboard or history side effect.
 5. When Key Bumps is disabled, its tab reports that state instead of presenting stale history as active.
-6. When Search is empty, successful prior queries appear under Recent Searches; selecting one restores it and clearing requires confirmation. Key Bumps provides the same confirmed clear-history affordance as the other histories.
+6. When Search is empty, successful prior queries appear under Recent Searches; selecting one restores it and clearing requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens and file/folder results do not train that ranking. Key Bumps provides the same confirmed clear-history affordance as the other histories.
 7. The footer truthfully identifies local-only behavior.
 
 ## UJ-10 — Capability controls and settings
@@ -145,14 +145,14 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 3. Enable or disable each capability only from its own screen.
 4. Disabling immediately tears down its active panel, monitor, recording, drag behavior, or shortcuts as applicable.
 5. Re-enabling restores valid registrations without duplicates.
-6. Window shortcuts, dictation language, presentation channels, app presence, and local histories persist according to their documented scope.
+6. Window shortcuts, dictation language, presentation channels, app presence, and local histories persist according to their documented scope. History content and destructive history actions live in the quick switcher rather than being duplicated in Settings.
 7. Quick Search, Clipboard History, Dictation, and every Window Management action provide Record and Clear controls. The three capability entry shortcuts also provide Restore Default.
 
 ## UJ-11 — Dock, menu bar, conflicts, and launch at login
 
 1. The app is visible in the Dock and application switcher by default.
-2. The menu-bar item contains Settings, the disabled local-preview update item, and Quit SuperMac.
-3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; clicking the Dock icon, menu-bar Settings item, or Command-comma recreates, raises, and focuses the single Settings window.
+2. Left-clicking the menu-bar icon opens Quick Search. Right-clicking it opens a native menu containing Open Quick Search, Settings, the disabled local-preview update item, and Quit SuperMac.
+3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; clicking the Dock icon, the menu-bar Settings item, or Command-comma recreates, raises, and focuses the single Settings window.
 4. SuperMac registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.
 

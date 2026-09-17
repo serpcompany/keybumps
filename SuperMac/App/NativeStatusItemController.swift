@@ -32,6 +32,7 @@ final class NativeStatusItemController: NSObject {
 
     private var statusItem: NSStatusItem?
     private let router: MainWindowRouter
+    private var openQuickSearchAction: (() -> Void)?
 
     init(router: MainWindowRouter? = nil) {
         self.router = router ?? .shared
@@ -40,6 +41,10 @@ final class NativeStatusItemController: NSObject {
 
     func configureOpenMainWindow(_ action: @escaping () -> Void) {
         router.configure(action)
+    }
+
+    func configureOpenQuickSearch(_ action: @escaping () -> Void) {
+        openQuickSearchAction = action
     }
 
     func install() {
@@ -51,28 +56,42 @@ final class NativeStatusItemController: NSObject {
             StatusItemBranding.configure(
                 button,
                 target: self,
-                action: #selector(showMenu(_:))
+                action: #selector(handleStatusItemClick(_:))
             )
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         statusItem = item
     }
 
-    @objc private func showMenu(_ sender: NSStatusBarButton) {
+    @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
+        if NSApplication.shared.currentEvent?.type == .rightMouseUp {
+            showMenu(from: sender)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.openQuickSearch()
+            }
+        }
+    }
+
+    private func showMenu(from sender: NSStatusBarButton) {
         let menu = makeMenu()
-        statusItem?.menu = menu
-        sender.performClick(nil)
-        statusItem?.menu = nil
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.addItem(withTitle: "Open Quick Search", action: #selector(openQuickSearch), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         let updates = menu.addItem(withTitle: "Check for Updates (Not Configured)", action: nil, keyEquivalent: "")
         updates.isEnabled = false
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit SuperMac", action: #selector(quit), keyEquivalent: "q").target = self
         return menu
+    }
+
+    @objc func openQuickSearch() {
+        openQuickSearchAction?()
     }
 
     @objc func openSettings() {

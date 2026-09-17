@@ -411,7 +411,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private func open(_ result: QuickSearchResult) {
         let didOpen = NSWorkspace.shared.open(result.url)
-        search.recordOpenResult(succeeded: didOpen)
+        search.recordOpenResult(result, succeeded: didOpen)
         if didOpen { dismiss() }
     }
 

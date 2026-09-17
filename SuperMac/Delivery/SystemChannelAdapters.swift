@@ -23,6 +23,10 @@ enum NativeNotificationAuthorization: Equatable {
     case provisional
     case ephemeral
     case unknown
+
+    var canPresentAlerts: Bool {
+        self == .authorized || self == .provisional || self == .ephemeral
+    }
 }
 
 @MainActor

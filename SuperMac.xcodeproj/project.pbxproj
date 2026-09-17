@@ -56,6 +56,7 @@
 		EC2FFB34F79A71D08629C95F /* DictationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706B4B469058348551AFE583 /* DictationHistoryView.swift */; };
 		F78B977DFCD21A997E90BED0 /* ActionCorrelator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A39FD515AB2244E626687C8 /* ActionCorrelator.swift */; };
 		FB62B9325E7785FDEEB501B4 /* Capability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842BC96677905E5FD541225A /* Capability.swift */; };
+		FF5B773B8E104E06D38DBA7E /* ApplicationUsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB5564DA94F77BA89189BE3 /* ApplicationUsageStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -115,6 +116,7 @@
 		D3890AA7A2ED495DF7406F94 /* DictationAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationAudioPlayer.swift; sourceTree = "<group>"; };
 		D6AB39FCFF8951FC4C3F93C7 /* StandardWindowControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWindowControlTests.swift; sourceTree = "<group>"; };
 		D7795FFAAF894657E10D9722 /* SuperMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuperMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DEB5564DA94F77BA89189BE3 /* ApplicationUsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationUsageStore.swift; sourceTree = "<group>"; };
 		E3AA941067E1BDE2DDDA9025 /* WindowAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAction.swift; sourceTree = "<group>"; };
 		EF56E37C6FB0B8B8BF1432E6 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
 		F450E0E0BDC74C58716AC0B9 /* SystemChannelAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChannelAdapters.swift; sourceTree = "<group>"; };
@@ -137,6 +139,7 @@
 		65E36344E655062E5781CB7E /* QuickSearch */ = {
 			isa = PBXGroup;
 			children = (
+				DEB5564DA94F77BA89189BE3 /* ApplicationUsageStore.swift */,
 				79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */,
 				464B1E71E43DB712798D8E4F /* RecentSearchStore.swift */,
 			);
@@ -412,6 +415,7 @@
 				8773503FC55C6C2D12BCA62F /* AppModel.swift in Sources */,
 				9A123083B9AA78A72E107ED3 /* AppPreferences.swift in Sources */,
 				4485C0E7B6169A3006A83E35 /* AppPresenceController.swift in Sources */,
+				FF5B773B8E104E06D38DBA7E /* ApplicationUsageStore.swift in Sources */,
 				FB62B9325E7785FDEEB501B4 /* Capability.swift in Sources */,
 				2F2DACC19C833EF41ADBD702 /* ChromeActionAdapter.swift in Sources */,
 				BBA68BFD1B6B9C15B5D2ED28 /* ClipboardHistoryService.swift in Sources */,

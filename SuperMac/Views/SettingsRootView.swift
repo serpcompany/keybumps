@@ -4,10 +4,10 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case setup = "Setup", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation", dictationHistory = "Dictation History"
+    case setup = "Setup", search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
     case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General", about = "About"
     var id: String { rawValue }
-    var icon: String { switch self { case .setup: "checklist"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .dictationHistory: "clock.arrow.circlepath"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
+    var icon: String { switch self { case .setup: "checklist"; case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape"; case .about: "info.circle" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -65,7 +65,13 @@ struct SettingsRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsSection.allCases, selection: selectionBinding) { section in Label(section.rawValue, systemImage: section.icon).tag(section) }
+            List(SettingsSection.allCases, selection: selectionBinding) { section in
+                SettingsSidebarRow(
+                    section: section,
+                    attentionCount: attentionCount(for: section)
+                )
+                .tag(section)
+            }
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220)
         } detail: {
             Group {
@@ -74,7 +80,6 @@ struct SettingsRootView: View {
                 case .search: QuickSearchSettingsView()
                 case .clipboard: ClipboardSettingsView()
                 case .dictation: DictationSettingsView()
-                case .dictationHistory: DictationHistoryView()
                 case .windows: WindowSettingsView()
                 case .coaching: KeyBumpsSettingsView()
                 case .permissions: PermissionsView()
@@ -98,7 +103,7 @@ struct SettingsRootView: View {
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
-        .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in navigation.navigate(to: .dictationHistory) }
+        .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
     }
 
     private var selectionBinding: Binding<SettingsSection?> {
@@ -109,6 +114,35 @@ struct SettingsRootView: View {
                 navigation.navigate(to: section)
             }
         )
+    }
+
+    private func attentionCount(for section: SettingsSection) -> Int {
+        switch section {
+        case .setup, .permissions:
+            model.missingPermissionCount
+        case .coaching:
+            model.missingPermissions(for: .shortcutCoaching).count
+                + (model.nativeNotificationNeedsAttention ? 1 : 0)
+        default:
+            0
+        }
+    }
+}
+
+private struct SettingsSidebarRow: View {
+    let section: SettingsSection
+    let attentionCount: Int
+
+    var body: some View {
+        HStack {
+            Label(section.rawValue, systemImage: section.icon)
+            Spacer()
+            if attentionCount > 0 {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("\(attentionCount) permission items need attention")
+            }
+        }
     }
 }
 
@@ -155,13 +189,16 @@ private struct SetupView: View {
 
     private func status(for capability: Capability) -> String {
         guard model.preferences.enabledCapabilities.contains(capability) else { return "Off" }
-        return model.missingPermissions(for: capability).isEmpty ? "Ready" : "Setup Needed"
+        return missingSetupItemCount(for: capability) == 0 ? "Ready" : "Setup Needed"
     }
 
     private func detail(for capability: Capability) -> String {
         guard model.preferences.enabledCapabilities.contains(capability) else { return "Disabled in \(capability.title) settings" }
         let missing = model.missingPermissions(for: capability)
         if !missing.isEmpty { return "Needs \(missing.map(\.title).joined(separator: " and "))" }
+        if capability == .shortcutCoaching, model.nativeNotificationNeedsAttention {
+            return "Needs Notifications access for the native banner"
+        }
         return switch capability {
         case .quickSearch: shortcutDetail(for: .quickSearch, action: "search apps, files, and folders")
         case .clipboardHistory: shortcutDetail(for: .clipboardHistory, action: "open your latest 10 copied text and image items")
@@ -180,12 +217,12 @@ private struct SetupView: View {
 
     private func statusColor(for capability: Capability) -> Color {
         if !model.preferences.enabledCapabilities.contains(capability) { return .secondary }
-        return model.missingPermissions(for: capability).isEmpty ? .green : .orange
+        return missingSetupItemCount(for: capability) == 0 ? .green : .red
     }
 
     private func actionTitle(for capability: Capability) -> String {
         if !model.preferences.enabledCapabilities.contains(capability) { return "Set Up" }
-        if !model.missingPermissions(for: capability).isEmpty { return "Grant Permission" }
+        if missingSetupItemCount(for: capability) > 0 { return "Grant Permission" }
         return switch capability {
         case .quickSearch, .clipboardHistory: "Open"
         case .dictation, .windowManagement, .shortcutCoaching: "Settings"
@@ -193,6 +230,12 @@ private struct SetupView: View {
     }
 
     private func performAction(for capability: Capability) {
+        if capability == .shortcutCoaching,
+           model.missingPermissions(for: capability).isEmpty,
+           model.nativeNotificationNeedsAttention {
+            Task { await model.requestNotificationPermission() }
+            return
+        }
         let action = SetupCapabilityAction.resolve(
             capability: capability,
             isEnabled: model.preferences.enabledCapabilities.contains(capability),
@@ -208,6 +251,11 @@ private struct SetupView: View {
         case .beginPermissionWalkthrough(let capability):
             model.beginPermissionWalkthrough(for: capability)
         }
+    }
+
+    private func missingSetupItemCount(for capability: Capability) -> Int {
+        model.missingPermissions(for: capability).count
+            + (capability == .shortcutCoaching && model.nativeNotificationNeedsAttention ? 1 : 0)
     }
 }
 
@@ -229,19 +277,11 @@ private struct ClipboardSettingsView: View {
         Form {
             CapabilityControl(capability: .clipboardHistory)
             CapabilityShortcutEditor(shortcut: .clipboardHistory)
-            Section("Local history") {
+            Section {
                 Button("Open Clipboard History") { model.showClipboardHistory() }
                     .disabled(!model.preferences.enabledCapabilities.contains(.clipboardHistory))
-                LabeledContent("Stored items", value: "\(model.clipboard.entries.count) of 10")
-                HistoryClearButton(
-                    title: "Clear History",
-                    confirmationTitle: "Clear clipboard history?",
-                    confirmationMessage: "This permanently removes all clipboard items saved by SuperMac.",
-                    destructiveActionTitle: "Clear Clipboard History",
-                    disabled: model.clipboard.entries.isEmpty,
-                    clear: model.clipboard.clear
-                )
-                Text("The latest ten text or image items are stored only on this Mac. Image media is capped at 50 MB per item. Copied secrets remain until removed or displaced.").foregroundStyle(.secondary)
+                Text("View, search, paste, and clear the latest ten local items in the quick switcher.")
+                    .foregroundStyle(.secondary)
             }
         }.formStyle(.grouped).navigationTitle("Clipboard History")
     }
@@ -289,8 +329,6 @@ private struct DictationSettingsView: View {
             }
             Section("Status") {
                 LabeledContent("Dictation", value: model.dictation.phase.label)
-                LabeledContent("Saved dictations", value: "\(model.dictationHistory.entries.count)")
-                Button("Open Dictation History") { NotificationCenter.default.post(name: .openDictationHistory, object: nil) }
                 if let error = model.dictation.lastError { Text(error).foregroundStyle(.orange) }
                 if model.dictation.recoveredTranscript != nil {
                     Text("The latest transcript is kept locally so it can be recovered if insertion fails.")
@@ -514,30 +552,10 @@ private struct KeyBumpsSettingsView: View {
             Section("Sound") {
                 channelControl(.sound)
             }
-            Section("History") {
-                LabeledContent("Events", value: "\(model.inbox.events.count)")
-                Button("Mark All Read") { model.markAllRead() }.disabled(model.unreadCount == 0)
-                HistoryClearButton(
-                    title: "Clear Key Bumps History",
-                    confirmationTitle: "Clear Key Bumps history?",
-                    confirmationMessage: "This permanently removes all saved Key Bumps events.",
-                    destructiveActionTitle: "Clear Key Bumps History",
-                    disabled: model.inbox.events.isEmpty,
-                    clear: model.clearHistory
-                )
-            }
-            Section("Key Bumps History") {
-                if model.inbox.events.isEmpty {
-                    Text("Manual actions with known shortcuts will appear here.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(model.inbox.events.prefix(30)) { event in
-                        Button { model.markRead(event.id) } label: {
-                            CoachingEventRow(event: event)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+            Section {
+                Button("Open Key Bumps History") { model.showKeyBumpsHistory() }
+                Text("View, filter, and clear detected actions in the quick switcher.")
+                    .foregroundStyle(.secondary)
             }
             Section("Supported shortcuts") {
                 ForEach(ShortcutCatalog.tips) { tip in
@@ -583,28 +601,91 @@ private struct KeyBumpsSettingsView: View {
 
 private struct PermissionsView: View {
     @Environment(AppModel.self) private var model
+    @State private var reviewingIndividualPermissions = false
     var body: some View {
         Form {
             Section {
                 PermissionWalkthroughView()
             }
             Section {
-                DisclosureGroup("Review individual permissions") {
+                Button {
+                    withAnimation {
+                        reviewingIndividualPermissions.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(reviewingIndividualPermissions ? 90 : 0))
+                        Text("Review individual permissions")
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(reviewingIndividualPermissions ? "Expanded" : "Collapsed")
+
+                if reviewingIndividualPermissions {
                     VStack(spacing: 8) {
                         ForEach(MacPermission.allCases) { permission in
                             PermissionRow(permission: permission, compact: true)
                         }
+                        NotificationPermissionRow()
                     }
                     .padding(.top, 8)
                 }
             }
             Section {
-                Button("Refresh Status") { model.refreshPermissions() }
+                Button("Refresh Status") {
+                    model.refreshPermissions()
+                    Task { await model.refreshNotificationPermission() }
+                }
                 Text("After changing a switch in System Settings, return here and the status will refresh automatically.").foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Permissions")
+    }
+}
+
+private struct NotificationPermissionRow: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Notifications").font(.headline)
+                Text("Lets the native macOS banner presentation appear in Notification Center.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(statusText)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(model.nativeNotificationAuthorization.canPresentAlerts ? .green : .red)
+            if !model.nativeNotificationAuthorization.canPresentAlerts {
+                Button(actionTitle) {
+                    Task { await model.requestNotificationPermission() }
+                }
+            }
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var statusText: String {
+        switch model.nativeNotificationAuthorization {
+        case .authorized, .provisional, .ephemeral: "Granted"
+        case .notDetermined: "Not Requested"
+        case .authorizedWithoutAlerts: "Banners Off"
+        case .denied: "Denied"
+        case .unknown: "Unavailable"
+        }
+    }
+
+    private var actionTitle: String {
+        model.nativeNotificationAuthorization == .notDetermined
+            ? "Request Access…"
+            : "Open System Settings…"
     }
 }
 
@@ -662,9 +743,12 @@ private struct PermissionWalkthroughView: View {
 
     var body: some View {
         let progress = model.permissionSetupProgress
+        let includesNotifications = model.preferences.selectedChannels.contains(.nativeBanner)
+        let totalCount = progress.totalCount + (includesNotifications ? 1 : 0)
+        let completedCount = totalCount - model.missingPermissionCount
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(progress.completedCount) of \(progress.totalCount) complete")
+                Text("\(completedCount) of \(totalCount) complete")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -673,6 +757,11 @@ private struct PermissionWalkthroughView: View {
             if let permission = progress.currentPermission {
                 PermissionRow(permission: permission, compact: true)
                 Text("After changing a macOS setting, return to SuperMac. This step advances as soon as macOS confirms access.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if model.nativeNotificationNeedsAttention {
+                NotificationPermissionRow()
+                Text("After changing Notification settings, return to SuperMac and choose Refresh Status.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

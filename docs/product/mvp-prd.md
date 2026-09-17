@@ -149,6 +149,7 @@ User outcome: replace the owner's basic Alfred/Spotlight launcher workflow.
 - Return opens or focuses the selected result.
 - Command-Return reveals a file or folder in Finder.
 - After a result opens successfully, retain a bounded, deduplicated local Recent Searches list. An empty query shows that list; choosing one restores the query, and clearing requires destructive confirmation. Typing, highlighting, dismissing, revealing, or a failed open does not record history.
+- Keep a separate local application-launch usage index. Successful application opens update frequency and recency; those signals refine future application ordering after exact/prefix relevance, while failed opens and file/folder results do not train application ranking.
 - Escape or clicking outside dismisses the panel.
 - The panel must not leave SuperMac as the active foreground app after launching a result.
 
@@ -196,7 +197,7 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Preserve the WAV in Dictation History with an explicit failure state when transcription fails or times out. Interrupted and failed entries provide a local Transcribe action that retries the completed audio file and updates the same history item.
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
 - Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
-- Provide a searchable Dictation History screen with real local playback, duration/progress, 0.5× through 2× speed controls, copy, reveal in Finder, individual delete, and a native clear-all control that requires destructive confirmation.
+- Provide searchable Dictation History in the shared quick switcher with real local playback, duration/progress, 0.5× through 2× speed controls, copy, reveal in Finder, individual delete, and a native clear-all control that requires destructive confirmation.
 - Add a Translate action to expanded transcript cards using Apple's custom on-device `TranslationSession`, with a supported target-language picker and system-managed language downloads. Render translated speech to a temporary local WAV and present it through the same waveform, play/pause, progress, duration, and speed controls as the original recording. Delete that temporary audio when the translation closes or changes; preserve the original transcript, do not add generated speech to Dictation History, and do not use the system presentation that may process content remotely.
 - Keep transcript reuse available from the third Command Palette tab.
 - Render the same rich accordion item in the Command Palette Dictation tab so completed and interrupted results can be reviewed, transcribed when needed, pasted, copied, played at an adjustable speed, translated, heard in the target language, revealed, or deleted without opening Settings. The entire padded accordion header is a button target with hover feedback rather than limiting expansion to its text.
@@ -247,7 +248,7 @@ Bring across the current full-product behavior:
 - permissions and diagnostics;
 - current supported action catalog.
 
-The retained presentation choices are Native macOS Banner, Top-right Toast, Top-center Shelf, Pointer Card, and separately configured Sound. Removed legacy channel identifiers are migrated out of saved preferences. Native Banner preview uses real notification authorization and provides a System Settings recovery action when denied. The Command Palette can filter and explicitly clear Key Bumps history; its rows omit unread dots and live elapsed-time counters.
+The retained presentation choices are Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Removed legacy channel identifiers, including Pointer Card, are migrated out of saved preferences. Native Banner preview uses real notification authorization and provides a System Settings recovery action when denied; missing authorization is visible in Settings and on the Dock attention badge when the channel is enabled. Custom cards show the action headline, source application, separated modifier/key caps, and a top-left close button. The Command Palette can filter and explicitly clear Key Bumps history; its rows omit unread dots and live elapsed-time counters.
 
 Required system permissions remain Accessibility and Input Monitoring. Direct distribution enables these permissions but does not increase detection coverage by itself. New application/action recognition is post-MVP work unless required to repair an existing supported journey.
 

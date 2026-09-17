@@ -390,6 +390,29 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertTrue(center.added.isEmpty)
     }
 
+    func testEnabledNativeBannerSurfacesMissingNotificationAuthorization() async {
+        let suite = "ShortcutCoachTests-notification-attention-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set([NotificationChannel.nativeBanner.rawValue], forKey: "selectedNotificationChannels")
+        let center = StubNativeNotificationCenter(status: .denied)
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            presenter: PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor()),
+            nativeNotificationCenter: center
+        )
+
+        await model.refreshNotificationPermission()
+        XCTAssertTrue(model.nativeNotificationNeedsAttention)
+
+        center.status = .authorized
+        await model.refreshNotificationPermission()
+        XCTAssertFalse(model.nativeNotificationNeedsAttention)
+    }
+
     func testSoundInvokesGlassAndReportsUnavailablePlayback() async throws {
         var playedName: NSSound.Name?
         let successful = SoundAdapter(playSound: {
@@ -415,9 +438,9 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(keyboard.startCount, 0)
 
         controller.show(event: .sample, style: .topRightToast)
-        controller.show(event: .sample, style: .pointerCard)
+        controller.show(event: .sample, style: .topCenterShelf)
         XCTAssertEqual(keyboard.startCount, 1, "All active presentations share one Escape monitor")
-        XCTAssertEqual(controller.activeChannels, [.topRightToast, .pointerCard])
+        XCTAssertEqual(controller.activeChannels, [.topRightToast, .topCenterShelf])
         XCTAssertTrue(keyboard.sendDismissalCommand())
         XCTAssertTrue(controller.activeChannels.isEmpty)
         XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
@@ -429,11 +452,11 @@ final class ShortcutCoachTests: XCTestCase {
         let keyboard = StubKeyboardEventMonitor()
         let controller = PresentationWindowController(keyboardMonitor: keyboard)
         controller.show(event: .sample, style: .topRightToast)
-        controller.show(event: .sample, style: .pointerCard)
+        controller.show(event: .sample, style: .topCenterShelf)
 
         controller.dismiss(.topRightToast)
         XCTAssertEqual(keyboard.stopCount, 0)
-        controller.dismiss(.pointerCard)
+        controller.dismiss(.topCenterShelf)
         XCTAssertEqual(keyboard.stopCount, 1)
     }
 
@@ -496,10 +519,9 @@ final class ShortcutCoachTests: XCTestCase {
 
         controller.show(event: .sample, style: .topRightToast)
         controller.show(event: .sample, style: .topCenterShelf)
-        controller.show(event: .sample, style: .pointerCard)
 
-        XCTAssertEqual(controller.activeChannels, [.topRightToast, .topCenterShelf, .pointerCard])
-        XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast, .topCenterShelf, .pointerCard])
+        XCTAssertEqual(controller.activeChannels, [.topRightToast, .topCenterShelf])
+        XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast, .topCenterShelf])
     }
 
     func testButtonDismissalUsesCanonicalPanelAndTaskCleanup() {
@@ -603,8 +625,7 @@ final class ShortcutCoachTests: XCTestCase {
         let preferences = AppPreferences(defaults: defaults)
 
         preferences.set(.topCenterShelf, enabled: true)
-        preferences.set(.pointerCard, enabled: true)
-        XCTAssertEqual(preferences.selectedChannels, [.topRightToast, .topCenterShelf, .pointerCard])
+        XCTAssertEqual(preferences.selectedChannels, [.topRightToast, .topCenterShelf])
     }
 
     func testRemovedPresentationChannelsAreMigratedOutOfPersistedPreferences() {
@@ -618,16 +639,16 @@ final class ShortcutCoachTests: XCTestCase {
             "dockBadge",
             "dockBounce",
             "cursorHalo",
-            NotificationChannel.pointerCard.rawValue,
+            "pointerCard",
             NotificationChannel.sound.rawValue
         ], forKey: "selectedNotificationChannels")
 
         let preferences = AppPreferences(defaults: defaults)
 
-        XCTAssertEqual(preferences.selectedChannels, [.topCenterShelf, .pointerCard, .sound])
+        XCTAssertEqual(preferences.selectedChannels, [.topCenterShelf, .sound])
         XCTAssertEqual(
             defaults.array(forKey: "selectedNotificationChannels") as? [String],
-            ["pointerCard", "sound", "topCenterShelf"]
+            ["sound", "topCenterShelf"]
         )
     }
 
@@ -721,7 +742,12 @@ final class ShortcutCoachTests: XCTestCase {
 
     func testCoachingCopyUsesTheDetectedEvent() {
         let event = CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
-        XCTAssertEqual(event.coachingTitle, "Try ⌘T next time")
-        XCTAssertEqual(event.coachingBody, "New Tab in Safari")
+        XCTAssertEqual(event.coachingTitle, "New tab")
+        XCTAssertEqual(event.coachingBody, "Safari")
+    }
+
+    func testShortcutKeycapsUseLowercaseLettersUnlessShiftIsPresent() {
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⌘N").keys, ["⌘", "n"])
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⇧⌘N").keys, ["⇧", "⌘", "N"])
     }
 }

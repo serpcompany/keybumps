@@ -7,8 +7,7 @@ import XCTest
 final class PresentationEvidenceTests: XCTestCase {
     private let visualChannels: [NotificationChannel] = [
         .topRightToast,
-        .topCenterShelf,
-        .pointerCard
+        .topCenterShelf
     ]
 
     func testEveryCustomPresentationRendersToReviewablePNG() throws {
@@ -39,13 +38,12 @@ final class PresentationEvidenceTests: XCTestCase {
 
         XCTAssertEqual(controller.panelSize(for: .topRightToast), NSSize(width: 360, height: 92))
         XCTAssertEqual(controller.panelSize(for: .topCenterShelf), NSSize(width: 500, height: 112))
-        XCTAssertEqual(controller.panelSize(for: .pointerCard), NSSize(width: 320, height: 92))
         XCTAssertEqual(controller.dismissalDelayNanoseconds(for: .topRightToast), 4_000_000_000)
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.fullScreenAuxiliary))
     }
 
-    func testPointerPresentationsFollowTheDisplayContainingTheEvent() {
+    func testToastPresentationUsesTheDisplayContainingTheEvent() {
         let primary = NSRect(x: 0, y: 0, width: 1_440, height: 900)
         let secondaryVisible = NSRect(x: 1_440, y: 0, width: 1_920, height: 1_040)
         let pointer = PresentationLayout.appKitPoint(
@@ -56,12 +54,12 @@ final class PresentationEvidenceTests: XCTestCase {
         XCTAssertTrue(secondaryVisible.contains(pointer))
         XCTAssertEqual(
             PresentationLayout.origin(
-                for: .pointerCard,
-                size: NSSize(width: 320, height: 92),
+                for: .topRightToast,
+                size: NSSize(width: 360, height: 92),
                 visibleFrame: secondaryVisible,
                 pointer: pointer
             ),
-            NSPoint(x: 1_818, y: 404)
+            NSPoint(x: 2_980, y: 928)
         )
     }
 

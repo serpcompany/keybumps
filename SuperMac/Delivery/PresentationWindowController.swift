@@ -133,7 +133,6 @@ final class PresentationWindowController {
         switch style {
         case .topRightToast: NSSize(width: 360, height: 92)
         case .topCenterShelf: NSSize(width: 500, height: 112)
-        case .pointerCard: NSSize(width: 320, height: 92)
         default: NSSize(width: 360, height: 92)
         }
     }
@@ -213,22 +212,29 @@ final class PresentationWindowController {
     private func handleTrackpadScroll(
         deltaX: CGFloat,
         deltaY: CGFloat,
-        phase: NSEvent.Phase,
-        location: NSPoint
+        phase: NSEvent.Phase
     ) {
-        guard let (style, session) = sessions.first(where: { $0.value.panel.frame.contains(location) }) else { return }
+        guard !sessions.isEmpty else { return }
         if phase == .began {
-            session.swipeTranslation = .zero
+            for session in sessions.values {
+                session.swipeTranslation = .zero
+            }
         }
-        session.swipeTranslation = NSSize(
-            width: session.swipeTranslation.width + deltaX,
-            height: session.swipeTranslation.height + deltaY
-        )
+        for session in sessions.values {
+            session.swipeTranslation = NSSize(
+                width: session.swipeTranslation.width + deltaX,
+                height: session.swipeTranslation.height + deltaY
+            )
+        }
         if phase == .ended || phase == .cancelled {
-            let translation = session.swipeTranslation
-            session.swipeTranslation = .zero
-            if ToastDismissalPolicy.shouldDismiss(for: translation) {
-                dismiss(style)
+            let shouldDismiss = sessions.values.contains {
+                ToastDismissalPolicy.shouldDismiss(for: $0.swipeTranslation)
+            }
+            for session in sessions.values {
+                session.swipeTranslation = .zero
+            }
+            if shouldDismiss {
+                dismissAll()
             }
         }
     }
@@ -242,13 +248,11 @@ final class PresentationWindowController {
             let deltaX = event.scrollingDeltaX
             let deltaY = event.scrollingDeltaY
             let phase = event.phase
-            let location = NSEvent.mouseLocation
             Task { @MainActor in
                 self?.handleTrackpadScroll(
                     deltaX: deltaX,
                     deltaY: deltaY,
-                    phase: phase,
-                    location: location
+                    phase: phase
                 )
             }
         }
@@ -256,8 +260,7 @@ final class PresentationWindowController {
             self?.handleTrackpadScroll(
                 deltaX: event.scrollingDeltaX,
                 deltaY: event.scrollingDeltaY,
-                phase: event.phase,
-                location: NSEvent.mouseLocation
+                phase: event.phase
             )
             return event
         }
@@ -309,10 +312,6 @@ enum PresentationLayout {
             return NSPoint(x: visible.maxX - size.width - 20, y: visible.maxY - size.height - 20)
         case .topCenterShelf:
             return NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 16)
-        case .pointerCard:
-            let x = min(max(pointer.x + 18, visible.minX), visible.maxX - size.width)
-            let y = min(max(pointer.y - size.height / 2, visible.minY), visible.maxY - size.height)
-            return NSPoint(x: x, y: y)
         default:
             return NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 16)
         }
@@ -326,41 +325,89 @@ struct CoachingPresentationView: View {
     var onHoverChanged: (Bool) -> Void = { _ in }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: style.systemImage)
-                .font(.title2)
-                .foregroundStyle(.green)
-            coachingCopy
-            Spacer(minLength: 18)
-            Text(event.shortcut)
-                .font(.title3.bold().monospaced())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 14) {
+                Image(systemName: style.systemImage)
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                coachingCopy
+                Spacer(minLength: 18)
+                ShortcutKeycaps(shortcut: event.shortcut)
+            }
+            .padding(.leading, 42)
+            .padding(.trailing, 16)
+            .padding(.vertical, 16)
+
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Dismiss Key Bump")
+            .padding(.leading, 10)
+            .padding(.top, 10)
         }
-        .padding(16)
         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(4)
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Key Bump. \(event.actionTitle). Try \(event.shortcut) next time.")
+        .accessibilityLabel("Key Bump. \(event.coachingTitle). \(event.applicationName). Shortcut \(event.shortcut).")
     }
 
     private var coachingCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(event.coachingTitle).font(.headline)
-            Text("\(event.actionTitle) · \(event.applicationName)")
+            Text(event.coachingBody)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+}
+
+struct ShortcutKeycapPresentation: Equatable {
+    let keys: [String]
+
+    init(shortcut: String) {
+        let modifiers = Set(["⌘", "⌥", "⌃", "⇧"])
+        var keys: [String] = []
+        var current = ""
+        for character in shortcut {
+            let value = String(character)
+            if modifiers.contains(value) {
+                if !current.isEmpty {
+                    keys.append(current)
+                    current = ""
+                }
+                keys.append(value)
+            } else {
+                current.append(character)
+            }
+        }
+        if !current.isEmpty {
+            keys.append(keys.contains("⇧") ? current.uppercased() : current.lowercased())
+        }
+        self.keys = keys
+    }
+}
+
+private struct ShortcutKeycaps: View {
+    let shortcut: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(ShortcutKeycapPresentation(shortcut: shortcut).keys, id: \.self) { key in
+                Text(key)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .frame(minWidth: 24, minHeight: 24)
+                    .padding(.horizontal, 3)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Shortcut \(shortcut)")
     }
 }
 

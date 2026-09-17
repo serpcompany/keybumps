@@ -43,6 +43,7 @@ final class AppModel {
     let conflicts = ConflictDetector()
     let dictation: DictationService
     private let delivery: NotificationDeliveryService
+    private let nativeNotificationCenter: any NativeNotificationCenterClient
     private let detector: ManualActionDetector
     private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
@@ -58,7 +59,17 @@ final class AppModel {
     private(set) var lastPreviewChannel: NotificationChannel?
     private(set) var isStarted = false
     private(set) var isPermissionWalkthroughActive = false
+    private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     var unreadCount: Int { inbox.unreadCount }
+    var nativeNotificationNeedsAttention: Bool {
+        guard preferences.selectedChannels.contains(.nativeBanner) else { return false }
+        return !nativeNotificationAuthorization.canPresentAlerts
+    }
+    var missingPermissionCount: Int {
+        permissionSetupProgress.requiredPermissions.filter {
+            !permissions.state(for: $0).isGranted
+        }.count + (nativeNotificationNeedsAttention ? 1 : 0)
+    }
     var permissionSetupProgress: PermissionSetupProgress {
         PermissionSetupPlan.progress(for: preferences.enabledCapabilities) { permission in
             permissions.state(for: permission)
@@ -69,8 +80,18 @@ final class AppModel {
         self.init(preferences: AppPreferences(), inbox: InboxStore(), presenceController: AppPresenceController(), detector: ManualActionDetector(), presenter: PresentationWindowController())
     }
 
-    init(releaseLane: ReleaseLane = .full, preferences: AppPreferences, inbox: InboxStore, presenceController: any AppPresenceControlling, detector: ManualActionDetector, presenter: PresentationWindowController) {
+    init(
+        releaseLane: ReleaseLane = .full,
+        preferences: AppPreferences,
+        inbox: InboxStore,
+        presenceController: any AppPresenceControlling,
+        detector: ManualActionDetector,
+        presenter: PresentationWindowController,
+        nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil
+    ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
+        let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
+        self.nativeNotificationCenter = nativeNotificationCenter
         let clipboard = ClipboardHistoryService()
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
@@ -88,7 +109,7 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
-        var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .sound: SoundAdapter()]
+        var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
@@ -106,6 +127,7 @@ final class AppModel {
         launchAtLogin.refresh()
         if preferences.didCompleteOnboarding { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
+        Task { await refreshNotificationPermission() }
     }
 
     func completeOnboarding() {
@@ -218,6 +240,25 @@ final class AppModel {
             windows.startDragSnapping()
         }
         refreshDetectorState()
+        updateMissingPermissionBadge()
+    }
+
+    func refreshNotificationPermission() async {
+        nativeNotificationAuthorization = await nativeNotificationCenter.authorizationStatus()
+        updateMissingPermissionBadge()
+    }
+
+    func requestNotificationPermission() async {
+        do {
+            if nativeNotificationAuthorization == .notDetermined {
+                _ = try await nativeNotificationCenter.requestAuthorization()
+            } else if !nativeNotificationAuthorization.canPresentAlerts {
+                openNotificationSettings()
+            }
+        } catch {
+            // The row remains in its truthful attention state and offers Settings recovery.
+        }
+        await refreshNotificationPermission()
     }
 
     private func advancePermissionWalkthroughIfNeeded() {
@@ -279,6 +320,7 @@ final class AppModel {
         commandPalette.show(.clipboard)
     }
     func showDictationHistory() { commandPalette.show(.dictation) }
+    func showKeyBumpsHistory() { commandPalette.show(.keyBumps) }
     func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
     func previewSample(channel: NotificationChannel) async {
         let channels = PreviewChannelPlan.channels(
@@ -288,6 +330,9 @@ final class AppModel {
         let outcomes = await delivery.preview(.sample, through: channels)
         lastPreviewChannel = channel
         lastReport = DeliveryReport(eventID: CoachingEvent.sample.id, inboxRecorded: false, outcomes: outcomes)
+        if channel == .nativeBanner {
+            await refreshNotificationPermission()
+        }
     }
     func previewOutcomes(for channel: NotificationChannel) -> [NotificationChannel: DeliveryOutcome] {
         guard lastPreviewChannel == channel else { return [:] }
@@ -296,12 +341,22 @@ final class AppModel {
     func openNotificationSettings() {
         NSWorkspace.shared.open(NotificationSettingsRecovery.url)
     }
-    func setChannel(_ channel: NotificationChannel, enabled: Bool) { preferences.set(channel, enabled: enabled) }
+    func setChannel(_ channel: NotificationChannel, enabled: Bool) {
+        preferences.set(channel, enabled: enabled)
+        updateMissingPermissionBadge()
+        if channel == .nativeBanner, enabled {
+            Task { await requestNotificationPermission() }
+        }
+    }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }
     func markRead(_ id: UUID) { inbox.markRead(id) }
     func markAllRead() { inbox.markAllRead() }
     func clearHistory() { inbox.clear() }
     private func deliver(_ event: CoachingEvent, through channels: Set<NotificationChannel>? = nil) async { lastReport = await delivery.deliver(event, through: channels ?? preferences.selectedChannels) }
+
+    private func updateMissingPermissionBadge() {
+        NSApplication.shared.dockTile.badgeLabel = missingPermissionCount > 0 ? "!" : nil
+    }
 
     private func deactivate(_ capability: Capability) {
         switch capability {

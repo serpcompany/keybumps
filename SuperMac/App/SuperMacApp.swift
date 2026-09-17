@@ -14,8 +14,9 @@ struct SuperMacApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     model.refreshPermissions()
+                    Task { await model.refreshNotificationPermission() }
                 }
-                .modifier(MainWindowRoutingModifier())
+                .modifier(MainWindowRoutingModifier(model: model))
         }
         .defaultSize(width: 920, height: 640)
         .commands {
@@ -30,11 +31,13 @@ struct SuperMacApp: App {
 
 private struct MainWindowRoutingModifier: ViewModifier {
     @Environment(\.openWindow) private var openWindow
+    let model: AppModel
 
     func body(content: Content) -> some View {
         content
             .onAppear {
                 MainWindowRouter.shared.configure(openMainWindow)
+                NativeStatusItemController.shared.configureOpenQuickSearch(model.showQuickSearch)
                 NativeStatusItemController.shared.install()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in

@@ -36,6 +36,10 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         shortcut: "⌘N"
     )
 
-    var coachingTitle: String { "Try \(shortcut) next time" }
-    var coachingBody: String { "\(actionTitle) in \(applicationName)" }
+    var coachingTitle: String {
+        guard let first = actionTitle.first else { return actionTitle }
+        return String(first).uppercased() + actionTitle.dropFirst().lowercased()
+    }
+
+    var coachingBody: String { applicationName }
 }

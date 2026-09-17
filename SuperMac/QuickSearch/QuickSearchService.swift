@@ -18,6 +18,7 @@ final class QuickSearchModel {
     private(set) var results: [QuickSearchResult] = []
     var selection = 0
     let recentSearches: RecentSearchStore
+    let applicationUsage: ApplicationUsageStore
 
     private let applications: [QuickSearchResult]
     private var metadataQuery: NSMetadataQuery?
@@ -25,9 +26,16 @@ final class QuickSearchModel {
 
     init(
         fileManager: FileManager = .default,
-        recentSearches: RecentSearchStore? = nil
+        recentSearches: RecentSearchStore? = nil,
+        applicationUsage: ApplicationUsageStore? = nil,
+        applications suppliedApplications: [QuickSearchResult]? = nil
     ) {
         self.recentSearches = recentSearches ?? RecentSearchStore(fileManager: fileManager)
+        self.applicationUsage = applicationUsage ?? ApplicationUsageStore(fileManager: fileManager)
+        if let suppliedApplications {
+            applications = suppliedApplications
+            return
+        }
         let roots = [URL(fileURLWithPath: "/Applications"), URL(fileURLWithPath: "/System/Applications"), URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications"), fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
         var seen = Set<URL>()
         var apps: [QuickSearchResult] = []
@@ -53,7 +61,11 @@ final class QuickSearchModel {
             return
         }
 
-        let appMatches = applications.filter { $0.name.localizedCaseInsensitiveContains(term) }
+        let appMatches = QuickSearchRanking.sortedApplications(
+            matching: term,
+            from: applications,
+            usage: applicationUsage
+        )
         results = Array(appMatches.prefix(12))
         selection = 0
 
@@ -81,9 +93,10 @@ final class QuickSearchModel {
         results.indices.contains(selection) ? results[selection] : nil
     }
 
-    func recordOpenResult(succeeded: Bool) {
+    func recordOpenResult(_ result: QuickSearchResult, succeeded: Bool) {
         guard succeeded else { return }
         recentSearches.record(query)
+        applicationUsage.record(result)
     }
 
     func restoreRecentSearch(_ query: String) {

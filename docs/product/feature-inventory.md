@@ -19,7 +19,7 @@ This inventory describes the full release lane. The App Store Lite lane provides
 | Menu bar | Always inserted; opens Key Bumps history | Implemented; clean menu-extra screenshot still limited by this Mac's crowded status area |
 | Key Bumps history | History rows, unread state, mark read, mark all read, test event, Open Settings | Runtime and persistence verified |
 | Main window | History, Notification Styles, App Presence, Permissions, Diagnostics | Runtime verified |
-| Dock | Visible by default; optional unread badge and attention request | Presence policy verified; badge/attention visual acceptance remains |
+| Dock | Visible by default; shows `!` when an enabled feature still needs permission | Presence policy verified; missing-notification runtime indicator verified |
 | Cmd-Tab | Visible with Dock under regular activation policy | Foreground/UIElement transition verified |
 
 ## Presentation channels
@@ -31,14 +31,13 @@ Durable inbox recording is mandatory and occurs before transient delivery. Users
 | Native macOS Banner | Notification Center banner | Implemented; permission-dependent live acceptance remains |
 | Top-right Toast | Compact custom key-bump card | Implemented; real Finder event notification confirmed by human |
 | Top-center Shelf | Prominent top-center key-bump shelf | Implemented with preview; visual acceptance remains |
-| Pointer Card | Key-bump card beside pointer location | Implemented with preview; visual acceptance remains |
 | Sound | Plays the system Glass sound from its separate Sound settings section | Implemented; audible owner acceptance remains |
 
 ## Settings and diagnostics
 
 - Enable or disable each transient presentation channel.
 - Preview each presentation channel and Sound with the same delivery adapters used by detected events.
-- Close custom presentations with their close button, Escape, or a horizontal trackpad swipe; hover pauses the remaining auto-dismiss duration.
+- Close custom presentations with their top-left close button, Escape, or a horizontal trackpad swipe from anywhere on screen; hover pauses the remaining auto-dismiss duration.
 - Show or hide the app in the Dock and Cmd-Tab together.
 - View Accessibility permission state and request/retry detection.
 - Send a test key bump.
