@@ -188,11 +188,15 @@ private struct SetupView: View {
 
     private func status(for capability: Capability) -> String {
         guard model.preferences.enabledCapabilities.contains(capability) else { return "Off" }
+        if model.requiresPermissionRelaunch(for: capability) { return "Restart Required" }
         return missingSetupItemCount(for: capability) == 0 ? "Ready" : "Setup Needed"
     }
 
     private func detail(for capability: Capability) -> String {
         guard model.preferences.enabledCapabilities.contains(capability) else { return "Disabled in \(capability.title) settings" }
+        if model.requiresPermissionRelaunch(for: capability) {
+            return "Quit and reopen SuperMac to finish applying macOS permissions"
+        }
         let missing = model.missingPermissions(for: capability)
         if !missing.isEmpty { return "Needs \(missing.map(\.title).joined(separator: " and "))" }
         if capability == .shortcutCoaching, model.nativeNotificationNeedsAttention {
@@ -221,6 +225,7 @@ private struct SetupView: View {
 
     private func actionTitle(for capability: Capability) -> String {
         if !model.preferences.enabledCapabilities.contains(capability) { return "Set Up" }
+        if model.requiresPermissionRelaunch(for: capability) { return "Quit SuperMac" }
         if missingSetupItemCount(for: capability) > 0 { return "Grant Permission" }
         return switch capability {
         case .quickSearch, .clipboardHistory: "Open"
@@ -229,6 +234,10 @@ private struct SetupView: View {
     }
 
     private func performAction(for capability: Capability) {
+        if model.requiresPermissionRelaunch(for: capability) {
+            model.quitForPermissionRelaunch()
+            return
+        }
         if capability == .shortcutCoaching,
            model.missingPermissions(for: capability).isEmpty,
            model.nativeNotificationNeedsAttention {
@@ -526,7 +535,13 @@ private struct KeyBumpsSettingsView: View {
     var body: some View {
         Form {
             CapabilityControl(capability: .shortcutCoaching)
-            if !model.missingPermissions(for: .shortcutCoaching).isEmpty {
+            if model.requiresPermissionRelaunch(for: .shortcutCoaching) {
+                Section("Restart required") {
+                    Text("Quit and reopen SuperMac to finish applying Accessibility or Input Monitoring access.")
+                        .foregroundStyle(.secondary)
+                    Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                }
+            } else if !model.missingPermissions(for: .shortcutCoaching).isEmpty {
                 Section("Setup required") {
                     Text("Key Bumps needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
@@ -774,10 +789,18 @@ private struct PermissionWalkthroughView: View {
             }
 
             if let permission = progress.currentPermission {
-                PermissionRow(permission: permission, compact: true)
-                Text("After changing a macOS setting, return to SuperMac. This step advances as soon as macOS confirms access.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if model.requiresPermissionRelaunch(permission) {
+                    Label("Quit and reopen SuperMac to finish \(permission.title) setup.", systemImage: "arrow.clockwise.circle.fill")
+                        .font(.headline)
+                        .foregroundStyle(.orange)
+                    Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    PermissionRow(permission: permission, compact: true)
+                    Text("After changing a macOS setting, return to SuperMac. This step advances as soon as macOS confirms access.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else if model.nativeNotificationNeedsAttention {
                 NotificationPermissionRow()
                 Text("After changing Notification settings, return to SuperMac and choose Refresh Status.")
@@ -894,10 +917,12 @@ private struct PermissionRow: View {
                 Text(permission.explanation).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(state.rawValue)
+            Text(model.requiresPermissionRelaunch(permission) ? "Restart Required" : state.rawValue)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(state.isGranted ? .green : .orange)
-            if action.buttonTitle != nil {
+            if model.requiresPermissionRelaunch(permission) {
+                Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+            } else if action.buttonTitle != nil {
                 Button(actionTitle(for: action)) { Task { await model.recoverPermission(permission) } }
                     .disabled(model.permissions.activeRequest != nil)
                     .accessibilityLabel("\(actionTitle(for: action)) for \(permission.title)")

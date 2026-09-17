@@ -92,6 +92,37 @@ enum PermissionRecoveryPresentation: Equatable {
     }
 }
 
+struct PermissionRelaunchAdvisor {
+    private var permissionsAwaitingReturn: [MacPermission] = []
+    private(set) var permissionsRequiringRelaunch: [MacPermission] = []
+
+    mutating func didOpenSystemSettings(for permission: MacPermission) {
+        guard permission.usesApplicationDragAssistant else { return }
+        if !permissionsAwaitingReturn.contains(where: { $0 == permission }) {
+            permissionsAwaitingReturn.append(permission)
+        }
+        permissionsRequiringRelaunch.removeAll(where: { $0 == permission })
+    }
+
+    mutating func didBecomeActive(
+        state: (MacPermission) -> PermissionAuthorizationState
+    ) {
+        for permission in permissionsAwaitingReturn {
+            if state(permission).isGranted {
+                permissionsRequiringRelaunch.removeAll(where: { $0 == permission })
+            } else if !permissionsRequiringRelaunch.contains(where: { $0 == permission }) {
+                permissionsRequiringRelaunch.append(permission)
+            }
+        }
+        permissionsAwaitingReturn.removeAll()
+    }
+
+    mutating func permissionDidBecomeUsable(_ permission: MacPermission) {
+        permissionsAwaitingReturn.removeAll(where: { $0 == permission })
+        permissionsRequiringRelaunch.removeAll(where: { $0 == permission })
+    }
+}
+
 struct PermissionSetupProgress: Equatable {
     let requiredPermissions: [MacPermission]
     let grantedPermissions: [MacPermission]

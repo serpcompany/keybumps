@@ -54,6 +54,7 @@ final class AppModel {
     private let dictationIndicator = DictationIndicatorController()
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
     @ObservationIgnored private var presentedWalkthroughPermission: MacPermission?
+    @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
     private(set) var detectorStatus: ManualActionDetector.Status = .stopped
     private(set) var isAccessibilityTrusted = false
     private(set) var isInputMonitoringAuthorized = false
@@ -61,6 +62,8 @@ final class AppModel {
     private(set) var lastPreviewChannel: NotificationChannel?
     private(set) var isStarted = false
     private(set) var isPermissionWalkthroughActive = false
+    private(set) var permissionsRequiringRelaunch: [MacPermission] = []
+    var relaunchPromptPermission: MacPermission?
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
     var unreadCount: Int { inbox.unreadCount }
@@ -231,6 +234,9 @@ final class AppModel {
         if presentation == .enableSwitch {
             permissionDragAssistant.showEnableSwitch(for: permission)
         }
+        if presentation == .applicationDrag {
+            permissionRelaunchAdvisor.didOpenSystemSettings(for: permission)
+        }
         await permissions.performRecovery(for: permission)
         refreshPermissions()
         guard !permissions.state(for: permission).isGranted else { return }
@@ -259,8 +265,44 @@ final class AppModel {
     func requestAccessibilityPermission() { detector.requestAccessibilityPermission(); refreshPermissions() }
     func requestInputMonitoringPermission() { detector.requestInputMonitoringPermission(); refreshPermissions() }
     func retryDetection() { if preferences.enabledCapabilities.contains(.shortcutCoaching) { detector.start() }; refreshDetectorState() }
+    func applicationDidBecomeActive() {
+        refreshPermissions()
+        permissionRelaunchAdvisor.didBecomeActive { [permissions] permission in
+            permissions.state(for: permission)
+        }
+        permissionsRequiringRelaunch = permissionRelaunchAdvisor.permissionsRequiringRelaunch
+        if relaunchPromptPermission == nil {
+            relaunchPromptPermission = permissionsRequiringRelaunch.first
+        }
+    }
+
+    func dismissPermissionRelaunchPrompt() {
+        relaunchPromptPermission = nil
+    }
+
+    func quitForPermissionRelaunch() {
+        relaunchPromptPermission = nil
+        NSApplication.shared.terminate(nil)
+    }
+
+    func requiresPermissionRelaunch(_ permission: MacPermission) -> Bool {
+        permissionsRequiringRelaunch.contains(where: { $0 == permission })
+    }
+
+    func requiresPermissionRelaunch(for capability: Capability) -> Bool {
+        let relevant = PermissionSetupPlan.requiredPermissions(for: [capability])
+        return relevant.contains(where: requiresPermissionRelaunch)
+    }
+
     func refreshPermissions() {
         permissions.refresh()
+        for permission in MacPermission.allCases where permissions.state(for: permission).isGranted {
+            permissionRelaunchAdvisor.permissionDidBecomeUsable(permission)
+            if relaunchPromptPermission == permission {
+                relaunchPromptPermission = nil
+            }
+        }
+        permissionsRequiringRelaunch = permissionRelaunchAdvisor.permissionsRequiringRelaunch
         permissionDragAssistant.dismissIfGranted(using: permissions)
         advancePermissionWalkthroughIfNeeded()
         if preferences.enabledCapabilities.contains(.shortcutCoaching), detector.status != .monitoring {

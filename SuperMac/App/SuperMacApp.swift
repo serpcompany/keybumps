@@ -13,8 +13,17 @@ struct SuperMacApp: App {
                     model.start()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                    model.refreshPermissions()
+                    model.applicationDidBecomeActive()
                     Task { await model.refreshNotificationPermission() }
+                }
+                .alert(
+                    "Quit and reopen SuperMac to finish setup",
+                    item: $model.relaunchPromptPermission
+                ) { _ in
+                    Button("Not Now", role: .cancel) { model.dismissPermissionRelaunchPrompt() }
+                    Button("Quit SuperMac") { model.quitForPermissionRelaunch() }
+                } message: { permission in
+                    Text("macOS has not made \(permission.title) available to this running copy of SuperMac. Quit now, then open SuperMac again to finish setup.")
                 }
                 .modifier(MainWindowRoutingModifier(model: model))
         }

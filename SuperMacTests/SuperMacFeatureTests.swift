@@ -268,6 +268,37 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(MacPermission.speechRecognition.settingsURL.absoluteString.hasSuffix("Privacy_SpeechRecognition"))
     }
 
+    func testPermissionRelaunchAdvisorFlagsUnusableListPermissionAfterReturningFromSettings() {
+        var advisor = PermissionRelaunchAdvisor()
+
+        advisor.didOpenSystemSettings(for: .inputMonitoring)
+        XCTAssertTrue(advisor.permissionsRequiringRelaunch.isEmpty)
+
+        advisor.didBecomeActive { permission in
+            permission == .inputMonitoring ? .required : .granted
+        }
+
+        XCTAssertEqual(advisor.permissionsRequiringRelaunch, [.inputMonitoring])
+    }
+
+    func testPermissionRelaunchAdvisorDoesNotPromptWhenPermissionRefreshesSuccessfully() {
+        var advisor = PermissionRelaunchAdvisor()
+
+        advisor.didOpenSystemSettings(for: .accessibility)
+        advisor.didBecomeActive { _ in .granted }
+
+        XCTAssertTrue(advisor.permissionsRequiringRelaunch.isEmpty)
+    }
+
+    func testPermissionRelaunchAdvisorIgnoresPermissionsThatDoNotNeedAnAppRelaunch() {
+        var advisor = PermissionRelaunchAdvisor()
+
+        advisor.didOpenSystemSettings(for: .microphone)
+        advisor.didBecomeActive { _ in .denied }
+
+        XCTAssertTrue(advisor.permissionsRequiringRelaunch.isEmpty)
+    }
+
     func testApplicationBundleDragPayloadRoundTripsAsAFileURL() throws {
         let applicationURL = Bundle.main.bundleURL
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("SuperMacDragPayload-\(UUID().uuidString)"))
