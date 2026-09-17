@@ -1,15 +1,19 @@
 #!/bin/zsh
 set -euo pipefail
 
-if (( $# != 3 )); then
-  print -u2 "usage: $0 <appcast> <public-feed-url> <--dry-run|--verify-live>"
+if (( $# != 5 )); then
+  print -u2 "usage: $0 <local-appcast> <local-archive> <local-release-notes> <public-feed-url> <--dry-run|--verify-live>"
   exit 64
 fi
 
 appcast_path=${1:A}
-public_feed_url=$2
-mode=$3
-[[ -f "$appcast_path" ]] || { print -u2 "missing appcast: $appcast_path"; exit 66; }
+archive_path=${2:A}
+release_notes_path=${3:A}
+public_feed_url=$4
+mode=$5
+for local_artifact in "$appcast_path" "$archive_path" "$release_notes_path"; do
+  [[ -f "$local_artifact" ]] || { print -u2 "missing local artifact: $local_artifact"; exit 66; }
+done
 [[ "$mode" == --dry-run || "$mode" == --verify-live ]] || { print -u2 "mode must be --dry-run or --verify-live"; exit 64; }
 [[ "$public_feed_url" == https://* || "$public_feed_url" == http://127.0.0.1:* || "$public_feed_url" == http://localhost:* ]] || {
   print -u2 "feed must be public HTTPS or an explicit localhost fixture"
@@ -17,21 +21,27 @@ mode=$3
 }
 /usr/bin/xmllint --noout "$appcast_path"
 
-asset_urls=(${(f)"$(/usr/bin/xmllint --xpath '//*[local-name()="enclosure"]/@url' "$appcast_path" | grep -Eo 'https?://[^" ]+')"})
-notes_urls=(${(f)"$(/usr/bin/xmllint --xpath '//*[local-name()="releaseNotesLink"]/text()' "$appcast_path" 2>/dev/null | grep -Eo 'https?://[^<[:space:]]+' || true)"})
-(( ${#asset_urls} > 0 )) || { print -u2 "appcast contains no downloadable update assets"; exit 70; }
+archive_url=$(/usr/bin/xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="enclosure"]/@url)' "$appcast_path")
+notes_url=$(/usr/bin/xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="releaseNotesLink"])' "$appcast_path")
+[[ -n "$archive_url" && -n "$notes_url" ]] || { print -u2 "appcast must contain archive and release-note URLs"; exit 70; }
 
 print "Phase 1 — publish and verify immutable assets:"
-for asset_url in $asset_urls $notes_urls; do
-  print "  $asset_url"
-  if [[ "$mode" == --verify-live ]]; then
-    /usr/bin/curl --fail --silent --show-error --location --head "$asset_url" >/dev/null
-  fi
-done
-
+print "  $archive_url"
+print "  $notes_url"
 print "Phase 2 — publish the pointer last:"
 print "  $public_feed_url"
+
 if [[ "$mode" == --verify-live ]]; then
-  /usr/bin/curl --fail --silent --show-error --location --head "$public_feed_url" >/dev/null
+  verification_directory=$(mktemp -d /tmp/supermac-publication-verify.XXXXXX)
+  trap 'rm -rf -- "$verification_directory"' EXIT
+  /usr/bin/curl --fail --silent --show-error --location "$archive_url" --output "$verification_directory/archive"
+  /usr/bin/curl --fail --silent --show-error --location "$notes_url" --output "$verification_directory/notes"
+  cmp -s "$archive_path" "$verification_directory/archive" || { print -u2 "deployed archive bytes differ from the validated archive"; exit 70; }
+  cmp -s "$release_notes_path" "$verification_directory/notes" || { print -u2 "deployed release-note bytes differ from the validated notes"; exit 70; }
+  [[ "$(/usr/bin/shasum -a 256 "$archive_path" | awk '{print $1}')" == "$(/usr/bin/shasum -a 256 "$verification_directory/archive" | awk '{print $1}')" ]] || { print -u2 "deployed archive checksum differs"; exit 70; }
+  /usr/bin/curl --fail --silent --show-error --location "$public_feed_url" --output "$verification_directory/appcast.xml"
+  cmp -s "$appcast_path" "$verification_directory/appcast.xml" || { print -u2 "deployed appcast bytes and embedded signatures differ from the validated appcast"; exit 70; }
+  /usr/bin/xmllint --noout "$verification_directory/appcast.xml"
 fi
-print "Publication ${mode#--} check passed; the workflow never checks/publishes the appcast before its assets."
+
+print "Publication ${mode#--} check passed; archive and notes are verified before the appcast pointer."

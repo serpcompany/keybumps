@@ -61,6 +61,11 @@ private final class FakeUpdateController: UpdateControlling {
     }
 }
 
+private final class UpdateTestRecorder: UpdateEventRecording {
+    private(set) var events: [UpdateTelemetryEvent] = []
+    func record(_ event: UpdateTelemetryEvent) { events.append(event) }
+}
+
 @MainActor
 final class UpdateControllerTests: XCTestCase {
     func testInstallationSafetyDefersEveryActiveDictationPhase() {
@@ -74,6 +79,10 @@ final class UpdateControllerTests: XCTestCase {
         policy.update(dictationPhase: .idle)
         XCTAssertTrue(policy.isSafeToInstall)
         policy.update(dictationPhase: .failed("fixture"))
+        XCTAssertTrue(policy.isSafeToInstall)
+        policy.updateApplicationTerminationReadiness(false)
+        XCTAssertFalse(policy.isSafeToInstall)
+        policy.updateApplicationTerminationReadiness(true)
         XCTAssertTrue(policy.isSafeToInstall)
     }
 
@@ -237,13 +246,6 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(model.updateSnapshot.status, .deferred(version: "0.0.2"))
     }
 
-    func testReleaseBuildNumbersMustIncreaseMonotonically() {
-        XCTAssertTrue(ReleaseVersionValidation.isMonotonicallyIncreasing(previousBuild: "1", candidateBuild: "2"))
-        XCTAssertFalse(ReleaseVersionValidation.isMonotonicallyIncreasing(previousBuild: "2", candidateBuild: "2"))
-        XCTAssertFalse(ReleaseVersionValidation.isMonotonicallyIncreasing(previousBuild: "3", candidateBuild: "2"))
-        XCTAssertFalse(ReleaseVersionValidation.isMonotonicallyIncreasing(previousBuild: "beta", candidateBuild: "2"))
-    }
-
     func testRestartIsNotReadyUntilAnImmediateInstallHandlerExists() {
         let safety = UpdateInstallationSafetyPolicy()
         let coordinator = SafeUpdateInstallCoordinator(safetyPolicy: safety)
@@ -283,6 +285,31 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(resumeCount, 1)
         coordinator.safetyDidChange()
         XCTAssertEqual(resumeCount, 1, "The postponed Sparkle continuation must be resumed once")
+    }
+
+    func testAutomaticDiscoveryFocusesSparklesStandardPresentationSeam() {
+        let presentation = UpdatePresentationCoordinator()
+        var focusCount = 0
+        presentation.focusStandardUpdateUI = { focusCount += 1 }
+
+        presentation.updateFound()
+
+        XCTAssertEqual(focusCount, 1)
+    }
+
+    func testUpdaterTelemetryContainsOnlyStructuralFields() {
+        let recorder = UpdateTestRecorder()
+        var time = 10.0
+        let telemetry = UpdateTelemetry(recorder: recorder, build: "2", now: { time })
+        time = 10.125
+
+        telemetry.record(.available, version: "0.0.2")
+        telemetry.record(.failed, failureCategory: "download")
+
+        XCTAssertEqual(recorder.events, [
+            UpdateTelemetryEvent(stage: .available, version: "0.0.2", build: "2", elapsedMilliseconds: 125, failureCategory: nil),
+            UpdateTelemetryEvent(stage: .failed, version: nil, build: "2", elapsedMilliseconds: 125, failureCategory: "download")
+        ])
     }
 
     func testUpdaterStatusCopyIsTruthfulAndContentFree() {

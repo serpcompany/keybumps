@@ -92,14 +92,23 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
 
     private let configuration: SparkleUpdateConfiguration
     private let installCoordinator: SafeUpdateInstallCoordinator
+    private let presentationCoordinator: UpdatePresentationCoordinator
+    private let telemetry: UpdateTelemetry
     private var updaterController: SPUStandardUpdaterController?
     private var started = false
 
-    init(configuration: SparkleUpdateConfiguration, safetyPolicy: UpdateInstallationSafetyPolicy) {
+    init(
+        configuration: SparkleUpdateConfiguration,
+        safetyPolicy: UpdateInstallationSafetyPolicy,
+        presentationCoordinator: UpdatePresentationCoordinator? = nil,
+        telemetry: UpdateTelemetry = UpdateTelemetry()
+    ) {
         self.configuration = configuration
         self.installCoordinator = SafeUpdateInstallCoordinator(safetyPolicy: safetyPolicy)
+        self.presentationCoordinator = presentationCoordinator ?? UpdatePresentationCoordinator()
+        self.telemetry = telemetry
         super.init()
-        installCoordinator.onStatusChange = { [weak self] status in self?.refresh(status: status) }
+        installCoordinator.onStatusChange = { [weak self] status in self?.apply(status) }
     }
 
     func start() {
@@ -110,17 +119,18 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
             updaterDelegate: self,
             userDriverDelegate: nil
         )
+        presentationCoordinator.focusStandardUpdateUI = { [weak controller] in
+            DispatchQueue.main.async { controller?.userDriver.showUpdateInFocus() }
+        }
         updaterController = controller
-        do {
-            try controller.startUpdater()
-            controller.updater.automaticallyDownloadsUpdates = true
-            refresh(status: .idle)
-            if controller.updater.automaticallyChecksForUpdates {
-                controller.updater.checkForUpdatesInBackground()
-                refresh(status: .checking)
-            }
-        } catch {
-            refresh(status: .failed("Update service could not start"))
+        controller.startUpdater()
+        controller.updater.automaticallyDownloadsUpdates = true
+        refresh(status: .idle)
+        telemetry.record(.started)
+        if controller.updater.automaticallyChecksForUpdates {
+            controller.updater.checkForUpdatesInBackground()
+            refresh(status: .checking)
+            telemetry.record(.checking)
         }
     }
 
@@ -131,6 +141,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     func checkNow() {
         guard let updater = updaterController?.updater, updater.canCheckForUpdates else { return }
         refresh(status: .checking)
+        telemetry.record(.checking)
         updater.checkForUpdates()
     }
 
@@ -152,17 +163,18 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-        refresh(status: .available(version: item.displayVersionString))
+        apply(.available(version: item.displayVersionString))
+        presentationCoordinator.updateFound()
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
         let nsError = error as NSError
         let reasonCode = (nsError.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)?.intValue
-        refresh(status: NoUpdateStatusResolver.status(reasonCode: reasonCode))
+        apply(NoUpdateStatusResolver.status(reasonCode: reasonCode))
     }
 
     func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
-        refresh(status: .downloading(version: item.displayVersionString))
+        apply(.downloading(version: item.displayVersionString))
     }
 
     func updater(_ updater: SPUUpdater, didDownloadUpdate item: SUAppcastItem) {
@@ -170,6 +182,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     func updater(_ updater: SPUUpdater, failedToDownloadUpdate item: SUAppcastItem, error: any Error) {
+        telemetry.record(.failed, version: item.displayVersionString, failureCategory: "download")
         refresh(status: .failed("The update could not be downloaded. Try again."))
     }
 
@@ -178,9 +191,10 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         let nsError = error as NSError
         guard nsError.code != 1001 else { // Sparkle's documented SUNoUpdateError value.
             let reasonCode = (nsError.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)?.intValue
-            refresh(status: NoUpdateStatusResolver.status(reasonCode: reasonCode))
+            apply(NoUpdateStatusResolver.status(reasonCode: reasonCode))
             return
         }
+        telemetry.record(.failed, failureCategory: "update-cycle")
         refresh(status: .failed("The update check failed. Try again."))
     }
 
@@ -223,5 +237,20 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         }
         snapshot.canRestart = installCoordinator.hasCallableRestart
         onChange?(snapshot)
+    }
+
+    private func apply(_ status: UpdateStatus) {
+        switch status {
+        case .available(let version): telemetry.record(.available, version: version)
+        case .downloading(let version): telemetry.record(.downloading, version: version)
+        case .downloaded(let version): telemetry.record(.downloaded, version: version)
+        case .readyToRestart(let version): telemetry.record(.ready, version: version)
+        case .deferred(let version): telemetry.record(.deferred, version: version)
+        case .current: telemetry.record(.current)
+        case .failed: telemetry.record(.failed, failureCategory: "status")
+        case .checking: telemetry.record(.checking)
+        case .idle, .unavailable: break
+        }
+        refresh(status: status)
     }
 }

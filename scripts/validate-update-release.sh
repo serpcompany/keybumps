@@ -22,13 +22,9 @@ checksum_path="$archive_path.sha256"
 sign_update_tool="$sparkle_tools_directory/sign_update"
 generate_keys_tool="$sparkle_tools_directory/generate_keys"
 
-for required_path in "$app_path" "$archive_path" "$appcast_path" "$release_notes_path" "$info_plist" "$checksum_path"; do
-  [[ -e "$required_path" ]] || { print -u2 "missing required artifact: $required_path"; exit 66; }
-done
-[[ -x "$sign_update_tool" && -x "$generate_keys_tool" ]] || { print -u2 "official Sparkle verification tools are missing"; exit 69; }
 [[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
 if [[ "$fixture_mode" == --skip-apple-trust-for-fixture ]]; then
-  [[ "$feed_url" == https://* || "$feed_url" == http://127.0.0.1:* || "$feed_url" == http://localhost:* ]] || { print -u2 "fixture feed must use HTTPS or explicit localhost"; exit 65; }
+  [[ "$feed_url" == http://127.0.0.1:*/* || "$feed_url" == https://127.0.0.1:*/* || "$feed_url" == http://localhost:*/* || "$feed_url" == https://localhost:*/* || "$feed_url" == http://\[::1\]:*/* || "$feed_url" == https://\[::1\]:*/* ]] || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
 else
   [[ "$feed_url" == https://* ]] || { print -u2 "production feed URL must use HTTPS"; exit 65; }
 fi
@@ -36,6 +32,10 @@ fi
   print -u2 "CFBundleVersion must be an integer greater than the previously published build"
   exit 65
 }
+for required_path in "$app_path" "$archive_path" "$appcast_path" "$release_notes_path" "$info_plist" "$checksum_path"; do
+  [[ -e "$required_path" ]] || { print -u2 "missing required artifact: $required_path"; exit 66; }
+done
+[[ -x "$sign_update_tool" && -x "$generate_keys_tool" ]] || { print -u2 "official Sparkle verification tools are missing"; exit 69; }
 
 actual_bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")
 actual_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist")

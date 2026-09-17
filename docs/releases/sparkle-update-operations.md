@@ -15,13 +15,15 @@ Generate the production key once with Sparkle's `generate_keys --account superma
 
 ## Release sequence
 
+The normal entry point is `scripts/build-update-release.sh`. It refuses a reused build or existing output directory, archives and exports with Developer ID, notarizes and staples, packages ZIP and DMG artifacts, generates and validates the signed appcast, and creates separate `publication/assets` and `publication/publish-last` directories. It does not upload anything.
+
 1. Increase `CFBundleVersion` above every previously published build and set the customer-facing semantic `MARKETING_VERSION`.
 2. Archive arm64 SuperMac with the stable `com.serp.supermac` bundle ID, the production feed URL, and the matching public key.
 3. Export with Developer ID, notarize, staple, and package the stapled app as the Sparkle update archive and DMG.
 4. Put the update archive and matching `.md` release notes in a clean staging directory.
 5. Run Sparkle's `generate_appcast` through `scripts/generate-staged-appcast.sh`. The private key stays in Keychain.
 6. Run `scripts/validate-update-release.sh`; it uses Sparkle's official tools and the selected Keychain account to verify that the app's public key matches, then cryptographically verifies the signed feed and archive. It also fails closed on malformed XML, checksum/size drift, identity/version/feed/compatibility, Apple signature, Gatekeeper, or notarization-ticket failures. The fixture-only trust-skip option is never valid release evidence.
-7. Run `scripts/verify-update-publication.sh <appcast> <feed-url> --dry-run` to inspect the two-phase order. Upload the archive and release notes first, then use `--verify-live` to prove every anonymous public asset URL responds before checking/publishing `appcast.xml` last. The script deliberately has no credentials or upload implementation.
+7. Run `scripts/verify-update-publication.sh <appcast> <archive> <notes> <feed-url> --dry-run` to inspect the two-phase order. Upload the archive and release notes first, then use `--verify-live` to download them and compare their exact bytes and hashes to the locally validated artifacts before downloading and byte-comparing the signed appcast. The script deliberately has no credentials or upload implementation.
 8. Install build N in `/Applications`, advertise N+1 on the staged feed, and verify check, download, signature validation, restart, exact N+1 version, and retained non-private fixture preferences. Repeat with active Dictation and confirm restart is refused until Dictation is idle.
 9. Corrupt a copy of the signed archive without regenerating the appcast and confirm Sparkle rejects it. Never weaken verification for this test.
 10. Promote the already-validated files to the production origin, again publishing the appcast last.
@@ -35,7 +37,7 @@ Resolve packages once so Sparkle's `bin/generate_keys` and `bin/generate_appcast
 ```sh
 scripts/generate-staged-appcast.sh /absolute/path/to/fixture-releases http://127.0.0.1:8765 /absolute/path/to/Sparkle/bin supermac-staged
 scripts/serve-update-fixture.sh /absolute/path/to/fixture-releases 8765
-scripts/verify-update-publication.sh /absolute/path/to/fixture-releases/appcast.xml http://127.0.0.1:8765/appcast.xml --verify-live
+scripts/verify-update-publication.sh /absolute/path/to/fixture-releases/appcast.xml /absolute/path/to/fixture-releases/SuperMac.zip /absolute/path/to/fixture-releases/SuperMac.md http://127.0.0.1:8765/appcast.xml --verify-live
 ```
 
 Build N with the staged public key, launch it with `SUPERMAC_UPDATE_FIXTURE_FEED_URL=http://127.0.0.1:8765/appcast.xml`, and exercise the standard Sparkle flow. Local fixture proof is separate from Developer ID/notarized staged acceptance; only the latter is release evidence.

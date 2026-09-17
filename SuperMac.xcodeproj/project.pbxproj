@@ -22,6 +22,7 @@
 		4485C0E7B6169A3006A83E35 /* AppPresenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1263F60CBD0F2902CB20582 /* AppPresenceController.swift */; };
 		48338CA9E74F84BA913AB753 /* QuickSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */; };
 		5300BBA1A5D216BB896E83C5 /* MenuInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E3FF4B2C9E74E32242A4AB /* MenuInboxView.swift */; };
+		5334C9867DC1B340F9216CC7 /* UpdateReleaseScriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8F33199F32B608ADD430F83 /* UpdateReleaseScriptTests.swift */; };
 		534C9EA197970F4075B479EB /* StandardWindowControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6AB39FCFF8951FC4C3F93C7 /* StandardWindowControlTests.swift */; };
 		593B0AB937B6862C6914C955 /* PermissionDragAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5EA774E7BE61A823AF2300C /* PermissionDragAssistantController.swift */; };
 		5A474A9F1CC0A3DFF5C06267 /* SuperMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A460EFFC33CD04F89DFB5E6 /* SuperMacApp.swift */; };
@@ -123,6 +124,7 @@
 		B5EA774E7BE61A823AF2300C /* PermissionDragAssistantController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionDragAssistantController.swift; sourceTree = "<group>"; };
 		BFF7AF91CCE5203106F1AB54 /* DictationHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryService.swift; sourceTree = "<group>"; };
 		C2403AFE407303A9488970CC /* SuperMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SuperMac.entitlements; sourceTree = "<group>"; };
+		C8F33199F32B608ADD430F83 /* UpdateReleaseScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateReleaseScriptTests.swift; sourceTree = "<group>"; };
 		CA63C9C8EB22D30080ECBC01 /* ClipboardHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistoryService.swift; sourceTree = "<group>"; };
 		CCF75D2E998EDF7DC502EE98 /* AccessibilitySnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySnapshotter.swift; sourceTree = "<group>"; };
 		D121EE0800846D3507A1B184 /* PointerEventMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerEventMonitor.swift; sourceTree = "<group>"; };
@@ -333,6 +335,7 @@
 				D6AB39FCFF8951FC4C3F93C7 /* StandardWindowControlTests.swift */,
 				99DF39DEF1A3A5EBE5AA54BF /* SuperMacFeatureTests.swift */,
 				25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */,
+				C8F33199F32B608ADD430F83 /* UpdateReleaseScriptTests.swift */,
 				378F951DA6AA74D50FC64A0C /* Fixtures */,
 			);
 			path = SuperMacTests;
@@ -540,6 +543,7 @@
 				534C9EA197970F4075B479EB /* StandardWindowControlTests.swift in Sources */,
 				E6DF6BFB45E567621DA64B0F /* SuperMacFeatureTests.swift in Sources */,
 				08F4D2532E291F60FC83D958 /* UpdateControllerTests.swift in Sources */,
+				5334C9867DC1B340F9216CC7 /* UpdateReleaseScriptTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

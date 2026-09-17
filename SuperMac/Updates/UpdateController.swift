@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 enum UpdateStatus: Equatable {
     case unavailable(String)
@@ -72,25 +73,83 @@ final class DisabledUpdateController: UpdateControlling {
 final class UpdateInstallationSafetyPolicy {
     static let shared = UpdateInstallationSafetyPolicy()
     private(set) var dictationPhase: DictationPhase = .idle
+    private(set) var isApplicationTerminationReady = true
     var isSafeToInstall: Bool {
-        switch dictationPhase {
-        case .idle, .failed: true
-        case .recording, .transcribing, .inserting: false
-        }
+        isApplicationTerminationReady && !dictationPhase.blocksUpdateInstallation
     }
 
     func update(dictationPhase: DictationPhase) {
         self.dictationPhase = dictationPhase
     }
+
+    func updateApplicationTerminationReadiness(_ isReady: Bool) {
+        isApplicationTerminationReady = isReady
+    }
 }
 
-enum ReleaseVersionValidation {
-    static func isMonotonicallyIncreasing(previousBuild: String, candidateBuild: String) -> Bool {
-        guard let previous = Int(previousBuild),
-              let candidate = Int(candidateBuild) else {
-            return false
+extension DictationPhase {
+    var blocksUpdateInstallation: Bool {
+        switch self {
+        case .idle, .failed: false
+        case .recording, .transcribing, .inserting: true
         }
-        return candidate > previous
+    }
+}
+
+@MainActor
+final class UpdatePresentationCoordinator {
+    var focusStandardUpdateUI: () -> Void = {}
+    func updateFound() { focusStandardUpdateUI() }
+}
+
+enum UpdateTelemetryStage: String, Equatable {
+    case started, checking, available, downloading, downloaded, ready, deferred, current, failed
+}
+
+struct UpdateTelemetryEvent: Equatable {
+    let stage: UpdateTelemetryStage
+    let version: String?
+    let build: String
+    let elapsedMilliseconds: Int
+    let failureCategory: String?
+}
+
+protocol UpdateEventRecording {
+    func record(_ event: UpdateTelemetryEvent)
+}
+
+struct OSLogUpdateEventRecorder: UpdateEventRecording {
+    private let logger = Logger(subsystem: "com.serp.supermac", category: "updates")
+    func record(_ event: UpdateTelemetryEvent) {
+        logger.info("stage=\(event.stage.rawValue, privacy: .public) version=\(event.version ?? "none", privacy: .public) build=\(event.build, privacy: .public) elapsed_ms=\(event.elapsedMilliseconds, privacy: .public) failure=\(event.failureCategory ?? "none", privacy: .public)")
+    }
+}
+
+final class UpdateTelemetry {
+    private let recorder: any UpdateEventRecording
+    private let build: String
+    private let now: () -> TimeInterval
+    private let startedAt: TimeInterval
+
+    init(
+        recorder: any UpdateEventRecording = OSLogUpdateEventRecorder(),
+        build: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    ) {
+        self.recorder = recorder
+        self.build = build
+        self.now = now
+        self.startedAt = now()
+    }
+
+    func record(_ stage: UpdateTelemetryStage, version: String? = nil, failureCategory: String? = nil) {
+        recorder.record(UpdateTelemetryEvent(
+            stage: stage,
+            version: version,
+            build: build,
+            elapsedMilliseconds: max(0, Int((now() - startedAt) * 1_000)),
+            failureCategory: failureCategory
+        ))
     }
 }
 
@@ -128,7 +187,7 @@ final class SafeUpdateInstallCoordinator {
     }
 
     func safetyDidChange() {
-        guard let version else { return }
+        guard version != nil else { return }
         if safetyPolicy.isSafeToInstall, let postponedRelaunchHandler {
             self.postponedRelaunchHandler = nil
             postponedRelaunchHandler()
