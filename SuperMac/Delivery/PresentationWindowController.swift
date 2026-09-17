@@ -75,7 +75,7 @@ final class PresentationWindowController {
 
         dismiss(style)
 
-        let size = panelSize(for: style, event: event)
+        let size = panelSize(for: style)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -130,11 +130,11 @@ final class PresentationWindowController {
     }
 
     func panelSize(for style: NotificationChannel) -> NSSize {
-        CoachingPresentationContract.compactPanelSize(for: style)
-    }
-
-    func panelSize(for style: NotificationChannel, event: CoachingEvent) -> NSSize {
-        CoachingPresentationContract(event: event, style: style).panelSize
+        switch style {
+        case .topRightToast: NSSize(width: 360, height: 92)
+        case .topCenterShelf: NSSize(width: 500, height: 112)
+        default: NSSize(width: 360, height: 92)
+        }
     }
 
     var panelCollectionBehavior: NSWindow.CollectionBehavior {
@@ -296,121 +296,6 @@ final class PresentationWindowController {
     }
 }
 
-struct CoachingPresentationMeasurements: Equatable {
-    let titleWidth: CGFloat
-    let applicationWidth: CGFloat
-    let shortcutWidth: CGFloat
-    let titleLineHeight: CGFloat
-    let applicationLineHeight: CGFloat
-
-    static func measure(event: CoachingEvent) -> Self {
-        let titleFont = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        let applicationFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-        let keyFont = NSFont.monospacedSystemFont(ofSize: 15, weight: .semibold)
-        let keyWidths = ShortcutKeycapPresentation(shortcut: event.shortcut).keys.map { key in
-            max(24, Self.singleLineWidth(key, font: keyFont) + 6)
-        }
-        let shortcutSpacing = CGFloat(max(0, keyWidths.count - 1)) * 6
-
-        return Self(
-            titleWidth: Self.singleLineWidth(event.actionTitle, font: titleFont),
-            applicationWidth: Self.singleLineWidth(event.applicationName, font: applicationFont),
-            shortcutWidth: keyWidths.reduce(0, +) + shortcutSpacing,
-            titleLineHeight: ceil(titleFont.boundingRectForFont.height),
-            applicationLineHeight: ceil(applicationFont.boundingRectForFont.height)
-        )
-    }
-
-    private static func singleLineWidth(_ text: String, font: NSFont) -> CGFloat {
-        ceil((text as NSString).size(withAttributes: [.font: font]).width)
-    }
-}
-
-struct CoachingPresentationContract: Equatable {
-    static let maximumWidth: CGFloat = 680
-    static let maximumHeight: CGFloat = 320
-
-    private static let outerHorizontalPadding: CGFloat = 8
-    private static let contentLeadingPadding: CGFloat = 16
-    private static let contentTrailingPadding: CGFloat = 42
-    private static let minimumCopyToShortcutGap: CGFloat = 18
-    private static let outerVerticalPadding: CGFloat = 8
-    private static let contentVerticalPadding: CGFloat = 32
-    private static let copyLineSpacing: CGFloat = 3
-    private static let measurementSafety: CGFloat = 4
-
-    let title: String
-    let applicationName: String
-    let shortcut: String
-    let measurements: CoachingPresentationMeasurements
-    let usesWrappedCopy: Bool
-    let copyWidth: CGFloat
-    let panelSize: NSSize
-    let accessibilityLabel: String
-
-    let keepsShortcutInPrimaryRow = true
-
-    init(
-        event: CoachingEvent,
-        style: NotificationChannel,
-        measurements: CoachingPresentationMeasurements? = nil
-    ) {
-        title = event.actionTitle
-        applicationName = event.applicationName
-        shortcut = event.shortcut
-
-        let measurements = measurements ?? .measure(event: event)
-        self.measurements = measurements
-
-        let naturalCopyWidth = max(measurements.titleWidth, measurements.applicationWidth)
-            + Self.measurementSafety
-        let fixedWidth = Self.fixedHorizontalWidth + measurements.shortcutWidth
-        let requiredSingleRowWidth = fixedWidth + naturalCopyWidth
-        let compactSize = Self.compactPanelSize(for: style)
-        usesWrappedCopy = requiredSingleRowWidth > Self.maximumWidth
-
-        if usesWrappedCopy {
-            copyWidth = max(1, Self.maximumWidth - fixedWidth)
-            let titleLines = max(1, ceil(measurements.titleWidth / copyWidth))
-            let applicationLines = max(1, ceil(measurements.applicationWidth / copyWidth))
-            let copyHeight = titleLines * measurements.titleLineHeight
-                + Self.copyLineSpacing
-                + applicationLines * measurements.applicationLineHeight
-            let requiredHeight = Self.outerVerticalPadding
-                + Self.contentVerticalPadding
-                + copyHeight
-                + Self.measurementSafety
-            panelSize = NSSize(
-                width: Self.maximumWidth,
-                height: min(Self.maximumHeight, max(compactSize.height, ceil(requiredHeight)))
-            )
-        } else {
-            copyWidth = naturalCopyWidth
-            panelSize = NSSize(
-                width: min(Self.maximumWidth, max(compactSize.width, ceil(requiredSingleRowWidth))),
-                height: compactSize.height
-            )
-        }
-
-        accessibilityLabel = "Key Bump. \(event.actionTitle). \(event.applicationName). Shortcut \(event.shortcut)."
-    }
-
-    static func compactPanelSize(for style: NotificationChannel) -> NSSize {
-        switch style {
-        case .topRightToast: NSSize(width: 360, height: 92)
-        case .topCenterShelf: NSSize(width: 500, height: 112)
-        default: NSSize(width: 360, height: 92)
-        }
-    }
-
-    private static var fixedHorizontalWidth: CGFloat {
-        outerHorizontalPadding
-            + contentLeadingPadding
-            + contentTrailingPadding
-            + minimumCopyToShortcutGap
-    }
-}
-
 enum PresentationLayout {
     static func appKitPoint(fromQuartzPoint point: NSPoint, primaryScreenFrame: NSRect) -> NSPoint {
         NSPoint(x: point.x, y: primaryScreenFrame.maxY - point.y)
@@ -440,20 +325,18 @@ struct CoachingPresentationView: View {
     var onHoverChanged: (Bool) -> Void = { _ in }
 
     var body: some View {
-        let presentation = CoachingPresentationContract(event: event, style: style)
-        ZStack(alignment: .topTrailing) {
-            HStack(spacing: 0) {
-                coachingCopy(presentation)
-                    .frame(width: presentation.copyWidth, alignment: .leading)
+        ZStack(alignment: .topLeading) {
+            HStack(spacing: 14) {
+                Image(systemName: style.systemImage)
+                    .font(.title2)
+                    .foregroundStyle(.green)
+                coachingCopy
                 Spacer(minLength: 18)
-                ShortcutKeycaps(shortcut: presentation.shortcut)
-                    .fixedSize()
+                ShortcutKeycaps(shortcut: event.shortcut)
             }
-            .padding(.leading, 16)
-            .padding(.trailing, 42)
+            .padding(.leading, 42)
+            .padding(.trailing, 16)
             .padding(.vertical, 16)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(presentation.accessibilityLabel)
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -462,27 +345,24 @@ struct CoachingPresentationView: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Dismiss Key Bump")
-            .help("Dismiss")
-            .padding(.trailing, 10)
+            .padding(.leading, 10)
             .padding(.top, 10)
         }
         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(4)
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Key Bump. \(event.coachingTitle). \(event.applicationName). Shortcut \(event.shortcut).")
     }
 
-    private func coachingCopy(_ presentation: CoachingPresentationContract) -> some View {
+    private var coachingCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(presentation.title)
-                .font(.headline)
-                .lineLimit(presentation.usesWrappedCopy ? nil : 1)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(presentation.applicationName)
+            Text(event.coachingTitle).font(.headline)
+            Text(event.coachingBody)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(presentation.usesWrappedCopy ? nil : 1)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
         }
     }
 }
