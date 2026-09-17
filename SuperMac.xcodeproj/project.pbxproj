@@ -38,6 +38,7 @@
 		98717D28224C1EF1BC213F94 /* TranslatedSpeechPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F988472005A1AEAE4AFC6A8A /* TranslatedSpeechPlayer.swift */; };
 		9A123083B9AA78A72E107ED3 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B18988CAC32C575BC5CCDB /* AppPreferences.swift */; };
 		9BFFF7DC990D0C62398C2EE7 /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADFA8CF3E1AE35E9218D553E /* NativeStatusItemController.swift */; };
+		9E04E044F067BB23EA2E794D /* RecentSearchStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464B1E71E43DB712798D8E4F /* RecentSearchStore.swift */; };
 		A96DFACD4867B4B8F5619492 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6B0462EFDE8CD0087CBCC711 /* Assets.xcassets */; };
 		A98C3F743448B3F422780FAE /* DictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 797FD303CEC7148DD772B296 /* DictationService.swift */; };
 		A9945C9305085D8C88E110F2 /* NotificationChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBE0AD5C335288BE3824279 /* NotificationChannel.swift */; };
@@ -79,6 +80,7 @@
 		374F0E123136211939751EBD /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
 		3ADE70860A30377DD7E7E3B2 /* NotificationDeliveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDeliveryService.swift; sourceTree = "<group>"; };
 		3FBE0AD5C335288BE3824279 /* NotificationChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationChannel.swift; sourceTree = "<group>"; };
+		464B1E71E43DB712798D8E4F /* RecentSearchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentSearchStore.swift; sourceTree = "<group>"; };
 		4A460EFFC33CD04F89DFB5E6 /* SuperMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperMacApp.swift; sourceTree = "<group>"; };
 		4BE8030020C75B10CEAD4D1F /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
 		4BFA3CEB2DACC39047B00175 /* GlobalShortcutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutCoordinator.swift; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 			isa = PBXGroup;
 			children = (
 				79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */,
+				464B1E71E43DB712798D8E4F /* RecentSearchStore.swift */,
 			);
 			path = QuickSearch;
 			sourceTree = "<group>";
@@ -432,6 +435,7 @@
 				187E6DE7C76E9035BB57C6C2 /* PresentationWindowController.swift in Sources */,
 				92E6B3EED451DCB6CC28356A /* ProductIdentity.swift in Sources */,
 				48338CA9E74F84BA913AB753 /* QuickSearchService.swift in Sources */,
+				9E04E044F067BB23EA2E794D /* RecentSearchStore.swift in Sources */,
 				E09625837E0C77B15DEEE22D /* SettingsRootView.swift in Sources */,
 				1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */,
 				881298FF4FFAEFBD96A747EE /* ShortcutCatalog.swift in Sources */,

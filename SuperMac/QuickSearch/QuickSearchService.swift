@@ -17,12 +17,17 @@ final class QuickSearchModel {
     var query = "" { didSet { refresh() } }
     private(set) var results: [QuickSearchResult] = []
     var selection = 0
+    let recentSearches: RecentSearchStore
 
     private let applications: [QuickSearchResult]
     private var metadataQuery: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
 
-    init(fileManager: FileManager = .default) {
+    init(
+        fileManager: FileManager = .default,
+        recentSearches: RecentSearchStore? = nil
+    ) {
+        self.recentSearches = recentSearches ?? RecentSearchStore(fileManager: fileManager)
         let roots = [URL(fileURLWithPath: "/Applications"), URL(fileURLWithPath: "/System/Applications"), URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications"), fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
         var seen = Set<URL>()
         var apps: [QuickSearchResult] = []
@@ -74,6 +79,15 @@ final class QuickSearchModel {
 
     var selectedResult: QuickSearchResult? {
         results.indices.contains(selection) ? results[selection] : nil
+    }
+
+    func recordOpenResult(succeeded: Bool) {
+        guard succeeded else { return }
+        recentSearches.record(query)
+    }
+
+    func restoreRecentSearch(_ query: String) {
+        self.query = query
     }
 
     private func consume(query: NSMetadataQuery, appMatches: [QuickSearchResult]) {

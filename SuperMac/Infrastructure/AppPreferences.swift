@@ -92,7 +92,7 @@ final class AppPreferences {
             channelsWereNormalized = normalizedChannels != decodedChannels
                 || rawChannels.sorted() != normalizedChannels.map(\.rawValue).sorted()
         } else {
-            selectedChannels = [.topRightToast, .dockBadge]
+            selectedChannels = [.topRightToast]
             channelsWereNormalized = false
         }
 

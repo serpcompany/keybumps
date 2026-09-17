@@ -1,22 +1,29 @@
 import SwiftUI
 
+struct CoachingEventRowPresentation: Equatable {
+    let actionTitle: String
+    let applicationName: String
+    let shortcut: String
+
+    init(event: CoachingEvent) {
+        actionTitle = event.actionTitle
+        applicationName = event.applicationName
+        shortcut = event.shortcut
+    }
+}
+
 struct CoachingEventRow: View {
     let event: CoachingEvent
 
     var body: some View {
+        let presentation = CoachingEventRowPresentation(event: event)
         HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(event.isRead ? Color.secondary.opacity(0.25) : Color.green)
-                .frame(width: 9, height: 9)
-                .padding(.top, 7)
-                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(event.actionTitle).font(.headline)
-                Text(event.applicationName).font(.subheadline).foregroundStyle(.secondary)
-                Text(event.occurredAt, style: .relative).font(.caption).foregroundStyle(.tertiary)
+                Text(presentation.actionTitle).font(.headline)
+                Text(presentation.applicationName).font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(event.shortcut)
+            Text(presentation.shortcut)
                 .font(.headline.monospaced())
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)
@@ -25,7 +32,7 @@ struct CoachingEventRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.actionTitle) in \(event.applicationName). Shortcut \(event.shortcut). \(event.isRead ? "Read" : "Unread")")
+        .accessibilityLabel("\(presentation.actionTitle) in \(presentation.applicationName). Shortcut \(presentation.shortcut).")
     }
 }
 

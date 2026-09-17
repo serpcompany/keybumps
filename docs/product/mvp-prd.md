@@ -133,7 +133,7 @@ Detect running Alfred, Rectangle, and Superwhisper instances that own the select
 
 ### Shared Command Palette
 
-Quick Search, Clipboard History, Dictation History, and Key Bumps History share one original SuperMac command palette inspired by Alfred's compact launcher and Raycast's dense keyboard-first hierarchy. Search is the default tab; Clipboard, Dictation, and Key Bumps are peer tabs. Tab controls show only their Command-1/2/3/4 shortcut and name. A single dominant input filters the active tab, arrow keys move selection, Return performs the primary action, Escape closes the palette, and Command-1/2/3/4 switch tabs.
+Quick Search, Clipboard History, Dictation History, and Key Bumps History share one original SuperMac command palette inspired by Alfred's compact launcher and Raycast's dense keyboard-first hierarchy. Search is the default tab; Clipboard, Dictation, and Key Bumps are peer tabs. Tab controls show only their Command-1/2/3/4 shortcut and name. A single dominant input filters the active tab, arrow keys move selection, Return performs the primary action where one exists, Escape closes the palette, and Command-1/2/3/4 switch tabs. Key Bumps rows are informational: selecting or pressing Return never writes the pasteboard or mutates read state.
 
 Command-Space opens the palette on Search. Shift-Command-Space opens the same palette on Clipboard. The Dictation settings screen opens it on Dictation. Reference product names, assets, themes, proprietary interactions, and broader feature sets remain excluded.
 
@@ -148,6 +148,7 @@ User outcome: replace the owner's basic Alfred/Spotlight launcher workflow.
 - Arrow keys change selection.
 - Return opens or focuses the selected result.
 - Command-Return reveals a file or folder in Finder.
+- After a result opens successfully, retain a bounded, deduplicated local Recent Searches list. An empty query shows that list; choosing one restores the query, and clearing requires destructive confirmation. Typing, highlighting, dismissing, revealing, or a failed open does not record history.
 - Escape or clicking outside dismisses the panel.
 - The panel must not leave SuperMac as the active foreground app after launching a result.
 
@@ -245,6 +246,8 @@ Bring across the current full-product behavior:
 - app-presence behavior;
 - permissions and diagnostics;
 - current supported action catalog.
+
+The retained presentation choices are Native macOS Banner, Top-right Toast, Top-center Shelf, Pointer Card, and separately configured Sound. Removed legacy channel identifiers are migrated out of saved preferences. Native Banner preview uses real notification authorization and provides a System Settings recovery action when denied. The Command Palette can filter and explicitly clear Key Bumps history; its rows omit unread dots and live elapsed-time counters.
 
 Required system permissions remain Accessibility and Input Monitoring. Direct distribution enables these permissions but does not increase detection coverage by itself. New application/action recognition is post-MVP work unless required to repair an existing supported journey.
 

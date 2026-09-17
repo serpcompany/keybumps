@@ -3,11 +3,13 @@ import UserNotifications
 
 enum DeliveryAdapterError: LocalizedError, Equatable {
     case notificationsDenied
+    case notificationAlertsDisabled
     case soundUnavailable
 
     var errorDescription: String? {
         switch self {
         case .notificationsDenied: "macOS notification permission is not granted"
+        case .notificationAlertsDisabled: "macOS notification banners are disabled"
         case .soundUnavailable: "the macOS notification sound is unavailable"
         }
     }
@@ -17,6 +19,7 @@ enum NativeNotificationAuthorization: Equatable {
     case notDetermined
     case denied
     case authorized
+    case authorizedWithoutAlerts
     case provisional
     case ephemeral
     case unknown
@@ -34,7 +37,13 @@ final class SystemNativeNotificationCenterClient: NativeNotificationCenterClient
     private let center = UNUserNotificationCenter.current()
 
     func authorizationStatus() async -> NativeNotificationAuthorization {
-        switch (await center.notificationSettings()).authorizationStatus {
+        let settings = await center.notificationSettings()
+        if settings.alertSetting != .enabled,
+           settings.authorizationStatus == .authorized
+            || settings.authorizationStatus == .provisional {
+            return .authorizedWithoutAlerts
+        }
+        return switch settings.authorizationStatus {
         case .notDetermined: .notDetermined
         case .denied: .denied
         case .authorized: .authorized
@@ -59,9 +68,14 @@ final class SystemNativeNotificationCenterClient: NativeNotificationCenterClient
 @MainActor
 final class NativeNotificationAdapter: ChannelDelivering {
     private let center: any NativeNotificationCenterClient
+    private let identifierFactory: () -> String
 
-    init(center: (any NativeNotificationCenterClient)? = nil) {
+    init(
+        center: (any NativeNotificationCenterClient)? = nil,
+        identifierFactory: @escaping () -> String = { UUID().uuidString }
+    ) {
         self.center = center ?? SystemNativeNotificationCenterClient()
+        self.identifierFactory = identifierFactory
     }
 
     func deliver(_ event: CoachingEvent) async throws {
@@ -72,46 +86,24 @@ final class NativeNotificationAdapter: ChannelDelivering {
             }
             status = await center.authorizationStatus()
         }
+        if status == .authorizedWithoutAlerts {
+            throw DeliveryAdapterError.notificationAlertsDisabled
+        }
         guard status == .authorized || status == .provisional || status == .ephemeral else {
             throw DeliveryAdapterError.notificationsDenied
         }
         try await center.add(
-            identifier: event.id.uuidString,
+            identifier: identifierFactory(),
             title: event.coachingTitle,
             body: event.coachingBody
         )
     }
 }
 
-@MainActor
-final class DockBadgeAdapter: ChannelDelivering {
-    private let unreadCount: () -> Int
-    private let setBadgeLabel: @MainActor (String?) -> Void
-
-    init(
-        unreadCount: @escaping () -> Int,
-        setBadgeLabel: (@MainActor (String?) -> Void)? = nil
-    ) {
-        self.unreadCount = unreadCount
-        self.setBadgeLabel = setBadgeLabel ?? { NSApplication.shared.dockTile.badgeLabel = $0 }
-    }
-
-    func deliver(_ event: CoachingEvent) async throws {
-        setBadgeLabel(String(unreadCount()))
-    }
-}
-
-@MainActor
-final class DockBounceAdapter: ChannelDelivering {
-    private let requestAttention: @MainActor (NSApplication.RequestUserAttentionType) -> Void
-
-    init(requestAttention: (@MainActor (NSApplication.RequestUserAttentionType) -> Void)? = nil) {
-        self.requestAttention = requestAttention ?? { _ = NSApplication.shared.requestUserAttention($0) }
-    }
-
-    func deliver(_ event: CoachingEvent) async throws {
-        requestAttention(.informationalRequest)
-    }
+enum NotificationSettingsRecovery {
+    static let url = URL(
+        string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?com.serp.supermac"
+    )!
 }
 
 @MainActor

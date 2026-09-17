@@ -8,9 +8,7 @@ final class PresentationEvidenceTests: XCTestCase {
     private let visualChannels: [NotificationChannel] = [
         .topRightToast,
         .topCenterShelf,
-        .pointerCard,
-        .statusFeedback,
-        .decisionBanner
+        .pointerCard
     ]
 
     func testEveryCustomPresentationRendersToReviewablePNG() throws {
@@ -42,10 +40,7 @@ final class PresentationEvidenceTests: XCTestCase {
         XCTAssertEqual(controller.panelSize(for: .topRightToast), NSSize(width: 360, height: 92))
         XCTAssertEqual(controller.panelSize(for: .topCenterShelf), NSSize(width: 500, height: 112))
         XCTAssertEqual(controller.panelSize(for: .pointerCard), NSSize(width: 320, height: 92))
-        XCTAssertEqual(controller.panelSize(for: .statusFeedback), NSSize(width: 300, height: 76))
-        XCTAssertEqual(controller.panelSize(for: .decisionBanner), NSSize(width: 700, height: 128))
         XCTAssertEqual(controller.dismissalDelayNanoseconds(for: .topRightToast), 4_000_000_000)
-        XCTAssertEqual(controller.dismissalDelayNanoseconds(for: .decisionBanner), 8_000_000_000)
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.fullScreenAuxiliary))
     }

@@ -71,16 +71,9 @@ final class PresentationWindowController {
 
     func show(event: CoachingEvent, style: NotificationChannel) {
         guard style != .nativeBanner,
-              style != .dockBadge,
-              style != .dockBounce,
               style != .sound else { return }
 
         dismiss(style)
-        if let exclusiveGroup = PresentationOverlapPolicy.exclusiveGroup(containing: style) {
-            for conflictingStyle in exclusiveGroup where conflictingStyle != style {
-                dismiss(conflictingStyle)
-            }
-        }
 
         let size = panelSize(for: style)
         let panel = NSPanel(
@@ -141,8 +134,6 @@ final class PresentationWindowController {
         case .topRightToast: NSSize(width: 360, height: 92)
         case .topCenterShelf: NSSize(width: 500, height: 112)
         case .pointerCard: NSSize(width: 320, height: 92)
-        case .statusFeedback: NSSize(width: 300, height: 76)
-        case .decisionBanner: NSSize(width: 700, height: 128)
         default: NSSize(width: 360, height: 92)
         }
     }
@@ -195,7 +186,7 @@ final class PresentationWindowController {
     }
 
     private func dismissalDelay(for style: NotificationChannel) -> TimeInterval {
-        style == .decisionBanner ? 8 : 4
+        4
     }
 
     private func scheduleDismissal(
@@ -316,7 +307,7 @@ enum PresentationLayout {
         switch style {
         case .topRightToast:
             return NSPoint(x: visible.maxX - size.width - 20, y: visible.maxY - size.height - 20)
-        case .topCenterShelf, .decisionBanner, .statusFeedback:
+        case .topCenterShelf:
             return NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 16)
         case .pointerCard:
             let x = min(max(pointer.x + 18, visible.minX), visible.maxX - size.width)
@@ -333,12 +324,10 @@ struct CoachingPresentationView: View {
     let style: NotificationChannel
     let onDismiss: () -> Void
     var onHoverChanged: (Bool) -> Void = { _ in }
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var statusCompleted = false
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: statusImage)
+            Image(systemName: style.systemImage)
                 .font(.title2)
                 .foregroundStyle(.green)
             coachingCopy
@@ -362,15 +351,6 @@ struct CoachingPresentationView: View {
         .onHover(perform: onHoverChanged)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Key Bump. \(event.actionTitle). Try \(event.shortcut) next time.")
-        .task {
-            guard style == .statusFeedback else { return }
-            let delay = PresentationMotionPolicy.statusFeedbackDelayNanoseconds(reduceMotion: reduceMotion)
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: delay)
-            }
-            guard !Task.isCancelled else { return }
-            statusCompleted = true
-        }
     }
 
     private var coachingCopy: some View {
@@ -381,10 +361,6 @@ struct CoachingPresentationView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-    }
-
-    private var statusImage: String {
-        style == .statusFeedback && !statusCompleted ? "ellipsis.circle" : style.systemImage
     }
 }
 
@@ -398,11 +374,5 @@ enum ToastDismissalPolicy {
     static func shouldDismiss(for translation: NSSize) -> Bool {
         abs(translation.width) >= minimumHorizontalSwipe
             && abs(translation.width) > abs(translation.height)
-    }
-}
-
-enum PresentationMotionPolicy {
-    static func statusFeedbackDelayNanoseconds(reduceMotion: Bool) -> UInt64 {
-        reduceMotion ? 0 : 700_000_000
     }
 }

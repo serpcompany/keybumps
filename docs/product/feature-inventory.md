@@ -32,10 +32,6 @@ Durable inbox recording is mandatory and occurs before transient delivery. Users
 | Top-right Toast | Compact custom key-bump card | Implemented; real Finder event notification confirmed by human |
 | Top-center Shelf | Prominent top-center key-bump shelf | Implemented with preview; visual acceptance remains |
 | Pointer Card | Key-bump card beside pointer location | Implemented with preview; visual acceptance remains |
-| Status Feedback | Brief evaluating-to-success state | Implemented with preview; visual acceptance remains |
-| Decision Banner | Wide prompt with dismiss actions | Implemented with preview; visual acceptance remains |
-| Dock Badge | Shows durable unread count | Implemented; unread behavior tested, Dock capture remains |
-| Dock Bounce | Requests informational attention | Implemented; live acceptance remains |
 | Sound | Plays the system Glass sound from its separate Sound settings section | Implemented; audible owner acceptance remains |
 
 ## Settings and diagnostics
@@ -47,7 +43,7 @@ Durable inbox recording is mandatory and occurs before transient delivery. Users
 - View Accessibility permission state and request/retry detection.
 - Send a test key bump.
 - Inspect per-channel delivery outcomes.
-- Search history and manage read state.
+- Search history and clear it explicitly. Command Palette history rows are passive and visually stable.
 
 ## Detector coverage
 

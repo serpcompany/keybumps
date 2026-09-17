@@ -121,10 +121,10 @@ Disabling Window Management stops drag monitoring and releases every owned windo
 1. Grant Accessibility and Input Monitoring and keep Key Bumps enabled.
 2. Perform a supported manual action in Finder or Chrome.
 3. The detector emits exactly one event only after the action's required postcondition is observed.
-4. The event is written once to Key Bumps history and the unread count.
+4. The event is written once to durable Key Bumps history.
 5. Selected presentation channels deliver their transient output independently. Custom presentations share a visible close button, Escape dismissal, horizontal trackpad-swipe dismissal, and an auto-dismiss timer that pauses while hovered.
-6. Preview visual channels without creating durable history; when Sound is selected it plays alongside those previews, while direct Sound preview plays once. Failed preview adapters report their individual failure instead of appearing successful.
-7. Review, filter, and mark events read in Settings, the menu panel, or the Command Palette; clear history when desired.
+6. Preview retained visual channels without creating durable history; when Sound is selected it plays alongside those previews, while direct Sound preview plays once. Native Banner uses real notification authorization and opens the matching System Settings recovery page when denied. Failed preview adapters report their individual failure instead of appearing successful.
+7. Review and filter events in Settings, the menu panel, or the Command Palette. Palette rows are passive and omit unread dots and changing relative-time counters. Clear Key Bumps history only through an explicit confirmed action.
 
 Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key bump. Disabling Key Bumps stops monitoring.
 
@@ -133,9 +133,10 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 1. Search is the default tab; Clipboard, Dictation, and Key Bumps are visible peer tabs in that order. Tab controls show the shortcut and name without icons.
 2. Click tabs or press Command-1/2/3/4 to switch.
 3. Switching clears the prior filter, resets selection, and keeps text-input focus.
-4. Arrow keys move selection, Return performs the tab's primary action, and Escape dismisses. In Key Bumps, clicking or pressing Return copies the selected shortcut and marks the event read.
+4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Key Bumps row click changes selection only; Return has no clipboard or history side effect.
 5. When Key Bumps is disabled, its tab reports that state instead of presenting stale history as active.
-6. The footer truthfully identifies local-only behavior.
+6. When Search is empty, successful prior queries appear under Recent Searches; selecting one restores it and clearing requires confirmation. Key Bumps provides the same confirmed clear-history affordance as the other histories.
+7. The footer truthfully identifies local-only behavior.
 
 ## UJ-10 — Capability controls and settings
 

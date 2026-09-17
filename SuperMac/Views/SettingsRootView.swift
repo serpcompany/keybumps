@@ -568,6 +568,12 @@ private struct KeyBumpsSettingsView: View {
                         Text("\(deliveredChannel.title) preview failed: \(message)")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                        if deliveredChannel == .nativeBanner {
+                            Button("Open Notification Settings…") {
+                                model.openNotificationSettings()
+                            }
+                            .controlSize(.small)
+                        }
                     }
                 }
             }

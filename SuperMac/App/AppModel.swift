@@ -88,7 +88,7 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
-        var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .dockBadge: DockBadgeAdapter { inbox.unreadCount }, .dockBounce: DockBounceAdapter(), .sound: SoundAdapter()]
+        var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
@@ -105,7 +105,7 @@ final class AppModel {
         presenceController.apply(showInDockAndSwitcher: true)
         launchAtLogin.refresh()
         if preferences.didCompleteOnboarding { applyCapabilities() }
-        refreshPermissions(); conflicts.refresh(); refreshDockBadge()
+        refreshPermissions(); conflicts.refresh()
     }
 
     func completeOnboarding() {
@@ -293,13 +293,15 @@ final class AppModel {
         guard lastPreviewChannel == channel else { return [:] }
         return lastReport?.outcomes ?? [:]
     }
+    func openNotificationSettings() {
+        NSWorkspace.shared.open(NotificationSettingsRecovery.url)
+    }
     func setChannel(_ channel: NotificationChannel, enabled: Bool) { preferences.set(channel, enabled: enabled) }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }
-    func markRead(_ id: UUID) { inbox.markRead(id); refreshDockBadge() }
-    func markAllRead() { inbox.markAllRead(); refreshDockBadge() }
-    func clearHistory() { inbox.clear(); refreshDockBadge() }
-    private func deliver(_ event: CoachingEvent, through channels: Set<NotificationChannel>? = nil) async { lastReport = await delivery.deliver(event, through: channels ?? preferences.selectedChannels); refreshDockBadge() }
-    private func refreshDockBadge() { NSApplication.shared.dockTile.badgeLabel = preferences.selectedChannels.contains(.dockBadge) && inbox.unreadCount > 0 ? String(inbox.unreadCount) : nil }
+    func markRead(_ id: UUID) { inbox.markRead(id) }
+    func markAllRead() { inbox.markAllRead() }
+    func clearHistory() { inbox.clear() }
+    private func deliver(_ event: CoachingEvent, through channels: Set<NotificationChannel>? = nil) async { lastReport = await delivery.deliver(event, through: channels ?? preferences.selectedChannels) }
 
     private func deactivate(_ capability: Capability) {
         switch capability {

@@ -809,6 +809,7 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(CommandPaletteTab.allCases.allSatisfy { $0.labelPresentation.systemImage == nil })
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
+        XCTAssertNil(CommandPaletteTab.keyBumps.primaryActionTitle)
 
         state.historyQuery = "private filter"
         state.selection = 3
@@ -817,6 +818,75 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(state.tab, .dictation)
         XCTAssertEqual(state.historyQuery, "")
         XCTAssertEqual(state.selection, 0)
+    }
+
+    func testRecentSearchesPersistOnlySuccessfulBoundedDeduplicatedQueries() {
+        let storageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("recent-searches-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let store = RecentSearchStore(storageURL: storageURL, limit: 3)
+
+        store.record("  Finder  ")
+        store.record("Safari")
+        store.record("finder")
+        store.record("Terminal")
+        store.record("Notes")
+
+        XCTAssertEqual(store.queries, ["Notes", "Terminal", "finder"])
+        XCTAssertEqual(
+            RecentSearchStore(storageURL: storageURL, limit: 3).queries,
+            ["Notes", "Terminal", "finder"]
+        )
+
+        store.clear()
+        XCTAssertTrue(store.queries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storageURL.path))
+    }
+
+    func testQuickSearchRecordsHistoryOnlyWhenExplicitlyToldAnOpenSucceeded() {
+        let storageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("quick-search-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let store = RecentSearchStore(storageURL: storageURL)
+        let model = QuickSearchModel(recentSearches: store)
+
+        model.query = "Finder"
+        XCTAssertTrue(store.queries.isEmpty, "Typing or highlighting must not record history")
+        model.recordOpenResult(succeeded: false)
+        XCTAssertTrue(store.queries.isEmpty, "A failed open must not record history")
+        model.recordOpenResult(succeeded: true)
+        XCTAssertEqual(store.queries, ["Finder"])
+        model.restoreRecentSearch("Terminal")
+        XCTAssertEqual(model.query, "Terminal")
+    }
+
+    func testKeyBumpsPaletteRowsIgnoreReadStateAndTime() {
+        let id = UUID()
+        let unread = CoachingEvent(
+            id: id,
+            occurredAt: Date(timeIntervalSince1970: 1),
+            applicationName: "Fixture",
+            actionTitle: "Action",
+            shortcut: "⌘F",
+            isRead: false
+        )
+        let readLater = CoachingEvent(
+            id: id,
+            occurredAt: Date(timeIntervalSince1970: 9_999),
+            applicationName: "Fixture",
+            actionTitle: "Action",
+            shortcut: "⌘F",
+            isRead: true
+        )
+
+        XCTAssertEqual(
+            CoachingEventRowPresentation(event: unread),
+            CoachingEventRowPresentation(event: readLater)
+        )
+    }
+
+    func testNotificationSettingsRecoveryTargetsSuperMac() {
+        XCTAssertTrue(NotificationSettingsRecovery.url.absoluteString.contains("com.serp.supermac"))
     }
 
     func testKeyBumpsHistoryContentCentralizesEnablementAndFiltering() {

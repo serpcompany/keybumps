@@ -60,6 +60,14 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var labelPresentation: CommandPaletteTabLabel {
         CommandPaletteTabLabel(shortcut: shortcutLabel, name: title)
     }
+
+    var primaryActionTitle: String? {
+        switch self {
+        case .search: "Open"
+        case .clipboard, .dictation: "Paste"
+        case .keyBumps: nil
+        }
+    }
 }
 
 struct CommandPaletteTabLabel: Equatable {
@@ -91,43 +99,6 @@ enum KeyBumpsHistoryContent: Equatable {
     var entries: [CoachingEvent] {
         guard case .entries(let entries) = self else { return [] }
         return entries
-    }
-}
-
-@MainActor
-protocol ShortcutPasteboardWriting {
-    func writeShortcut(_ shortcut: String) -> Bool
-}
-
-@MainActor
-struct PasteboardShortcutWriter: ShortcutPasteboardWriting {
-    let pasteboard: NSPasteboard
-
-    init(pasteboard: NSPasteboard = .general) {
-        self.pasteboard = pasteboard
-    }
-
-    func writeShortcut(_ shortcut: String) -> Bool {
-        pasteboard.clearContents()
-        return pasteboard.setString(shortcut, forType: .string)
-    }
-}
-
-@MainActor
-final class KeyBumpsShortcutAction {
-    private let inbox: InboxStore
-    private let pasteboard: any ShortcutPasteboardWriting
-
-    init(inbox: InboxStore, pasteboard: (any ShortcutPasteboardWriting)? = nil) {
-        self.inbox = inbox
-        self.pasteboard = pasteboard ?? PasteboardShortcutWriter()
-    }
-
-    @discardableResult
-    func copyShortcut(from event: CoachingEvent) -> Bool {
-        guard pasteboard.writeShortcut(event.shortcut) else { return false }
-        inbox.markRead(event.id)
-        return true
     }
 }
 
@@ -164,7 +135,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let dictationService: DictationService
     private let inbox: InboxStore
     private let preferences: AppPreferences
-    private let keyBumpsAction: KeyBumpsShortcutAction
     private let state = CommandPaletteState()
     private var panel: NSPanel?
     private weak var destination: NSRunningApplication?
@@ -178,18 +148,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         dictationHistory: DictationHistoryService,
         dictationService: DictationService,
         inbox: InboxStore,
-        preferences: AppPreferences,
-        shortcutPasteboard: (any ShortcutPasteboardWriting)? = nil
+        preferences: AppPreferences
     ) {
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService
         self.inbox = inbox
         self.preferences = preferences
-        keyBumpsAction = KeyBumpsShortcutAction(
-            inbox: inbox,
-            pasteboard: shortcutPasteboard ?? PasteboardShortcutWriter()
-        )
     }
 
     func toggle(_ tab: CommandPaletteTab) {
@@ -270,9 +235,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 pasteClipboardEntry: pasteClipboardEntry,
                 pasteDictationText: { [weak self] text in
                     self?.paste(text, suppressClipboardHistory: true)
-                },
-                copyKeyBumpsShortcut: { [weak self] event in
-                    self?.keyBumpsAction.copyShortcut(from: event)
                 },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
@@ -386,7 +348,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var itemCount: Int {
         switch state.tab {
         case .search:
-            search.results.count
+            search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? search.recentSearches.queries.count
+                : search.results.count
         case .clipboard:
             filteredClipboard.count
         case .dictation:
@@ -424,6 +388,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func activateSelection(reveal: Bool) {
         switch state.tab {
         case .search:
+            if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                guard search.recentSearches.queries.indices.contains(state.selection) else { return }
+                search.restoreRecentSearch(search.recentSearches.queries[state.selection])
+                return
+            }
             guard search.results.indices.contains(state.selection) else { return }
             let result = search.results[state.selection]
             reveal ? self.reveal(result) : open(result)
@@ -436,14 +405,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard !text.isEmpty else { return }
             paste(text, suppressClipboardHistory: true)
         case .keyBumps:
-            guard filteredKeyBumps.indices.contains(state.selection) else { return }
-            keyBumpsAction.copyShortcut(from: filteredKeyBumps[state.selection])
+            break
         }
     }
 
     private func open(_ result: QuickSearchResult) {
-        dismiss()
-        NSWorkspace.shared.open(result.url)
+        let didOpen = NSWorkspace.shared.open(result.url)
+        search.recordOpenResult(succeeded: didOpen)
+        if didOpen { dismiss() }
     }
 
     private func reveal(_ result: QuickSearchResult) {
@@ -496,7 +465,6 @@ private struct CommandPaletteView: View {
     let revealSearchResult: (QuickSearchResult) -> Void
     let pasteClipboardEntry: (ClipboardEntry) -> Void
     let pasteDictationText: (String) -> Void
-    let copyKeyBumpsShortcut: (CoachingEvent) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
 
@@ -545,8 +513,12 @@ private struct CommandPaletteView: View {
                 results: search.results,
                 selection: state.selection,
                 query: search.query,
+                recentSearches: search.recentSearches.queries,
                 open: activateSearchResult,
-                reveal: revealSearchResult
+                reveal: revealSearchResult,
+                restoreRecentSearch: search.restoreRecentSearch,
+                clearRecentSearches: search.recentSearches.clear,
+                confirmationPresentationChanged: confirmationPresentationChanged
             )
         case .clipboard:
             ClipboardResultsView(
@@ -573,7 +545,9 @@ private struct CommandPaletteView: View {
             KeyBumpsResultsView(
                 content: keyBumpsContent,
                 selection: state.selection,
-                choose: copyKeyBumpsShortcut
+                select: { state.selection = $0 },
+                clear: inbox.clear,
+                confirmationPresentationChanged: confirmationPresentationChanged
             )
         }
     }
@@ -640,7 +614,9 @@ private struct PaletteTabBar: View {
 private struct KeyBumpsResultsView: View {
     let content: KeyBumpsHistoryContent
     let selection: Int
-    let choose: (CoachingEvent) -> Void
+    let select: (Int) -> Void
+    let clear: () -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
 
     var body: some View {
         PaletteResultsContainer {
@@ -650,20 +626,40 @@ private struct KeyBumpsResultsView: View {
             case .empty:
                 PaletteEmptyState(title: "No matching Key Bumps", systemImage: "keyboard")
             case .entries(let entries):
-                List(Array(entries.enumerated()), id: \.element.id) { index, event in
-                    Button { choose(event) } label: {
-                        CoachingEventRow(event: event)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                            .contentShape(Rectangle())
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Recent")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        HistoryClearButton(
+                            title: "Clear History",
+                            confirmationTitle: "Clear Key Bumps history?",
+                            confirmationMessage: "This permanently removes all saved Key Bumps events.",
+                            destructiveActionTitle: "Clear Key Bumps History",
+                            disabled: entries.isEmpty,
+                            confirmationPresentationChanged: confirmationPresentationChanged,
+                            clear: clear
+                        )
                     }
-                    .buttonStyle(.plain)
-                    .listRowInsets(.init())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+
+                    List(Array(entries.enumerated()), id: \.element.id) { index, event in
+                        Button { select(index) } label: {
+                            CoachingEventRow(event: event)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 5)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(.init())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -706,14 +702,66 @@ private struct SearchResultsView: View {
     let results: [QuickSearchResult]
     let selection: Int
     let query: String
+    let recentSearches: [String]
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
+    let restoreRecentSearch: (String) -> Void
+    let clearRecentSearches: () -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
 
     var body: some View {
         PaletteResultsContainer {
-            if results.isEmpty {
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if recentSearches.isEmpty {
+                    PaletteEmptyState(
+                        title: "Start typing to search your Mac",
+                        systemImage: "magnifyingglass"
+                    )
+                } else {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text("Recent Searches")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            HistoryClearButton(
+                                title: "Clear Searches",
+                                confirmationTitle: "Clear recent searches?",
+                                confirmationMessage: "This permanently removes your locally saved Quick Search history.",
+                                destructiveActionTitle: "Clear Recent Searches",
+                                disabled: recentSearches.isEmpty,
+                                confirmationPresentationChanged: confirmationPresentationChanged,
+                                clear: clearRecentSearches
+                            )
+                        }
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 8)
+
+                        List(Array(recentSearches.enumerated()), id: \.element) { index, recentQuery in
+                            Button { restoreRecentSearch(recentQuery) } label: {
+                                HStack {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .foregroundStyle(.secondary)
+                                    Text(recentQuery)
+                                        .lineLimit(1)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .listRowInsets(.init())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                    }
+                }
+            } else if results.isEmpty {
                 PaletteEmptyState(
-                    title: query.isEmpty ? "Start typing to search your Mac" : "No local results",
+                    title: "No local results",
                     systemImage: "magnifyingglass"
                 )
             } else {
@@ -1002,7 +1050,9 @@ private struct PaletteFooter: View {
     var body: some View {
         HStack(spacing: 14) {
             Label("Select", systemImage: "arrow.up.arrow.down")
-            Label(tab == .search ? "Open" : tab == .keyBumps ? "Copy Shortcut" : "Paste", systemImage: "return")
+            if let primaryActionTitle = tab.primaryActionTitle {
+                Label(primaryActionTitle, systemImage: "return")
+            }
             if tab == .search {
                 Label("Reveal", systemImage: "command")
             }
