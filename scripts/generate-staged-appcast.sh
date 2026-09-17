@@ -26,7 +26,7 @@ done
 "$generate_appcast_tool" \
   --account "$keychain_account" \
   --download-url-prefix "$download_url_prefix" \
-  --embed-release-notes \
+  --release-notes-url-prefix "$download_url_prefix" \
   --maximum-versions 3 \
   "$archives_directory"
 

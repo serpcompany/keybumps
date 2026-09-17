@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import SuperMac
 
 final class UpdateReleaseScriptTests: XCTestCase {
     private var repositoryRoot: URL {
@@ -32,7 +33,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertNotEqual(invalid.status, 0)
     }
 
-    func testFixtureServerAndLiveByteVerification() throws {
+    func testFixtureServerAndLiveByteVerification() async throws {
         let fixture = repositoryRoot.appendingPathComponent("SuperMacTests/Fixtures/Updates")
         let server = Process()
         server.executableURL = repositoryRoot.appendingPathComponent("scripts/serve-update-fixture.sh")
@@ -62,6 +63,29 @@ final class UpdateReleaseScriptTests: XCTestCase {
         }
         XCTAssertTrue(becameReady)
 
+        let bundleURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ServedUpdaterFixture-\(UUID().uuidString).bundle", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: bundleURL) }
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        let plistData = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "CFBundleIdentifier": "com.serp.supermac.served-fixture",
+                "CFBundlePackageType": "BNDL",
+                "SUPublicEDKey": "fixture-public-key"
+            ],
+            format: .xml,
+            options: 0
+        )
+        try plistData.write(to: bundleURL.appendingPathComponent("Info.plist"))
+        let bundle = try XCTUnwrap(Bundle(path: bundleURL.path))
+        let configuration = try XCTUnwrap(SparkleUpdateConfiguration.from(
+            bundle: bundle,
+            environment: ["SUPERMAC_UPDATE_FIXTURE_FEED_URL": "http://127.0.0.1:18765/appcast.xml"]
+        ))
+        let (servedFeed, response) = try await URLSession.shared.data(from: configuration.feedURL)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(XMLParser(data: servedFeed).parse(), "The served fixture must be parseable XML")
+
         let verifier = repositoryRoot.appendingPathComponent("scripts/verify-update-publication.sh")
         let verified = try run(verifier, [
             fixture.appendingPathComponent("appcast.xml").path,
@@ -86,11 +110,17 @@ final class UpdateReleaseScriptTests: XCTestCase {
     func testReleaseValidationAndOrchestrationFailClosedBeforeArtifacts() throws {
         let validator = repositoryRoot.appendingPathComponent("scripts/validate-update-release.sh")
         let common = ["/tmp/missing.app", "/tmp/missing.zip", "/tmp/missing.xml", "/tmp/missing.md"]
-        let arbitraryHTTPSFixture = try run(validator, common + [
-            "https://example.com/appcast.xml", "1", "2", "0.0.2", "/tmp/tools", "fixture", "--skip-apple-trust-for-fixture"
-        ])
-        XCTAssertNotEqual(arbitraryHTTPSFixture.status, 0)
-        XCTAssertTrue(arbitraryHTTPSFixture.output.contains("loopback feeds only"))
+        for maliciousFixtureURL in [
+            "https://example.com/appcast.xml",
+            "https://user:password@localhost/appcast.xml",
+            "https://localhost/appcast.xml#fragment"
+        ] {
+            let result = try run(validator, common + [
+                maliciousFixtureURL, "1", "2", "0.0.2", "/tmp/tools", "fixture", "--skip-apple-trust-for-fixture"
+            ])
+            XCTAssertNotEqual(result.status, 0)
+            XCTAssertTrue(result.output.contains("loopback feeds only"))
+        }
 
         let reusedBuild = try run(validator, common + [
             "https://updates.example.com/appcast.xml", "2", "2", "0.0.2", "/tmp/tools", "production"
@@ -104,6 +134,18 @@ final class UpdateReleaseScriptTests: XCTestCase {
         ])
         XCTAssertNotEqual(invalidBuild.status, 0)
         XCTAssertTrue(invalidBuild.output.contains("greater than"))
+
+        for maliciousProductionURL in [
+            "https:///appcast.xml",
+            "https://user:password@example.com/appcast.xml",
+            "https://example.com/appcast.xml#fragment"
+        ] {
+            let result = try run(orchestrator, [
+                "0.0.2", "2", "1", maliciousProductionURL, "public", "notary", "key", "/tmp/tools", "/tmp/output"
+            ])
+            XCTAssertNotEqual(result.status, 0)
+            XCTAssertTrue(result.output.contains("credential-free"))
+        }
     }
 
     private func run(_ executable: URL, _ arguments: [String]) throws -> (status: Int32, output: String) {

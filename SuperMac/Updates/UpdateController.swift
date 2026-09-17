@@ -85,6 +85,19 @@ final class UpdateInstallationSafetyPolicy {
     func updateApplicationTerminationReadiness(_ isReady: Bool) {
         isApplicationTerminationReady = isReady
     }
+
+    func performSynchronousCriticalOperation(
+        notify: () -> Void,
+        operation: () -> Void
+    ) {
+        updateApplicationTerminationReadiness(false)
+        notify()
+        defer {
+            updateApplicationTerminationReadiness(true)
+            notify()
+        }
+        operation()
+    }
 }
 
 extension DictationPhase {
@@ -96,10 +109,8 @@ extension DictationPhase {
     }
 }
 
-@MainActor
-final class UpdatePresentationCoordinator {
-    var focusStandardUpdateUI: () -> Void = {}
-    func updateFound() { focusStandardUpdateUI() }
+enum ScheduledUpdatePresentationPolicy {
+    static let usesSparkleStandardDriver = true
 }
 
 enum UpdateTelemetryStage: String, Equatable {

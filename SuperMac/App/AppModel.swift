@@ -165,12 +165,19 @@ final class AppModel {
         configure(owner: CapabilityShortcut.dictation.ownerID, capability: .dictation, binding: preferences.capabilityShortcut(for: .dictation)) { [weak self] in self?.handleDictationShortcut() }
         for action in SuperMacWindowAction.allCases {
             let owner = "window.\(action.rawValue)"
-            configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.windows.perform(action) }
+            configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
         }
         enabled.contains(.clipboardHistory) ? clipboard.start() : clipboard.stop()
         enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
         enabled.contains(.shortcutCoaching) ? detector.start() : detector.stop()
         refreshDetectorState()
+    }
+
+    private func performWindowAction(_ action: SuperMacWindowAction) {
+        updateSafetyPolicy.performSynchronousCriticalOperation(
+            notify: updater.installationSafetyDidChange,
+            operation: { windows.perform(action) }
+        )
     }
 
     private func configure(owner: String, capability: Capability, binding: ShortcutBinding?, handler: @escaping () -> Void) {

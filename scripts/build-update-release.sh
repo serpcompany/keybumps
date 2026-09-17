@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+source "${0:A:h}/lib/update-url-validation.sh"
 
 if (( $# != 9 )); then
   print -u2 "usage: $0 <version> <build> <previous-build> <feed-url> <public-key> <notary-keychain-profile> <sparkle-key-account> <sparkle-tools-directory> <output-directory>"
@@ -19,7 +20,7 @@ repository_root=${0:A:h:h}
 release_notes="$repository_root/docs/releases/v$release_version.md"
 
 [[ "$release_build" == <-> && "$previous_build" == <-> && "$release_build" -gt "$previous_build" ]] || { print -u2 "build must be an integer greater than previous-build"; exit 65; }
-[[ "$feed_url" == https://* ]] || { print -u2 "release feed must use public HTTPS"; exit 65; }
+update_url_is_production_https "$feed_url" || { print -u2 "release feed must be credential-free, fragment-free public HTTPS with a host"; exit 65; }
 [[ -n "$public_key" && -n "$notary_profile" && -n "$sparkle_key_account" ]] || { print -u2 "signing/notary configuration is incomplete"; exit 65; }
 [[ -f "$release_notes" ]] || { print -u2 "missing release notes: $release_notes"; exit 66; }
 [[ ! -e "$output_directory" ]] || { print -u2 "refusing to overwrite output directory: $output_directory"; exit 73; }

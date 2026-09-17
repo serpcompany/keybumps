@@ -81,7 +81,7 @@ enum UpdateControllerFactory {
 }
 
 @MainActor
-final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDelegate {
+final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
     private(set) var snapshot = UpdateSnapshot(
         status: .idle,
         automaticallyChecks: true,
@@ -92,7 +92,6 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
 
     private let configuration: SparkleUpdateConfiguration
     private let installCoordinator: SafeUpdateInstallCoordinator
-    private let presentationCoordinator: UpdatePresentationCoordinator
     private let telemetry: UpdateTelemetry
     private var updaterController: SPUStandardUpdaterController?
     private var started = false
@@ -100,12 +99,10 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     init(
         configuration: SparkleUpdateConfiguration,
         safetyPolicy: UpdateInstallationSafetyPolicy,
-        presentationCoordinator: UpdatePresentationCoordinator? = nil,
         telemetry: UpdateTelemetry = UpdateTelemetry()
     ) {
         self.configuration = configuration
         self.installCoordinator = SafeUpdateInstallCoordinator(safetyPolicy: safetyPolicy)
-        self.presentationCoordinator = presentationCoordinator ?? UpdatePresentationCoordinator()
         self.telemetry = telemetry
         super.init()
         installCoordinator.onStatusChange = { [weak self] status in self?.apply(status) }
@@ -117,11 +114,8 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         let controller = SPUStandardUpdaterController(
             startingUpdater: false,
             updaterDelegate: self,
-            userDriverDelegate: nil
+            userDriverDelegate: self
         )
-        presentationCoordinator.focusStandardUpdateUI = { [weak controller] in
-            DispatchQueue.main.async { controller?.userDriver.showUpdateInFocus() }
-        }
         updaterController = controller
         controller.startUpdater()
         controller.updater.automaticallyDownloadsUpdates = true
@@ -164,7 +158,13 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         apply(.available(version: item.displayVersionString))
-        presentationCoordinator.updateFound()
+    }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem,
+        andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        ScheduledUpdatePresentationPolicy.usesSparkleStandardDriver
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {

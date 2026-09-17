@@ -41,3 +41,5 @@ scripts/verify-update-publication.sh /absolute/path/to/fixture-releases/appcast.
 ```
 
 Build N with the staged public key, launch it with `SUPERMAC_UPDATE_FIXTURE_FEED_URL=http://127.0.0.1:8765/appcast.xml`, and exercise the standard Sparkle flow. Local fixture proof is separate from Developer ID/notarized staged acceptance; only the latter is release evidence.
+
+Automated tests prove loopback-only configuration, served-feed parsing, publication byte equivalence, appcast structure, cryptographic tooling, and deterministic app-shell states. Sparkle's actual replacement of an installed application bundle cannot be faithfully simulated from the unit-test host: the remaining live gate is an installed, Developer ID-signed and notarized N→N+1 run from `/Applications`, including Dictation deferral and tamper rejection.

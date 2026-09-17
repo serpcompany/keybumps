@@ -287,14 +287,26 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(resumeCount, 1, "The postponed Sparkle continuation must be resumed once")
     }
 
-    func testAutomaticDiscoveryFocusesSparklesStandardPresentationSeam() {
-        let presentation = UpdatePresentationCoordinator()
-        var focusCount = 0
-        presentation.focusStandardUpdateUI = { focusCount += 1 }
+    func testScheduledDiscoveryUsesSparklesStandardPresentation() {
+        XCTAssertTrue(ScheduledUpdatePresentationPolicy.usesSparkleStandardDriver)
+    }
 
-        presentation.updateFound()
+    func testSynchronousCriticalOperationUsesSharedTerminationGate() {
+        let policy = UpdateInstallationSafetyPolicy()
+        var safetyChanges: [Bool] = []
+        var operationRan = false
 
-        XCTAssertEqual(focusCount, 1)
+        policy.performSynchronousCriticalOperation(
+            notify: { safetyChanges.append(policy.isSafeToInstall) },
+            operation: {
+                operationRan = true
+                XCTAssertFalse(policy.isSafeToInstall)
+            }
+        )
+
+        XCTAssertTrue(operationRan)
+        XCTAssertEqual(safetyChanges, [false, true])
+        XCTAssertTrue(policy.isSafeToInstall)
     }
 
     func testUpdaterTelemetryContainsOnlyStructuralFields() {

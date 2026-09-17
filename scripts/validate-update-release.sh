@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+source "${0:A:h}/lib/update-url-validation.sh"
 
 if (( $# < 10 || $# > 11 )); then
   print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture]"
@@ -24,9 +25,9 @@ generate_keys_tool="$sparkle_tools_directory/generate_keys"
 
 [[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
 if [[ "$fixture_mode" == --skip-apple-trust-for-fixture ]]; then
-  [[ "$feed_url" == http://127.0.0.1:*/* || "$feed_url" == https://127.0.0.1:*/* || "$feed_url" == http://localhost:*/* || "$feed_url" == https://localhost:*/* || "$feed_url" == http://\[::1\]:*/* || "$feed_url" == https://\[::1\]:*/* ]] || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
+  update_url_is_loopback_fixture "$feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
 else
-  [[ "$feed_url" == https://* ]] || { print -u2 "production feed URL must use HTTPS"; exit 65; }
+  update_url_is_production_https "$feed_url" || { print -u2 "production feed URL must be credential-free, fragment-free HTTPS with a host"; exit 65; }
 fi
 [[ "$previous_build" == <-> && "$expected_build" == <-> && "$expected_build" -gt "$previous_build" ]] || {
   print -u2 "CFBundleVersion must be an integer greater than the previously published build"
@@ -67,11 +68,15 @@ keychain_public_key=$("$generate_keys_tool" --account "$keychain_account" -p | g
 enclosure_url=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='enclosure']/@url)" "$appcast_path")
 enclosure_signature=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='enclosure']/@*[local-name()='edSignature'])" "$appcast_path")
 enclosure_length=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='enclosure']/@length)" "$appcast_path")
+release_notes_url=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='releaseNotesLink'])" "$appcast_path")
+release_notes_signature=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='releaseNotesLink']/@*[local-name()='edSignature'])" "$appcast_path")
+release_notes_length=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='releaseNotesLink']/@*[local-name()='length'])" "$appcast_path")
 appcast_version=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='version'])" "$appcast_path")
 appcast_short_version=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='shortVersionString'])" "$appcast_path")
 minimum_system_version=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='minimumSystemVersion'])" "$appcast_path")
 hardware_requirements=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='hardwareRequirements'])" "$appcast_path")
 [[ -n "$enclosure_url" && -n "$enclosure_signature" && -n "$enclosure_length" ]] || { print -u2 "appcast enclosure metadata is incomplete"; exit 70; }
+[[ -n "$release_notes_url" && -n "$release_notes_signature" && -n "$release_notes_length" ]] || { print -u2 "appcast linked release-note metadata is incomplete"; exit 70; }
 [[ "$appcast_version" == "$expected_build" ]] || { print -u2 "appcast build mismatch"; exit 70; }
 [[ "$appcast_short_version" == "$expected_version" ]] || { print -u2 "appcast marketing version mismatch"; exit 70; }
 [[ "$minimum_system_version" == 14.2 || "$minimum_system_version" == 14.2.0 ]] || { print -u2 "minimum macOS requirement missing"; exit 70; }
@@ -80,13 +85,18 @@ hardware_requirements=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'
 actual_size=$(/usr/bin/stat -f '%z' "$archive_path")
 [[ "$enclosure_length" == "$actual_size" ]] || { print -u2 "appcast archive length does not match the local archive"; exit 70; }
 "$sign_update_tool" --account "$keychain_account" --verify "$archive_path" "$enclosure_signature"
+actual_notes_size=$(/usr/bin/stat -f '%z' "$release_notes_path")
+[[ "$release_notes_length" == "$actual_notes_size" ]] || { print -u2 "appcast release-note length does not match local notes"; exit 70; }
+"$sign_update_tool" --account "$keychain_account" --verify "$release_notes_path" "$release_notes_signature"
 
 expected_checksum=$(awk 'NR == 1 { print $1 }' "$checksum_path")
 actual_checksum=$(/usr/bin/shasum -a 256 "$archive_path" | awk '{ print $1 }')
 [[ "$expected_checksum" == "$actual_checksum" ]] || { print -u2 "SHA-256 checksum does not match the archive"; exit 70; }
 
 archive_name=${archive_path:t}
+release_notes_name=${release_notes_path:t}
 [[ "$enclosure_url" == *"$archive_name" ]] || { print -u2 "appcast does not reference $archive_name"; exit 70; }
+[[ "$release_notes_url" == *"$release_notes_name" ]] || { print -u2 "appcast does not reference $release_notes_name"; exit 70; }
 grep -q 'sparkle:edSignature=' "$appcast_path" || { print -u2 "missing update signature"; exit 70; }
 grep -q '<!-- sparkle-signatures:' "$appcast_path" || { print -u2 "appcast feed itself is not signed"; exit 70; }
 
