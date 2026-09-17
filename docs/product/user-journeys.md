@@ -151,7 +151,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 
 1. The app is visible in the Dock and application switcher by default.
 2. The menu-bar item contains Settings, the disabled local-preview update item, and Quit SuperMac.
-3. Closing Settings leaves the companion running; clicking the Dock icon or the menu-bar Settings item recreates, raises, and focuses the window.
+3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; clicking the Dock icon, menu-bar Settings item, or Command-comma recreates, raises, and focuses the single Settings window.
 4. SuperMac registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.
 

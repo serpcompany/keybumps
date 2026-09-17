@@ -84,6 +84,12 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
     }
 
+    func testClosingTheSettingsWindowKeepsTheCompanionRunning() {
+        let delegate = AppDelegate(mainWindowRouter: MainWindowRouter())
+
+        XCTAssertFalse(delegate.applicationShouldTerminateAfterLastWindowClosed(.shared))
+    }
+
     func testWindowShortcutCustomizationPersistsAndMovesDuplicateBinding() {
         let suite = "SuperMacWindowShortcuts-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
