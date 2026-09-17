@@ -1,0 +1,15 @@
+<!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires updating signatures in appcasts that reference this file! This will involve re-running generate_appcast or sign_update.
+-->
+# SuperMac 0.0.2-beta.1
+
+First updater-enabled bridge release.
+
+- Adds automatic signed update checks and background downloads.
+- Adds standard release notes and Restart to Update behavior.
+- Defers relaunch during Dictation and Window Management activity.
+- Adds Recent Items, individual recent-item deletion, and learned application ranking.
+- Standardizes Command Palette search, copy, and Clear All controls.
+- Improves Key Bumps presentations, permission recovery, and menu-bar behavior.
+
+Existing `v0.0.1-beta.1` installations require this one manual DMG installation. Later compatible releases can update automatically.

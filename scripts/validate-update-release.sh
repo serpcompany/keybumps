@@ -2,8 +2,8 @@
 set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
 
-if (( $# < 10 || $# > 11 )); then
-  print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture]"
+if (( $# < 11 || $# > 12 )); then
+  print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <embedded-feed-url> <publication-feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture]"
   exit 64
 fi
 
@@ -11,13 +11,14 @@ app_path=${1:A}
 archive_path=${2:A}
 appcast_path=${3:A}
 release_notes_path=${4:A}
-feed_url=$5
-previous_build=$6
-expected_build=$7
-expected_version=$8
-sparkle_tools_directory=${9:A}
-keychain_account=${10}
-fixture_mode=${11:-}
+embedded_feed_url=$5
+publication_feed_url=$6
+previous_build=$7
+expected_build=$8
+expected_version=$9
+sparkle_tools_directory=${10:A}
+keychain_account=${11}
+fixture_mode=${12:-}
 info_plist="$app_path/Contents/Info.plist"
 checksum_path="$archive_path.sha256"
 sign_update_tool="$sparkle_tools_directory/sign_update"
@@ -25,9 +26,11 @@ generate_keys_tool="$sparkle_tools_directory/generate_keys"
 
 [[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
 if [[ "$fixture_mode" == --skip-apple-trust-for-fixture ]]; then
-  update_url_is_loopback_fixture "$feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
+  update_url_is_loopback_fixture "$embedded_feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
+  update_url_is_loopback_fixture "$publication_feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
 else
-  update_url_is_production_https "$feed_url" || { print -u2 "production feed URL must be credential-free, fragment-free HTTPS with a host"; exit 65; }
+  update_url_is_production_https "$embedded_feed_url" || { print -u2 "embedded feed URL must be credential-free, fragment-free HTTPS with a host"; exit 65; }
+  update_url_is_production_https "$publication_feed_url" || { print -u2 "publication feed URL must be credential-free, fragment-free HTTPS with a host"; exit 65; }
 fi
 [[ "$previous_build" == <-> && "$expected_build" == <-> && "$expected_build" -gt "$previous_build" ]] || {
   print -u2 "CFBundleVersion must be an integer greater than the previously published build"
@@ -47,7 +50,7 @@ public_key=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info_plist")
 [[ "$actual_bundle" == com.serp.supermac ]] || { print -u2 "bundle identity changed: $actual_bundle"; exit 70; }
 [[ "$actual_build" == "$expected_build" ]] || { print -u2 "unexpected build: $actual_build"; exit 70; }
 [[ "$actual_version" == "$expected_version" ]] || { print -u2 "unexpected version: $actual_version"; exit 70; }
-[[ "$actual_feed" == "$feed_url" ]] || { print -u2 "app feed URL does not match publication feed"; exit 70; }
+[[ "$actual_feed" == "$embedded_feed_url" ]] || { print -u2 "app feed URL does not match expected embedded feed"; exit 70; }
 [[ -n "$public_key" ]] || { print -u2 "missing Sparkle public key"; exit 70; }
 
 if [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
@@ -97,6 +100,9 @@ archive_name=${archive_path:t}
 release_notes_name=${release_notes_path:t}
 [[ "$enclosure_url" == *"$archive_name" ]] || { print -u2 "appcast does not reference $archive_name"; exit 70; }
 [[ "$release_notes_url" == *"$release_notes_name" ]] || { print -u2 "appcast does not reference $release_notes_name"; exit 70; }
+publication_parent=$(update_url_parent_prefix "$publication_feed_url")
+[[ "$enclosure_url" == "$publication_parent"* ]] || { print -u2 "appcast archive URL is outside the publication feed directory"; exit 70; }
+[[ "$release_notes_url" == "$publication_parent"* ]] || { print -u2 "appcast release-note URL is outside the publication feed directory"; exit 70; }
 grep -q 'sparkle:edSignature=' "$appcast_path" || { print -u2 "missing update signature"; exit 70; }
 grep -q '<!-- sparkle-signatures:' "$appcast_path" || { print -u2 "appcast feed itself is not signed"; exit 70; }
 

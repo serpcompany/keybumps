@@ -118,14 +118,14 @@ final class UpdateReleaseScriptTests: XCTestCase {
             "http://local host/appcast.xml"
         ] {
             let result = try run(validator, common + [
-                maliciousFixtureURL, "1", "2", "0.0.2", "/tmp/tools", "fixture", "--skip-apple-trust-for-fixture"
+                maliciousFixtureURL, maliciousFixtureURL, "1", "2", "0.0.2", "/tmp/tools", "fixture", "--skip-apple-trust-for-fixture"
             ])
             XCTAssertNotEqual(result.status, 0)
             XCTAssertTrue(result.output.contains("loopback feeds only"))
         }
 
         let reusedBuild = try run(validator, common + [
-            "https://updates.example.com/appcast.xml", "2", "2", "0.0.2", "/tmp/tools", "production"
+            "https://updates.example.com/appcast.xml", "https://staging.example.com/appcast.xml", "2", "2", "0.0.2", "/tmp/tools", "production"
         ])
         XCTAssertNotEqual(reusedBuild.status, 0)
         XCTAssertTrue(reusedBuild.output.contains("greater than"))
