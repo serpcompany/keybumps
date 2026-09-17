@@ -217,7 +217,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             let element = frontier.removeFirst()
             visited += 1
             if (attribute(kAXRoleAttribute, from: element) as String?) == kAXMenuItemRole as String,
-               (attribute(kAXEnabledAttribute, from: element) as Bool?) != false,
+               (attribute(kAXEnabledAttribute, from: element) as Bool?) == true,
                let title: String = attribute(kAXTitleAttribute, from: element),
                let shortcut = LiveShortcutObservation(evidence: AXShortcutEvidenceReader.read(from: element)) {
                 observations.append((title, shortcut))
