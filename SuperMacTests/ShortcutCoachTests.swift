@@ -812,11 +812,143 @@ final class ShortcutCoachTests: XCTestCase {
         }
     }
 
-    func testShortcutFormatterUsesAccessibilityModifierBits() {
-        XCTAssertEqual(ShortcutFormatter.format(command: "n", modifiers: 0), "⌘N")
-        XCTAssertEqual(ShortcutFormatter.format(command: "t", modifiers: 1), "⇧⌘T")
-        XCTAssertEqual(ShortcutFormatter.format(command: "f", modifiers: 2 | 4), "⌃⌥⌘F")
-        XCTAssertEqual(ShortcutFormatter.format(command: "a", modifiers: 8), "A")
+    func testCanonicalShortcutRegistryResolvesReportedVSCodeFailures() {
+        let fixtures: [(String, AXShortcutEvidence, String)] = [
+            (
+                "Move Line Down",
+                AXShortcutEvidence(commandCharacter: "\u{F701}", modifiers: 2 | 8, commandGlyph: 0x6A, virtualKey: 0x7D),
+                "⌥↓"
+            ),
+            (
+                "Select Previous Tab",
+                AXShortcutEvidence(commandCharacter: "\t", modifiers: 1 | 4 | 8, commandGlyph: 0x02, virtualKey: 0x30),
+                "⌃⇧⇥"
+            ),
+            (
+                "Emmet: Expand Abbreviation",
+                AXShortcutEvidence(commandCharacter: "\t", modifiers: 8, commandGlyph: 0x02, virtualKey: 0x30),
+                "⇥"
+            )
+        ]
+
+        for (action, evidence, expected) in fixtures {
+            XCTAssertEqual(
+                KeyboardShortcutRegistry.resolve(evidence)?.displayString,
+                expected,
+                action
+            )
+        }
+    }
+
+    func testCanonicalShortcutRegistryUppercasesMenuLettersWithoutInventingShift() {
+        let shortcut = KeyboardShortcutRegistry.resolve(
+            AXShortcutEvidence(commandCharacter: "a", modifiers: 0, commandGlyph: nil, virtualKey: nil)
+        )
+
+        XCTAssertEqual(shortcut?.displayString, "⌘A")
+        XCTAssertEqual(shortcut?.keycapTokens, ["⌘", "A"])
+        XCTAssertEqual(shortcut?.accessibilityDescription, "Command A")
+    }
+
+    func testCanonicalShortcutRegistrySuppressesUnknownAndIncompleteEvidence() {
+        XCTAssertNil(
+            KeyboardShortcutRegistry.resolve(
+                AXShortcutEvidence(commandCharacter: "\u{F7FF}", modifiers: 0, commandGlyph: 0xFFFF, virtualKey: 0xFFFF)
+            )
+        )
+        XCTAssertNil(
+            KeyboardShortcutRegistry.resolve(
+                AXShortcutEvidence(commandCharacter: nil, modifiers: 0, commandGlyph: nil, virtualKey: nil)
+            )
+        )
+        XCTAssertNil(
+            KeyboardShortcutRegistry.resolve(
+                AXShortcutEvidence(commandCharacter: "a", modifiers: nil, commandGlyph: nil, virtualKey: nil)
+            )
+        )
+    }
+
+    func testKeyboardGlyphLegendIsGeneratedFromRuntimeRegistry() throws {
+        let downArrow = try XCTUnwrap(
+            KeyboardShortcutRegistry.legendEntries.first(where: { $0.semanticKey == .downArrow })
+        )
+        let resolved = try XCTUnwrap(
+            KeyboardShortcutRegistry.resolve(
+                AXShortcutEvidence(commandCharacter: "\u{F701}", modifiers: 8, commandGlyph: 0x6A, virtualKey: 0x7D)
+            )
+        )
+
+        XCTAssertEqual(downArrow.symbol, resolved.primaryKey.renderedSymbol)
+        XCTAssertEqual(downArrow.name, "Down Arrow")
+        XCTAssertTrue(KeyboardShortcutRegistry.legendEntries.contains { $0.name == "Tab Right" && $0.symbol == "⇥" })
+        XCTAssertTrue(KeyboardShortcutRegistry.legendEntries.contains { $0.name == "Escape (Esc)" && $0.symbol == "⎋" })
+        XCTAssertEqual(
+            Set(KeyboardShortcutRegistry.legendEntries.map(\.semanticKey)).count,
+            KeyboardShortcutRegistry.legendEntries.count
+        )
+    }
+
+    func testEveryAcceptedRegistryInputResolvesToItsDeclaredSemanticKey() throws {
+        XCTAssertFalse(KeyboardShortcutRegistry.validationFixtures.isEmpty)
+        for fixture in KeyboardShortcutRegistry.validationFixtures {
+            let shortcut = try XCTUnwrap(
+                KeyboardShortcutRegistry.resolve(fixture.evidence),
+                "Expected registry fixture \(fixture.semanticKey) to resolve"
+            )
+            XCTAssertEqual(shortcut.primaryKey.semanticKey, fixture.semanticKey)
+            XCTAssertFalse(shortcut.primaryKey.renderedSymbol.isEmpty)
+            XCTAssertFalse(shortcut.primaryKey.officialName.isEmpty)
+        }
+    }
+
+    func testAccessibilityModifierMaskUsesOneCanonicalOrderAndNoCommandSemantics() {
+        let character = "k"
+        XCTAssertEqual(
+            ShortcutFormatter.format(command: character, modifiers: 0),
+            "⌘K"
+        )
+        XCTAssertEqual(
+            ShortcutFormatter.format(command: character, modifiers: 1 | 2 | 4),
+            "⌃⌥⇧⌘K"
+        )
+        XCTAssertEqual(
+            ShortcutFormatter.format(command: character, modifiers: 1 | 2 | 4 | 8),
+            "⌃⌥⇧K"
+        )
+    }
+
+    func testCanonicalRegistryCoversPrintableLettersDigitsAndPunctuation() {
+        for (input, expected) in [("z", "⌘Z"), ("7", "⌘7"), ("/", "⌘/"), ("[", "⌘[")] {
+            XCTAssertEqual(
+                ShortcutFormatter.format(command: input, modifiers: 0),
+                expected
+            )
+        }
+    }
+
+    func testCanonicalShortcutFansOutUnchangedToHistoryNativeCopyKeycapsAndAccessibility() throws {
+        let canonical = try XCTUnwrap(
+            KeyboardShortcutRegistry.resolve(
+                AXShortcutEvidence(commandCharacter: "\u{F701}", modifiers: 2 | 8, commandGlyph: 0x6A, virtualKey: 0x7D)
+            )
+        )
+        let event = CoachingEvent(
+            applicationName: "Visual Studio Code",
+            actionTitle: "Move Line Down",
+            shortcut: canonical.displayString
+        )
+
+        XCTAssertEqual(CoachingEventRowPresentation(event: event).shortcut, "⌥↓")
+        XCTAssertEqual(event.coachingBody, "Visual Studio Code · ⌥↓")
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: event.shortcut).keys, ["⌥", "↓"])
+        XCTAssertEqual(
+            KeyboardShortcutRegistry.accessibilityDescription(for: event.shortcut),
+            "Option Down Arrow"
+        )
+        XCTAssertEqual(
+            KeyboardShortcutRegistry.legendEntries.first(where: { $0.semanticKey == .downArrow })?.symbol,
+            canonical.primaryKey.renderedSymbol
+        )
     }
 
     func testCoachingCopyUsesTheDetectedEvent() {
@@ -825,8 +957,9 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(event.coachingBody, "Safari · ⌘T")
     }
 
-    func testShortcutKeycapsUseLowercaseLettersUnlessShiftIsPresent() {
-        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⌘N").keys, ["⌘", "n"])
+    func testShortcutKeycapsUseCanonicalRegistryCapitalization() {
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⌘N").keys, ["⌘", "N"])
         XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⇧⌘N").keys, ["⇧", "⌘", "N"])
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⌃⇧⇥").keys, ["⌃", "⇧", "⇥"])
     }
 }

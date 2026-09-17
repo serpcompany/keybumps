@@ -23,6 +23,37 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
     let actions: [String]
     let frame: AXFrameSnapshot?
     let menuShortcut: String?
+    let menuShortcutEvidence: AXShortcutEvidence?
+
+    init(
+        token: String,
+        role: String?,
+        subrole: String?,
+        title: String?,
+        elementDescription: String?,
+        identifier: String?,
+        value: String?,
+        selected: Bool?,
+        enabled: Bool?,
+        actions: [String],
+        frame: AXFrameSnapshot?,
+        menuShortcut: String?,
+        menuShortcutEvidence: AXShortcutEvidence? = nil
+    ) {
+        self.token = token
+        self.role = role
+        self.subrole = subrole
+        self.title = title
+        self.elementDescription = elementDescription
+        self.identifier = identifier
+        self.value = value
+        self.selected = selected
+        self.enabled = enabled
+        self.actions = actions
+        self.frame = frame
+        self.menuShortcut = menuShortcut
+        self.menuShortcutEvidence = menuShortcutEvidence
+    }
 }
 
 struct AccessibilitySnapshot: Codable, Equatable, Sendable {
@@ -83,6 +114,14 @@ final class AccessibilitySnapshotter {
         let actions = AXUIElementCopyActionNames(element, &actionNames) == .success ? (actionNames as? [String] ?? []) : []
         let command: String? = attribute(kAXMenuItemCmdCharAttribute, from: element)
         let modifiers: NSNumber? = attribute(kAXMenuItemCmdModifiersAttribute, from: element)
+        let glyph: NSNumber? = attribute(kAXMenuItemCmdGlyphAttribute, from: element)
+        let virtualKey: NSNumber? = attribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)
+        let shortcutEvidence = AXShortcutEvidence(
+            commandCharacter: command,
+            modifiers: modifiers?.intValue,
+            commandGlyph: glyph?.intValue,
+            virtualKey: virtualKey?.intValue
+        )
         return AXNodeSnapshot(
             token: token(for: element), role: attribute(kAXRoleAttribute, from: element),
             subrole: attribute(kAXSubroleAttribute, from: element), title: attribute(kAXTitleAttribute, from: element),
@@ -90,7 +129,8 @@ final class AccessibilitySnapshotter {
             value: valueString, selected: selected ?? ((rawValue as? NSNumber)?.boolValue),
             enabled: attribute(kAXEnabledAttribute, from: element), actions: actions.sorted(),
             frame: position.flatMap { origin in size.map { AXFrameSnapshot(x: origin.x, y: origin.y, width: $0.width, height: $0.height) } },
-            menuShortcut: command.map { ShortcutFormatter.format(command: $0, modifiers: modifiers?.intValue ?? 0) }
+            menuShortcut: KeyboardShortcutRegistry.resolve(shortcutEvidence)?.displayString,
+            menuShortcutEvidence: shortcutEvidence
         )
     }
 

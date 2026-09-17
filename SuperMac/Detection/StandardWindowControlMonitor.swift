@@ -323,11 +323,21 @@ final class StandardWindowControlMonitor {
             if (attribute(kAXRoleAttribute, from: element) as String?) == kAXMenuItemRole as String,
                (!requireEnabled || (attribute(kAXEnabledAttribute, from: element) as Bool?) != false),
                let title: String = attribute(kAXTitleAttribute, from: element),
-               menuTitle(title, matches: kind, state: state),
-               let command: String = attribute(kAXMenuItemCmdCharAttribute, from: element) {
+               menuTitle(title, matches: kind, state: state) {
+                let command: String? = attribute(kAXMenuItemCmdCharAttribute, from: element)
                 let modifiers: NSNumber? = attribute(kAXMenuItemCmdModifiersAttribute, from: element)
-                let raw = modifiers?.intValue ?? 0
-                if raw & ~0x0F == 0 { matches.append(ShortcutFormatter.format(command: command, modifiers: raw)) }
+                let glyph: NSNumber? = attribute(kAXMenuItemCmdGlyphAttribute, from: element)
+                let virtualKey: NSNumber? = attribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)
+                if let shortcut = KeyboardShortcutRegistry.resolve(
+                    AXShortcutEvidence(
+                        commandCharacter: command,
+                        modifiers: modifiers?.intValue,
+                        commandGlyph: glyph?.intValue,
+                        virtualKey: virtualKey?.intValue
+                    )
+                ) {
+                    matches.append(shortcut.displayString)
+                }
             }
             let children: [AXUIElement] = attribute(kAXChildrenAttribute, from: element) ?? []
             frontier.append(contentsOf: children)

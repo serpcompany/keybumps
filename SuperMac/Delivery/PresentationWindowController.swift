@@ -353,7 +353,7 @@ struct CoachingPresentationView: View {
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Key Bump. \(event.coachingTitle). \(event.applicationName). Shortcut \(event.shortcut).")
+        .accessibilityLabel(accessibilityCopy)
     }
 
     private var coachingCopy: some View {
@@ -364,6 +364,13 @@ struct CoachingPresentationView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+
+    private var accessibilityCopy: String {
+        let shortcut = KeyboardShortcutRegistry.accessibilityDescription(for: event.shortcut)
+            .map { "Shortcut \($0)" }
+            ?? "Shortcut unavailable"
+        return "Key Bump. \(event.coachingTitle). \(event.applicationName). \(shortcut)."
     }
 }
 

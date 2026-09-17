@@ -2,27 +2,11 @@ import SwiftUI
 
 struct ShortcutKeycapPresentation: Equatable {
     let keys: [String]
+    let accessibilityDescription: String?
 
     init(shortcut: String) {
-        let modifiers = Set(["⌘", "⌥", "⌃", "⇧"])
-        var keys: [String] = []
-        var current = ""
-        for character in shortcut {
-            let value = String(character)
-            if modifiers.contains(value) {
-                if !current.isEmpty {
-                    keys.append(current)
-                    current = ""
-                }
-                keys.append(value)
-            } else {
-                current.append(character)
-            }
-        }
-        if !current.isEmpty {
-            keys.append(keys.contains("⇧") ? current.uppercased() : current.lowercased())
-        }
-        self.keys = keys
+        keys = KeyboardShortcutRegistry.keycapTokens(for: shortcut)
+        accessibilityDescription = KeyboardShortcutRegistry.accessibilityDescription(for: shortcut)
     }
 }
 
@@ -31,9 +15,9 @@ struct ShortcutKeycaps: View {
     var compact = false
 
     var body: some View {
-        let keys = ShortcutKeycapPresentation(shortcut: shortcut).keys
+        let presentation = ShortcutKeycapPresentation(shortcut: shortcut)
         HStack(spacing: compact ? 3 : 6) {
-            ForEach(keys, id: \.self) { key in
+            ForEach(presentation.keys, id: \.self) { key in
                 Text(key)
                     .font(.system(size: compact ? 11 : 15, weight: .semibold, design: .rounded))
                     .frame(
@@ -45,7 +29,13 @@ struct ShortcutKeycaps: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Shortcut \(shortcut)")
+        .accessibilityLabel(
+            presentationAccessibilityLabel(presentation.accessibilityDescription)
+        )
+    }
+
+    private func presentationAccessibilityLabel(_ description: String?) -> String {
+        description.map { "Shortcut \($0)" } ?? "Shortcut unavailable"
     }
 }
 
@@ -77,7 +67,16 @@ struct CoachingEventRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(presentation.actionTitle) in \(presentation.applicationName). Shortcut \(presentation.shortcut).")
+        .accessibilityLabel(
+            "\(presentation.actionTitle) in \(presentation.applicationName). \(shortcutAccessibilityCopy)."
+        )
+    }
+
+    private var shortcutAccessibilityCopy: String {
+        guard let description = KeyboardShortcutRegistry.accessibilityDescription(for: event.shortcut) else {
+            return "Shortcut unavailable"
+        }
+        return "Shortcut \(description)"
     }
 }
 
