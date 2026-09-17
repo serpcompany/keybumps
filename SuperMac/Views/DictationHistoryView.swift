@@ -242,14 +242,15 @@ struct DictationHistoryCard: View {
                         if let primaryActionTitle, let primaryAction {
                             Button(primaryActionTitle, systemImage: "return", action: primaryAction)
                                 .buttonStyle(.borderless)
-                                .help("Paste transcript")
-                                .accessibilityLabel("Paste transcript")
+                                .help("\(primaryActionTitle) transcript")
+                                .accessibilityLabel("\(primaryActionTitle) transcript")
+                        } else {
+                            Button(action: copy) { Image(systemName: "doc.on.doc") }
+                                .buttonStyle(.borderless)
+                                .disabled(entry.text.isEmpty)
+                                .help("Copy transcript")
+                                .accessibilityLabel("Copy transcript")
                         }
-                        Button(action: copy) { Image(systemName: "doc.on.doc") }
-                            .buttonStyle(.borderless)
-                            .disabled(entry.text.isEmpty)
-                            .help("Copy transcript")
-                            .accessibilityLabel("Copy transcript")
                         if #available(macOS 15.0, *) {
                             Button {
                                 showsTranslation = true

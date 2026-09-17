@@ -45,19 +45,17 @@ final class QuickSearchRouter {
 }
 
 @MainActor
-final class NativeStatusItemController: NSObject {
+final class NativeStatusItemController: NSObject, NSMenuDelegate {
     static let shared = NativeStatusItemController()
 
     private var statusItem: NSStatusItem?
     private let router: MainWindowRouter
-    private let quickSearchRouter: QuickSearchRouter
+    private var quickSearchIsVisible: () -> Bool = { false }
+    private var setQuickSearchVisible: (Bool) -> Void = { _ in }
+    private var quickSearchWasVisibleWhenMenuOpened = false
 
-    init(
-        router: MainWindowRouter? = nil,
-        quickSearchRouter: QuickSearchRouter? = nil
-    ) {
+    init(router: MainWindowRouter? = nil) {
         self.router = router ?? .shared
-        self.quickSearchRouter = quickSearchRouter ?? .shared
         super.init()
     }
 
@@ -65,8 +63,12 @@ final class NativeStatusItemController: NSObject {
         router.configure(action)
     }
 
-    func configureOpenQuickSearch(_ action: @escaping () -> Void) {
-        quickSearchRouter.configure(action)
+    func configureQuickSearch(
+        isVisible: @escaping () -> Bool,
+        setVisible: @escaping (Bool) -> Void
+    ) {
+        quickSearchIsVisible = isVisible
+        setQuickSearchVisible = setVisible
     }
 
     func install() {
@@ -78,42 +80,37 @@ final class NativeStatusItemController: NSObject {
             StatusItemBranding.configure(
                 button,
                 target: self,
-                action: #selector(handleStatusItemClick(_:))
+                action: #selector(toggleQuickSearch)
             )
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
+        item.menu = makeMenu()
         statusItem = item
-    }
-
-    @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
-        if NSApplication.shared.currentEvent?.type == .rightMouseUp {
-            showMenu(from: sender)
-        } else {
-            DispatchQueue.main.async { [weak self] in
-                self?.openQuickSearch()
-            }
-        }
-    }
-
-    private func showMenu(from sender: NSStatusBarButton) {
-        let menu = makeMenu()
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Open Quick Search", action: #selector(openQuickSearch), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
-        let updates = menu.addItem(withTitle: "Check for Updates (Not Configured)", action: nil, keyEquivalent: "")
+        menu.delegate = self
+        menu.autoenablesItems = false
+        menu.addItem(withTitle: "Toggle SuperMac", action: #selector(toggleQuickSearch), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        let version = menu.addItem(withTitle: AppVersionDisplay.title(), action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        let updates = menu.addItem(withTitle: "Check for Updates…", action: nil, keyEquivalent: "")
         updates.isEnabled = false
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit SuperMac", action: #selector(quit), keyEquivalent: "q").target = self
         return menu
     }
 
-    @objc func openQuickSearch() {
-        quickSearchRouter.open()
+    @objc func toggleQuickSearch() {
+        setQuickSearchVisible(!quickSearchWasVisibleWhenMenuOpened)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        quickSearchWasVisibleWhenMenuOpened = quickSearchIsVisible()
     }
 
     @objc func openSettings() {

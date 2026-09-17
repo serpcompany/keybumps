@@ -71,7 +71,7 @@ final class SuperMacFeatureTests: XCTestCase {
         router.configure { openCount += 1 }
         let statusController = NativeStatusItemController(router: router)
 
-        statusController.makeMenu().performActionForItem(at: 1)
+        statusController.makeMenu().performActionForItem(at: 5)
         XCTAssertTrue(router.open()) // Command-comma uses this same route.
 
         XCTAssertEqual(openCount, 2)
@@ -82,20 +82,33 @@ final class SuperMacFeatureTests: XCTestCase {
     }
 
     func testStatusItemOffersAndRoutesQuickSearchSeparatelyFromSettings() {
-        let quickSearchRouter = QuickSearchRouter()
-        let controller = NativeStatusItemController(
-            router: MainWindowRouter(),
-            quickSearchRouter: quickSearchRouter
+        let controller = NativeStatusItemController(router: MainWindowRouter())
+        var quickSearchVisible = false
+        controller.configureQuickSearch(
+            isVisible: { quickSearchVisible },
+            setVisible: { quickSearchVisible = $0 }
         )
-        var quickSearchOpenCount = 0
-        controller.configureOpenQuickSearch { quickSearchOpenCount += 1 }
 
         let menu = controller.makeMenu()
-        XCTAssertEqual(menu.items.prefix(2).map(\.title), ["Open Quick Search", "Settings…"])
+        XCTAssertEqual(
+            menu.items.filter { !$0.isSeparatorItem }.map(\.title),
+            [
+                "Toggle SuperMac",
+                AppVersionDisplay.title(),
+                "Check for Updates…",
+                "Settings…",
+                "Quit SuperMac"
+            ]
+        )
+        XCTAssertFalse(menu.items[2].isEnabled)
+        XCTAssertFalse(menu.items[3].isEnabled)
+        controller.menuWillOpen(menu)
         menu.performActionForItem(at: 0)
-        controller.openQuickSearch()
+        XCTAssertTrue(quickSearchVisible)
 
-        XCTAssertEqual(quickSearchOpenCount, 2)
+        controller.menuWillOpen(menu)
+        controller.toggleQuickSearch()
+        XCTAssertFalse(quickSearchVisible)
     }
 
     func testDockReopenDefaultsToQuickSearchInsteadOfSettings() async {
@@ -840,6 +853,8 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
         XCTAssertNil(CommandPaletteTab.keyBumps.primaryActionTitle)
+        XCTAssertEqual(CommandPaletteTab.clipboard.primaryActionTitle, "Copy")
+        XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.clipboard.prompt, "Search clipboard history")
         XCTAssertEqual(CommandPaletteTab.dictation.prompt, "Search dictation history")
         XCTAssertEqual(CommandPaletteTab.keyBumps.prompt, "Search Key Bumps history")
@@ -854,48 +869,62 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(state.selection, 0)
     }
 
-    func testRecentSearchesPersistOnlySuccessfulBoundedDeduplicatedQueries() {
+    func testRecentItemsPersistBoundedDeduplicatedResultsAndSupportIndividualDeletion() {
         let storageURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("recent-searches-\(UUID().uuidString).json")
+            .appendingPathComponent("recent-items-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: storageURL) }
-        let store = RecentSearchStore(storageURL: storageURL, limit: 3)
+        var timestamp = Date(timeIntervalSince1970: 100)
+        let store = RecentItemStore(storageURL: storageURL, limit: 3, now: { timestamp })
+        let finder = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Finder.app"), kind: .application)
+        let safari = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Safari.app"), kind: .application)
+        let terminal = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Terminal.app"), kind: .application)
+        let document = QuickSearchResult(url: URL(fileURLWithPath: "/tmp/Notes.txt"), kind: .file)
 
-        store.record("  Finder  ")
-        store.record("Safari")
-        store.record("finder")
-        store.record("Terminal")
-        store.record("Notes")
+        store.record(finder)
+        timestamp.addTimeInterval(1)
+        store.record(safari)
+        timestamp.addTimeInterval(1)
+        store.record(finder)
+        timestamp.addTimeInterval(1)
+        store.record(terminal)
+        timestamp.addTimeInterval(1)
+        store.record(document)
 
-        XCTAssertEqual(store.queries, ["Notes", "Terminal", "finder"])
+        XCTAssertEqual(store.items.map(\.result), [document, terminal, finder])
         XCTAssertEqual(
-            RecentSearchStore(storageURL: storageURL, limit: 3).queries,
-            ["Notes", "Terminal", "finder"]
+            RecentItemStore(storageURL: storageURL, limit: 3).items.map(\.result),
+            [document, terminal, finder]
+        )
+
+        store.delete(store.items[1])
+        XCTAssertEqual(store.items.map(\.result), [document, finder])
+        XCTAssertEqual(
+            RecentItemStore(storageURL: storageURL, limit: 3).items.map(\.result),
+            [document, finder]
         )
 
         store.clear()
-        XCTAssertTrue(store.queries.isEmpty)
+        XCTAssertTrue(store.items.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: storageURL.path))
     }
 
-    func testQuickSearchRecordsHistoryOnlyWhenExplicitlyToldAnOpenSucceeded() {
+    func testQuickSearchRecordsOpenedItemsOnlyWhenAnOpenSucceeded() {
         let storageURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("quick-search-history-\(UUID().uuidString).json")
+            .appendingPathComponent("quick-search-items-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: storageURL) }
-        let store = RecentSearchStore(storageURL: storageURL)
+        let store = RecentItemStore(storageURL: storageURL)
         let result = QuickSearchResult(
             url: URL(fileURLWithPath: "/Applications/Finder.app"),
             kind: .application
         )
-        let model = QuickSearchModel(recentSearches: store, applications: [result])
+        let model = QuickSearchModel(recentItems: store, applications: [result])
 
         model.query = "Finder"
-        XCTAssertTrue(store.queries.isEmpty, "Typing or highlighting must not record history")
+        XCTAssertTrue(store.items.isEmpty, "Typing or highlighting must not record history")
         model.recordOpenResult(result, succeeded: false)
-        XCTAssertTrue(store.queries.isEmpty, "A failed open must not record history")
+        XCTAssertTrue(store.items.isEmpty, "A failed open must not record history")
         model.recordOpenResult(result, succeeded: true)
-        XCTAssertEqual(store.queries, ["Finder"])
-        model.restoreRecentSearch("Terminal")
-        XCTAssertEqual(model.query, "Terminal")
+        XCTAssertEqual(store.items.map(\.result), [result])
     }
 
     func testQuickSearchLearnsSuccessfulApplicationLaunchesByFrequencyAndRecency() throws {
@@ -917,8 +946,8 @@ final class SuperMacFeatureTests: XCTestCase {
             kind: .application
         )
         let model = QuickSearchModel(
-            recentSearches: RecentSearchStore(
-                storageURL: storageURL.deletingPathExtension().appendingPathExtension("recent.json")
+            recentItems: RecentItemStore(
+                storageURL: storageURL.deletingPathExtension().appendingPathExtension("items.json")
             ),
             applicationUsage: usage,
             applications: [activityMonitor, iTerm, terminal]

@@ -64,7 +64,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var primaryActionTitle: String? {
         switch self {
         case .search: "Open"
-        case .clipboard, .dictation: "Paste"
+        case .clipboard, .dictation: "Copy"
         case .keyBumps: nil
         }
     }
@@ -137,7 +137,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let preferences: AppPreferences
     private let state = CommandPaletteState()
     private var panel: NSPanel?
-    private weak var destination: NSRunningApplication?
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
@@ -166,9 +165,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     func show(_ tab: CommandPaletteTab) {
-        if panel?.isVisible != true {
-            destination = NSWorkspace.shared.frontmostApplication
-        }
         if panel == nil { makePanel() }
         guard let panel else { return }
 
@@ -194,6 +190,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         if panel?.isVisible == true, state.tab == tab {
             dismiss()
         }
+    }
+
+    func isDisplaying(_ tab: CommandPaletteTab) -> Bool {
+        panel?.isVisible == true && state.tab == tab
     }
 
     func windowDidResignKey(_ notification: Notification) {
@@ -232,9 +232,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
-                pasteClipboardEntry: pasteClipboardEntry,
-                pasteDictationText: { [weak self] text in
-                    self?.paste(text, suppressClipboardHistory: true)
+                copyClipboardEntry: copyClipboardEntry,
+                copyDictationText: { [weak self] text in
+                    self?.copy(text, suppressClipboardHistory: true)
                 },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
@@ -349,7 +349,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? search.recentSearches.queries.count
+                ? search.recentItems.items.count
                 : search.results.count
         case .clipboard:
             filteredClipboard.count
@@ -389,8 +389,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                guard search.recentSearches.queries.indices.contains(state.selection) else { return }
-                search.restoreRecentSearch(search.recentSearches.queries[state.selection])
+                guard search.recentItems.items.indices.contains(state.selection) else { return }
+                open(search.recentItems.items[state.selection].result)
                 return
             }
             guard search.results.indices.contains(state.selection) else { return }
@@ -398,12 +398,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             reveal ? self.reveal(result) : open(result)
         case .clipboard:
             guard filteredClipboard.indices.contains(state.selection) else { return }
-            pasteClipboardEntry(filteredClipboard[state.selection])
+            copyClipboardEntry(filteredClipboard[state.selection])
         case .dictation:
             guard filteredDictations.indices.contains(state.selection) else { return }
             let text = filteredDictations[state.selection].text
             guard !text.isEmpty else { return }
-            paste(text, suppressClipboardHistory: true)
+            copy(text, suppressClipboardHistory: true)
         case .keyBumps:
             break
         }
@@ -420,35 +420,17 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([result.url])
     }
 
-    private func paste(_ text: String, suppressClipboardHistory: Bool) {
-        let target = destination
+    private func copy(_ text: String, suppressClipboardHistory: Bool) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
-        finishPaste(to: target)
-    }
-
-    private func pasteClipboardEntry(_ entry: ClipboardEntry) {
-        let target = destination
-        guard clipboard.restore(entry) else { return }
-        finishPaste(to: target)
-    }
-
-    private func finishPaste(to target: NSRunningApplication?) {
         dismiss()
-        target?.activate(options: [])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            guard let target,
-                  NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
-                  let source = CGEventSource(stateID: .combinedSessionState),
-                  let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else { return }
-            down.flags = .maskCommand
-            up.flags = .maskCommand
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
+    }
+
+    private func copyClipboardEntry(_ entry: ClipboardEntry) {
+        guard clipboard.restore(entry) else { return }
+        dismiss()
     }
 }
 
@@ -463,8 +445,8 @@ private struct CommandPaletteView: View {
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
-    let pasteClipboardEntry: (ClipboardEntry) -> Void
-    let pasteDictationText: (String) -> Void
+    let copyClipboardEntry: (ClipboardEntry) -> Void
+    let copyDictationText: (String) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
 
@@ -501,6 +483,12 @@ private struct CommandPaletteView: View {
         .onChange(of: search.query) {
             state.selection = 0
         }
+        .onChange(of: search.recentItems.items.map(\.id)) {
+            guard state.tab == .search,
+                  search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  state.selection >= search.recentItems.items.count else { return }
+            state.selection = max(0, search.recentItems.items.count - 1)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("SuperMac command palette")
     }
@@ -513,18 +501,18 @@ private struct CommandPaletteView: View {
                 results: search.results,
                 selection: state.selection,
                 query: search.query,
-                recentSearches: search.recentSearches.queries,
+                recentItems: search.recentItems.items,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
-                restoreRecentSearch: search.restoreRecentSearch,
-                clearRecentSearches: search.recentSearches.clear,
+                deleteRecentItem: search.recentItems.delete,
+                clearRecentItems: search.recentItems.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
         case .clipboard:
             ClipboardResultsView(
                 entries: filteredClipboard,
                 selection: state.selection,
-                choose: pasteClipboardEntry,
+                choose: copyClipboardEntry,
                 delete: clipboard.delete,
                 clear: clipboard.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -534,7 +522,7 @@ private struct CommandPaletteView: View {
                 entries: filteredDictations,
                 selection: state.selection,
                 select: { state.selection = $0 },
-                choose: pasteDictationText,
+                choose: copyDictationText,
                 transcribe: { entry in Task { await dictationService.transcribe(entry) } },
                 retryingEntryID: dictationService.retryingEntryID,
                 delete: dictationHistory.delete,
@@ -694,17 +682,17 @@ private struct SearchResultsView: View {
     let results: [QuickSearchResult]
     let selection: Int
     let query: String
-    let recentSearches: [String]
+    let recentItems: [RecentItem]
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
-    let restoreRecentSearch: (String) -> Void
-    let clearRecentSearches: () -> Void
+    let deleteRecentItem: (RecentItem) -> Void
+    let clearRecentItems: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
 
     var body: some View {
         PaletteResultsContainer {
             if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if recentSearches.isEmpty {
+                if recentItems.isEmpty {
                     PaletteEmptyState(
                         title: "Start typing to search your Mac",
                         systemImage: "magnifyingglass"
@@ -712,35 +700,37 @@ private struct SearchResultsView: View {
                 } else {
                     VStack(spacing: 0) {
                         HStack {
-                            Text("Recent Searches")
+                            Text("Recent Items")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             Spacer()
                             ClearAllButton(
-                                confirmationTitle: "Clear recent searches?",
-                                confirmationMessage: "This permanently removes your locally saved Quick Search history.",
-                                disabled: recentSearches.isEmpty,
+                                confirmationTitle: "Clear recent items?",
+                                confirmationMessage: "This permanently removes your locally saved recently opened items.",
+                                disabled: recentItems.isEmpty,
                                 confirmationPresentationChanged: confirmationPresentationChanged,
-                                clear: clearRecentSearches
+                                clear: clearRecentItems
                             )
                         }
                         .padding(.horizontal, 13)
                         .padding(.vertical, 8)
 
-                        List(Array(recentSearches.enumerated()), id: \.element) { index, recentQuery in
-                            Button { restoreRecentSearch(recentQuery) } label: {
-                                HStack {
-                                    Image(systemName: "clock.arrow.circlepath")
-                                        .foregroundStyle(.secondary)
-                                    Text(recentQuery)
-                                        .lineLimit(1)
-                                    Spacer()
+                        List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
+                            HStack(spacing: 10) {
+                                Button { open(item.result) } label: {
+                                    SearchResultRow(result: item.result, showsReturn: index == selection)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 7)
+                                        .contentShape(Rectangle())
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
+                                Button(role: .destructive) { deleteRecentItem(item) } label: {
+                                    Image(systemName: "trash")
+                                        .frame(width: 24, height: 24)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Delete recent item \(item.result.name)")
                             }
-                            .buttonStyle(.plain)
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
                             .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
@@ -760,26 +750,7 @@ private struct SearchResultsView: View {
                         Button {
                             open(result)
                         } label: {
-                            HStack(spacing: 13) {
-                                Image(nsImage: NSWorkspace.shared.icon(forFile: result.url.path))
-                                    .resizable()
-                                    .frame(width: 34, height: 34)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(result.name)
-                                        .font(.body.weight(.medium))
-                                        .lineLimit(1)
-                                    Text("\(result.kind.rawValue) · \(result.detail)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                if index == selection {
-                                    Text("↩")
-                                        .font(.caption.monospaced())
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                            SearchResultRow(result: result, showsReturn: index == selection)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .contentShape(Rectangle())
@@ -801,6 +772,34 @@ private struct SearchResultsView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private struct SearchResultRow: View {
+    let result: QuickSearchResult
+    let showsReturn: Bool
+
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: result.url.path))
+                .resizable()
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(result.name)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                Text("\(result.kind.rawValue) · \(result.detail)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if showsReturn {
+                Text("↩")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -978,7 +977,7 @@ private struct DictationResultsView: View {
                                         togglePlayback: { audioPlayer.toggle(entry) },
                                         setPlaybackRate: audioPlayer.setPlaybackRate,
                                         transcribe: { transcribe(entry) },
-                                        primaryActionTitle: "Paste",
+                                        primaryActionTitle: "Copy",
                                         primaryAction: entry.text.isEmpty ? nil : { choose(entry.text) },
                                         copy: { DictationHistoryClipboard.copy(entry.text) },
                                         reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },

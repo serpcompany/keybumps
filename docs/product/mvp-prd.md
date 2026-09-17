@@ -103,7 +103,8 @@ Clicking the Dock icon opens Quick Search. Settings remains a single reusable wi
 
 Keep the menu deliberately minimal:
 
-- Open Quick Search
+- Toggle SuperMac
+- version information
 - Settings…
 - Check for Updates…
 - Quit SuperMac
@@ -148,7 +149,7 @@ User outcome: replace the owner's basic Alfred/Spotlight launcher workflow.
 - Arrow keys change selection.
 - Return opens or focuses the selected result.
 - Command-Return reveals a file or folder in Finder.
-- After a result opens successfully, retain a bounded, deduplicated local Recent Searches list. An empty query shows that list; choosing one restores the query, and clearing requires destructive confirmation. Typing, highlighting, dismissing, revealing, or a failed open does not record history.
+- After a result opens successfully, retain a bounded, deduplicated local Recent Items list containing the actual app, file, or folder—not the query string. An empty query shows that list; choosing one opens it, each item can be deleted individually, and clearing all requires destructive confirmation. Typing, highlighting, dismissing, revealing, or a failed open does not record history.
 - Keep a separate local application-launch usage index. Successful application opens update frequency and recency; those signals refine future application ordering after exact/prefix relevance, while failed opens and file/folder results do not train application ranking.
 - Escape or clicking outside dismisses the panel.
 - The panel must not leave SuperMac as the active foreground app after launching a result.
@@ -166,7 +167,7 @@ User outcome: recover and reuse the most recent copied text or image through the
 - Persist only the ten most recent text or image items locally. Store image payloads as separate local media files capped at 50 MB each rather than embedding binary data in the history JSON.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
-- Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Paste from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
+- Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Copy from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
 - Provide deletion and one shared native SwiftUI `Clear All` control that requires destructive confirmation before removing all items. Opening, cancelling, or confirming that alert must not dismiss the Command Palette.
 - Disabling the capability stops monitoring but does not silently erase retained items.
 - No arbitrary copied files, audio/video media, cloud sync, account, permanent archive, or elaborate source filtering in MVP.

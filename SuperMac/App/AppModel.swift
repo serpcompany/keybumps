@@ -315,6 +315,14 @@ final class AppModel {
         guard preferences.enabledCapabilities.contains(.quickSearch) else { return }
         commandPalette.show(.search)
     }
+    var isQuickSearchVisible: Bool { commandPalette.isDisplaying(.search) }
+    func setQuickSearchVisible(_ isVisible: Bool) {
+        if isVisible {
+            showQuickSearch()
+        } else {
+            commandPalette.dismiss(ifDisplaying: .search)
+        }
+    }
     func showClipboardHistory() {
         guard preferences.enabledCapabilities.contains(.clipboardHistory) else { return }
         commandPalette.show(.clipboard)

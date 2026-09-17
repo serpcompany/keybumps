@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import Observation
 
-struct QuickSearchResult: Identifiable, Hashable {
-    enum Kind: String { case application = "Application", file = "File", folder = "Folder" }
+struct QuickSearchResult: Codable, Identifiable, Hashable {
+    enum Kind: String, Codable { case application = "Application", file = "File", folder = "Folder" }
     let url: URL
     let kind: Kind
     var id: URL { url }
@@ -17,7 +17,7 @@ final class QuickSearchModel {
     var query = "" { didSet { refresh() } }
     private(set) var results: [QuickSearchResult] = []
     var selection = 0
-    let recentSearches: RecentSearchStore
+    let recentItems: RecentItemStore
     let applicationUsage: ApplicationUsageStore
 
     private let applications: [QuickSearchResult]
@@ -26,11 +26,11 @@ final class QuickSearchModel {
 
     init(
         fileManager: FileManager = .default,
-        recentSearches: RecentSearchStore? = nil,
+        recentItems: RecentItemStore? = nil,
         applicationUsage: ApplicationUsageStore? = nil,
         applications suppliedApplications: [QuickSearchResult]? = nil
     ) {
-        self.recentSearches = recentSearches ?? RecentSearchStore(fileManager: fileManager)
+        self.recentItems = recentItems ?? RecentItemStore(fileManager: fileManager)
         self.applicationUsage = applicationUsage ?? ApplicationUsageStore(fileManager: fileManager)
         if let suppliedApplications {
             applications = suppliedApplications
@@ -95,12 +95,8 @@ final class QuickSearchModel {
 
     func recordOpenResult(_ result: QuickSearchResult, succeeded: Bool) {
         guard succeeded else { return }
-        recentSearches.record(query)
+        recentItems.record(result)
         applicationUsage.record(result)
-    }
-
-    func restoreRecentSearch(_ query: String) {
-        self.query = query
     }
 
     private func consume(query: NSMetadataQuery, appMatches: [QuickSearchResult]) {

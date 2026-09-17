@@ -38,6 +38,10 @@ private struct MainWindowRoutingModifier: ViewModifier {
             .onAppear {
                 MainWindowRouter.shared.configure(openMainWindow)
                 QuickSearchRouter.shared.configure(model.showQuickSearch)
+                NativeStatusItemController.shared.configureQuickSearch(
+                    isVisible: { model.isQuickSearchVisible },
+                    setVisible: model.setQuickSearchVisible
+                )
                 NativeStatusItemController.shared.install()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in

@@ -81,7 +81,7 @@ Disabling Quick Search closes its panel and releases its configured shortcut.
 1. Copy text or a supported image in ordinary applications while Clipboard History is enabled.
 2. Press the configured Clipboard History shortcut (`Shift-Command-Space` by default), or open Clipboard History from Setup/settings.
 3. The shared palette opens on Clipboard with the newest item first and at most ten items. Image entries show a visual thumbnail and media label.
-4. Search the local history, select a text or image item, and paste its original representation into the previously focused destination when safe.
+4. Search the local history, select a text or image item, and press Return to copy its original representation back to the pasteboard for later use.
 5. Delete an item, or choose Clear All and explicitly confirm before all saved clipboard items are removed. The confirmation appears over the palette; cancelling or confirming leaves the palette open and shows the resulting history state.
 6. Disable Clipboard History to stop monitoring and release its shortcut without silently erasing retained items.
 
@@ -97,9 +97,9 @@ Clipboard content stays local. Supported image payloads are stored as separate l
 6. Pending metadata and `output.wav` are created under `~/Documents/SuperMac/recordings/<timestamp>/` when capture starts. Successful transcription completes that same metadata before insertion. An unexpected app/process interruption leaves recoverable audio; intentional Escape cancellation discards the pending item.
 7. If insertion fails, recover the last transcript from Dictation settings.
 8. After relaunch, SuperMac scans pending metadata and legacy playable audio-only folders. Recoverable items appear in Dictation History and the Command Palette as Recording interrupted — transcript unavailable; Transcribe retries locally and updates the same item.
-9. Open the Command Palette's Dictation tab to search cards, click anywhere in a card's padded header to expand it, play/pause the original recording, adjust playback from 0.5× through 2×, transcribe when needed, paste or copy completed text, translate through the on-device target-language picker, and use the same waveform/playback/speed controls for temporary translated speech generated with an installed target-language voice. Reveal or delete recordings as needed; Clear All requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged, and temporary translated audio is not saved as another recording.
+9. Open the Command Palette's Dictation tab to search cards, click anywhere in a card's padded header to expand it, play/pause the original recording, adjust playback from 0.5× through 2×, transcribe when needed, copy completed text, translate through the on-device target-language picker, and use the same waveform/playback/speed controls for temporary translated speech generated with an installed target-language voice. Reveal or delete recordings as needed; Clear All requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged, and temporary translated audio is not saved as another recording.
 
-Automatic insertion after recording and the explicit Paste action in Dictation History use the pasteboard only as delivery transport. Neither creates a duplicate in Clipboard History. Choosing Copy is an intentional clipboard action and remains eligible for Clipboard History.
+Automatic insertion after recording and Copy from Dictation History use the pasteboard only as delivery transport. Neither creates a duplicate in Clipboard History. A later user-originated copy of the same text remains eligible for Clipboard History.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 
@@ -135,7 +135,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 3. Switching clears the prior filter, resets selection, and keeps text-input focus.
 4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Key Bumps row click changes selection only; Return has no clipboard or history side effect.
 5. When Key Bumps is disabled, its tab reports that state instead of presenting stale history as active.
-6. When Search is empty, successful prior queries appear under Recent Searches; selecting one restores it and clearing requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens and file/folder results do not train that ranking. Key Bumps provides the same confirmed clear-history affordance as the other histories.
+6. When Search is empty, successfully opened apps, files, and folders appear under Recent Items; selecting one opens it, individual rows can be deleted, and Clear All requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens do not create recent items or train ranking, and file/folder results do not train application ranking. Key Bumps provides the same confirmed clear-history affordance as the other histories.
 7. The footer truthfully identifies local-only behavior.
 
 ## UJ-10 — Capability controls and settings
@@ -151,7 +151,7 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 ## UJ-11 — Dock, menu bar, conflicts, and launch at login
 
 1. The app is visible in the Dock and application switcher by default; clicking its Dock icon opens Quick Search rather than Settings.
-2. Left-clicking the menu-bar icon opens Quick Search. Right-clicking it opens a native menu containing Open Quick Search, Settings, the disabled local-preview update item, and Quit SuperMac.
+2. Clicking the menu-bar icon always opens a native menu, even when another app is foreground. The menu contains Toggle SuperMac, the current version/build, a truthfully disabled Check for Updates item until issue #10 is implemented, Settings, and Quit SuperMac. Toggle SuperMac opens or closes Quick Search.
 3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; the menu-bar Settings item or Command-comma recreates, raises, and focuses the single Settings window.
 4. SuperMac registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.

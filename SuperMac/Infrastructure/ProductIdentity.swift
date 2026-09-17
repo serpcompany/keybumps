@@ -15,6 +15,18 @@ enum ProductIdentity {
     static let inAppBrandImageName = "SuperMacArrow"
 }
 
+enum AppVersionDisplay {
+    static func title(bundle: Bundle = .main) -> String {
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "Unknown Version"
+        let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        guard let build, !build.isEmpty else {
+            return "\(ReleaseLane.current.productName) \(version)"
+        }
+        return "\(ReleaseLane.current.productName) \(version) (\(build))"
+    }
+}
+
 enum StatusItemBranding {
     static func configure(_ button: NSStatusBarButton, target: AnyObject, action: Selector) {
         guard let image = NSImage(named: ProductIdentity.statusItemImageName) else {
