@@ -119,24 +119,19 @@ private struct QuickSearchSettingsView: View {
         Form {
             CapabilityControl(capability: .quickSearch)
             CapabilityShortcutEditor(shortcut: .quickSearch)
-            Section { Button("Open Quick Search") { model.showQuickSearch() }.disabled(!model.preferences.enabledCapabilities.contains(.quickSearch)) }
-            Section { Text("Searches installed applications and Spotlight-indexed local files and folders. Web search and workflows are outside this MVP.").foregroundStyle(.secondary) }
+            Section {
+                Button("Open Quick Search") { model.showQuickSearch() }
+                    .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
+            }
         }.formStyle(.grouped).navigationTitle("Quick Search")
     }
 }
 
 private struct ClipboardSettingsView: View {
-    @Environment(AppModel.self) private var model
     var body: some View {
         Form {
             CapabilityControl(capability: .clipboardHistory)
-            CapabilityShortcutEditor(shortcut: .clipboardHistory)
-            Section {
-                Button("Open Clipboard History") { model.showClipboardHistory() }
-                    .disabled(!model.preferences.enabledCapabilities.contains(.clipboardHistory))
-                Text("View, search, paste, and clear the latest ten local items in the quick switcher.")
-                    .foregroundStyle(.secondary)
-            }
+            CapabilityShortcutEditor(shortcut: .clipboardHistory, showsInstructions: false)
         }.formStyle(.grouped).navigationTitle("Clipboard History")
     }
 }
@@ -178,21 +173,6 @@ private struct DictationSettingsView: View {
                 .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
                 Text("SuperMac stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut.")
                     .foregroundStyle(.secondary)
-                Text("Long recordings use more disk space and may take longer to transcribe. If transcription fails, SuperMac keeps the audio in Dictation History.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section("Status") {
-                LabeledContent("Dictation", value: model.dictation.phase.label)
-                if let error = model.dictation.lastError { Text(error).foregroundStyle(.orange) }
-                if model.dictation.recoveredTranscript != nil {
-                    Text("The latest transcript is kept locally so it can be recovered if insertion fails.")
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        Button("Copy Last Dictation") { model.dictation.copyRecoveredTranscript() }
-                        Button("Clear Last Dictation", role: .destructive) { model.dictation.clearRecoveredTranscript() }
-                    }
-                }
             }
         }.formStyle(.grouped).navigationTitle("Dictation")
     }
@@ -208,10 +188,7 @@ private struct WindowSettingsView: View {
         let isReady = isEnabled && readiness.isReady
         VStack(spacing: 0) {
             HStack(spacing: 16) {
-                Toggle("Enable Window Management", isOn: Binding(
-                    get: { model.preferences.enabledCapabilities.contains(.windowManagement) },
-                    set: { model.setCapability(.windowManagement, enabled: $0) }
-                ))
+                CapabilityToggle(capability: .windowManagement)
                 Spacer()
                 Label(
                     isEnabled ? (isReady ? "Ready" : "Setup Needed") : "Off",
@@ -511,13 +488,8 @@ struct KeyboardGlyphLegendContent: View {
 }
 
 private struct PermissionsView: View {
-    @Environment(AppModel.self) private var model
-
     var body: some View {
         Form {
-            Section("Readiness") {
-                PermissionReadinessSummaryView()
-            }
             Section("Permissions") {
                 VStack(spacing: 8) {
                     ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
@@ -526,36 +498,9 @@ private struct PermissionsView: View {
                     NotificationPermissionRow()
                 }
             }
-            Section {
-                Button("Refresh Status") {
-                    model.refreshPermissions()
-                    Task { await model.refreshNotificationPermission() }
-                }
-                Text("After changing a switch in System Settings, return here and the status will refresh automatically.").foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
         .navigationTitle("Permissions")
-    }
-}
-
-private struct PermissionReadinessSummaryView: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let readiness = model.permissionReadiness
-        HStack(spacing: 12) {
-            Image(systemName: readiness.isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(readiness.isReady ? .green : .orange)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(readiness.isReady ? "All required permissions are ready" : "Setup needs attention")
-                    .font(.headline)
-                Text("\(readiness.completedCount) of \(readiness.totalCount) complete")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -715,15 +660,11 @@ private struct PermissionWalkthroughView: View {
 }
 
 private struct CapabilityControl: View {
-    @Environment(AppModel.self) private var model
     let capability: Capability
 
     var body: some View {
         Section("Capability") {
-            Toggle("Enable \(capability.title)", isOn: Binding(
-                get: { model.preferences.enabledCapabilities.contains(capability) },
-                set: { model.setCapability(capability, enabled: $0) }
-            ))
+            CapabilityToggle(capability: capability)
             if let disableExplanation {
                 Text(disableExplanation)
                     .font(.caption)
@@ -743,29 +684,66 @@ private struct CapabilityControl: View {
     }
 }
 
+private struct CapabilityToggle: View {
+    @Environment(AppModel.self) private var model
+    let capability: Capability
+
+    var body: some View {
+        Toggle(
+            "Enable \(capability.title)",
+            isOn: CapabilityToggleBinding(model: model, capability: capability).value
+        )
+    }
+}
+
+@MainActor
+struct CapabilityToggleBinding {
+    let model: AppModel
+    let capability: Capability
+
+    var value: Binding<Bool> {
+        Binding(
+            get: { model.preferences.enabledCapabilities.contains(capability) },
+            set: { model.setCapability(capability, enabled: $0) }
+        )
+    }
+}
+
 private struct CapabilityShortcutEditor: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
     let shortcut: CapabilityShortcut
+    var showsInstructions = true
 
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
         Section("Shortcut") {
-            Text("Record a new shortcut, clear it, or restore the default. Escape cancels recording.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if showsInstructions {
+                Text("Record a new shortcut, clear it, or restore the default. Escape cancels recording.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 Text(shortcut.title)
                 Spacer()
-                Button(recorder.identifier == shortcut.rawValue ? "Press shortcut…" : (binding?.displayName ?? "Record Shortcut")) {
+                Button {
                     recorder.begin(
                         identifier: shortcut.rawValue,
                         suspend: { model.beginShortcutRecording() },
                         capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
                         cancel: { model.cancelShortcutRecording() }
                     )
+                } label: {
+                    if recorder.identifier == shortcut.rawValue {
+                        Text("Press shortcut…")
+                    } else if let binding {
+                        ShortcutKeycaps(shortcut: binding.displayName, compact: true)
+                    } else {
+                        Text("Record Shortcut")
+                    }
                 }
                 .accessibilityLabel("Record shortcut for \(shortcut.title)")
+                .accessibilityValue(shortcutAccessibilityValue(binding: binding))
                 Button("Clear") {
                     model.finishCapabilityShortcutRecording(nil, for: shortcut)
                 }
@@ -783,6 +761,12 @@ private struct CapabilityShortcutEditor: View {
             }
         }
         .onDisappear { recorder.cancel() }
+    }
+
+    private func shortcutAccessibilityValue(binding: ShortcutBinding?) -> String {
+        if recorder.identifier == shortcut.rawValue { return "Waiting for shortcut" }
+        guard let binding else { return "No shortcut assigned" }
+        return KeyboardShortcutRegistry.accessibilityCopy(for: binding.displayName)
     }
 }
 

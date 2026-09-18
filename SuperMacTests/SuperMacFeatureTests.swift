@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Carbon.HIToolbox
 import Security
 import XCTest
@@ -26,6 +27,16 @@ private final class StubGlobalHotKeyBackend: GlobalHotKeyRegistering {
     func send(identifier: UInt32) {
         handler?(identifier)
     }
+}
+
+@MainActor
+private struct StubAppPresenceController: AppPresenceControlling {
+    func apply(showInDockAndSwitcher: Bool) {}
+}
+
+private struct InMemoryEventPersistence: EventPersistence {
+    func load() throws -> [CoachingEvent] { [] }
+    func save(_ events: [CoachingEvent]) throws {}
 }
 
 @MainActor
@@ -603,6 +614,52 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertEqual(AppPreferences(defaults: defaults).dictationDurationLimit, .thirtyMinutes)
         first.dictationDurationLimit = .unlimited
         XCTAssertNil(AppPreferences(defaults: defaults).dictationDurationLimit.seconds)
+    }
+
+    func testCapabilityShortcutEditorsUseCanonicalSpaceKeycaps() {
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: DefaultShortcut.quickSearch.displayName).keys, ["⌘", "Space"])
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: DefaultShortcut.clipboard.displayName).keys, ["⇧", "⌘", "Space"])
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: DefaultShortcut.dictation.displayName).keys, ["⌥", "Space"])
+    }
+
+    func testWindowManagementSharedToggleBindingReadsAndWritesCapabilityState() {
+        let suite = "SuperMacWindowCapability-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            updater: DisabledUpdateController(reason: "Unit test")
+        )
+        let toggle = CapabilityToggleBinding(model: model, capability: .windowManagement).value
+
+        toggle.wrappedValue = false
+        XCTAssertFalse(model.preferences.enabledCapabilities.contains(.windowManagement))
+
+        toggle.wrappedValue = true
+        XCTAssertTrue(model.preferences.enabledCapabilities.contains(.windowManagement))
+    }
+
+    func testVersionDisplayUsesCanonicalBundleVersionAndBuild() throws {
+        let bundleURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SuperMacVersion-\(UUID().uuidString).bundle")
+        defer { try? FileManager.default.removeItem(at: bundleURL) }
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "com.serp.supermac.tests.version",
+            "CFBundleName": "SuperMacVersionFixture",
+            "CFBundlePackageType": "BNDL",
+            "CFBundleShortVersionString": "1.2.3",
+            "CFBundleVersion": "456"
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        try data.write(to: bundleURL.appendingPathComponent("Info.plist"))
+        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
+
+        XCTAssertEqual(AppVersionDisplay.title(bundle: bundle), "SuperMac 1.2.3 (456)")
     }
 
     func testDictationTranscribesTheCompletedAudioArchiveRatherThanAnEarlyLiveResult() {
