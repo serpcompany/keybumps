@@ -8,18 +8,19 @@
 
 /* Begin PBXBuildFile section */
 		02616B8277F6E19177358C2B /* NotificationDeliveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADE70860A30377DD7E7E3B2 /* NotificationDeliveryService.swift */; };
-		08C07BABCDF840920981C39E /* KeyboardShortcutRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622B0F6D27EE05F4FCA662F4 /* KeyboardShortcutRegistry.swift */; };
 		08F4D2532E291F60FC83D958 /* UpdateControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */; };
-		23A000000000000000000002 /* AXShortcutEvidenceReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A000000000000000000001 /* AXShortcutEvidenceReader.swift */; };
 		0F173B8EEE34731BFC2BB46C /* SystemServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374F0E123136211939751EBD /* SystemServices.swift */; };
 		10BF68EF4B2FCD67176B78E5 /* PointerEventMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D121EE0800846D3507A1B184 /* PointerEventMonitor.swift */; };
 		10E38342515AA764D84F979D /* ChromeActionDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8064DB57B1E1DDD769BECC1 /* ChromeActionDetectionTests.swift */; };
 		187E6DE7C76E9035BB57C6C2 /* PresentationWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA7CB636F8938DE2ADC7AE2 /* PresentationWindowController.swift */; };
 		1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B06DF9E1F28BCAC34392C78B /* SharedViews.swift */; };
 		230E9EC0C94164772A13BAB0 /* SparkleUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2C2F9376E2BB9E5C58E632 /* SparkleUpdateController.swift */; };
+		2F22E1DE25CD833424C49C42 /* ProductPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C08F3AB668C02EE985B94D1 /* ProductPaths.swift */; };
 		2F2DACC19C833EF41ADBD702 /* ChromeActionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C166318C53B0BFACE88EC23 /* ChromeActionAdapter.swift */; };
 		3A5367E28E8097629B28C7FD /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = 7A528259D83A4514FCB7F62C /* appcast.xml */; };
+		3C09F153F945A7C4F88A9935 /* KeyboardShortcutRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABECCAA1BAF658171B58B4E2 /* KeyboardShortcutRegistry.swift */; };
 		3CC2F1521D5D9DA5985DF178 /* DictationAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3890AA7A2ED495DF7406F94 /* DictationAudioPlayer.swift */; };
+		3CE9D68EAE554D2342E9483E /* LegacyDataMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E3BE56B44419133AB4DB41 /* LegacyDataMigrationTests.swift */; };
 		4485C0E7B6169A3006A83E35 /* AppPresenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1263F60CBD0F2902CB20582 /* AppPresenceController.swift */; };
 		48338CA9E74F84BA913AB753 /* QuickSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F330F94AC63BB8C3A0C228 /* QuickSearchService.swift */; };
 		5300BBA1A5D216BB896E83C5 /* MenuInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E3FF4B2C9E74E32242A4AB /* MenuInboxView.swift */; };
@@ -61,9 +62,11 @@
 		E09625837E0C77B15DEEE22D /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E05E454796B21B5BE7C33D8 /* SettingsRootView.swift */; };
 		E29927A40173419DC2A94C2E /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF75D2E998EDF7DC502EE98 /* AccessibilitySnapshotter.swift */; };
 		E6DF6BFB45E567621DA64B0F /* SuperMacFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99DF39DEF1A3A5EBE5AA54BF /* SuperMacFeatureTests.swift */; };
+		E909DB0CB06B8A6FB25C0E96 /* AXShortcutEvidenceReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CD9AA5A581A600CDAE19F99 /* AXShortcutEvidenceReader.swift */; };
 		EC2FFB34F79A71D08629C95F /* DictationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706B4B469058348551AFE583 /* DictationHistoryView.swift */; };
 		F78B977DFCD21A997E90BED0 /* ActionCorrelator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A39FD515AB2244E626687C8 /* ActionCorrelator.swift */; };
 		FB62B9325E7785FDEEB501B4 /* Capability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842BC96677905E5FD541225A /* Capability.swift */; };
+		FBC82968D41B0612E062BB57 /* LegacyDataMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1001B0FB2E2FF0290FDC6E09 /* LegacyDataMigrator.swift */; };
 		FD54C2FC83B463A7CDC7A0C5 /* fixture.zip in Resources */ = {isa = PBXBuildFile; fileRef = 4E8537BBC04F3303D87D5D4E /* fixture.zip */; };
 		FF5B773B8E104E06D38DBA7E /* ApplicationUsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB5564DA94F77BA89189BE3 /* ApplicationUsageStore.swift */; };
 /* End PBXBuildFile section */
@@ -82,24 +85,25 @@
 		0240BC1260429941529C0347 /* StandardWindowControlMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWindowControlMonitor.swift; sourceTree = "<group>"; };
 		0AF6645A4948BB46570AD40A /* FinderTrashDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashDetectionTests.swift; sourceTree = "<group>"; };
 		0FD6214B05262E21EEBEAF73 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
+		1001B0FB2E2FF0290FDC6E09 /* LegacyDataMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyDataMigrator.swift; sourceTree = "<group>"; };
 		1A345711CDDED027099E273D /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
 		1B693B5DB877A0D2D65233AB /* ShortcutCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCatalog.swift; sourceTree = "<group>"; };
 		1D1127D1CBB6DF74B0C9DC4E /* SuperMac-AppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SuperMac-AppStore.entitlements"; sourceTree = "<group>"; };
-		23A000000000000000000001 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateControllerTests.swift; sourceTree = "<group>"; };
 		2C7F01062D6A9BFA8A23FC52 /* WindowManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementService.swift; sourceTree = "<group>"; };
 		2C950B36CEF4429972BA91B8 /* InboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxStore.swift; sourceTree = "<group>"; };
 		374F0E123136211939751EBD /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
 		3ADE70860A30377DD7E7E3B2 /* NotificationDeliveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDeliveryService.swift; sourceTree = "<group>"; };
 		3FBE0AD5C335288BE3824279 /* NotificationChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationChannel.swift; sourceTree = "<group>"; };
+		48E3BE56B44419133AB4DB41 /* LegacyDataMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyDataMigrationTests.swift; sourceTree = "<group>"; };
 		4A460EFFC33CD04F89DFB5E6 /* SuperMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuperMacApp.swift; sourceTree = "<group>"; };
 		4BE8030020C75B10CEAD4D1F /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
 		4BFA3CEB2DACC39047B00175 /* GlobalShortcutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutCoordinator.swift; sourceTree = "<group>"; };
 		4E8537BBC04F3303D87D5D4E /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
 		60E3FF4B2C9E74E32242A4AB /* MenuInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuInboxView.swift; sourceTree = "<group>"; };
-		622B0F6D27EE05F4FCA662F4 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		693B2BEFF4340566A2E73421 /* ShortcutCoachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCoachTests.swift; sourceTree = "<group>"; };
 		6B0462EFDE8CD0087CBCC711 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6C08F3AB668C02EE985B94D1 /* ProductPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPaths.swift; sourceTree = "<group>"; };
 		6E3CD33F55E7ED6FD7447DF8 /* RecentItemStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentItemStore.swift; sourceTree = "<group>"; };
 		706B4B469058348551AFE583 /* DictationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryView.swift; sourceTree = "<group>"; };
 		751041DE9F75C902026B8BB7 /* CoachingEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingEvent.swift; sourceTree = "<group>"; };
@@ -110,6 +114,7 @@
 		842BC96677905E5FD541225A /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
 		86B20E99067CB7C7C7EA917A /* fixture.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = fixture.md; sourceTree = "<group>"; };
 		89ABD0D4EE31D549315662E4 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
+		8CD9AA5A581A600CDAE19F99 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		92B18988CAC32C575BC5CCDB /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		9340D19AA59A8D0E867E2EE1 /* SuperMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuperMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		93ACB7EEE409602FAD54275F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -120,6 +125,7 @@
 		9E05E454796B21B5BE7C33D8 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
 		A0E22195F188A3E6A72FF14C /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A6289CE87E5B5614446EE9EF /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		ABECCAA1BAF658171B58B4E2 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		ADFA8CF3E1AE35E9218D553E /* NativeStatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStatusItemController.swift; sourceTree = "<group>"; };
 		B06DF9E1F28BCAC34392C78B /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
 		B50956405C3010608E9006C7 /* DictationIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationIndicatorController.swift; sourceTree = "<group>"; };
@@ -241,7 +247,9 @@
 				D1263F60CBD0F2902CB20582 /* AppPresenceController.swift */,
 				4BFA3CEB2DACC39047B00175 /* GlobalShortcutCoordinator.swift */,
 				2C950B36CEF4429972BA91B8 /* InboxStore.swift */,
+				1001B0FB2E2FF0290FDC6E09 /* LegacyDataMigrator.swift */,
 				FFC8E02410AD7693C5667BB0 /* ProductIdentity.swift */,
+				6C08F3AB668C02EE985B94D1 /* ProductPaths.swift */,
 				374F0E123136211939751EBD /* SystemServices.swift */,
 			);
 			path = Infrastructure;
@@ -318,7 +326,7 @@
 			children = (
 				CCF75D2E998EDF7DC502EE98 /* AccessibilitySnapshotter.swift */,
 				9A39FD515AB2244E626687C8 /* ActionCorrelator.swift */,
-				23A000000000000000000001 /* AXShortcutEvidenceReader.swift */,
+				8CD9AA5A581A600CDAE19F99 /* AXShortcutEvidenceReader.swift */,
 				9C166318C53B0BFACE88EC23 /* ChromeActionAdapter.swift */,
 				4BE8030020C75B10CEAD4D1F /* FinderTrashMonitor.swift */,
 				1A345711CDDED027099E273D /* ManualActionDetector.swift */,
@@ -333,6 +341,7 @@
 			children = (
 				F8064DB57B1E1DDD769BECC1 /* ChromeActionDetectionTests.swift */,
 				0AF6645A4948BB46570AD40A /* FinderTrashDetectionTests.swift */,
+				48E3BE56B44419133AB4DB41 /* LegacyDataMigrationTests.swift */,
 				F57F110363DEA2571C92D002 /* PresentationEvidenceTests.swift */,
 				693B2BEFF4340566A2E73421 /* ShortcutCoachTests.swift */,
 				D6AB39FCFF8951FC4C3F93C7 /* StandardWindowControlTests.swift */,
@@ -370,9 +379,9 @@
 			children = (
 				842BC96677905E5FD541225A /* Capability.swift */,
 				751041DE9F75C902026B8BB7 /* CoachingEvent.swift */,
+				ABECCAA1BAF658171B58B4E2 /* KeyboardShortcutRegistry.swift */,
 				3FBE0AD5C335288BE3824279 /* NotificationChannel.swift */,
 				1B693B5DB877A0D2D65233AB /* ShortcutCatalog.swift */,
-				622B0F6D27EE05F4FCA662F4 /* KeyboardShortcutRegistry.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -487,9 +496,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E909DB0CB06B8A6FB25C0E96 /* AXShortcutEvidenceReader.swift in Sources */,
 				E29927A40173419DC2A94C2E /* AccessibilitySnapshotter.swift in Sources */,
 				F78B977DFCD21A997E90BED0 /* ActionCorrelator.swift in Sources */,
-				23A000000000000000000002 /* AXShortcutEvidenceReader.swift in Sources */,
 				87E4B8800D1A96942C01C6D8 /* AppDelegate.swift in Sources */,
 				8773503FC55C6C2D12BCA62F /* AppModel.swift in Sources */,
 				9A123083B9AA78A72E107ED3 /* AppPreferences.swift in Sources */,
@@ -508,6 +517,8 @@
 				88CC14F3049EF838ECAA0680 /* FinderTrashMonitor.swift in Sources */,
 				B75B94A8EE220ED1CE6BC757 /* GlobalShortcutCoordinator.swift in Sources */,
 				DD2E133AF9A7FFBBCE04176F /* InboxStore.swift in Sources */,
+				3C09F153F945A7C4F88A9935 /* KeyboardShortcutRegistry.swift in Sources */,
+				FBC82968D41B0612E062BB57 /* LegacyDataMigrator.swift in Sources */,
 				7AC61ABFE660302914B2C181 /* ManualActionDetector.swift in Sources */,
 				5300BBA1A5D216BB896E83C5 /* MenuInboxView.swift in Sources */,
 				9BFFF7DC990D0C62398C2EE7 /* NativeStatusItemController.swift in Sources */,
@@ -517,12 +528,12 @@
 				10BF68EF4B2FCD67176B78E5 /* PointerEventMonitor.swift in Sources */,
 				187E6DE7C76E9035BB57C6C2 /* PresentationWindowController.swift in Sources */,
 				92E6B3EED451DCB6CC28356A /* ProductIdentity.swift in Sources */,
+				2F22E1DE25CD833424C49C42 /* ProductPaths.swift in Sources */,
 				48338CA9E74F84BA913AB753 /* QuickSearchService.swift in Sources */,
 				D6EEE376BED64257604D8727 /* RecentItemStore.swift in Sources */,
 				E09625837E0C77B15DEEE22D /* SettingsRootView.swift in Sources */,
 				1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */,
 				881298FF4FFAEFBD96A747EE /* ShortcutCatalog.swift in Sources */,
-				08C07BABCDF840920981C39E /* KeyboardShortcutRegistry.swift in Sources */,
 				230E9EC0C94164772A13BAB0 /* SparkleUpdateController.swift in Sources */,
 				B338B93F3DEBF46EC97E2A0A /* StandardWindowControlMonitor.swift in Sources */,
 				5A474A9F1CC0A3DFF5C06267 /* SuperMacApp.swift in Sources */,
@@ -542,6 +553,7 @@
 			files = (
 				10E38342515AA764D84F979D /* ChromeActionDetectionTests.swift in Sources */,
 				8E4483D8C92296BB042C0650 /* FinderTrashDetectionTests.swift in Sources */,
+				3CE9D68EAE554D2342E9483E /* LegacyDataMigrationTests.swift in Sources */,
 				78A56298B21D918770A553F4 /* PresentationEvidenceTests.swift in Sources */,
 				D632A48B79BA759590A960F3 /* ShortcutCoachTests.swift in Sources */,
 				534C9EA197970F4075B479EB /* StandardWindowControlTests.swift in Sources */,

@@ -27,15 +27,9 @@ final class RecentItemStore {
         self.fileManager = fileManager
         self.limit = max(1, limit)
         self.now = now
-        let applicationSupport = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0]
         self.storageURL = storageURL
-            ?? applicationSupport.appendingPathComponent(
-                "SuperMac/recent-items.json",
-                isDirectory: false
-            )
+            ?? ProductPaths.keybumps(fileManager: fileManager).applicationSupport
+                .appendingPathComponent("recent-items.json", isDirectory: false)
         load()
     }
 

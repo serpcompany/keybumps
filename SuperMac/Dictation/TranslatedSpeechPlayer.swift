@@ -56,8 +56,7 @@ final class TranslatedSpeechPlayer {
         let currentGeneration = generation
         isPreparing = true
         lastError = nil
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SuperMac/TranslatedAudio", isDirectory: true)
+        let directory = ProductPaths.keybumps().translatedSpeechTemporary
         let outputURL = directory.appendingPathComponent("\(UUID().uuidString).wav")
 
         let utterance = AVSpeechUtterance(string: text)

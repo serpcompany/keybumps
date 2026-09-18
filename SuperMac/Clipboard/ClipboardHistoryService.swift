@@ -71,8 +71,7 @@ final class ClipboardHistoryService {
         pasteboard: NSPasteboard = .general,
         mediaDirectoryURL: URL? = nil
     ) {
-        let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SuperMac", isDirectory: true)
+        let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         self.fileManager = fileManager
         self.storageURL = storageURL ?? directory.appendingPathComponent("clipboard-history.json")
@@ -199,6 +198,9 @@ final class ClipboardHistoryService {
 
     private func removeMedia(for entry: ClipboardEntry) {
         guard let imageURL = entry.imageURL else { return }
+        let mediaRoot = mediaDirectoryURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let candidate = imageURL.resolvingSymlinksInPath().standardizedFileURL.path
+        guard candidate.hasPrefix(mediaRoot + "/") else { return }
         try? fileManager.removeItem(at: imageURL)
     }
 

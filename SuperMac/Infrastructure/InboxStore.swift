@@ -10,8 +10,7 @@ struct JSONEventPersistence: EventPersistence {
     let url: URL
 
     init(fileManager: FileManager = .default) {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let directory = base.appendingPathComponent("SuperMac", isDirectory: true)
+        let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         url = directory.appendingPathComponent("coaching-events.json")
     }

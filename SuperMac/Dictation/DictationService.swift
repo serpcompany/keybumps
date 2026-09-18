@@ -170,7 +170,7 @@ final class DictationService {
     ) {
         selectedLanguage = language
         self.durationLimit = durationLimit
-        let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SuperMac", isDirectory: true)
+        let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let recoveryURL = directory.appendingPathComponent("last-dictation.txt")
         self.recoveryURL = recoveryURL

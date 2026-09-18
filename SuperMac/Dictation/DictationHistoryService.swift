@@ -71,9 +71,8 @@ final class DictationHistoryService {
     ) {
         self.fileManager = fileManager
         self.appVersion = appVersion
-        let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         self.recordingsDirectoryURL = recordingsDirectoryURL
-            ?? documents.appendingPathComponent("SuperMac/recordings", isDirectory: true)
+            ?? ProductPaths.keybumps(fileManager: fileManager).recordings
         try? fileManager.createDirectory(at: self.recordingsDirectoryURL, withIntermediateDirectories: true)
         refresh()
     }

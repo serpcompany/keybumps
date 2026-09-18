@@ -19,15 +19,9 @@ final class ApplicationUsageStore {
     ) {
         self.fileManager = fileManager
         self.now = now
-        let applicationSupport = fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0]
         self.storageURL = storageURL
-            ?? applicationSupport.appendingPathComponent(
-                "SuperMac/application-usage.json",
-                isDirectory: false
-            )
+            ?? ProductPaths.keybumps(fileManager: fileManager).applicationSupport
+                .appendingPathComponent("application-usage.json", isDirectory: false)
         load()
     }
 
