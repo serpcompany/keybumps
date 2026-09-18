@@ -604,7 +604,18 @@ private struct OnboardingView: View {
                 case 3:
                     VStack(spacing: 12) { Text("Resolve shortcut conflicts").font(.largeTitle.bold()); ForEach(ReferenceApp.allCases) { app in HStack { Text(app.name); Spacer(); if !model.conflicts.isRunning(app) { Text("Not running").foregroundStyle(.secondary) } else { Button("Quit") { model.conflicts.quit(app) } } } } }
                 default:
-                    VStack(spacing: 12) { Text("Ready").font(.largeTitle.bold()); Text("Permissions shows what is working and what still needs attention.").foregroundStyle(.secondary) }
+                    VStack(spacing: 12) {
+                        Text("Ready").font(.largeTitle.bold())
+                        Text("Permissions shows what is working and what still needs attention.")
+                            .foregroundStyle(.secondary)
+                        if LegacyInstallationDetector().isPresent {
+                            Label("Legacy SuperMac data or an app installation was detected.", systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                        }
+                        Text("After Keybumps starts, open System Settings → General → Login Items. If SuperMac is listed, remove it manually; Keybumps never removes the old app, login item, or rollback data.")
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
             }.frame(maxWidth: 620)
             Spacer()

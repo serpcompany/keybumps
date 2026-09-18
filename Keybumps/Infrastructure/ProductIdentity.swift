@@ -4,13 +4,15 @@ enum ReleaseLane: String, CaseIterable {
     case full
     static let current = ReleaseLane.full
     var productName: String { "Keybumps" }
-    var bundleIdentifier: String { "com.serp.keybumps" }
+    var bundleIdentifier: String { ProductIdentity.bundleIdentifier }
     var supportsManualActionDetection: Bool { true }
     var showsFullVersionCTA: Bool { false }
 }
 
 enum ProductIdentity {
-    static let legacyBundleIdentifiers = ["com.serp.supermac"]
+    static let bundleIdentifier = "com.serp.keybumps"
+    static let legacyBundleIdentifier = "com.serp.supermac"
+    static let legacyBundleIdentifiers = [legacyBundleIdentifier]
     static let statusItemImageName = "KeybumpsMenuBarMark"
     static let inAppBrandImageName = "KeybumpsArrow"
 }

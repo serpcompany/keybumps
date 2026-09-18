@@ -9,7 +9,7 @@ A user-enabled area providing one coherent outcome. Disabling it stops the resou
 _Avoid_: Mini-app, embedded app
 
 **Command Palette**:
-The single floating, keyboard-first surface with Search, Clipboard, and Dictation tabs.
+The single floating, keyboard-first surface with Search, Clipboard, Dictation, and Keyboard Shortcutter tabs.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Quick Search**:

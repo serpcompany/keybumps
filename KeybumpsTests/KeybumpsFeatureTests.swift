@@ -54,6 +54,9 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String, "Keybumps")
         XCTAssertFalse((bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "").isEmpty)
         XCTAssertFalse((bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "").isEmpty)
+        XCTAssertNotNil(bundle.object(forInfoDictionaryKey: "SUFeedURL") as? String)
+        XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SURequireSignedFeed") as? Bool, true)
+        XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SUVerifyUpdateBeforeExtraction") as? Bool, true)
         XCTAssertTrue(FileManager.default.isExecutableFile(
             atPath: appURL.appendingPathComponent("Contents/MacOS/Keybumps").path
         ))

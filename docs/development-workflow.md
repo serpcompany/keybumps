@@ -21,7 +21,8 @@ This is the general Keybumps development cycle for feature work, bug fixes, loca
 - Build from the exact issue-branch state intended for review.
 - Use a development-only label that identifies the issue or branch; do not reuse public release names for local candidates.
 - Record the branch and full commit SHA in the QA handoff.
-- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful. Legacy `com.serp.keybumps` installs are separate applications and remain read-only migration/rollback sources.
+- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful. Legacy `com.serp.supermac` installs are separate applications and remain read-only migration/rollback sources.
+- Keybumps registers its own Launch at Login item only after fresh onboarding. During owner acceptance, remove a legacy SuperMac entry manually in System Settings → General → Login Items; the app must never remove the old registration, app, or rollback data automatically.
 - Replace the installed app with the intended candidate, launch it from `/Applications`, and verify that the running artifact is the candidate just built.
 
 ## 4. Give the owner a scoped hit list

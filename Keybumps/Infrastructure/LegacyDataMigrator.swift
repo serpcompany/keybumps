@@ -7,6 +7,41 @@ enum AppRuntimeEnvironment {
     }
 }
 
+struct LegacyInstallationDetector {
+    private let fileManager: FileManager
+    private let paths: ProductPaths
+    private let defaults: UserDefaults
+    private let defaultsDomainName: String
+    private let applicationURLs: [URL]
+
+    init(
+        fileManager: FileManager = .default,
+        paths: ProductPaths? = nil,
+        defaults: UserDefaults? = nil,
+        defaultsDomainName: String = ProductIdentity.legacyBundleIdentifier,
+        applicationURLs: [URL]? = nil
+    ) {
+        self.fileManager = fileManager
+        self.paths = paths ?? .legacySuperMac(fileManager: fileManager)
+        self.defaults = defaults
+            ?? UserDefaults(suiteName: defaultsDomainName)
+            ?? .standard
+        self.defaultsDomainName = defaultsDomainName
+        self.applicationURLs = applicationURLs ?? [
+            URL(fileURLWithPath: "/Applications/SuperMac.app", isDirectory: true),
+            fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Applications/SuperMac.app", isDirectory: true)
+        ]
+    }
+
+    var isPresent: Bool {
+        applicationURLs.contains { fileManager.fileExists(atPath: $0.path) }
+            || fileManager.fileExists(atPath: paths.applicationSupport.path)
+            || fileManager.fileExists(atPath: paths.recordings.path)
+            || !(defaults.persistentDomain(forName: defaultsDomainName)?.isEmpty ?? true)
+    }
+}
+
 enum LegacyMigrationError: Error, Equatable {
     case legacyAppRunning
 }
@@ -15,7 +50,7 @@ struct LegacyAppProcessDetector {
     private let isRunningHandler: (pid_t) -> Bool
 
     init(isRunningHandler: @escaping (pid_t) -> Bool = { currentProcessIdentifier in
-        NSRunningApplication.runningApplications(withBundleIdentifier: "com.serp.supermac").contains {
+        NSRunningApplication.runningApplications(withBundleIdentifier: ProductIdentity.legacyBundleIdentifier).contains {
             $0.processIdentifier != currentProcessIdentifier && !$0.isTerminated
         }
     }) {
@@ -57,7 +92,9 @@ struct LegacyDataMigrator {
         self.fileManager = fileManager
         self.legacyPaths = legacyPaths ?? .legacySuperMac(fileManager: fileManager)
         self.destinationPaths = destinationPaths ?? .keybumps(fileManager: fileManager)
-        self.legacyDefaults = legacyDefaults ?? UserDefaults(suiteName: "com.serp.supermac") ?? .standard
+        self.legacyDefaults = legacyDefaults
+            ?? UserDefaults(suiteName: ProductIdentity.legacyBundleIdentifier)
+            ?? .standard
         self.destinationDefaults = destinationDefaults
     }
 
@@ -328,7 +365,7 @@ final class LegacyAppCoexistenceMonitor {
         ) { [weak self] notification in
             guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                     as? NSRunningApplication,
-                  application.bundleIdentifier == "com.serp.supermac" else { return }
+                  application.bundleIdentifier == ProductIdentity.legacyBundleIdentifier else { return }
             Task { @MainActor in self?.onLegacyAppDetected?() }
         }
         if processDetector.isLegacySuperMacRunning() {

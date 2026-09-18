@@ -48,12 +48,18 @@ actual_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist"
 actual_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")
 actual_feed=$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info_plist")
 public_key=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info_plist")
+requires_signed_feed=$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' "$info_plist")
+verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info_plist")
 
 [[ "$actual_bundle" == com.serp.keybumps ]] || { print -u2 "bundle identity changed: $actual_bundle"; exit 70; }
 [[ "$actual_build" == "$expected_build" ]] || { print -u2 "unexpected build: $actual_build"; exit 70; }
 [[ "$actual_version" == "$expected_version" ]] || { print -u2 "unexpected version: $actual_version"; exit 70; }
 [[ "$actual_feed" == "$embedded_feed_url" ]] || { print -u2 "app feed URL does not match expected embedded feed"; exit 70; }
 [[ -n "$public_key" ]] || { print -u2 "missing Sparkle public key"; exit 70; }
+[[ "$requires_signed_feed" == true && "$verifies_before_extraction" == true ]] || {
+  print -u2 "Sparkle signed-feed and verify-before-extraction requirements must be enabled"
+  exit 70
+}
 
 if [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"

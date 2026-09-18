@@ -46,6 +46,9 @@ final class LegacyDataMigrationTests: XCTestCase {
         legacyDefaults.set(["quickSearch", "shortcutCoaching"], forKey: "enabledCapabilities")
         legacyDefaults.set(true, forKey: "didCompleteOnboarding")
         legacyDefaults.set(true, forKey: "launchAtLogin")
+        let legacyDefaultsSnapshot = try XCTUnwrap(
+            legacyDefaults.persistentDomain(forName: suiteName("legacy"))
+        ) as NSDictionary
         let sourceSnapshot = try directorySnapshot(fixture.legacy.applicationSupport)
         let recordingsSnapshot = try directorySnapshot(fixture.legacy.recordings)
 
@@ -58,6 +61,10 @@ final class LegacyDataMigrationTests: XCTestCase {
         )
         XCTAssertNil(destinationDefaults.object(forKey: "didCompleteOnboarding"))
         XCTAssertNil(destinationDefaults.object(forKey: "launchAtLogin"))
+        XCTAssertEqual(
+            legacyDefaults.persistentDomain(forName: suiteName("legacy")) as NSDictionary?,
+            legacyDefaultsSnapshot
+        )
         XCTAssertEqual(try directorySnapshot(fixture.legacy.applicationSupport), sourceSnapshot)
         XCTAssertEqual(try directorySnapshot(fixture.legacy.recordings), recordingsSnapshot)
 
@@ -168,6 +175,21 @@ final class LegacyDataMigrationTests: XCTestCase {
         clipboard.clear()
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: outsideFile.path))
+    }
+
+    func testLegacyInstallationDetectionUsesOnlyReadOnlyLegacySignals() throws {
+        let fixture = try makeFixture()
+        let detector = LegacyInstallationDetector(
+            paths: fixture.legacy,
+            defaults: legacyDefaults,
+            defaultsDomainName: suiteName("legacy"),
+            applicationURLs: []
+        )
+        XCTAssertFalse(detector.isPresent)
+
+        try write(Data("legacy".utf8), to: fixture.legacy.applicationSupport.appendingPathComponent("sentinel"))
+
+        XCTAssertTrue(detector.isPresent)
     }
 
     private func makeFixture() throws -> (
