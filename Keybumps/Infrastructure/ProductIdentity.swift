@@ -11,8 +11,6 @@ enum ReleaseLane: String, CaseIterable {
 
 enum ProductIdentity {
     static let bundleIdentifier = "com.serp.keybumps"
-    static let legacyBundleIdentifier = "com.serp.supermac"
-    static let legacyBundleIdentifiers = [legacyBundleIdentifier]
     static let statusItemImageName = "KeybumpsMenuBarMark"
     static let inAppBrandImageName = "KeybumpsArrow"
 }

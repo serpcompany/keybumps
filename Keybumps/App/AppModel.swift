@@ -29,40 +29,6 @@ enum DictationEscapeRegistration {
     }
 }
 
-enum StartupBlockReason: Equatable {
-    case legacyAppRunning
-    case migrationFailed
-
-    var title: String {
-        switch self {
-        case .legacyAppRunning: "Quit SuperMac Before Continuing"
-        case .migrationFailed: "Migration Could Not Finish"
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .legacyAppRunning:
-            "Keybumps has not imported or changed any SuperMac data. Quit SuperMac, then reopen Keybumps."
-        case .migrationFailed:
-            "Keybumps did not activate any global features and left SuperMac data unchanged. Quit Keybumps, check that your Documents and Application Support folders are writable, then try again."
-        }
-    }
-}
-
-@MainActor
-enum StartupBlockPresenter {
-    static func present(_ reason: StartupBlockReason) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = reason.title
-        alert.informativeText = reason.message
-        alert.addButton(withTitle: "Quit Keybumps")
-        alert.runModal()
-        NSApplication.shared.terminate(nil)
-    }
-}
-
 @MainActor @Observable
 final class AppModel {
     let releaseLane = ReleaseLane.current
@@ -86,7 +52,6 @@ final class AppModel {
     private let commandPalette: CommandPaletteController
     private let permissionDragAssistant = PermissionDragAssistantController()
     private let dictationIndicator = DictationIndicatorController()
-    private let legacyAppMonitor: LegacyAppCoexistenceMonitor
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
     @ObservationIgnored private var presentedWalkthroughPermission: MacPermission?
     @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
@@ -101,7 +66,6 @@ final class AppModel {
     var relaunchPromptPermission: MacPermission?
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
-    private(set) var startupBlockReason: StartupBlockReason?
     var unreadCount: Int { inbox.unreadCount }
     var permissionReadiness: PermissionReadinessSnapshot {
         permissionReadiness(for: preferences.enabledCapabilities)
@@ -131,26 +95,12 @@ final class AppModel {
     }
 
     convenience init() {
-        let startupBlockReason: StartupBlockReason?
-        if AppRuntimeEnvironment.isRunningTests {
-            startupBlockReason = nil
-        } else {
-            do {
-                try KeybumpsStartupPreparation().prepare()
-                startupBlockReason = nil
-            } catch LegacyMigrationError.legacyAppRunning {
-                startupBlockReason = .legacyAppRunning
-            } catch {
-                startupBlockReason = .migrationFailed
-            }
-        }
         self.init(
             preferences: AppPreferences(),
             inbox: InboxStore(),
             presenceController: AppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
-            startupBlockReason: startupBlockReason
+            presenter: PresentationWindowController()
         )
     }
 
@@ -163,9 +113,7 @@ final class AppModel {
         presenter: PresentationWindowController,
         shortcutCoordinator: GlobalShortcutCoordinator? = nil,
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
-        updater injectedUpdater: (any UpdateControlling)? = nil,
-        startupBlockReason: StartupBlockReason? = nil,
-        legacyAppMonitor: LegacyAppCoexistenceMonitor? = nil
+        updater injectedUpdater: (any UpdateControlling)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
@@ -176,13 +124,6 @@ final class AppModel {
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
         self.updater = updater
         self.updateSnapshot = updater.snapshot
-        self.startupBlockReason = startupBlockReason
-        let legacyAppMonitor = legacyAppMonitor ?? LegacyAppCoexistenceMonitor(
-            processDetector: AppRuntimeEnvironment.isRunningTests
-                ? LegacyAppProcessDetector(isRunningHandler: { _ in false })
-                : LegacyAppProcessDetector()
-        )
-        self.legacyAppMonitor = legacyAppMonitor
         let clipboard = ClipboardHistoryService()
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
@@ -217,20 +158,11 @@ final class AppModel {
             self.updateSafetyPolicy.updateCriticalOperation(.windowDrag, active: isActive)
             self.updater.installationSafetyDidChange()
         }
-        legacyAppMonitor.onLegacyAppDetected = { [weak self] in
-            self?.blockForRunningLegacyApp()
-        }
         refreshDetectorState()
     }
 
     func start() {
-        if let startupBlockReason {
-            StartupBlockPresenter.present(startupBlockReason)
-            return
-        }
         guard !isStarted else { return }; isStarted = true
-        legacyAppMonitor.start()
-        guard startupBlockReason == nil else { return }
         presenceController.apply(showInDockAndSwitcher: true)
         launchAtLogin.refresh()
         if preferences.didCompleteOnboarding { applyCapabilities() }
@@ -553,15 +485,4 @@ final class AppModel {
         }
     }
 
-    private func blockForRunningLegacyApp() {
-        guard startupBlockReason == nil else { return }
-        startupBlockReason = .legacyAppRunning
-        shortcuts.unregisterAll()
-        clipboard.stop()
-        windows.stop()
-        detector.stop()
-        presenter.dismissAll()
-        dictation.cancel()
-        StartupBlockPresenter.present(.legacyAppRunning)
-    }
 }

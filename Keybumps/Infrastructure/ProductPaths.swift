@@ -9,10 +9,6 @@ struct ProductPaths: Equatable {
         make(productDirectoryName: "Keybumps", fileManager: fileManager)
     }
 
-    static func legacySuperMac(fileManager: FileManager = .default) -> ProductPaths {
-        make(productDirectoryName: "SuperMac", fileManager: fileManager)
-    }
-
     private static func make(
         productDirectoryName: String,
         fileManager: FileManager

@@ -843,7 +843,6 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testKeybumpsBrandingConfiguresTheActualStatusBarButtonContract() {
-        XCTAssertEqual(ProductIdentity.legacyBundleIdentifiers, ["com.serp.supermac"])
         let button = NSStatusBarButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
         let target = StatusItemActionTarget()
 
