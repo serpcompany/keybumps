@@ -401,7 +401,7 @@ private struct KeyboardShortcutterSettingsView: View {
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
-                Button("Send Test Key Bump") { Task { await model.deliverSample() } }
+                Button("Send Test Suggestion") { Task { await model.deliverSample() } }
                     .disabled(!isEnabled || !readiness.isReady)
             }
             Section("Presentation channels") {

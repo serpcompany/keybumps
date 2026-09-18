@@ -358,7 +358,7 @@ struct CoachingPresentationView: View {
     }
 
     private var accessibilityCopy: String {
-        "Key Bump. \(event.actionTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
+        "Keyboard Shortcutter. \(event.actionTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
     }
 }
 

@@ -1,0 +1,39 @@
+name: Validate Keybumps release tooling
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Keybumps/**
+      - KeybumpsTests/**
+      - scripts/**
+      - project.yml
+      - .github/workflows/keybumps-release-checks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keybumps-release-checks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - name: Check out Keybumps
+        uses: actions/checkout@v7.0.1
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Keybumps project
+        run: xcodegen generate
+
+      - name: Test release tooling
+        run: >-
+          xcodebuild -project Keybumps.xcodeproj -scheme Keybumps
+          -configuration Debug -derivedDataPath .derived-ci
+          -only-testing:KeybumpsTests/UpdateControllerTests
+          -only-testing:KeybumpsTests/UpdateReleaseScriptTests test

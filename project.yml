@@ -41,6 +41,23 @@ targets:
         ENABLE_APP_SANDBOX: NO
     dependencies:
       - package: Sparkle
+    preBuildScripts:
+      - name: Validate Keybumps release configuration
+        script: |
+          if [ "$CONFIGURATION" = "Release" ]; then
+            if /usr/bin/env | /usr/bin/grep -q '^SUPERMAC_'; then
+              echo "error: legacy SUPERMAC_* release variables are forbidden"
+              exit 1
+            fi
+            case "$KEYBUMPS_UPDATE_FEED_URL" in
+              "https://updates.keybumps.app/appcast.xml"|"https://updates.keybumps.app/staging/appcast.xml") ;;
+              *) echo "error: KEYBUMPS_UPDATE_FEED_URL must be a canonical Keybumps feed"; exit 1 ;;
+            esac
+            if [ -z "$KEYBUMPS_UPDATE_PUBLIC_KEY" ]; then
+              echo "error: KEYBUMPS_UPDATE_PUBLIC_KEY is required for Release builds"
+              exit 1
+            fi
+          fi
   KeybumpsTests:
     type: bundle.unit-test
     platform: macOS

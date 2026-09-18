@@ -31,6 +31,8 @@ if [[ "$fixture_mode" == --skip-apple-trust-for-fixture ]]; then
 else
   update_url_is_production_https "$embedded_feed_url" || { print -u2 "embedded feed URL must be credential-free, fragment-free HTTPS with a host"; exit 65; }
   update_url_is_production_https "$publication_feed_url" || { print -u2 "publication feed URL must be credential-free, fragment-free HTTPS with a host"; exit 65; }
+  update_url_is_keybumps_feed "$embedded_feed_url" || { print -u2 "embedded feed must use updates.keybumps.app"; exit 65; }
+  update_url_is_keybumps_feed "$publication_feed_url" || { print -u2 "publication feed must use updates.keybumps.app"; exit 65; }
 fi
 [[ "$previous_build" == <-> && "$expected_build" == <-> && "$expected_build" -gt "$previous_build" ]] || {
   print -u2 "CFBundleVersion must be an integer greater than the previously published build"
@@ -47,7 +49,7 @@ actual_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' 
 actual_feed=$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info_plist")
 public_key=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info_plist")
 
-[[ "$actual_bundle" == com.serp.supermac ]] || { print -u2 "bundle identity changed: $actual_bundle"; exit 70; }
+[[ "$actual_bundle" == com.serp.keybumps ]] || { print -u2 "bundle identity changed: $actual_bundle"; exit 70; }
 [[ "$actual_build" == "$expected_build" ]] || { print -u2 "unexpected build: $actual_build"; exit 70; }
 [[ "$actual_version" == "$expected_version" ]] || { print -u2 "unexpected version: $actual_version"; exit 70; }
 [[ "$actual_feed" == "$embedded_feed_url" ]] || { print -u2 "app feed URL does not match expected embedded feed"; exit 70; }
@@ -106,8 +108,8 @@ publication_parent=$(update_url_parent_prefix "$publication_feed_url")
 grep -q 'sparkle:edSignature=' "$appcast_path" || { print -u2 "missing update signature"; exit 70; }
 grep -q '<!-- sparkle-signatures:' "$appcast_path" || { print -u2 "appcast feed itself is not signed"; exit 70; }
 
-architectures=$(/usr/bin/lipo -archs "$app_path/Contents/MacOS/SuperMac")
+architectures=$(/usr/bin/lipo -archs "$app_path/Contents/MacOS/Keybumps")
 [[ "$architectures" == arm64 ]] || { print -u2 "release must contain only arm64; found: $architectures"; exit 70; }
 
-print "Release validation passed for SuperMac $expected_version ($expected_build)."
+print "Release validation passed for Keybumps $expected_version ($expected_build)."
 print "Upload archive and notes first, verify their public URLs, and publish appcast.xml last."

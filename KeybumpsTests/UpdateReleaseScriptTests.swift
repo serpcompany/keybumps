@@ -125,7 +125,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
         }
 
         let reusedBuild = try run(validator, common + [
-            "https://updates.example.com/appcast.xml", "https://staging.example.com/appcast.xml", "2", "2", "0.0.2", "/tmp/tools", "production"
+            "https://updates.keybumps.app/appcast.xml", "https://updates.keybumps.app/staging/appcast.xml", "2", "2", "0.0.2", "/tmp/tools", "production"
         ])
         XCTAssertNotEqual(reusedBuild.status, 0)
         XCTAssertTrue(reusedBuild.output.contains("greater than"))
@@ -136,6 +136,12 @@ final class UpdateReleaseScriptTests: XCTestCase {
         ])
         XCTAssertNotEqual(invalidBuild.status, 0)
         XCTAssertTrue(invalidBuild.output.contains("greater than"))
+
+        let wrongReleaseOrigin = try run(orchestrator, [
+            "0.0.2", "2", "1", "https://updates.example.com/appcast.xml", "public", "key", "/tmp/tools", "/tmp/output"
+        ])
+        XCTAssertNotEqual(wrongReleaseOrigin.status, 0)
+        XCTAssertTrue(wrongReleaseOrigin.output.contains("updates.keybumps.app"))
 
         for maliciousProductionURL in [
             "https:///appcast.xml",

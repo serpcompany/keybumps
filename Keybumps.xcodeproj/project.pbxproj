@@ -393,6 +393,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 83ED1FEC0498672294CAE2E2 /* Build configuration list for PBXNativeTarget "Keybumps" */;
 			buildPhases = (
+				49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */,
 				5DDC946BDE8BD0352EA7CF7B /* Sources */,
 				A2D5E4A89A5E4E8D2261929C /* Resources */,
 				24CE05F3D0E70230042F6542 /* Frameworks */,
@@ -490,6 +491,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Validate Keybumps release configuration";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  if /usr/bin/env | /usr/bin/grep -q '^SUPERMAC_'; then\n    echo \"error: legacy SUPERMAC_* release variables are forbidden\"\n    exit 1\n  fi\n  case \"$KEYBUMPS_UPDATE_FEED_URL\" in\n    \"https://updates.keybumps.app/appcast.xml\"|\"https://updates.keybumps.app/staging/appcast.xml\") ;;\n    *) echo \"error: KEYBUMPS_UPDATE_FEED_URL must be a canonical Keybumps feed\"; exit 1 ;;\n  esac\n  if [ -z \"$KEYBUMPS_UPDATE_PUBLIC_KEY\" ]; then\n    echo \"error: KEYBUMPS_UPDATE_PUBLIC_KEY is required for Release builds\"\n    exit 1\n  fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		5DDC946BDE8BD0352EA7CF7B /* Sources */ = {

@@ -33,7 +33,7 @@ print "Phase 2 — publish the pointer last:"
 print "  $public_feed_url"
 
 if [[ "$mode" == --verify-live ]]; then
-  verification_directory=$(mktemp -d /tmp/supermac-publication-verify.XXXXXX)
+  verification_directory=$(mktemp -d /tmp/keybumps-publication-verify.XXXXXX)
   trap 'rm -rf -- "$verification_directory"' EXIT
   /usr/bin/curl --fail --silent --show-error --location "$archive_url" --output "$verification_directory/archive"
   /usr/bin/curl --fail --silent --show-error --location "$notes_url" --output "$verification_directory/notes"

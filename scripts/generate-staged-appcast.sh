@@ -10,7 +10,7 @@ fi
 archives_directory=${1:A}
 download_url_prefix=$2
 sparkle_tools_directory=${3:A}
-keychain_account=${4:-supermac-staged}
+keychain_account=${4:-keybumps-staged}
 generate_appcast_tool="$sparkle_tools_directory/generate_appcast"
 
 [[ -d "$archives_directory" ]] || { print -u2 "archives directory does not exist: $archives_directory"; exit 66; }
