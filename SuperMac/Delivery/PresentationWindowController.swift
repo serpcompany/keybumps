@@ -340,9 +340,6 @@ struct CoachingPresentationView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             HStack(spacing: 14) {
-                Image(systemName: style.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(.green)
                 coachingCopy
                 Spacer(minLength: 18)
                 ShortcutKeycaps(shortcut: visibleShortcut)
