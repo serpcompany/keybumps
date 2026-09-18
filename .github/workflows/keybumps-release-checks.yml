@@ -35,5 +35,6 @@ jobs:
         run: >-
           xcodebuild -project Keybumps.xcodeproj -scheme Keybumps
           -configuration Debug -derivedDataPath .derived-ci
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           -only-testing:KeybumpsTests/UpdateControllerTests
           -only-testing:KeybumpsTests/UpdateReleaseScriptTests test
