@@ -179,6 +179,26 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertFalse(NSWindow.allowsAutomaticWindowTabbing)
     }
 
+    func testCommandPaletteAndSettingsUseIndependentActivationRoutes() {
+        var paletteOpenCount = 0
+        var settingsOpenCount = 0
+        var applicationActivationCount = 0
+        let paletteRouter = QuickSearchRouter()
+        let settingsRouter = MainWindowRouter { applicationActivationCount += 1 }
+        paletteRouter.configure { paletteOpenCount += 1 }
+        settingsRouter.configure { settingsOpenCount += 1 }
+
+        XCTAssertTrue(paletteRouter.open())
+        XCTAssertEqual(paletteOpenCount, 1)
+        XCTAssertEqual(settingsOpenCount, 0)
+        XCTAssertEqual(applicationActivationCount, 0)
+
+        XCTAssertTrue(settingsRouter.open())
+        XCTAssertEqual(paletteOpenCount, 1)
+        XCTAssertEqual(settingsOpenCount, 1)
+        XCTAssertEqual(applicationActivationCount, 1)
+    }
+
     func testStatusItemOffersAndRoutesQuickSearchSeparatelyFromSettings() {
         let controller = NativeStatusItemController(router: MainWindowRouter())
         var quickSearchVisible = false
@@ -1289,6 +1309,28 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(
             CommandPaletteDismissalPolicy.shouldDismiss(isPresentingConfirmation: false)
         )
+    }
+
+    func testCommandPalettePanelIsNonactivatingAndAcceptsKeyboardFocus() {
+        let panel = CommandPalettePanel(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520)
+        )
+        let field = NSTextField(frame: NSRect(x: 20, y: 20, width: 300, height: 30))
+        panel.contentView = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
+        panel.contentView?.addSubview(field)
+        defer { panel.orderOut(nil) }
+
+        XCTAssertTrue(panel.styleMask.contains(.borderless))
+        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
+        XCTAssertTrue(panel.canBecomeKey)
+        XCTAssertFalse(panel.canBecomeMain)
+
+        panel.makeKeyAndOrderFront(nil)
+        XCTAssertTrue(panel.makeFirstResponder(field))
+
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertTrue(panel.isKeyWindow)
+        XCTAssertTrue(panel.firstResponder === field.currentEditor())
     }
 
     func testSelectedRectangleShortcutProfileIsExactAndUnique() {
