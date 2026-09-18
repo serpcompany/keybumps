@@ -115,7 +115,16 @@ final class CommandPaletteState {
     }
 }
 
-private final class CommandPalettePanel: NSPanel {
+final class CommandPalettePanel: NSPanel {
+    convenience init(contentRect: NSRect) {
+        self.init(
+            contentRect: contentRect,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
@@ -172,7 +181,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         position(panel)
         installKeyMonitor()
         installOutsideMonitors()
-        NSApplication.shared.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async { [weak self] in
             self?.focusInput()
@@ -205,12 +213,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private func makePanel() {
         let size = NSSize(width: 760, height: 520)
-        let panel = CommandPalettePanel(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
+        let panel = CommandPalettePanel(contentRect: NSRect(origin: .zero, size: size))
         panel.delegate = self
         panel.isOpaque = false
         panel.backgroundColor = .clear
