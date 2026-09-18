@@ -313,7 +313,7 @@ enum PresentationLayout {
     }
 }
 
-struct KeyBumpVisibleCopy: Equatable {
+struct KeyboardShortcutterVisibleCopy: Equatable {
     let lines: [String]
 
     init(event: CoachingEvent) {
@@ -328,7 +328,9 @@ struct CoachingPresentationView: View {
     let style: NotificationChannel
     var onHoverChanged: (Bool) -> Void = { _ in }
 
-    var visibleCopy: KeyBumpVisibleCopy { KeyBumpVisibleCopy(event: event) }
+    var visibleCopy: KeyboardShortcutterVisibleCopy {
+        KeyboardShortcutterVisibleCopy(event: event)
+    }
     var visibleShortcut: String { event.shortcut }
 
     var body: some View {

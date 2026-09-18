@@ -4,7 +4,7 @@ set -euo pipefail
 repository_root=${0:A:h:h}
 cd "$repository_root"
 
-legacy_pattern='SuperMac|supermac|SUPERMAC|Key Bump|Key Bumps|key bump|key bumps|key-bump|key-bumps|keyBump|keyBumps|ShortcutCoach|shortcutCoaching'
+legacy_pattern='SuperMac|supermac|SUPERMAC|Key Bump|Key Bumps|key bump|key bumps|key-bump|key-bumps|KeyBump|KeyBumps|keyBump|keyBumps|ShortcutCoach|shortcutCoaching'
 violations=()
 
 while IFS= read -r tracked_file; do
