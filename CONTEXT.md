@@ -1,6 +1,6 @@
-# SuperMac domain
+# Keybumps domain
 
-SuperMac is one installed native macOS companion with five independently enabled capabilities presented through shared app surfaces.
+Keybumps is one installed native macOS companion with five independently enabled capabilities presented through shared app surfaces.
 
 ## Language
 
@@ -9,7 +9,7 @@ A user-enabled area providing one coherent outcome. Disabling it stops the resou
 _Avoid_: Mini-app, embedded app
 
 **Command Palette**:
-The single floating, keyboard-first surface with Search, Clipboard, and Dictation tabs.
+The single floating, keyboard-first surface with Search, Clipboard, Dictation, and Keyboard Shortcutter tabs.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Quick Search**:
@@ -17,7 +17,7 @@ The default Command Palette tab for finding local applications, files, and folde
 _Avoid_: Web search, workflow launcher
 
 **Clipboard History**:
-The Command Palette tab containing the ten most recent user-originated local text or image clipboard items, with visual previews for images. SuperMac's temporary pasteboard writes for automatic Dictation delivery are not clipboard activity.
+The Command Palette tab containing the ten most recent user-originated local text or image clipboard items, with visual previews for images. Keybumps's temporary pasteboard writes for automatic Dictation delivery are not clipboard activity.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Dictation**:
@@ -32,7 +32,7 @@ _Avoid_: Cloud transcript, monolithic history file
 Rectangle-derived window movement and sizing under the owner's selected shortcuts.
 _Avoid_: Rectangle app
 
-**Key Bumps**:
+**Keyboard Shortcutter**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.
 _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
 

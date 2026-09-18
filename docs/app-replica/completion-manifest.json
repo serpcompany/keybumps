@@ -19,7 +19,7 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
-        "candidate": ["SuperMac/CommandPalette/CommandPaletteController.swift", "SuperMac/Views/DictationHistoryView.swift"],
+        "candidate": ["Keybumps/CommandPalette/CommandPaletteController.swift", "Keybumps/Views/DictationHistoryView.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
         "behavior": ["docs/evidence/mvp/README.md#2026-09-12-native-transcript-translation"]
       }
@@ -32,9 +32,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
-        "candidate": ["SuperMac/Views/DictationHistoryView.swift"],
+        "candidate": ["Keybumps/Views/DictationHistoryView.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-native-transcript-translation"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-native-transcript-translation"]
       }
     },
     {
@@ -45,9 +45,9 @@
       "exercised": false,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
-        "candidate": ["SuperMac/Dictation/TranslatedSpeechPlayer.swift", "SuperMac/Views/DictationHistoryView.swift"],
+        "candidate": ["Keybumps/Dictation/TranslatedSpeechPlayer.swift", "Keybumps/Views/DictationHistoryView.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#local-translated-speech-playback"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#local-translated-speech-playback"]
       }
     },
     {
@@ -58,9 +58,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#dictation-acceptance-boundary"],
-        "candidate": ["SuperMac/Dictation/DictationService.swift", "SuperMac/Infrastructure/AppPreferences.swift", "SuperMac/Views/SettingsRootView.swift"],
+        "candidate": ["Keybumps/Dictation/DictationService.swift", "Keybumps/Infrastructure/AppPreferences.swift", "Keybumps/Views/SettingsRootView.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-long-dictation-boundary"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-long-dictation-boundary"]
       }
     },
     {
@@ -71,9 +71,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/product/mvp-prd.md#3-dictation"],
-        "candidate": ["SuperMac/App/AppModel.swift", "SuperMac/Infrastructure/GlobalShortcutCoordinator.swift", "SuperMac/Dictation/DictationService.swift"],
+        "candidate": ["Keybumps/App/AppModel.swift", "Keybumps/Infrastructure/GlobalShortcutCoordinator.swift", "Keybumps/Dictation/DictationService.swift"],
         "comparison": [],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-escape-cancellation-and-menu-settings-repair"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-escape-cancellation-and-menu-settings-repair"]
       }
     },
     {
@@ -84,9 +84,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
-        "candidate": ["SuperMac/Dictation/DictationHistoryService.swift"],
+        "candidate": ["Keybumps/Dictation/DictationHistoryService.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
       }
     },
     {
@@ -97,7 +97,7 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
-        "candidate": ["SuperMac/Dictation/DictationService.swift", "SuperMac/Dictation/DictationAudioPlayer.swift"],
+        "candidate": ["Keybumps/Dictation/DictationService.swift", "Keybumps/Dictation/DictationAudioPlayer.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
         "behavior": ["docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
       }
@@ -110,9 +110,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#per-recording-history-and-storage-slice"],
-        "candidate": ["SuperMac/Views/SettingsRootView.swift"],
+        "candidate": ["Keybumps/Views/SettingsRootView.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-per-recording-dictation-archive"]
       }
     },
     {
@@ -149,9 +149,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/product/mvp-prd.md#2-clipboard-history"],
-        "candidate": ["SuperMac/Clipboard/ClipboardHistoryService.swift", "SuperMac/Dictation/DictationService.swift", "SuperMac/CommandPalette/CommandPaletteController.swift"],
+        "candidate": ["Keybumps/Clipboard/ClipboardHistoryService.swift", "Keybumps/Dictation/DictationService.swift", "Keybumps/CommandPalette/CommandPaletteController.swift"],
         "comparison": [],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-dictation-and-clipboard-history-separation"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-dictation-and-clipboard-history-separation"]
       }
     },
     {
@@ -162,9 +162,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/product/mvp-prd.md#2-clipboard-history"],
-        "candidate": ["SuperMac/CommandPalette/CommandPaletteController.swift", "SuperMac/Views/DictationHistoryView.swift"],
+        "candidate": ["Keybumps/CommandPalette/CommandPaletteController.swift", "Keybumps/Views/DictationHistoryView.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-history-interaction-repair"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-history-interaction-repair"]
       }
     },
     {
@@ -188,7 +188,7 @@
       "exercised": false,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#alfred-reference-slice"],
-        "candidate": ["SuperMac/App/AppModel.swift"],
+        "candidate": ["Keybumps/App/AppModel.swift"],
         "comparison": [],
         "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
       }
@@ -214,7 +214,7 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/product/mvp-prd.md#shared-command-palette"],
-        "candidate": ["SuperMacTests/SuperMacFeatureTests.swift"],
+        "candidate": ["KeybumpsTests/KeybumpsFeatureTests.swift"],
         "comparison": [],
         "behavior": ["docs/evidence/mvp/README.md#2026-09-12-unified-command-palette"]
       }
@@ -240,9 +240,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#unified-command-palette-reference-slice"],
-        "candidate": ["SuperMac/Clipboard/ClipboardHistoryService.swift", "SuperMac/CommandPalette/CommandPaletteController.swift"],
+        "candidate": ["Keybumps/Clipboard/ClipboardHistoryService.swift", "Keybumps/CommandPalette/CommandPaletteController.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md#clipboard-rich-media-history"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-rectangle-style-settings-and-image-clipboard-history"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-rectangle-style-settings-and-image-clipboard-history"]
       }
     },
     {
@@ -253,9 +253,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#rectangle-configuration-reference"],
-        "candidate": ["SuperMac/Views/SettingsRootView.swift", "SuperMac/WindowManagement/WindowAction.swift"],
+        "candidate": ["Keybumps/Views/SettingsRootView.swift", "Keybumps/WindowManagement/WindowAction.swift"],
         "comparison": ["docs/app-replica/parity-ledger.md#window-management-settings-layout"],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-rectangle-style-settings-and-image-clipboard-history"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-rectangle-style-settings-and-image-clipboard-history"]
       }
     },
     {
@@ -279,9 +279,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/evidence/heyclicky-1.0.48/reference/permission-drag-helper.png"],
-        "candidate": ["SuperMac/Permissions/PermissionDragAssistantController.swift"],
+        "candidate": ["Keybumps/Permissions/PermissionDragAssistantController.swift"],
         "comparison": [],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
       }
     },
     {
@@ -292,9 +292,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/app-replica/scope.md#heyclicky-permission-helper-slice"],
-        "candidate": ["SuperMac/Infrastructure/SystemServices.swift", "SuperMac/Views/SettingsRootView.swift"],
+        "candidate": ["Keybumps/Infrastructure/SystemServices.swift", "Keybumps/Views/SettingsRootView.swift"],
         "comparison": [],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-draggable-permission-helper"]
       }
     },
     {
@@ -305,9 +305,9 @@
       "exercised": true,
       "evidence": {
         "reference": ["docs/product/user-journeys.md#uj-11--dock-menu-bar-conflicts-and-launch-at-login"],
-        "candidate": ["SuperMac/App/NativeStatusItemController.swift", "SuperMac/App/SuperMacApp.swift", "SuperMac/App/AppDelegate.swift"],
+        "candidate": ["Keybumps/App/NativeStatusItemController.swift", "Keybumps/App/KeybumpsApp.swift", "Keybumps/App/AppDelegate.swift"],
         "comparison": [],
-        "behavior": ["SuperMacTests/SuperMacFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-escape-cancellation-and-menu-settings-repair"]
+        "behavior": ["KeybumpsTests/KeybumpsFeatureTests.swift", "docs/evidence/mvp/README.md#2026-09-12-escape-cancellation-and-menu-settings-repair"]
       }
     }
   ]

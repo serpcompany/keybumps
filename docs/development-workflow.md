@@ -1,6 +1,6 @@
 # Development and manual QA workflow
 
-This is the general SuperMac development cycle for feature work, bug fixes, local builds, and owner acceptance. Public Sparkle distribution is a later, separate operation documented in [`releases/sparkle-update-operations.md`](releases/sparkle-update-operations.md).
+This is the general Keybumps development cycle for feature work, bug fixes, local builds, and owner acceptance. Public Sparkle distribution is a later, separate operation documented in [`releases/sparkle-update-operations.md`](releases/sparkle-update-operations.md).
 
 ## 1. Establish the base
 
@@ -21,7 +21,9 @@ This is the general SuperMac development cycle for feature work, bug fixes, loca
 - Build from the exact issue-branch state intended for review.
 - Use a development-only label that identifies the issue or branch; do not reuse public release names for local candidates.
 - Record the branch and full commit SHA in the QA handoff.
-- Keep the stable `com.serp.supermac` bundle identity and signing identity so permission-sensitive testing remains meaningful.
+- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful.
+- Sign installed manual-QA candidates with `Developer ID Application` using the same designated requirement as the accepted baseline. An Apple Development-signed Debug/test host is a different TCC identity and must never be installed as a permission-continuity candidate.
+- Keybumps registers its own Launch at Login item only after fresh onboarding.
 - Replace the installed app with the intended candidate, launch it from `/Applications`, and verify that the running artifact is the candidate just built.
 
 ## 4. Give the owner a scoped hit list

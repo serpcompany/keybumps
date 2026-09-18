@@ -1,8 +1,8 @@
-# SuperMac MVP — implementation handoff
+# Keybumps MVP — implementation handoff
 
 ## Mission
 
-Build one native macOS application that replaces the owner's daily use of Shortcut Coach, Rectangle, Superwhisper, and Alfred with the selected workflows below. The product is **SuperMac**, bundle identifier `com.serp.supermac`.
+Build one native macOS application that replaces the owner's daily use of Shortcut Coach, Rectangle, Superwhisper, and Alfred with the selected workflows below. The product is **Keybumps**, bundle identifier `com.serp.keybumps`.
 
 Prioritize a usable integrated MVP over speculative platform work. Preserve working donor behavior, prove each real macOS integration from the signed app, and defer reversible polish until the owner can use the combined product.
 
@@ -10,7 +10,7 @@ Prioritize a usable integrated MVP over speculative platform work. Preserve work
 
 When the owner gives this document to an implementation agent, that authorizes:
 
-- creating a new local repository for SuperMac;
+- creating a new local repository for Keybumps;
 - copying or adapting selected source from the owner-controlled donor repositories;
 - using Rectangle-derived source under its MIT license with attribution;
 - building, signing for local development, launching, testing, and recording local evidence;
@@ -35,7 +35,7 @@ Read these before editing:
 2. [`docs/adr/0001-one-companion-with-enabled-capabilities.md`](../adr/0001-one-companion-with-enabled-capabilities.md) — one-app product shape.
 3. [`docs/adr/0002-direct-local-only-commercial-product.md`](../adr/0002-direct-local-only-commercial-product.md) — distribution and privacy boundary.
 4. [`docs/adr/0003-one-online-activation-then-offline-validation.md`](../adr/0003-one-online-activation-then-offline-validation.md) — licensing decision and deferred details.
-5. [`docs/adr/0004-new-canonical-supermac-repository.md`](../adr/0004-new-canonical-supermac-repository.md) — new-repository decision.
+5. [`docs/adr/0004-new-canonical-keybumps-repository.md`](../adr/0004-new-canonical-keybumps-repository.md) — new-repository decision.
 6. [`docs/app-replica/scope.md`](../app-replica/scope.md) — frozen reference versions, exact Rectangle shortcuts, observed settings, and selected reference slices.
 
 Treat the reference scope as authoritative when this PRD summarizes rather than repeats detailed mappings.
@@ -56,11 +56,11 @@ The donor repositories remain intact. Record the donor repository and commit for
 - `/Applications/Rectangle.app` is the behavioral and configuration oracle for Window Management.
 - `/Applications/Alfred 5.app` is the behavioral oracle for Quick Search and the Clipboard History invocation.
 
-Use black-box observation only for Superwhisper and Alfred. Keep SuperMac branding and assets original.
+Use black-box observation only for Superwhisper and Alfred. Keep Keybumps branding and assets original.
 
 ## Product frame
 
-SuperMac is one quiet, sellable Mac utility with:
+Keybumps is one quiet, sellable Mac utility with:
 
 - one Dock icon;
 - one menu-bar item;
@@ -76,7 +76,7 @@ The capabilities are:
 2. Clipboard History
 3. Dictation
 4. Window Management
-5. Key Bumps
+5. Keyboard Shortcutter
 
 All begin enabled. Settings/Setup is a readiness dashboard with truthful status and setup/open actions. Enable/disable controls live in each capability's own sidebar screen. Disabling a capability immediately stops the resources it actually owns, such as monitors, panels, recordings, and global shortcuts.
 
@@ -91,23 +91,23 @@ Use a native macOS sidebar with these conceptual destinations:
 - Clipboard History
 - Dictation
 - Window Management
-- Key Bumps
+- Keyboard Shortcutter
 - Permissions
 - General
 
 Exact labels, order, and visual polish are reversible implementation details. The window must remain understandable without documentation.
 
-Clicking the Dock icon opens Quick Search. Settings remains a single reusable window opened through Command-comma or the menu-bar menu. SuperMac registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
+Clicking the Dock icon opens Quick Search. Settings remains a single reusable window opened through Command-comma or the menu-bar menu. Keybumps registers Launch at Login during onboarding; it does not duplicate macOS Login Items controls inside General. Users change that behavior through System Settings.
 
 ### Menu bar
 
 Keep the menu deliberately minimal:
 
-- Toggle SuperMac
+- Toggle Keybumps
 - version information
 - Settings…
 - Check for Updates…
-- Quit SuperMac
+- Quit Keybumps
 
 Settings must reopen and raise the main window even after the user has closed it; the menu action cannot depend on a listener owned only by that closed window.
 
@@ -134,7 +134,7 @@ Detect running Alfred, Rectangle, and Superwhisper instances that own the select
 
 ### Shared Command Palette
 
-Quick Search, Clipboard History, Dictation History, and Key Bumps History share one original SuperMac command palette inspired by Alfred's compact launcher and Raycast's dense keyboard-first hierarchy. Search is the default tab; Clipboard, Dictation, and Key Bumps are peer tabs. Tab controls show only their Command-1/2/3/4 shortcut and name. A single dominant input filters the active tab, arrow keys move selection, Return performs the primary action where one exists, Escape closes the palette, and Command-1/2/3/4 switch tabs. Key Bumps rows are informational: selecting or pressing Return never writes the pasteboard or mutates read state.
+Quick Search, Clipboard History, Dictation History, and Keyboard Shortcutter History share one original Keybumps command palette inspired by Alfred's compact launcher and Raycast's dense keyboard-first hierarchy. Search is the default tab; Clipboard, Dictation, and Keyboard Shortcutter are peer tabs. Tab controls show only their Command-1/2/3/4 shortcut and name. A single dominant input filters the active tab, arrow keys move selection, Return performs the primary action where one exists, Escape closes the palette, and Command-1/2/3/4 switch tabs. Keyboard Shortcutter rows are informational: selecting or pressing Return never writes the pasteboard or mutates read state.
 
 Command-Space opens the palette on Search. Shift-Command-Space opens the same palette on Clipboard. The Dictation settings screen opens it on Dictation. Reference product names, assets, themes, proprietary interactions, and broader feature sets remain excluded.
 
@@ -152,7 +152,7 @@ User outcome: replace the owner's basic Alfred/Spotlight launcher workflow.
 - After a result opens successfully, retain a bounded, deduplicated local Recent Items list containing the actual app, file, or folder—not the query string. An empty query shows that list; choosing one opens it, each item can be deleted individually, and clearing all requires destructive confirmation. Typing, highlighting, dismissing, revealing, or a failed open does not record history.
 - Keep a separate local application-launch usage index. Successful application opens update frequency and recency; those signals refine future application ordering after exact/prefix relevance, while failed opens and file/folder results do not train application ranking.
 - Escape or clicking outside dismisses the panel.
-- The panel must not leave SuperMac as the active foreground app after launching a result.
+- The panel must not leave Keybumps as the active foreground app after launching a result.
 
 Out of scope: web searches, calculations, contacts, music control, Alfred workflows, arbitrary commands, plugins, and cloud search.
 
@@ -167,7 +167,7 @@ User outcome: recover and reuse the most recent copied text or image through the
 - Persist only the ten most recent text or image items locally. Store image payloads as separate local media files capped at 50 MB each rather than embedding binary data in the history JSON.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the clipboard and pastes it into the focused destination when safe.
-- Exclude SuperMac's automatic pasteboard writes for fresh Dictation insertion and Copy from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
+- Exclude Keybumps's automatic pasteboard writes for fresh Dictation insertion and Copy from Dictation History; those transcripts already belong to Dictation History. A later user-originated copy of the same text remains eligible for Clipboard History.
 - Provide deletion and one shared native SwiftUI `Clear All` control that requires destructive confirmation before removing all items. Opening, cancelling, or confirming that alert must not dismiss the Command Palette.
 - Disabling the capability stops monitoring but does not silently erase retained items.
 - No arbitrary copied files, audio/video media, cloud sync, account, permanent archive, or elaborate source filtering in MVP.
@@ -197,7 +197,7 @@ User outcome: replace the owner's transparent Superwhisper voice-to-text workflo
 - Write pending metadata when recording begins and preserve the continuously written WAV when the app/process is unexpectedly interrupted. On relaunch, recover pending recordings and legacy playable audio-only folders into Dictation History with an explicit interrupted state. Intentional Escape cancellation remains a discard action.
 - Preserve the WAV in Dictation History with an explicit failure state when transcription fails or times out. Interrupted and failed entries provide a local Transcribe action that retries the completed audio file and updates the same history item.
 - Retain SERPy's crash-safe last-dictation recovery behavior where practical.
-- Persist every completed Dictation as `~/Documents/SuperMac/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
+- Persist every completed Dictation as `~/Documents/Keybumps/recordings/<timestamp>/meta.json` plus `output.wav` rather than rewriting a monolithic history file.
 - Provide searchable Dictation History in the shared quick switcher with real local playback, duration/progress, 0.5× through 2× speed controls, copy, reveal in Finder, individual delete, and a native clear-all control that requires destructive confirmation.
 - Add a Translate action to expanded transcript cards using Apple's custom on-device `TranslationSession`, with a supported target-language picker and system-managed language downloads. Render translated speech to a temporary local WAV and present it through the same waveform, play/pause, progress, duration, and speed controls as the original recording. Delete that temporary audio when the translation closes or changes; preserve the original transcript, do not add generated speech to Dictation History, and do not use the system presentation that may process content remotely.
 - Keep transcript reuse available from the third Command Palette tab.
@@ -235,21 +235,21 @@ Use Window Manager's independently identified MIT-licensed fork as the code dono
 
 Completion criterion: exercise every assigned shortcut against normal resizable windows, verify the resulting frame on one display and across displays where applicable, prove repeated-command behavior, and physically verify each selected drag-to-snap region. Unit tests for calculations support but do not replace installed runtime proof.
 
-### 5. Key Bumps
+### 5. Keyboard Shortcutter
 
-User outcome: provide the old Shortcut Coach foundation inside SuperMac under the Key Bumps name.
+User outcome: provide the old Shortcut Coach foundation inside Keybumps under the Keyboard Shortcutter name.
 
 Bring across the current full-product behavior:
 
 - supported manual-action detection;
-- durable key-bump history and unread state;
+- durable keyboard-shortcut history and unread state;
 - presentation-channel selection and previews;
-- Key Bumps history;
+- Keyboard Shortcutter history;
 - app-presence behavior;
 - permissions and diagnostics;
 - current supported action catalog.
 
-The retained presentation choices are Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Removed legacy channel identifiers, including Pointer Card, are migrated out of saved preferences. Native Banner preview uses real notification authorization and provides a System Settings recovery action when denied; missing authorization is visible in Settings and on the Dock attention badge when the channel is enabled. Custom cards show the action headline, source application, separated modifier/key caps, and a top-left close button. The Command Palette can filter and explicitly clear Key Bumps history; its rows omit unread dots and live elapsed-time counters.
+The retained presentation choices are Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Removed legacy channel identifiers, including Pointer Card, are migrated out of saved preferences. Native Banner preview uses real notification authorization and provides a System Settings recovery action when denied; missing authorization is visible in Settings and on the Dock attention badge when the channel is enabled. Custom cards show the action headline, source application, separated modifier/key caps, and a top-left close button. The Command Palette can filter and explicitly clear Keyboard Shortcutter history; its rows omit unread dots and live elapsed-time counters.
 
 Required system permissions remain Accessibility and Input Monitoring. Direct distribution enables these permissions but does not increase detection coverage by itself. New application/action recognition is post-MVP work unless required to repair an existing supported journey.
 
@@ -259,7 +259,7 @@ Use the existing Shortcut Coach architecture and verification documents as the c
 - [`docs/product/feature-inventory.md`](feature-inventory.md)
 - [`docs/verification.md`](../verification.md)
 
-Completion criterion: from the exact signed SuperMac build, a physical supported manual action in Finder and a supported action in Chrome each produce one correct durable key bump and the selected presentation output. Synthetic previews do not satisfy detector acceptance.
+Completion criterion: from the exact signed Keybumps build, a physical supported manual action in Finder and a supported action in Chrome each produce one correct durable keyboard shortcut suggestion and the selected presentation output. Synthetic previews do not satisfy detector acceptance.
 
 ## Shared system requirements
 
@@ -276,7 +276,7 @@ The coordinator must:
 - release a capability's bindings when it is disabled;
 - handle session resign/activation without duplicate registrations.
 
-Every global shortcut exposed by a capability settings screen must be recordable and explicitly clearable. Quick Search, Clipboard History, and Dictation also provide a per-action Restore Default control. Reassigning a key combination moves it from its previous SuperMac action rather than leaving an ambiguous internal collision.
+Every global shortcut exposed by a capability settings screen must be recordable and explicitly clearable. Quick Search, Clipboard History, and Dictation also provide a per-action Restore Default control. Reassigning a key combination moves it from its previous Keybumps action rather than leaving an ambiguous internal collision.
 
 Pressing the Dictation shortcut without Microphone or Speech Recognition access first shows an app-owned explanation with a Set Up Dictation action. It must not throw the user into System Settings without context. The explicit setup action starts the guided permission flow; denied permissions open the exact macOS pane with a visible instruction card. Other startup failures show a transient error indicator and remain visible in Dictation settings.
 
@@ -284,7 +284,7 @@ Pressing the Dictation shortcut without Microphone or Speech Recognition access 
 
 One permission coordinator reports capability requirements and current state. The guided setup should make macOS's Security & Privacy steps as direct as public APIs allow, using clear drag/open guidance and deep links where appropriate. The app may guide users but must not claim to bypass or silently grant macOS-controlled consent.
 
-Accessibility and Input Monitoring use only the HeyClicky-inspired bounded setup journey recorded in `docs/app-replica/scope.md`: silently preflight current status, open the exact System Settings list, keep a nonactivating helper visible above it, and let the user drag the signed SuperMac app bundle into the list. SuperMac must not also invoke the native Accessibility `AXIsProcessTrustedWithOptions(prompt: true)` or `CGRequestListenEventAccess()` dialogs for those permissions. Microphone and Speech Recognition use their required native consent prompts. Every path refreshes truthful permission state after the user returns.
+Accessibility and Input Monitoring use only the HeyClicky-inspired bounded setup journey recorded in `docs/app-replica/scope.md`: silently preflight current status, open the exact System Settings list, keep a nonactivating helper visible above it, and let the user drag the signed Keybumps app bundle into the list. Keybumps must not also invoke the native Accessibility `AXIsProcessTrustedWithOptions(prompt: true)` or `CGRequestListenEventAccess()` dialogs for those permissions. Microphone and Speech Recognition use their required native consent prompts. Every path refreshes truthful permission state after the user returns.
 
 Required permissions by capability:
 
@@ -294,21 +294,21 @@ Required permissions by capability:
 | Clipboard History | None for ordinary pasteboard monitoring |
 | Dictation | Microphone, Speech Recognition, and conditional Accessibility for insertion |
 | Window Management | Accessibility |
-| Key Bumps | Accessibility and Input Monitoring |
+| Keyboard Shortcutter | Accessibility and Input Monitoring |
 
 ### Privacy and storage
 
 - User content and processing remain local.
 - No account, sync, analytics backend, application server, cloud transcription, or hosted history.
-- No clipboard, dictated text, search terms, Key Bumps history, or filenames in telemetry or committed evidence.
+- No clipboard, dictated text, search terms, Keyboard Shortcutter history, or filenames in telemetry or committed evidence.
 - Start all histories clean; do not import historical user content from donor/reference apps.
-- Use distinct SuperMac storage paths and preference domains.
+- Use distinct Keybumps storage paths and preference domains.
 - Keep logs structural: state, duration, stage, error category, and recovery—not private content.
 
 ### App identity
 
-- Display name: SuperMac
-- Bundle identifier: `com.serp.supermac`
+- Display name: Keybumps
+- Bundle identifier: `com.serp.keybumps`
 - Target: Apple Silicon, macOS 14.2 or newer
 - Distribution: Developer ID signing, hardened runtime, notarized direct download
 - Mac App Store: no product or release lane
@@ -347,7 +347,7 @@ Select and document an owned update feed and signing mechanism before treating u
 Use one native macOS Xcode project with a thin composition/lifecycle target and independently testable feature boundaries. A sensible dependency direction is:
 
 ```text
-SuperMacApp
+KeybumpsApp
     ├── SharedCore
     ├── SharedMac
     ├── SharedUI
@@ -355,7 +355,7 @@ SuperMacApp
     ├── ClipboardFeature
     ├── DictationFeature
     ├── WindowManagementFeature
-    └── KeyBumpsFeature
+    └── KeyboardShortcutterFeature
 ```
 
 The exact targets/packages are implementation discretion. Preserve these ownership rules:
@@ -366,7 +366,7 @@ The exact targets/packages are implementation discretion. Preserve these ownersh
 - each feature owns its domain behavior and detailed settings;
 - no feature creates a second app delegate, status item, Settings scene, updater, license system, or launch-at-login controller;
 - dictation never depends on guide/assistant code;
-- Key Bumps detection never owns presentation history;
+- Keyboard Shortcutter detection never owns presentation history;
 - Window Management calculations remain independently testable from Accessibility execution.
 
 Prefer extracting coherent donor modules over mechanically copying entire application targets.
@@ -381,7 +381,7 @@ Prefer extracting coherent donor modules over mechanically copying entire applic
 4. Establish the stable app identity and a repeatable build/run script.
 5. Capture baseline reference evidence needed for the selected journeys.
 
-Completion criterion: a fresh clone can build and launch a signed empty SuperMac shell under the permanent bundle identity, and every imported source group has a recorded donor/license disposition.
+Completion criterion: a fresh clone can build and launch a signed empty Keybumps shell under the permanent bundle identity, and every imported source group has a recorded donor/license disposition.
 
 ### Phase 1 — Shared shell
 
@@ -407,9 +407,9 @@ Extract selected Rectangle behavior from the Window Manager donor and integrate 
 
 Completion criterion: the complete assigned shortcut profile and drag-to-snap acceptance pass without Rectangle running.
 
-### Phase 5 — Key Bumps
+### Phase 5 — Keyboard Shortcutter
 
-Move the old Shortcut Coach feature into the shared shell as Key Bumps without broadening coverage.
+Move the old Shortcut Coach feature into the shared shell as Keyboard Shortcutter without broadening coverage.
 
 Completion criterion: current Finder and Chrome physical-action journeys pass without the old Shortcut Coach running.
 
@@ -421,7 +421,7 @@ Completion criterion: current Finder and Chrome physical-action journeys pass wi
 4. Prove each primary workflow with Alfred, Rectangle, Superwhisper, and Shortcut Coach stopped.
 5. Preserve screenshots, logs, test results, and short screen recordings that contain no private content.
 
-Completion criterion: the owner can perform all five selected daily workflows using only SuperMac, while the old apps remain available but inactive for rollback.
+Completion criterion: the owner can perform all five selected daily workflows using only Keybumps, while the old apps remain available but inactive for rollback.
 
 ### Phase 7 — Commercial release gates
 
@@ -451,7 +451,7 @@ Never promote a lower layer as proof of a higher one. In particular:
 - a build is not proof of window movement or dictation;
 - a synthetic transcript is not proof of microphone capture;
 - unit-tested window calculations are not proof of Accessibility execution;
-- presentation previews are not proof of physical Key Bumps detection;
+- presentation previews are not proof of physical Keyboard Shortcutter detection;
 - a launched `.app` is not proof of the installed/notarized artifact;
 - one successful workflow is not complete reference-app parity.
 
@@ -471,13 +471,13 @@ Never promote a lower layer as proof of a higher one. In particular:
 
 ## Definition of functional MVP
 
-The functional MVP is complete when one stable signed SuperMac build, with the four old apps stopped, directly proves all of the following:
+The functional MVP is complete when one stable signed Keybumps build, with the four old apps stopped, directly proves all of the following:
 
 - `Command-Space` finds and opens apps, files, and folders.
 - `Shift-Command-Space` recalls the bounded persistent text clipboard history.
 - `Option-Space` records, transcribes locally, and inserts dictated text; Escape cancels.
 - every assigned Rectangle shortcut and selected drag-to-snap behavior works.
-- current supported Finder and Chrome actions generate correct key bumps.
+- current supported Finder and Chrome actions generate correct keyboard shortcuts.
 - Capability switches stop and restart each capability without duplicate hotkeys or monitors.
 - skipped permissions remain recoverable and do not disable unrelated capabilities.
 - quitting/relaunching preserves intended preferences and histories.

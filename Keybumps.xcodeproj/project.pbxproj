@@ -1,0 +1,858 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */; };
+		098879181087D6A890F705C8 /* DictationAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */; };
+		0995B7DD6F2FBCEF958946B3 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ECDF1BD3B90804BF35BDC11 /* AppModel.swift */; };
+		0A2691072FFA6F40A5F31531 /* StandardWindowControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6496418091377710D1C553EB /* StandardWindowControlTests.swift */; };
+		0F5B463A70383784E45A5ED2 /* QuickSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8898653639A2B580518571 /* QuickSearchService.swift */; };
+		15CE81C4A605AA2A6004C832 /* NotificationChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6DD21B40DBBF07863F2539 /* NotificationChannel.swift */; };
+		168EB2F837DEC3518377B4C2 /* ChromeActionDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */; };
+		1A1112634F9877A12C8E3B19 /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */; };
+		1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */; };
+		29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */; };
+		3059D8E4728CF39B1A21420A /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */; };
+		30969CFBA6428F79100205AF /* DictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79A769F22A9F51BA885B76F1 /* DictationService.swift */; };
+		331F72AEC4344E569F6BEB91 /* KeyboardShortcutterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F61176BC5A52592CB08999D5 /* KeyboardShortcutterTests.swift */; };
+		356E7F675BBAF3C664BF0C0F /* DictationIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90063321A15E6192126FE5C0 /* DictationIndicatorController.swift */; };
+		35D76276DAD2370A13E37108 /* ActionCorrelator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1125D0B1418C5EBF60FFBEBD /* ActionCorrelator.swift */; };
+		397B0338C0A8428140BDE535 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 4180293288B6BA15C922987B /* Sparkle */; };
+		484DBF61BC6DF412A9518239 /* KeyboardShortcutRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */; };
+		53CFFCB76A3C8CA8E3926704 /* SystemChannelAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15DFFB4F5CBB2AC080E88C36 /* SystemChannelAdapters.swift */; };
+		55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */; };
+		58CCB0AF49FFC5BA0289F8C1 /* WindowAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08E29668587A361DF1D41AC /* WindowAction.swift */; };
+		5D29894075C352B646141A29 /* FinderTrashDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18BF5E21B6787A034888698 /* FinderTrashDetectionTests.swift */; };
+		66D4AA5C1B1F31493509DD84 /* PointerEventMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96B2E873B85F38F428D7E33E /* PointerEventMonitor.swift */; };
+		6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5341E18161C5048290122F /* CoachingEvent.swift */; };
+		72889304501A8474A7F08269 /* InboxStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE3159CDD93E812D43C4592 /* InboxStore.swift */; };
+		780135D18A3D6C288C8DC1DD /* DictationHistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 509645F9F339E06AC1E564CE /* DictationHistoryService.swift */; };
+		7C5C620EDEABCBCF01BA1DE3 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */; };
+		80EBAD50A5F6E554E63A4CC4 /* ProductIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 997F4D090D8DCBF03DAFC78E /* ProductIdentity.swift */; };
+		85868CCFFF8CE1C0294CBE42 /* GlobalShortcutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */; };
+		898609FBD52337225953DE11 /* PresentationWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F84D2C75C3619AC08893A51 /* PresentationWindowController.swift */; };
+		8FD80A923E357790F894A93C /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059D55AF379C93A1EABF75A1 /* SharedViews.swift */; };
+		906AF4F5B61D66F206EBD737 /* fixture.zip in Resources */ = {isa = PBXBuildFile; fileRef = 323E102DD6374B05A2E71420 /* fixture.zip */; };
+		9198579854CC8F0979A2D87D /* SystemServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF5180228D1F28AB0362C61 /* SystemServices.swift */; };
+		924524C9291A150C1ED22EAA /* ApplicationUsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 655FDDBD20D3B108B6CC84CD /* ApplicationUsageStore.swift */; };
+		952BFAC50F37CBE088DC6D6F /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13C5DD5F845097BB1BA796D /* UpdateController.swift */; };
+		969668521B3A2F95CAD252BB /* MenuInboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9C29448CFAF723A5885A20 /* MenuInboxView.swift */; };
+		98D0993E91F7EFD2B0E346D1 /* UpdateReleaseScriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */; };
+		9F11C1F5817C7DE04228CEF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C144E78DC41A2DF2C4FCA0C /* Assets.xcassets */; };
+		AF01C1FEA6DFAC71142B7305 /* ProductPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF48890AB96ECDC791B1116 /* ProductPaths.swift */; };
+		B276B1127A353841F9623DE6 /* StandardWindowControlMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447B3311AE42A32A9FD01E03 /* StandardWindowControlMonitor.swift */; };
+		B8AD9EB09F7831E8226756F2 /* ChromeActionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */; };
+		B8EF53C6A451D2E475070D85 /* SparkleUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */; };
+		C6B99BA39BBA147D692C0FCB /* AppPresenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF370D4AAE4252C8026A77E /* AppPresenceController.swift */; };
+		C7BA0E484216B7DE0A03D3BC /* ManualActionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */; };
+		CC7CDD51F06A873ACBE309A6 /* NotificationDeliveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F7E0D610E42D0E55E94D1F /* NotificationDeliveryService.swift */; };
+		CC9C3B70B132461EB151193B /* DictationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */; };
+		D071D645E3CFD0351F3E11C5 /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */; };
+		D6A968F55CA67D1A1BB90941 /* TranslatedSpeechPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06540DC321A150343B3C752 /* TranslatedSpeechPlayer.swift */; };
+		DC5D1578C1100C5D5B0471DC /* Capability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C53D92EB611917B9E44212C /* Capability.swift */; };
+		E38A15BF69E728B9C3142E0A /* AXShortcutEvidenceReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */; };
+		E78F2836D4E83FAE88C6F9BB /* KeybumpsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9198187F33359DFFA13F0C5D /* KeybumpsApp.swift */; };
+		E81A9BD91DF71EE3A5BA0064 /* PresentationEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8B7E25C1D066158973E5A7F /* PresentationEvidenceTests.swift */; };
+		EC784D4AB4204072FEBCC20F /* ClipboardHistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621ADF842978F483030F4A98 /* ClipboardHistoryService.swift */; };
+		EE5DCEFB09728CECFDE914B0 /* WindowManagementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31EA5B36802F222489865B5 /* WindowManagementService.swift */; };
+		EFDCF1CF3AEFE100555404D9 /* KeybumpsFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */; };
+		F2C72DC369FD3FDD4586E311 /* UpdateControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */; };
+		F43F37F847B4D894E2B90B57 /* fixture.md in Resources */ = {isa = PBXBuildFile; fileRef = 3EF5ED7D3614F5E7E907D83B /* fixture.md */; };
+		FB1EF3A045635D619E187E8D /* RecentItemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE31E47A0F652B4E42CD60 /* RecentItemStore.swift */; };
+		FD8E7DB4FEB1D67D4B46E1AD /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = 3BB76ED2E173127B8361F2B8 /* appcast.xml */; };
+		FEE8BAB393C914FFECD752A3 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E50394667FC5D2DE8B5333 /* AppDelegate.swift */; };
+		FF97CDE8A3490AA04F8B76B0 /* ShortcutCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D547C96CB0A8C34AE6C8D05C /* ShortcutCatalog.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		07F06C50136DD628F45195F1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 28E15429764BA5F28DAA3D0E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 16EA3C6D651A8AAA3A2782B1;
+			remoteInfo = Keybumps;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		00E50394667FC5D2DE8B5333 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		059D55AF379C93A1EABF75A1 /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
+		0C53D92EB611917B9E44212C /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
+		0ECDF1BD3B90804BF35BDC11 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		1125D0B1418C5EBF60FFBEBD /* ActionCorrelator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionCorrelator.swift; sourceTree = "<group>"; };
+		15DFFB4F5CBB2AC080E88C36 /* SystemChannelAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChannelAdapters.swift; sourceTree = "<group>"; };
+		1FD52164D0E4BEB3C625179B /* Keybumps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Keybumps.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
+		323E102DD6374B05A2E71420 /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
+		3BB76ED2E173127B8361F2B8 /* appcast.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = appcast.xml; sourceTree = "<group>"; };
+		3DF48890AB96ECDC791B1116 /* ProductPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPaths.swift; sourceTree = "<group>"; };
+		3EF5ED7D3614F5E7E907D83B /* fixture.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = fixture.md; sourceTree = "<group>"; };
+		3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateControllerTests.swift; sourceTree = "<group>"; };
+		3FE3159CDD93E812D43C4592 /* InboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxStore.swift; sourceTree = "<group>"; };
+		422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionDragAssistantController.swift; sourceTree = "<group>"; };
+		4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
+		447B3311AE42A32A9FD01E03 /* StandardWindowControlMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWindowControlMonitor.swift; sourceTree = "<group>"; };
+		509645F9F339E06AC1E564CE /* DictationHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryService.swift; sourceTree = "<group>"; };
+		54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateReleaseScriptTests.swift; sourceTree = "<group>"; };
+		57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
+		5A6DD21B40DBBF07863F2539 /* NotificationChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationChannel.swift; sourceTree = "<group>"; };
+		5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
+		60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutCoordinator.swift; sourceTree = "<group>"; };
+		61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilitySnapshotter.swift; sourceTree = "<group>"; };
+		621ADF842978F483030F4A98 /* ClipboardHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistoryService.swift; sourceTree = "<group>"; };
+		6496418091377710D1C553EB /* StandardWindowControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWindowControlTests.swift; sourceTree = "<group>"; };
+		655FDDBD20D3B108B6CC84CD /* ApplicationUsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationUsageStore.swift; sourceTree = "<group>"; };
+		67F7E0D610E42D0E55E94D1F /* NotificationDeliveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationDeliveryService.swift; sourceTree = "<group>"; };
+		6CF370D4AAE4252C8026A77E /* AppPresenceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPresenceController.swift; sourceTree = "<group>"; };
+		6F84D2C75C3619AC08893A51 /* PresentationWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationWindowController.swift; sourceTree = "<group>"; };
+		743638B35EF5149ECD4B72CE /* Keybumps.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Keybumps.entitlements; sourceTree = "<group>"; };
+		79A769F22A9F51BA885B76F1 /* DictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationService.swift; sourceTree = "<group>"; };
+		7C144E78DC41A2DF2C4FCA0C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7D8898653639A2B580518571 /* QuickSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchService.swift; sourceTree = "<group>"; };
+		7FEE31E47A0F652B4E42CD60 /* RecentItemStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentItemStore.swift; sourceTree = "<group>"; };
+		823E92CD42198870BE19775A /* KeybumpsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		90063321A15E6192126FE5C0 /* DictationIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationIndicatorController.swift; sourceTree = "<group>"; };
+		9198187F33359DFFA13F0C5D /* KeybumpsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybumpsApp.swift; sourceTree = "<group>"; };
+		96B2E873B85F38F428D7E33E /* PointerEventMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerEventMonitor.swift; sourceTree = "<group>"; };
+		997F4D090D8DCBF03DAFC78E /* ProductIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductIdentity.swift; sourceTree = "<group>"; };
+		A08E29668587A361DF1D41AC /* WindowAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAction.swift; sourceTree = "<group>"; };
+		A18BF5E21B6787A034888698 /* FinderTrashDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashDetectionTests.swift; sourceTree = "<group>"; };
+		A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationAudioPlayer.swift; sourceTree = "<group>"; };
+		A8B7E25C1D066158973E5A7F /* PresentationEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationEvidenceTests.swift; sourceTree = "<group>"; };
+		ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionDetectionTests.swift; sourceTree = "<group>"; };
+		AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionAdapter.swift; sourceTree = "<group>"; };
+		B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
+		C13C5DD5F845097BB1BA796D /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
+		C2407E9D69CA5264F1B99A89 /* Keybumps-AppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Keybumps-AppStore.entitlements"; sourceTree = "<group>"; };
+		C31EA5B36802F222489865B5 /* WindowManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementService.swift; sourceTree = "<group>"; };
+		C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
+		C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
+		C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybumpsFeatureTests.swift; sourceTree = "<group>"; };
+		CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
+		D547C96CB0A8C34AE6C8D05C /* ShortcutCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCatalog.swift; sourceTree = "<group>"; };
+		DC9C29448CFAF723A5885A20 /* MenuInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuInboxView.swift; sourceTree = "<group>"; };
+		E06540DC321A150343B3C752 /* TranslatedSpeechPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatedSpeechPlayer.swift; sourceTree = "<group>"; };
+		E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateController.swift; sourceTree = "<group>"; };
+		E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryView.swift; sourceTree = "<group>"; };
+		ECF5180228D1F28AB0362C61 /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
+		F61176BC5A52592CB08999D5 /* KeyboardShortcutterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutterTests.swift; sourceTree = "<group>"; };
+		F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStatusItemController.swift; sourceTree = "<group>"; };
+		FE17DFA0D287D62711BA73C2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FF5341E18161C5048290122F /* CoachingEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoachingEvent.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		24CE05F3D0E70230042F6542 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				397B0338C0A8428140BDE535 /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		05C8E0D38AB8DCFDF398F263 /* Detection */ = {
+			isa = PBXGroup;
+			children = (
+				61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */,
+				1125D0B1418C5EBF60FFBEBD /* ActionCorrelator.swift */,
+				57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */,
+				AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */,
+				B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */,
+				C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */,
+				96B2E873B85F38F428D7E33E /* PointerEventMonitor.swift */,
+				447B3311AE42A32A9FD01E03 /* StandardWindowControlMonitor.swift */,
+			);
+			path = Detection;
+			sourceTree = "<group>";
+		};
+		0C1EE789247318181EA45F24 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				00E50394667FC5D2DE8B5333 /* AppDelegate.swift */,
+				0ECDF1BD3B90804BF35BDC11 /* AppModel.swift */,
+				9198187F33359DFFA13F0C5D /* KeybumpsApp.swift */,
+				F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		0E7778986CE26CDE8B64610D = {
+			isa = PBXGroup;
+			children = (
+				10ADA2E15706EB6242F989F3 /* Keybumps */,
+				23064D186B9C35D4D0EA2A3E /* KeybumpsTests */,
+				8020E928811E8ED941846F8D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		10ADA2E15706EB6242F989F3 /* Keybumps */ = {
+			isa = PBXGroup;
+			children = (
+				0C1EE789247318181EA45F24 /* App */,
+				7FFEC5D41739BD997D5CC761 /* Clipboard */,
+				1317B9E0CBA43161CCF7E650 /* CommandPalette */,
+				38027859DC5B7996DC828441 /* Delivery */,
+				05C8E0D38AB8DCFDF398F263 /* Detection */,
+				BCE24287CDFBC62010E9921E /* Dictation */,
+				1C2873FDBF5FD973FF3E2809 /* Domain */,
+				5B75BADB74A2FA44403F1B19 /* Infrastructure */,
+				F84A100C7F15BBD0CA0E7B59 /* Permissions */,
+				22D139DE7DF47178EB5EB2AA /* QuickSearch */,
+				F90E6AAF76609E0D3777911B /* Resources */,
+				FBC9828AB939A3E2774979B9 /* Updates */,
+				BE46ED0687B2F00EC4872DE9 /* Views */,
+				BCED1EFDD3A834B21D622E7C /* WindowManagement */,
+			);
+			path = Keybumps;
+			sourceTree = "<group>";
+		};
+		1317B9E0CBA43161CCF7E650 /* CommandPalette */ = {
+			isa = PBXGroup;
+			children = (
+				4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */,
+			);
+			path = CommandPalette;
+			sourceTree = "<group>";
+		};
+		1C2873FDBF5FD973FF3E2809 /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				0C53D92EB611917B9E44212C /* Capability.swift */,
+				FF5341E18161C5048290122F /* CoachingEvent.swift */,
+				5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */,
+				5A6DD21B40DBBF07863F2539 /* NotificationChannel.swift */,
+				D547C96CB0A8C34AE6C8D05C /* ShortcutCatalog.swift */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		22D139DE7DF47178EB5EB2AA /* QuickSearch */ = {
+			isa = PBXGroup;
+			children = (
+				655FDDBD20D3B108B6CC84CD /* ApplicationUsageStore.swift */,
+				7D8898653639A2B580518571 /* QuickSearchService.swift */,
+				7FEE31E47A0F652B4E42CD60 /* RecentItemStore.swift */,
+			);
+			path = QuickSearch;
+			sourceTree = "<group>";
+		};
+		23064D186B9C35D4D0EA2A3E /* KeybumpsTests */ = {
+			isa = PBXGroup;
+			children = (
+				ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */,
+				A18BF5E21B6787A034888698 /* FinderTrashDetectionTests.swift */,
+				F61176BC5A52592CB08999D5 /* KeyboardShortcutterTests.swift */,
+				C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */,
+				A8B7E25C1D066158973E5A7F /* PresentationEvidenceTests.swift */,
+				6496418091377710D1C553EB /* StandardWindowControlTests.swift */,
+				3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */,
+				54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */,
+				E5DBE0291391003CE7E8D960 /* Fixtures */,
+			);
+			path = KeybumpsTests;
+			sourceTree = "<group>";
+		};
+		38027859DC5B7996DC828441 /* Delivery */ = {
+			isa = PBXGroup;
+			children = (
+				67F7E0D610E42D0E55E94D1F /* NotificationDeliveryService.swift */,
+				6F84D2C75C3619AC08893A51 /* PresentationWindowController.swift */,
+				15DFFB4F5CBB2AC080E88C36 /* SystemChannelAdapters.swift */,
+			);
+			path = Delivery;
+			sourceTree = "<group>";
+		};
+		5B75BADB74A2FA44403F1B19 /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+				25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */,
+				6CF370D4AAE4252C8026A77E /* AppPresenceController.swift */,
+				60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */,
+				3FE3159CDD93E812D43C4592 /* InboxStore.swift */,
+				997F4D090D8DCBF03DAFC78E /* ProductIdentity.swift */,
+				3DF48890AB96ECDC791B1116 /* ProductPaths.swift */,
+				ECF5180228D1F28AB0362C61 /* SystemServices.swift */,
+			);
+			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		7FFEC5D41739BD997D5CC761 /* Clipboard */ = {
+			isa = PBXGroup;
+			children = (
+				621ADF842978F483030F4A98 /* ClipboardHistoryService.swift */,
+			);
+			path = Clipboard;
+			sourceTree = "<group>";
+		};
+		8020E928811E8ED941846F8D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1FD52164D0E4BEB3C625179B /* Keybumps.app */,
+				823E92CD42198870BE19775A /* KeybumpsTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA58599891427F66671A3CD5 /* Updates */ = {
+			isa = PBXGroup;
+			children = (
+				3BB76ED2E173127B8361F2B8 /* appcast.xml */,
+				3EF5ED7D3614F5E7E907D83B /* fixture.md */,
+				323E102DD6374B05A2E71420 /* fixture.zip */,
+			);
+			path = Updates;
+			sourceTree = "<group>";
+		};
+		BCE24287CDFBC62010E9921E /* Dictation */ = {
+			isa = PBXGroup;
+			children = (
+				A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */,
+				509645F9F339E06AC1E564CE /* DictationHistoryService.swift */,
+				90063321A15E6192126FE5C0 /* DictationIndicatorController.swift */,
+				79A769F22A9F51BA885B76F1 /* DictationService.swift */,
+				E06540DC321A150343B3C752 /* TranslatedSpeechPlayer.swift */,
+			);
+			path = Dictation;
+			sourceTree = "<group>";
+		};
+		BCED1EFDD3A834B21D622E7C /* WindowManagement */ = {
+			isa = PBXGroup;
+			children = (
+				A08E29668587A361DF1D41AC /* WindowAction.swift */,
+				C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */,
+				C31EA5B36802F222489865B5 /* WindowManagementService.swift */,
+			);
+			path = WindowManagement;
+			sourceTree = "<group>";
+		};
+		BE46ED0687B2F00EC4872DE9 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */,
+				DC9C29448CFAF723A5885A20 /* MenuInboxView.swift */,
+				CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */,
+				059D55AF379C93A1EABF75A1 /* SharedViews.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E5DBE0291391003CE7E8D960 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				AA58599891427F66671A3CD5 /* Updates */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		F84A100C7F15BBD0CA0E7B59 /* Permissions */ = {
+			isa = PBXGroup;
+			children = (
+				422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */,
+			);
+			path = Permissions;
+			sourceTree = "<group>";
+		};
+		F90E6AAF76609E0D3777911B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				7C144E78DC41A2DF2C4FCA0C /* Assets.xcassets */,
+				FE17DFA0D287D62711BA73C2 /* Info.plist */,
+				C2407E9D69CA5264F1B99A89 /* Keybumps-AppStore.entitlements */,
+				743638B35EF5149ECD4B72CE /* Keybumps.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		FBC9828AB939A3E2774979B9 /* Updates */ = {
+			isa = PBXGroup;
+			children = (
+				E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */,
+				C13C5DD5F845097BB1BA796D /* UpdateController.swift */,
+			);
+			path = Updates;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		16EA3C6D651A8AAA3A2782B1 /* Keybumps */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 83ED1FEC0498672294CAE2E2 /* Build configuration list for PBXNativeTarget "Keybumps" */;
+			buildPhases = (
+				49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */,
+				5DDC946BDE8BD0352EA7CF7B /* Sources */,
+				A2D5E4A89A5E4E8D2261929C /* Resources */,
+				24CE05F3D0E70230042F6542 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Keybumps;
+			packageProductDependencies = (
+				4180293288B6BA15C922987B /* Sparkle */,
+			);
+			productName = Keybumps;
+			productReference = 1FD52164D0E4BEB3C625179B /* Keybumps.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3356307D476DF647068D33C8 /* KeybumpsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15C7A24238C4E411283A186A /* Build configuration list for PBXNativeTarget "KeybumpsTests" */;
+			buildPhases = (
+				E9A6891800D34554C24E8DC4 /* Sources */,
+				A1AE0FF7A15F6187979DB2A2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A7734D201F848040ADC635D6 /* PBXTargetDependency */,
+			);
+			name = KeybumpsTests;
+			packageProductDependencies = (
+			);
+			productName = KeybumpsTests;
+			productReference = 823E92CD42198870BE19775A /* KeybumpsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		28E15429764BA5F28DAA3D0E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					16EA3C6D651A8AAA3A2782B1 = {
+						DevelopmentTeam = 847HR8U8D9;
+						ProvisioningStyle = Automatic;
+					};
+					3356307D476DF647068D33C8 = {
+						DevelopmentTeam = 847HR8U8D9;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 95819173BD65B6C3408FA756 /* Build configuration list for PBXProject "Keybumps" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 0E7778986CE26CDE8B64610D;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				68EF14751C0BC7F6B784AC67 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				16EA3C6D651A8AAA3A2782B1 /* Keybumps */,
+				3356307D476DF647068D33C8 /* KeybumpsTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1AE0FF7A15F6187979DB2A2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FD8E7DB4FEB1D67D4B46E1AD /* appcast.xml in Resources */,
+				F43F37F847B4D894E2B90B57 /* fixture.md in Resources */,
+				906AF4F5B61D66F206EBD737 /* fixture.zip in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A2D5E4A89A5E4E8D2261929C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9F11C1F5817C7DE04228CEF8 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Validate Keybumps release configuration";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  if /usr/bin/env | /usr/bin/grep -q '^SUPERMAC_'; then\n    echo \"error: legacy SUPERMAC_* release variables are forbidden\"\n    exit 1\n  fi\n  case \"$KEYBUMPS_UPDATE_FEED_URL\" in\n    \"https://updates.keybumps.app/appcast.xml\"|\"https://updates.keybumps.app/staging/appcast.xml\") ;;\n    *) echo \"error: KEYBUMPS_UPDATE_FEED_URL must be a canonical Keybumps feed\"; exit 1 ;;\n  esac\n  if [ -z \"$KEYBUMPS_UPDATE_PUBLIC_KEY\" ]; then\n    echo \"error: KEYBUMPS_UPDATE_PUBLIC_KEY is required for Release builds\"\n    exit 1\n  fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5DDC946BDE8BD0352EA7CF7B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E38A15BF69E728B9C3142E0A /* AXShortcutEvidenceReader.swift in Sources */,
+				1A1112634F9877A12C8E3B19 /* AccessibilitySnapshotter.swift in Sources */,
+				35D76276DAD2370A13E37108 /* ActionCorrelator.swift in Sources */,
+				FEE8BAB393C914FFECD752A3 /* AppDelegate.swift in Sources */,
+				0995B7DD6F2FBCEF958946B3 /* AppModel.swift in Sources */,
+				7C5C620EDEABCBCF01BA1DE3 /* AppPreferences.swift in Sources */,
+				C6B99BA39BBA147D692C0FCB /* AppPresenceController.swift in Sources */,
+				924524C9291A150C1ED22EAA /* ApplicationUsageStore.swift in Sources */,
+				DC5D1578C1100C5D5B0471DC /* Capability.swift in Sources */,
+				B8AD9EB09F7831E8226756F2 /* ChromeActionAdapter.swift in Sources */,
+				EC784D4AB4204072FEBCC20F /* ClipboardHistoryService.swift in Sources */,
+				6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */,
+				081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */,
+				098879181087D6A890F705C8 /* DictationAudioPlayer.swift in Sources */,
+				780135D18A3D6C288C8DC1DD /* DictationHistoryService.swift in Sources */,
+				CC9C3B70B132461EB151193B /* DictationHistoryView.swift in Sources */,
+				356E7F675BBAF3C664BF0C0F /* DictationIndicatorController.swift in Sources */,
+				30969CFBA6428F79100205AF /* DictationService.swift in Sources */,
+				1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */,
+				85868CCFFF8CE1C0294CBE42 /* GlobalShortcutCoordinator.swift in Sources */,
+				72889304501A8474A7F08269 /* InboxStore.swift in Sources */,
+				484DBF61BC6DF412A9518239 /* KeyboardShortcutRegistry.swift in Sources */,
+				E78F2836D4E83FAE88C6F9BB /* KeybumpsApp.swift in Sources */,
+				C7BA0E484216B7DE0A03D3BC /* ManualActionDetector.swift in Sources */,
+				969668521B3A2F95CAD252BB /* MenuInboxView.swift in Sources */,
+				55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */,
+				15CE81C4A605AA2A6004C832 /* NotificationChannel.swift in Sources */,
+				CC7CDD51F06A873ACBE309A6 /* NotificationDeliveryService.swift in Sources */,
+				29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */,
+				66D4AA5C1B1F31493509DD84 /* PointerEventMonitor.swift in Sources */,
+				898609FBD52337225953DE11 /* PresentationWindowController.swift in Sources */,
+				80EBAD50A5F6E554E63A4CC4 /* ProductIdentity.swift in Sources */,
+				AF01C1FEA6DFAC71142B7305 /* ProductPaths.swift in Sources */,
+				0F5B463A70383784E45A5ED2 /* QuickSearchService.swift in Sources */,
+				FB1EF3A045635D619E187E8D /* RecentItemStore.swift in Sources */,
+				D071D645E3CFD0351F3E11C5 /* SettingsRootView.swift in Sources */,
+				8FD80A923E357790F894A93C /* SharedViews.swift in Sources */,
+				FF97CDE8A3490AA04F8B76B0 /* ShortcutCatalog.swift in Sources */,
+				B8EF53C6A451D2E475070D85 /* SparkleUpdateController.swift in Sources */,
+				B276B1127A353841F9623DE6 /* StandardWindowControlMonitor.swift in Sources */,
+				53CFFCB76A3C8CA8E3926704 /* SystemChannelAdapters.swift in Sources */,
+				9198579854CC8F0979A2D87D /* SystemServices.swift in Sources */,
+				D6A968F55CA67D1A1BB90941 /* TranslatedSpeechPlayer.swift in Sources */,
+				952BFAC50F37CBE088DC6D6F /* UpdateController.swift in Sources */,
+				58CCB0AF49FFC5BA0289F8C1 /* WindowAction.swift in Sources */,
+				3059D8E4728CF39B1A21420A /* WindowGeometry.swift in Sources */,
+				EE5DCEFB09728CECFDE914B0 /* WindowManagementService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E9A6891800D34554C24E8DC4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				168EB2F837DEC3518377B4C2 /* ChromeActionDetectionTests.swift in Sources */,
+				5D29894075C352B646141A29 /* FinderTrashDetectionTests.swift in Sources */,
+				331F72AEC4344E569F6BEB91 /* KeyboardShortcutterTests.swift in Sources */,
+				EFDCF1CF3AEFE100555404D9 /* KeybumpsFeatureTests.swift in Sources */,
+				E81A9BD91DF71EE3A5BA0064 /* PresentationEvidenceTests.swift in Sources */,
+				0A2691072FFA6F40A5F31531 /* StandardWindowControlTests.swift in Sources */,
+				F2C72DC369FD3FDD4586E311 /* UpdateControllerTests.swift in Sources */,
+				98D0993E91F7EFD2B0E346D1 /* UpdateReleaseScriptTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A7734D201F848040ADC635D6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 16EA3C6D651A8AAA3A2782B1 /* Keybumps */;
+			targetProxy = 07F06C50136DD628F45195F1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3981E3FBB1845BFAB4CDC8D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 847HR8U8D9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Keybumps.app/Contents/MacOS/Keybumps";
+			};
+			name = Release;
+		};
+		43ED80E7825CC050B41BCE05 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Keybumps/Resources/Keybumps.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 847HR8U8D9;
+				ENABLE_APP_SANDBOX = NO;
+				EXECUTABLE_NAME = Keybumps;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Keybumps/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps;
+				PRODUCT_MODULE_NAME = Keybumps;
+				PRODUCT_NAME = Keybumps;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		71052521015345A77A027496 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 847HR8U8D9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Keybumps.app/Contents/MacOS/Keybumps";
+			};
+			name = Debug;
+		};
+		82808FACFA8D3B419B580773 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				KEYBUMPS_UPDATE_FEED_URL = "";
+				KEYBUMPS_UPDATE_PUBLIC_KEY = "";
+				MACOSX_DEPLOYMENT_TARGET = 14.2;
+				MARKETING_VERSION = 0.0.2;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Debug;
+		};
+		A5D37A6A946D950BD7F0B883 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Keybumps/Resources/Keybumps.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 847HR8U8D9;
+				ENABLE_APP_SANDBOX = NO;
+				EXECUTABLE_NAME = Keybumps;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Keybumps/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps;
+				PRODUCT_MODULE_NAME = Keybumps;
+				PRODUCT_NAME = Keybumps;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		FE4FD4E5BDC96FDF525F3918 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				KEYBUMPS_UPDATE_FEED_URL = "";
+				KEYBUMPS_UPDATE_PUBLIC_KEY = "";
+				MACOSX_DEPLOYMENT_TARGET = 14.2;
+				MARKETING_VERSION = 0.0.2;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		15C7A24238C4E411283A186A /* Build configuration list for PBXNativeTarget "KeybumpsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71052521015345A77A027496 /* Debug */,
+				3981E3FBB1845BFAB4CDC8D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		83ED1FEC0498672294CAE2E2 /* Build configuration list for PBXNativeTarget "Keybumps" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				43ED80E7825CC050B41BCE05 /* Debug */,
+				A5D37A6A946D950BD7F0B883 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		95819173BD65B6C3408FA756 /* Build configuration list for PBXProject "Keybumps" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				82808FACFA8D3B419B580773 /* Debug */,
+				FE4FD4E5BDC96FDF525F3918 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		68EF14751C0BC7F6B784AC67 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4180293288B6BA15C922987B /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 68EF14751C0BC7F6B784AC67 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 28E15429764BA5F28DAA3D0E /* Project object */;
+}

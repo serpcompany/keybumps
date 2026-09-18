@@ -1,4 +1,4 @@
-# SuperMac MVP user journeys
+# Keybumps MVP user journeys
 
 This is the acceptance ledger for the functional MVP described in [`mvp-prd.md`](mvp-prd.md). It documents what a person does, what the app must do, and how strongly that behavior has been verified.
 
@@ -22,17 +22,17 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 | UJ-05 | Clipboard History | Signed runtime panel opening and bounded local-store behavior are verified; retention, duplicate collapse, and persistence are automated. | Private-content selection/paste, deletion, clearing, restart, and disabled monitoring need owner acceptance. |
 | UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, temporary global Escape registration, and recovery state have automated coverage. | Physical Escape during English/Japanese recording, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
 | UJ-07 | Window Management | Exact selected shortcut map, customization, persistence, representative geometry, drag guards, and restore behavior are automated; shortcut recording UI has signed-runtime evidence. | Every assigned shortcut, repeated sizing, multi-display movement, and every drag-to-snap/unsnap region need owner acceptance with Accessibility enabled. |
-| UJ-08 | Key Bumps | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
-| UJ-09 | Shared Command Palette | Search/Clipboard/Dictation/Key Bumps tab order, Command-1/2/3/4 routing, filtering, and reset behavior are automated. | Physical global routing and privacy-safe checks of history selection and paste remain. |
+| UJ-08 | Keyboard Shortcutter | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
+| UJ-09 | Shared Command Palette | Search/Clipboard/Dictation/Keyboard Shortcutter tab order, Command-1/2/3/4 routing, filtering, and reset behavior are automated. | Physical global routing and privacy-safe checks of history selection and paste remain. |
 | UJ-10 | Capability controls and settings | Enablement persistence, shortcut release, teardown, and major settings routes are automated or runtime inspected. | Owner should confirm the combined app remains understandable during normal daily use. |
 | UJ-11 | Dock, menu bar, conflicts, and launch at login | Dock/sidebar shell and status-item contract are automated or runtime verified; the real Settings menu item routes through a persistent window opener; conflict detection is implemented. | Physical status-item selection, login-session relaunch, crowded-menu-bar visibility, and quitting each reference app from onboarding need owner acceptance. |
 | UJ-12 | Updates, licensing, and distribution | The local preview truthfully reports that updates are not configured and contains no fake activation. | Production licensing, update feed, notarization, packaging, installed artifact, and distribution are deferred. |
 
 ## UJ-01 — First launch and onboarding
 
-Precondition: no completed-onboarding preference for `com.serp.supermac`.
+Precondition: no completed-onboarding preference for `com.serp.keybumps`.
 
-1. Launch SuperMac.
+1. Launch Keybumps.
 2. Read the local-preview welcome; no fake license control is shown.
 3. Review the five enabled capabilities.
 4. Complete or skip the guided permission sequence.
@@ -47,9 +47,9 @@ Expected recovery: a skipped permission keeps the related feature enabled but ma
 The required order is Accessibility, Input Monitoring, Microphone, then Speech Recognition. Permissions already granted—or needed only by disabled capabilities—are skipped.
 
 1. The walkthrough shows one missing permission and `completed of total` progress.
-2. Accessibility or Input Monitoring silently checks current status, opens the exact System Settings list, and shows the compact draggable SuperMac card without first displaying a competing native permission dialog.
+2. Accessibility or Input Monitoring silently checks current status, opens the exact System Settings list, and shows the compact draggable Keybumps card without first displaying a competing native permission dialog.
 3. The drag card dismisses only after an accepted drop; a cancelled drag remains retryable.
-4. The user enables SuperMac in macOS and returns to the app.
+4. The user enables Keybumps in macOS and returns to the app.
 5. App activation refreshes the real permission state and automatically presents the next missing step.
 6. Microphone and Speech Recognition use their native consent prompts. Denied permissions route to the matching System Settings pane.
 7. Completion reads: `All permissions needed by your enabled features are ready.`
@@ -62,7 +62,7 @@ The Permissions screen keeps `Review individual permissions` collapsed by defaul
 2. Each capability reports Ready, Setup Needed, or Off from actual capability and permission state.
 3. Quick Search and Clipboard open directly when ready.
 4. A feature's Grant Permission action begins that feature's permission sequence immediately without navigating away from Setup.
-5. Ready Dictation, Window Management, and Key Bumps route to their settings.
+5. Ready Dictation, Window Management, and Keyboard Shortcutter route to their settings.
 6. Off features route to their capability screen, where they can be enabled.
 
 ## UJ-04 — Quick Search
@@ -93,17 +93,17 @@ Clipboard content stays local. Supported image payloads are stored as separate l
 2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default).
 3. A visible Recording indicator appears while audio is captured.
 4. Recording automatically stops at the selected duration limit—five minutes by default—or the user presses the configured Dictation shortcut again to stop sooner.
-5. While Recording or Transcribing, press Escape from any app to cancel without insertion. Once insertion begins, SuperMac releases Escape so it does not consume an ordinary key unnecessarily.
-6. Pending metadata and `output.wav` are created under `~/Documents/SuperMac/recordings/<timestamp>/` when capture starts. Successful transcription completes that same metadata before insertion. An unexpected app/process interruption leaves recoverable audio; intentional Escape cancellation discards the pending item.
+5. While Recording or Transcribing, press Escape from any app to cancel without insertion. Once insertion begins, Keybumps releases Escape so it does not consume an ordinary key unnecessarily.
+6. Pending metadata and `output.wav` are created under `~/Documents/Keybumps/recordings/<timestamp>/` when capture starts. Successful transcription completes that same metadata before insertion. An unexpected app/process interruption leaves recoverable audio; intentional Escape cancellation discards the pending item.
 7. If insertion fails, recover the last transcript from Dictation settings.
-8. After relaunch, SuperMac scans pending metadata and legacy playable audio-only folders. Recoverable items appear in Dictation History and the Command Palette as Recording interrupted — transcript unavailable; Transcribe retries locally and updates the same item.
+8. After relaunch, Keybumps scans pending metadata and legacy playable audio-only folders. Recoverable items appear in Dictation History and the Command Palette as Recording interrupted — transcript unavailable; Transcribe retries locally and updates the same item.
 9. Open the Command Palette's Dictation tab to search cards, click anywhere in a card's padded header to expand it, play/pause the original recording, adjust playback from 0.5× through 2×, transcribe when needed, copy completed text, translate through the on-device target-language picker, and use the same waveform/playback/speed controls for temporary translated speech generated with an installed target-language voice. Reveal or delete recordings as needed; Clear All requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged, and temporary translated audio is not saved as another recording.
 
 Automatic insertion after recording and Copy from Dictation History use the pasteboard only as delivery transport. Neither creates a duplicate in Clipboard History. A later user-originated copy of the same text remains eligible for Clipboard History.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 
-If Dictation permissions are missing, pressing the shortcut first shows a SuperMac setup card explaining what is missing. Choosing Set Up Dictation starts the guided Microphone → Speech Recognition flow. A denied permission opens the matching System Settings page with a persistent card identifying the exact switch to enable. Microphone and Speech Recognition do not support adding or dragging an app into their lists; macOS adds SuperMac only after the native consent request. If another startup error occurs, a temporary on-screen error explains the failure.
+If Dictation permissions are missing, pressing the shortcut first shows a Keybumps setup card explaining what is missing. Choosing Set Up Dictation starts the guided Microphone → Speech Recognition flow. A denied permission opens the matching System Settings page with a persistent card identifying the exact switch to enable. Microphone and Speech Recognition do not support adding or dragging an app into their lists; macOS adds Keybumps only after the native consent request. If another startup error occurs, a temporary on-screen error explains the failure.
 
 ## UJ-07 — Window Management
 
@@ -116,31 +116,31 @@ If Dictation permissions are missing, pressing the shortcut first shows a SuperM
 
 Disabling Window Management stops drag monitoring and releases every owned window shortcut.
 
-## UJ-08 — Key Bumps
+## UJ-08 — Keyboard Shortcutter
 
-1. Grant Accessibility and Input Monitoring and keep Key Bumps enabled.
+1. Grant Accessibility and Input Monitoring and keep Keyboard Shortcutter enabled.
 2. Perform a supported manual action in Finder or Chrome.
 3. The detector emits exactly one event only after the action's required postcondition is observed.
-4. The event is written once to durable Key Bumps history.
+4. The event is written once to durable Keyboard Shortcutter history.
 5. Selected presentation channels deliver their transient output independently. Custom presentations show the action and source application with separated shortcut keycaps, and share a top-left close button, Escape dismissal, screen-wide horizontal trackpad-swipe dismissal, and an auto-dismiss timer that pauses while hovered.
 6. Preview retained visual channels without creating durable history; when Sound is selected it plays alongside those previews, while direct Sound preview plays once. Native Banner uses real notification authorization and opens the matching System Settings recovery page when denied. Failed preview adapters report their individual failure instead of appearing successful.
-7. Review, filter, and clear events only in the Command Palette. Palette rows are native list rows, remain passive, and omit unread dots and changing relative-time counters. Clear Key Bumps history only through an explicit confirmed action.
+7. Review, filter, and clear events only in the Command Palette. Palette rows are native list rows, remain passive, and omit unread dots and changing relative-time counters. Clear Keyboard Shortcutter history only through an explicit confirmed action.
 
-Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key bump. Disabling Key Bumps stops monitoring.
+Ambiguous, stale, modified, unsafe, or unverified gestures must produce no keyboard shortcut suggestion. Disabling Keyboard Shortcutter stops monitoring.
 
 ## UJ-09 — Shared Command Palette
 
-1. Search is the default tab; Clipboard, Dictation, and Key Bumps are visible peer tabs in that order. Tab controls show the shortcut and name without icons.
+1. Search is the default tab; Clipboard, Dictation, and Keyboard Shortcutter are visible peer tabs in that order. Tab controls show the shortcut and name without icons.
 2. Click tabs or press Command-1/2/3/4 to switch.
 3. Switching clears the prior filter, resets selection, and keeps text-input focus.
-4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Key Bumps row click changes selection only; Return has no clipboard or history side effect.
-5. When Key Bumps is disabled, its tab reports that state instead of presenting stale history as active.
-6. When Search is empty, successfully opened apps, files, and folders appear under Recent Items; selecting one opens it, individual rows can be deleted, and Clear All requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens do not create recent items or train ranking, and file/folder results do not train application ranking. Key Bumps provides the same confirmed clear-history affordance as the other histories.
+4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Keyboard Shortcutter row click changes selection only; Return has no clipboard or history side effect.
+5. When Keyboard Shortcutter is disabled, its tab reports that state instead of presenting stale history as active.
+6. When Search is empty, successfully opened apps, files, and folders appear under Recent Items; selecting one opens it, individual rows can be deleted, and Clear All requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens do not create recent items or train ranking, and file/folder results do not train application ranking. Keyboard Shortcutter provides the same confirmed clear-history affordance as the other histories.
 7. The footer truthfully identifies local-only behavior.
 
 ## UJ-10 — Capability controls and settings
 
-1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, and General.
+1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General.
 2. Use the toolbar Back button or Command-[ to return through previously visited Settings screens.
 3. Enable or disable each capability only from its own screen.
 4. Disabling immediately tears down its active panel, monitor, recording, drag behavior, or shortcuts as applicable.
@@ -151,9 +151,9 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key b
 ## UJ-11 — Dock, menu bar, conflicts, and launch at login
 
 1. The app is visible in the Dock and application switcher by default; clicking its Dock icon opens Quick Search rather than Settings.
-2. Clicking the menu-bar icon always opens a native menu, even when another app is foreground. The menu contains Toggle SuperMac, the current version/build, a truthfully disabled Check for Updates item until issue #10 is implemented, Settings, and Quit SuperMac. Toggle SuperMac opens or closes Quick Search.
+2. Clicking the menu-bar icon always opens a native menu, even when another app is foreground. The menu contains Toggle Keybumps, the current version/build, a truthfully disabled Check for Updates item until issue #10 is implemented, Settings, and Quit Keybumps. Toggle Keybumps opens or closes Quick Search.
 3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; the menu-bar Settings item or Command-comma recreates, raises, and focuses the single Settings window.
-4. SuperMac registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
+4. Keybumps registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.
 
 ## UJ-12 — Deferred commercial journey
@@ -165,8 +165,8 @@ The eventual commercial sequence inserts license activation after Welcome, then 
 Run this only from the intended installed, signed artifact after granting the requested macOS permissions:
 
 1. Complete UJ-01 and UJ-02 from a clean first launch.
-2. Stop Alfred, Rectangle, and Superwhisper, then confirm SuperMac owns the three global entry shortcuts without collisions.
+2. Stop Alfred, Rectangle, and Superwhisper, then confirm Keybumps owns the three global entry shortcuts without collisions.
 3. Complete the physical acceptance items in UJ-04 through UJ-08, using non-sensitive test text.
 4. Disable and re-enable every capability, confirming resource teardown and restoration.
 5. Relaunch the Mac login session and confirm menu-bar, Dock, settings, histories, preferences, and shortcuts recover correctly.
-6. Record pass/fail evidence without filenames, clipboard values, transcripts, or private Key Bumps content.
+6. Record pass/fail evidence without filenames, clipboard values, transcripts, or private Keyboard Shortcutter content.
