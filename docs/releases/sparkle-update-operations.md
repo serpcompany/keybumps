@@ -18,7 +18,9 @@ Generate the production key once with Sparkle's `generate_keys --account superma
 
 ## Release sequence
 
-The normal entry point is `scripts/build-update-release.sh`. It refuses a reused build or existing output directory, archives and exports with Developer ID, notarizes and staples, packages ZIP and DMG artifacts, generates and validates the signed appcast, and creates separate `publication/assets` and `publication/publish-last` directories. It does not upload anything.
+The normal entry point is `scripts/build-update-release.sh`. It refuses a reused build or existing output directory, and it also refuses any source that is dirty, not on `main`, or not exactly equal to `origin/main`. The source commit, branch, and build kind are embedded in the app and written to `build-manifest.json`. It archives and exports with Developer ID, notarizes and staples, packages ZIP and DMG artifacts, generates and validates the signed appcast, and creates separate `publication/assets` and `publication/publish-last` directories. It does not upload anything.
+
+Local issue builds use `scripts/build-local-candidate.sh <issue-slug> <build-number> <output-directory>`. They require a clean source tree but may use a feature branch. Their version is visibly development-only (`0.0.2-dev.<issue>.<short-sha>`), and their manifest records the exact source. Never assign unpublished branch candidates sequential public `beta.N` names.
 
 1. Increase `CFBundleVersion` above every previously published build and set the customer-facing semantic `MARKETING_VERSION`.
 2. Archive arm64 SuperMac with the stable `com.serp.supermac` bundle ID, the production feed URL, and the matching public key.

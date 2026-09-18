@@ -46,7 +46,13 @@
     <string>$(SUPERMAC_UPDATE_PUBLIC_KEY)</string>
     <key>SURequireSignedFeed</key>
     <true/>
-    <key>SUVerifyUpdateBeforeExtraction</key>
-    <true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SuperMacBuildKind</key>
+	<string>$(SUPERMAC_BUILD_KIND)</string>
+	<key>SuperMacSourceBranch</key>
+	<string>$(SUPERMAC_SOURCE_BRANCH)</string>
+	<key>SuperMacSourceCommit</key>
+	<string>$(SUPERMAC_SOURCE_COMMIT)</string>
 </dict>
 </plist>
