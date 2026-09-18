@@ -43,7 +43,7 @@ final class PresentationEvidenceTests: XCTestCase {
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.fullScreenAuxiliary))
     }
 
-    func testCustomPresentationsUseExactSourceCopyCanonicalKeycapsAndNoSubtitle() {
+    func testCustomPresentationsUseExactSourceCopyCanonicalKeycapsAndAppNameOnlySubtitle() {
         let fixtures: [(NotificationChannel, CoachingEvent, String, [String])] = [
             (
                 .topRightToast,
@@ -70,7 +70,7 @@ final class PresentationEvidenceTests: XCTestCase {
         for (channel, event, expectedTitle, expectedKeycaps) in fixtures {
             let presentation = CoachingPresentationView(event: event, style: channel, onDismiss: {})
 
-            XCTAssertEqual(presentation.visibleCopy.lines, [expectedTitle])
+            XCTAssertEqual(presentation.visibleCopy.lines, [expectedTitle, event.applicationName])
             XCTAssertEqual(ShortcutKeycapPresentation(shortcut: presentation.visibleShortcut).keys, expectedKeycaps)
         }
     }

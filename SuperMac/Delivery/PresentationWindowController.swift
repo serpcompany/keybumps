@@ -322,7 +322,7 @@ struct KeyBumpVisibleCopy: Equatable {
     let lines: [String]
 
     init(event: CoachingEvent) {
-        lines = [event.actionTitle]
+        lines = [event.actionTitle, event.applicationName]
     }
 
     var title: String { lines.first ?? "" }
@@ -338,25 +338,27 @@ struct CoachingPresentationView: View {
     var visibleShortcut: String { event.shortcut }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Dismiss Key Bump")
+            }
+            .padding(.top, 6)
+            .padding(.horizontal, 10)
+
             HStack(spacing: 14) {
                 coachingCopy
                 Spacer(minLength: 18)
-                ShortcutKeycaps(shortcut: visibleShortcut)
+                ShortcutKeycaps(shortcut: visibleShortcut, fontSize: 13)
             }
-            .padding(.leading, 42)
-            .padding(.trailing, 16)
-            .padding(.vertical, 16)
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Dismiss Key Bump")
-            .padding(.leading, 10)
-            .padding(.top, 10)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(4)
@@ -369,11 +371,15 @@ struct CoachingPresentationView: View {
     private var coachingCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(visibleCopy.title).font(.headline)
+            Text(event.applicationName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 
     private var accessibilityCopy: String {
-        "Key Bump. \(event.coachingTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
+        "Key Bump. \(event.actionTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
     }
 }
 
