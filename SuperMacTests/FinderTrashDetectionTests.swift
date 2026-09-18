@@ -5,7 +5,7 @@ import XCTest
 final class FinderTrashDetectionTests: XCTestCase {
     private let detector = DragDropActionDetector()
 
-    func testVerifiedFinderDragToDockTrashProducesMoveToTrashCoaching() {
+    func testVerifiedFinderDragStaysSuppressedWithoutLiveMenuShortcutEvidence() {
         let trace = DragDropTrace(
             schemaVersion: DragDropActionDetector.currentSchemaVersion,
             itemEligibility: .supportedRegularItem,
@@ -15,10 +15,10 @@ final class FinderTrashDetectionTests: XCTestCase {
             postcondition: .removedFromOriginalParent
         )
 
-        let event = detector.detect(trace)
-        XCTAssertEqual(event?.applicationName, "Finder")
-        XCTAssertEqual(event?.actionTitle, "Move to Trash")
-        XCTAssertEqual(event?.shortcut, "⌘⌫")
+        XCTAssertNil(
+            detector.detect(trace),
+            "Behavior verification alone must not present a possibly customized Finder shortcut"
+        )
     }
 
     func testEveryUnverifiedOrUnsafeScenarioProducesNoCoaching() {
@@ -88,7 +88,10 @@ final class FinderTrashDetectionTests: XCTestCase {
             .appendingPathComponent("docs/evidence/finder-trash/captured-sanitized-trace.json")
         let data = try Data(contentsOf: fixtureURL)
         let trace = try JSONDecoder().decode(DragDropTrace.self, from: data)
-        XCTAssertEqual(detector.detect(trace)?.actionTitle, "Move to Trash")
+        XCTAssertNil(
+            detector.detect(trace),
+            "The captured behavior trace must stay suppressed until the live Finder menu shortcut is retained"
+        )
 
         let text = String(decoding: data, as: UTF8.self).lowercased()
         for forbidden in ["name", "path", "url", "title", "description", "identifier", "coordinate", "pid", "token", "fileid", "contents"] {

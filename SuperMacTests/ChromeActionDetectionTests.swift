@@ -52,17 +52,18 @@ final class ChromeActionDetectionTests: XCTestCase {
         let validPre = makeSnapshot(
             hit: node("settings", role: "AXMenuItem", title: "Settings", actions: ["AXPress"])
         )
-        let validPreRuntime = runtime(shortcut: .resolved("⌘,"), destination: .other)
+        let validPreRuntime = runtime(shortcut: resolved("⌘,"), destination: .other)
         let validPost = makeSnapshot(hit: node("content", role: "AXGroup"))
-        let validPostRuntime = runtime(shortcut: .resolved("⌘,"), destination: .settings)
+        let validPostRuntime = runtime(shortcut: resolved("⌘,"), destination: .settings)
 
         var keyboardInvocation = ChromeClickDetector()
-        assertSuppressed(keyboardInvocation.receive(.post(validPost, validPostRuntime, timestamp: 1.2)))
+        assertSuppressed(keyboardInvocation.receive(.post(identity(validPost), validPostRuntime, timestamp: 1.2)))
 
         var menuDismissal = ChromeClickDetector()
         XCTAssertEqual(menuDismissal.receive(.down(down, validPre, validPreRuntime)), .pending)
         XCTAssertEqual(menuDismissal.receive(.up(up, nil)), .pending)
-        assertSuppressed(menuDismissal.receive(.post(validPre, validPreRuntime, timestamp: 1.2)))
+        XCTAssertEqual(menuDismissal.receive(.post(identity(validPre), validPreRuntime, timestamp: 1.2)), .pending)
+        assertSuppressed(menuDismissal.receive(.cancelled))
 
         var movedOff = ChromeClickDetector()
         XCTAssertEqual(movedOff.receive(.down(down, validPre, validPreRuntime)), .pending)
@@ -71,19 +72,20 @@ final class ChromeActionDetectionTests: XCTestCase {
         var cancelled = ChromeClickDetector()
         XCTAssertEqual(cancelled.receive(.down(down, validPre, validPreRuntime)), .pending)
         assertSuppressed(cancelled.receive(.cancelled))
-        assertSuppressed(cancelled.receive(.post(validPost, validPostRuntime, timestamp: 1.2)))
+        assertSuppressed(cancelled.receive(.post(identity(validPost), validPostRuntime, timestamp: 1.2)))
 
         for resolution in [LiveShortcutResolution.unavailable, .ambiguous] {
             var unresolved = ChromeClickDetector()
             assertSuppressed(unresolved.receive(.down(down, validPre, runtime(shortcut: resolution, destination: .other))))
             XCTAssertEqual(unresolved.receive(.up(up, validPre)), .pending)
-            assertSuppressed(unresolved.receive(.post(validPost, validPostRuntime, timestamp: 1.2)))
+            assertSuppressed(unresolved.receive(.post(identity(validPost), validPostRuntime, timestamp: 1.2)))
         }
 
         var failedNavigation = ChromeClickDetector()
         XCTAssertEqual(failedNavigation.receive(.down(down, validPre, validPreRuntime)), .pending)
         XCTAssertEqual(failedNavigation.receive(.up(up, validPre)), .pending)
-        assertSuppressed(failedNavigation.receive(.post(validPre, validPreRuntime, timestamp: 1.2)))
+        XCTAssertEqual(failedNavigation.receive(.post(identity(validPre), validPreRuntime, timestamp: 1.2)), .pending)
+        assertSuppressed(failedNavigation.receive(.cancelled))
     }
 
     func testClassifiesNewTabUsingSemanticConjunction() {
@@ -130,12 +132,135 @@ final class ChromeActionDetectionTests: XCTestCase {
         var correlator = ActionCorrelator()
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
-        XCTAssertNil(correlator.verify(post: pre, runtime: preRuntime, at: 1.2))
+        XCTAssertNil(correlator.verify(processIdentity: identity(pre), runtime: preRuntime, at: 1.2))
 
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 2, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 2.1), hit: pre))
-        let event = correlator.verify(post: makeSnapshot(hit: pre.hit), runtime: runtime(tabs: tabs(count: 3)), at: 2.2)
+        let event = correlator.verify(processIdentity: identity(pre), runtime: runtime(tabs: tabs(count: 3)), at: 2.2)
         XCTAssertEqual(event?.shortcut, "⌘T")
+        XCTAssertEqual(event?.shortcutProvenance, .liveAX)
+        XCTAssertEqual(event?.rawShortcutEvidence, tryResolvedObservation("⌘T").evidence)
+    }
+
+    func testProductionDetectorRetriesAStalePostconditionAndEmitsExactlyOnce() {
+        let pre = makeSnapshot(hit: node("new", role: "AXButton", description: "New Tab", actions: ["AXPress"]))
+        let preRuntime = runtime(tabs: tabs(count: 2))
+        let post = makeSnapshot(hit: pre.hit)
+        let settledRuntime = runtime(tabs: tabs(count: 3))
+        var detector = ChromeClickDetector()
+
+        XCTAssertEqual(detector.receive(.down(sample(.down, time: 1), pre, preRuntime)), .pending)
+        XCTAssertEqual(detector.receive(.up(sample(.up, time: 1.1), pre)), .pending)
+        XCTAssertEqual(detector.receive(.post(identity(post), preRuntime, timestamp: 1.2)), .pending)
+        XCTAssertTrue(detector.needsPostObservation)
+
+        guard case .event(let event) = detector.receive(.post(identity(post), settledRuntime, timestamp: 1.3)) else {
+            return XCTFail("The first action must survive a stale AX sample and emit after the verified postcondition")
+        }
+        XCTAssertEqual(event.shortcut, "⌘T")
+        XCTAssertFalse(detector.needsPostObservation)
+        assertSuppressed(detector.receive(.post(identity(post), settledRuntime, timestamp: 1.4)))
+    }
+
+    func testCloseTabRetriesAStalePostconditionAndEmitsExactlyOnce() {
+        let active = node("tab-1", role: "AXRadioButton", selected: true)
+        let other = node("tab-2", role: "AXRadioButton", selected: false)
+        let close = node("close", role: "AXButton", description: "Close", actions: ["AXPress"])
+        let pre = makeSnapshot(hit: close, ancestors: [active])
+        let preRuntime = runtime(tabs: ChromeTabState(containerToken: "strip", tabs: [active, other]))
+        let settledRuntime = runtime(tabs: ChromeTabState(containerToken: "strip", tabs: [other]))
+        var detector = ChromeClickDetector()
+
+        XCTAssertEqual(detector.receive(.down(sample(.down, time: 1), pre, preRuntime)), .pending)
+        XCTAssertEqual(detector.receive(.up(sample(.up, time: 1.1), pre)), .pending)
+        XCTAssertEqual(detector.receive(.post(identity(pre), preRuntime, timestamp: 1.2)), .pending)
+
+        guard case .event(let event) = detector.receive(.post(identity(pre), settledRuntime, timestamp: 1.3)) else {
+            return XCTFail("Close Tab must survive a stale AX sample and emit after the verified tab-count change")
+        }
+        XCTAssertEqual(event.actionTitle, "Close Tab")
+        XCTAssertEqual(event.shortcut, "⌘W")
+        assertSuppressed(detector.receive(.post(identity(pre), settledRuntime, timestamp: 1.4)))
+    }
+
+    func testIssue31LiveEvidenceIsCurrentAndContainsNoPrivateBrowserOrDocumentData() throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("docs/evidence/key-bumps/issue-31-live-shortcuts.json")
+        let data = try Data(contentsOf: fixture)
+        let text = String(decoding: data, as: UTF8.self)
+
+        XCTAssertTrue(text.contains("\"version\": \"1.138.0\""))
+        XCTAssertTrue(text.contains("\"version\": \"153.0.8010.48\""))
+        for forbidden in ["http://", "https://", "\"url\"", "\"filename\"", "\"documentTitle\"", "\"tabTitle\"", "\"account\"", "@"] {
+            XCTAssertFalse(text.lowercased().contains(forbidden.lowercased()))
+        }
+    }
+
+    func testCharacterizedTabDefaultsSuppressWhenChromeVersionIsMissingOrMismatched() {
+        for incompatibleVersion in [nil, "153.0.8010.11", "154.0.0.0"] as [String?] {
+            let tabState = tabs(count: 2)
+            let selected = tabState.tabs[1]
+            let pre = makeSnapshot(
+                applicationVersion: incompatibleVersion,
+                hit: selected
+            )
+            let preRuntime = runtime(
+                tabs: tabState,
+                tabShortcuts: .unavailable,
+                applicationVersion: incompatibleVersion
+            )
+            let selectedPost = ChromeTabState(
+                containerToken: tabState.containerToken,
+                tabs: [
+                    node("tab-1", role: "AXRadioButton", selected: false),
+                    node("tab-2", role: "AXRadioButton", selected: true)
+                ]
+            )
+            let postRuntime = runtime(
+                tabs: selectedPost,
+                tabShortcuts: .unavailable,
+                applicationVersion: incompatibleVersion
+            )
+            var correlator = ActionCorrelator()
+            correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
+            XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
+            XCTAssertNil(
+                correlator.verify(processIdentity: identity(pre), runtime: postRuntime, at: 1.2),
+                "Characterized defaults must suppress for version \(incompatibleVersion ?? "missing")"
+            )
+        }
+    }
+
+    func testDirectTabSelectionUsesVersionedCharacterizedFallbackOnlyWhenLiveEvidenceIsUnavailable() {
+        let tabState = tabs(count: 2)
+        let target = tabState.tabs[1]
+        let pre = makeSnapshot(hit: target)
+        let preRuntime = runtime(tabs: tabState, tabShortcuts: .unavailable)
+        let postTabs = ChromeTabState(
+            containerToken: tabState.containerToken,
+            tabs: [
+                node("tab-1", role: "AXRadioButton", selected: false),
+                node("tab-2", role: "AXRadioButton", selected: true)
+            ]
+        )
+        var correlator = ActionCorrelator()
+        correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
+        XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
+
+        let event = correlator.verify(
+            processIdentity: identity(pre),
+            runtime: runtime(tabs: postTabs, tabShortcuts: .unavailable),
+            at: 1.2
+        )
+
+        XCTAssertEqual(event?.shortcut, "⌘2")
+        XCTAssertEqual(
+            event?.shortcutProvenance,
+            .characterizedDefault(
+                adapterID: ChromeShortcutCatalog.adapterID,
+                compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion
+            )
+        )
     }
 
     func testCloseAndSelectionRequireExactPostconditions() {
@@ -147,13 +272,13 @@ final class ChromeActionDetectionTests: XCTestCase {
         var correlator = ActionCorrelator()
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
-        XCTAssertEqual(correlator.verify(post: makeSnapshot(hit: other), runtime: runtime(tabs: ChromeTabState(containerToken: "strip", tabs: [other])), at: 1.2)?.shortcut, "⌘W")
+        XCTAssertEqual(correlator.verify(processIdentity: identity(pre), runtime: runtime(tabs: ChromeTabState(containerToken: "strip", tabs: [other])), at: 1.2)?.shortcut, "⌘W")
 
         let tabPre = makeSnapshot(hit: other)
         correlator.begin(tryCandidate(tabPre, runtime: preRuntime), at: 2, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 2.1), hit: tabPre))
         let selectedOther = node("tab-2", role: "AXRadioButton", selected: true)
-        XCTAssertEqual(correlator.verify(post: makeSnapshot(hit: selectedOther), runtime: runtime(tabs: ChromeTabState(containerToken: "strip", tabs: [node("tab-1", role: "AXRadioButton", selected: false), selectedOther])), at: 2.2)?.shortcut, "⌘2")
+        XCTAssertEqual(correlator.verify(processIdentity: identity(tabPre), runtime: runtime(tabs: ChromeTabState(containerToken: "strip", tabs: [node("tab-1", role: "AXRadioButton", selected: false), selectedOther])), at: 2.2)?.shortcut, "⌘2")
     }
 
     func testGestureSuppressionsCoverModifiersDragMovedOffDisabledAndExpiry() {
@@ -209,10 +334,10 @@ final class ChromeActionDetectionTests: XCTestCase {
         XCTAssertEqual(
             adapter.classify(
                 snapshot,
-                runtime: runtime(shortcut: .resolved("⇧⌘,"), destination: .other),
+                runtime: runtime(shortcut: resolved("⇧⌘,"), destination: .other),
                 point: CGPoint(x: 5, y: 5)
             )?.kind,
-            .chromeSettings(shortcut: "⇧⌘,")
+            .chromeSettings(shortcut: tryResolvedObservation("⇧⌘,"))
         )
         XCTAssertTrue(ChromeSettingsSemantics.isSettingsMenuItem(snapshot.hit))
     }
@@ -220,17 +345,26 @@ final class ChromeActionDetectionTests: XCTestCase {
     func testChromeSettingsLiveShortcutRequiresKnownEnabledAndModifierMetadata() {
         let settings = node("settings", role: "AXMenuItem", title: "Preferences…", actions: ["AXPress"])
         func observation(enabled: Bool?, modifiers: Int?) -> ChromeMenuCommandObservation {
-            ChromeMenuCommandObservation(node: settings, enabled: enabled, command: ",", modifiers: modifiers)
+            ChromeMenuCommandObservation(
+                node: settings,
+                enabled: enabled,
+                shortcutEvidence: AXShortcutEvidence(
+                    commandCharacter: ",",
+                    modifiers: modifiers,
+                    commandGlyph: nil,
+                    virtualKey: nil
+                )
+            )
         }
 
         XCTAssertEqual(
             ChromeSettingsSemantics.resolveShortcut(from: [observation(enabled: true, modifiers: 0)]),
-            .resolved("⌘,")
+            resolved("⌘,")
         )
         XCTAssertEqual(ChromeSettingsSemantics.resolveShortcut(from: [observation(enabled: nil, modifiers: 0)]), .unavailable)
         XCTAssertEqual(ChromeSettingsSemantics.resolveShortcut(from: [observation(enabled: false, modifiers: 0)]), .unavailable)
         XCTAssertEqual(ChromeSettingsSemantics.resolveShortcut(from: [observation(enabled: true, modifiers: nil)]), .unavailable)
-        XCTAssertEqual(ChromeSettingsSemantics.resolveShortcut(from: [observation(enabled: true, modifiers: 16)]), .unavailable)
+        XCTAssertEqual(ChromeSettingsSemantics.resolveShortcut(from: [observation(enabled: true, modifiers: 32)]), .unavailable)
         XCTAssertEqual(
             ChromeSettingsSemantics.resolveShortcut(from: [
                 observation(enabled: true, modifiers: 0),
@@ -242,17 +376,17 @@ final class ChromeActionDetectionTests: XCTestCase {
 
     func testChromeSettingsRequiresTheResolvedCommandAndSettingsDestination() {
         let pre = makeSnapshot(hit: node("settings", role: "AXMenuItem", title: "Settings", actions: ["AXPress"]))
-        let preRuntime = runtime(shortcut: .resolved("⇧⌘,"), destination: .other)
+        let preRuntime = runtime(shortcut: resolved("⇧⌘,"), destination: .other)
         var correlator = ActionCorrelator()
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
-        XCTAssertNil(correlator.verify(post: pre, runtime: preRuntime, at: 1.2))
+        XCTAssertNil(correlator.verify(processIdentity: identity(pre), runtime: preRuntime, at: 1.2))
 
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 2, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 2.1), hit: pre))
         let event = correlator.verify(
-            post: makeSnapshot(hit: pre.hit),
-            runtime: runtime(shortcut: .resolved("⇧⌘,"), destination: .settings),
+            processIdentity: identity(pre),
+            runtime: runtime(shortcut: resolved("⇧⌘,"), destination: .settings),
             at: 2.2
         )
         XCTAssertEqual(event?.actionTitle, "Settings")
@@ -264,22 +398,22 @@ final class ChromeActionDetectionTests: XCTestCase {
         let snapshot = makeSnapshot(hit: hit)
         XCTAssertNil(adapter.classify(snapshot, runtime: runtime(shortcut: .unavailable), point: .zero))
         XCTAssertNil(adapter.classify(snapshot, runtime: runtime(shortcut: .ambiguous), point: .zero))
-        XCTAssertNil(adapter.classify(snapshot, runtime: runtime(shortcut: .resolved("⌘,"), destination: .settings), point: .zero))
-        XCTAssertNil(adapter.classify(snapshot, runtime: runtime(shortcut: .resolved("⌘,"), destination: .unavailable), point: .zero))
+        XCTAssertNil(adapter.classify(snapshot, runtime: runtime(shortcut: resolved("⌘,"), destination: .settings), point: .zero))
+        XCTAssertNil(adapter.classify(snapshot, runtime: runtime(shortcut: resolved("⌘,"), destination: .unavailable), point: .zero))
         let unknownEnabled = makeSnapshot(hit: node("settings", role: "AXMenuItem", title: "Settings", enabled: nil, actions: ["AXPress"]))
-        XCTAssertNil(adapter.classify(unknownEnabled, runtime: runtime(shortcut: .resolved("⌘,"), destination: .other), point: .zero))
+        XCTAssertNil(adapter.classify(unknownEnabled, runtime: runtime(shortcut: resolved("⌘,"), destination: .other), point: .zero))
 
-        let preRuntime = runtime(shortcut: .resolved("⌘,"), destination: .other)
+        let preRuntime = runtime(shortcut: resolved("⌘,"), destination: .other)
         for postRuntime in [
-            runtime(shortcut: .resolved("⌥⌘,"), destination: .settings),
+            runtime(shortcut: resolved("⌥⌘,"), destination: .settings),
             runtime(shortcut: .unavailable, destination: .settings),
-            runtime(shortcut: .resolved("⌘,"), destination: .other),
-            runtime(shortcut: .resolved("⌘,"), destination: .unavailable)
+            runtime(shortcut: resolved("⌘,"), destination: .other),
+            runtime(shortcut: resolved("⌘,"), destination: .unavailable)
         ] {
             var correlator = ActionCorrelator()
             correlator.begin(tryCandidate(snapshot, runtime: preRuntime), at: 1, modifiers: [])
             XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: snapshot))
-            XCTAssertNil(correlator.verify(post: snapshot, runtime: postRuntime, at: 1.2))
+            XCTAssertNil(correlator.verify(processIdentity: identity(snapshot), runtime: postRuntime, at: 1.2))
         }
     }
 
@@ -298,10 +432,10 @@ final class ChromeActionDetectionTests: XCTestCase {
         var correlator = ActionCorrelator()
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.1), hit: pre))
-        XCTAssertNotNil(correlator.verify(post: post, runtime: postRuntime, at: 1.2))
+        XCTAssertNotNil(correlator.verify(processIdentity: identity(post), runtime: postRuntime, at: 1.2))
         correlator.begin(tryCandidate(pre, runtime: preRuntime), at: 1.3, modifiers: [])
         XCTAssertTrue(correlator.acceptsMouseUp(sample(.up, time: 1.4), hit: pre))
-        XCTAssertNil(correlator.verify(post: post, runtime: postRuntime, at: 1.5))
+        XCTAssertNil(correlator.verify(processIdentity: identity(post), runtime: postRuntime, at: 1.5))
         XCTAssertTrue(PointerEventMonitor.shouldRecover(from: .tapDisabledByTimeout))
         XCTAssertTrue(PointerEventMonitor.shouldRecover(from: .tapDisabledByUserInput))
         XCTAssertFalse(PointerEventMonitor.shouldRecover(from: .leftMouseDown))
@@ -316,25 +450,67 @@ final class ChromeActionDetectionTests: XCTestCase {
         PointerSample(phase: phase, location: CGPoint(x: x, y: y), modifiers: [], timestamp: time)
     }
 
+    private func identity(_ snapshot: AccessibilitySnapshot) -> ApplicationProcessIdentity {
+        ApplicationProcessIdentity(snapshot: snapshot)
+    }
+
     private func tabs(count: Int) -> ChromeTabState {
         ChromeTabState(containerToken: "strip", tabs: (1...count).map { node("tab-\($0)", role: "AXRadioButton", selected: $0 == 1) })
     }
 
     private func makeSnapshot(
         bundle: String = "com.google.Chrome",
+        applicationVersion: String? = ChromeShortcutCatalog.characterizedChromeVersion,
         hit: AXNodeSnapshot,
         ancestors: [AXNodeSnapshot] = []
     ) -> AccessibilitySnapshot {
-        AccessibilitySnapshot(pid: 123, bundleIdentifier: bundle, applicationName: "Google Chrome",
+        AccessibilitySnapshot(pid: 123, bundleIdentifier: bundle, applicationVersion: applicationVersion, applicationName: "Google Chrome",
                               hit: hit, ancestors: ancestors)
     }
 
     private func runtime(
         tabs: ChromeTabState? = nil,
+        tabShortcuts: ChromeTabShortcutState? = nil,
         shortcut: LiveShortcutResolution = .unavailable,
-        destination: ChromeNavigationDestination = .unavailable
+        destination: ChromeNavigationDestination = .unavailable,
+        applicationVersion: String? = ChromeShortcutCatalog.characterizedChromeVersion
     ) -> ChromeRuntimeState {
-        ChromeRuntimeState(tabs: tabs, settingsShortcut: shortcut, destination: destination)
+        ChromeRuntimeState(
+            tabs: tabs,
+            tabShortcuts: tabShortcuts ?? fixtureTabShortcuts(),
+            settingsShortcut: shortcut,
+            destination: destination,
+            applicationVersion: applicationVersion
+        )
+    }
+
+    private func fixtureTabShortcuts() -> ChromeTabShortcutState {
+        ChromeTabShortcutState(
+            newTab: resolved("⌘T"),
+            closeTab: resolved("⌘W"),
+            directSelection: Dictionary(uniqueKeysWithValues: (1...9).map { ($0, resolved("⌘\($0)")) })
+        )
+    }
+
+    private func resolved(_ displayString: String) -> LiveShortcutResolution {
+        .resolved(tryResolvedObservation(displayString))
+    }
+
+    private func tryResolvedObservation(_ displayString: String) -> LiveShortcutObservation {
+        var modifiers = 0
+        if displayString.contains("⇧") { modifiers |= 1 }
+        if displayString.contains("⌥") { modifiers |= 2 }
+        if displayString.contains("⌃") { modifiers |= 4 }
+        if !displayString.contains("⌘") { modifiers |= 8 }
+        let primary = String(displayString.last ?? ",")
+        return LiveShortcutObservation(
+            evidence: AXShortcutEvidence(
+                commandCharacter: primary,
+                modifiers: modifiers,
+                commandGlyph: nil,
+                virtualKey: nil
+            )
+        )!
     }
 
     private func node(_ token: String, role: String, title: String? = nil, description: String? = nil,
@@ -405,6 +581,7 @@ private struct SettingsTraceObservation: Decodable {
         let snapshot = AccessibilitySnapshot(
             pid: 123,
             bundleIdentifier: "com.google.Chrome",
+            applicationVersion: ChromeShortcutCatalog.characterizedChromeVersion,
             applicationName: "Google Chrome",
             hit: AXNodeSnapshot(
                 token: hit.token,
@@ -432,17 +609,33 @@ private struct SettingsTraceObservation: Decodable {
                 }
             ),
             settingsShortcut: parseShortcut(settingsShortcut),
-            destination: destination
+            destination: destination,
+            applicationVersion: ChromeShortcutCatalog.characterizedChromeVersion
         )
         switch phase {
         case "down": return .down(PointerSample(phase: .down, location: point, modifiers: [], timestamp: time), snapshot, runtime)
         case "up": return .up(PointerSample(phase: .up, location: point, modifiers: [], timestamp: time), snapshot)
-        case "post": return .post(snapshot, runtime, timestamp: time)
+        case "post": return .post(ApplicationProcessIdentity(snapshot: snapshot), runtime, timestamp: time)
         default: return .cancelled
         }
     }
 
     private func parseShortcut(_ value: String) -> LiveShortcutResolution {
-        value.hasPrefix("resolved:") ? .resolved(String(value.dropFirst("resolved:".count))) : .unavailable
+        value.hasPrefix("resolved:") ? resolved(String(value.dropFirst("resolved:".count))) : .unavailable
+    }
+
+    private func resolved(_ displayString: String) -> LiveShortcutResolution {
+        var modifiers = 0
+        if displayString.contains("⇧") { modifiers |= 1 }
+        if displayString.contains("⌥") { modifiers |= 2 }
+        if displayString.contains("⌃") { modifiers |= 4 }
+        if !displayString.contains("⌘") { modifiers |= 8 }
+        let evidence = AXShortcutEvidence(
+            commandCharacter: ",",
+            modifiers: modifiers,
+            commandGlyph: nil,
+            virtualKey: nil
+        )
+        return .resolved(LiveShortcutObservation(evidence: evidence)!)
     }
 }

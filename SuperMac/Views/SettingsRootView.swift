@@ -383,6 +383,7 @@ private struct WindowActionPreviewView: View {
 
 private struct KeyBumpsSettingsView: View {
     @Environment(AppModel.self) private var model
+
     var body: some View {
         let isEnabled = model.preferences.enabledCapabilities.contains(.shortcutCoaching)
         let readiness = model.permissionReadiness(for: [.shortcutCoaching])
@@ -435,12 +436,17 @@ private struct KeyBumpsSettingsView: View {
             Section("Sound") {
                 channelControl(.sound)
             }
+            Section("Keyboard symbols") {
+                KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
+            }
             Section {
                 Button("Open Key Bumps History") { model.showKeyBumpsHistory() }
                 Text("View, filter, and clear detected actions in the quick switcher.")
                     .foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).navigationTitle("Key Bumps")
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Key Bumps")
     }
 
     @ViewBuilder
@@ -474,6 +480,31 @@ private struct KeyBumpsSettingsView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+struct KeyboardGlyphLegendContent: View {
+    let entries: [KeyboardGlyphLegendEntry]
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            ForEach(entries) { entry in
+                HStack(spacing: 10) {
+                    KeyboardKeycap(label: entry.symbol)
+                        .accessibilityHidden(true)
+                    Text(entry.name)
+                        .font(.callout)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(entry.name), \(entry.symbol)")
             }
         }
     }

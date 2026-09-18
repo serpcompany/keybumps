@@ -42,36 +42,114 @@ struct ActionCorrelator {
         return true
     }
 
-    mutating func verify(post: AccessibilitySnapshot, runtime: ChromeRuntimeState, at timestamp: TimeInterval) -> CoachingEvent? {
+    mutating func verify(
+        processIdentity: ApplicationProcessIdentity,
+        runtime: ChromeRuntimeState,
+        at timestamp: TimeInterval
+    ) -> CoachingEvent? {
         guard let candidate else { return nil }
-        defer { cancel() }
-        guard post.bundleIdentifier == candidate.preSnapshot.bundleIdentifier else { return nil }
-        let output: (String, String)?
+        guard processIdentity.bundleIdentifier == candidate.preSnapshot.bundleIdentifier else { return nil }
+        let event: CoachingEvent?
         switch candidate.kind {
-        case .chromeNewTab where tabStates(candidate.preRuntime, runtime, satisfy: { $1.tabs.count == $0.tabs.count + 1 }):
-            output = ("New Tab", ChromeShortcutCatalog.newTab)
+        case .chromeNewTab
+            where tabStates(candidate.preRuntime, runtime, satisfy: { $1.tabs.count == $0.tabs.count + 1 }):
+            event = liveEvent(
+                title: "New Tab",
+                pre: candidate.preRuntime.tabShortcuts.newTab,
+                post: runtime.tabShortcuts.newTab,
+                candidate: candidate
+            )
         case .chromeCloseActiveTab(let token)
             where tabStates(candidate.preRuntime, runtime, satisfy: {
                 $1.tabs.count == $0.tabs.count - 1 && !$1.tabs.contains(where: { $0.token == token })
             }):
-            output = ("Close Tab", ChromeShortcutCatalog.closeTab)
+            event = liveEvent(
+                title: "Close Tab",
+                pre: candidate.preRuntime.tabShortcuts.closeTab,
+                post: runtime.tabShortcuts.closeTab,
+                candidate: candidate
+            )
         case .chromeSelectTab(let token, let index, let count)
             where tabStates(candidate.preRuntime, runtime, satisfy: {
                 $1.tabs.count == count && $1.tabs.first(where: { $0.token == token })?.selected == true
             }):
-            output = ("Select Tab \(index)", ChromeShortcutCatalog.selectTab(index: index))
+            let shortcutIndex = min(index, 9)
+            let preResolution = candidate.preRuntime.tabShortcuts.directSelection[shortcutIndex] ?? .unavailable
+            let postResolution = runtime.tabShortcuts.directSelection[shortcutIndex] ?? .unavailable
+            if let live = liveEvent(
+                title: "Select Tab \(index)",
+                pre: preResolution,
+                post: postResolution,
+                candidate: candidate
+            ) {
+                event = live
+            } else if preResolution == .unavailable,
+                      postResolution == .unavailable,
+                      ChromeShortcutCatalog.isCompatible(
+                          snapshotVersion: candidate.preSnapshot.applicationVersion,
+                          preRuntimeVersion: candidate.preRuntime.applicationVersion,
+                          postRuntimeVersion: runtime.applicationVersion
+                      ) {
+                event = characterizedEvent(
+                    title: "Select Tab \(index)",
+                    shortcut: ChromeShortcutCatalog.selectTab(index: index),
+                    candidate: candidate
+                )
+            } else {
+                event = nil
+            }
         case .chromeSettings(let shortcut)
             where runtime.destination == .settings && runtime.settingsShortcut == .resolved(shortcut):
-            output = ("Settings", shortcut)
-        default: output = nil
+            event = CoachingEventFactory.make(
+                applicationName: candidate.applicationName,
+                actionTitle: "Settings",
+                shortcutEvidence: shortcut.evidence,
+                pointerX: candidate.point.x,
+                pointerY: candidate.point.y
+            )
+        default: event = nil
         }
-        guard let output else { return nil }
-        let signature = "\(candidate.applicationName)|\(output.0)|\(output.1)"
+        guard let event else { return nil }
+        cancel()
+        let signature = "\(event.applicationName)|\(event.actionTitle)|\(event.shortcut)"
         guard signature != lastSignature || timestamp - lastEmissionTimestamp > deduplicationWindow else { return nil }
         lastSignature = signature
         lastEmissionTimestamp = timestamp
-        return CoachingEvent(applicationName: candidate.applicationName, actionTitle: output.0,
-                             shortcut: output.1, pointerX: candidate.point.x, pointerY: candidate.point.y)
+        return event
+    }
+
+    private func characterizedEvent(
+        title: String,
+        shortcut: String,
+        candidate: ManualActionCandidate
+    ) -> CoachingEvent? {
+        CoachingEventFactory.makeCharacterized(
+            applicationName: candidate.applicationName,
+            actionTitle: title,
+            displayShortcut: shortcut,
+            adapterID: ChromeShortcutCatalog.adapterID,
+            compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion,
+            pointerX: candidate.point.x,
+            pointerY: candidate.point.y
+        )
+    }
+
+    private func liveEvent(
+        title: String,
+        pre: LiveShortcutResolution,
+        post: LiveShortcutResolution,
+        candidate: ManualActionCandidate
+    ) -> CoachingEvent? {
+        guard case .resolved(let preShortcut) = pre,
+              case .resolved(let postShortcut) = post,
+              preShortcut == postShortcut else { return nil }
+        return CoachingEventFactory.make(
+            applicationName: candidate.applicationName,
+            actionTitle: title,
+            shortcutEvidence: preShortcut.evidence,
+            pointerX: candidate.point.x,
+            pointerY: candidate.point.y
+        )
     }
 
     private func tabStates(
@@ -89,8 +167,18 @@ enum ChromeClickObservation: Equatable, Sendable {
     case down(PointerSample, AccessibilitySnapshot?, ChromeRuntimeState)
     case dragged(PointerSample)
     case up(PointerSample, AccessibilitySnapshot?)
-    case post(AccessibilitySnapshot?, ChromeRuntimeState, timestamp: TimeInterval)
+    case post(ApplicationProcessIdentity?, ChromeRuntimeState, timestamp: TimeInterval)
     case cancelled
+}
+
+struct ApplicationProcessIdentity: Equatable, Sendable {
+    let pid: Int32
+    let bundleIdentifier: String?
+
+    init(snapshot: AccessibilitySnapshot) {
+        pid = snapshot.pid
+        bundleIdentifier = snapshot.bundleIdentifier
+    }
 }
 
 enum ChromeClickSuppression: Equatable, Sendable {
@@ -113,6 +201,9 @@ struct ChromeClickDetector {
     private var ignoringGesture = false
     private(set) var needsPostObservation = false
     var hasPendingCandidate: Bool { correlator.candidate != nil }
+    var pendingProcessIdentity: ApplicationProcessIdentity? {
+        correlator.candidate.map { ApplicationProcessIdentity(snapshot: $0.preSnapshot) }
+    }
     var postRuntimeRequirement: ChromeRuntimeRequirement {
         guard let candidate = correlator.candidate else { return .none }
         if case .chromeSettings = candidate.kind { return .settings }
@@ -148,15 +239,25 @@ struct ChromeClickDetector {
             guard correlator.acceptsMouseUp(sample, hit: snapshot) else { return .suppressed(.invalidGesture) }
             needsPostObservation = true
             return .pending
-        case .post(let snapshot, let runtime, let timestamp):
-            needsPostObservation = false
-            guard let snapshot else {
+        case .post(let processIdentity, let runtime, let timestamp):
+            guard let processIdentity else {
+                needsPostObservation = false
                 correlator.cancel()
                 return .suppressed(.missingPostObservation)
             }
-            guard let event = correlator.verify(post: snapshot, runtime: runtime, at: timestamp) else {
+            guard correlator.candidate != nil else {
+                needsPostObservation = false
                 return .suppressed(.postconditionFailed)
             }
+            guard let event = correlator.verify(
+                processIdentity: processIdentity,
+                runtime: runtime,
+                at: timestamp
+            ) else {
+                needsPostObservation = true
+                return .pending
+            }
+            needsPostObservation = false
             return .event(event)
         case .cancelled:
             ignoringGesture = false

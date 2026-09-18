@@ -4,25 +4,36 @@ struct ShortcutKeycapPresentation: Equatable {
     let keys: [String]
 
     init(shortcut: String) {
-        let modifiers = Set(["⌘", "⌥", "⌃", "⇧"])
-        var keys: [String] = []
-        var current = ""
-        for character in shortcut {
-            let value = String(character)
-            if modifiers.contains(value) {
-                if !current.isEmpty {
-                    keys.append(current)
-                    current = ""
-                }
-                keys.append(value)
-            } else {
-                current.append(character)
-            }
-        }
-        if !current.isEmpty {
-            keys.append(keys.contains("⇧") ? current.uppercased() : current.lowercased())
-        }
-        self.keys = keys
+        keys = KeyboardShortcutRegistry.keycapTokens(for: shortcut)
+    }
+}
+
+struct ShortcutKeycapMetrics: Equatable {
+    let fontSize: CGFloat
+    let height: CGFloat
+    let minimumWidth: CGFloat
+    let horizontalPadding: CGFloat
+    let cornerRadius: CGFloat
+
+    static func value(compact: Bool) -> ShortcutKeycapMetrics {
+        compact
+            ? ShortcutKeycapMetrics(fontSize: 11, height: 20, minimumWidth: 20, horizontalPadding: 4, cornerRadius: 5)
+            : ShortcutKeycapMetrics(fontSize: 15, height: 28, minimumWidth: 28, horizontalPadding: 7, cornerRadius: 6)
+    }
+}
+
+struct KeyboardKeycap: View {
+    let label: String
+    var compact = false
+
+    var body: some View {
+        let metrics = ShortcutKeycapMetrics.value(compact: compact)
+        Text(label)
+            .font(.system(size: metrics.fontSize, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .padding(.horizontal, metrics.horizontalPadding)
+            .frame(minWidth: metrics.minimumWidth, minHeight: metrics.height, maxHeight: metrics.height)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: metrics.cornerRadius))
     }
 }
 
@@ -31,21 +42,14 @@ struct ShortcutKeycaps: View {
     var compact = false
 
     var body: some View {
-        let keys = ShortcutKeycapPresentation(shortcut: shortcut).keys
+        let presentation = ShortcutKeycapPresentation(shortcut: shortcut)
         HStack(spacing: compact ? 3 : 6) {
-            ForEach(keys, id: \.self) { key in
-                Text(key)
-                    .font(.system(size: compact ? 11 : 15, weight: .semibold, design: .rounded))
-                    .frame(
-                        minWidth: compact ? 18 : 24,
-                        minHeight: compact ? 18 : 24
-                    )
-                    .padding(.horizontal, compact ? 1 : 3)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: compact ? 4 : 6))
+            ForEach(presentation.keys, id: \.self) { key in
+                KeyboardKeycap(label: key, compact: compact)
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Shortcut \(shortcut)")
+        .accessibilityLabel(KeyboardShortcutRegistry.accessibilityCopy(for: shortcut))
     }
 }
 
@@ -77,7 +81,13 @@ struct CoachingEventRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(presentation.actionTitle) in \(presentation.applicationName). Shortcut \(presentation.shortcut).")
+        .accessibilityLabel(
+            "\(presentation.actionTitle) in \(presentation.applicationName). \(shortcutAccessibilityCopy)."
+        )
+    }
+
+    private var shortcutAccessibilityCopy: String {
+        KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut)
     }
 }
 

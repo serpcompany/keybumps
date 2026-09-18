@@ -8,8 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		02616B8277F6E19177358C2B /* NotificationDeliveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADE70860A30377DD7E7E3B2 /* NotificationDeliveryService.swift */; };
-		08C07BABCDF840920981C39E /* ShortcutFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622B0F6D27EE05F4FCA662F4 /* ShortcutFormatter.swift */; };
+		08C07BABCDF840920981C39E /* KeyboardShortcutRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 622B0F6D27EE05F4FCA662F4 /* KeyboardShortcutRegistry.swift */; };
 		08F4D2532E291F60FC83D958 /* UpdateControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */; };
+		23A000000000000000000002 /* AXShortcutEvidenceReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A000000000000000000001 /* AXShortcutEvidenceReader.swift */; };
 		0F173B8EEE34731BFC2BB46C /* SystemServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374F0E123136211939751EBD /* SystemServices.swift */; };
 		10BF68EF4B2FCD67176B78E5 /* PointerEventMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D121EE0800846D3507A1B184 /* PointerEventMonitor.swift */; };
 		10E38342515AA764D84F979D /* ChromeActionDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8064DB57B1E1DDD769BECC1 /* ChromeActionDetectionTests.swift */; };
@@ -84,6 +85,7 @@
 		1A345711CDDED027099E273D /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
 		1B693B5DB877A0D2D65233AB /* ShortcutCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCatalog.swift; sourceTree = "<group>"; };
 		1D1127D1CBB6DF74B0C9DC4E /* SuperMac-AppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SuperMac-AppStore.entitlements"; sourceTree = "<group>"; };
+		23A000000000000000000001 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		25903B98C29F55332BFEB455 /* UpdateControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateControllerTests.swift; sourceTree = "<group>"; };
 		2C7F01062D6A9BFA8A23FC52 /* WindowManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementService.swift; sourceTree = "<group>"; };
 		2C950B36CEF4429972BA91B8 /* InboxStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxStore.swift; sourceTree = "<group>"; };
@@ -95,7 +97,7 @@
 		4BFA3CEB2DACC39047B00175 /* GlobalShortcutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutCoordinator.swift; sourceTree = "<group>"; };
 		4E8537BBC04F3303D87D5D4E /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
 		60E3FF4B2C9E74E32242A4AB /* MenuInboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuInboxView.swift; sourceTree = "<group>"; };
-		622B0F6D27EE05F4FCA662F4 /* ShortcutFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutFormatter.swift; sourceTree = "<group>"; };
+		622B0F6D27EE05F4FCA662F4 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		693B2BEFF4340566A2E73421 /* ShortcutCoachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCoachTests.swift; sourceTree = "<group>"; };
 		6B0462EFDE8CD0087CBCC711 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6E3CD33F55E7ED6FD7447DF8 /* RecentItemStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentItemStore.swift; sourceTree = "<group>"; };
@@ -316,6 +318,7 @@
 			children = (
 				CCF75D2E998EDF7DC502EE98 /* AccessibilitySnapshotter.swift */,
 				9A39FD515AB2244E626687C8 /* ActionCorrelator.swift */,
+				23A000000000000000000001 /* AXShortcutEvidenceReader.swift */,
 				9C166318C53B0BFACE88EC23 /* ChromeActionAdapter.swift */,
 				4BE8030020C75B10CEAD4D1F /* FinderTrashMonitor.swift */,
 				1A345711CDDED027099E273D /* ManualActionDetector.swift */,
@@ -369,7 +372,7 @@
 				751041DE9F75C902026B8BB7 /* CoachingEvent.swift */,
 				3FBE0AD5C335288BE3824279 /* NotificationChannel.swift */,
 				1B693B5DB877A0D2D65233AB /* ShortcutCatalog.swift */,
-				622B0F6D27EE05F4FCA662F4 /* ShortcutFormatter.swift */,
+				622B0F6D27EE05F4FCA662F4 /* KeyboardShortcutRegistry.swift */,
 			);
 			path = Domain;
 			sourceTree = "<group>";
@@ -486,6 +489,7 @@
 			files = (
 				E29927A40173419DC2A94C2E /* AccessibilitySnapshotter.swift in Sources */,
 				F78B977DFCD21A997E90BED0 /* ActionCorrelator.swift in Sources */,
+				23A000000000000000000002 /* AXShortcutEvidenceReader.swift in Sources */,
 				87E4B8800D1A96942C01C6D8 /* AppDelegate.swift in Sources */,
 				8773503FC55C6C2D12BCA62F /* AppModel.swift in Sources */,
 				9A123083B9AA78A72E107ED3 /* AppPreferences.swift in Sources */,
@@ -518,7 +522,7 @@
 				E09625837E0C77B15DEEE22D /* SettingsRootView.swift in Sources */,
 				1B6E06CA72D1EB30D1D26F11 /* SharedViews.swift in Sources */,
 				881298FF4FFAEFBD96A747EE /* ShortcutCatalog.swift in Sources */,
-				08C07BABCDF840920981C39E /* ShortcutFormatter.swift in Sources */,
+				08C07BABCDF840920981C39E /* KeyboardShortcutRegistry.swift in Sources */,
 				230E9EC0C94164772A13BAB0 /* SparkleUpdateController.swift in Sources */,
 				B338B93F3DEBF46EC97E2A0A /* StandardWindowControlMonitor.swift in Sources */,
 				5A474A9F1CC0A3DFF5C06267 /* SuperMacApp.swift in Sources */,

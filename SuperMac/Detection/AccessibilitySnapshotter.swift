@@ -23,18 +23,70 @@ struct AXNodeSnapshot: Codable, Equatable, Sendable {
     let actions: [String]
     let frame: AXFrameSnapshot?
     let menuShortcut: String?
+    let menuShortcutEvidence: AXShortcutEvidence?
+
+    init(
+        token: String,
+        role: String?,
+        subrole: String?,
+        title: String?,
+        elementDescription: String?,
+        identifier: String?,
+        value: String?,
+        selected: Bool?,
+        enabled: Bool?,
+        actions: [String],
+        frame: AXFrameSnapshot?,
+        menuShortcut: String?,
+        menuShortcutEvidence: AXShortcutEvidence? = nil
+    ) {
+        self.token = token
+        self.role = role
+        self.subrole = subrole
+        self.title = title
+        self.elementDescription = elementDescription
+        self.identifier = identifier
+        self.value = value
+        self.selected = selected
+        self.enabled = enabled
+        self.actions = actions
+        self.frame = frame
+        self.menuShortcut = menuShortcut
+        self.menuShortcutEvidence = menuShortcutEvidence
+    }
 }
 
 struct AccessibilitySnapshot: Codable, Equatable, Sendable {
     let pid: Int32
     let bundleIdentifier: String?
+    let applicationVersion: String?
     let applicationName: String
     let hit: AXNodeSnapshot
     let ancestors: [AXNodeSnapshot]
     var hitAndAncestors: [AXNodeSnapshot] { [hit] + ancestors }
+
+    init(
+        pid: Int32,
+        bundleIdentifier: String?,
+        applicationVersion: String? = nil,
+        applicationName: String,
+        hit: AXNodeSnapshot,
+        ancestors: [AXNodeSnapshot]
+    ) {
+        self.pid = pid
+        self.bundleIdentifier = bundleIdentifier
+        self.applicationVersion = applicationVersion
+        self.applicationName = applicationName
+        self.hit = hit
+        self.ancestors = ancestors
+    }
 }
 
-final class AccessibilitySnapshotter {
+protocol AccessibilitySnapshotting {
+    func snapshot(at point: CGPoint, completion: @escaping (AccessibilitySnapshot?) -> Void)
+}
+
+final class AccessibilitySnapshotter: AccessibilitySnapshotting {
     // AppKit's in-process accessibility implementation is main-thread-bound.
     // A global click can land on SuperMac itself, so all AX hit-testing
     // must share the main queue rather than racing from detector worker queues.
@@ -55,6 +107,9 @@ final class AccessibilitySnapshotter {
         guard AXUIElementGetPid(hit, &pid) == .success else { return nil }
         let app = NSRunningApplication(processIdentifier: pid)
         let bundleIdentifier = app?.bundleIdentifier
+        let applicationVersion = app?.bundleURL
+            .flatMap(Bundle.init(url:))?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         var ancestors: [(AXUIElement, AXNodeSnapshot)] = []
         var cursor = hit
         for _ in 0..<8 {
@@ -65,7 +120,7 @@ final class AccessibilitySnapshotter {
             if node.role == kAXApplicationRole as String { break }
         }
         let hitSnapshot = nodeSnapshot(hit)
-        return AccessibilitySnapshot(pid: pid, bundleIdentifier: bundleIdentifier,
+        return AccessibilitySnapshot(pid: pid, bundleIdentifier: bundleIdentifier, applicationVersion: applicationVersion,
                                      applicationName: app?.localizedName ?? "Current app",
                                      hit: hitSnapshot, ancestors: ancestors.map(\.1))
     }
@@ -81,8 +136,7 @@ final class AccessibilitySnapshotter {
         else { valueString = nil }
         var actionNames: CFArray?
         let actions = AXUIElementCopyActionNames(element, &actionNames) == .success ? (actionNames as? [String] ?? []) : []
-        let command: String? = attribute(kAXMenuItemCmdCharAttribute, from: element)
-        let modifiers: NSNumber? = attribute(kAXMenuItemCmdModifiersAttribute, from: element)
+        let shortcutEvidence = AXShortcutEvidenceReader.read(from: element)
         return AXNodeSnapshot(
             token: token(for: element), role: attribute(kAXRoleAttribute, from: element),
             subrole: attribute(kAXSubroleAttribute, from: element), title: attribute(kAXTitleAttribute, from: element),
@@ -90,7 +144,8 @@ final class AccessibilitySnapshotter {
             value: valueString, selected: selected ?? ((rawValue as? NSNumber)?.boolValue),
             enabled: attribute(kAXEnabledAttribute, from: element), actions: actions.sorted(),
             frame: position.flatMap { origin in size.map { AXFrameSnapshot(x: origin.x, y: origin.y, width: $0.width, height: $0.height) } },
-            menuShortcut: command.map { ShortcutFormatter.format(command: $0, modifiers: modifiers?.intValue ?? 0) }
+            menuShortcut: KeyboardShortcutRegistry.resolve(shortcutEvidence)?.displayString,
+            menuShortcutEvidence: shortcutEvidence
         )
     }
 

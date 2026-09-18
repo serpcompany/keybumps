@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -6,7 +7,7 @@ enum ManualActionKind: Equatable, Sendable {
     case chromeNewTab
     case chromeCloseActiveTab(tabToken: String)
     case chromeSelectTab(tabToken: String, index: Int, tabCount: Int)
-    case chromeSettings(shortcut: String)
+    case chromeSettings(shortcut: LiveShortcutObservation)
 }
 
 struct ManualActionCandidate: Equatable, Sendable {
@@ -27,8 +28,35 @@ struct ChromeTabState: Codable, Equatable, Sendable {
     let tabs: [AXNodeSnapshot]
 }
 
+struct ChromeTabShortcutState: Equatable, Sendable {
+    var newTab: LiveShortcutResolution
+    var closeTab: LiveShortcutResolution
+    var directSelection: [Int: LiveShortcutResolution]
+
+    static let unavailable = ChromeTabShortcutState(
+        newTab: .unavailable,
+        closeTab: .unavailable,
+        directSelection: [:]
+    )
+}
+
+struct LiveShortcutObservation: Codable, Equatable, Sendable {
+    let evidence: AXShortcutEvidence
+
+    init?(evidence: AXShortcutEvidence) {
+        guard KeyboardShortcutRegistry.resolve(evidence) != nil else { return nil }
+        self.evidence = evidence
+    }
+
+    var canonicalShortcut: CanonicalKeyboardShortcut? {
+        KeyboardShortcutRegistry.resolve(evidence)
+    }
+
+    var displayString: String? { canonicalShortcut?.displayString }
+}
+
 enum LiveShortcutResolution: Codable, Equatable, Sendable {
-    case resolved(String)
+    case resolved(LiveShortcutObservation)
     case unavailable
     case ambiguous
 }
@@ -47,10 +75,32 @@ enum ChromeRuntimeRequirement: Equatable, Sendable {
 
 struct ChromeRuntimeState: Equatable, Sendable {
     var tabs: ChromeTabState?
+    var tabShortcuts: ChromeTabShortcutState
     var settingsShortcut: LiveShortcutResolution
     var destination: ChromeNavigationDestination
+    var applicationVersion: String?
 
-    static let unavailable = ChromeRuntimeState(tabs: nil, settingsShortcut: .unavailable, destination: .unavailable)
+    init(
+        tabs: ChromeTabState?,
+        tabShortcuts: ChromeTabShortcutState = .unavailable,
+        settingsShortcut: LiveShortcutResolution,
+        destination: ChromeNavigationDestination,
+        applicationVersion: String? = nil
+    ) {
+        self.tabs = tabs
+        self.tabShortcuts = tabShortcuts
+        self.settingsShortcut = settingsShortcut
+        self.destination = destination
+        self.applicationVersion = applicationVersion
+    }
+
+    static let unavailable = ChromeRuntimeState(
+        tabs: nil,
+        tabShortcuts: .unavailable,
+        settingsShortcut: .unavailable,
+        destination: .unavailable,
+        applicationVersion: nil
+    )
 }
 
 protocol ChromeRuntimeStateReading {
@@ -60,8 +110,17 @@ protocol ChromeRuntimeStateReading {
 struct ChromeMenuCommandObservation: Equatable, Sendable {
     let node: AXNodeSnapshot
     let enabled: Bool?
-    let command: String?
-    let modifiers: Int?
+    let shortcutEvidence: AXShortcutEvidence
+
+    init(
+        node: AXNodeSnapshot,
+        enabled: Bool?,
+        shortcutEvidence: AXShortcutEvidence
+    ) {
+        self.node = node
+        self.enabled = enabled
+        self.shortcutEvidence = shortcutEvidence
+    }
 }
 
 enum ChromeSettingsSemantics {
@@ -85,10 +144,8 @@ enum ChromeSettingsSemantics {
             return matches.isEmpty ? .unavailable : .ambiguous
         }
         guard match.enabled == true,
-              let command = match.command, !command.isEmpty,
-              let modifiers = match.modifiers,
-              modifiers >= 0, modifiers & ~15 == 0 else { return .unavailable }
-        return .resolved(ShortcutFormatter.format(command: command, modifiers: modifiers))
+              let shortcut = LiveShortcutObservation(evidence: match.shortcutEvidence) else { return .unavailable }
+        return .resolved(shortcut)
     }
 
     private static let settingsTitles: Set<String> = ["settings", "preferences"]
@@ -108,18 +165,29 @@ enum ChromeSettingsSemantics {
 struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
     func read(pid: Int32, requirement: ChromeRuntimeRequirement) -> ChromeRuntimeState {
         let application = AXUIElementCreateApplication(pid)
+        let applicationVersion = NSRunningApplication(processIdentifier: pid)?.bundleURL
+            .flatMap(Bundle.init(url:))?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         switch requirement {
         case .none:
             return .unavailable
         case .tabs:
             guard let window = focusedWindow(of: application) else { return .unavailable }
-            return ChromeRuntimeState(tabs: tabState(in: window), settingsShortcut: .unavailable, destination: .unavailable)
+            return ChromeRuntimeState(
+                tabs: tabState(in: window),
+                tabShortcuts: tabShortcuts(in: application),
+                settingsShortcut: .unavailable,
+                destination: .unavailable,
+                applicationVersion: applicationVersion
+            )
         case .settings:
             guard let window = focusedWindow(of: application) else { return .unavailable }
             return ChromeRuntimeState(
                 tabs: nil,
+                tabShortcuts: .unavailable,
                 settingsShortcut: settingsShortcut(in: application),
-                destination: navigationDestination(in: window)
+                destination: navigationDestination(in: window),
+                applicationVersion: applicationVersion
             )
         }
     }
@@ -132,11 +200,50 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             observations.append(ChromeMenuCommandObservation(
                 node: node,
                 enabled: attribute(kAXEnabledAttribute, from: element),
-                command: attribute(kAXMenuItemCmdCharAttribute, from: element),
-                modifiers: (attribute(kAXMenuItemCmdModifiersAttribute, from: element) as NSNumber?)?.intValue
+                shortcutEvidence: AXShortcutEvidenceReader.read(from: element)
             ))
         }
         return ChromeSettingsSemantics.resolveShortcut(from: observations)
+    }
+
+    private func tabShortcuts(in application: AXUIElement) -> ChromeTabShortcutState {
+        guard let menuBar: AXUIElement = attribute(kAXMenuBarAttribute, from: application) else {
+            return .unavailable
+        }
+        var frontier = [menuBar]
+        var observations: [(title: String, shortcut: LiveShortcutObservation)] = []
+        var visited = 0
+        while !frontier.isEmpty && visited < 800 {
+            let element = frontier.removeFirst()
+            visited += 1
+            if (attribute(kAXRoleAttribute, from: element) as String?) == kAXMenuItemRole as String,
+               (attribute(kAXEnabledAttribute, from: element) as Bool?) == true,
+               let title: String = attribute(kAXTitleAttribute, from: element),
+               let shortcut = LiveShortcutObservation(evidence: AXShortcutEvidenceReader.read(from: element)) {
+                observations.append((title, shortcut))
+            }
+            let children: [AXUIElement] = attribute(kAXChildrenAttribute, from: element) ?? []
+            frontier.append(contentsOf: children)
+        }
+
+        func unique(titles: Set<String>) -> LiveShortcutResolution {
+            let matches = observations.filter { titles.contains($0.title.lowercased()) }.map(\.shortcut)
+            if matches.count == 1 { return .resolved(matches[0]) }
+            return matches.isEmpty ? .unavailable : .ambiguous
+        }
+
+        var direct: [Int: LiveShortcutResolution] = [:]
+        for index in 1...9 {
+            let expected = "⌘\(index)"
+            let matches = observations.map(\.shortcut).filter { $0.displayString == expected }
+            if matches.count == 1 { direct[index] = .resolved(matches[0]) }
+            else if matches.count > 1 { direct[index] = .ambiguous }
+        }
+        return ChromeTabShortcutState(
+            newTab: unique(titles: ["new tab"]),
+            closeTab: unique(titles: ["close tab"]),
+            directSelection: direct
+        )
     }
 
     private func navigationDestination(in window: AXUIElement) -> ChromeNavigationDestination {
@@ -217,9 +324,20 @@ enum ChromeShortcutCatalog {
     // Static defaults are the explicit fallback characterized against this Chrome build.
     // A later slice can resolve equivalent visible menu items before using these values.
     static let characterizedChromeVersion = "153.0.8010.12"
+    static let adapterID = "chrome-tab-defaults"
     static let newTab = "⌘T"
     static let closeTab = "⌘W"
     static func selectTab(index: Int) -> String { index <= 8 ? "⌘\(index)" : "⌘9" }
+
+    static func isCompatible(
+        snapshotVersion: String?,
+        preRuntimeVersion: String?,
+        postRuntimeVersion: String?
+    ) -> Bool {
+        snapshotVersion == characterizedChromeVersion
+            && preRuntimeVersion == characterizedChromeVersion
+            && postRuntimeVersion == characterizedChromeVersion
+    }
 }
 
 struct ChromeActionAdapter: ApplicationActionAdapter {
