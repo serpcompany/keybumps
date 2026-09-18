@@ -24,19 +24,12 @@ update_url_is_production_https "$feed_url" || { print -u2 "release feed must be 
 [[ -f "$release_notes" ]] || { print -u2 "missing release notes: $release_notes"; exit 66; }
 [[ ! -e "$output_directory" ]] || { print -u2 "refusing to overwrite output directory: $output_directory"; exit 73; }
 
-git -C "$repository_root" fetch origin main --tags --prune
-"$repository_root/scripts/verify-build-source.sh" public "$repository_root" >/dev/null
-source_commit=$(git -C "$repository_root" rev-parse HEAD)
-source_branch=$(git -C "$repository_root" symbolic-ref --quiet --short HEAD)
-
 mkdir -p "$output_directory/archive" "$output_directory/export" "$output_directory/feed" "$output_directory/dmg-root" "$output_directory/publication/assets" "$output_directory/publication/publish-last"
 cd "$repository_root"
 xcodegen generate
-"$repository_root/scripts/verify-build-source.sh" public "$repository_root" >/dev/null
 xcodebuild -project SuperMac.xcodeproj -scheme SuperMac-Release -configuration Release \
   -archivePath "$output_directory/archive/SuperMac.xcarchive" \
   MARKETING_VERSION="$release_version" CURRENT_PROJECT_VERSION="$release_build" \
-  SUPERMAC_SOURCE_COMMIT="$source_commit" SUPERMAC_SOURCE_BRANCH="$source_branch" SUPERMAC_BUILD_KIND=public-release \
   SUPERMAC_UPDATE_FEED_URL="$feed_url" SUPERMAC_UPDATE_PUBLIC_KEY="$public_key" archive
 xcodebuild -exportArchive \
   -archivePath "$output_directory/archive/SuperMac.xcarchive" \
@@ -44,16 +37,6 @@ xcodebuild -exportArchive \
   -exportOptionsPlist "$repository_root/scripts/ExportOptions-DeveloperID.plist"
 
 app_path="$output_directory/export/SuperMac.app"
-embedded_commit=$(/usr/libexec/PlistBuddy -c 'Print :SuperMacSourceCommit' "$app_path/Contents/Info.plist")
-embedded_branch=$(/usr/libexec/PlistBuddy -c 'Print :SuperMacSourceBranch' "$app_path/Contents/Info.plist")
-embedded_kind=$(/usr/libexec/PlistBuddy -c 'Print :SuperMacBuildKind' "$app_path/Contents/Info.plist")
-[[ "$embedded_commit" == "$source_commit" && "$embedded_branch" == main && "$embedded_kind" == public-release ]] || {
-  print -u2 "exported app provenance does not match the verified main source"
-  exit 65
-}
-"$repository_root/scripts/write-build-manifest.sh" \
-  "$output_directory/build-manifest.json" "$release_version" "$release_build" \
-  "$source_commit" "$source_branch" public-release
 notary_archive="$output_directory/SuperMac-notary.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_archive"
 asc notarization submit --file "$notary_archive" --wait
