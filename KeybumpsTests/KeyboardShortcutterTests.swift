@@ -682,6 +682,27 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertTrue(model.permissionReadiness.state(for: .accessibility).isGranted)
     }
 
+    func testPermissionRelaunchAlertBindingDismissesThePresentedPermission() {
+        let suite = "KeyboardShortcutterTests-relaunch-alert-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            presenter: PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor())
+        )
+
+        model.relaunchPromptPermission = .accessibility
+        XCTAssertTrue(model.isPermissionRelaunchPromptPresented)
+
+        model.isPermissionRelaunchPromptPresented = false
+
+        XCTAssertNil(model.relaunchPromptPermission)
+        XCTAssertFalse(model.isPermissionRelaunchPromptPresented)
+    }
+
     func testSoundInvokesGlassAndReportsUnavailablePlayback() async throws {
         var playedName: NSSound.Name?
         let successful = SoundAdapter(playSound: {

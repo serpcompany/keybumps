@@ -21,7 +21,8 @@ struct KeybumpsApp: App {
                 }
                 .alert(
                     "Restart Keybumps to finish setup",
-                    item: $model.relaunchPromptPermission
+                    isPresented: $model.isPermissionRelaunchPromptPresented,
+                    presenting: model.relaunchPromptPermission
                 ) { _ in
                     Button("Not Now", role: .cancel) { model.dismissPermissionRelaunchPrompt() }
                     Button("Restart Keybumps") { model.restartForPermissionRelaunch() }

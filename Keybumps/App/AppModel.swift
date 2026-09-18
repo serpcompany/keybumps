@@ -64,6 +64,12 @@ final class AppModel {
     private(set) var isPermissionWalkthroughActive = false
     private(set) var permissionsRequiringRelaunch: [MacPermission] = []
     var relaunchPromptPermission: MacPermission?
+    var isPermissionRelaunchPromptPresented: Bool {
+        get { relaunchPromptPermission != nil }
+        set {
+            if !newValue { dismissPermissionRelaunchPrompt() }
+        }
+    }
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
     var unreadCount: Int { inbox.unreadCount }
