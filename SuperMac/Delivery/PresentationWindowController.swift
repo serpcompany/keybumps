@@ -340,7 +340,6 @@ struct CoachingPresentationView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Spacer()
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
                         .frame(width: 24, height: 24)
@@ -348,6 +347,7 @@ struct CoachingPresentationView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Dismiss Key Bump")
+                Spacer()
             }
             .padding(.top, 6)
             .padding(.horizontal, 10)
@@ -355,7 +355,7 @@ struct CoachingPresentationView: View {
             HStack(spacing: 14) {
                 coachingCopy
                 Spacer(minLength: 18)
-                ShortcutKeycaps(shortcut: visibleShortcut, fontSize: 13)
+                ShortcutKeycaps(shortcut: visibleShortcut, fontSize: 11.5)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
