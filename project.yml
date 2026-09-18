@@ -16,9 +16,6 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     SUPERMAC_UPDATE_FEED_URL: ""
     SUPERMAC_UPDATE_PUBLIC_KEY: ""
-    SUPERMAC_SOURCE_COMMIT: unknown
-    SUPERMAC_SOURCE_BRANCH: unknown
-    SUPERMAC_BUILD_KIND: unspecified
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
