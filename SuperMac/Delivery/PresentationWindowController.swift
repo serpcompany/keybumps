@@ -92,7 +92,6 @@ final class PresentationWindowController {
         panel.contentView = NSHostingView(rootView: CoachingPresentationView(
             event: event,
             style: style,
-            onDismiss: dismissalAction(for: style),
             onHoverChanged: { [weak self] isHovering in
                 self?.setHovering(isHovering, style: style)
             }
@@ -151,10 +150,6 @@ final class PresentationWindowController {
         session.dismissalTask = nil
         session.panel.orderOut(nil)
         if sessions.isEmpty { stopInteractionMonitors() }
-    }
-
-    func dismissalAction(for style: NotificationChannel) -> () -> Void {
-        { [weak self] in self?.dismiss(style) }
     }
 
     func setHovering(_ isHovering: Bool, style: NotificationChannel, now: Date = Date()) {
@@ -318,36 +313,32 @@ enum PresentationLayout {
     }
 }
 
+struct KeyBumpVisibleCopy: Equatable {
+    let lines: [String]
+
+    init(event: CoachingEvent) {
+        lines = [event.actionTitle, event.applicationName]
+    }
+
+    var title: String { lines.first ?? "" }
+}
+
 struct CoachingPresentationView: View {
     let event: CoachingEvent
     let style: NotificationChannel
-    let onDismiss: () -> Void
     var onHoverChanged: (Bool) -> Void = { _ in }
 
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            HStack(spacing: 14) {
-                Image(systemName: style.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(.green)
-                coachingCopy
-                Spacer(minLength: 18)
-                ShortcutKeycaps(shortcut: event.shortcut)
-            }
-            .padding(.leading, 42)
-            .padding(.trailing, 16)
-            .padding(.vertical, 16)
+    var visibleCopy: KeyBumpVisibleCopy { KeyBumpVisibleCopy(event: event) }
+    var visibleShortcut: String { event.shortcut }
 
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Dismiss Key Bump")
-            .padding(.leading, 10)
-            .padding(.top, 10)
+    var body: some View {
+        HStack(spacing: 14) {
+            coachingCopy
+            Spacer(minLength: 18)
+            ShortcutKeycaps(shortcut: visibleShortcut, fontSize: 11.5)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(4)
         .contentShape(Rectangle())
@@ -358,8 +349,8 @@ struct CoachingPresentationView: View {
 
     private var coachingCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(event.coachingTitle).font(.headline)
-            Text(event.coachingBody)
+            Text(visibleCopy.title).font(.headline)
+            Text(event.applicationName)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -367,7 +358,7 @@ struct CoachingPresentationView: View {
     }
 
     private var accessibilityCopy: String {
-        "Key Bump. \(event.coachingTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
+        "Key Bump. \(event.actionTitle). \(event.applicationName). \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))."
     }
 }
 

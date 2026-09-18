@@ -43,6 +43,38 @@ final class PresentationEvidenceTests: XCTestCase {
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.fullScreenAuxiliary))
     }
 
+    func testCustomPresentationsUseExactSourceCopyCanonicalKeycapsAndAppNameOnlySubtitle() {
+        let fixtures: [(NotificationChannel, CoachingEvent, String, [String])] = [
+            (
+                .topRightToast,
+                CoachingEvent(
+                    applicationName: "Google Chrome",
+                    actionTitle: "Always Show Toolbar in Full Screen…",
+                    shortcut: "⌃⇤"
+                ),
+                "Always Show Toolbar in Full Screen…",
+                ["⌃", "⇤"]
+            ),
+            (
+                .topCenterShelf,
+                CoachingEvent(
+                    applicationName: "Visual Studio Code",
+                    actionTitle: "Move Left",
+                    shortcut: "⌃←"
+                ),
+                "Move Left",
+                ["⌃", "←"]
+            )
+        ]
+
+        for (channel, event, expectedTitle, expectedKeycaps) in fixtures {
+            let presentation = CoachingPresentationView(event: event, style: channel)
+
+            XCTAssertEqual(presentation.visibleCopy.lines, [expectedTitle, event.applicationName])
+            XCTAssertEqual(ShortcutKeycapPresentation(shortcut: presentation.visibleShortcut).keys, expectedKeycaps)
+        }
+    }
+
     func testInlineKeyboardGlyphGuideRendersToReviewablePNG() throws {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
@@ -96,7 +128,7 @@ final class PresentationEvidenceTests: XCTestCase {
     }
 
     private func render(channel: NotificationChannel, size: NSSize, to destination: URL) throws {
-        let root = CoachingPresentationView(event: .sample, style: channel, onDismiss: {})
+        let root = CoachingPresentationView(event: .sample, style: channel)
             .frame(width: size.width, height: size.height)
             .environment(\.colorScheme, .dark)
 
