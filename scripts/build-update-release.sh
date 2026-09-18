@@ -65,6 +65,7 @@ update_archive="$output_directory/feed/SuperMac-$release_version.zip"
 cp "$release_notes" "$output_directory/feed/SuperMac-$release_version.md"
 cp -R "$app_path" "$output_directory/dmg-root/SuperMac.app"
 hdiutil create -volname SuperMac -srcfolder "$output_directory/dmg-root" -format ULFO "$output_directory/SuperMac-$release_version.dmg"
+/usr/bin/shasum -a 256 "$output_directory/SuperMac-$release_version.dmg" > "$output_directory/SuperMac-$release_version.dmg.sha256"
 
 feed_parent_prefix=$(update_url_parent_prefix "$feed_url")
 "$repository_root/scripts/generate-staged-appcast.sh" "$output_directory/feed" "$feed_parent_prefix" "$sparkle_tools_directory" "$sparkle_key_account"
@@ -72,7 +73,9 @@ feed_parent_prefix=$(update_url_parent_prefix "$feed_url")
   "$app_path" "$update_archive" "$output_directory/feed/appcast.xml" "$output_directory/feed/SuperMac-$release_version.md" \
   "$feed_url" "$feed_url" "$previous_build" "$release_build" "$release_version" "$sparkle_tools_directory" "$sparkle_key_account"
 
-cp "$update_archive" "$update_archive.sha256" "$output_directory/feed/SuperMac-$release_version.md" "$output_directory/SuperMac-$release_version.dmg" "$output_directory/publication/assets/"
+cp "$update_archive" "$update_archive.sha256" "$output_directory/feed/SuperMac-$release_version.md" \
+  "$output_directory/SuperMac-$release_version.dmg" "$output_directory/SuperMac-$release_version.dmg.sha256" \
+  "$output_directory/publication/assets/"
 cp "$output_directory/feed/appcast.xml" "$output_directory/publication/publish-last/appcast.xml"
 
 print "Release prepared. Publish publication/assets first and publication/publish-last/appcast.xml last."
