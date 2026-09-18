@@ -2,8 +2,8 @@
 set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
 
-if (( $# != 9 )); then
-  print -u2 "usage: $0 <version> <build> <previous-build> <feed-url> <public-key> <notary-keychain-profile> <sparkle-key-account> <sparkle-tools-directory> <output-directory>"
+if (( $# != 8 )); then
+  print -u2 "usage: $0 <version> <build> <previous-build> <feed-url> <public-key> <sparkle-key-account> <sparkle-tools-directory> <output-directory>"
   exit 64
 fi
 
@@ -12,16 +12,15 @@ release_build=$2
 previous_build=$3
 feed_url=$4
 public_key=$5
-notary_profile=$6
-sparkle_key_account=$7
-sparkle_tools_directory=${8:A}
-output_directory=${9:A}
+sparkle_key_account=$6
+sparkle_tools_directory=${7:A}
+output_directory=${8:A}
 repository_root=${0:A:h:h}
 release_notes="$repository_root/docs/releases/v$release_version.md"
 
 [[ "$release_build" == <-> && "$previous_build" == <-> && "$release_build" -gt "$previous_build" ]] || { print -u2 "build must be an integer greater than previous-build"; exit 65; }
 update_url_is_production_https "$feed_url" || { print -u2 "release feed must be credential-free, fragment-free public HTTPS with a host"; exit 65; }
-[[ -n "$public_key" && -n "$notary_profile" && -n "$sparkle_key_account" ]] || { print -u2 "signing/notary configuration is incomplete"; exit 65; }
+[[ -n "$public_key" && -n "$sparkle_key_account" ]] || { print -u2 "signing/notary configuration is incomplete"; exit 65; }
 [[ -f "$release_notes" ]] || { print -u2 "missing release notes: $release_notes"; exit 66; }
 [[ ! -e "$output_directory" ]] || { print -u2 "refusing to overwrite output directory: $output_directory"; exit 73; }
 
@@ -60,7 +59,7 @@ embedded_kind=$(/usr/libexec/PlistBuddy -c 'Print :SuperMacBuildKind' "$app_path
 /usr/bin/plutil -insert buildKind -string public-release "$output_directory/build-manifest.json"
 notary_archive="$output_directory/SuperMac-notary.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_archive"
-xcrun notarytool submit "$notary_archive" --keychain-profile "$notary_profile" --wait
+asc notarization submit --file "$notary_archive" --wait
 xcrun stapler staple "$app_path"
 xcrun stapler validate "$app_path"
 

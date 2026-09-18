@@ -147,7 +147,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
 
         let orchestrator = repositoryRoot.appendingPathComponent("scripts/build-update-release.sh")
         let invalidBuild = try run(orchestrator, [
-            "0.0.2", "2", "2", "https://updates.example.com/appcast.xml", "public", "notary", "key", "/tmp/tools", "/tmp/output"
+            "0.0.2", "2", "2", "https://updates.example.com/appcast.xml", "public", "key", "/tmp/tools", "/tmp/output"
         ])
         XCTAssertNotEqual(invalidBuild.status, 0)
         XCTAssertTrue(invalidBuild.output.contains("greater than"))
@@ -160,7 +160,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
             "https://example .com/appcast.xml"
         ] {
             let result = try run(orchestrator, [
-                "0.0.2", "2", "1", maliciousProductionURL, "public", "notary", "key", "/tmp/tools", "/tmp/output"
+                "0.0.2", "2", "1", maliciousProductionURL, "public", "key", "/tmp/tools", "/tmp/output"
             ])
             XCTAssertNotEqual(result.status, 0)
             XCTAssertTrue(result.output.contains("credential-free"))
