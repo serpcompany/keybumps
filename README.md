@@ -1,14 +1,14 @@
-# SuperMac
+# Keybumps
 
-SuperMac is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, on-device Dictation, Window Management, and Keyboard Shortcutter in one app. Search, Clipboard History, and Dictation History share one three-tab keyboard-first Command Palette.
+Keybumps is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, on-device Dictation, Window Management, and Keyboard Shortcutter in one app. Search, Clipboard History, and Dictation History share one three-tab keyboard-first Command Palette.
 
 Automatic Dictation insertion and reuse from Dictation History are excluded from Clipboard History even though macOS pasteboard transport is used to deliver the text. An explicit user Copy remains normal clipboard activity.
 
-Each completed dictation is stored locally under `~/Documents/SuperMac/recordings/<timestamp>/` with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
+Each completed dictation is stored locally under `~/Documents/Keybumps/recordings/<timestamp>/` with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
 
-On macOS 15 or newer, each expanded history card can open SuperMac's on-device translation panel for immediate target-language selection, translated-text copying, and optional spoken playback using an installed macOS voice without changing the original transcript.
+On macOS 15 or newer, each expanded history card can open Keybumps's on-device translation panel for immediate target-language selection, translated-text copying, and optional spoken playback using an installed macOS voice without changing the original transcript.
 
-Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. SuperMac transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session.
+Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. Keybumps transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session.
 
 ## Build and run
 
@@ -22,7 +22,7 @@ Run deterministic tests:
 
 ```sh
 xcodegen generate
-xcodebuild -project SuperMac.xcodeproj -scheme SuperMac -configuration Debug -derivedDataPath .derived test
+xcodebuild -project Keybumps.xcodeproj -scheme Keybumps -configuration Debug -derivedDataPath .derived test
 ```
 
 The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.

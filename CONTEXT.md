@@ -1,6 +1,6 @@
-# SuperMac domain
+# Keybumps domain
 
-SuperMac is one installed native macOS companion with five independently enabled capabilities presented through shared app surfaces.
+Keybumps is one installed native macOS companion with five independently enabled capabilities presented through shared app surfaces.
 
 ## Language
 
@@ -17,7 +17,7 @@ The default Command Palette tab for finding local applications, files, and folde
 _Avoid_: Web search, workflow launcher
 
 **Clipboard History**:
-The Command Palette tab containing the ten most recent user-originated local text or image clipboard items, with visual previews for images. SuperMac's temporary pasteboard writes for automatic Dictation delivery are not clipboard activity.
+The Command Palette tab containing the ten most recent user-originated local text or image clipboard items, with visual previews for images. Keybumps's temporary pasteboard writes for automatic Dictation delivery are not clipboard activity.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Dictation**:

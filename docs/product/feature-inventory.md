@@ -4,7 +4,7 @@ This inventory describes the full release lane. The App Store Lite lane provides
 
 ## User journey
 
-1. SuperMac launches in the Dock, Cmd-Tab, and menu bar.
+1. Keybumps launches in the Dock, Cmd-Tab, and menu bar.
 2. The user grants Accessibility permission.
 3. The detector observes a supported menu item, Chrome control, standard window control, or Finder-to-Trash drag.
 4. The click becomes one durable keyboard shortcut suggestion.

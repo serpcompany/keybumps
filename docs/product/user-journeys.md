@@ -1,4 +1,4 @@
-# SuperMac MVP user journeys
+# Keybumps MVP user journeys
 
 This is the acceptance ledger for the functional MVP described in [`mvp-prd.md`](mvp-prd.md). It documents what a person does, what the app must do, and how strongly that behavior has been verified.
 
@@ -30,9 +30,9 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 
 ## UJ-01 — First launch and onboarding
 
-Precondition: no completed-onboarding preference for `com.serp.supermac`.
+Precondition: no completed-onboarding preference for `com.serp.keybumps`.
 
-1. Launch SuperMac.
+1. Launch Keybumps.
 2. Read the local-preview welcome; no fake license control is shown.
 3. Review the five enabled capabilities.
 4. Complete or skip the guided permission sequence.
@@ -47,9 +47,9 @@ Expected recovery: a skipped permission keeps the related feature enabled but ma
 The required order is Accessibility, Input Monitoring, Microphone, then Speech Recognition. Permissions already granted—or needed only by disabled capabilities—are skipped.
 
 1. The walkthrough shows one missing permission and `completed of total` progress.
-2. Accessibility or Input Monitoring silently checks current status, opens the exact System Settings list, and shows the compact draggable SuperMac card without first displaying a competing native permission dialog.
+2. Accessibility or Input Monitoring silently checks current status, opens the exact System Settings list, and shows the compact draggable Keybumps card without first displaying a competing native permission dialog.
 3. The drag card dismisses only after an accepted drop; a cancelled drag remains retryable.
-4. The user enables SuperMac in macOS and returns to the app.
+4. The user enables Keybumps in macOS and returns to the app.
 5. App activation refreshes the real permission state and automatically presents the next missing step.
 6. Microphone and Speech Recognition use their native consent prompts. Denied permissions route to the matching System Settings pane.
 7. Completion reads: `All permissions needed by your enabled features are ready.`
@@ -93,17 +93,17 @@ Clipboard content stays local. Supported image payloads are stored as separate l
 2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default).
 3. A visible Recording indicator appears while audio is captured.
 4. Recording automatically stops at the selected duration limit—five minutes by default—or the user presses the configured Dictation shortcut again to stop sooner.
-5. While Recording or Transcribing, press Escape from any app to cancel without insertion. Once insertion begins, SuperMac releases Escape so it does not consume an ordinary key unnecessarily.
-6. Pending metadata and `output.wav` are created under `~/Documents/SuperMac/recordings/<timestamp>/` when capture starts. Successful transcription completes that same metadata before insertion. An unexpected app/process interruption leaves recoverable audio; intentional Escape cancellation discards the pending item.
+5. While Recording or Transcribing, press Escape from any app to cancel without insertion. Once insertion begins, Keybumps releases Escape so it does not consume an ordinary key unnecessarily.
+6. Pending metadata and `output.wav` are created under `~/Documents/Keybumps/recordings/<timestamp>/` when capture starts. Successful transcription completes that same metadata before insertion. An unexpected app/process interruption leaves recoverable audio; intentional Escape cancellation discards the pending item.
 7. If insertion fails, recover the last transcript from Dictation settings.
-8. After relaunch, SuperMac scans pending metadata and legacy playable audio-only folders. Recoverable items appear in Dictation History and the Command Palette as Recording interrupted — transcript unavailable; Transcribe retries locally and updates the same item.
+8. After relaunch, Keybumps scans pending metadata and legacy playable audio-only folders. Recoverable items appear in Dictation History and the Command Palette as Recording interrupted — transcript unavailable; Transcribe retries locally and updates the same item.
 9. Open the Command Palette's Dictation tab to search cards, click anywhere in a card's padded header to expand it, play/pause the original recording, adjust playback from 0.5× through 2×, transcribe when needed, copy completed text, translate through the on-device target-language picker, and use the same waveform/playback/speed controls for temporary translated speech generated with an installed target-language voice. Reveal or delete recordings as needed; Clear All requires explicit destructive confirmation. Translation and translated speech leave the original transcript unchanged, and temporary translated audio is not saved as another recording.
 
 Automatic insertion after recording and Copy from Dictation History use the pasteboard only as delivery transport. Neither creates a duplicate in Clipboard History. A later user-originated copy of the same text remains eligible for Clipboard History.
 
 Disabling Dictation cancels an active session and releases its shortcuts.
 
-If Dictation permissions are missing, pressing the shortcut first shows a SuperMac setup card explaining what is missing. Choosing Set Up Dictation starts the guided Microphone → Speech Recognition flow. A denied permission opens the matching System Settings page with a persistent card identifying the exact switch to enable. Microphone and Speech Recognition do not support adding or dragging an app into their lists; macOS adds SuperMac only after the native consent request. If another startup error occurs, a temporary on-screen error explains the failure.
+If Dictation permissions are missing, pressing the shortcut first shows a Keybumps setup card explaining what is missing. Choosing Set Up Dictation starts the guided Microphone → Speech Recognition flow. A denied permission opens the matching System Settings page with a persistent card identifying the exact switch to enable. Microphone and Speech Recognition do not support adding or dragging an app into their lists; macOS adds Keybumps only after the native consent request. If another startup error occurs, a temporary on-screen error explains the failure.
 
 ## UJ-07 — Window Management
 
@@ -151,9 +151,9 @@ Ambiguous, stale, modified, unsafe, or unverified gestures must produce no keybo
 ## UJ-11 — Dock, menu bar, conflicts, and launch at login
 
 1. The app is visible in the Dock and application switcher by default; clicking its Dock icon opens Quick Search rather than Settings.
-2. Clicking the menu-bar icon always opens a native menu, even when another app is foreground. The menu contains Toggle SuperMac, the current version/build, a truthfully disabled Check for Updates item until issue #10 is implemented, Settings, and Quit SuperMac. Toggle SuperMac opens or closes Quick Search.
+2. Clicking the menu-bar icon always opens a native menu, even when another app is foreground. The menu contains Toggle Keybumps, the current version/build, a truthfully disabled Check for Updates item until issue #10 is implemented, Settings, and Quit Keybumps. Toggle Keybumps opens or closes Quick Search.
 3. Closing Settings with the red window control or Command-W closes only that window and leaves the companion, menu-bar item, enabled monitors, and shortcuts running; the menu-bar Settings item or Command-comma recreates, raises, and focuses the single Settings window.
-4. SuperMac registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
+4. Keybumps registers Launch at Login during onboarding. It does not expose a duplicate in-app setting; the user changes or disables it through macOS System Settings → General → Login Items.
 5. Onboarding detects running Alfred, Rectangle, and Superwhisper and may quit their processes without uninstalling or changing their data.
 
 ## UJ-12 — Deferred commercial journey
@@ -165,7 +165,7 @@ The eventual commercial sequence inserts license activation after Welcome, then 
 Run this only from the intended installed, signed artifact after granting the requested macOS permissions:
 
 1. Complete UJ-01 and UJ-02 from a clean first launch.
-2. Stop Alfred, Rectangle, and Superwhisper, then confirm SuperMac owns the three global entry shortcuts without collisions.
+2. Stop Alfred, Rectangle, and Superwhisper, then confirm Keybumps owns the three global entry shortcuts without collisions.
 3. Complete the physical acceptance items in UJ-04 through UJ-08, using non-sensitive test text.
 4. Disable and re-enable every capability, confirming resource teardown and restoration.
 5. Relaunch the Mac login session and confirm menu-bar, Dock, settings, histories, preferences, and shortcuts recover correctly.

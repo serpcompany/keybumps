@@ -1,6 +1,6 @@
 # Functional MVP selected slices
 
-- [ ] Stable signed shell under `com.serp.supermac`
+- [ ] Stable signed shell under `com.serp.keybumps`
 - [ ] Capability toggles acquire and release services
 - [ ] Command-Space Quick Search: apps, files, folders
 - [ ] Shift-Command-Space Clipboard History: ten text or image items with visual previews
