@@ -684,17 +684,6 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(controller.scheduledDismissalChannels, [.topRightToast, .topCenterShelf])
     }
 
-    func testButtonDismissalUsesCanonicalPanelAndTaskCleanup() {
-        let controller = PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor())
-        controller.show(event: .sample, style: .topCenterShelf)
-
-        let buttonAction = controller.dismissalAction(for: .topCenterShelf)
-        buttonAction()
-
-        XCTAssertTrue(controller.activeChannels.isEmpty)
-        XCTAssertTrue(controller.scheduledDismissalChannels.isEmpty)
-    }
-
     func testHoverPausesAndResumesTheExistingDismissalCountdown() {
         let controller = PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor())
         controller.show(event: .sample, style: .topRightToast)

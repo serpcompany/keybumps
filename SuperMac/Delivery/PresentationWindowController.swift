@@ -92,7 +92,6 @@ final class PresentationWindowController {
         panel.contentView = NSHostingView(rootView: CoachingPresentationView(
             event: event,
             style: style,
-            onDismiss: dismissalAction(for: style),
             onHoverChanged: { [weak self] isHovering in
                 self?.setHovering(isHovering, style: style)
             }
@@ -151,10 +150,6 @@ final class PresentationWindowController {
         session.dismissalTask = nil
         session.panel.orderOut(nil)
         if sessions.isEmpty { stopInteractionMonitors() }
-    }
-
-    func dismissalAction(for style: NotificationChannel) -> () -> Void {
-        { [weak self] in self?.dismiss(style) }
     }
 
     func setHovering(_ isHovering: Bool, style: NotificationChannel, now: Date = Date()) {
@@ -331,35 +326,19 @@ struct KeyBumpVisibleCopy: Equatable {
 struct CoachingPresentationView: View {
     let event: CoachingEvent
     let style: NotificationChannel
-    let onDismiss: () -> Void
     var onHoverChanged: (Bool) -> Void = { _ in }
 
     var visibleCopy: KeyBumpVisibleCopy { KeyBumpVisibleCopy(event: event) }
     var visibleShortcut: String { event.shortcut }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Dismiss Key Bump")
-                Spacer()
-            }
-            .padding(.top, 6)
-            .padding(.horizontal, 10)
-
-            HStack(spacing: 14) {
-                coachingCopy
-                Spacer(minLength: 18)
-                ShortcutKeycaps(shortcut: visibleShortcut, fontSize: 11.5)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+        HStack(spacing: 14) {
+            coachingCopy
+            Spacer(minLength: 18)
+            ShortcutKeycaps(shortcut: visibleShortcut, fontSize: 11.5)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding(4)
         .contentShape(Rectangle())

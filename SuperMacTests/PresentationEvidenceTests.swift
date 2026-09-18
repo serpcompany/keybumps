@@ -68,7 +68,7 @@ final class PresentationEvidenceTests: XCTestCase {
         ]
 
         for (channel, event, expectedTitle, expectedKeycaps) in fixtures {
-            let presentation = CoachingPresentationView(event: event, style: channel, onDismiss: {})
+            let presentation = CoachingPresentationView(event: event, style: channel)
 
             XCTAssertEqual(presentation.visibleCopy.lines, [expectedTitle, event.applicationName])
             XCTAssertEqual(ShortcutKeycapPresentation(shortcut: presentation.visibleShortcut).keys, expectedKeycaps)
@@ -128,7 +128,7 @@ final class PresentationEvidenceTests: XCTestCase {
     }
 
     private func render(channel: NotificationChannel, size: NSSize, to destination: URL) throws {
-        let root = CoachingPresentationView(event: .sample, style: channel, onDismiss: {})
+        let root = CoachingPresentationView(event: .sample, style: channel)
             .frame(width: size.width, height: size.height)
             .environment(\.colorScheme, .dark)
 
