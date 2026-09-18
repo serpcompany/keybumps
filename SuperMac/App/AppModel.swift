@@ -132,13 +132,17 @@ final class AppModel {
 
     convenience init() {
         let startupBlockReason: StartupBlockReason?
-        do {
-            try KeybumpsStartupPreparation().prepare()
+        if AppRuntimeEnvironment.isRunningTests {
             startupBlockReason = nil
-        } catch LegacyMigrationError.legacyAppRunning {
-            startupBlockReason = .legacyAppRunning
-        } catch {
-            startupBlockReason = .migrationFailed
+        } else {
+            do {
+                try KeybumpsStartupPreparation().prepare()
+                startupBlockReason = nil
+            } catch LegacyMigrationError.legacyAppRunning {
+                startupBlockReason = .legacyAppRunning
+            } catch {
+                startupBlockReason = .migrationFailed
+            }
         }
         self.init(
             preferences: AppPreferences(),
@@ -173,7 +177,11 @@ final class AppModel {
         self.updater = updater
         self.updateSnapshot = updater.snapshot
         self.startupBlockReason = startupBlockReason
-        let legacyAppMonitor = legacyAppMonitor ?? LegacyAppCoexistenceMonitor()
+        let legacyAppMonitor = legacyAppMonitor ?? LegacyAppCoexistenceMonitor(
+            processDetector: AppRuntimeEnvironment.isRunningTests
+                ? LegacyAppProcessDetector(isRunningHandler: { _ in false })
+                : LegacyAppProcessDetector()
+        )
         self.legacyAppMonitor = legacyAppMonitor
         let clipboard = ClipboardHistoryService()
         let dictationHistory = DictationHistoryService()

@@ -1,6 +1,12 @@
 import AppKit
 import Foundation
 
+enum AppRuntimeEnvironment {
+    static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+}
+
 enum LegacyMigrationError: Error, Equatable {
     case legacyAppRunning
 }
