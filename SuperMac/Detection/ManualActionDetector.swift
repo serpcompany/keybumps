@@ -22,6 +22,29 @@ struct SystemDetectorPermissions: DetectorPermissionProviding {
     }
 }
 
+enum MenuActionEventResolver {
+    static func makeEvent(from snapshot: AccessibilitySnapshot, point: CGPoint) -> CoachingEvent? {
+        let menuItems = snapshot.hitAndAncestors.filter { node in
+            node.role == kAXMenuItemRole as String
+                && node.enabled == true
+                && node.title?.isEmpty == false
+                && node.menuShortcutEvidence != nil
+        }
+        let uniqueItems = Dictionary(grouping: menuItems, by: \.token).compactMap(\.value.first)
+        guard uniqueItems.count == 1,
+              let menuItem = uniqueItems.first,
+              let title = menuItem.title,
+              let evidence = menuItem.menuShortcutEvidence else { return nil }
+        return CoachingEventFactory.make(
+            applicationName: snapshot.applicationName,
+            actionTitle: title,
+            shortcutEvidence: evidence,
+            pointerX: point.x,
+            pointerY: point.y
+        )
+    }
+}
+
 @MainActor
 final class ManualActionDetector {
     enum RequiredPermission: Equatable {
@@ -49,7 +72,7 @@ final class ManualActionDetector {
     }
     var onEvent: ((CoachingEvent) -> Void)?
     private let monitor: any PointerEventMonitoring
-    private let snapshotter: AccessibilitySnapshotter
+    private let snapshotter: any AccessibilitySnapshotting
     private let permissions: any DetectorPermissionProviding
     private let chromeRuntimeReader: any ChromeRuntimeStateReading
     private let windowControlMonitor = StandardWindowControlMonitor()
@@ -74,7 +97,7 @@ final class ManualActionDetector {
 
     init(
         monitor: any PointerEventMonitoring = PointerEventMonitor(),
-        snapshotter: AccessibilitySnapshotter = AccessibilitySnapshotter(),
+        snapshotter: any AccessibilitySnapshotting = AccessibilitySnapshotter(),
         permissions: any DetectorPermissionProviding = SystemDetectorPermissions(),
         chromeRuntimeReader: any ChromeRuntimeStateReading = SystemChromeRuntimeStateReader()
     ) {
@@ -168,23 +191,12 @@ final class ManualActionDetector {
                         self.handleMouseUp(mouseUp, generation: currentGeneration)
                     }
                 } else if !isChromeSettings,
-                   let shortcut = snapshot.hit.menuShortcut,
-                   let shortcutEvidence = snapshot.hit.menuShortcutEvidence,
-                   snapshot.hit.role == kAXMenuItemRole as String,
-                   let title = snapshot.hit.title, !title.isEmpty {
-                    let signature = "\(snapshot.applicationName)|\(title)|\(shortcut)"
+                          let event = MenuActionEventResolver.makeEvent(from: snapshot, point: sample.location) {
+                    let signature = "\(event.applicationName)|\(event.actionTitle)|\(event.shortcut)"
                     if signature != self.lastMenuSignature || Date().timeIntervalSince(self.lastMenuEmission) > 1 {
                         self.lastMenuSignature = signature
                         self.lastMenuEmission = Date()
-                        if let event = CoachingEventFactory.make(
-                            applicationName: snapshot.applicationName,
-                            actionTitle: title,
-                            shortcutEvidence: shortcutEvidence,
-                            pointerX: sample.location.x,
-                            pointerY: sample.location.y
-                        ) {
-                            self.onEvent?(event)
-                        }
+                        self.onEvent?(event)
                     }
                 } else if case .event(let event) = chromeOutcome {
                     self.onEvent?(event)
@@ -204,20 +216,32 @@ final class ManualActionDetector {
                 guard let self, self.generation == currentGeneration else { return }
                 _ = self.chromeClickDetector.receive(.up(sample, upSnapshot))
                 guard self.chromeClickDetector.needsPostObservation else { return }
-                let runtimeRequirement = self.chromeClickDetector.postRuntimeRequirement
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    self.snapshotter.snapshot(at: sample.location) { [weak self] post in
-                        guard let self, self.generation == currentGeneration else { return }
-                        let runtime = post.map {
-                            self.chromeRuntimeReader.read(pid: $0.pid, requirement: runtimeRequirement)
-                        } ?? .unavailable
-                        if case .event(let event) = self.chromeClickDetector.receive(
-                            .post(post, runtime, timestamp: ProcessInfo.processInfo.systemUptime)
-                        ) {
-                            self.onEvent?(event)
-                        }
-                    }
-                }
+                self.scheduleChromePostObservation(generation: currentGeneration, attempt: 0)
             }
+    }
+
+    private func scheduleChromePostObservation(generation currentGeneration: Int, attempt: Int) {
+        let delays: [TimeInterval] = [0.08, 0.10, 0.15, 0.20, 0.30]
+        guard attempt < delays.count,
+              let processIdentity = chromeClickDetector.pendingProcessIdentity else {
+            _ = chromeClickDetector.receive(.cancelled)
+            return
+        }
+        let runtimeRequirement = chromeClickDetector.postRuntimeRequirement
+        DispatchQueue.main.asyncAfter(deadline: .now() + delays[attempt]) { [weak self] in
+            guard let self, self.generation == currentGeneration else { return }
+            let runtime = self.chromeRuntimeReader.read(
+                pid: processIdentity.pid,
+                requirement: runtimeRequirement
+            )
+            let outcome = self.chromeClickDetector.receive(
+                .post(processIdentity, runtime, timestamp: ProcessInfo.processInfo.systemUptime)
+            )
+            if case .event(let event) = outcome {
+                self.onEvent?(event)
+            } else if self.chromeClickDetector.needsPostObservation {
+                self.scheduleChromePostObservation(generation: currentGeneration, attempt: attempt + 1)
+            }
+        }
     }
 }

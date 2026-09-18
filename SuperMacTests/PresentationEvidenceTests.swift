@@ -43,22 +43,21 @@ final class PresentationEvidenceTests: XCTestCase {
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.fullScreenAuxiliary))
     }
 
-    func testKeyboardGlyphLegendRendersToReviewablePNG() throws {
+    func testInlineKeyboardGlyphGuideRendersToReviewablePNG() throws {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
             ?? FileManager.default.temporaryDirectory
                 .appendingPathComponent("ShortcutCoachPresentationEvidence")
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
-        let size = NSSize(width: 420, height: 520)
-        let destination = outputDirectory.appendingPathComponent("keyboard-glyph-legend.png")
-        let root = VStack(spacing: 0) {
-            Text("Keyboard Glyph Legend")
-                .font(.title2.bold())
-                .padding()
-            Divider()
+        let size = NSSize(width: 720, height: 420)
+        let destination = outputDirectory.appendingPathComponent("inline-keyboard-symbols.png")
+        let root = VStack(alignment: .leading, spacing: 12) {
+            Text("Keyboard symbols")
+                .font(.headline)
             KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
         }
+        .padding(20)
         .frame(width: size.width, height: size.height)
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(\.colorScheme, .dark)

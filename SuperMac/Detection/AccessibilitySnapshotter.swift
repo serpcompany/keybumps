@@ -82,7 +82,11 @@ struct AccessibilitySnapshot: Codable, Equatable, Sendable {
     }
 }
 
-final class AccessibilitySnapshotter {
+protocol AccessibilitySnapshotting {
+    func snapshot(at point: CGPoint, completion: @escaping (AccessibilitySnapshot?) -> Void)
+}
+
+final class AccessibilitySnapshotter: AccessibilitySnapshotting {
     // AppKit's in-process accessibility implementation is main-thread-bound.
     // A global click can land on SuperMac itself, so all AX hit-testing
     // must share the main queue rather than racing from detector worker queues.

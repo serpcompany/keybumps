@@ -383,7 +383,6 @@ private struct WindowActionPreviewView: View {
 
 private struct KeyBumpsSettingsView: View {
     @Environment(AppModel.self) private var model
-    @State private var isGlyphLegendPresented = false
 
     var body: some View {
         let isEnabled = model.preferences.enabledCapabilities.contains(.shortcutCoaching)
@@ -438,14 +437,7 @@ private struct KeyBumpsSettingsView: View {
                 channelControl(.sound)
             }
             Section("Keyboard symbols") {
-                Button {
-                    isGlyphLegendPresented = true
-                } label: {
-                    Label("Keyboard Glyph Legend…", systemImage: "keyboard")
-                }
-                .accessibilityHint("Shows the keyboard symbols supported by Key Bumps")
-                Text("See the macOS key symbols and names that Key Bumps can display.")
-                    .foregroundStyle(.secondary)
+                KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
             Section {
                 Button("Open Key Bumps History") { model.showKeyBumpsHistory() }
@@ -455,9 +447,6 @@ private struct KeyBumpsSettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Key Bumps")
-        .sheet(isPresented: $isGlyphLegendPresented) {
-            KeyboardGlyphLegendView(entries: KeyboardShortcutRegistry.legendEntries)
-        }
     }
 
     @ViewBuilder
@@ -496,47 +485,26 @@ private struct KeyBumpsSettingsView: View {
     }
 }
 
-struct KeyboardGlyphLegendView: View {
-    let entries: [KeyboardGlyphLegendEntry]
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            KeyboardGlyphLegendContent(entries: entries)
-            .navigationTitle("Keyboard Glyph Legend")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .frame(minWidth: 420, minHeight: 520)
-    }
-}
-
 struct KeyboardGlyphLegendContent: View {
     let entries: [KeyboardGlyphLegendEntry]
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(entries) { entry in
-                    HStack(spacing: 16) {
-                        Text(entry.symbol)
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .frame(width: 56)
-                            .frame(minHeight: 28)
-                            .background(Color.gray.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                            .accessibilityHidden(true)
-                        Text(entry.name)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(entry.name), \(entry.symbol)")
-                    Divider()
+        LazyVGrid(
+            columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            ForEach(entries) { entry in
+                HStack(spacing: 10) {
+                    KeyboardKeycap(label: entry.symbol)
+                        .accessibilityHidden(true)
+                    Text(entry.name)
+                        .font(.callout)
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(entry.name), \(entry.symbol)")
             }
         }
     }

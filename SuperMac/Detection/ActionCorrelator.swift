@@ -42,10 +42,13 @@ struct ActionCorrelator {
         return true
     }
 
-    mutating func verify(post: AccessibilitySnapshot, runtime: ChromeRuntimeState, at timestamp: TimeInterval) -> CoachingEvent? {
+    mutating func verify(
+        processIdentity: ApplicationProcessIdentity,
+        runtime: ChromeRuntimeState,
+        at timestamp: TimeInterval
+    ) -> CoachingEvent? {
         guard let candidate else { return nil }
-        defer { cancel() }
-        guard post.bundleIdentifier == candidate.preSnapshot.bundleIdentifier else { return nil }
+        guard processIdentity.bundleIdentifier == candidate.preSnapshot.bundleIdentifier else { return nil }
         let event: CoachingEvent?
         switch candidate.kind {
         case .chromeNewTab
@@ -107,6 +110,7 @@ struct ActionCorrelator {
         default: event = nil
         }
         guard let event else { return nil }
+        cancel()
         let signature = "\(event.applicationName)|\(event.actionTitle)|\(event.shortcut)"
         guard signature != lastSignature || timestamp - lastEmissionTimestamp > deduplicationWindow else { return nil }
         lastSignature = signature
@@ -163,8 +167,18 @@ enum ChromeClickObservation: Equatable, Sendable {
     case down(PointerSample, AccessibilitySnapshot?, ChromeRuntimeState)
     case dragged(PointerSample)
     case up(PointerSample, AccessibilitySnapshot?)
-    case post(AccessibilitySnapshot?, ChromeRuntimeState, timestamp: TimeInterval)
+    case post(ApplicationProcessIdentity?, ChromeRuntimeState, timestamp: TimeInterval)
     case cancelled
+}
+
+struct ApplicationProcessIdentity: Equatable, Sendable {
+    let pid: Int32
+    let bundleIdentifier: String?
+
+    init(snapshot: AccessibilitySnapshot) {
+        pid = snapshot.pid
+        bundleIdentifier = snapshot.bundleIdentifier
+    }
 }
 
 enum ChromeClickSuppression: Equatable, Sendable {
@@ -187,6 +201,9 @@ struct ChromeClickDetector {
     private var ignoringGesture = false
     private(set) var needsPostObservation = false
     var hasPendingCandidate: Bool { correlator.candidate != nil }
+    var pendingProcessIdentity: ApplicationProcessIdentity? {
+        correlator.candidate.map { ApplicationProcessIdentity(snapshot: $0.preSnapshot) }
+    }
     var postRuntimeRequirement: ChromeRuntimeRequirement {
         guard let candidate = correlator.candidate else { return .none }
         if case .chromeSettings = candidate.kind { return .settings }
@@ -222,15 +239,25 @@ struct ChromeClickDetector {
             guard correlator.acceptsMouseUp(sample, hit: snapshot) else { return .suppressed(.invalidGesture) }
             needsPostObservation = true
             return .pending
-        case .post(let snapshot, let runtime, let timestamp):
-            needsPostObservation = false
-            guard let snapshot else {
+        case .post(let processIdentity, let runtime, let timestamp):
+            guard let processIdentity else {
+                needsPostObservation = false
                 correlator.cancel()
                 return .suppressed(.missingPostObservation)
             }
-            guard let event = correlator.verify(post: snapshot, runtime: runtime, at: timestamp) else {
+            guard correlator.candidate != nil else {
+                needsPostObservation = false
                 return .suppressed(.postconditionFailed)
             }
+            guard let event = correlator.verify(
+                processIdentity: processIdentity,
+                runtime: runtime,
+                at: timestamp
+            ) else {
+                needsPostObservation = true
+                return .pending
+            }
+            needsPostObservation = false
             return .event(event)
         case .cancelled:
             ignoringGesture = false

@@ -118,6 +118,36 @@ private final class StubPointerMonitor: PointerEventMonitoring {
     func stop() {
         stopCount += 1
     }
+
+    func send(_ sample: PointerSample) {
+        onSample?(sample)
+    }
+}
+
+private final class StubAccessibilitySnapshotter: AccessibilitySnapshotting {
+    private var snapshots: [AccessibilitySnapshot?]
+
+    init(_ snapshots: [AccessibilitySnapshot?]) {
+        self.snapshots = snapshots
+    }
+
+    func snapshot(at point: CGPoint, completion: @escaping (AccessibilitySnapshot?) -> Void) {
+        completion(snapshots.isEmpty ? nil : snapshots.removeFirst())
+    }
+}
+
+private final class StubChromeRuntimeReader: ChromeRuntimeStateReading {
+    private var states: [ChromeRuntimeState]
+    private(set) var requests: [(pid: Int32, requirement: ChromeRuntimeRequirement)] = []
+
+    init(_ states: [ChromeRuntimeState]) {
+        self.states = states
+    }
+
+    func read(pid: Int32, requirement: ChromeRuntimeRequirement) -> ChromeRuntimeState {
+        requests.append((pid, requirement))
+        return states.isEmpty ? .unavailable : states.removeFirst()
+    }
 }
 
 @MainActor
@@ -285,6 +315,56 @@ final class ShortcutCoachTests: XCTestCase {
 
         XCTAssertEqual(permissions.accessibilityRequestCount, 1)
         XCTAssertEqual(permissions.inputMonitoringRequestCount, 1)
+    }
+
+    func testManualDetectorRetriesChromePostconditionAndDeliversTheFirstActionExactlyOnce() async {
+        let preTabs = ChromeTabState(
+            containerToken: "strip",
+            tabs: (0..<2).map { chromeNode("tab-\($0)", role: kAXRadioButtonRole as String, selected: $0 == 0) }
+        )
+        let settledTabs = ChromeTabState(
+            containerToken: "strip",
+            tabs: (0..<3).map { chromeNode("tab-\($0)", role: kAXRadioButtonRole as String, selected: $0 == 0) }
+        )
+        let preSnapshot = AccessibilitySnapshot(
+            pid: 123,
+            bundleIdentifier: "com.google.Chrome",
+            applicationVersion: "153.0.8010.48",
+            applicationName: "Google Chrome",
+            hit: chromeNode("new-tab", role: kAXButtonRole as String, description: "New Tab"),
+            ancestors: []
+        )
+
+        await assertManualDetectorChromeJourney(
+            preSnapshot: preSnapshot,
+            preRuntime: chromeRuntime(tabs: preTabs),
+            settledRuntime: chromeRuntime(tabs: settledTabs),
+            expectedTitle: "New Tab",
+            expectedShortcut: "⌘T"
+        )
+    }
+
+    func testManualDetectorRetriesChromeCloseTabAndDeliversTheFirstActionExactlyOnce() async {
+        let active = chromeNode("tab-1", role: kAXRadioButtonRole as String, selected: true)
+        let other = chromeNode("tab-2", role: kAXRadioButtonRole as String, selected: false)
+        let preTabs = ChromeTabState(containerToken: "strip", tabs: [active, other])
+        let settledTabs = ChromeTabState(containerToken: "strip", tabs: [other])
+        let preSnapshot = AccessibilitySnapshot(
+            pid: 123,
+            bundleIdentifier: "com.google.Chrome",
+            applicationVersion: "153.0.8010.48",
+            applicationName: "Google Chrome",
+            hit: chromeNode("close", role: kAXButtonRole as String, description: "Close"),
+            ancestors: [active]
+        )
+
+        await assertManualDetectorChromeJourney(
+            preSnapshot: preSnapshot,
+            preRuntime: chromeRuntime(tabs: preTabs),
+            settledRuntime: chromeRuntime(tabs: settledTabs),
+            expectedTitle: "Close Tab",
+            expectedShortcut: "⌘W"
+        )
     }
 
     func testDeliveryRecordsOnceAndFansOutToSelectedChannels() async {
@@ -924,6 +1004,140 @@ final class ShortcutCoachTests: XCTestCase {
         )
     }
 
+    func testVisibleKeyboardGuideIsCuratedFromAppleMenuSymbols() {
+        let expected: [KeyboardSemanticKey] = [
+            .functionModifier, .control, .option, .shift, .command,
+            .returnKey, .delete, .forwardDelete,
+            .upArrow, .downArrow, .leftArrow, .rightArrow,
+            .pageUp, .pageDown, .home, .end, .tabRight, .tabLeft, .escape
+        ]
+
+        XCTAssertEqual(KeyboardShortcutRegistry.legendEntries.map(\.semanticKey), expected)
+        XCTAssertTrue(KeyboardShortcutRegistry.legendEntries.allSatisfy {
+            $0.sourceURL.absoluteString == "https://support.apple.com/guide/mac-help/cpmh0011/mac"
+        })
+        XCTAssertFalse(KeyboardShortcutRegistry.legendEntries.contains { entry in
+            switch entry.semanticKey {
+            case .space, .enter, .help, .clear, .function: true
+            default: false
+            }
+        })
+    }
+
+    func testEveryVisibleGuideKeyUsesTheSameCanonicalValueAcrossConsumers() async throws {
+        let modifierKeys: Set<KeyboardSemanticKey> = [
+            .functionModifier, .control, .option, .shift, .command
+        ]
+        let persistence = MemoryPersistence()
+        let inbox = InboxStore(persistence: persistence)
+        let center = StubNativeNotificationCenter(status: .authorized)
+        var notificationSequence = 0
+        let native = NativeNotificationAdapter(center: center) {
+            defer { notificationSequence += 1 }
+            return "issue-31-parity-\(notificationSequence)"
+        }
+
+        for entry in KeyboardShortcutRegistry.legendEntries {
+            let displayShortcut = modifierKeys.contains(entry.semanticKey)
+                ? "\(entry.symbol)A"
+                : "⌘\(entry.symbol)"
+            let canonical = try XCTUnwrap(KeyboardShortcutRegistry.resolve(displayString: displayShortcut))
+            let event = CoachingEvent(
+                applicationName: "Fixture",
+                actionTitle: entry.name,
+                shortcut: canonical.displayString
+            )
+            try inbox.append(event)
+            try await native.deliver(event)
+
+            XCTAssertTrue(canonical.keycapTokens.contains(entry.symbol), entry.name)
+            XCTAssertEqual(CoachingEventRowPresentation(event: event).shortcut, canonical.displayString, entry.name)
+            XCTAssertEqual(ShortcutKeycapPresentation(shortcut: event.shortcut).keys, canonical.keycapTokens, entry.name)
+            XCTAssertTrue(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut).contains(entry.name), entry.name)
+            XCTAssertEqual(center.added.last?.payload.body, event.coachingBody, entry.name)
+            XCTAssertEqual(inbox.events.first?.shortcut, canonical.displayString, entry.name)
+        }
+
+        XCTAssertEqual(persistence.stored.count, KeyboardShortcutRegistry.legendEntries.count)
+        XCTAssertEqual(center.added.count, KeyboardShortcutRegistry.legendEntries.count)
+    }
+
+    func testVSCodeWindowFillAndCenterChildHitsResolveThroughProductionMenuEventSeam() throws {
+        let fixtures: [(title: String, character: String, expected: String)] = [
+            ("Fill", "F", "🌐︎⌃F"),
+            ("Center", "C", "🌐︎⌃C")
+        ]
+
+        for fixture in fixtures {
+            let menuItem = AXNodeSnapshot(
+                token: "menu-\(fixture.title)", role: kAXMenuItemRole as String,
+                subrole: nil, title: fixture.title, elementDescription: nil, identifier: nil,
+                value: nil, selected: nil, enabled: true, actions: [kAXPressAction as String], frame: nil,
+                menuShortcut: nil,
+                menuShortcutEvidence: AXShortcutEvidence(
+                    commandCharacter: fixture.character,
+                    modifiers: 16 | 8 | 4,
+                    commandGlyph: nil,
+                    virtualKey: nil
+                )
+            )
+            let child = AXNodeSnapshot(
+                token: "child-\(fixture.title)", role: kAXStaticTextRole as String,
+                subrole: nil, title: fixture.title, elementDescription: nil, identifier: nil,
+                value: nil, selected: nil, enabled: true, actions: [], frame: nil,
+                menuShortcut: nil
+            )
+            let snapshot = AccessibilitySnapshot(
+                pid: 123,
+                bundleIdentifier: "com.microsoft.VSCode",
+                applicationVersion: "1.138.0",
+                applicationName: "Visual Studio Code",
+                hit: child,
+                ancestors: [menuItem]
+            )
+
+            let event = try XCTUnwrap(MenuActionEventResolver.makeEvent(from: snapshot, point: .zero))
+            XCTAssertEqual(event.actionTitle, fixture.title)
+            XCTAssertEqual(event.shortcut, fixture.expected)
+            XCTAssertEqual(event.rawShortcutEvidence, menuItem.menuShortcutEvidence)
+            XCTAssertEqual(event.shortcutProvenance, .liveAX)
+            XCTAssertEqual(CoachingEventRowPresentation(event: event).shortcut, fixture.expected)
+            XCTAssertEqual(ShortcutKeycapPresentation(shortcut: event.shortcut).keys, ["🌐︎", "⌃", fixture.character])
+            XCTAssertEqual(
+                KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut),
+                "Shortcut Fn (Function) or Globe Control \(fixture.character)"
+            )
+        }
+    }
+
+    func testMenuEventResolverSuppressesAmbiguousAndIncompleteEvidence() {
+        func menu(_ token: String, title: String, evidence: AXShortcutEvidence?) -> AXNodeSnapshot {
+            AXNodeSnapshot(
+                token: token, role: kAXMenuItemRole as String, subrole: nil, title: title,
+                elementDescription: nil, identifier: nil, value: nil, selected: nil, enabled: true,
+                actions: [kAXPressAction as String], frame: nil, menuShortcut: nil,
+                menuShortcutEvidence: evidence
+            )
+        }
+        let valid = AXShortcutEvidence(commandCharacter: "F", modifiers: 28, commandGlyph: nil, virtualKey: nil)
+        let child = AXNodeSnapshot(
+            token: "child", role: kAXStaticTextRole as String, subrole: nil, title: "Fill",
+            elementDescription: nil, identifier: nil, value: nil, selected: nil, enabled: true,
+            actions: [], frame: nil, menuShortcut: nil
+        )
+        let ambiguous = AccessibilitySnapshot(
+            pid: 1, bundleIdentifier: "com.microsoft.VSCode", applicationName: "Visual Studio Code",
+            hit: child, ancestors: [menu("one", title: "Fill", evidence: valid), menu("two", title: "Fill", evidence: valid)]
+        )
+        let incomplete = AccessibilitySnapshot(
+            pid: 1, bundleIdentifier: "com.microsoft.VSCode", applicationName: "Visual Studio Code",
+            hit: child, ancestors: [menu("one", title: "Fill", evidence: nil)]
+        )
+
+        XCTAssertNil(MenuActionEventResolver.makeEvent(from: ambiguous, point: .zero))
+        XCTAssertNil(MenuActionEventResolver.makeEvent(from: incomplete, point: .zero))
+    }
+
     func testEveryDeclaredSpecialKeyInputResolvesThroughTheRealRegistry() {
         typealias Expected = (
             key: KeyboardSemanticKey,
@@ -1110,6 +1324,92 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⌘N").keys, ["⌘", "N"])
         XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⇧⌘N").keys, ["⇧", "⌘", "N"])
         XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "⌃⇧⇥").keys, ["⌃", "⇧", "⇥"])
+        XCTAssertEqual(ShortcutKeycapPresentation(shortcut: "🌐︎⌃F").keys, ["🌐︎", "⌃", "F"])
+
+        let regular = ShortcutKeycapMetrics.value(compact: false)
+        XCTAssertEqual(regular.height, 28)
+        XCTAssertEqual(regular.minimumWidth, 28)
+        XCTAssertEqual(regular.horizontalPadding, 7)
+        XCTAssertEqual(regular, ShortcutKeycapMetrics.value(compact: false), "Every token length uses one layout contract")
+    }
+
+    private func chromeNode(
+        _ token: String,
+        role: String,
+        description: String? = nil,
+        selected: Bool? = nil
+    ) -> AXNodeSnapshot {
+        AXNodeSnapshot(
+            token: token, role: role, subrole: nil, title: nil,
+            elementDescription: description, identifier: nil,
+            value: selected.map { $0 ? "1" : "0" }, selected: selected,
+            enabled: true, actions: role == kAXButtonRole as String ? [kAXPressAction as String] : [],
+            frame: AXFrameSnapshot(x: 0, y: 0, width: 30, height: 30), menuShortcut: nil
+        )
+    }
+
+    private func chromeRuntime(tabs: ChromeTabState) -> ChromeRuntimeState {
+        func live(_ character: String) -> LiveShortcutResolution {
+            .resolved(
+                LiveShortcutObservation(
+                    evidence: AXShortcutEvidence(
+                        commandCharacter: character,
+                        modifiers: 0,
+                        commandGlyph: nil,
+                        virtualKey: nil
+                    )
+                )!
+            )
+        }
+        return ChromeRuntimeState(
+            tabs: tabs,
+            tabShortcuts: ChromeTabShortcutState(
+                newTab: live("T"), closeTab: live("W"), directSelection: [:]
+            ),
+            settingsShortcut: .unavailable,
+            destination: .unavailable,
+            applicationVersion: "153.0.8010.48"
+        )
+    }
+
+    private func assertManualDetectorChromeJourney(
+        preSnapshot: AccessibilitySnapshot,
+        preRuntime: ChromeRuntimeState,
+        settledRuntime: ChromeRuntimeState,
+        expectedTitle: String,
+        expectedShortcut: String
+    ) async {
+        let monitor = StubPointerMonitor()
+        let runtimeReader = StubChromeRuntimeReader([preRuntime, preRuntime, settledRuntime])
+        let detector = ManualActionDetector(
+            monitor: monitor,
+            snapshotter: StubAccessibilitySnapshotter([preSnapshot, preSnapshot]),
+            permissions: StubDetectorPermissions(accessibility: true, inputMonitoring: true),
+            chromeRuntimeReader: runtimeReader
+        )
+        let persistence = MemoryPersistence()
+        let inbox = InboxStore(persistence: persistence)
+        let adapter = SpyAdapter()
+        let delivery = NotificationDeliveryService(inbox: inbox, adapters: [.topRightToast: adapter])
+        let delivered = expectation(description: "first Chrome action delivered")
+        detector.onEvent = { event in
+            Task { @MainActor in
+                _ = await delivery.deliver(event, through: [.topRightToast])
+                delivered.fulfill()
+            }
+        }
+        detector.start()
+        monitor.send(PointerSample(phase: .down, location: CGPoint(x: 5, y: 5), modifiers: [], timestamp: 1))
+        monitor.send(PointerSample(phase: .up, location: CGPoint(x: 5, y: 5), modifiers: [], timestamp: 1.1))
+
+        await fulfillment(of: [delivered], timeout: 1)
+        try? await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(inbox.events.map(\.actionTitle), [expectedTitle])
+        XCTAssertEqual(inbox.events.map(\.shortcut), [expectedShortcut])
+        XCTAssertEqual(persistence.stored.count, 1)
+        XCTAssertEqual(adapter.events.count, 1)
+        XCTAssertEqual(runtimeReader.requests.map(\.requirement), [.tabs, .tabs, .tabs])
+        detector.stop()
     }
 
     private func assertRegistry(

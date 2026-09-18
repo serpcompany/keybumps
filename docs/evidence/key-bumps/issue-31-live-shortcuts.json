@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-09-18",
+  "privacy": "Exact named enabled menu items and the four public AX shortcut attributes only. No menu tree, document title, filename, URL, account, tab title, or page content retained.",
+  "applications": [
+    {
+      "name": "Visual Studio Code",
+      "version": "1.138.0",
+      "actions": [
+        {
+          "title": "Fill",
+          "enabled": true,
+          "commandCharacter": "U+0046",
+          "modifiers": 28,
+          "commandGlyph": null,
+          "virtualKey": null,
+          "canonicalShortcut": "Globe-Control-F"
+        },
+        {
+          "title": "Center",
+          "enabled": true,
+          "commandCharacter": "U+0043",
+          "modifiers": 28,
+          "commandGlyph": null,
+          "virtualKey": null,
+          "canonicalShortcut": "Globe-Control-C"
+        }
+      ]
+    },
+    {
+      "name": "Google Chrome",
+      "version": "153.0.8010.48",
+      "actions": [
+        {
+          "title": "New Tab",
+          "enabled": true,
+          "commandCharacter": "U+0054",
+          "modifiers": 0,
+          "commandGlyph": null,
+          "virtualKey": null,
+          "canonicalShortcut": "Command-T"
+        },
+        {
+          "title": "Close Tab",
+          "enabled": true,
+          "commandCharacter": "U+0057",
+          "modifiers": 0,
+          "commandGlyph": null,
+          "virtualKey": null,
+          "canonicalShortcut": "Command-W"
+        }
+      ]
+    }
+  ]
+}

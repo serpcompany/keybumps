@@ -13,6 +13,7 @@ struct AXShortcutEvidence: Codable, Equatable, Sendable {
 }
 
 enum KeyboardSemanticKey: Hashable, Sendable {
+    case functionModifier
     case command
     case shift
     case option
@@ -66,6 +67,7 @@ struct KeyboardGlyphLegendEntry: Identifiable, Equatable, Sendable {
     let semanticKey: KeyboardSemanticKey
     let symbol: String
     let name: String
+    let sourceURL: URL
 
     var id: KeyboardSemanticKey { semanticKey }
 }
@@ -86,6 +88,7 @@ enum KeyboardShortcutRegistry {
     }
 
     private static let modifierDefinitions: [KeyboardShortcutKey] = [
+        .init(semanticKey: .functionModifier, officialName: "Fn (Function) or Globe", renderedSymbol: "🌐︎"),
         .init(semanticKey: .control, officialName: "Control", renderedSymbol: "⌃"),
         .init(semanticKey: .option, officialName: "Option", renderedSymbol: "⌥"),
         .init(semanticKey: .shift, officialName: "Shift", renderedSymbol: "⇧"),
@@ -133,20 +136,35 @@ enum KeyboardShortcutRegistry {
 
     private static let definitions = fixedDefinitions + functionDefinitions
 
-    static let legendEntries: [KeyboardGlyphLegendEntry] = {
-        let modifierEntries = modifierDefinitions.map {
-            KeyboardGlyphLegendEntry(semanticKey: $0.semanticKey, symbol: $0.renderedSymbol, name: $0.officialName)
-        }
-        let primaryEntries = definitions.map {
-            KeyboardGlyphLegendEntry(semanticKey: $0.key.semanticKey, symbol: $0.key.renderedSymbol, name: $0.key.officialName)
-        }
-        return modifierEntries + primaryEntries
-    }()
+    /// Apple documents these symbols as the special keys shown in macOS menus.
+    /// Runtime support is deliberately broader: Space, keypad Enter, Help,
+    /// Clear, and F1-F20 remain resolvable but are omitted because Apple's
+    /// user-facing menu-symbol guide does not document a useful symbol row for
+    /// them.
+    private static let appleMenuSymbolSource = URL(
+        string: "https://support.apple.com/guide/mac-help/cpmh0011/mac"
+    )!
+    private static let visibleLegendKeys: [KeyboardSemanticKey] = [
+        .functionModifier, .control, .option, .shift, .command,
+        .returnKey, .delete, .forwardDelete,
+        .upArrow, .downArrow, .leftArrow, .rightArrow,
+        .pageUp, .pageDown, .home, .end, .tabRight, .tabLeft, .escape
+    ]
+
+    static let legendEntries: [KeyboardGlyphLegendEntry] = visibleLegendKeys.compactMap { semanticKey in
+        guard let key = registeredKey(for: semanticKey) else { return nil }
+        return KeyboardGlyphLegendEntry(
+            semanticKey: semanticKey,
+            symbol: key.renderedSymbol,
+            name: key.officialName,
+            sourceURL: appleMenuSymbolSource
+        )
+    }
 
     static func resolve(_ evidence: AXShortcutEvidence) -> CanonicalKeyboardShortcut? {
         guard let modifierMask = evidence.modifiers,
               modifierMask >= 0,
-              modifierMask & ~0x0F == 0 else { return nil }
+              modifierMask & ~0x1F == 0 else { return nil }
 
         var candidates = Set<KeyboardSemanticKey>()
 
@@ -223,11 +241,17 @@ enum KeyboardShortcutRegistry {
 
     private static func modifiers(from mask: Int) -> [KeyboardShortcutKey] {
         var result: [KeyboardShortcutKey] = []
-        if mask & 4 != 0 { result.append(modifierDefinitions[0]) }
-        if mask & 2 != 0 { result.append(modifierDefinitions[1]) }
-        if mask & 1 != 0 { result.append(modifierDefinitions[2]) }
-        if mask & 8 == 0 { result.append(modifierDefinitions[3]) }
+        if mask & 16 != 0 { result.append(modifierDefinitions[0]) }
+        if mask & 4 != 0 { result.append(modifierDefinitions[1]) }
+        if mask & 2 != 0 { result.append(modifierDefinitions[2]) }
+        if mask & 1 != 0 { result.append(modifierDefinitions[3]) }
+        if mask & 8 == 0 { result.append(modifierDefinitions[4]) }
         return result
+    }
+
+    private static func registeredKey(for semanticKey: KeyboardSemanticKey) -> KeyboardShortcutKey? {
+        modifierDefinitions.first(where: { $0.semanticKey == semanticKey })
+            ?? definitions.first(where: { $0.key.semanticKey == semanticKey })?.key
     }
 
     private static func printableKey(from value: String) -> KeyboardShortcutKey? {
