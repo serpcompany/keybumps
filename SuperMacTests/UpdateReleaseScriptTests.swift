@@ -9,6 +9,21 @@ final class UpdateReleaseScriptTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
+    func testBuildProvenanceGuardAndBundleKeys() throws {
+        let guardTest = repositoryRoot.appendingPathComponent("scripts/test-build-provenance.sh")
+        let result = try run(guardTest, [])
+        XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertTrue(result.output.contains("build provenance guard tests passed"))
+
+        let infoData = try Data(contentsOf: repositoryRoot.appendingPathComponent("SuperMac/Resources/Info.plist"))
+        let info = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: infoData, format: nil) as? [String: Any]
+        )
+        XCTAssertEqual(info["SuperMacSourceCommit"] as? String, "$(SUPERMAC_SOURCE_COMMIT)")
+        XCTAssertEqual(info["SuperMacSourceBranch"] as? String, "$(SUPERMAC_SOURCE_BRANCH)")
+        XCTAssertEqual(info["SuperMacBuildKind"] as? String, "$(SUPERMAC_BUILD_KIND)")
+    }
+
     func testPublicationDryRunAndFailClosedInputs() throws {
         let fixture = repositoryRoot.appendingPathComponent("SuperMacTests/Fixtures/Updates")
         let verifier = repositoryRoot.appendingPathComponent("scripts/verify-update-publication.sh")
@@ -132,7 +147,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
 
         let orchestrator = repositoryRoot.appendingPathComponent("scripts/build-update-release.sh")
         let invalidBuild = try run(orchestrator, [
-            "0.0.2", "2", "2", "https://updates.example.com/appcast.xml", "public", "notary", "key", "/tmp/tools", "/tmp/output"
+            "0.0.2", "2", "2", "https://updates.example.com/appcast.xml", "public", "key", "/tmp/tools", "/tmp/output"
         ])
         XCTAssertNotEqual(invalidBuild.status, 0)
         XCTAssertTrue(invalidBuild.output.contains("greater than"))
@@ -145,7 +160,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
             "https://example .com/appcast.xml"
         ] {
             let result = try run(orchestrator, [
-                "0.0.2", "2", "1", maliciousProductionURL, "public", "notary", "key", "/tmp/tools", "/tmp/output"
+                "0.0.2", "2", "1", maliciousProductionURL, "public", "key", "/tmp/tools", "/tmp/output"
             ])
             XCTAssertNotEqual(result.status, 0)
             XCTAssertTrue(result.output.contains("credential-free"))
