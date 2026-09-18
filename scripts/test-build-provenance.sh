@@ -46,4 +46,11 @@ if "$guard_script" local "$fixture_root" >/dev/null 2>&1; then
 fi
 git -C "$fixture_root" switch -q main
 "$guard_script" local "$fixture_root" >/dev/null
+
+manifest_path="$fixture_root/build-manifest.json"
+"$repository_root/scripts/write-build-manifest.sh" \
+  "$manifest_path" "0.0.2-dev.fixture" 42 "$(git -C "$fixture_root" rev-parse HEAD)" main local-candidate
+[[ "$(/usr/bin/plutil -extract version raw -expect string "$manifest_path")" == "0.0.2-dev.fixture" ]]
+[[ "$(/usr/bin/plutil -extract build raw -expect string "$manifest_path")" == 42 ]]
+[[ "$(/usr/bin/plutil -extract buildKind raw -expect string "$manifest_path")" == local-candidate ]]
 print 'build provenance guard tests passed'

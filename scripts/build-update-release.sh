@@ -51,12 +51,9 @@ embedded_kind=$(/usr/libexec/PlistBuddy -c 'Print :SuperMacBuildKind' "$app_path
   print -u2 "exported app provenance does not match the verified main source"
   exit 65
 }
-/usr/bin/plutil -create json "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert version -string "$release_version" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert build -string "$release_build" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert sourceCommit -string "$source_commit" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert sourceBranch -string "$source_branch" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert buildKind -string public-release "$output_directory/build-manifest.json"
+"$repository_root/scripts/write-build-manifest.sh" \
+  "$output_directory/build-manifest.json" "$release_version" "$release_build" \
+  "$source_commit" "$source_branch" public-release
 notary_archive="$output_directory/SuperMac-notary.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_archive"
 asc notarization submit --file "$notary_archive" --wait

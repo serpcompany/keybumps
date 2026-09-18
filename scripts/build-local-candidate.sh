@@ -41,11 +41,8 @@ app_path="$output_directory/export/SuperMac.app"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SuperMacSourceBranch' "$app_path/Contents/Info.plist")" == "$source_branch" ]] || exit 65
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SuperMacBuildKind' "$app_path/Contents/Info.plist")" == local-candidate ]] || exit 65
 
-/usr/bin/plutil -create json "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert version -string "$candidate_version" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert build -string "$candidate_build" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert sourceCommit -string "$source_commit" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert sourceBranch -string "$source_branch" "$output_directory/build-manifest.json"
-/usr/bin/plutil -insert buildKind -string local-candidate "$output_directory/build-manifest.json"
+"$repository_root/scripts/write-build-manifest.sh" \
+  "$output_directory/build-manifest.json" "$candidate_version" "$candidate_build" \
+  "$source_commit" "$source_branch" local-candidate
 
 print "Local candidate prepared from $source_branch@$short_commit: $app_path"
