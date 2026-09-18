@@ -35,7 +35,7 @@ final class AppModel {
     let preferences: AppPreferences
     let inbox: InboxStore
     let shortcuts: GlobalShortcutCoordinator
-    let permissions = PermissionCoordinator()
+    let permissions: PermissionCoordinator
     let clipboard: ClipboardHistoryService
     let dictationHistory: DictationHistoryService
     let windows = WindowManagementService()
@@ -112,10 +112,12 @@ final class AppModel {
         detector: ManualActionDetector,
         presenter: PresentationWindowController,
         shortcutCoordinator: GlobalShortcutCoordinator? = nil,
+        permissionCoordinator: PermissionCoordinator? = nil,
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
         updater injectedUpdater: (any UpdateControlling)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
+        self.permissions = permissionCoordinator ?? PermissionCoordinator()
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
         self.nativeNotificationCenter = nativeNotificationCenter
@@ -247,6 +249,8 @@ final class AppModel {
     }
 
     func recoverPermission(_ permission: MacPermission) async {
+        refreshPermissions()
+        guard !permissions.state(for: permission).isGranted else { return }
         let presentation = PermissionRecoveryPresentation.resolve(
             permission: permission,
             action: permissions.recoveryAction(for: permission)
@@ -348,6 +352,42 @@ final class AppModel {
     func refreshNotificationPermission() async {
         nativeNotificationAuthorization = await nativeNotificationCenter.authorizationStatus()
         updateMissingPermissionBadge()
+    }
+
+    func monitorNotificationPermissionChanges(
+        interval: Duration = .seconds(1),
+        maximumRefreshes: Int? = nil
+    ) async {
+        await monitorPermissionChanges(interval: interval, maximumRefreshes: maximumRefreshes) { [weak self] in
+            await self?.refreshNotificationPermission()
+        }
+    }
+
+    func monitorSystemPermissionChanges(
+        interval: Duration = .seconds(1),
+        maximumRefreshes: Int? = nil
+    ) async {
+        await monitorPermissionChanges(interval: interval, maximumRefreshes: maximumRefreshes) { [weak self] in
+            self?.refreshPermissions()
+        }
+    }
+
+    private func monitorPermissionChanges(
+        interval: Duration,
+        maximumRefreshes: Int?,
+        refresh: @escaping @MainActor () async -> Void
+    ) async {
+        var refreshCount = 0
+        while !Task.isCancelled {
+            if let maximumRefreshes, refreshCount >= maximumRefreshes { return }
+            await refresh()
+            refreshCount += 1
+            do {
+                try await Task.sleep(for: interval)
+            } catch {
+                return
+            }
+        }
     }
 
     func requestNotificationPermission() async {

@@ -287,19 +287,43 @@ final class PermissionCoordinator {
     private(set) var microphoneState: PermissionAuthorizationState = .notDetermined
     private(set) var speechState: PermissionAuthorizationState = .notDetermined
     private(set) var activeRequest: MacPermission?
+    private let accessibilityTrusted: () -> Bool
+    private let inputMonitoringAuthorized: () -> Bool
+    private let microphoneAuthorizationStatus: () -> AVAuthorizationStatus
+    private let speechAuthorizationStatus: () -> SFSpeechRecognizerAuthorizationStatus
+    private let openSettingsAction: (MacPermission) -> Void
 
     var accessibilityGranted: Bool { accessibilityState.isGranted }
     var inputMonitoringGranted: Bool { inputMonitoringState.isGranted }
     var microphoneGranted: Bool { microphoneState.isGranted }
     var speechGranted: Bool { speechState.isGranted }
 
-    init() { refresh() }
+    init(
+        accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
+        inputMonitoringAuthorized: @escaping () -> Bool = { CGPreflightListenEventAccess() },
+        microphoneAuthorizationStatus: @escaping () -> AVAuthorizationStatus = {
+            AVCaptureDevice.authorizationStatus(for: .audio)
+        },
+        speechAuthorizationStatus: @escaping () -> SFSpeechRecognizerAuthorizationStatus = {
+            SFSpeechRecognizer.authorizationStatus()
+        },
+        openSettings: @escaping (MacPermission) -> Void = { permission in
+            _ = NSWorkspace.shared.open(permission.settingsURL)
+        }
+    ) {
+        self.accessibilityTrusted = accessibilityTrusted
+        self.inputMonitoringAuthorized = inputMonitoringAuthorized
+        self.microphoneAuthorizationStatus = microphoneAuthorizationStatus
+        self.speechAuthorizationStatus = speechAuthorizationStatus
+        self.openSettingsAction = openSettings
+        refresh()
+    }
 
     func refresh() {
-        accessibilityState = AXIsProcessTrusted() ? .granted : .required
-        inputMonitoringState = CGPreflightListenEventAccess() ? .granted : .required
-        microphoneState = Self.state(for: AVCaptureDevice.authorizationStatus(for: .audio))
-        speechState = Self.state(for: SFSpeechRecognizer.authorizationStatus())
+        accessibilityState = accessibilityTrusted() ? .granted : .required
+        inputMonitoringState = inputMonitoringAuthorized() ? .granted : .required
+        microphoneState = Self.state(for: microphoneAuthorizationStatus())
+        speechState = Self.state(for: speechAuthorizationStatus())
     }
 
     func state(for permission: MacPermission) -> PermissionAuthorizationState {
@@ -351,7 +375,7 @@ final class PermissionCoordinator {
     }
 
     func openSettings(_ permission: MacPermission) {
-        NSWorkspace.shared.open(permission.settingsURL)
+        openSettingsAction(permission)
     }
 
     private static func state(for status: AVAuthorizationStatus) -> PermissionAuthorizationState {

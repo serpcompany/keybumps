@@ -29,6 +29,32 @@ enum NativeNotificationAuthorization: Equatable {
     }
 }
 
+enum NativeNotificationAuthorizationResolver {
+    static func resolve(
+        authorizationStatus: UNAuthorizationStatus,
+        alertSetting: UNNotificationSetting,
+        alertStyle: UNAlertStyle
+    ) -> NativeNotificationAuthorization {
+        let authorization: NativeNotificationAuthorization = switch authorizationStatus {
+        case .notDetermined: .notDetermined
+        case .denied: .denied
+        case .authorized: .authorized
+        case .provisional: .provisional
+        case .ephemeral: .ephemeral
+        @unknown default: .unknown
+        }
+        guard authorization == .authorized
+                || authorization == .provisional
+                || authorization == .ephemeral else {
+            return authorization
+        }
+        guard alertSetting != .disabled, alertStyle != .none else {
+            return .authorizedWithoutAlerts
+        }
+        return authorization
+    }
+}
+
 enum AppShellDestination: String, Equatable {
     case keyboardShortcutterHistory
 
@@ -74,19 +100,11 @@ final class SystemNativeNotificationCenterClient: NativeNotificationCenterClient
 
     func authorizationStatus() async -> NativeNotificationAuthorization {
         let settings = await center.notificationSettings()
-        if settings.alertSetting != .enabled,
-           settings.authorizationStatus == .authorized
-            || settings.authorizationStatus == .provisional {
-            return .authorizedWithoutAlerts
-        }
-        return switch settings.authorizationStatus {
-        case .notDetermined: .notDetermined
-        case .denied: .denied
-        case .authorized: .authorized
-        case .provisional: .provisional
-        case .ephemeral: .ephemeral
-        @unknown default: .unknown
-        }
+        return NativeNotificationAuthorizationResolver.resolve(
+            authorizationStatus: settings.authorizationStatus,
+            alertSetting: settings.alertSetting,
+            alertStyle: settings.alertStyle
+        )
     }
 
     func requestAuthorization() async throws -> Bool {

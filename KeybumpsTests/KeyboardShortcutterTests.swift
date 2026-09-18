@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 import Observation
+import UserNotifications
 import XCTest
 @testable import Keybumps
 
@@ -550,6 +551,25 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertTrue(center.added.isEmpty)
     }
 
+    func testNativeNotificationAcceptsMacOSBannerWhenAlertSettingIsNotSupported() {
+        XCTAssertEqual(
+            NativeNotificationAuthorizationResolver.resolve(
+                authorizationStatus: .authorized,
+                alertSetting: .notSupported,
+                alertStyle: .banner
+            ),
+            .authorized
+        )
+        XCTAssertEqual(
+            NativeNotificationAuthorizationResolver.resolve(
+                authorizationStatus: .authorized,
+                alertSetting: .notSupported,
+                alertStyle: .none
+            ),
+            .authorizedWithoutAlerts
+        )
+    }
+
     func testNativeNotificationHonorsARejectedAuthorizationRequest() async {
         let center = StubNativeNotificationCenter(status: .notDetermined)
         center.requestResult = false
@@ -586,6 +606,80 @@ final class KeyboardShortcutterTests: XCTestCase {
         center.status = .authorized
         await model.refreshNotificationPermission()
         XCTAssertFalse(model.nativeNotificationNeedsAttention)
+    }
+
+    func testVisiblePermissionMonitoringRefreshesNotificationStatusWithoutAppReactivation() async {
+        let suite = "KeyboardShortcutterTests-notification-monitoring-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let center = StubNativeNotificationCenter(status: .authorizedWithoutAlerts)
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            presenter: PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor()),
+            nativeNotificationCenter: center
+        )
+
+        await model.refreshNotificationPermission()
+        XCTAssertEqual(model.nativeNotificationAuthorization, .authorizedWithoutAlerts)
+
+        center.status = .authorized
+        await model.monitorNotificationPermissionChanges(interval: .zero, maximumRefreshes: 1)
+
+        XCTAssertEqual(model.nativeNotificationAuthorization, .authorized)
+        XCTAssertFalse(model.nativeNotificationNeedsAttention)
+    }
+
+    func testPermissionRecoveryRechecksAlreadyGrantedAccessBeforeOpeningSystemSettings() async {
+        var accessibilityTrusted = false
+        var openedSettings: [MacPermission] = []
+        let permissions = PermissionCoordinator(
+            accessibilityTrusted: { accessibilityTrusted },
+            openSettings: { openedSettings.append($0) }
+        )
+        let suite = "KeyboardShortcutterTests-permission-recheck-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            presenter: PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor()),
+            permissionCoordinator: permissions
+        )
+        XCTAssertEqual(permissions.accessibilityState, .required)
+
+        accessibilityTrusted = true
+        await model.recoverPermission(.accessibility)
+
+        XCTAssertEqual(permissions.accessibilityState, .granted)
+        XCTAssertTrue(openedSettings.isEmpty)
+    }
+
+    func testVisiblePermissionMonitoringRecognizesAccessGrantedWhileSystemSettingsIsForeground() async {
+        var accessibilityTrusted = false
+        let permissions = PermissionCoordinator(accessibilityTrusted: { accessibilityTrusted })
+        let suite = "KeyboardShortcutterTests-permission-monitoring-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: MemoryPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            presenter: PresentationWindowController(keyboardMonitor: StubKeyboardEventMonitor()),
+            permissionCoordinator: permissions
+        )
+        XCTAssertEqual(permissions.accessibilityState, .required)
+
+        accessibilityTrusted = true
+        await model.monitorSystemPermissionChanges(interval: .zero, maximumRefreshes: 1)
+
+        XCTAssertEqual(permissions.accessibilityState, .granted)
+        XCTAssertTrue(model.permissionReadiness.state(for: .accessibility).isGranted)
     }
 
     func testSoundInvokesGlassAndReportsUnavailablePlayback() async throws {

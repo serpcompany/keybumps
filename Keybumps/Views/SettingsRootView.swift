@@ -487,6 +487,8 @@ struct KeyboardGlyphLegendContent: View {
 }
 
 private struct PermissionsView: View {
+    @Environment(AppModel.self) private var model
+
     var body: some View {
         Form {
             Section("Permissions") {
@@ -500,6 +502,9 @@ private struct PermissionsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Permissions")
+        .task {
+            await model.monitorSystemPermissionChanges()
+        }
     }
 }
 
@@ -526,6 +531,9 @@ private struct NotificationPermissionRow: View {
         }
         .padding(10)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .task {
+            await model.monitorNotificationPermissionChanges()
+        }
     }
 
     private var statusText: String {
@@ -659,6 +667,9 @@ private struct PermissionWalkthroughView: View {
         .background(compact ? AnyShapeStyle(.quaternary.opacity(0.35)) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Guided permission setup")
+        .task {
+            await model.monitorSystemPermissionChanges()
+        }
     }
 }
 
