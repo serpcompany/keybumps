@@ -318,11 +318,24 @@ enum PresentationLayout {
     }
 }
 
+struct KeyBumpVisibleCopy: Equatable {
+    let lines: [String]
+
+    init(event: CoachingEvent) {
+        lines = [event.actionTitle]
+    }
+
+    var title: String { lines.first ?? "" }
+}
+
 struct CoachingPresentationView: View {
     let event: CoachingEvent
     let style: NotificationChannel
     let onDismiss: () -> Void
     var onHoverChanged: (Bool) -> Void = { _ in }
+
+    var visibleCopy: KeyBumpVisibleCopy { KeyBumpVisibleCopy(event: event) }
+    var visibleShortcut: String { event.shortcut }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -332,7 +345,7 @@ struct CoachingPresentationView: View {
                     .foregroundStyle(.green)
                 coachingCopy
                 Spacer(minLength: 18)
-                ShortcutKeycaps(shortcut: event.shortcut)
+                ShortcutKeycaps(shortcut: visibleShortcut)
             }
             .padding(.leading, 42)
             .padding(.trailing, 16)
@@ -358,11 +371,7 @@ struct CoachingPresentationView: View {
 
     private var coachingCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(event.coachingTitle).font(.headline)
-            Text(event.coachingBody)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            Text(visibleCopy.title).font(.headline)
         }
     }
 

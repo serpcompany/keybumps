@@ -43,6 +43,38 @@ final class PresentationEvidenceTests: XCTestCase {
         XCTAssertTrue(controller.panelCollectionBehavior.contains(.fullScreenAuxiliary))
     }
 
+    func testCustomPresentationsUseExactSourceCopyCanonicalKeycapsAndNoSubtitle() {
+        let fixtures: [(NotificationChannel, CoachingEvent, String, [String])] = [
+            (
+                .topRightToast,
+                CoachingEvent(
+                    applicationName: "Google Chrome",
+                    actionTitle: "Always Show Toolbar in Full Screen…",
+                    shortcut: "⌃⇤"
+                ),
+                "Always Show Toolbar in Full Screen…",
+                ["⌃", "⇤"]
+            ),
+            (
+                .topCenterShelf,
+                CoachingEvent(
+                    applicationName: "Visual Studio Code",
+                    actionTitle: "Move Left",
+                    shortcut: "⌃←"
+                ),
+                "Move Left",
+                ["⌃", "←"]
+            )
+        ]
+
+        for (channel, event, expectedTitle, expectedKeycaps) in fixtures {
+            let presentation = CoachingPresentationView(event: event, style: channel, onDismiss: {})
+
+            XCTAssertEqual(presentation.visibleCopy.lines, [expectedTitle])
+            XCTAssertEqual(ShortcutKeycapPresentation(shortcut: presentation.visibleShortcut).keys, expectedKeycaps)
+        }
+    }
+
     func testInlineKeyboardGlyphGuideRendersToReviewablePNG() throws {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
