@@ -22,8 +22,8 @@ Build success, tests, UI inspection, signed runtime, installed artifact, and own
 | UJ-05 | Clipboard History | Signed runtime panel opening and bounded local-store behavior are verified; retention, duplicate collapse, and persistence are automated. | Private-content selection/paste, deletion, clearing, restart, and disabled monitoring need owner acceptance. |
 | UJ-06 | Dictation and Dictation History | Language availability, per-recording metadata/audio persistence, reload ordering, deletion, cancellation/teardown paths, temporary global Escape registration, and recovery state have automated coverage. | Physical Escape during English/Japanese recording, browser insertion, offline operation, failed-insertion recovery, and full History control acceptance still need owner verification. |
 | UJ-07 | Window Management | Exact selected shortcut map, customization, persistence, representative geometry, drag guards, and restore behavior are automated; shortcut recording UI has signed-runtime evidence. | Every assigned shortcut, repeated sizing, multi-display movement, and every drag-to-snap/unsnap region need owner acceptance with Accessibility enabled. |
-| UJ-08 | Key Bumps | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
-| UJ-09 | Shared Command Palette | Search/Clipboard/Dictation/Key Bumps tab order, Command-1/2/3/4 routing, filtering, and reset behavior are automated. | Physical global routing and privacy-safe checks of history selection and paste remain. |
+| UJ-08 | Keyboard Shortcutter | Detection rules, suppression, durable history, unread state, channel fan-out, previews, and presentation geometry are automated; a synthetic runtime event was observed. | Physical supported Finder and Chrome actions plus selected live presentation channels need owner acceptance with both permissions enabled. |
+| UJ-09 | Shared Command Palette | Search/Clipboard/Dictation/Keyboard Shortcutter tab order, Command-1/2/3/4 routing, filtering, and reset behavior are automated. | Physical global routing and privacy-safe checks of history selection and paste remain. |
 | UJ-10 | Capability controls and settings | Enablement persistence, shortcut release, teardown, and major settings routes are automated or runtime inspected. | Owner should confirm the combined app remains understandable during normal daily use. |
 | UJ-11 | Dock, menu bar, conflicts, and launch at login | Dock/sidebar shell and status-item contract are automated or runtime verified; the real Settings menu item routes through a persistent window opener; conflict detection is implemented. | Physical status-item selection, login-session relaunch, crowded-menu-bar visibility, and quitting each reference app from onboarding need owner acceptance. |
 | UJ-12 | Updates, licensing, and distribution | The local preview truthfully reports that updates are not configured and contains no fake activation. | Production licensing, update feed, notarization, packaging, installed artifact, and distribution are deferred. |
@@ -62,7 +62,7 @@ The Permissions screen keeps `Review individual permissions` collapsed by defaul
 2. Each capability reports Ready, Setup Needed, or Off from actual capability and permission state.
 3. Quick Search and Clipboard open directly when ready.
 4. A feature's Grant Permission action begins that feature's permission sequence immediately without navigating away from Setup.
-5. Ready Dictation, Window Management, and Key Bumps route to their settings.
+5. Ready Dictation, Window Management, and Keyboard Shortcutter route to their settings.
 6. Off features route to their capability screen, where they can be enabled.
 
 ## UJ-04 — Quick Search
@@ -116,31 +116,31 @@ If Dictation permissions are missing, pressing the shortcut first shows a SuperM
 
 Disabling Window Management stops drag monitoring and releases every owned window shortcut.
 
-## UJ-08 — Key Bumps
+## UJ-08 — Keyboard Shortcutter
 
-1. Grant Accessibility and Input Monitoring and keep Key Bumps enabled.
+1. Grant Accessibility and Input Monitoring and keep Keyboard Shortcutter enabled.
 2. Perform a supported manual action in Finder or Chrome.
 3. The detector emits exactly one event only after the action's required postcondition is observed.
-4. The event is written once to durable Key Bumps history.
+4. The event is written once to durable Keyboard Shortcutter history.
 5. Selected presentation channels deliver their transient output independently. Custom presentations show the action and source application with separated shortcut keycaps, and share a top-left close button, Escape dismissal, screen-wide horizontal trackpad-swipe dismissal, and an auto-dismiss timer that pauses while hovered.
 6. Preview retained visual channels without creating durable history; when Sound is selected it plays alongside those previews, while direct Sound preview plays once. Native Banner uses real notification authorization and opens the matching System Settings recovery page when denied. Failed preview adapters report their individual failure instead of appearing successful.
-7. Review, filter, and clear events only in the Command Palette. Palette rows are native list rows, remain passive, and omit unread dots and changing relative-time counters. Clear Key Bumps history only through an explicit confirmed action.
+7. Review, filter, and clear events only in the Command Palette. Palette rows are native list rows, remain passive, and omit unread dots and changing relative-time counters. Clear Keyboard Shortcutter history only through an explicit confirmed action.
 
-Ambiguous, stale, modified, unsafe, or unverified gestures must produce no key bump. Disabling Key Bumps stops monitoring.
+Ambiguous, stale, modified, unsafe, or unverified gestures must produce no keyboard shortcut suggestion. Disabling Keyboard Shortcutter stops monitoring.
 
 ## UJ-09 — Shared Command Palette
 
-1. Search is the default tab; Clipboard, Dictation, and Key Bumps are visible peer tabs in that order. Tab controls show the shortcut and name without icons.
+1. Search is the default tab; Clipboard, Dictation, and Keyboard Shortcutter are visible peer tabs in that order. Tab controls show the shortcut and name without icons.
 2. Click tabs or press Command-1/2/3/4 to switch.
 3. Switching clears the prior filter, resets selection, and keeps text-input focus.
-4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Key Bumps row click changes selection only; Return has no clipboard or history side effect.
-5. When Key Bumps is disabled, its tab reports that state instead of presenting stale history as active.
-6. When Search is empty, successfully opened apps, files, and folders appear under Recent Items; selecting one opens it, individual rows can be deleted, and Clear All requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens do not create recent items or train ranking, and file/folder results do not train application ranking. Key Bumps provides the same confirmed clear-history affordance as the other histories.
+4. Arrow keys move selection, Return performs the active tab's primary action where one exists, and Escape dismisses. Keyboard Shortcutter row click changes selection only; Return has no clipboard or history side effect.
+5. When Keyboard Shortcutter is disabled, its tab reports that state instead of presenting stale history as active.
+6. When Search is empty, successfully opened apps, files, and folders appear under Recent Items; selecting one opens it, individual rows can be deleted, and Clear All requires confirmation. Successful application launches also train local frequency/recency ranking so repeatedly used applications rise within relevant results. Failed opens do not create recent items or train ranking, and file/folder results do not train application ranking. Keyboard Shortcutter provides the same confirmed clear-history affordance as the other histories.
 7. The footer truthfully identifies local-only behavior.
 
 ## UJ-10 — Capability controls and settings
 
-1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Key Bumps, Permissions, and General.
+1. Use the native sidebar to reach Setup, Quick Search, Clipboard History, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General.
 2. Use the toolbar Back button or Command-[ to return through previously visited Settings screens.
 3. Enable or disable each capability only from its own screen.
 4. Disabling immediately tears down its active panel, monitor, recording, drag behavior, or shortcuts as applicable.
@@ -169,4 +169,4 @@ Run this only from the intended installed, signed artifact after granting the re
 3. Complete the physical acceptance items in UJ-04 through UJ-08, using non-sensitive test text.
 4. Disable and re-enable every capability, confirming resource teardown and restoration.
 5. Relaunch the Mac login session and confirm menu-bar, Dock, settings, histories, preferences, and shortcuts recover correctly.
-6. Record pass/fail evidence without filenames, clipboard values, transcripts, or private Key Bumps content.
+6. Record pass/fail evidence without filenames, clipboard values, transcripts, or private Keyboard Shortcutter content.

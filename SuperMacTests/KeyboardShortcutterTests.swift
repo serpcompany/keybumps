@@ -156,7 +156,7 @@ private struct StubPresenceController: AppPresenceControlling {
 }
 
 @MainActor
-final class ShortcutCoachTests: XCTestCase {
+final class KeyboardShortcutterTests: XCTestCase {
     func testPresentationPreviewDoesNotPersistSyntheticEvent() async {
         let inbox = InboxStore(persistence: MemoryPersistence())
         let adapter = SpyAdapter()
@@ -218,7 +218,7 @@ final class ShortcutCoachTests: XCTestCase {
     }
 
     func testAppModelPublishesPermissionAndStatusSnapshotsAfterRequestsAndRetry() async {
-        let suite = "ShortcutCoachTests-permissions-\(UUID().uuidString)"
+        let suite = "KeyboardShortcutterTests-permissions-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let permissions = StubDetectorPermissions(accessibility: false, inputMonitoring: false)
@@ -416,14 +416,14 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(center.added.first?.identifier, "fresh-preview")
         XCTAssertEqual(center.added.first?.payload.title, event.coachingTitle)
         XCTAssertEqual(center.added.first?.payload.body, event.coachingBody)
-        XCTAssertEqual(center.added.first?.payload.destination, .keyBumpsHistory)
+        XCTAssertEqual(center.added.first?.payload.destination, .keyboardShortcutterHistory)
     }
 
     func testNativeBannerContentDoesNotForceTheSeparateSoundChannel() {
         let payload = NativeNotificationPayload(
             title: "Open new window",
             body: "Finder · ⌘N",
-            destination: .keyBumpsHistory
+            destination: .keyboardShortcutterHistory
         )
 
         let content = SystemNotificationContentFactory.makeContent(for: payload)
@@ -431,7 +431,7 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertNil(content.sound)
         XCTAssertEqual(
             content.userInfo[NativeNotificationPayload.destinationKey] as? String,
-            AppShellDestination.keyBumpsHistory.rawValue
+            AppShellDestination.keyboardShortcutterHistory.rawValue
         )
     }
 
@@ -450,7 +450,7 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertTrue(inbox.events.isEmpty)
     }
 
-    func testNotificationResponseRoutesThroughAppShellToKeyBumpsHistory() {
+    func testNotificationResponseRoutesThroughAppShellToKeyboardShortcutterHistory() {
         let router = AppShellRouter()
         var destinations: [AppShellDestination] = []
         let delegate = AppDelegate(
@@ -458,12 +458,27 @@ final class ShortcutCoachTests: XCTestCase {
             appShellRouter: router
         )
 
-        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: NativeNotificationPayload.keyBumpsUserInfo))
+        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: NativeNotificationPayload.keyboardShortcutterUserInfo))
         XCTAssertTrue(destinations.isEmpty, "A cold-launch notification response should wait for app-shell configuration")
         router.configure { destinations.append($0) }
-        XCTAssertEqual(destinations, [.keyBumpsHistory])
+        XCTAssertEqual(destinations, [.keyboardShortcutterHistory])
         XCTAssertFalse(delegate.handleNotificationResponse(userInfo: [:]))
-        XCTAssertEqual(destinations, [.keyBumpsHistory])
+        XCTAssertEqual(destinations, [.keyboardShortcutterHistory])
+    }
+
+    func testLegacyKeyBumpsNotificationDestinationRoutesToKeyboardShortcutterHistory() {
+        let router = AppShellRouter()
+        var destinations: [AppShellDestination] = []
+        router.configure { destinations.append($0) }
+        let delegate = AppDelegate(
+            quickSearchRouter: QuickSearchRouter(),
+            appShellRouter: router
+        )
+
+        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: [
+            NativeNotificationPayload.destinationKey: "keyBumpsHistory"
+        ]))
+        XCTAssertEqual(destinations, [.keyboardShortcutterHistory])
     }
 
     func testNotificationResponseWinsOverQueuedGenericReopen() async {
@@ -479,12 +494,12 @@ final class ShortcutCoachTests: XCTestCase {
         )
 
         XCTAssertFalse(delegate.applicationShouldHandleReopen(.shared, hasVisibleWindows: false))
-        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: NativeNotificationPayload.keyBumpsUserInfo))
+        XCTAssertTrue(delegate.handleNotificationResponse(userInfo: NativeNotificationPayload.keyboardShortcutterUserInfo))
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
         }
 
-        XCTAssertEqual(destinations, [.keyBumpsHistory])
+        XCTAssertEqual(destinations, [.keyboardShortcutterHistory])
         XCTAssertEqual(quickSearchOpenCount, 0, "Notification routing must suppress the queued generic Search reopen")
     }
 
@@ -551,7 +566,7 @@ final class ShortcutCoachTests: XCTestCase {
     }
 
     func testEnabledNativeBannerSurfacesMissingNotificationAuthorization() async {
-        let suite = "ShortcutCoachTests-notification-attention-\(UUID().uuidString)"
+        let suite = "KeyboardShortcutterTests-notification-attention-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set([NotificationChannel.nativeBanner.rawValue], forKey: "selectedNotificationChannels")
@@ -620,8 +635,8 @@ final class ShortcutCoachTests: XCTestCase {
         XCTAssertEqual(keyboard.stopCount, 1)
     }
 
-    func testDisablingKeyBumpsDismissesPresentationsAndStopsInteractionMonitors() {
-        let suite = "ShortcutCoachTests-disable-presentations-\(UUID().uuidString)"
+    func testDisablingKeyboardShortcutterDismissesPresentationsAndStopsInteractionMonitors() {
+        let suite = "KeyboardShortcutterTests-disable-presentations-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = AppPreferences(defaults: defaults)
@@ -638,7 +653,7 @@ final class ShortcutCoachTests: XCTestCase {
         )
         presenter.show(event: .sample, style: .topRightToast)
 
-        model.setCapability(.shortcutCoaching, enabled: false)
+        model.setCapability(.keyboardShortcutter, enabled: false)
 
         XCTAssertTrue(presenter.activeChannels.isEmpty)
         XCTAssertEqual(keyboard.stopCount, 1)
@@ -737,7 +752,7 @@ final class ShortcutCoachTests: XCTestCase {
     }
 
     func testPreferencesDefaultToVisiblePresenceAndPersistChannelCombinations() {
-        let suite = "ShortcutCoachTests-\(UUID().uuidString)"
+        let suite = "KeyboardShortcutterTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
 
@@ -755,7 +770,7 @@ final class ShortcutCoachTests: XCTestCase {
     }
 
     func testLegacyCursorHaloSelectionIsRemovedAndRewritten() {
-        let suite = "ShortcutCoachTests-remove-cursor-halo-\(UUID().uuidString)"
+        let suite = "KeyboardShortcutterTests-remove-cursor-halo-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(["cursorHalo", NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
@@ -768,7 +783,7 @@ final class ShortcutCoachTests: XCTestCase {
     }
 
     func testRetainedPresentationChannelsCanBeCombined() {
-        let suite = "ShortcutCoachTests-overlap-\(UUID().uuidString)"
+        let suite = "KeyboardShortcutterTests-overlap-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = AppPreferences(defaults: defaults)
@@ -778,7 +793,7 @@ final class ShortcutCoachTests: XCTestCase {
     }
 
     func testRemovedPresentationChannelsAreMigratedOutOfPersistedPreferences() {
-        let suite = "ShortcutCoachTests-normalized-overlap-\(UUID().uuidString)"
+        let suite = "KeyboardShortcutterTests-normalized-overlap-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set([
@@ -803,9 +818,9 @@ final class ShortcutCoachTests: XCTestCase {
 
     func testPreferencesMigrateFromEitherPreviousBundleIdentity() {
         for sourceIndex in 0..<2 {
-            let currentSuite = "ShortcutCoachTests-current-\(UUID().uuidString)"
-            let oldestSuite = "ShortcutCoachTests-oldest-\(UUID().uuidString)"
-            let recentSuite = "ShortcutCoachTests-recent-\(UUID().uuidString)"
+            let currentSuite = "KeyboardShortcutterTests-current-\(UUID().uuidString)"
+            let oldestSuite = "KeyboardShortcutterTests-oldest-\(UUID().uuidString)"
+            let recentSuite = "KeyboardShortcutterTests-recent-\(UUID().uuidString)"
             let current = UserDefaults(suiteName: currentSuite)!
             let oldest = UserDefaults(suiteName: oldestSuite)!
             let recent = UserDefaults(suiteName: recentSuite)!

@@ -6,7 +6,7 @@
 - [ ] Shift-Command-Space Clipboard History: ten text or image items with visual previews
 - [ ] Option-Space Dictation: visible recording/transcribing, local insertion, Escape cancellation
 - [ ] Owner-selected Rectangle shortcut profile and drag-to-snap
-- [ ] Current Key Bumps behavior and durable presentations
+- [ ] Current Keyboard Shortcutter behavior and durable presentations
 - [ ] Integrated replacement proof with donor/reference apps inactive
 
 Commercial licensing, production updates, notarization, and public distribution are Phase 7 and are not claimed by this manifest.

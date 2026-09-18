@@ -52,8 +52,8 @@ private struct MainWindowRoutingModifier: ViewModifier {
                 QuickSearchRouter.shared.configure(model.showQuickSearch)
                 AppShellRouter.shared.configure { destination in
                     switch destination {
-                    case .keyBumpsHistory:
-                        model.showKeyBumpsHistory()
+                    case .keyboardShortcutterHistory:
+                        model.showKeyboardShortcutterHistory()
                     }
                 }
                 NativeStatusItemController.shared.configureQuickSearch(

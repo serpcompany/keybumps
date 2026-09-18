@@ -137,7 +137,7 @@ final class SuperMacFeatureTests: XCTestCase {
         preferences.didCompleteOnboarding = true
         preferences.setCapability(.clipboardHistory, enabled: false)
         preferences.setCapability(.windowManagement, enabled: false)
-        preferences.setCapability(.shortcutCoaching, enabled: false)
+        preferences.setCapability(.keyboardShortcutter, enabled: false)
         let backend = StubGlobalHotKeyBackend()
         let coordinator = GlobalShortcutCoordinator(backend: backend)
         let model = AppModel(
@@ -302,15 +302,15 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertNil(migrated.capabilityShortcut(for: .dictation))
     }
 
-    func testKeyBumpsIsTheCanonicalUserFacingCapabilityName() {
-        XCTAssertEqual(Capability.shortcutCoaching.title, "Key Bumps")
-        XCTAssertEqual(SettingsSection.coaching.rawValue, "Key Bumps")
+    func testKeyboardShortcutterIsTheCanonicalUserFacingCapabilityName() {
+        XCTAssertEqual(Capability.keyboardShortcutter.title, "Keyboard Shortcutter")
+        XCTAssertEqual(SettingsSection.keyboardShortcutter.rawValue, "Keyboard Shortcutter")
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Setup"))
         XCTAssertEqual(SettingsNavigationHistory().selection, .permissions)
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("About"))
-        XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Key Bumps"))
+        XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Keyboard Shortcutter"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
     }
 
@@ -345,7 +345,7 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(deniedInputMonitoring.requiresRelaunch(.inputMonitoring))
 
         let staleGrantedInputMonitoring = PermissionReadinessSnapshot.resolve(
-            enabledCapabilities: [.shortcutCoaching],
+            enabledCapabilities: [.keyboardShortcutter],
             states: allGranted,
             permissionsRequiringRelaunch: [.inputMonitoring],
             selectedChannels: [],
@@ -574,7 +574,7 @@ final class SuperMacFeatureTests: XCTestCase {
             [.microphone, .speechRecognition]
         )
         XCTAssertEqual(
-            PermissionSetupPlan.requiredPermissions(for: [.shortcutCoaching]),
+            PermissionSetupPlan.requiredPermissions(for: [.keyboardShortcutter]),
             [.accessibility, .inputMonitoring]
         )
 
@@ -1097,7 +1097,7 @@ final class SuperMacFeatureTests: XCTestCase {
     func testCommandPaletteHasTheFourRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
-        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyBumps])
+        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyboardShortcutter])
         XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4"])
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
@@ -1105,21 +1105,21 @@ final class SuperMacFeatureTests: XCTestCase {
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
                 CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Key Bumps")
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Keyboard Shortcutter")
             ]
         )
         XCTAssertEqual(
             CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
             [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"]]
         )
-        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyBumps)
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyboardShortcutter)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
-        XCTAssertNil(CommandPaletteTab.keyBumps.primaryActionTitle)
+        XCTAssertNil(CommandPaletteTab.keyboardShortcutter.primaryActionTitle)
         XCTAssertEqual(CommandPaletteTab.clipboard.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.clipboard.prompt, "Search clipboard history")
         XCTAssertEqual(CommandPaletteTab.dictation.prompt, "Search dictation history")
-        XCTAssertEqual(CommandPaletteTab.keyBumps.prompt, "Search Key Bumps history")
+        XCTAssertEqual(CommandPaletteTab.keyboardShortcutter.prompt, "Search Keyboard Shortcutter history")
         XCTAssertEqual(ClearAllButton.title, "Clear All")
 
         state.historyQuery = "private filter"
@@ -1253,7 +1253,7 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertNil(usage.record(for: file.url))
     }
 
-    func testKeyBumpsPaletteRowsIgnoreReadStateAndTime() {
+    func testKeyboardShortcutterPaletteRowsIgnoreReadStateAndTime() {
         let id = UUID()
         let unread = CoachingEvent(
             id: id,
@@ -1282,18 +1282,18 @@ final class SuperMacFeatureTests: XCTestCase {
         XCTAssertTrue(NotificationSettingsRecovery.url.absoluteString.contains("com.serp.supermac"))
     }
 
-    func testKeyBumpsHistoryContentCentralizesEnablementAndFiltering() {
+    func testKeyboardShortcutterHistoryContentCentralizesEnablementAndFiltering() {
         let events = [
             CoachingEvent(applicationName: "Finder", actionTitle: "Open New Window", shortcut: "⌘N"),
             CoachingEvent(applicationName: "Safari", actionTitle: "New Tab", shortcut: "⌘T")
         ]
 
-        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "finder", isEnabled: true).entries.map(\.applicationName), ["Finder"])
-        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "new tab", isEnabled: true).entries.map(\.applicationName), ["Safari"])
-        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "⌘N", isEnabled: true).entries.map(\.applicationName), ["Finder"])
-        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "  ", isEnabled: true), .entries(events))
-        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: events, query: "", isEnabled: false), .disabled)
-        XCTAssertEqual(KeyBumpsHistoryContent.resolve(events: [], query: "", isEnabled: true), .empty)
+        XCTAssertEqual(KeyboardShortcutterHistoryContent.resolve(events: events, query: "finder", isEnabled: true).entries.map(\.applicationName), ["Finder"])
+        XCTAssertEqual(KeyboardShortcutterHistoryContent.resolve(events: events, query: "new tab", isEnabled: true).entries.map(\.applicationName), ["Safari"])
+        XCTAssertEqual(KeyboardShortcutterHistoryContent.resolve(events: events, query: "⌘N", isEnabled: true).entries.map(\.applicationName), ["Finder"])
+        XCTAssertEqual(KeyboardShortcutterHistoryContent.resolve(events: events, query: "  ", isEnabled: true), .entries(events))
+        XCTAssertEqual(KeyboardShortcutterHistoryContent.resolve(events: events, query: "", isEnabled: false), .disabled)
+        XCTAssertEqual(KeyboardShortcutterHistoryContent.resolve(events: [], query: "", isEnabled: true), .empty)
     }
 
     func testMainWindowDisablesAutomaticTabbing() {

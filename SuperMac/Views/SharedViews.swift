@@ -96,7 +96,7 @@ struct CoachingEventRow: View {
 struct EmptyInboxView: View {
     var body: some View {
         ContentUnavailableView(
-            "No key bumps yet",
+            "No keyboard shortcut suggestions yet",
             systemImage: "keyboard",
             description: Text("Manual actions with known shortcuts will appear here.")
         )

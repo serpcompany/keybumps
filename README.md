@@ -1,6 +1,6 @@
 # SuperMac
 
-SuperMac is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, on-device Dictation, Window Management, and Key Bumps in one app. Search, Clipboard History, and Dictation History share one three-tab keyboard-first Command Palette.
+SuperMac is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, on-device Dictation, Window Management, and Keyboard Shortcutter in one app. Search, Clipboard History, and Dictation History share one three-tab keyboard-first Command Palette.
 
 Automatic Dictation insertion and reuse from Dictation History are excluded from Clipboard History even though macOS pasteboard transport is used to deliver the text. An explicit user Copy remains normal clipboard activity.
 

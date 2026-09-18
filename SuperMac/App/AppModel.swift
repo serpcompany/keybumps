@@ -265,7 +265,7 @@ final class AppModel {
         }
         enabled.contains(.clipboardHistory) ? clipboard.start() : clipboard.stop()
         enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
-        enabled.contains(.shortcutCoaching) ? detector.start() : detector.stop()
+        enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
         refreshDetectorState()
     }
 
@@ -352,7 +352,7 @@ final class AppModel {
 
     func requestAccessibilityPermission() { detector.requestAccessibilityPermission(); refreshPermissions() }
     func requestInputMonitoringPermission() { detector.requestInputMonitoringPermission(); refreshPermissions() }
-    func retryDetection() { if preferences.enabledCapabilities.contains(.shortcutCoaching) { detector.start() }; refreshDetectorState() }
+    func retryDetection() { if preferences.enabledCapabilities.contains(.keyboardShortcutter) { detector.start() }; refreshDetectorState() }
     func applicationDidBecomeActive() {
         refreshPermissions()
         permissionRelaunchAdvisor.didBecomeActive { [permissions] permission in
@@ -403,7 +403,7 @@ final class AppModel {
         permissionsRequiringRelaunch = permissionRelaunchAdvisor.permissionsRequiringRelaunch
         permissionDragAssistant.dismissIfGranted(using: permissions)
         advancePermissionWalkthroughIfNeeded()
-        if preferences.enabledCapabilities.contains(.shortcutCoaching), detector.status != .monitoring {
+        if preferences.enabledCapabilities.contains(.keyboardShortcutter), detector.status != .monitoring {
             detector.start()
         }
         if preferences.enabledCapabilities.contains(.windowManagement), permissions.accessibilityGranted {
@@ -494,7 +494,7 @@ final class AppModel {
         commandPalette.show(.clipboard)
     }
     func showDictationHistory() { commandPalette.show(.dictation) }
-    func showKeyBumpsHistory() { commandPalette.show(.keyBumps) }
+    func showKeyboardShortcutterHistory() { commandPalette.show(.keyboardShortcutter) }
     func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
     func previewSample(channel: NotificationChannel) async {
         let channels = PreviewChannelPlan.channels(
@@ -547,7 +547,7 @@ final class AppModel {
             shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
         case .windowManagement:
             windows.stop()
-        case .shortcutCoaching:
+        case .keyboardShortcutter:
             detector.stop()
             presenter.dismissAll()
         }

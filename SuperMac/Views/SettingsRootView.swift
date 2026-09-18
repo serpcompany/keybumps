@@ -5,9 +5,9 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
-    case windows = "Window Management", coaching = "Key Bumps", permissions = "Permissions", general = "General"
+    case windows = "Window Management", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
     var id: String { rawValue }
-    var icon: String { switch self { case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .coaching: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
+    var icon: String { switch self { case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .keyboardShortcutter: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -49,7 +49,7 @@ struct SettingsRootView: View {
                 case .clipboard: ClipboardSettingsView()
                 case .dictation: DictationSettingsView()
                 case .windows: WindowSettingsView()
-                case .coaching: KeyBumpsSettingsView()
+                case .keyboardShortcutter: KeyboardShortcutterSettingsView()
                 case .permissions: PermissionsView()
                 case .general: GeneralView()
                 }
@@ -87,9 +87,9 @@ struct SettingsRootView: View {
         switch section {
         case .permissions:
             return model.missingPermissionCount
-        case .coaching:
-            guard model.preferences.enabledCapabilities.contains(.shortcutCoaching) else { return 0 }
-            return model.permissionReadiness(for: [.shortcutCoaching]).missingCount
+        case .keyboardShortcutter:
+            guard model.preferences.enabledCapabilities.contains(.keyboardShortcutter) else { return 0 }
+            return model.permissionReadiness(for: [.keyboardShortcutter]).missingCount
         default:
             return 0
         }
@@ -357,29 +357,29 @@ private struct WindowActionPreviewView: View {
     }
 }
 
-private struct KeyBumpsSettingsView: View {
+private struct KeyboardShortcutterSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let isEnabled = model.preferences.enabledCapabilities.contains(.shortcutCoaching)
-        let readiness = model.permissionReadiness(for: [.shortcutCoaching])
+        let isEnabled = model.preferences.enabledCapabilities.contains(.keyboardShortcutter)
+        let readiness = model.permissionReadiness(for: [.keyboardShortcutter])
         Form {
-            CapabilityControl(capability: .shortcutCoaching)
-            if model.preferences.enabledCapabilities.contains(.shortcutCoaching),
-               model.requiresPermissionRelaunch(for: .shortcutCoaching) {
+            CapabilityControl(capability: .keyboardShortcutter)
+            if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
+               model.requiresPermissionRelaunch(for: .keyboardShortcutter) {
                 Section("Restart required") {
                     Text("Restart SuperMac to finish applying Accessibility or Input Monitoring access.")
                         .foregroundStyle(.secondary)
                     Button("Restart SuperMac") { model.restartForPermissionRelaunch() }
                 }
-            } else if model.preferences.enabledCapabilities.contains(.shortcutCoaching),
-                      !model.missingPermissions(for: .shortcutCoaching).isEmpty {
+            } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
+                      !model.missingPermissions(for: .keyboardShortcutter).isEmpty {
                 Section("Setup required") {
-                    Text("Key Bumps needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
+                    Text("Keyboard Shortcutter needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
-            } else if model.preferences.enabledCapabilities.contains(.shortcutCoaching),
-                      model.permissionReadiness(for: [.shortcutCoaching]).nativeNotificationNeedsAttention {
+            } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
+                      model.permissionReadiness(for: [.keyboardShortcutter]).nativeNotificationNeedsAttention {
                 Section("Setup required") {
                     Text("Native macOS Banner needs Notifications access before it can appear.")
                         .foregroundStyle(.secondary)
@@ -397,7 +397,7 @@ private struct KeyBumpsSettingsView: View {
                     Label("Ready", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {
-                    Label("Key Bumps needs to reconnect", systemImage: "exclamationmark.triangle.fill")
+                    Label("Keyboard Shortcutter needs to reconnect", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
@@ -416,13 +416,13 @@ private struct KeyBumpsSettingsView: View {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
             Section {
-                Button("Open Key Bumps History") { model.showKeyBumpsHistory() }
+                Button("Open Keyboard Shortcutter History") { model.showKeyboardShortcutterHistory() }
                 Text("View, filter, and clear detected actions in the quick switcher.")
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Key Bumps")
+        .navigationTitle("Keyboard Shortcutter")
     }
 
     @ViewBuilder
@@ -678,7 +678,7 @@ private struct CapabilityControl: View {
         case .clipboardHistory: "Turning this off stops clipboard monitoring, closes its panel, and releases its global shortcut."
         case .dictation: "Turning this off cancels active Dictation and releases its global shortcut."
         case .windowManagement: "Turning this off stops drag-to-snap and releases all window shortcuts."
-        case .shortcutCoaching: nil
+        case .keyboardShortcutter: nil
         }
     }
 }

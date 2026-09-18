@@ -5,7 +5,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
     case clipboardHistory
     case dictation
     case windowManagement
-    case shortcutCoaching
+    case keyboardShortcutter
 
     var id: String { rawValue }
 
@@ -15,7 +15,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
         case .clipboardHistory: "Clipboard History"
         case .dictation: "Dictation"
         case .windowManagement: "Window Management"
-        case .shortcutCoaching: "Key Bumps"
+        case .keyboardShortcutter: "Keyboard Shortcutter"
         }
     }
 
@@ -25,7 +25,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
         case .clipboardHistory: "clipboard"
         case .dictation: "waveform"
         case .windowManagement: "rectangle.split.2x1"
-        case .shortcutCoaching: "keyboard"
+        case .keyboardShortcutter: "keyboard"
         }
     }
 }

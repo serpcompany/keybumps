@@ -32,7 +32,7 @@ _Avoid_: Cloud transcript, monolithic history file
 Rectangle-derived window movement and sizing under the owner's selected shortcuts.
 _Avoid_: Rectangle app
 
-**Key Bumps**:
+**Keyboard Shortcutter**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.
 _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
 

@@ -30,12 +30,17 @@ enum NativeNotificationAuthorization: Equatable {
 }
 
 enum AppShellDestination: String, Equatable {
-    case keyBumpsHistory
+    case keyboardShortcutterHistory
+
+    static func decode(_ persistedRawValue: String) -> AppShellDestination? {
+        if persistedRawValue == "keyBumpsHistory" { return .keyboardShortcutterHistory }
+        return AppShellDestination(rawValue: persistedRawValue)
+    }
 }
 
 struct NativeNotificationPayload: Equatable {
     static let destinationKey = "supermac.destination"
-    static let keyBumpsUserInfo = [destinationKey: AppShellDestination.keyBumpsHistory.rawValue]
+    static let keyboardShortcutterUserInfo = [destinationKey: AppShellDestination.keyboardShortcutterHistory.rawValue]
 
     let title: String
     let body: String
@@ -126,7 +131,7 @@ final class NativeNotificationAdapter: ChannelDelivering {
             payload: NativeNotificationPayload(
                 title: event.coachingTitle,
                 body: event.coachingBody,
-                destination: .keyBumpsHistory
+                destination: .keyboardShortcutterHistory
             )
         )
     }

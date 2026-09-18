@@ -185,7 +185,7 @@ final class ChromeActionDetectionTests: XCTestCase {
 
     func testIssue31LiveEvidenceIsCurrentAndContainsNoPrivateBrowserOrDocumentData() throws {
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/evidence/key-bumps/issue-31-live-shortcuts.json")
+            .appendingPathComponent("docs/evidence/keyboard-shortcutter/issue-31-live-shortcuts.json")
         let data = try Data(contentsOf: fixture)
         let text = String(decoding: data, as: UTF8.self)
 

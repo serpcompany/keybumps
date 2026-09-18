@@ -7,7 +7,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case search
     case clipboard
     case dictation
-    case keyBumps
+    case keyboardShortcutter
 
     var id: String { rawValue }
 
@@ -16,7 +16,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search"
         case .clipboard: "Clipboard"
         case .dictation: "Dictation"
-        case .keyBumps: "Key Bumps"
+        case .keyboardShortcutter: "Keyboard Shortcutter"
         }
     }
 
@@ -25,7 +25,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "magnifyingglass"
         case .clipboard: "clipboard"
         case .dictation: "waveform"
-        case .keyBumps: "keyboard"
+        case .keyboardShortcutter: "keyboard"
         }
     }
 
@@ -34,7 +34,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "⌘1"
         case .clipboard: "⌘2"
         case .dictation: "⌘3"
-        case .keyBumps: "⌘4"
+        case .keyboardShortcutter: "⌘4"
         }
     }
 
@@ -43,7 +43,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search apps, files, and folders"
         case .clipboard: "Search clipboard history"
         case .dictation: "Search dictation history"
-        case .keyBumps: "Search Key Bumps history"
+        case .keyboardShortcutter: "Search Keyboard Shortcutter history"
         }
     }
 
@@ -52,7 +52,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case "1": .search
         case "2": .clipboard
         case "3": .dictation
-        case "4": .keyBumps
+        case "4": .keyboardShortcutter
         default: nil
         }
     }
@@ -65,7 +65,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         switch self {
         case .search: "Open"
         case .clipboard, .dictation: "Copy"
-        case .keyBumps: nil
+        case .keyboardShortcutter: nil
         }
     }
 }
@@ -75,7 +75,7 @@ struct CommandPaletteTabLabel: Equatable {
     let name: String
 }
 
-enum KeyBumpsHistoryContent: Equatable {
+enum KeyboardShortcutterHistoryContent: Equatable {
     case disabled
     case empty
     case entries([CoachingEvent])
@@ -84,7 +84,7 @@ enum KeyBumpsHistoryContent: Equatable {
         events: [CoachingEvent],
         query rawQuery: String,
         isEnabled: Bool
-    ) -> KeyBumpsHistoryContent {
+    ) -> KeyboardShortcutterHistoryContent {
         guard isEnabled else { return .disabled }
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches = query.isEmpty ? events : events.filter {
@@ -357,8 +357,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             filteredClipboard.count
         case .dictation:
             filteredDictations.count
-        case .keyBumps:
-            filteredKeyBumps.count
+        case .keyboardShortcutter:
+            filteredKeyboardShortcutter.count
         }
     }
 
@@ -375,15 +375,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         return reusableEntries.filter { $0.text.localizedCaseInsensitiveContains(query) }
     }
 
-    private var filteredKeyBumps: [CoachingEvent] {
-        keyBumpsContent.entries
+    private var filteredKeyboardShortcutter: [CoachingEvent] {
+        keyboardShortcutterContent.entries
     }
 
-    private var keyBumpsContent: KeyBumpsHistoryContent {
-        KeyBumpsHistoryContent.resolve(
+    private var keyboardShortcutterContent: KeyboardShortcutterHistoryContent {
+        KeyboardShortcutterHistoryContent.resolve(
             events: inbox.events,
             query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.shortcutCoaching)
+            isEnabled: preferences.enabledCapabilities.contains(.keyboardShortcutter)
         )
     }
 
@@ -406,7 +406,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let text = filteredDictations[state.selection].text
             guard !text.isEmpty else { return }
             copy(text, suppressClipboardHistory: true)
-        case .keyBumps:
+        case .keyboardShortcutter:
             break
         }
     }
@@ -531,9 +531,9 @@ private struct CommandPaletteView: View {
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
-        case .keyBumps:
-            KeyBumpsResultsView(
-                content: keyBumpsContent,
+        case .keyboardShortcutter:
+            KeyboardShortcutterResultsView(
+                content: keyboardShortcutterContent,
                 selection: state.selection,
                 select: { state.selection = $0 },
                 clear: inbox.clear,
@@ -554,11 +554,11 @@ private struct CommandPaletteView: View {
         return dictationHistory.entries.filter { $0.displayText.localizedCaseInsensitiveContains(query) }
     }
 
-    private var keyBumpsContent: KeyBumpsHistoryContent {
-        KeyBumpsHistoryContent.resolve(
+    private var keyboardShortcutterContent: KeyboardShortcutterHistoryContent {
+        KeyboardShortcutterHistoryContent.resolve(
             events: inbox.events,
             query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.shortcutCoaching)
+            isEnabled: preferences.enabledCapabilities.contains(.keyboardShortcutter)
         )
     }
 }
@@ -599,8 +599,8 @@ private struct PaletteTabBar: View {
     }
 }
 
-private struct KeyBumpsResultsView: View {
-    let content: KeyBumpsHistoryContent
+private struct KeyboardShortcutterResultsView: View {
+    let content: KeyboardShortcutterHistoryContent
     let selection: Int
     let select: (Int) -> Void
     let clear: () -> Void
@@ -610,9 +610,9 @@ private struct KeyBumpsResultsView: View {
         PaletteResultsContainer {
             switch content {
             case .disabled:
-                PaletteEmptyState(title: "Key Bumps is turned off", systemImage: "keyboard")
+                PaletteEmptyState(title: "Keyboard Shortcutter is turned off", systemImage: "keyboard")
             case .empty:
-                PaletteEmptyState(title: "No matching Key Bumps", systemImage: "keyboard")
+                PaletteEmptyState(title: "No matching Keyboard Shortcutter", systemImage: "keyboard")
             case .entries(let entries):
                 VStack(spacing: 0) {
                     HStack {
@@ -621,8 +621,8 @@ private struct KeyBumpsResultsView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         ClearAllButton(
-                            confirmationTitle: "Clear Key Bumps history?",
-                            confirmationMessage: "This permanently removes all saved Key Bumps events.",
+                            confirmationTitle: "Clear Keyboard Shortcutter history?",
+                            confirmationMessage: "This permanently removes all saved Keyboard Shortcutter events.",
                             disabled: entries.isEmpty,
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear

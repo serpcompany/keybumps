@@ -14,7 +14,7 @@ final class PresentationEvidenceTests: XCTestCase {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
             ?? FileManager.default.temporaryDirectory
-                .appendingPathComponent("ShortcutCoachPresentationEvidence")
+                .appendingPathComponent("KeyboardShortcutterPresentationEvidence")
         if requestedDirectory == nil {
             try? FileManager.default.removeItem(at: outputDirectory)
         }
@@ -79,7 +79,7 @@ final class PresentationEvidenceTests: XCTestCase {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
             ?? FileManager.default.temporaryDirectory
-                .appendingPathComponent("ShortcutCoachPresentationEvidence")
+                .appendingPathComponent("KeyboardShortcutterPresentationEvidence")
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         let size = NSSize(width: 720, height: 420)

@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     @discardableResult
     func handleNotificationResponse(userInfo: [AnyHashable: Any]) -> Bool {
         guard let rawDestination = userInfo[NativeNotificationPayload.destinationKey] as? String,
-              let destination = AppShellDestination(rawValue: rawDestination) else { return false }
+              let destination = AppShellDestination.decode(rawDestination) else { return false }
         return appShellRouter.open(destination)
     }
 }
