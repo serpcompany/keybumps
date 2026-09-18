@@ -214,6 +214,7 @@ enum KeyboardShortcutRegistry {
                 remainder.removeSubrange(range)
             }
         }
+        remainder = remainder.trimmingCharacters(in: .whitespaces)
         guard !remainder.isEmpty else { return nil }
 
         if let definition = definitions.first(where: {
