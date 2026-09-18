@@ -141,7 +141,7 @@ private struct DictationSettingsView: View {
     var body: some View {
         Form {
             CapabilityControl(capability: .dictation)
-            CapabilityShortcutEditor(shortcut: .dictation)
+            CapabilityShortcutEditor(shortcut: .dictation, showsInstructions: false)
             if model.preferences.enabledCapabilities.contains(.dictation),
                !model.missingPermissions(for: .dictation).isEmpty {
                 Section("Setup required") {
@@ -156,7 +156,6 @@ private struct DictationSettingsView: View {
                         Text(Locale.current.localizedString(forIdentifier: code) ?? code).tag(code)
                     }
                 }
-                Text("Only languages with Apple on-device recognition on this Mac are shown.").foregroundStyle(.secondary)
             }
             Section("Recording length") {
                 Picker(
