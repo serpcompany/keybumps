@@ -4,17 +4,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>SuperMac</title>
         <item>
-            <title>0.0.2-beta.3</title>
-            <pubDate>Fri, 18 Sep 2026 04:28:53 +0900</pubDate>
-            <sparkle:version>5</sparkle:version>
-            <sparkle:shortVersionString>0.0.2-beta.3</sparkle:shortVersionString>
+            <title>0.0.2-beta.4</title>
+            <pubDate>Fri, 18 Sep 2026 09:09:29 +0900</pubDate>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>0.0.2-beta.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.2</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <sparkle:releaseNotesLink sparkle:edSignature="LsIjl/Ca1D4AwOizWWSM/TpiVZqpZUkgVMVvIYkgX986bw8ABNTgpAHYSJ2oiurhDVcRYw0BMWW7w5lvj1EzCA==" sparkle:length="769">https://serpcompany.github.io/supermac-macos-app/updates/SuperMac-0.0.2-beta.3.md</sparkle:releaseNotesLink>
-            <enclosure url="https://serpcompany.github.io/supermac-macos-app/updates/SuperMac-0.0.2-beta.3.zip" length="1799702" type="application/octet-stream" sparkle:edSignature="5Ln0p+sB15epzxkWnrjrlU4i1vzgzap4rzktdzJuK+q7n0ZyX+9V+oggJoUVZvWr+RqpFNADwoftAi8PF8ktBw=="></enclosure>
+            <sparkle:releaseNotesLink sparkle:edSignature="w0vZmRQSQMKoNAbElbIugkaKkrrFvHzi0UP+JfByYzrY+XmZ2XzkJ5fKdjV49p6TsB17YhYEZfGKhyDby5OzDw==" sparkle:length="855">https://serpcompany.github.io/supermac-macos-app/updates/SuperMac-0.0.2-beta.4.md</sparkle:releaseNotesLink>
+            <enclosure url="https://serpcompany.github.io/supermac-macos-app/updates/SuperMac-0.0.2-beta.4.zip" length="1800358" type="application/octet-stream" sparkle:edSignature="v5DaIDiRoPAXc2ZAG2PYIVMupU5UxFpOG2xg9WC7YG7Rfy5Kyav1AYndYBzNlb+EhSgPF2uvRQbQK6YpV8N3Dg=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: VdXb2WiZ5R1FBYLqftWtPTkKjzfxnQBGwAJJ3e6d3cUA1vaSK1feKP6ij6/4AZPpMFjeGvcciOLHVhbPJA9nCw==
+edSignature: iVn+WoIwspOrz0e8eyW7yrwtlNdhDtdbJehqIBk02fyAadEjI4Nbi8vuywpYAY1Ey8Y7hkBNzS8y8qgMXsQ7CQ==
 length: 1415
 -->
