@@ -89,8 +89,8 @@ Clipboard content stays local. Supported image payloads are stored as separate l
 
 ## UJ-06 — Dictation and Dictation History
 
-1. Choose an available on-device recognition language in Dictation settings.
-2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default).
+1. Choose an available recognition language in Dictation settings. Apple Speech is available without a download. Optional Whisper Medium English, Whisper Medium Multilingual, and compressed Whisper Large v3 Turbo models can be downloaded, selected, and deleted independently; the selection persists. English-only Medium cannot be selected for another language, and deleting the selected model returns to Apple Speech.
+2. Place the cursor in another app and press the configured Dictation shortcut (`Option-Space` by default). Keybumps transcribes the completed local WAV with the selected installed engine and falls back to Apple Speech if that model is unexpectedly unavailable.
 3. A visible Recording indicator appears while audio is captured.
 4. Recording automatically stops at the selected duration limit—five minutes by default—or the user presses the configured Dictation shortcut again to stop sooner.
 5. While Recording or Transcribing, press Escape from any app to cancel without insertion. Once insertion begins, Keybumps releases Escape so it does not consume an ordinary key unnecessarily.

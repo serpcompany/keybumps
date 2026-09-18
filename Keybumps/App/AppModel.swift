@@ -38,6 +38,7 @@ final class AppModel {
     let permissions: PermissionCoordinator
     let clipboard: ClipboardHistoryService
     let dictationHistory: DictationHistoryService
+    let dictationModels: DictationModelManager
     let windows = WindowManagementService()
     let launchAtLogin = LaunchAtLoginController()
     let conflicts = ConflictDetector()
@@ -120,7 +121,8 @@ final class AppModel {
         shortcutCoordinator: GlobalShortcutCoordinator? = nil,
         permissionCoordinator: PermissionCoordinator? = nil,
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
-        updater injectedUpdater: (any UpdateControlling)? = nil
+        updater injectedUpdater: (any UpdateControlling)? = nil,
+        dictationModelManager injectedDictationModelManager: DictationModelManager? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -136,10 +138,24 @@ final class AppModel {
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
+        let dictationModelManager = injectedDictationModelManager ?? DictationModelManager(
+            modelsRoot: ProductPaths.keybumps().dictationModels,
+            downloader: WhisperKitModelDownloader()
+        )
+        self.dictationModels = dictationModelManager
+        if dictationModelManager.state(for: preferences.dictationTranscriptionEngine) != .installed
+            || !preferences.dictationTranscriptionEngine.supports(language: preferences.dictationLanguage) {
+            preferences.dictationTranscriptionEngine = .appleSpeech
+        }
+        let transcriptionCoordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { preferences.dictationTranscriptionEngine },
+            modelManager: dictationModelManager
+        )
         dictation = DictationService(
             language: preferences.dictationLanguage,
             durationLimit: preferences.dictationDurationLimit,
             history: dictationHistory,
+            transcriber: transcriptionCoordinator,
             didWritePasteboard: clipboard.suppressCurrentChange
         )
         commandPalette = CommandPaletteController(
@@ -430,7 +446,27 @@ final class AppModel {
     func missingPermissions(for capability: Capability) -> [MacPermission] {
         permissionReadiness(for: [capability]).missingPermissions
     }
-    func setDictationLanguage(_ language: String) { preferences.dictationLanguage = language; dictation.selectedLanguage = language }
+    func setDictationLanguage(_ language: String) {
+        preferences.dictationLanguage = language
+        dictation.selectedLanguage = language
+        if !preferences.dictationTranscriptionEngine.supports(language: language) {
+            preferences.dictationTranscriptionEngine = .appleSpeech
+        }
+    }
+    func selectDictationTranscriptionEngine(_ engine: DictationTranscriptionEngine) {
+        guard engine.supports(language: preferences.dictationLanguage) else { return }
+        guard dictationModels.state(for: engine) == .installed else { return }
+        preferences.dictationTranscriptionEngine = engine
+    }
+    func downloadDictationModel(_ engine: DictationTranscriptionEngine) async {
+        await dictationModels.download(engine)
+    }
+    func deleteDictationModel(_ engine: DictationTranscriptionEngine) {
+        if preferences.dictationTranscriptionEngine == engine {
+            preferences.dictationTranscriptionEngine = .appleSpeech
+        }
+        try? dictationModels.delete(engine)
+    }
     func setDictationDurationLimit(_ limit: DictationDurationLimit) {
         preferences.dictationDurationLimit = limit
         dictation.durationLimit = limit

@@ -157,6 +157,7 @@ private struct DictationSettingsView: View {
                     }
                 }
             }
+            DictationTranscriptionEngineSection()
             Section("Recording length") {
                 Picker(
                     "Maximum recording length",
@@ -174,6 +175,100 @@ private struct DictationSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }.formStyle(.grouped).navigationTitle("Dictation")
+    }
+}
+
+private struct DictationTranscriptionEngineSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Section("Transcription model") {
+            ForEach(DictationTranscriptionEngine.allCases) { engine in
+                DictationTranscriptionEngineRow(engine: engine)
+            }
+            Text("Downloaded models stay on this Mac. Dictation audio is transcribed locally with the selected model.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct DictationTranscriptionEngineRow: View {
+    @Environment(AppModel.self) private var model
+    let engine: DictationTranscriptionEngine
+    @State private var confirmsDeletion = false
+
+    private var state: DictationModelInstallationState {
+        model.dictationModels.state(for: engine)
+    }
+
+    private var isSelected: Bool {
+        model.preferences.dictationTranscriptionEngine == engine
+    }
+
+    private var isCompatible: Bool {
+        engine.supports(language: model.preferences.dictationLanguage)
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(engine.title)
+                Text(isCompatible ? engine.detail : "English language selection required")
+                    .font(.caption)
+                    .foregroundStyle(isCompatible ? Color.secondary : Color.orange)
+                if case .failed(let message) = state {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 16)
+
+            switch state {
+            case .notInstalled:
+                Button("Download") {
+                    Task { await model.downloadDictationModel(engine) }
+                }
+                .disabled(!isCompatible)
+            case .downloading(let progress):
+                ProgressView(value: progress) {
+                    Text("Downloading")
+                }
+                .progressViewStyle(.linear)
+                .frame(width: 140)
+            case .installed:
+                if isSelected {
+                    Label("Selected", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Button("Use") { model.selectDictationTranscriptionEngine(engine) }
+                        .disabled(!isCompatible)
+                }
+                if engine.requiresDownload {
+                    Button("Delete", role: .destructive) { confirmsDeletion = true }
+                }
+            case .failed:
+                Button("Retry") {
+                    Task { await model.downloadDictationModel(engine) }
+                }
+                .disabled(!isCompatible)
+            }
+        }
+        .confirmationDialog(
+            "Delete \(engine.title)?",
+            isPresented: $confirmsDeletion,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Model", role: .destructive) {
+                model.deleteDictationModel(engine)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can download this model again later.")
+        }
     }
 }
 

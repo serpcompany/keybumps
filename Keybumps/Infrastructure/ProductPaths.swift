@@ -3,6 +3,7 @@ import Foundation
 struct ProductPaths: Equatable {
     let applicationSupport: URL
     let recordings: URL
+    let dictationModels: URL
     let translatedSpeechTemporary: URL
 
     static func keybumps(fileManager: FileManager = .default) -> ProductPaths {
@@ -26,6 +27,9 @@ struct ProductPaths: Equatable {
             recordings: documentsRoot
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("recordings", isDirectory: true),
+            dictationModels: applicationSupportRoot
+                .appendingPathComponent(productDirectoryName, isDirectory: true)
+                .appendingPathComponent("DictationModels", isDirectory: true),
             translatedSpeechTemporary: fileManager.temporaryDirectory
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("TranslatedAudio", isDirectory: true)

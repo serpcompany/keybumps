@@ -39,6 +39,50 @@ private struct InMemoryEventPersistence: EventPersistence {
     func save(_ events: [CoachingEvent]) throws {}
 }
 
+private struct StubDictationModelDownloader: DictationModelDownloading {
+    let download: @MainActor (
+        _ modelIdentifier: String,
+        _ downloadBase: URL,
+        _ progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> URL
+
+    func downloadModel(
+        identifier: String,
+        to downloadBase: URL,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> URL {
+        try await download(identifier, downloadBase, progress)
+    }
+}
+
+@MainActor
+private final class StubCompletedAudioTranscriber: CompletedAudioTranscribing {
+    private(set) var calls: [(URL, String, TimeInterval)] = []
+    private(set) var cancelCount = 0
+    let result: Result<String, Error>
+
+    init(result: Result<String, Error>) {
+        self.result = result
+    }
+
+    var partialTranscript: String {
+        (try? result.get()) ?? ""
+    }
+
+    func transcribe(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> String {
+        calls.append((audioURL, language, recordedDuration))
+        return try result.get()
+    }
+
+    func cancel() {
+        cancelCount += 1
+    }
+}
+
 @MainActor
 final class KeybumpsFeatureTests: XCTestCase {
     func testBuiltTestHostHasCanonicalKeybumpsIdentity() throws {
@@ -57,6 +101,14 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertNotNil(bundle.object(forInfoDictionaryKey: "SUFeedURL") as? String)
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SURequireSignedFeed") as? Bool, true)
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SUVerifyUpdateBeforeExtraction") as? Bool, true)
+        for resource in [
+            "LICENSE.rectangle",
+            "LICENSE.argmax-oss-swift",
+            "NOTICES.argmax-oss-swift",
+            "LICENSE.openai-whisper"
+        ] {
+            XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil))
+        }
         XCTAssertTrue(FileManager.default.isExecutableFile(
             atPath: appURL.appendingPathComponent("Contents/MacOS/Keybumps").path
         ))
@@ -108,6 +160,197 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertTrue(DictationEscapeRegistration.shouldRegister(for: .transcribing))
         XCTAssertFalse(DictationEscapeRegistration.shouldRegister(for: .inserting))
         XCTAssertFalse(DictationEscapeRegistration.shouldRegister(for: .failed("Example")))
+    }
+
+    func testDictationTranscriptionEngineCatalogPersistsACompatibleSelection() {
+        let suite = "KeybumpsFeatureTests-dictation-engine-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.dictationTranscriptionEngine, .appleSpeech)
+        XCTAssertFalse(DictationTranscriptionEngine.appleSpeech.requiresDownload)
+        XCTAssertTrue(DictationTranscriptionEngine.whisperMediumEnglish.supports(language: "en-US"))
+        XCTAssertFalse(DictationTranscriptionEngine.whisperMediumEnglish.supports(language: "ja-JP"))
+        XCTAssertTrue(DictationTranscriptionEngine.whisperMediumMultilingual.supports(language: "ja-JP"))
+        XCTAssertTrue(DictationTranscriptionEngine.whisperTurboCompressed.supports(language: "ja-JP"))
+        XCTAssertEqual(PublicModelDownloadPolicy.anonymousToken, "")
+
+        preferences.dictationTranscriptionEngine = .whisperMediumEnglish
+
+        XCTAssertEqual(
+            AppPreferences(defaults: defaults).dictationTranscriptionEngine,
+            .whisperMediumEnglish
+        )
+    }
+
+    func testDictationModelManagerDownloadsTracksAndDeletesOneModel() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsModelManager-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let downloader = StubDictationModelDownloader { identifier, downloadBase, progress in
+            XCTAssertEqual(identifier, "medium.en")
+            progress(0.4)
+            let folder = downloadBase.appendingPathComponent("openai_whisper-medium.en", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for component in ["AudioEncoder.mlmodelc", "MelSpectrogram.mlmodelc", "TextDecoder.mlmodelc"] {
+                try FileManager.default.createDirectory(
+                    at: folder.appendingPathComponent(component, isDirectory: true),
+                    withIntermediateDirectories: true
+                )
+            }
+            progress(1)
+            return folder
+        }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: downloader
+        )
+
+        XCTAssertEqual(manager.state(for: .whisperMediumEnglish), .notInstalled)
+        await manager.download(.whisperMediumEnglish)
+        await Task.yield()
+        await Task.yield()
+
+        XCTAssertEqual(manager.state(for: .whisperMediumEnglish), .installed)
+        XCTAssertNotNil(manager.installedModelFolder(for: .whisperMediumEnglish))
+
+        try manager.delete(.whisperMediumEnglish)
+
+        XCTAssertEqual(manager.state(for: .whisperMediumEnglish), .notInstalled)
+        XCTAssertNil(manager.installedModelFolder(for: .whisperMediumEnglish))
+    }
+
+    func testTranscriptionCoordinatorUsesInstalledSelectedWhisperModel() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsEngineRouting-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let downloader = StubDictationModelDownloader { _, downloadBase, _ in
+            let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for component in ["AudioEncoder.mlmodelc", "MelSpectrogram.mlmodelc", "TextDecoder.mlmodelc"] {
+                try FileManager.default.createDirectory(
+                    at: folder.appendingPathComponent(component, isDirectory: true),
+                    withIntermediateDirectories: true
+                )
+            }
+            return folder
+        }
+        let manager = DictationModelManager(modelsRoot: root, downloader: downloader)
+        await manager.download(.whisperMediumMultilingual)
+        let apple = StubCompletedAudioTranscriber(result: .success("apple"))
+        let whisper = StubCompletedAudioTranscriber(result: .success("whisper"))
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumMultilingual },
+            modelManager: manager,
+            appleTranscriber: apple,
+            whisperFactory: { _ in whisper }
+        )
+        let audioURL = root.appendingPathComponent("recording.wav")
+
+        let transcript = try await coordinator.transcribe(
+            audioURL: audioURL,
+            language: "ja-JP",
+            recordedDuration: 42
+        )
+
+        XCTAssertEqual(transcript, "whisper")
+        XCTAssertEqual(whisper.calls.count, 1)
+        XCTAssertTrue(apple.calls.isEmpty)
+    }
+
+    func testTranscriptionCoordinatorFallsBackToAppleWhenSelectedModelIsUnavailable() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsEngineFallback-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, _, _ in root }
+        )
+        let apple = StubCompletedAudioTranscriber(result: .success("apple"))
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            appleTranscriber: apple,
+            whisperFactory: { _ in StubCompletedAudioTranscriber(result: .success("whisper")) }
+        )
+
+        let transcript = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("recording.wav"),
+            language: "en-US",
+            recordedDuration: 3
+        )
+
+        XCTAssertEqual(transcript, "apple")
+        XCTAssertEqual(apple.calls.count, 1)
+    }
+
+    func testDeletingSelectedDictationModelReturnsSelectionToAppleSpeech() async throws {
+        let suite = "KeybumpsModelSelection-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsModelSelection-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                for component in ["AudioEncoder.mlmodelc", "MelSpectrogram.mlmodelc", "TextDecoder.mlmodelc"] {
+                    try FileManager.default.createDirectory(
+                        at: folder.appendingPathComponent(component, isDirectory: true),
+                        withIntermediateDirectories: true
+                    )
+                }
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let model = AppModel(
+            preferences: AppPreferences(defaults: defaults),
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            updater: DisabledUpdateController(reason: "Unit test"),
+            dictationModelManager: manager
+        )
+
+        model.selectDictationTranscriptionEngine(.whisperMediumEnglish)
+        XCTAssertEqual(model.preferences.dictationTranscriptionEngine, .whisperMediumEnglish)
+
+        model.deleteDictationModel(.whisperMediumEnglish)
+
+        XCTAssertEqual(model.preferences.dictationTranscriptionEngine, .appleSpeech)
+        XCTAssertEqual(manager.state(for: .whisperMediumEnglish), .notInstalled)
+    }
+
+    func testAppLaunchRepairsAStoredSelectionWhoseModelFilesAreMissing() {
+        let suite = "KeybumpsMissingModelSelection-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.dictationTranscriptionEngine = .whisperTurboCompressed
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsMissingModelSelection-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, _, _ in root }
+        )
+
+        _ = AppModel(
+            preferences: preferences,
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            updater: DisabledUpdateController(reason: "Unit test"),
+            dictationModelManager: manager
+        )
+
+        XCTAssertEqual(preferences.dictationTranscriptionEngine, .appleSpeech)
     }
 
     func testUnmodifiedEscapeCanBeRegisteredAsATemporaryGlobalShortcut() {
