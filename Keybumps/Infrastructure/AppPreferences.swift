@@ -10,6 +10,7 @@ final class AppPreferences {
         static let enabledCapabilities = "enabledCapabilities"
         static let dictationLanguage = "dictationLanguage"
         static let dictationDurationLimit = "dictationDurationLimit"
+        static let dictationTranscriptionEngine = "dictationTranscriptionEngine"
         static let didCompleteOnboarding = "didCompleteOnboarding"
         static let capabilityShortcuts = "capabilityShortcuts"
         static let windowShortcuts = "windowShortcuts"
@@ -35,6 +36,10 @@ final class AppPreferences {
 
     var dictationDurationLimit: DictationDurationLimit {
         didSet { defaults.set(dictationDurationLimit.rawValue, forKey: Key.dictationDurationLimit) }
+    }
+
+    var dictationTranscriptionEngine: DictationTranscriptionEngine {
+        didSet { defaults.set(dictationTranscriptionEngine.rawValue, forKey: Key.dictationTranscriptionEngine) }
     }
 
     var didCompleteOnboarding: Bool {
@@ -63,6 +68,9 @@ final class AppPreferences {
         } else {
             dictationDurationLimit = .fiveMinutes
         }
+        dictationTranscriptionEngine = defaults.string(forKey: Key.dictationTranscriptionEngine)
+            .flatMap(DictationTranscriptionEngine.init(rawValue:))
+            ?? .appleSpeech
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            let decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

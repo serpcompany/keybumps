@@ -146,18 +146,15 @@ final class DictationService {
     var onPhaseChange: ((DictationPhase) -> Void)?
 
     private let audioEngine = AVAudioEngine()
-    private var task: SFSpeechRecognitionTask?
-    private var completion: CheckedContinuation<String, Error>?
-    private var transcriptAssembler = DictationTranscriptAssembler()
     private var inputTapInstalled = false
     private var destination: DictationInsertionTarget?
     private var audioFile: AVAudioFile?
     private var activeRecording: PendingDictationRecording?
     private var recordingStartedAt: Date?
     @ObservationIgnored private var durationTimer: Timer?
-    @ObservationIgnored private var transcriptionTimeoutTask: Task<Void, Never>?
     private let recoveryURL: URL
     private let history: DictationHistoryService
+    private let transcriber: any CompletedAudioTranscribing
     private let didWritePasteboard: () -> Void
     var durationLimit: DictationDurationLimit
 
@@ -166,6 +163,7 @@ final class DictationService {
         durationLimit: DictationDurationLimit = .fiveMinutes,
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
+        transcriber: (any CompletedAudioTranscribing)? = nil,
         didWritePasteboard: @escaping () -> Void = {}
     ) {
         selectedLanguage = language
@@ -175,6 +173,7 @@ final class DictationService {
         let recoveryURL = directory.appendingPathComponent("last-dictation.txt")
         self.recoveryURL = recoveryURL
         self.history = history ?? DictationHistoryService(fileManager: fileManager)
+        self.transcriber = transcriber ?? AppleSpeechCompletedAudioTranscriber()
         self.didWritePasteboard = didWritePasteboard
         recoveredTranscript = try? String(contentsOf: recoveryURL, encoding: .utf8)
     }
@@ -220,8 +219,6 @@ final class DictationService {
         }
         lastError = nil
         destination = NSWorkspace.shared.frontmostApplication.map(DictationInsertionTarget.init)
-        transcriptAssembler = DictationTranscriptAssembler()
-
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { fail("The microphone has no usable audio format."); return }
@@ -252,8 +249,7 @@ final class DictationService {
 
     func cancel() {
         guard phase != .idle || retryingEntryID != nil else { return }
-        completion?.resume(throwing: CancellationError())
-        completion = nil
+        transcriber.cancel()
         cleanup()
         setPhase(.idle)
     }
@@ -282,6 +278,7 @@ final class DictationService {
             try history.markTranscribing(entry, language: language)
             let transcript = try await transcribeCompletedAudio(
                 at: audioURL,
+                language: language,
                 recordedDuration: entry.duration
             )
             _ = try history.completeTranscription(
@@ -292,23 +289,20 @@ final class DictationService {
         } catch is CancellationError {
             _ = try? history.completeTranscription(
                 of: entry,
-                text: transcriptAssembler.transcript,
+                text: transcriber.partialTranscript,
                 language: language,
                 transcriptionError: "Transcription was cancelled."
             )
         } catch {
             _ = try? history.completeTranscription(
                 of: entry,
-                text: transcriptAssembler.transcript,
+                text: transcriber.partialTranscript,
                 language: language,
                 transcriptionError: error.localizedDescription
             )
             lastError = "Transcription failed. The audio recording was preserved."
         }
-        task?.cancel()
-        task = nil
-        transcriptionTimeoutTask?.cancel()
-        transcriptionTimeoutTask = nil
+        transcriber.cancel()
         retryingEntryID = nil
     }
 
@@ -330,6 +324,7 @@ final class DictationService {
             )
             let transcript = try await transcribeCompletedAudio(
                 at: recording.audioURL,
+                language: selectedLanguage,
                 recordedDuration: duration
             )
             try transcript.write(to: recoveryURL, atomically: true, encoding: .utf8)
@@ -352,7 +347,7 @@ final class DictationService {
             if let recording = activeRecording {
                 _ = try? history.completeRecording(
                     recording,
-                    text: transcriptAssembler.transcript,
+                    text: transcriber.partialTranscript,
                     language: selectedLanguage,
                     duration: duration,
                     transcriptionError: error.localizedDescription
@@ -367,70 +362,16 @@ final class DictationService {
         }
     }
 
-    private func transcribeCompletedAudio(at audioURL: URL, recordedDuration: TimeInterval) async throws -> String {
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: selectedLanguage)),
-              recognizer.supportsOnDeviceRecognition else {
-            throw NSError(domain: "Keybumps.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "On-device speech is unavailable for \(selectedLanguage)."])
-        }
-        transcriptAssembler = DictationTranscriptAssembler()
-        let request = SFSpeechURLRecognitionRequest(url: audioURL)
-        request.requiresOnDeviceRecognition = true
-        request.shouldReportPartialResults = true
-        request.addsPunctuation = true
-
-        return try await withCheckedThrowingContinuation { continuation in
-            completion = continuation
-            task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                Task { @MainActor in self?.receive(result: result, error: error) }
-            }
-            transcriptionTimeoutTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(
-                    DictationTranscriptionPlan.timeout(forRecordedDuration: recordedDuration)
-                ))
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self?.finishRecognition(error: NSError(
-                        domain: "Keybumps.Dictation",
-                        code: 6,
-                        userInfo: [NSLocalizedDescriptionKey: "Transcription took too long. The audio recording was preserved."]
-                    ))
-                }
-            }
-        }
-    }
-
-    private func receive(result: SFSpeechRecognitionResult?, error: Error?) {
-        if let result {
-            let segments = result.bestTranscription.segments
-            transcriptAssembler.receive(DictationTranscriptUpdate(
-                text: result.bestTranscription.formattedString,
-                segmentStart: segments.first?.timestamp ?? 0,
-                segmentEnd: segments.last.map { $0.timestamp + $0.duration } ?? 0,
-                isFinal: result.isFinal
-            ))
-            if result.isFinal { finishRecognition() }
-        } else if let error, completion != nil {
-            finishRecognition(error: error)
-        }
-    }
-
-    private func finishRecognition(error: Error? = nil) {
-        guard let completion else { return }
-        self.completion = nil
-        transcriptionTimeoutTask?.cancel()
-        transcriptionTimeoutTask = nil
-        if let error {
-            completion.resume(throwing: error)
-            return
-        }
-        do { completion.resume(returning: try validatedTranscript()) }
-        catch { completion.resume(throwing: error) }
-    }
-
-    private func validatedTranscript() throws -> String {
-        let text = transcriptAssembler.transcript
-        guard !text.isEmpty else { throw NSError(domain: "Keybumps.Dictation", code: 1, userInfo: [NSLocalizedDescriptionKey: "No speech was detected."]) }
-        return text
+    private func transcribeCompletedAudio(
+        at audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> String {
+        try await transcriber.transcribe(
+            audioURL: audioURL,
+            language: language,
+            recordedDuration: recordedDuration
+        )
     }
 
     private func paste(_ text: String) async throws {
@@ -467,10 +408,8 @@ final class DictationService {
     private func cleanup() {
         durationTimer?.invalidate()
         durationTimer = nil
-        transcriptionTimeoutTask?.cancel()
-        transcriptionTimeoutTask = nil
         stopAudio()
-        task?.cancel(); task = nil
+        transcriber.cancel()
         if let activeRecording {
             history.discard(activeRecording)
             self.activeRecording = nil
