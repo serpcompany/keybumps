@@ -2,14 +2,26 @@ import Foundation
 import WhisperKit
 
 @MainActor
-final class WhisperKitCompletedAudioTranscriber: CompletedAudioTranscribing {
-    private let modelFolder: URL
+final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscribing {
+    private let whisper: WhisperKit
     private var activeTask: Task<String, Error>?
 
     private(set) var partialTranscript = ""
 
-    init(modelFolder: URL) {
-        self.modelFolder = modelFolder
+    private init(whisper: WhisperKit) {
+        self.whisper = whisper
+    }
+
+    static func load(modelFolder: URL) async throws -> WhisperKitCompletedAudioTranscriber {
+        let configuration = WhisperKitConfig(
+            modelFolder: modelFolder.path,
+            tokenizerFolder: modelFolder,
+            verbose: false,
+            prewarm: false,
+            load: true,
+            download: false
+        )
+        return WhisperKitCompletedAudioTranscriber(whisper: try await WhisperKit(configuration))
     }
 
     func transcribe(
@@ -18,20 +30,10 @@ final class WhisperKitCompletedAudioTranscriber: CompletedAudioTranscribing {
         recordedDuration: TimeInterval
     ) async throws -> String {
         partialTranscript = ""
-        let modelFolder = modelFolder
         let languageCode = Locale(identifier: language).language.languageCode?.identifier
+        let whisper = whisper
 
         let task = Task<String, Error> {
-            let configuration = WhisperKitConfig(
-                modelFolder: modelFolder.path,
-                tokenizerFolder: modelFolder,
-                verbose: false,
-                prewarm: false,
-                load: true,
-                download: false
-            )
-            let whisper = try await WhisperKit(configuration)
-            defer { Task { await whisper.unloadModels() } }
             try Task.checkCancellation()
 
             let results = try await whisper.transcribe(
@@ -70,5 +72,11 @@ final class WhisperKitCompletedAudioTranscriber: CompletedAudioTranscribing {
     func cancel() {
         activeTask?.cancel()
         activeTask = nil
+    }
+
+    func unload() -> Task<Void, Never> {
+        cancel()
+        let whisper = whisper
+        return Task { await whisper.unloadModels() }
     }
 }
