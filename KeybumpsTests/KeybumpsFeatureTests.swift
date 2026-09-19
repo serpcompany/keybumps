@@ -56,9 +56,10 @@ private struct StubDictationModelDownloader: DictationModelDownloading {
 }
 
 @MainActor
-private final class StubCompletedAudioTranscriber: CompletedAudioTranscribing {
+private final class StubCompletedAudioTranscriber: UnloadableCompletedAudioTranscribing {
     private(set) var calls: [(URL, String, TimeInterval)] = []
     private(set) var cancelCount = 0
+    private(set) var unloadCount = 0
     let result: Result<String, Error>
 
     init(result: Result<String, Error>) {
@@ -80,6 +81,142 @@ private final class StubCompletedAudioTranscriber: CompletedAudioTranscribing {
 
     func cancel() {
         cancelCount += 1
+    }
+
+    func unload() -> Task<Void, Never> {
+        unloadCount += 1
+        return Task {}
+    }
+}
+
+@MainActor
+private final class CancellationThenSuccessTranscriber: UnloadableCompletedAudioTranscribing {
+    private var continuation: CheckedContinuation<String, Error>?
+    private(set) var callCount = 0
+    private(set) var unloadCount = 0
+
+    var partialTranscript: String { "" }
+
+    func transcribe(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> String {
+        callCount += 1
+        if callCount > 1 { return "warm after cancellation" }
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func cancel() {
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+
+    func unload() -> Task<Void, Never> {
+        unloadCount += 1
+        return Task {}
+    }
+}
+
+@MainActor
+private final class AsyncVoidGate {
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func release() {
+        let pending = continuations
+        continuations.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+@MainActor
+private final class DelayedUnloadTranscriber: UnloadableCompletedAudioTranscribing {
+    private let transcript: String
+    private let unloadGate: AsyncVoidGate
+    private(set) var unloadCount = 0
+
+    init(transcript: String, unloadGate: AsyncVoidGate) {
+        self.transcript = transcript
+        self.unloadGate = unloadGate
+    }
+
+    var partialTranscript: String { transcript }
+
+    func transcribe(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> String {
+        transcript
+    }
+
+    func cancel() {}
+
+    func unload() -> Task<Void, Never> {
+        unloadCount += 1
+        let unloadGate = unloadGate
+        return Task { @MainActor in await unloadGate.wait() }
+    }
+}
+
+@MainActor
+private final class TranscriberLoadGate {
+    private var waiters: [CheckedContinuation<any UnloadableCompletedAudioTranscribing, Never>] = []
+
+    func wait() async -> any UnloadableCompletedAudioTranscribing {
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release(with transcriber: any UnloadableCompletedAudioTranscribing) {
+        let pending = waiters
+        waiters.removeAll()
+        for waiter in pending {
+            waiter.resume(returning: transcriber)
+        }
+    }
+}
+
+@MainActor
+private final class ManualDictationRuntimeIdleScheduler: DictationRuntimeIdleScheduling {
+    private final class Cancellation: DictationRuntimeIdleCancellation {
+        private(set) var isCancelled = false
+        func cancel() { isCancelled = true }
+    }
+
+    private var scheduled: [(TimeInterval, Cancellation, @MainActor () -> Void)] = []
+
+    func schedule(
+        after delay: TimeInterval,
+        operation: @escaping @MainActor () -> Void
+    ) -> any DictationRuntimeIdleCancellation {
+        let cancellation = Cancellation()
+        scheduled.append((delay, cancellation, operation))
+        return cancellation
+    }
+
+    var latestDelay: TimeInterval? { scheduled.last?.0 }
+    var scheduledCount: Int { scheduled.count }
+
+    func fireLatest() {
+        guard let latest = scheduled.indices.last else { return }
+        fire(at: latest)
+    }
+
+    func fire(at index: Int) {
+        let (_, cancellation, operation) = scheduled[index]
+        guard
+              !cancellation.isCancelled else { return }
+        operation()
     }
 }
 
@@ -259,6 +396,476 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertTrue(apple.calls.isEmpty)
     }
 
+    func testTranscriptionCoordinatorReusesSelectedWhisperRuntimeAcrossSequentialDictations() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWarmWhisper-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let whisper = StubCompletedAudioTranscriber(result: .success("warm"))
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in
+                loadCount += 1
+                return whisper
+            }
+        )
+
+        for index in 1...2 {
+            let transcript = try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("recording-\(index).wav"),
+                language: "en-US",
+                recordedDuration: 5
+            )
+            XCTAssertEqual(transcript, "warm")
+        }
+
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(whisper.calls.count, 2)
+    }
+
+    func testTranscriptionCoordinatorCoalescesOverlappingLoadsForTheSameModel() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsCoalescedWhisper-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let whisper = StubCompletedAudioTranscriber(result: .success("coalesced"))
+        let gate = TranscriberLoadGate()
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in
+                loadCount += 1
+                return await gate.wait()
+            }
+        )
+
+        let first = Task { @MainActor in
+            try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("one.wav"),
+                language: "en-US",
+                recordedDuration: 2
+            )
+        }
+        await Task.yield()
+        let second = Task { @MainActor in
+            try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("two.wav"),
+                language: "en-US",
+                recordedDuration: 2
+            )
+        }
+        await Task.yield()
+
+        XCTAssertEqual(loadCount, 1)
+        gate.release(with: whisper)
+        let firstTranscript = try await first.value
+        let secondTranscript = try await second.value
+        XCTAssertEqual(firstTranscript, "coalesced")
+        XCTAssertEqual(secondTranscript, "coalesced")
+        XCTAssertEqual(loadCount, 1)
+    }
+
+    func testTranscriptionCoordinatorEvictsOldRuntimeWhenModelSelectionChanges() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperSwitch-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { identifier, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent(identifier, isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        await manager.download(.whisperTurboCompressed)
+        var selectedEngine = DictationTranscriptionEngine.whisperMediumEnglish
+        let medium = StubCompletedAudioTranscriber(result: .success("medium"))
+        let turbo = StubCompletedAudioTranscriber(result: .success("turbo"))
+        var loaded: [StubCompletedAudioTranscriber] = []
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { selectedEngine },
+            modelManager: manager,
+            whisperFactory: { modelFolder in
+                let transcriber = modelFolder.lastPathComponent == "medium.en" ? medium : turbo
+                loaded.append(transcriber)
+                return transcriber
+            }
+        )
+
+        let first = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("medium.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        selectedEngine = .whisperTurboCompressed
+        coordinator.selectedModelDidChange()
+        let second = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("turbo.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+
+        XCTAssertEqual(first, "medium")
+        XCTAssertEqual(second, "turbo")
+        XCTAssertEqual(loaded.count, 2)
+        XCTAssertEqual(medium.unloadCount, 1)
+        XCTAssertEqual(turbo.unloadCount, 0)
+    }
+
+    func testNewWhisperModelWaitsForOldRuntimeToUnload() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperExclusiveRuntime-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { identifier, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent(identifier, isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        await manager.download(.whisperTurboCompressed)
+        var selectedEngine = DictationTranscriptionEngine.whisperMediumEnglish
+        let unloadGate = AsyncVoidGate()
+        let medium = DelayedUnloadTranscriber(transcript: "medium", unloadGate: unloadGate)
+        let turbo = StubCompletedAudioTranscriber(result: .success("turbo"))
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { selectedEngine },
+            modelManager: manager,
+            whisperFactory: { modelFolder in
+                loadCount += 1
+                return modelFolder.lastPathComponent == "medium.en" ? medium : turbo
+            }
+        )
+        _ = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("medium.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        selectedEngine = .whisperTurboCompressed
+        coordinator.selectedModelDidChange()
+        let next = Task { @MainActor in
+            try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("turbo.wav"),
+                language: "en-US",
+                recordedDuration: 2
+            )
+        }
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(medium.unloadCount, 1)
+        XCTAssertEqual(loadCount, 1)
+        unloadGate.release()
+
+        let transcript = try await next.value
+        XCTAssertEqual(transcript, "turbo")
+        XCTAssertEqual(loadCount, 2)
+    }
+
+    func testTranscriptionCoordinatorEvictsWarmRuntimeAfterFiveMinutesOfInactivity() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperIdle-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let scheduler = ManualDictationRuntimeIdleScheduler()
+        let firstRuntime = StubCompletedAudioTranscriber(result: .success("first"))
+        let secondRuntime = StubCompletedAudioTranscriber(result: .success("second"))
+        var runtimes = [firstRuntime, secondRuntime]
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in
+                defer { loadCount += 1 }
+                return runtimes.removeFirst()
+            },
+            idleScheduler: scheduler,
+            idleTimeout: 300
+        )
+
+        _ = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("first.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        XCTAssertEqual(scheduler.latestDelay, 300)
+        XCTAssertEqual(firstRuntime.unloadCount, 0)
+
+        scheduler.fireLatest()
+
+        XCTAssertEqual(firstRuntime.unloadCount, 1)
+        let transcript = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("second.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        XCTAssertEqual(transcript, "second")
+        XCTAssertEqual(loadCount, 2)
+    }
+
+    func testSuccessfulWarmUseResetsTheFiveMinuteIdleEviction() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperIdleReset-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let scheduler = ManualDictationRuntimeIdleScheduler()
+        let whisper = StubCompletedAudioTranscriber(result: .success("warm"))
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in whisper },
+            idleScheduler: scheduler,
+            idleTimeout: 300
+        )
+
+        for index in 1...2 {
+            _ = try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("\(index).wav"),
+                language: "en-US",
+                recordedDuration: 2
+            )
+        }
+        XCTAssertEqual(scheduler.scheduledCount, 2)
+
+        scheduler.fire(at: 0)
+        XCTAssertEqual(whisper.unloadCount, 0)
+        scheduler.fire(at: 1)
+        XCTAssertEqual(whisper.unloadCount, 1)
+    }
+
+    func testCancellingTranscriptionKeepsTheWhisperRuntimeWarmForTheNextDictation() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperCancellation-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let whisper = CancellationThenSuccessTranscriber()
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in
+                loadCount += 1
+                return whisper
+            }
+        )
+        let cancelled = Task { @MainActor in
+            try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("cancelled.wav"),
+                language: "en-US",
+                recordedDuration: 2
+            )
+        }
+        for _ in 0..<100 where whisper.callCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(whisper.callCount, 1)
+
+        coordinator.cancel()
+        do {
+            _ = try await cancelled.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+
+        let transcript = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("next.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        XCTAssertEqual(transcript, "warm after cancellation")
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(whisper.unloadCount, 0)
+    }
+
+    func testFailedWhisperLoadIsClearedSoRetryCanSucceed() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperLoadRetry-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let whisper = StubCompletedAudioTranscriber(result: .success("recovered"))
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in
+                loadCount += 1
+                if loadCount == 1 {
+                    throw NSError(domain: "KeybumpsTests", code: 42)
+                }
+                return whisper
+            }
+        )
+
+        do {
+            _ = try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("first.wav"),
+                language: "en-US",
+                recordedDuration: 2
+            )
+            XCTFail("Expected first load to fail")
+        } catch {}
+
+        let transcript = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("retry.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        XCTAssertEqual(transcript, "recovered")
+        XCTAssertEqual(loadCount, 2)
+    }
+
+    func testDeletingSelectedWhisperModelEvictsRuntimeAndFallsBackToAppleSpeech() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWhisperDeletion-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DictationModelManager(
+            modelsRoot: root,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        var selectedEngine = DictationTranscriptionEngine.whisperMediumEnglish
+        let whisper = StubCompletedAudioTranscriber(result: .success("whisper"))
+        let apple = StubCompletedAudioTranscriber(result: .success("apple"))
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { selectedEngine },
+            modelManager: manager,
+            appleTranscriber: apple,
+            whisperFactory: { _ in whisper }
+        )
+
+        _ = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("whisper.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+        selectedEngine = .appleSpeech
+        coordinator.selectedModelWasDeleted()
+        try manager.delete(.whisperMediumEnglish)
+        let transcript = try await coordinator.transcribe(
+            audioURL: root.appendingPathComponent("apple.wav"),
+            language: "en-US",
+            recordedDuration: 2
+        )
+
+        XCTAssertEqual(whisper.unloadCount, 1)
+        XCTAssertEqual(transcript, "apple")
+        XCTAssertEqual(apple.calls.count, 1)
+    }
+
+    func testHistoryRetriesReuseTheWarmWhisperRuntime() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsWarmHistoryRetry-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let modelsRoot = root.appendingPathComponent("models", isDirectory: true)
+        let recordingsRoot = root.appendingPathComponent("recordings", isDirectory: true)
+        let manager = DictationModelManager(
+            modelsRoot: modelsRoot,
+            downloader: StubDictationModelDownloader { _, downloadBase, _ in
+                let folder = downloadBase.appendingPathComponent("model", isDirectory: true)
+                try Self.createCompleteModelFolder(at: folder)
+                return folder
+            }
+        )
+        await manager.download(.whisperMediumEnglish)
+        let whisper = StubCompletedAudioTranscriber(result: .success("history transcript"))
+        var loadCount = 0
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .whisperMediumEnglish },
+            modelManager: manager,
+            whisperFactory: { _ in
+                loadCount += 1
+                return whisper
+            }
+        )
+        let history = DictationHistoryService(recordingsDirectoryURL: recordingsRoot)
+        var retryEntries: [DictationHistoryEntry] = []
+        for timestamp in [1_700_000_000.0, 1_700_000_001.0] {
+            let recording = try history.prepareRecording(
+                capturedAt: Date(timeIntervalSince1970: timestamp),
+                language: "en-US"
+            )
+            try Self.writeMinimalWAV(to: recording.audioURL)
+            retryEntries.append(try history.completeRecording(
+                recording,
+                text: "",
+                language: "en-US",
+                duration: 2,
+                transcriptionError: "Retry requested"
+            ))
+        }
+        let service = DictationService(
+            language: "en-US",
+            fileManager: .default,
+            history: history,
+            transcriber: coordinator
+        )
+
+        for entry in retryEntries {
+            await service.transcribe(entry)
+        }
+
+        XCTAssertEqual(loadCount, 1)
+        XCTAssertEqual(whisper.calls.count, 2)
+        XCTAssertEqual(history.entries.filter { $0.state == .completed }.count, 2)
+    }
+
     func testTranscriptionCoordinatorFallsBackToAppleWhenSelectedModelIsUnavailable() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsEngineFallback-\(UUID().uuidString)", isDirectory: true)
@@ -283,6 +890,20 @@ final class KeybumpsFeatureTests: XCTestCase {
 
         XCTAssertEqual(transcript, "apple")
         XCTAssertEqual(apple.calls.count, 1)
+    }
+
+    private static func createCompleteModelFolder(at folder: URL) throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for component in ["AudioEncoder.mlmodelc", "MelSpectrogram.mlmodelc", "TextDecoder.mlmodelc"] {
+            try FileManager.default.createDirectory(
+                at: folder.appendingPathComponent(component, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+    }
+
+    private static func writeMinimalWAV(to url: URL) throws {
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: url)
     }
 
     func testDeletingSelectedDictationModelReturnsSelectionToAppleSpeech() async throws {

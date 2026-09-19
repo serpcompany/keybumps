@@ -51,6 +51,7 @@ final class AppModel {
     private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
     private let commandPalette: CommandPaletteController
+    private let transcriptionCoordinator: DictationTranscriptionCoordinator
     private let permissionDragAssistant = PermissionDragAssistantController()
     private let dictationIndicator = DictationIndicatorController()
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
@@ -151,6 +152,7 @@ final class AppModel {
             selectedEngine: { preferences.dictationTranscriptionEngine },
             modelManager: dictationModelManager
         )
+        self.transcriptionCoordinator = transcriptionCoordinator
         dictation = DictationService(
             language: preferences.dictationLanguage,
             durationLimit: preferences.dictationDurationLimit,
@@ -451,18 +453,22 @@ final class AppModel {
         dictation.selectedLanguage = language
         if !preferences.dictationTranscriptionEngine.supports(language: language) {
             preferences.dictationTranscriptionEngine = .appleSpeech
+            transcriptionCoordinator.selectedModelDidChange()
         }
     }
     func selectDictationTranscriptionEngine(_ engine: DictationTranscriptionEngine) {
         guard engine.supports(language: preferences.dictationLanguage) else { return }
         guard dictationModels.state(for: engine) == .installed else { return }
+        guard preferences.dictationTranscriptionEngine != engine else { return }
         preferences.dictationTranscriptionEngine = engine
+        transcriptionCoordinator.selectedModelDidChange()
     }
     func downloadDictationModel(_ engine: DictationTranscriptionEngine) async {
         await dictationModels.download(engine)
     }
     func deleteDictationModel(_ engine: DictationTranscriptionEngine) {
         if preferences.dictationTranscriptionEngine == engine {
+            transcriptionCoordinator.selectedModelWasDeleted()
             preferences.dictationTranscriptionEngine = .appleSpeech
         }
         try? dictationModels.delete(engine)
