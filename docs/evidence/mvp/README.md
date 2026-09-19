@@ -166,8 +166,6 @@ The owner supplied a HeyClicky 1.0.48 reference screenshot showing a low-frictio
 
 Evidence:
 
-- Reference: `docs/app-replica/evidence/heyclicky-1.0.48/reference/permission-drag-helper.png`
-- Candidate: `docs/app-replica/evidence/heyclicky-1.0.48/candidate/permission-drag-helper.png`
 
 The agent did not drop the bundle or toggle either permission because that changes macOS security state. The user must perform that consent step; source tests, the AppKit completion callback, and panel visibility do not substitute for a successful human drag into System Settings.
 

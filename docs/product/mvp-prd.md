@@ -36,7 +36,6 @@ Read these before editing:
 3. [`docs/adr/0002-direct-local-only-commercial-product.md`](../adr/0002-direct-local-only-commercial-product.md) — distribution and privacy boundary.
 4. [`docs/adr/0003-one-online-activation-then-offline-validation.md`](../adr/0003-one-online-activation-then-offline-validation.md) — licensing decision and deferred details.
 5. [`docs/adr/0004-new-canonical-keybumps-repository.md`](../adr/0004-new-canonical-keybumps-repository.md) — new-repository decision.
-6. [`docs/app-replica/scope.md`](../app-replica/scope.md) — frozen reference versions, exact Rectangle shortcuts, observed settings, and selected reference slices.
 
 Treat the reference scope as authoritative when this PRD summarizes rather than repeats detailed mappings.
 
@@ -215,7 +214,7 @@ Completion criterion: in at least one standard text editor and one browser text 
 
 User outcome: replace the owner's actual Rectangle configuration without learning new shortcuts.
 
-- Use every assigned shortcut in the canonical table in [`docs/app-replica/scope.md`](../app-replica/scope.md).
+- Use every owner-assigned Window Management shortcut; preserve unassigned actions as unassigned.
 - Preserve unassigned actions as unassigned; do not invent additional defaults.
 - Support the selected positioning and sizing actions.
 - Preserve repeated sizing behavior.
@@ -284,7 +283,7 @@ Pressing the Dictation shortcut without Microphone or Speech Recognition access 
 
 One permission coordinator reports capability requirements and current state. The guided setup should make macOS's Security & Privacy steps as direct as public APIs allow, using clear drag/open guidance and deep links where appropriate. The app may guide users but must not claim to bypass or silently grant macOS-controlled consent.
 
-Accessibility and Input Monitoring use only the HeyClicky-inspired bounded setup journey recorded in `docs/app-replica/scope.md`: silently preflight current status, open the exact System Settings list, keep a nonactivating helper visible above it, and let the user drag the signed Keybumps app bundle into the list. Keybumps must not also invoke the native Accessibility `AXIsProcessTrustedWithOptions(prompt: true)` or `CGRequestListenEventAccess()` dialogs for those permissions. Microphone and Speech Recognition use their required native consent prompts. Every path refreshes truthful permission state after the user returns.
+Accessibility and Input Monitoring use a bounded setup journey: silently preflight current status, open the exact System Settings list, keep a nonactivating helper visible above it, and let the user drag the signed Keybumps app bundle into the list. Keybumps must not also invoke the native Accessibility `AXIsProcessTrustedWithOptions(prompt: true)` or `CGRequestListenEventAccess()` dialogs for those permissions. Microphone and Speech Recognition use their required native consent prompts. Every path refreshes truthful permission state after the user returns.
 
 Required permissions by capability:
 

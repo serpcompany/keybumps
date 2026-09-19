@@ -108,7 +108,7 @@ If Dictation permissions are missing, pressing the shortcut first shows a Keybum
 ## UJ-07 — Window Management
 
 1. Grant Accessibility and keep Window Management enabled.
-2. Use each assigned shortcut from [`../app-replica/scope.md`](../app-replica/scope.md); unassigned actions remain inactive.
+2. Use each assigned Window Management shortcut; unassigned actions remain inactive.
 3. Confirm the frontmost resizable window reaches the requested half, third, sixth, fourth, three-fourths, center, maximize, resize, restore, or display position.
 4. Repeat sizing commands where the selected behavior cycles.
 5. Drag a window into each selected snap region, then drag it away and confirm its previous frame is restored.

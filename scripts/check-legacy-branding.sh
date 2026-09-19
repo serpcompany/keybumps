@@ -12,7 +12,7 @@ while IFS= read -r tracked_file; do
     AGENTS.md|project.yml|Keybumps.xcodeproj/project.pbxproj|scripts/check-legacy-branding.sh|docs/development-workflow.md|Keybumps/Delivery/SystemChannelAdapters.swift|KeybumpsTests/KeyboardShortcutterTests.swift|docs/releases/sparkle-update-operations.md|docs/releases/keybumps-update-hosting.md)
       continue
       ;;
-    docs/adr/*|docs/provenance/*|docs/evidence/*|docs/app-replica/completion-manifest.json|docs/app-replica/parity-ledger.md|docs/app-replica/scope.md|docs/app-replica/evidence/*|docs/releases/v0.0.*|public/*)
+    docs/adr/*|docs/provenance/*|docs/evidence/*|docs/releases/v0.0.*|public/*)
       continue
       ;;
   esac
