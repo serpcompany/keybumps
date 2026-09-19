@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AVFoundation
+import Carbon.HIToolbox
 import Foundation
 import Observation
 import ServiceManagement
@@ -442,4 +443,179 @@ final class ConflictDetector {
             refresh()
         }
     }
+}
+
+enum SpotlightShortcutConflictStatus: Equatable {
+    case noConflict
+    case conflict
+    case unavailable(manualRecovery: String)
+}
+
+enum SpotlightShortcutResolution: Equatable {
+    case resolved
+    case noLongerConflicting
+    case failed(manualRecovery: String)
+}
+
+struct QuickSearchShortcutOnboardingPresentation: Equatable {
+    let canContinue: Bool
+    let manualRecovery: String?
+
+    static func resolve(
+        _ status: SpotlightShortcutConflictStatus
+    ) -> QuickSearchShortcutOnboardingPresentation {
+        switch status {
+        case .noConflict:
+            QuickSearchShortcutOnboardingPresentation(canContinue: true, manualRecovery: nil)
+        case .conflict:
+            QuickSearchShortcutOnboardingPresentation(canContinue: false, manualRecovery: nil)
+        case .unavailable(let manualRecovery):
+            QuickSearchShortcutOnboardingPresentation(
+                canContinue: false,
+                manualRecovery: manualRecovery
+            )
+        }
+    }
+}
+
+protocol SymbolicHotKeyPreferences: AnyObject {
+    func readSymbolicHotKeys() throws -> [String: Any]
+    func writeSymbolicHotKeys(_ hotKeys: [String: Any]) throws
+    func reloadSymbolicHotKeys() throws
+}
+
+protocol SpotlightShortcutConflictResolving: AnyObject {
+    func status(for binding: ShortcutBinding) -> SpotlightShortcutConflictStatus
+    func disableIfConflicting(_ binding: ShortcutBinding) -> SpotlightShortcutResolution
+}
+
+enum SymbolicHotKeyPreferencesError: Error {
+    case unreadable
+    case unsynchronized
+    case reloadFailed
+}
+
+final class SystemSymbolicHotKeyPreferences: SymbolicHotKeyPreferences {
+    private let applicationID = "com.apple.symbolichotkeys" as CFString
+    private let preferenceKey = "AppleSymbolicHotKeys" as CFString
+    private let settingsActivatorURL = URL(
+        fileURLWithPath: "/System/Library/PrivateFrameworks/SystemAdministration.framework/Versions/A/Resources/activateSettings"
+    )
+
+    func readSymbolicHotKeys() throws -> [String: Any] {
+        guard let hotKeys = CFPreferencesCopyValue(
+            preferenceKey,
+            applicationID,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost
+        ) as? [String: Any] else {
+            throw SymbolicHotKeyPreferencesError.unreadable
+        }
+        return hotKeys
+    }
+
+    func writeSymbolicHotKeys(_ hotKeys: [String: Any]) throws {
+        CFPreferencesSetValue(
+            preferenceKey,
+            hotKeys as CFDictionary,
+            applicationID,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost
+        )
+        guard CFPreferencesSynchronize(
+            applicationID,
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost
+        ) else {
+            throw SymbolicHotKeyPreferencesError.unsynchronized
+        }
+    }
+
+    func reloadSymbolicHotKeys() throws {
+        let process = Process()
+        process.executableURL = settingsActivatorURL
+        process.arguments = ["-u"]
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
+            throw SymbolicHotKeyPreferencesError.reloadFailed
+        }
+    }
+}
+
+final class SpotlightShortcutConflictResolver: SpotlightShortcutConflictResolving {
+    private enum Key {
+        static let spotlightSearch = "64"
+    }
+
+    private let preferences: any SymbolicHotKeyPreferences
+
+    init(preferences: any SymbolicHotKeyPreferences) {
+        self.preferences = preferences
+    }
+
+    func status(for binding: ShortcutBinding) -> SpotlightShortcutConflictStatus {
+        do {
+            let hotKeys = try preferences.readSymbolicHotKeys()
+            return spotlightStatus(in: hotKeys, binding: binding)
+        } catch {
+            return .unavailable(manualRecovery: Self.manualRecovery)
+        }
+    }
+
+    func disableIfConflicting(_ binding: ShortcutBinding) -> SpotlightShortcutResolution {
+        do {
+            var hotKeys = try preferences.readSymbolicHotKeys()
+            switch spotlightStatus(in: hotKeys, binding: binding) {
+            case .noConflict:
+                return .noLongerConflicting
+            case .unavailable:
+                return .failed(manualRecovery: Self.manualRecovery)
+            case .conflict:
+                break
+            }
+            guard var spotlight = hotKeys[Key.spotlightSearch] as? [String: Any] else {
+                return .failed(manualRecovery: Self.manualRecovery)
+            }
+            spotlight["enabled"] = false
+            hotKeys[Key.spotlightSearch] = spotlight
+            try preferences.writeSymbolicHotKeys(hotKeys)
+            try preferences.reloadSymbolicHotKeys()
+            return .resolved
+        } catch {
+            return .failed(manualRecovery: Self.manualRecovery)
+        }
+    }
+
+    private func spotlightStatus(
+        in hotKeys: [String: Any],
+        binding: ShortcutBinding
+    ) -> SpotlightShortcutConflictStatus {
+        guard let spotlight = hotKeys[Key.spotlightSearch] as? [String: Any],
+              let enabled = spotlight["enabled"] as? NSNumber else {
+            return .unavailable(manualRecovery: Self.manualRecovery)
+        }
+        guard enabled.boolValue else { return .noConflict }
+        guard
+            let value = spotlight["value"] as? [String: Any],
+            value["type"] as? String == "standard",
+            let parameters = value["parameters"] as? [NSNumber],
+            parameters.count >= 3
+        else { return .unavailable(manualRecovery: Self.manualRecovery) }
+
+        let matches = parameters[1].uint32Value == binding.keyCode
+            && parameters[2].intValue == cocoaModifiers(for: binding.modifiers)
+        return matches ? .conflict : .noConflict
+    }
+
+    private func cocoaModifiers(for carbonModifiers: UInt32) -> Int {
+        var modifiers = 0
+        if carbonModifiers & UInt32(cmdKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.command.rawValue) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.shift.rawValue) }
+        if carbonModifiers & UInt32(optionKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.option.rawValue) }
+        if carbonModifiers & UInt32(controlKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.control.rawValue) }
+        return modifiers
+    }
+
+    private static let manualRecovery = "Open System Settings → Keyboard → Keyboard Shortcuts → Spotlight, turn off Show Spotlight search, then return to Keybumps."
 }

@@ -687,6 +687,7 @@ private struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @State private var step = 0
     var body: some View {
+        let shortcutPresentation = model.quickSearchShortcutOnboardingPresentation
         VStack(spacing: 24) {
             Spacer()
             Image(ProductIdentity.inAppBrandImageName).resizable().scaledToFit().frame(width: 72, height: 72)
@@ -705,7 +706,41 @@ private struct OnboardingView: View {
                         PermissionWalkthroughView(compact: true)
                     }
                 case 3:
-                    VStack(spacing: 12) { Text("Resolve shortcut conflicts").font(.largeTitle.bold()); ForEach(ReferenceApp.allCases) { app in HStack { Text(app.name); Spacer(); if !model.conflicts.isRunning(app) { Text("Not running").foregroundStyle(.secondary) } else { Button("Quit") { model.conflicts.quit(app) } } } } }
+                    VStack(spacing: 12) {
+                        Text("Resolve shortcut conflicts").font(.largeTitle.bold())
+                        Text("Keybumps checks whether Spotlight owns your Quick Search shortcut. For an exact conflict, Keybumps turns off only Spotlight's keyboard shortcut and leaves Spotlight search available everywhere else.")
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if shortcutPresentation.canContinue {
+                            Label("Quick Search is ready.", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        } else if let manualRecovery = shortcutPresentation.manualRecovery {
+                            Label("Quick Search still needs attention.", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(manualRecovery)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            HStack {
+                                Button("Open Keyboard Shortcuts…") { model.openKeyboardShortcutSettings() }
+                                Button("Check Again") { model.refreshQuickSearchShortcutConflict() }
+                                    .buttonStyle(.borderedProminent)
+                            }
+                        } else {
+                            ProgressView("Resolving the Spotlight shortcut…")
+                        }
+                        ForEach(ReferenceApp.allCases) { app in
+                            HStack {
+                                Text(app.name)
+                                Spacer()
+                                if !model.conflicts.isRunning(app) {
+                                    Text("Not running").foregroundStyle(.secondary)
+                                } else {
+                                    Button("Quit") { model.conflicts.quit(app) }
+                                }
+                            }
+                        }
+                    }
                 default:
                     VStack(spacing: 12) {
                         Text("Ready").font(.largeTitle.bold())
@@ -715,8 +750,26 @@ private struct OnboardingView: View {
                 }
             }.frame(maxWidth: 620)
             Spacer()
-            HStack { if step > 0 { Button("Back") { step -= 1 } }; Spacer(); if step < 4 { Button("Continue") { step += 1 }.buttonStyle(.borderedProminent) } else { Button("Start Keybumps") { model.completeOnboarding() }.buttonStyle(.borderedProminent) } }
-        }.padding(36).frame(width: 760, height: 520)
+            HStack {
+                if step > 0 { Button("Back") { step -= 1 } }
+                Spacer()
+                if step < 4 {
+                    Button("Continue") { step += 1 }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(step == 3 && !shortcutPresentation.canContinue)
+                } else {
+                    Button("Start Keybumps") { model.completeOnboarding() }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .padding(36)
+        .frame(width: 760, height: 520)
+        .task(id: step) {
+            if step == 3 {
+                model.refreshQuickSearchShortcutConflict()
+            }
+        }
     }
 }
 

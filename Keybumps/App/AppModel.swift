@@ -42,6 +42,7 @@ final class AppModel {
     let windows = WindowManagementService()
     let launchAtLogin = LaunchAtLoginController()
     let conflicts = ConflictDetector()
+    private let spotlightShortcutResolver: any SpotlightShortcutConflictResolving
     let dictation: DictationService
     let updater: any UpdateControlling
     let updateSafetyPolicy: UpdateInstallationSafetyPolicy
@@ -74,6 +75,12 @@ final class AppModel {
     }
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
+    private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
+        manualRecovery: "Checking the Quick Search shortcut…"
+    )
+    var quickSearchShortcutOnboardingPresentation: QuickSearchShortcutOnboardingPresentation {
+        QuickSearchShortcutOnboardingPresentation.resolve(quickSearchShortcutConflictStatus)
+    }
     var unreadCount: Int { inbox.unreadCount }
     var permissionReadiness: PermissionReadinessSnapshot {
         permissionReadiness(for: preferences.enabledCapabilities)
@@ -123,11 +130,14 @@ final class AppModel {
         permissionCoordinator: PermissionCoordinator? = nil,
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
         updater injectedUpdater: (any UpdateControlling)? = nil,
-        dictationModelManager injectedDictationModelManager: DictationModelManager? = nil
+        dictationModelManager injectedDictationModelManager: DictationModelManager? = nil,
+        spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
+        self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
+            ?? SpotlightShortcutConflictResolver(preferences: SystemSymbolicHotKeyPreferences())
         let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
         self.nativeNotificationCenter = nativeNotificationCenter
         let updateSafetyPolicy = UpdateInstallationSafetyPolicy.shared
@@ -204,6 +214,48 @@ final class AppModel {
     func completeOnboarding() {
         preferences.didCompleteOnboarding = true
         launchAtLogin.setEnabled(true); applyCapabilities()
+    }
+
+    func refreshQuickSearchShortcutConflict() {
+        guard !preferences.didCompleteOnboarding,
+              preferences.enabledCapabilities.contains(.quickSearch),
+              let binding = preferences.capabilityShortcut(for: .quickSearch) else {
+            quickSearchShortcutConflictStatus = .noConflict
+            return
+        }
+
+        let status = spotlightShortcutResolver.status(for: binding)
+        if status == .conflict {
+            switch spotlightShortcutResolver.disableIfConflicting(binding) {
+            case .resolved, .noLongerConflicting:
+                break
+            case .failed(let manualRecovery):
+                quickSearchShortcutConflictStatus = .unavailable(manualRecovery: manualRecovery)
+                return
+            }
+        } else if case .unavailable = status {
+            quickSearchShortcutConflictStatus = status
+            return
+        }
+
+        let registered = shortcuts.register(
+            owner: CapabilityShortcut.quickSearch.ownerID,
+            binding: binding
+        ) { [weak self] in
+            self?.commandPalette.toggle(.search)
+        }
+        quickSearchShortcutConflictStatus = registered
+            ? .noConflict
+            : .unavailable(
+                manualRecovery: "Open System Settings → Keyboard → Keyboard Shortcuts, remove the conflicting shortcut, then return to Keybumps."
+            )
+    }
+
+    func openKeyboardShortcutSettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"
+        ) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {

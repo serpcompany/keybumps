@@ -10,12 +10,18 @@ private final class StubGlobalHotKeyBackend: GlobalHotKeyRegistering {
     let registrationScope = GlobalHotKeyRegistrationScope.systemWide
     private(set) var activeIdentifiers: Set<UInt32> = []
     private var handler: ((UInt32) -> Void)?
+    private let registrationResult: (ShortcutBinding) -> Bool
+
+    init(registrationResult: @escaping (ShortcutBinding) -> Bool = { _ in true }) {
+        self.registrationResult = registrationResult
+    }
 
     func installHandler(_ handler: @escaping (UInt32) -> Void) {
         self.handler = handler
     }
 
     func register(binding: ShortcutBinding, identifier: UInt32) -> Bool {
+        guard registrationResult(binding) else { return false }
         activeIdentifiers.insert(identifier)
         return true
     }
@@ -26,6 +32,35 @@ private final class StubGlobalHotKeyBackend: GlobalHotKeyRegistering {
 
     func send(identifier: UInt32) {
         handler?(identifier)
+    }
+}
+
+private final class StubSymbolicHotKeyPreferences: SymbolicHotKeyPreferences {
+    enum Failure: Error { case write }
+
+    var hotKeys: [String: Any]
+    var failsWrite = false
+    private(set) var readCount = 0
+    private(set) var writeCount = 0
+    private(set) var reloadCount = 0
+
+    init(hotKeys: [String: Any]) {
+        self.hotKeys = hotKeys
+    }
+
+    func readSymbolicHotKeys() throws -> [String: Any] {
+        readCount += 1
+        return hotKeys
+    }
+
+    func writeSymbolicHotKeys(_ hotKeys: [String: Any]) throws {
+        if failsWrite { throw Failure.write }
+        self.hotKeys = hotKeys
+        writeCount += 1
+    }
+
+    func reloadSymbolicHotKeys() throws {
+        reloadCount += 1
     }
 }
 
@@ -222,6 +257,218 @@ private final class ManualDictationRuntimeIdleScheduler: DictationRuntimeIdleSch
 
 @MainActor
 final class KeybumpsFeatureTests: XCTestCase {
+    func testSpotlightResolverDetectsEnabledExactQuickSearchConflict() {
+        let preferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": [
+                "enabled": true,
+                "value": [
+                    "type": "standard",
+                    "parameters": [32, 49, 1_048_576]
+                ]
+            ]
+        ])
+        let resolver = SpotlightShortcutConflictResolver(preferences: preferences)
+
+        XCTAssertEqual(resolver.status(for: DefaultShortcut.quickSearch), .conflict)
+    }
+
+    func testSpotlightResolverDisablesOnlyMatchingSpotlightShortcut() throws {
+        let spotlightValue: [String: Any] = [
+            "type": "standard",
+            "parameters": [32, 49, 1_048_576],
+            "futureField": "preserve"
+        ]
+        let sibling: [String: Any] = ["enabled": true, "value": ["opaque": 7]]
+        let preferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": ["enabled": true, "value": spotlightValue, "opaque": "keep"],
+            "65": sibling
+        ])
+        let resolver = SpotlightShortcutConflictResolver(preferences: preferences)
+
+        XCTAssertEqual(resolver.disableIfConflicting(DefaultShortcut.quickSearch), .resolved)
+
+        let spotlight = try XCTUnwrap(preferences.hotKeys["64"] as? [String: Any])
+        XCTAssertEqual((spotlight["enabled"] as? NSNumber)?.boolValue, false)
+        XCTAssertEqual(spotlight["opaque"] as? String, "keep")
+        XCTAssertEqual(spotlight["value"] as? NSDictionary, spotlightValue as NSDictionary)
+        XCTAssertEqual(preferences.hotKeys["65"] as? NSDictionary, sibling as NSDictionary)
+        XCTAssertEqual(preferences.writeCount, 1)
+        XCTAssertEqual(preferences.reloadCount, 1)
+    }
+
+    func testSpotlightResolverDoesNotTreatMalformedPreferencesAsReady() {
+        let preferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": ["enabled": true, "value": ["type": "standard"]]
+        ])
+        let resolver = SpotlightShortcutConflictResolver(preferences: preferences)
+
+        guard case .unavailable(let manualRecovery) = resolver.status(for: DefaultShortcut.quickSearch) else {
+            return XCTFail("Malformed Spotlight preferences must not be reported as no conflict")
+        }
+        XCTAssertTrue(manualRecovery.contains("System Settings"))
+    }
+
+    func testCustomQuickSearchBindingDoesNotModifySpotlight() {
+        let preferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": [
+                "enabled": true,
+                "value": ["type": "standard", "parameters": [32, 49, 1_048_576]]
+            ]
+        ])
+        let resolver = SpotlightShortcutConflictResolver(preferences: preferences)
+        let customBinding = ShortcutBinding(
+            keyCode: 40,
+            modifiers: UInt32(cmdKey),
+            displayName: "⌘ K"
+        )
+
+        XCTAssertEqual(resolver.status(for: customBinding), .noConflict)
+        XCTAssertEqual(resolver.disableIfConflicting(customBinding), .noLongerConflicting)
+        XCTAssertEqual(preferences.writeCount, 0)
+        XCTAssertEqual(preferences.reloadCount, 0)
+    }
+
+    func testSpotlightWriteFailureReturnsManualRecoveryWithoutClaimingResolution() {
+        let preferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": [
+                "enabled": true,
+                "value": ["type": "standard", "parameters": [32, 49, 1_048_576]]
+            ]
+        ])
+        preferences.failsWrite = true
+        let resolver = SpotlightShortcutConflictResolver(preferences: preferences)
+
+        guard case .failed(let manualRecovery) = resolver.disableIfConflicting(
+            DefaultShortcut.quickSearch
+        ) else {
+            return XCTFail("A preferences write failure must not report resolution")
+        }
+        XCTAssertTrue(manualRecovery.contains("System Settings"))
+        let spotlight = preferences.hotKeys["64"] as? [String: Any]
+        XCTAssertEqual((spotlight?["enabled"] as? NSNumber)?.boolValue, true)
+        XCTAssertEqual(preferences.reloadCount, 0)
+    }
+
+    func testFirstRunAutomaticallyDisablesSpotlightAndRetriesQuickSearchRegistration() {
+        let suite = "KeybumpsSpotlightOnboarding-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.setCapability(.clipboardHistory, enabled: false)
+        preferences.setCapability(.dictation, enabled: false)
+        preferences.setCapability(.windowManagement, enabled: false)
+        preferences.setCapability(.keyboardShortcutter, enabled: false)
+        let symbolicPreferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": [
+                "enabled": true,
+                "value": ["type": "standard", "parameters": [32, 49, 1_048_576]]
+            ]
+        ])
+        let backend = StubGlobalHotKeyBackend { _ in
+            let spotlight = symbolicPreferences.hotKeys["64"] as? [String: Any]
+            return (spotlight?["enabled"] as? NSNumber)?.boolValue == false
+        }
+        let coordinator = GlobalShortcutCoordinator(backend: backend)
+        let model = AppModel(
+            preferences: preferences,
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            shortcutCoordinator: coordinator,
+            updater: DisabledUpdateController(reason: "Unit test"),
+            spotlightShortcutResolver: SpotlightShortcutConflictResolver(
+                preferences: symbolicPreferences
+            )
+        )
+
+        model.refreshQuickSearchShortcutConflict()
+
+        XCTAssertEqual(model.quickSearchShortcutConflictStatus, .noConflict)
+        XCTAssertTrue(coordinator.activeOwners.contains(CapabilityShortcut.quickSearch.ownerID))
+        let spotlight = symbolicPreferences.hotKeys["64"] as? [String: Any]
+        XCTAssertEqual((spotlight?["enabled"] as? NSNumber)?.boolValue, false)
+    }
+
+    func testOnboardingCannotClaimReadyWhenSpotlightRecoveryFails() {
+        let guidance = "Open System Settings and disable the Spotlight shortcut."
+
+        let failed = QuickSearchShortcutOnboardingPresentation.resolve(
+            .unavailable(manualRecovery: guidance)
+        )
+        let ready = QuickSearchShortcutOnboardingPresentation.resolve(.noConflict)
+
+        XCTAssertFalse(failed.canContinue)
+        XCTAssertEqual(failed.manualRecovery, guidance)
+        XCTAssertTrue(ready.canContinue)
+        XCTAssertNil(ready.manualRecovery)
+    }
+
+    func testCompletedOnboardingDoesNotInspectOrModifySpotlight() {
+        let suite = "KeybumpsExistingUserSpotlight-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.didCompleteOnboarding = true
+        let symbolicPreferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": [
+                "enabled": true,
+                "value": ["type": "standard", "parameters": [32, 49, 1_048_576]]
+            ]
+        ])
+        let model = AppModel(
+            preferences: preferences,
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            updater: DisabledUpdateController(reason: "Unit test"),
+            spotlightShortcutResolver: SpotlightShortcutConflictResolver(
+                preferences: symbolicPreferences
+            )
+        )
+
+        model.refreshQuickSearchShortcutConflict()
+
+        XCTAssertEqual(symbolicPreferences.readCount, 0)
+        XCTAssertEqual(symbolicPreferences.writeCount, 0)
+        XCTAssertEqual(symbolicPreferences.reloadCount, 0)
+    }
+
+    func testFailedQuickSearchRetryKeepsOnboardingBlocked() {
+        let suite = "KeybumpsSpotlightRetryFailure-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.setCapability(.clipboardHistory, enabled: false)
+        preferences.setCapability(.dictation, enabled: false)
+        preferences.setCapability(.windowManagement, enabled: false)
+        preferences.setCapability(.keyboardShortcutter, enabled: false)
+        let symbolicPreferences = StubSymbolicHotKeyPreferences(hotKeys: [
+            "64": ["enabled": false]
+        ])
+        let coordinator = GlobalShortcutCoordinator(
+            backend: StubGlobalHotKeyBackend { _ in false }
+        )
+        let model = AppModel(
+            preferences: preferences,
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
+            detector: ManualActionDetector(),
+            presenter: PresentationWindowController(),
+            shortcutCoordinator: coordinator,
+            updater: DisabledUpdateController(reason: "Unit test"),
+            spotlightShortcutResolver: SpotlightShortcutConflictResolver(
+                preferences: symbolicPreferences
+            )
+        )
+
+        model.refreshQuickSearchShortcutConflict()
+
+        XCTAssertFalse(model.quickSearchShortcutOnboardingPresentation.canContinue)
+        XCTAssertFalse(coordinator.activeOwners.contains(CapabilityShortcut.quickSearch.ownerID))
+    }
+
     func testBuiltTestHostHasCanonicalKeybumpsIdentity() throws {
         var appURL = Bundle(for: Self.self).bundleURL
         while appURL.pathExtension != "app", appURL.path != "/" {
