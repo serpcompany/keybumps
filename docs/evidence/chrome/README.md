@@ -1,6 +1,6 @@
 # Chrome tab-strip characterization
 
-`chrome-153-tab-strip.json` is the sanitized structural projection of the local Chrome 153.0.8010.12 Accessibility observation described in `docs/research/chrome-non-menu-action-detection.md`.
+`chrome-153-tab-strip.json` is the sanitized structural projection of a local Chrome 153.0.8010.12 Accessibility observation.
 
 `chrome-153-settings-failing-trace.json` is the privacy-sanitized projection of the agent-run physical action recorded on issue #14: opening Chrome's three-dot menu and choosing Settings navigated successfully but produced no coaching event. The replay retains only the two pointer gestures, generic AX control roles/actions, a live-command resolution state, tab counts, and a derived destination class. It does not retain the address value used to derive that class.
 
