@@ -74,7 +74,7 @@ final class StandardWindowControlTests: XCTestCase {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("docs/evidence/window-controls/chrome-green-captured-sanitized-trace.json")
+            .appendingPathComponent("KeybumpsTests/Fixtures/KeyboardShortcutter/chrome-green-captured-sanitized-trace.json")
         let data = try Data(contentsOf: fixtureURL)
         let trace = try JSONDecoder().decode(WindowControlTrace.self, from: data)
         XCTAssertEqual(detector.detect(trace, applicationName: "Google Chrome", pointer: .zero)?.actionTitle, "Enter Full Screen")

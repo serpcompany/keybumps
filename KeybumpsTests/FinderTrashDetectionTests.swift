@@ -85,7 +85,7 @@ final class FinderTrashDetectionTests: XCTestCase {
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("docs/evidence/finder-trash/captured-sanitized-trace.json")
+            .appendingPathComponent("KeybumpsTests/Fixtures/KeyboardShortcutter/finder-trash-captured-sanitized-trace.json")
         let data = try Data(contentsOf: fixtureURL)
         let trace = try JSONDecoder().decode(DragDropTrace.self, from: data)
         XCTAssertNil(

@@ -14,7 +14,19 @@ This is the general Keybumps development cycle for feature work, bug fixes, loca
 - Keep the branch tied to its GitHub issue, parent, blockers, and acceptance criteria.
 - Separate unrelated feature additions into their own issues.
 - Run deterministic tests and a Release build appropriate to the changed behavior.
-- Treat build success, rendered UI, signed runtime, installed artifact, and owner acceptance as separate evidence levels.
+
+Report evidence at the level actually established:
+
+1. **Build** — compilation and signing succeeded.
+2. **Deterministic tests** — domain, state, calculation, and adapter-contract tests passed.
+3. **UI tests** — deterministic navigation and visible states passed.
+4. **Signed runtime** — macOS integrations were exercised from the stable signed bundle.
+5. **Installed artifact** — the exact Developer ID candidate completed the journey from `/Applications`.
+6. **Owner acceptance** — the owner performed and accepted the scoped workflow.
+
+A lower level never proves a higher one. In particular, a build does not prove global shortcuts, permissions, window movement, paste, microphone capture, or installed-update replacement.
+
+Keep durable test inputs under `KeybumpsTests/Fixtures`. Keep generated builds, result bundles, screenshots, recordings, and logs out of Git. Record concise, privacy-safe evidence and remaining gates in the owning GitHub issue; never commit user content.
 
 ## 3. Prepare a local manual-QA build
 
