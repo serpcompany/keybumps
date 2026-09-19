@@ -17,7 +17,7 @@ final class ChromeActionDetectionTests: XCTestCase {
 
     func testSanitizedCharacterizationFixtureHasNoPrivateBrowserData() throws {
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/evidence/chrome/chrome-153-tab-strip.json")
+            .appendingPathComponent("KeybumpsTests/Fixtures/KeyboardShortcutter/chrome-153-tab-strip.json")
         let data = try Data(contentsOf: fixture)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(object["chromeVersion"] as? String, "153.0.8010.12")
@@ -185,7 +185,7 @@ final class ChromeActionDetectionTests: XCTestCase {
 
     func testIssue31LiveEvidenceIsCurrentAndContainsNoPrivateBrowserOrDocumentData() throws {
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/evidence/keyboard-shortcutter/issue-31-live-shortcuts.json")
+            .appendingPathComponent("KeybumpsTests/Fixtures/KeyboardShortcutter/issue-31-live-shortcuts.json")
         let data = try Data(contentsOf: fixture)
         let text = String(decoding: data, as: UTF8.self)
 
@@ -523,7 +523,7 @@ final class ChromeActionDetectionTests: XCTestCase {
 
     private func loadSettingsTrace() throws -> SettingsTraceFixture {
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("docs/evidence/chrome/chrome-153-settings-failing-trace.json")
+            .appendingPathComponent("KeybumpsTests/Fixtures/KeyboardShortcutter/chrome-153-settings-failing-trace.json")
         let data = try Data(contentsOf: fixture)
         let serialized = String(decoding: data, as: UTF8.self).lowercased()
         for forbidden in ["http://", "https://", "chrome://", "@", "tabtitle", "accountname"] {

@@ -16,6 +16,12 @@ An absent or invalid configuration disables the updater truthfully. Debug and te
 
 Generate the production key once with Sparkle's `generate_keys --account keybumps-production`. Keep the private key only in the operator Keychain/secret store and an encrypted, access-controlled recovery backup. Never commit, print, ship, or upload it. Losing it prevents existing installations from trusting ordinary future updates; key rotation must follow Sparkle's documented migration procedure.
 
+## Hosting and publication boundary
+
+The remote repository is `serpcompany/keybumps`, but this repository does not deploy the update origin. Release preparation produces immutable ZIP/DMG assets, release notes, and a signed appcast for an owner-controlled upload. Upload assets and notes first and publish the signed appcast pointer last.
+
+Historical SuperMac Pages artifacts belong to a different bundle identity and trust chain. Never copy or recreate that feed as a Keybumps update bridge; existing SuperMac testers must install Keybumps manually.
+
 ## Release sequence
 
 The normal entry point is `scripts/build-update-release.sh`. It refuses a reused build or existing output directory, archives and exports with Developer ID, submits through the authenticated `asc notarization` API, staples, packages ZIP and DMG artifacts, generates and validates the signed appcast, and creates separate `publication/assets` and `publication/publish-last` directories. It does not upload anything.
@@ -30,8 +36,6 @@ The normal entry point is `scripts/build-update-release.sh`. It refuses a reused
 8. Install build N in `/Applications`, advertise N+1 on the staged feed, and verify check, download, signature validation, restart, exact N+1 version, and retained non-private fixture preferences. Repeat with active Dictation and confirm restart is refused until Dictation is idle.
 9. Corrupt a copy of the signed archive without regenerating the appcast and confirm Sparkle rejects it. Never weaken verification for this test.
 10. Promote the exact already-validated files from the staging path to the production path, preserving filenames and bytes. Verify the public production archive and notes before accepting the production appcast.
-
-SuperMac and Keybumps have different bundle identifiers. There is no updater bridge: every existing private-beta tester must quit SuperMac and manually install Keybumps. The retired `https://serpcompany.github.io/supermac-macos-app/updates/appcast.xml` feed returned 404 at the identity cutover and must not be recreated as a cross-bundle bridge.
 
 ## Local fixture harness
 
