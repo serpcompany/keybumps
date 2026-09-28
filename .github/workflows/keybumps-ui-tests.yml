@@ -1,15 +1,26 @@
 name: Keybumps UI tests
 
 # UI tests launch an ad-hoc signed build with faked permissions and disabled global hot keys
-# (see docs/testing.md). Runs only as a gate of Release Keybumps, or manually from Actions
-# (owner decision: no per-PR or nightly runs, since the repo is private and macOS minutes count 10x).
+# (see docs/testing.md). Runs on pull requests that touch app code, as a gate of Release Keybumps,
+# and manually from Actions. No nightly schedule.
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Keybumps/**
+      - KeybumpsUITests/**
+      - project.yml
+      - .github/workflows/keybumps-ui-tests.yml
   workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: keybumps-ui-tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   XCODE_APP: /Applications/Xcode_26.6.app

@@ -1,13 +1,25 @@
 name: Keybumps unit tests
 
-# Runs only as the first gate of Release Keybumps, or manually from Actions (owner decision:
-# no per-PR runs, since the repo is private and macOS minutes count 10x).
+# Runs on pull requests that touch app code, as the first gate of Release Keybumps, and
+# manually from Actions. No nightly schedule.
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Keybumps/**
+      - KeybumpsTests/**
+      - scripts/**
+      - project.yml
+      - .github/workflows/keybumps-unit-tests.yml
   workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: keybumps-unit-tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   XCODE_APP: /Applications/Xcode_26.6.app
