@@ -106,7 +106,7 @@ User outcome: screenshots taken with Keybumps' hotkeys or the standard macOS sho
 
 ### Screenshots tab
 
-- Command-4 shows only screenshot items from Clipboard History, newest first, with thumbnails and the shared Search input. Copied images and copied image files stay in the Clipboard tab only.
+- Command-4 shows only screenshot items from Clipboard History, newest first, as a three-column grid of large thumbnails with name and age, and the shared Search input. Arrow keys move through the grid (Left/Right once the search field is empty). Copied images and copied image files stay in the Clipboard tab only.
 - Return, or a click, opens the Screenshot Editor; Command-Return, or Command-click, restores the screenshot to the clipboard; Command-E also edits. The footer shows Edit and ⌘ Copy.
 - Per-item delete and confirmed Clear All remove screenshot items from history only; files stay where macOS saved them.
 - When Screenshot Tools is off, the tab says so. Screenshots share Clipboard History's 50-item limit, so heavy copying can displace older screenshots.

@@ -303,10 +303,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 self.dismiss()
                 return nil
             case 125:
-                self.moveSelection(1)
+                self.moveSelection(self.state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
                 return nil
             case 126:
-                self.moveSelection(-1)
+                self.moveSelection(self.state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
+                return nil
+            case 123, 124:
+                // Left and Right move through the screenshot grid; elsewhere they move the caret.
+                guard self.state.tab == .screenshots, self.activeQuery.isEmpty else { return event }
+                self.moveSelection(event.keyCode == 124 ? 1 : -1)
                 return nil
             case 36:
                 self.activateSelection(reveal: event.modifierFlags.contains(.command))
@@ -352,7 +357,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func moveSelection(_ delta: Int) {
         let count = itemCount
         guard count > 0 else { return }
-        state.selection = (state.selection + delta + count) % count
+        if abs(delta) > 1 {
+            // Moving a grid row stops at the edges instead of wrapping to another column.
+            let target = state.selection + delta
+            guard (0..<count).contains(target) else { return }
+            state.selection = target
+        } else {
+            state.selection = (state.selection + delta + count) % count
+        }
     }
 
     private var itemCount: Int {
@@ -639,17 +651,14 @@ private struct CommandPaletteView: View {
                     )
                 }
             case .entries(let entries):
-                ClipboardResultsView(
+                ScreenshotGrid(
                     entries: entries,
                     selection: state.selection,
+                    select: { state.selection = $0 },
                     choose: chooseScreenshot,
-                    showsEditHint: false,
                     delete: clipboard.delete,
                     clear: clipboard.clearScreenshots,
-                    confirmationPresentationChanged: confirmationPresentationChanged,
-                    emptyTitle: "No screenshots yet",
-                    clearTitle: "Clear screenshots?",
-                    clearMessage: "This removes screenshots from Keybumps history. The screenshot files stay where macOS saved them."
+                    confirmationPresentationChanged: confirmationPresentationChanged
                 )
             }
         }
@@ -1044,11 +1053,11 @@ private struct ClipboardEntryPreview: View {
                 thumbnail = nil
                 return
             }
-            thumbnail = await Self.loadThumbnail(from: imageURL)
+            thumbnail = await Self.loadThumbnail(from: imageURL, maxPixelSize: 160)
         }
     }
 
-    private static func loadThumbnail(from url: URL) async -> NSImage? {
+    static func loadThumbnail(from url: URL, maxPixelSize: Int) async -> NSImage? {
         await Task.detached(priority: .utility) {
             let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
             guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions as CFDictionary) else {
@@ -1056,7 +1065,7 @@ private struct ClipboardEntryPreview: View {
             }
             let thumbnailOptions: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: 160,
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceShouldCacheImmediately: true
             ]
@@ -1065,6 +1074,133 @@ private struct ClipboardEntryPreview: View {
             }
             return NSImage(cgImage: image, size: .zero)
         }.value
+    }
+}
+
+/// Raycast's Search Screenshots: a grid of large thumbnails with the name and age underneath,
+/// so screenshots are recognizable at a glance. Arrow keys move through the grid.
+private struct ScreenshotGrid: View {
+    static let columnCount = 3
+
+    let entries: [ClipboardEntry]
+    let selection: Int
+    let select: (Int) -> Void
+    let choose: (ClipboardEntry) -> Void
+    let delete: (ClipboardEntry) -> Void
+    let clear: () -> Void
+    let confirmationPresentationChanged: (Bool) -> Void
+
+    var body: some View {
+        PaletteResultsContainer {
+            VStack(spacing: 0) {
+                HStack {
+                    PaletteSectionHeader("Recent")
+                    Spacer()
+                    ClearAllButton(
+                        confirmationTitle: "Clear screenshots?",
+                        confirmationMessage: "This removes screenshots from Keybumps history. The screenshot files stay where macOS saved them.",
+                        disabled: entries.isEmpty,
+                        confirmationPresentationChanged: confirmationPresentationChanged,
+                        clear: clear
+                    )
+                    .buttonStyle(PaletteChipButtonStyle())
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: Self.columnCount),
+                            spacing: 14
+                        ) {
+                            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                ScreenshotCard(
+                                    entry: entry,
+                                    isSelected: index == selection,
+                                    choose: { select(index); choose(entry) },
+                                    delete: { delete(entry) }
+                                )
+                                .id(entry.id)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                    }
+                    .onChange(of: selection) {
+                        guard entries.indices.contains(selection) else { return }
+                        proxy.scrollTo(entries[selection].id)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ScreenshotCard: View {
+    let entry: ClipboardEntry
+    let isSelected: Bool
+    let choose: () -> Void
+    let delete: () -> Void
+    @State private var thumbnail: NSImage?
+    @State private var isHovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: choose) {
+                ZStack {
+                    PaletteTheme.keycapFill
+                    if let thumbnail {
+                        Image(nsImage: thumbnail)
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .aspectRatio(16 / 10, contentMode: .fit)
+                .clipShape(shape)
+                .overlay(shape.strokeBorder(isSelected ? Color.accentColor : PaletteTheme.border, lineWidth: isSelected ? 3 : 1))
+                .contentShape(shape)
+            }
+            .buttonStyle(.plain)
+            .overlay(alignment: .topTrailing) {
+                if isHovering || isSelected {
+                    Button(role: .destructive, action: delete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 26, height: 26)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(8)
+                    .help("Delete (⌫)")
+                    .accessibilityLabel("Delete screenshot \(entry.displayText)")
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayText)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(entry.capturedAt, style: .relative)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 2)
+        }
+        .onHover { isHovering = $0 }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .task(id: entry.mediaPath) {
+            guard let imageURL = entry.imageURL else { return }
+            thumbnail = await ClipboardEntryPreview.loadThumbnail(from: imageURL, maxPixelSize: 640)
+        }
     }
 }
 
@@ -1178,7 +1314,7 @@ private struct PaletteFooter: View {
         HStack {
             Spacer()
             HStack(spacing: 14) {
-                hint("Select", keys: ["↑", "↓"], isPrimary: false)
+                hint("Select", keys: tab == .screenshots ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
                 if let primaryActionTitle = tab.primaryActionTitle {
                     hint(primaryActionTitle, keys: ["↵"], isPrimary: true)
                 }
