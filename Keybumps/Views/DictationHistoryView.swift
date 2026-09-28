@@ -56,6 +56,7 @@ struct DictationHistoryView: View {
                 audioPlayer.stop()
                 model.dictationHistory.clear()
             }
+            .buttonStyle(.bordered)
         }
         .padding(16)
     }
@@ -393,8 +394,6 @@ struct ClearAllButton: View {
         Button(Self.title, systemImage: "trash", role: .destructive) {
             showsConfirmation = true
         }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
         .disabled(disabled)
         .onChange(of: showsConfirmation) {
             confirmationPresentationChanged(showsConfirmation)

@@ -507,8 +507,8 @@ private struct CommandPaletteView: View {
             )
             PaletteTabBar(selected: state.tab, select: selectTab)
             content
-            Divider().opacity(0.35)
-            PaletteFooter(tab: state.tab)
+                .contentMargins(.bottom, 48, for: .scrollContent)
+                .overlay(alignment: .bottom) { PaletteFooter(tab: state.tab) }
         }
         .background(PaletteTheme.background, in: RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .overlay {
@@ -651,7 +651,7 @@ private struct PaletteTabBar: View {
                     select(tab)
                 } label: {
                     HStack(spacing: 7) {
-                        ShortcutKeycaps(shortcut: tab.labelPresentation.shortcut, compact: true)
+                        PaletteKeycaps(shortcut: tab.labelPresentation.shortcut)
                         Text(tab.labelPresentation.name)
                             .lineLimit(1)
                             .fixedSize()
@@ -709,6 +709,7 @@ private struct KeyboardShortcutterResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
+                        .buttonStyle(PaletteChipButtonStyle())
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
@@ -793,6 +794,7 @@ private struct SearchResultsView: View {
                                 confirmationPresentationChanged: confirmationPresentationChanged,
                                 clear: clearRecentItems
                             )
+                            .buttonStyle(PaletteChipButtonStyle())
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 6)
@@ -914,6 +916,7 @@ private struct ClipboardResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
+                        .buttonStyle(PaletteChipButtonStyle())
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
@@ -1044,6 +1047,7 @@ private struct DictationResultsView: View {
                             audioPlayer.stop()
                             clear()
                         }
+                        .buttonStyle(PaletteChipButtonStyle())
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
@@ -1115,35 +1119,40 @@ private struct PaletteEmptyState: View {
     }
 }
 
-/// Raycast's footer: the tab's actions on the right, each with its keys.
+/// Raycast's footer: a floating pill at the bottom right with the tab's actions and their keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: tab.systemImage)
-                .foregroundStyle(.secondary)
+        HStack {
             Spacer()
-            hint("Select", keys: ["↑", "↓"])
-            if let primaryActionTitle = tab.primaryActionTitle {
-                Divider().frame(height: 14)
-                hint(primaryActionTitle, keys: ["↵"])
+            HStack(spacing: 14) {
+                hint("Select", keys: ["↑", "↓"], isPrimary: false)
+                if let primaryActionTitle = tab.primaryActionTitle {
+                    hint(primaryActionTitle, keys: ["↵"], isPrimary: true)
+                }
+                if let secondaryActionTitle = tab.secondaryActionTitle {
+                    hint(secondaryActionTitle, keys: ["⌘", "↵"], isPrimary: false)
+                }
             }
-            if let secondaryActionTitle = tab.secondaryActionTitle {
-                Divider().frame(height: 14)
-                hint(secondaryActionTitle, keys: ["⌘", "↵"])
-            }
+            .font(.system(size: 13, weight: .medium))
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .frame(height: 32)
+            .background(PaletteTheme.pill, in: Capsule())
+            .overlay(Capsule().strokeBorder(PaletteTheme.border, lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
         }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(10)
+        .allowsHitTesting(false)
     }
 
-    private func hint(_ title: String, keys: [String]) -> some View {
-        HStack(spacing: 4) {
-            Text(title).foregroundStyle(.primary)
-            ForEach(keys, id: \.self) { PaletteKeycap($0) }
+    private func hint(_ title: String, keys: [String], isPrimary: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(title).foregroundStyle(isPrimary ? .primary : .secondary)
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { PaletteKeycap($0) }
+            }
         }
     }
 }
