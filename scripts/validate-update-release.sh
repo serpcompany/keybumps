@@ -109,8 +109,15 @@ release_notes_name=${release_notes_path:t}
 [[ "$enclosure_url" == *"$archive_name" ]] || { print -u2 "appcast does not reference $archive_name"; exit 70; }
 [[ "$release_notes_url" == *"$release_notes_name" ]] || { print -u2 "appcast does not reference $release_notes_name"; exit 70; }
 publication_parent=$(update_url_parent_prefix "$publication_feed_url")
-[[ "$enclosure_url" == "$publication_parent"* ]] || { print -u2 "appcast archive URL is outside the publication feed directory"; exit 70; }
-[[ "$release_notes_url" == "$publication_parent"* ]] || { print -u2 "appcast release-note URL is outside the publication feed directory"; exit 70; }
+# Keybumps feeds (production and staging) share immutable assets under releases/<build>/;
+# loopback fixture feeds keep assets beside the feed.
+if [[ "$publication_parent" == https://updates.keybumps.app/* ]]; then
+  asset_prefix="https://updates.keybumps.app/releases/$expected_build/"
+else
+  asset_prefix=$publication_parent
+fi
+[[ "$enclosure_url" == "$asset_prefix"* ]] || { print -u2 "appcast archive URL is outside $asset_prefix"; exit 70; }
+[[ "$release_notes_url" == "$asset_prefix"* ]] || { print -u2 "appcast release-note URL is outside $asset_prefix"; exit 70; }
 grep -q 'sparkle:edSignature=' "$appcast_path" || { print -u2 "missing update signature"; exit 70; }
 grep -q '<!-- sparkle-signatures:' "$appcast_path" || { print -u2 "appcast feed itself is not signed"; exit 70; }
 
