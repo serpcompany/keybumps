@@ -131,6 +131,9 @@ struct SettingsRootView: View {
                 }
             }
             .environment(model)
+            .font(.system(size: 14))
+            .headerProminence(.increased)
+            .controlSize(.large)
             .accessibilityIdentifier("settings.detail.\(navigation.selection.launchToken)")
         }
         .navigationTitle("Keybumps")
@@ -754,12 +757,10 @@ private struct PermissionsView: View {
     var body: some View {
         Form {
             Section("Permissions") {
-                VStack(spacing: 8) {
-                    ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
-                        PermissionRow(permission: permission, compact: true)
-                    }
-                    NotificationPermissionRow()
+                ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
+                    PermissionRow(permission: permission, compact: true)
                 }
+                NotificationPermissionRow()
             }
         }
         .formStyle(.grouped)
@@ -776,9 +777,9 @@ private struct NotificationPermissionRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Notifications").font(.headline)
+                Text("Notifications")
                 Text("Lets the native macOS banner presentation appear in Notification Center.")
-                    .font(.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -791,8 +792,6 @@ private struct NotificationPermissionRow: View {
                 }
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         .task {
             await model.monitorNotificationPermissionChanges()
         }
@@ -1133,8 +1132,6 @@ private struct PermissionRow: View {
         Group {
             if compact {
                 content(state: state, action: action)
-                    .padding(10)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
             } else {
                 Section(permission.title) { content(state: state, action: action) }
             }
@@ -1145,8 +1142,8 @@ private struct PermissionRow: View {
     private func content(state: PermissionAuthorizationState, action: PermissionSettingsRowAction) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                if compact { Text(permission.title).font(.headline) }
-                Text(permission.explanation).font(.caption).foregroundStyle(.secondary)
+                if compact { Text(permission.title) }
+                Text(permission.explanation).font(.system(size: 12)).foregroundStyle(.secondary)
             }
             Spacer()
             Text(model.requiresPermissionRelaunch(permission) ? "Restart Required" : state.rawValue)
