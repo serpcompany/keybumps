@@ -732,8 +732,12 @@ struct KeyboardShortcutterSettingsView: View {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
             SettingsGroup {
+                Toggle("Show Hotkeys tab in the Command Palette", isOn: Binding(
+                    get: { model.preferences.showsHotkeysTab },
+                    set: { model.preferences.showsHotkeysTab = $0 }
+                ))
                 Button("Open Keyboard Shortcutter History") { model.showKeyboardShortcutterHistory() }
-                Text("View, filter, and clear detected actions in the quick switcher.")
+                Text("View, filter, and clear detected actions in the Command Palette.")
                     .foregroundStyle(.secondary)
             }
         }

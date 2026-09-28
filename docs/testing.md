@@ -75,7 +75,7 @@ For changes that touch capability wiring or system integration, the hand-off inc
 1. Command-Space, Shift-Command-Space, and Option-Space from another app open or trigger the right surface.
 2. A window shortcut and one drag-to-snap work on a normal app window.
 3. Dictation inserts text into TextEdit; Escape cancels.
-4. A Shift-Command-4 screenshot appears in ⌘5; Return opens the editor; Done pastes into another app.
+4. A Shift-Command-4 screenshot appears in ⌘4; Return opens the editor; Done pastes into another app.
 5. A Keyboard Shortcutter action in Finder produces its notification.
 6. A denied permission shows System Settings recovery.
 7. Toggling a capability off and on in Settings stops and restores it.
