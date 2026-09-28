@@ -234,20 +234,72 @@ struct SettingsDropdown<Value: Hashable>: View {
     }
 }
 
-/// A shortcut shown as one keycap pill, like Raycast's hotkey field.
-struct SettingsHotkeyPill: View {
-    let label: String
+/// Raycast's hotkey field: gray "Record Hotkey" when empty, a filled keycap pill when set, an
+/// outlined field showing held modifiers while recording, and a clear button on hover.
+struct SettingsHotkeyField: View {
+    let shortcut: ShortcutBinding?
+    let isRecording: Bool
+    let liveModifiers: String
+    let title: String
+    var width: CGFloat = 160
+    let record: () -> Void
+    let clear: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
-        Text(label)
-            .font(.system(size: SettingsTheme.titleSize, weight: .medium))
-            .padding(.horizontal, 10)
-            .frame(minWidth: 56, minHeight: 26)
-            .background(SettingsTheme.control, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        Button(action: record) {
+            Text(label)
+                .font(.system(size: SettingsTheme.titleSize, weight: showsKeys ? .medium : .regular))
+                .foregroundStyle(showsKeys ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .lineLimit(1)
+                .padding(.leading, 10)
+                .padding(.trailing, 24)
+                .frame(width: width, height: 28, alignment: .leading)
+                .background(
+                    shortcut != nil && !isRecording ? SettingsTheme.control : .clear,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .trailing) {
+            if shortcut != nil, isHovering, !isRecording {
+                Button(action: clear) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 7)
+                .help("Clear shortcut")
+                .accessibilityLabel("Clear shortcut for \(title)")
+            }
+        }
+        .onHover { isHovering = $0 }
+        .help("Click, then press a new shortcut. Delete clears it; Escape cancels.")
+        .accessibilityLabel("Record shortcut for \(title)")
+    }
+
+    private var showsKeys: Bool {
+        isRecording ? !liveModifiers.isEmpty : shortcut != nil
+    }
+
+    private var label: String {
+        if isRecording { return liveModifiers.isEmpty ? "Recording…" : liveModifiers }
+        guard let shortcut else { return "Record Hotkey" }
+        return ShortcutKeycapPresentation(shortcut: shortcut.displayName).keys.joined(separator: " ")
+    }
+
+    private var borderColor: Color {
+        if isRecording { return Color.primary.opacity(0.45) }
+        return shortcut == nil && isHovering ? Color.primary.opacity(0.18) : .clear
     }
 }
 
-/// A square icon button beside a hotkey pill, like Raycast's reset button.
+/// A square icon button beside a hotkey field, like Raycast's reset button.
 struct SettingsIconButton: View {
     let systemImage: String
     let help: String

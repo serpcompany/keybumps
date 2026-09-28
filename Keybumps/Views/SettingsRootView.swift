@@ -586,7 +586,7 @@ struct WindowSettingsView: View {
             if let error = recorder.error {
                 SettingsNote(error).foregroundStyle(.orange)
             }
-            SettingsGroup("Commands", subtitle: "Click a shortcut to record a new combination. Delete clears it; Escape cancels.") {
+            SettingsGroup("Commands") {
                 shortcutColumns(WindowSettingsLayout.primaryLeading, WindowSettingsLayout.primaryTrailing)
             }
             SettingsGroup {
@@ -613,6 +613,7 @@ struct WindowSettingsView: View {
                     action: action,
                     shortcut: model.preferences.windowShortcut(for: action),
                     activeRecorderID: recorder.identifier,
+                    liveModifiers: recorder.liveModifiers,
                     record: { beginRecording(action) },
                     clear: { model.finishWindowShortcutRecording(nil, for: action) }
                 )
@@ -631,11 +632,12 @@ struct WindowSettingsView: View {
     }
 }
 
-/// One cell of Window Management's shortcut grid: preview, name, hotkey, and clear.
+/// One cell of Window Management's shortcut grid: preview, name, and hotkey field.
 private struct WindowCommandRow: View {
     let action: WindowAction
     let shortcut: ShortcutBinding?
     let activeRecorderID: String?
+    let liveModifiers: String
     let record: () -> Void
     let clear: () -> Void
 
@@ -646,24 +648,16 @@ private struct WindowCommandRow: View {
             Text(action.title)
                 .lineLimit(1)
             Spacer(minLength: 12)
-            Button(action: record) {
-                if activeRecorderID == action.rawValue {
-                    SettingsHotkeyPill(label: "Press shortcut…")
-                } else if let shortcut {
-                    SettingsHotkeyPill(label: ShortcutKeycapPresentation(shortcut: shortcut.displayName).keys.joined(separator: " "))
-                } else {
-                    Text("Record Hotkey")
-                        .foregroundStyle(.secondary)
-                        .frame(minHeight: 26)
-                }
-            }
-            .buttonStyle(.plain)
+            SettingsHotkeyField(
+                shortcut: shortcut,
+                isRecording: activeRecorderID == action.rawValue,
+                liveModifiers: liveModifiers,
+                title: action.title,
+                width: 136,
+                record: record,
+                clear: clear
+            )
             .disabled(activeRecorderID != nil && activeRecorderID != action.rawValue)
-            .help("Click, then press a new shortcut. Delete clears it; Escape cancels.")
-            .accessibilityLabel("Record shortcut for \(action.title)")
-            SettingsIconButton(systemImage: "xmark", help: "Clear shortcut for \(action.title)", action: clear)
-                .disabled(shortcut == nil || activeRecorderID != nil)
-                .opacity(shortcut == nil ? 0 : 1)
         }
     }
 }
@@ -1152,30 +1146,28 @@ private struct CapabilityShortcutEditor: View {
                 SettingsCommandIcon(systemImage: shortcut.capability.systemImage, tint: shortcut.capability.descriptor.iconTint)
                 Text(shortcut.title)
                 Spacer(minLength: 12)
-                Button {
-                    recorder.begin(
-                        identifier: shortcut.rawValue,
-                        suspend: { model.beginShortcutRecording() },
-                        capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
-                        cancel: { model.cancelShortcutRecording() }
-                    )
-                } label: {
-                    SettingsHotkeyPill(label: pillLabel(binding: binding))
-                }
-                .buttonStyle(.plain)
-                .help("Click, then press a new shortcut. Escape cancels.")
-                .accessibilityLabel("Record shortcut for \(shortcut.title)")
+                SettingsHotkeyField(
+                    shortcut: binding,
+                    isRecording: recorder.identifier == shortcut.rawValue,
+                    liveModifiers: recorder.liveModifiers,
+                    title: shortcut.title,
+                    record: {
+                        recorder.begin(
+                            identifier: shortcut.rawValue,
+                            suspend: { model.beginShortcutRecording() },
+                            capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
+                            cancel: { model.cancelShortcutRecording() }
+                        )
+                    },
+                    clear: { model.finishCapabilityShortcutRecording(nil, for: shortcut) }
+                )
                 .accessibilityValue(shortcutAccessibilityValue(binding: binding))
-                if binding != nil {
-                    SettingsIconButton(systemImage: "xmark", help: "Clear shortcut") {
-                        model.finishCapabilityShortcutRecording(nil, for: shortcut)
+                if binding?.usesSameKeys(as: shortcut.defaultBinding) != true {
+                    SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
+                        model.restoreDefaultCapabilityShortcut(shortcut)
                     }
                     .disabled(recorder.identifier != nil)
                 }
-                SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
-                    model.restoreDefaultCapabilityShortcut(shortcut)
-                }
-                .disabled(binding?.usesSameKeys(as: shortcut.defaultBinding) == true || recorder.identifier != nil)
             }
             if let error = recorder.error {
                 SettingsNote(error).foregroundStyle(.orange)
@@ -1185,12 +1177,6 @@ private struct CapabilityShortcutEditor: View {
             }
         }
         .onDisappear { recorder.cancel() }
-    }
-
-    private func pillLabel(binding: ShortcutBinding?) -> String {
-        if recorder.identifier == shortcut.rawValue { return "Press shortcut…" }
-        guard let binding else { return "Record Shortcut" }
-        return ShortcutKeycapPresentation(shortcut: binding.displayName).keys.joined(separator: " ")
     }
 
     private func shortcutAccessibilityValue(binding: ShortcutBinding?) -> String {
@@ -1261,6 +1247,8 @@ extension Notification.Name {
 private final class ShortcutRecorderState {
     private(set) var identifier: String?
     private(set) var error: String?
+    /// The modifier symbols held down while recording, shown live in the field.
+    private(set) var liveModifiers = ""
     private var monitor: Any?
     private var cancelAction: (() -> Void)?
 
@@ -1275,8 +1263,13 @@ private final class ShortcutRecorderState {
         error = nil
         cancelAction = cancel
         suspend()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        liveModifiers = ""
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
+            if event.type == .flagsChanged {
+                self.liveModifiers = Self.symbols(for: event.modifierFlags)
+                return event
+            }
             if event.keyCode == UInt16(kVK_Escape) {
                 self.finish()
                 cancel()
@@ -1309,7 +1302,15 @@ private final class ShortcutRecorderState {
         stopMonitor()
         identifier = nil
         error = nil
+        liveModifiers = ""
         cancelAction = nil
+    }
+
+    private static func symbols(for flags: NSEvent.ModifierFlags) -> String {
+        [(NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
+            .filter { flags.contains($0.0) }
+            .map(\.1)
+            .joined(separator: " ")
     }
 
     private func stopMonitor() {
