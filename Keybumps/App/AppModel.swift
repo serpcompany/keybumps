@@ -207,7 +207,8 @@ final class AppModel {
             WindowManagementModule(
                 windows: windows,
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
-            )
+            ),
+            KeyboardShortcutterModule(detector: detector, presenter: presenter)
         ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
@@ -280,7 +281,7 @@ final class AppModel {
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
-        if !enabled { deactivate(capability) }
+        if !enabled { capabilities.deactivate(capability, context: capabilityContext) }
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
     }
@@ -298,17 +299,7 @@ final class AppModel {
 
     func applyCapabilities() {
         capabilities.apply(capabilityContext)
-        let enabled = preferences.enabledCapabilities
-        enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
         refreshDetectorState()
-    }
-
-    private func configure(owner: String, capability: Capability, binding: ShortcutBinding?, handler: @escaping () -> Void) {
-        guard preferences.enabledCapabilities.contains(capability), let binding else {
-            shortcuts.unregister(owner: owner)
-            return
-        }
-        shortcuts.register(owner: owner, binding: binding, handler: handler)
     }
 
     private func handleDictationShortcut() {
@@ -418,9 +409,6 @@ final class AppModel {
         permissionsRequiringRelaunch = permissionRelaunchAdvisor.permissionsRequiringRelaunch
         permissionDragAssistant.dismissIfGranted(using: permissions)
         advancePermissionWalkthroughIfNeeded()
-        if preferences.enabledCapabilities.contains(.keyboardShortcutter), detector.status != .monitoring {
-            detector.start()
-        }
         capabilities.permissionsDidRefresh(capabilityContext)
         refreshDetectorState()
         updateMissingPermissionBadge()
@@ -607,28 +595,6 @@ final class AppModel {
 
     private func updateMissingPermissionBadge() {
         NSApplication.shared.dockTile.badgeLabel = missingPermissionCount > 0 ? "!" : nil
-    }
-
-    private func deactivate(_ capability: Capability) {
-        if let module = capabilities.module(for: capability) {
-            module.deactivate(capabilityContext)
-            return
-        }
-        switch capability {
-        case .quickSearch:
-            break
-        case .clipboardHistory:
-            break
-        case .dictation:
-            break
-        case .windowManagement:
-            break
-        case .keyboardShortcutter:
-            detector.stop()
-            presenter.dismissAll()
-        case .screenshotTools:
-            break
-        }
     }
 
 }

@@ -107,17 +107,9 @@ struct SettingsRootView: View {
 
 extension AppModel {
     func settingsAttentionCount(for section: SettingsSection) -> Int {
-        switch section {
-        case .permissions:
-            return missingPermissionCount
-        case _ where section.capability.flatMap(capabilities.module(for:)) != nil:
-            return capabilities.attentionCount(for: section.capability!, context: capabilityContext)
-        case .keyboardShortcutter:
-            guard preferences.enabledCapabilities.contains(.keyboardShortcutter) else { return 0 }
-            return permissionReadiness(for: [.keyboardShortcutter]).missingCount
-        default:
-            return 0
-        }
+        if section == .permissions { return missingPermissionCount }
+        guard let capability = section.capability else { return 0 }
+        return capabilities.attentionCount(for: capability, context: capabilityContext)
     }
 }
 

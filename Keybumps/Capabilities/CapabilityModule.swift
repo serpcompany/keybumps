@@ -187,11 +187,9 @@ final class CapabilityRegistry {
     private let byCapability: [Capability: any CapabilityModule]
 
     init(modules: [any CapabilityModule]) {
-        let order = CapabilityCatalog.descriptors.map(\.capability)
-        let registered = modules.map(\.capability)
         precondition(
-            registered == order.filter(registered.contains),
-            "Capability modules must be registered once each, in catalog order"
+            modules.map(\.capability) == CapabilityCatalog.descriptors.map(\.capability),
+            "Register one module per catalog descriptor, in catalog order"
         )
         self.modules = modules
         byCapability = Dictionary(uniqueKeysWithValues: modules.map { ($0.capability, $0) })
