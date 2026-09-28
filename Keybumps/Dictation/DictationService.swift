@@ -264,8 +264,8 @@ final class DictationService {
 
     func copyRecoveredTranscript() {
         guard let recoveredTranscript else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(recoveredTranscript, forType: .string)
+        NSPasteboard.keybumps.clearContents()
+        NSPasteboard.keybumps.setString(recoveredTranscript, forType: .string)
     }
 
     func clearRecoveredTranscript() {
@@ -389,7 +389,7 @@ final class DictationService {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier else {
             throw NSError(domain: "Keybumps.Dictation", code: 4, userInfo: [NSLocalizedDescriptionKey: "The destination app could not be focused. Your transcript was preserved."])
         }
-        let pasteboard = NSPasteboard.general
+        let pasteboard = NSPasteboard.keybumps
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else {
             throw NSError(domain: "Keybumps.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])

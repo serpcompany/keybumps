@@ -18,9 +18,7 @@ extension AppModel {
         defaults.removePersistentDomain(forName: uiTestDefaultsSuite)
         defaults.set(true, forKey: "didCompleteOnboarding")
 
-        let clipboard = ClipboardHistoryService(
-            pasteboard: NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
-        )
+        let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard)
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(),
@@ -60,11 +58,26 @@ extension AppModel {
         return model
     }
 
-    /// Runs after `start()`, once the main window exists.
+    private static var didPerformUITestLaunchActions = false
+
+    /// Runs after `start()`, once the main window exists. Only the first call acts, because the
+    /// window's `.task` reruns whenever the main window is reopened.
     func performUITestLaunchActions(_ configuration: UITestLaunchConfiguration = .current) {
-        guard configuration.isUITesting, let tab = configuration.openPalette else { return }
+        guard configuration.isUITesting, !Self.didPerformUITestLaunchActions,
+              let tab = configuration.openPalette else { return }
+        Self.didPerformUITestLaunchActions = true
         NSApplication.shared.activate(ignoringOtherApps: true)
         showCommandPalette(tab)
+    }
+}
+
+extension NSPasteboard {
+    static let uiTestPasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
+
+    /// The pasteboard Keybumps reads and writes: the general pasteboard, or a private named one in
+    /// UI test mode so tests never touch the user's real clipboard.
+    static var keybumps: NSPasteboard {
+        UITestLaunchConfiguration.current.isUITesting ? uiTestPasteboard : .general
     }
 }
 

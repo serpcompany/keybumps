@@ -41,8 +41,8 @@ Permission-gated and system-level features are faked in automated tests, never g
 
 | Argument | Effect |
 | --- | --- |
-| `-KBUITestPermissions granted\|denied` | Enters UI test mode and fakes every permission check (Accessibility, Input Monitoring, Microphone, Speech, notifications) as all granted or all denied. It also swaps in an inert pointer event tap, a fake screenshot-folder reader (denied throws access-denied), and an inert Spotlight resolver. Dictation refuses audio capture before the microphone opens. Data goes to a disposable `$TMPDIR/KeybumpsUITests-<pid>` root, preferences to a wiped `com.serp.keybumps.uitests` suite with onboarding marked complete, and the clipboard poller reads a named pasteboard. SwiftUI animations are off. |
-| `-KBOpenPalette <tab>` | Opens the Command Palette on `search`, `clipboard`, `dictation`, `keyboardShortcutter`, or `screenshots` after launch |
+| `-KBUITestPermissions granted\|denied` | Enters UI test mode and fakes every permission check (Accessibility, Input Monitoring, Microphone, Speech, notifications) as all granted or all denied. It also swaps in an inert pointer event tap, a fake screenshot-folder reader (denied throws access-denied), and an inert Spotlight resolver. Dictation refuses audio capture before the microphone opens. Data goes to a disposable `$TMPDIR/KeybumpsUITests-<pid>` root, preferences to a wiped `com.serp.keybumps.uitests` suite with onboarding marked complete, and every pasteboard read and write goes to a private named pasteboard (`NSPasteboard.keybumps`). SwiftUI animations are off. |
+| `-KBOpenPalette <tab>` | Opens the Command Palette once, at launch, on `search`, `clipboard`, `dictation`, `keyboardShortcutter`, or `screenshots` after launch |
 | `-KBOpenSettings <section>` | Opens Settings on a `SettingsSection` case name (`search`, `clipboard`, `screenshotTools`, `dictation`, `windows`, `keyboardShortcutter`, `permissions`, `general`) |
 | `-KBDisableHotKeys YES` | Registers shortcuts with an inert backend, so no Carbon hot keys are installed |
 | `-KBUITestSeedClipboardImage YES` | Adds one generated PNG to the sandboxed Clipboard History |

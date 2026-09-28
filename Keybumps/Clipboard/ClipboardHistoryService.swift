@@ -90,7 +90,7 @@ class ClipboardHistoryService {
     init(
         fileManager: FileManager = .default,
         storageURL: URL? = nil,
-        pasteboard: NSPasteboard = .general,
+        pasteboard: NSPasteboard = .keybumps,
         mediaDirectoryURL: URL? = nil
     ) {
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport

@@ -36,7 +36,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private var didFinish = false
     var onFinish: ((Result?) -> Void)?
 
-    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .general) {
+    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .keybumps) {
         self.source = source
         self.sourceURL = sourceURL
         self.fallbackFolder = fallbackFolder

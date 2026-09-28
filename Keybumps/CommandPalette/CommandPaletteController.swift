@@ -480,7 +480,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func copy(_ text: String, suppressClipboardHistory: Bool) {
-        let pasteboard = NSPasteboard.general
+        let pasteboard = NSPasteboard.keybumps
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
