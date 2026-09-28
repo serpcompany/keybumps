@@ -93,10 +93,10 @@ final class PaletteHUD {
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
 
-    func show(_ message: String) {
+    func show(_ message: String, systemImage: String = "checkmark.circle.fill", tint: Color = .green) {
         let panel = panel ?? makePanel()
         self.panel = panel
-        let host = NSHostingView(rootView: PaletteHUDView(message: message))
+        let host = NSHostingView(rootView: PaletteHUDView(message: message, systemImage: systemImage, tint: tint))
         panel.contentView = host
         panel.setContentSize(host.fittingSize)
         if let screen = NSScreen.main {
@@ -121,7 +121,7 @@ final class PaletteHUD {
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (tint == .green ? 1.2 : 3), execute: work)
     }
 
     private func makePanel() -> NSPanel {
@@ -140,11 +140,13 @@ final class PaletteHUD {
 
 private struct PaletteHUDView: View {
     let message: String
+    let systemImage: String
+    let tint: Color
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
             Text(message)
                 .foregroundStyle(.primary)
         }

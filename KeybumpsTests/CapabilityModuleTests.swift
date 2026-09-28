@@ -188,6 +188,8 @@ private final class ModuleHarness {
                 inputMonitoringAuthorized: { true },
                 microphoneAuthorizationStatus: { .authorized },
                 speechAuthorizationStatus: { .authorized },
+                screenRecordingAuthorized: { true },
+                requestScreenRecording: {},
                 openSettings: { _ in }
             ),
             nativeNotificationCenter: FakeNativeNotificationCenter(granted: true),
@@ -231,7 +233,8 @@ private final class ModuleHarness {
         case .clipboardHistory: [CapabilityShortcut.clipboardHistory.ownerID]
         case .dictation: [CapabilityShortcut.dictation.ownerID]
         case .windowManagement: Set(WindowAction.allCases.filter { $0.defaultShortcut != nil }.map { "window.\($0.rawValue)" })
-        case .keyboardShortcutter, .screenshotTools: []
+        case .screenshotTools: Set(CapabilityShortcut.allCases.filter { $0.capability == .screenshotTools }.map(\.ownerID))
+        case .keyboardShortcutter: []
         }
     }
 

@@ -12,6 +12,7 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
     case inputMonitoring
     case microphone
     case speechRecognition
+    case screenRecording
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
         case .inputMonitoring: "Input Monitoring"
         case .microphone: "Microphone"
         case .speechRecognition: "Speech Recognition"
+        case .screenRecording: "Screen Recording"
         }
     }
 
@@ -30,6 +32,7 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
         case .inputMonitoring: "Lets Keyboard Shortcutter recognize supported mouse and keyboard actions outside Keybumps."
         case .microphone: "Lets Dictation record only while its recording indicator is visible."
         case .speechRecognition: "Lets Apple transcribe Dictation locally on this Mac."
+        case .screenRecording: "Lets Screenshot Tools take screenshots with its hotkeys."
         }
     }
 
@@ -39,6 +42,7 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
         case .inputMonitoring: "Privacy_ListenEvent"
         case .microphone: "Privacy_Microphone"
         case .speechRecognition: "Privacy_SpeechRecognition"
+        case .screenRecording: "Privacy_ScreenCapture"
         }
         return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
     }
@@ -198,7 +202,7 @@ enum PermissionSettingsRowAction: Equatable {
         switch permission {
         case .microphone where state == .notDetermined, .speechRecognition where state == .notDetermined:
             return .requestAccess
-        case .accessibility, .inputMonitoring, .microphone, .speechRecognition:
+        case .accessibility, .inputMonitoring, .microphone, .speechRecognition, .screenRecording:
             return .recoverInSystemSettings
         }
     }
@@ -277,17 +281,24 @@ final class PermissionCoordinator {
     private(set) var inputMonitoringState: PermissionAuthorizationState = .required
     private(set) var microphoneState: PermissionAuthorizationState = .notDetermined
     private(set) var speechState: PermissionAuthorizationState = .notDetermined
+    private(set) var screenRecordingState: PermissionAuthorizationState = .required
     private(set) var activeRequest: MacPermission?
     private let accessibilityTrusted: () -> Bool
     private let inputMonitoringAuthorized: () -> Bool
     private let microphoneAuthorizationStatus: () -> AVAuthorizationStatus
     private let speechAuthorizationStatus: () -> SFSpeechRecognizerAuthorizationStatus
+    private let screenRecordingAuthorized: () -> Bool
+    private let requestScreenRecording: () -> Void
     private let openSettingsAction: (MacPermission) -> Void
 
     var accessibilityGranted: Bool { accessibilityState.isGranted }
     var inputMonitoringGranted: Bool { inputMonitoringState.isGranted }
     var microphoneGranted: Bool { microphoneState.isGranted }
     var speechGranted: Bool { speechState.isGranted }
+    var screenRecordingGranted: Bool { screenRecordingState.isGranted }
+
+    /// Asks macOS for Screen Recording, which can open System Settings.
+    func requestScreenRecordingAccess() { requestScreenRecording() }
 
     init(
         accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
@@ -298,6 +309,8 @@ final class PermissionCoordinator {
         speechAuthorizationStatus: @escaping () -> SFSpeechRecognizerAuthorizationStatus = {
             SFSpeechRecognizer.authorizationStatus()
         },
+        screenRecordingAuthorized: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
+        requestScreenRecording: @escaping () -> Void = { _ = CGRequestScreenCaptureAccess() },
         openSettings: @escaping (MacPermission) -> Void = { permission in
             _ = NSWorkspace.shared.open(permission.settingsURL)
         }
@@ -306,6 +319,8 @@ final class PermissionCoordinator {
         self.inputMonitoringAuthorized = inputMonitoringAuthorized
         self.microphoneAuthorizationStatus = microphoneAuthorizationStatus
         self.speechAuthorizationStatus = speechAuthorizationStatus
+        self.screenRecordingAuthorized = screenRecordingAuthorized
+        self.requestScreenRecording = requestScreenRecording
         self.openSettingsAction = openSettings
         refresh()
     }
@@ -315,6 +330,7 @@ final class PermissionCoordinator {
         inputMonitoringState = inputMonitoringAuthorized() ? .granted : .required
         microphoneState = Self.state(for: microphoneAuthorizationStatus())
         speechState = Self.state(for: speechAuthorizationStatus())
+        screenRecordingState = screenRecordingAuthorized() ? .granted : .required
     }
 
     func state(for permission: MacPermission) -> PermissionAuthorizationState {
@@ -323,6 +339,7 @@ final class PermissionCoordinator {
         case .inputMonitoring: inputMonitoringState
         case .microphone: microphoneState
         case .speechRecognition: speechState
+        case .screenRecording: screenRecordingState
         }
     }
 
@@ -333,7 +350,7 @@ final class PermissionCoordinator {
     static func recoveryAction(for permission: MacPermission, state: PermissionAuthorizationState) -> PermissionRecoveryAction {
         guard state != .granted else { return .none }
         switch permission {
-        case .accessibility, .inputMonitoring:
+        case .accessibility, .inputMonitoring, .screenRecording:
             return .openSystemSettings
         case .microphone, .speechRecognition:
             return state == .notDetermined ? .request : .openSystemSettings
@@ -349,6 +366,8 @@ final class PermissionCoordinator {
         case .none:
             break
         case .openSystemSettings:
+            // Screen Recording lists Keybumps in System Settings only after it has asked once.
+            if permission == .screenRecording { requestScreenRecording() }
             openSettings(permission)
         case .request:
             switch permission {
@@ -358,7 +377,7 @@ final class PermissionCoordinator {
                 await withCheckedContinuation { continuation in
                     SFSpeechRecognizer.requestAuthorization { _ in continuation.resume() }
                 }
-            case .accessibility, .inputMonitoring:
+            case .accessibility, .inputMonitoring, .screenRecording:
                 break
             }
             refresh()
@@ -594,17 +613,8 @@ final class SpotlightShortcutConflictResolver: SpotlightShortcutConflictResolvin
         else { return .unavailable(manualRecovery: Self.manualRecovery) }
 
         let matches = parameters[1].uint32Value == binding.keyCode
-            && parameters[2].intValue == cocoaModifiers(for: binding.modifiers)
+            && parameters[2].intValue == SymbolicHotKeyModifiers.cocoa(for: binding.modifiers)
         return matches ? .conflict : .noConflict
-    }
-
-    private func cocoaModifiers(for carbonModifiers: UInt32) -> Int {
-        var modifiers = 0
-        if carbonModifiers & UInt32(cmdKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.command.rawValue) }
-        if carbonModifiers & UInt32(shiftKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.shift.rawValue) }
-        if carbonModifiers & UInt32(optionKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.option.rawValue) }
-        if carbonModifiers & UInt32(controlKey) != 0 { modifiers |= Int(NSEvent.ModifierFlags.control.rawValue) }
-        return modifiers
     }
 
     private static let manualRecovery = "Open System Settings → Keyboard → Keyboard Shortcuts → Spotlight, turn off Show Spotlight search, then return to Keybumps."

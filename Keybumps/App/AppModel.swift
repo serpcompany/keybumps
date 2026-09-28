@@ -28,6 +28,7 @@ final class AppModel {
     let inbox: InboxStore
     let shortcuts: GlobalShortcutCoordinator
     let permissions: PermissionCoordinator
+    @ObservationIgnored private let notice = PaletteHUD()
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
@@ -134,7 +135,9 @@ final class AppModel {
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
         dictationFileManager: FileManager = .default,
         allowsDictationSystemAccess: Bool = true,
-        screenshotEditorFallbackFolder: (() -> URL)? = nil
+        screenshotEditorFallbackFolder: (() -> URL)? = nil,
+        screenshotCapturer: ScreenshotCapturer? = nil,
+        symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -188,6 +191,23 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
+        // Unit tests must never rewrite the owner's macOS shortcuts.
+        let symbolicHotKeys = symbolicHotKeyPreferences
+            ?? (UnitTestHost.isActive ? InertSymbolicHotKeyPreferences() : SystemSymbolicHotKeyPreferences())
+        let screenshotModule = ScreenshotToolsModule(
+            service: screenshotTools,
+            palette: commandPalette,
+            clipboard: clipboard,
+            capturer: screenshotCapturer ?? ScreenshotCapturer(),
+            systemShortcuts: SystemScreenshotShortcutTakeover(
+                preferences: symbolicHotKeys,
+                takenOver: { preferences.takenOverSystemShortcuts },
+                setTakenOver: { preferences.takenOverSystemShortcuts = $0 }
+            ),
+            permissions: permissions,
+            editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
+            updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
+        )
         let dictationModule = DictationModule(
             dictation: dictation,
             indicator: injectedDictationIndicator ?? DictationIndicatorController(),
@@ -197,12 +217,7 @@ final class AppModel {
         capabilities = CapabilityRegistry(modules: [
             QuickSearchModule(palette: commandPalette),
             ClipboardHistoryModule(clipboard: clipboard, palette: commandPalette),
-            ScreenshotToolsModule(
-                service: screenshotTools,
-                palette: commandPalette,
-                editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
-                updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
-            ),
+            screenshotModule,
             dictationModule,
             WindowManagementModule(
                 windows: windows,
@@ -215,6 +230,7 @@ final class AppModel {
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
+        screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         refreshDetectorState()
     }
@@ -376,6 +392,18 @@ final class AppModel {
 
     func dismissPermissionRelaunchPrompt() {
         relaunchPromptPermission = nil
+    }
+
+    /// A screenshot hotkey without Screen Recording asks macOS once (which may open System
+    /// Settings); afterwards a brief notice points to Screenshot Tools settings, where Allow and
+    /// Restart live (macOS reports a new grant only after Keybumps reopens).
+    private func screenshotHotkeyNeedsScreenRecording() {
+        guard preferences.didRequestScreenRecording else {
+            preferences.didRequestScreenRecording = true
+            permissions.requestScreenRecordingAccess()
+            return
+        }
+        notice.show("Screen Recording needed — see Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
     }
 
     func restartForPermissionRelaunch() {

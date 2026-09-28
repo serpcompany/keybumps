@@ -68,6 +68,8 @@ extension AppModel {
                 inputMonitoringAuthorized: { granted },
                 microphoneAuthorizationStatus: { granted ? .authorized : .denied },
                 speechAuthorizationStatus: { granted ? .authorized : .denied },
+                screenRecordingAuthorized: { granted },
+                requestScreenRecording: {},
                 openSettings: { _ in }
             ),
             nativeNotificationCenter: FakeNativeNotificationCenter(granted: granted),
@@ -83,7 +85,8 @@ extension AppModel {
                 ingest: { clipboard.ingestImageFile(at: $0, isScreenCapture: true) }
             ),
             allowsDictationSystemAccess: false,
-            screenshotEditorFallbackFolder: { sandbox.screenshots }
+            screenshotEditorFallbackFolder: { sandbox.screenshots },
+            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences()
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {
             model.clipboard.ingestImageFile(at: image, isScreenCapture: false)
