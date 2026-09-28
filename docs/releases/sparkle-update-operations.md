@@ -40,12 +40,16 @@ The normal entry point is `scripts/build-update-release.sh`. It refuses a reused
 
 ## Release in CI
 
-Releases are built and published by the manually triggered **Release Keybumps** workflow (`.github/workflows/release.yml`) on a macOS runner. Merging to `main` never releases. Run it from Actions → Release Keybumps with:
+Releases are cut by [release-please](https://github.com/googleapis/release-please) and built in CI. Nobody types versions or tags.
 
-- `version`: marketing version. `docs/releases/v<version>.md` must exist on the chosen ref.
-- `build`: optional. Defaults to the live production build + 1 and must exceed it.
-- `channel`: `staging` or `production` (which appcast pointer to publish).
-- `publish`: off builds, signs, notarizes, packages, validates, previews publication, and keeps the `publication/` files as a workflow artifact for 90 days. On also runs `scripts/publish-release.sh --publish`.
+1. Merge ordinary PRs to `main` with Conventional Commit titles. `feat:` and `fix:` (plus `perf:` and `refactor:`) become user-facing notes; `docs:`, `test:`, `build:`, `ci:`, and `chore:` stay out.
+2. The **Release Please** workflow keeps one open PR titled `release: Keybumps <next version>`. It bumps `version.txt` and `.release-please-manifest.json` and writes `CHANGELOG.md`. Beta versions count up (`0.0.3-beta.4` → `beta.5`). To start a new line, add `Release-As: 0.1.0` to a commit body. Edit the changelog text in that PR if needed.
+3. Merging the release PR tags `v<version>`, creates the GitHub Release, and calls **Release Keybumps** (`.github/workflows/release.yml`):
+   - `build` (macOS, `release` environment): turns the `CHANGELOG.md` section into `docs/releases/v<version>.md` via `scripts/write-release-notes.sh` (a hand-written file for that version wins); sets the build number to the live production build + 1; builds, signs, notarizes, packages, and validates; keeps the `publication/` artifact for 90 days; publishes to **staging**.
+   - `production` (`production` environment): after approval, publishes `appcast.xml` and `latest.json`, which updates in-app updates and keybumps.app/download.
+4. Release Keybumps can also be run manually from Actions. It takes a version, an optional build number, and `publish` (off = build and notarize only).
+
+The owner should require reviewers on the `production` environment (Settings → Environments). Without that, production publishes right after staging. Release Please needs **Allow GitHub Actions to create and approve pull requests** enabled (Settings → Actions → General) to open its PR.
 
 The workflow uses a temporary keychain for the Developer ID identity and the Sparkle key, pins Sparkle's tools by SHA-256, and fails early if the Sparkle private key doesn't match the public key embedded in Keybumps. The build uses `KEYBUMPS_MANUAL_SIGNING=1` (explicit Developer ID signing via `scripts/ExportOptions-DeveloperID-Manual.plist`); local builds keep automatic signing.
 

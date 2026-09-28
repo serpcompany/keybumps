@@ -1,25 +1,30 @@
 name: Release Keybumps
 
-# Manual only: merging to main never builds or publishes a release.
+# Runs when release-please publishes a release (merging its "release: Keybumps x.y.z" PR),
+# or manually from Actions. Merging ordinary PRs to main never releases.
+# Staging publishes automatically; production waits for approval on the `production` environment.
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      publish:
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       version:
-        description: Marketing version (needs docs/releases/v<version>.md), e.g. 0.0.3-beta.4
+        description: Marketing version, e.g. 0.0.3-beta.4 (notes come from CHANGELOG.md or docs/releases/v<version>.md)
         required: true
         type: string
       build:
         description: Build number (blank = live production build + 1)
         required: false
         type: string
-      channel:
-        description: Where to publish the appcast pointer
-        required: true
-        type: choice
-        options: [staging, production]
-        default: staging
       publish:
-        description: Upload to updates.keybumps.app (off = build, notarize, and keep artifacts only)
+        description: Publish (staging now, production after approval). Off = build, notarize, and keep artifacts only.
         required: true
         type: boolean
         default: false
@@ -42,10 +47,13 @@ env:
   WRANGLER_VERSION: 4.142.0
 
 jobs:
-  release:
+  build:
     runs-on: macos-26
     environment: release
     timeout-minutes: 120
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      build: ${{ steps.resolve.outputs.build }}
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
@@ -89,7 +97,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe > /dev/null
 
+      - name: Write release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ./scripts/write-release-notes.sh CHANGELOG.md "$VERSION" "docs/releases/v${VERSION}.md"
+
       - name: Resolve version and build
+        id: resolve
         env:
           VERSION: ${{ inputs.version }}
           BUILD: ${{ inputs.build }}
@@ -105,6 +119,10 @@ jobs:
             echo "RELEASE_BUILD=$build"
             echo "PREVIOUS_BUILD=$previous"
           } >> "$GITHUB_ENV"
+          {
+            echo "version=$VERSION"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
           echo "Keybumps $VERSION ($build), replacing live build $previous"
 
       - name: Set up signing keychain
@@ -143,9 +161,9 @@ jobs:
             "$FEED_URL" "$UPDATE_PUBLIC_KEY" "$SPARKLE_ACCOUNT" "$SPARKLE_TOOLS" "$RUNNER_TEMP/release"
 
       - name: Preview publication
-        env:
-          CHANNEL: ${{ inputs.channel }}
-        run: ./scripts/publish-release.sh "$RUNNER_TEMP/release" "$CHANNEL"
+        run: |
+          ./scripts/publish-release.sh "$RUNNER_TEMP/release" staging
+          ./scripts/publish-release.sh "$RUNNER_TEMP/release" production
 
       - name: Keep release artifacts
         uses: actions/upload-artifact@v4
@@ -155,14 +173,37 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      - name: Publish to updates.keybumps.app
+      - name: Publish to staging
         if: inputs.publish
         env:
-          CHANNEL: ${{ inputs.channel }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
-        run: ./scripts/publish-release.sh "$RUNNER_TEMP/release" "$CHANNEL" --publish
+        run: ./scripts/publish-release.sh "$RUNNER_TEMP/release" staging --publish
 
       - name: Remove signing keychain
         if: always()
         run: |
           [ -n "${RELEASE_KEYCHAIN:-}" ] && security delete-keychain "$RELEASE_KEYCHAIN" || true
+
+  production:
+    needs: build
+    if: inputs.publish
+    runs-on: macos-26
+    # Configure required reviewers on this environment so production waits for approval.
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Check out Keybumps
+        uses: actions/checkout@v7.0.1
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: keybumps-${{ needs.build.outputs.version }}-${{ needs.build.outputs.build }}
+          path: ${{ runner.temp }}/release/publication
+
+      - name: Publish to production (appcast.xml and latest.json)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+        run: |
+          npm install --global "wrangler@${WRANGLER_VERSION}"
+          ./scripts/publish-release.sh "$RUNNER_TEMP/release" production --publish

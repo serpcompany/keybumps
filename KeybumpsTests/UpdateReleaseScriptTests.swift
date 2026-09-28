@@ -324,6 +324,52 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertEqual(try run(publisher, [output.path, "staging"], environment: environment).status, 0)
     }
 
+    func testReleaseNotesComeFromTheChangelogWithoutLinks() throws {
+        let writer = repositoryRoot.appendingPathComponent("scripts/write-release-notes.sh")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("notes-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let changelog = work.appendingPathComponent("CHANGELOG.md")
+        try """
+        # Changelog
+
+        ## [0.0.3-beta.4](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.3...v0.0.3-beta.4) (2026-09-28)
+
+        ### Features
+
+        * add a Screenshots tab ([88f94da](https://github.com/serpcompany/keybumps/commit/88f94da)), closes [#59](https://github.com/serpcompany/keybumps/issues/59)
+        * **editor:** number keys select tools ([#62](https://github.com/serpcompany/keybumps/issues/62)) ([3ce4272](https://github.com/serpcompany/keybumps/commit/3ce4272))
+
+        ### Fixes
+
+        * recover denied Microphone access ([2764245](https://github.com/serpcompany/keybumps/commit/2764245))
+
+        ## [0.0.3-beta.3](https://github.com/serpcompany/keybumps/compare/x) (2026-09-19)
+
+        * older entry
+        """.write(to: changelog, atomically: true, encoding: .utf8)
+
+        let output = work.appendingPathComponent("v0.0.3-beta.4.md")
+        let result = try run(writer, [changelog.path, "0.0.3-beta.4", output.path])
+        XCTAssertEqual(result.status, 0, result.output)
+        let notes = try String(contentsOf: output, encoding: .utf8)
+        XCTAssertTrue(notes.hasPrefix("# Keybumps 0.0.3-beta.4\n"))
+        XCTAssertTrue(notes.contains("- add a Screenshots tab\n"))
+        XCTAssertTrue(notes.contains("- **editor:** number keys select tools\n"))
+        XCTAssertTrue(notes.contains("### Fixes"))
+        XCTAssertFalse(notes.contains("http"), "no commit, PR, or compare links reach users")
+        XCTAssertFalse(notes.contains("older entry"), "only the requested version's section")
+
+        let handWritten = work.appendingPathComponent("v0.0.3-beta.3.md")
+        try "# Keybumps 0.0.3-beta.3\n\nHand-written.\n".write(to: handWritten, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try run(writer, [changelog.path, "0.0.3-beta.3", handWritten.path]).status, 0)
+        XCTAssertEqual(try String(contentsOf: handWritten, encoding: .utf8), "# Keybumps 0.0.3-beta.3\n\nHand-written.\n", "hand-written notes win")
+
+        let missing = try run(writer, [changelog.path, "0.0.3-beta.9", work.appendingPathComponent("missing.md").path])
+        XCTAssertNotEqual(missing.status, 0)
+        XCTAssertNotEqual(try run(writer, [changelog.path, "latest", work.appendingPathComponent("bad.md").path]).status, 0)
+    }
+
     private func run(_ executable: URL, _ arguments: [String], environment: [String: String] = [:]) throws -> (status: Int32, output: String) {
         let process = Process()
         let pipe = Pipe()
