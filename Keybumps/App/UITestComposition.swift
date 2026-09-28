@@ -4,14 +4,46 @@ import Speech
 
 /// The composition XCUITests launch. It swaps every permission check, event tap, hot-key
 /// registration, audio capture, and user folder for a fake, and keeps all data in a disposable
-/// sandbox. Production launches never reach this file: `AppModel.forLaunch()` returns the
-/// normal composition when `-KBUITestPermissions` is absent.
+/// sandbox. Production launches never reach it: `AppModel.forLaunch()` returns the normal
+/// composition when `-KBUITestPermissions` is absent, and Release builds compile none of it.
+extension AppModel {
+    static func forLaunch(_ configuration: UITestLaunchConfiguration = .current) -> AppModel {
+        #if DEBUG
+        if let mode = configuration.permissions {
+            return makeForUITesting(granted: mode == .granted, configuration: configuration)
+        }
+        #endif
+        return AppModel()
+    }
+
+    private static var didPerformUITestLaunchActions = false
+
+    /// Runs after `start()`, once the main window exists. Only the first call acts, because the
+    /// window's `.task` reruns whenever the main window is reopened.
+    func performUITestLaunchActions(_ configuration: UITestLaunchConfiguration = .current) {
+        guard configuration.isUITesting, !Self.didPerformUITestLaunchActions,
+              let tab = configuration.openPalette else { return }
+        Self.didPerformUITestLaunchActions = true
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        showCommandPalette(tab)
+    }
+}
+
+extension NSPasteboard {
+    static let uiTestPasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
+
+    /// The pasteboard Keybumps reads and writes: the general pasteboard, or a private named one in
+    /// UI test mode so tests never touch the user's real clipboard.
+    static var keybumps: NSPasteboard {
+        UITestLaunchConfiguration.current.isUITesting ? uiTestPasteboard : .general
+    }
+}
+
+#if DEBUG
 extension AppModel {
     static let uiTestDefaultsSuite = "com.serp.keybumps.uitests"
 
-    static func forLaunch(_ configuration: UITestLaunchConfiguration = .current) -> AppModel {
-        guard let mode = configuration.permissions else { return AppModel() }
-        let granted = mode == .granted
+    private static func makeForUITesting(granted: Bool, configuration: UITestLaunchConfiguration) -> AppModel {
         let sandbox = UITestSandbox.prepare()
 
         let defaults = UserDefaults(suiteName: uiTestDefaultsSuite) ?? .standard
@@ -50,34 +82,13 @@ extension AppModel {
                 reader: FakeScreenshotDirectoryReader(granted: granted),
                 ingest: { clipboard.ingestImageFile(at: $0, isScreenCapture: true) }
             ),
-            isDictationAudioCaptureAvailable: false
+            allowsDictationSystemAccess: false,
+            screenshotEditorFallbackFolder: { sandbox.screenshots }
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {
             model.clipboard.ingestImageFile(at: image, isScreenCapture: false)
         }
         return model
-    }
-
-    private static var didPerformUITestLaunchActions = false
-
-    /// Runs after `start()`, once the main window exists. Only the first call acts, because the
-    /// window's `.task` reruns whenever the main window is reopened.
-    func performUITestLaunchActions(_ configuration: UITestLaunchConfiguration = .current) {
-        guard configuration.isUITesting, !Self.didPerformUITestLaunchActions,
-              let tab = configuration.openPalette else { return }
-        Self.didPerformUITestLaunchActions = true
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        showCommandPalette(tab)
-    }
-}
-
-extension NSPasteboard {
-    static let uiTestPasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
-
-    /// The pasteboard Keybumps reads and writes: the general pasteboard, or a private named one in
-    /// UI test mode so tests never touch the user's real clipboard.
-    static var keybumps: NSPasteboard {
-        UITestLaunchConfiguration.current.isUITesting ? uiTestPasteboard : .general
     }
 }
 
@@ -89,7 +100,7 @@ enum UITestSandbox {
 
     static func prepare(fileManager: FileManager = .default) -> Paths {
         let root = fileManager.temporaryDirectory
-            .appendingPathComponent("KeybumpsUITests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+            .appendingPathComponent("KeybumpsUITests", isDirectory: true)
         try? fileManager.removeItem(at: root)
         let screenshots = root.appendingPathComponent("Screenshots", isDirectory: true)
         try? fileManager.createDirectory(at: screenshots, withIntermediateDirectories: true)
@@ -139,22 +150,23 @@ private final class InertGlobalHotKeyBackend: GlobalHotKeyRegistering {
     func unregister(identifier: UInt32) {}
 }
 
-private struct FakeNativeNotificationCenter: NativeNotificationCenterClient {
+struct FakeNativeNotificationCenter: NativeNotificationCenterClient {
     let granted: Bool
     func authorizationStatus() async -> NativeNotificationAuthorization { granted ? .authorized : .denied }
     func requestAuthorization() async throws -> Bool { granted }
     func add(identifier: String, payload: NativeNotificationPayload) async throws {}
 }
 
-private final class InertSpotlightShortcutResolver: SpotlightShortcutConflictResolving {
+final class InertSpotlightShortcutResolver: SpotlightShortcutConflictResolving {
     func status(for binding: ShortcutBinding) -> SpotlightShortcutConflictStatus { .noConflict }
     func disableIfConflicting(_ binding: ShortcutBinding) -> SpotlightShortcutResolution { .noLongerConflicting }
 }
 
-private struct FakeScreenshotDirectoryReader: ScreenshotDirectoryReading {
+struct FakeScreenshotDirectoryReader: ScreenshotDirectoryReading {
     let granted: Bool
     func entries(in folder: URL) throws -> [ScreenshotDirectoryEntry] {
         guard granted else { throw ScreenshotFolderReadError.accessDenied }
         return []
     }
 }
+#endif

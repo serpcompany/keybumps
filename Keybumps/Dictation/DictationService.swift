@@ -156,7 +156,7 @@ final class DictationService {
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
     private let didWritePasteboard: () -> Void
-    private let isAudioCaptureAvailable: Bool
+    private let allowsSystemAccess: Bool
     var durationLimit: DictationDurationLimit
 
     init(
@@ -166,9 +166,9 @@ final class DictationService {
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
         didWritePasteboard: @escaping () -> Void = {},
-        isAudioCaptureAvailable: Bool = true
+        allowsSystemAccess: Bool = true
     ) {
-        self.isAudioCaptureAvailable = isAudioCaptureAvailable
+        self.allowsSystemAccess = allowsSystemAccess
         selectedLanguage = language
         self.durationLimit = durationLimit
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
@@ -213,7 +213,7 @@ final class DictationService {
         guard phase == .idle || isFailed else { return }
         guard retryingEntryID == nil else { return }
         // UI test compositions never open the microphone, whatever the faked permission state.
-        guard isAudioCaptureAvailable else {
+        guard allowsSystemAccess else {
             fail("Audio capture is unavailable in this session.")
             return
         }
@@ -383,6 +383,8 @@ final class DictationService {
     }
 
     private func paste(_ text: String) async throws {
+        // UI test compositions never activate another app or synthesize Command-V.
+        guard allowsSystemAccess else { throw NSError(domain: "Keybumps.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "Insertion is unavailable in this session. Your transcript was preserved."]) }
         guard let destination = destination?.runningApplication() else { throw NSError(domain: "Keybumps.Dictation", code: 2, userInfo: [NSLocalizedDescriptionKey: "The destination app is no longer available. Your transcript was preserved."]) }
         destination.activate(options: [])
         try await Task.sleep(for: .milliseconds(160))

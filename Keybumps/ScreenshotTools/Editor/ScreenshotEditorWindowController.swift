@@ -63,7 +63,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             canvas: canvas,
             cancel: { [weak self] in self?.cancel() },
             done: { [weak self] in self?.done() }
-        ))
+        ).uiTestAnimationsDisabled())
         window.contentView = root
         model.onChange = { [weak self] in self?.canvas.needsDisplay = true }
     }

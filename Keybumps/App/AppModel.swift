@@ -142,7 +142,8 @@ final class AppModel {
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
         dictationFileManager: FileManager = .default,
-        isDictationAudioCaptureAvailable: Bool = true
+        allowsDictationSystemAccess: Bool = true,
+        screenshotEditorFallbackFolder: (() -> URL)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -188,10 +189,10 @@ final class AppModel {
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
             didWritePasteboard: clipboard.suppressCurrentChange,
-            isAudioCaptureAvailable: isDictationAudioCaptureAvailable
+            allowsSystemAccess: allowsDictationSystemAccess
         )
         screenshotEditor = ScreenshotEditorPresenter(
-            fallbackFolder: { ScreenshotLocationResolver.system.resolve() },
+            fallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
             editingChanged: { isEditing in
                 updateSafetyPolicy.updateCriticalOperation(.unsavedWork, active: isEditing)
                 updater.installationSafetyDidChange()

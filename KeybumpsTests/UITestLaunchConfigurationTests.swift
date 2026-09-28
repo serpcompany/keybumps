@@ -117,7 +117,7 @@ struct UITestFakeCompositionTests {
         let service = DictationService(
             language: "en-US",
             history: DictationHistoryService(recordingsDirectoryURL: root),
-            isAudioCaptureAvailable: false
+            allowsSystemAccess: false
         )
 
         service.start()

@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// Launch arguments that let XCUITests reach surfaces without real permissions or global hot keys.
 ///
@@ -16,7 +16,14 @@ struct UITestLaunchConfiguration: Equatable {
     static let disableHotKeysArgument = "-KBDisableHotKeys"
     static let seedClipboardImageArgument = "-KBUITestSeedClipboardImage"
 
-    static let current = UITestLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
+    /// Release builds never read the flags, so the shipping app has no test mode.
+    static let current: UITestLaunchConfiguration = {
+        #if DEBUG
+        UITestLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
+        #else
+        UITestLaunchConfiguration(arguments: [])
+        #endif
+    }()
 
     private(set) var permissions: PermissionMode?
     private(set) var openPalette: CommandPaletteTab?
@@ -51,6 +58,15 @@ struct UITestLaunchConfiguration: Equatable {
         let next = arguments.index(after: index)
         guard next < arguments.endIndex, !arguments[next].hasPrefix("-") else { return nil }
         return arguments[next]
+    }
+}
+
+extension View {
+    /// Turns off SwiftUI animations under UI test mode. Apply at every hosting root.
+    func uiTestAnimationsDisabled() -> some View {
+        transaction { transaction in
+            if UITestLaunchConfiguration.current.isUITesting { transaction.disablesAnimations = true }
+        }
     }
 }
 

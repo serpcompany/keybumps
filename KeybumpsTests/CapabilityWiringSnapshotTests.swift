@@ -282,7 +282,7 @@ final class WiringHarness {
                 homeDirectory: screenshotHome,
                 isDirectory: { _ in true }
             ),
-            reader: EmptyScreenshotDirectoryReader(),
+            reader: FakeScreenshotDirectoryReader(granted: true),
             ingest: { _ in false }
         )
         model = AppModel(
@@ -302,13 +302,13 @@ final class WiringHarness {
                 speechAuthorizationStatus: { grants.isGranted(.speechRecognition) ? .authorized : .denied },
                 openSettings: { _ in }
             ),
-            nativeNotificationCenter: AuthorizedNotificationCenter(),
+            nativeNotificationCenter: FakeNativeNotificationCenter(granted: true),
             updater: DisabledUpdateController(reason: "Capability wiring snapshot"),
             dictationModelManager: DictationModelManager(
                 modelsRoot: directory.appendingPathComponent("models", isDirectory: true),
                 downloader: WhisperKitModelDownloader()
             ),
-            spotlightShortcutResolver: NullSpotlightResolver(),
+            spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
             dictationHistory: DictationHistoryService(
                 recordingsDirectoryURL: directory.appendingPathComponent("recordings", isDirectory: true)
@@ -494,10 +494,6 @@ private final class SandboxedFileManager: FileManager {
     }
 }
 
-private struct EmptyScreenshotDirectoryReader: ScreenshotDirectoryReading {
-    func entries(in folder: URL) throws -> [ScreenshotDirectoryEntry] { [] }
-}
-
 private struct NullEventPersistence: EventPersistence {
     func load() throws -> [CoachingEvent] { [] }
     func save(_ events: [CoachingEvent]) throws {}
@@ -506,15 +502,4 @@ private struct NullEventPersistence: EventPersistence {
 @MainActor
 private struct NullPresenceController: AppPresenceControlling {
     func apply(showInDockAndSwitcher: Bool) {}
-}
-
-private struct AuthorizedNotificationCenter: NativeNotificationCenterClient {
-    func authorizationStatus() async -> NativeNotificationAuthorization { .authorized }
-    func requestAuthorization() async throws -> Bool { true }
-    func add(identifier: String, payload: NativeNotificationPayload) async throws {}
-}
-
-private final class NullSpotlightResolver: SpotlightShortcutConflictResolving {
-    func status(for binding: ShortcutBinding) -> SpotlightShortcutConflictStatus { .noConflict }
-    func disableIfConflicting(_ binding: ShortcutBinding) -> SpotlightShortcutResolution { .noLongerConflicting }
 }

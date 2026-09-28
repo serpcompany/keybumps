@@ -13,9 +13,7 @@ struct KeybumpsApp: App {
                     model.start()
                     model.performUITestLaunchActions()
                 }
-                .transaction { transaction in
-                    if UITestLaunchConfiguration.current.isUITesting { transaction.disablesAnimations = true }
-                }
+                .uiTestAnimationsDisabled()
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     model.applicationDidBecomeActive()
                     Task { await model.refreshNotificationPermission() }

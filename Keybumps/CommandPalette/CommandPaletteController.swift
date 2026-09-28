@@ -279,6 +279,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
+            .uiTestAnimationsDisabled()
         )
         panel.setContentSize(size)
         self.panel = panel
