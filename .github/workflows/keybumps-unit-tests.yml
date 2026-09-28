@@ -1,22 +1,13 @@
-name: Keybumps tests
+name: Keybumps unit tests
 
+# Runs only as the first gate of Release Keybumps, or manually from Actions (owner decision:
+# no per-PR runs, since the repo is private and macOS minutes count 10x).
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - Keybumps/**
-      - KeybumpsTests/**
-      - scripts/**
-      - project.yml
-      - .github/workflows/keybumps-release-checks.yml
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: keybumps-tests-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   XCODE_APP: /Applications/Xcode_26.6.app

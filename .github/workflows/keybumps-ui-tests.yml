@@ -1,32 +1,22 @@
 name: Keybumps UI tests
 
 # UI tests launch an ad-hoc signed build with faked permissions and disabled global hot keys
-# (see docs/testing.md). Pull requests run the smoke suite; manual runs (workflow_dispatch) run
-# the whole KeybumpsUITests target with retries. There is no nightly schedule (see #73).
+# (see docs/testing.md). Runs only as a gate of Release Keybumps, or manually from Actions
+# (owner decision: no per-PR or nightly runs, since the repo is private and macOS minutes count 10x).
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - Keybumps/**
-      - KeybumpsUITests/**
-      - project.yml
-      - .github/workflows/keybumps-ui-tests.yml
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: keybumps-ui-tests-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   XCODE_APP: /Applications/Xcode_26.6.app
 
 jobs:
   ui:
-    name: ${{ github.event_name == 'pull_request' && 'UI smoke tests' || 'UI tests (full, with retries)' }}
+    name: UI tests (with retries)
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -62,20 +52,7 @@ jobs:
             CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO \
             | xcbeautify --renderer github-actions
 
-      - name: Run UI smoke tests
-        if: github.event_name == 'pull_request'
-        run: |
-          set -o pipefail
-          xcodebuild test-without-building \
-            -project Keybumps.xcodeproj -scheme KeybumpsUITests \
-            -destination 'platform=macOS' \
-            -derivedDataPath .derived-ui -clonedSourcePackagesDirPath .spm \
-            -only-testing:KeybumpsUITests/SmokeUITests \
-            -resultBundlePath KeybumpsUITests.xcresult \
-            | xcbeautify --renderer github-actions
-
-      - name: Run full UI suite with retries
-        if: github.event_name != 'pull_request'
+      - name: Run UI suite with retries
         run: |
           set -o pipefail
           xcodebuild test-without-building \

@@ -2,6 +2,7 @@ name: Release Keybumps
 
 # Runs when release-please publishes a release (merging its "release: Keybumps x.y.z" PR),
 # or manually from Actions. Merging ordinary PRs to main never releases.
+# The unit and UI test suites run first; nothing is built or published unless both pass.
 # Staging publishes automatically; production waits for approval on the `production` environment.
 on:
   workflow_call:
@@ -47,7 +48,14 @@ env:
   WRANGLER_VERSION: 4.142.0
 
 jobs:
+  unit-tests:
+    uses: ./.github/workflows/keybumps-unit-tests.yml
+
+  ui-tests:
+    uses: ./.github/workflows/keybumps-ui-tests.yml
+
   build:
+    needs: [unit-tests, ui-tests]
     runs-on: macos-26
     environment: release
     timeout-minutes: 120

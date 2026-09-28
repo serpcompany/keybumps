@@ -6,8 +6,8 @@ Decisions for how Keybumps is tested, researched against current sources on 2026
 
 | Level | What it proves | Tooling | Where |
 | --- | --- | --- | --- |
-| Deterministic tests | Domain logic, state, adapter contracts, wiring snapshots, release scripts | Swift Testing (new) and XCTest (existing) in `KeybumpsTests` | Every PR in CI; locally before every hand-off |
-| UI smoke tests | App launches; Settings, palette tabs, and editor open and respond | XCUITest in a `KeybumpsUITests` target, driven by launch arguments with faked permissions | Small suite per PR once stable; full suite on demand (see #73 for release gating) |
+| Deterministic tests | Domain logic, state, adapter contracts, wiring snapshots, release scripts | Swift Testing (new) and XCTest (existing) in `KeybumpsTests` | Locally before every hand-off; in CI as the first gate of every release build, or on demand |
+| UI smoke tests | App launches; Settings, palette tabs, and editor open and respond | XCUITest in a `KeybumpsUITests` target, driven by launch arguments with faked permissions | In CI as a gate of every release build, or on demand |
 | Signed runtime and installed artifact | Global hot keys, real permissions, cross-app paste/insertion, window movement, real screenshots | `scripts/build-qa-candidate.sh` plus a short manual checklist | Owner's Mac (agent first pass headless; screen only when handed over) |
 | Owner acceptance | The scoped workflow works for the owner | Issue hit list | Owner's Mac |
 
@@ -54,10 +54,11 @@ Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `s
 ## CI
 
 - **Runner:** GitHub-hosted `macos-26` (arm64), pinning Xcode with `xcode-select`. Evaluate the `xcode-27` image labels separately before moving. macOS minutes cost about 10× Linux, so jobs set `timeout-minutes`.
-- **Per PR:**
-  - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure. The existing `keybumps-release-checks.yml` runs only the two update-tooling test classes and should be widened.
-  - **UI smoke job:** `SmokeUITests` (5 XCUITests) in `keybumps-ui-tests.yml`, ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`). The #70 spike proved this path on image `20260907.0351.1`, and it was enabled per PR after three consecutive green runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
-- **On demand (`workflow_dispatch`):** the full UI suite with `-retry-tests-on-failure -test-iterations 3`. There is no nightly schedule: the repo is private (macOS minutes count 10×) and the full suite currently equals the smoke suite. #73 decides whether the grown suite gates releases. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x.
+- **When CI runs tests (owner decision, 2026-09-28):** only before a build. The repo is private and macOS minutes count 10×, so pull requests and merges to `main` run no macOS tests. Agents run the unit suite locally before every hand-off instead (see `development-workflow.md`).
+  - **Release gate:** `release.yml` (Release Keybumps, from release-please or run manually) calls `keybumps-unit-tests.yml` and `keybumps-ui-tests.yml` first. The build, notarization, and publish jobs need both to pass.
+  - **On demand:** either workflow can be run from Actions (`workflow_dispatch`), for example on a risky branch like #53.
+  - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure.
+  - **UI job:** the whole `KeybumpsUITests` target (today the 5 `SmokeUITests`), ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`), with `-retry-tests-on-failure -test-iterations 3`. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x. The #70 spike proved this path on image `20260907.0351.1`, and it then passed three consecutive runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
 - **Hygiene:**
   - `build-for-testing` then `test-without-building`
   - cache SPM packages (`-clonedSourcePackagesDirPath`, keyed on `Package.resolved`), not DerivedData
