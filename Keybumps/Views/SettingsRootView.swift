@@ -11,8 +11,12 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsNavigationHistory: Equatable {
-    private(set) var selection: SettingsSection = .permissions
+    private(set) var selection: SettingsSection
     private(set) var backStack: [SettingsSection] = []
+
+    init(selection: SettingsSection = .permissions) {
+        self.selection = selection
+    }
 
     var canGoBack: Bool { !backStack.isEmpty }
 
@@ -30,7 +34,9 @@ struct SettingsNavigationHistory: Equatable {
 
 struct SettingsRootView: View {
     @Environment(AppModel.self) private var model
-    @State private var navigation = SettingsNavigationHistory()
+    @State private var navigation = SettingsNavigationHistory(
+        selection: UITestLaunchConfiguration.current.openSettings ?? .permissions
+    )
 
     var body: some View {
         NavigationSplitView {
@@ -40,6 +46,7 @@ struct SettingsRootView: View {
                     attentionCount: model.settingsAttentionCount(for: section)
                 )
                 .tag(section)
+                .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
             }
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220)
         } detail: {
@@ -54,7 +61,9 @@ struct SettingsRootView: View {
                 case .permissions: PermissionsView()
                 case .general: GeneralView()
                 }
-            }.environment(model)
+            }
+            .environment(model)
+            .accessibilityIdentifier("settings.detail.\(navigation.selection.launchToken)")
         }
         .navigationTitle("Keybumps")
         .toolbar {
@@ -920,6 +929,7 @@ private struct CapabilityToggle: View {
             "Enable \(capability.title)",
             isOn: CapabilityToggleBinding(model: model, capability: capability).value
         )
+        .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
     }
 }
 

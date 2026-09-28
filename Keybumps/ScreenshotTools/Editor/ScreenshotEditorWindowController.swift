@@ -50,6 +50,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             defer: false
         )
         window.title = "Edit Screenshot"
+        window.identifier = NSUserInterfaceItemIdentifier("screenshotEditor")
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: Self.minimumWidth, height: 420)
         window.tabbingMode = .disallowed

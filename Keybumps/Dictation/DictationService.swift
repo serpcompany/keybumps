@@ -156,6 +156,7 @@ final class DictationService {
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
     private let didWritePasteboard: () -> Void
+    private let isAudioCaptureAvailable: Bool
     var durationLimit: DictationDurationLimit
 
     init(
@@ -164,8 +165,10 @@ final class DictationService {
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
-        didWritePasteboard: @escaping () -> Void = {}
+        didWritePasteboard: @escaping () -> Void = {},
+        isAudioCaptureAvailable: Bool = true
     ) {
+        self.isAudioCaptureAvailable = isAudioCaptureAvailable
         selectedLanguage = language
         self.durationLimit = durationLimit
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
@@ -209,6 +212,11 @@ final class DictationService {
     func start() {
         guard phase == .idle || isFailed else { return }
         guard retryingEntryID == nil else { return }
+        // UI test compositions never open the microphone, whatever the faked permission state.
+        guard isAudioCaptureAvailable else {
+            fail("Audio capture is unavailable in this session.")
+            return
+        }
         guard microphoneGranted, speechGranted else {
             fail("Microphone and Speech Recognition permissions are required.")
             return

@@ -255,6 +255,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
+        panel.identifier = NSUserInterfaceItemIdentifier("commandPalette")
         panel.contentViewController = NSHostingController(
             rootView: CommandPaletteView(
                 state: state,
@@ -706,6 +707,7 @@ private struct PaletteTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected == tab ? .isSelected : [])
+                .accessibilityIdentifier("palette.tab.\(tab.rawValue)")
             }
             Spacer()
             Image("KeybumpsArrow")

@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct KeybumpsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model = AppModel.forLaunch()
 
     var body: some Scene {
         Window(ReleaseLane.current.productName, id: "main") {
@@ -11,6 +11,10 @@ struct KeybumpsApp: App {
                 .environment(model)
                 .task {
                     model.start()
+                    model.performUITestLaunchActions()
+                }
+                .transaction { transaction in
+                    if UITestLaunchConfiguration.current.isUITesting { transaction.disablesAnimations = true }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     model.applicationDidBecomeActive()
