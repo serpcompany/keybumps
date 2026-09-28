@@ -153,6 +153,12 @@ struct CapabilityUpdateSafety {
     let updater: any UpdateControlling
     let criticalOperations: Set<ApplicationCriticalOperation>
 
+    init(policy: UpdateInstallationSafetyPolicy, updater: any UpdateControlling, descriptor: CapabilityDescriptor) {
+        self.policy = policy
+        self.updater = updater
+        criticalOperations = descriptor.criticalOperations
+    }
+
     func setCriticalOperation(_ operation: ApplicationCriticalOperation, active: Bool) {
         assert(criticalOperations.contains(operation), "Undeclared critical operation \(operation)")
         policy.updateCriticalOperation(operation, active: active)

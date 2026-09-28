@@ -38,7 +38,6 @@ final class AppModel {
     let permissions: PermissionCoordinator
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
-    private let screenshotEditor: ScreenshotEditorPresenter
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
     let windows: WindowManagementService
@@ -192,13 +191,6 @@ final class AppModel {
             didWritePasteboard: clipboard.suppressCurrentChange,
             allowsSystemAccess: allowsDictationSystemAccess
         )
-        screenshotEditor = ScreenshotEditorPresenter(
-            fallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
-            editingChanged: { isEditing in
-                updateSafetyPolicy.updateCriticalOperation(.unsavedWork, active: isEditing)
-                updater.installationSafetyDidChange()
-            }
-        )
         commandPalette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -208,7 +200,13 @@ final class AppModel {
         )
         capabilities = CapabilityRegistry(modules: [
             QuickSearchModule(palette: commandPalette),
-            ClipboardHistoryModule(clipboard: clipboard, palette: commandPalette)
+            ClipboardHistoryModule(clipboard: clipboard, palette: commandPalette),
+            ScreenshotToolsModule(
+                service: screenshotTools,
+                palette: commandPalette,
+                editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
+                updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
+            )
         ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
@@ -316,13 +314,6 @@ final class AppModel {
             let owner = "window.\(action.rawValue)"
             configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
         }
-        screenshotTools.apply(
-            enabled: enabled.contains(.screenshotTools),
-            clipboardHistoryEnabled: enabled.contains(.clipboardHistory)
-        )
-        commandPalette.editImage = enabled.contains(.screenshotTools)
-            ? { [weak self] entry in self?.screenshotEditor.edit(entry) ?? false }
-            : nil
         enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
         enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
         refreshDetectorState()
@@ -677,8 +668,7 @@ final class AppModel {
             detector.stop()
             presenter.dismissAll()
         case .screenshotTools:
-            screenshotTools.stop()
-            screenshotEditor.close()
+            break
         }
     }
 

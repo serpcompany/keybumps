@@ -112,11 +112,6 @@ extension AppModel {
             return missingPermissionCount
         case _ where section.capability.flatMap(capabilities.module(for:)) != nil:
             return capabilities.attentionCount(for: section.capability!, context: capabilityContext)
-        case .screenshotTools:
-            switch screenshotTools.status {
-            case .requiresClipboardHistory, .folderAccessDenied: return 1
-            case .stopped, .watching, .folderUnavailable: return 0
-            }
         case .keyboardShortcutter:
             guard preferences.enabledCapabilities.contains(.keyboardShortcutter) else { return 0 }
             return permissionReadiness(for: [.keyboardShortcutter]).missingCount
