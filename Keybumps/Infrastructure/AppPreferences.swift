@@ -17,6 +17,7 @@ final class AppPreferences {
         static let knownCapabilityShortcuts = "knownCapabilityShortcuts"
         static let takenOverSystemShortcuts = "takenOverSystemShortcuts"
         static let windowShortcuts = "windowShortcuts"
+        static let showsHotkeysTab = "showsHotkeysTab"
     }
 
     private let defaults: UserDefaults
@@ -62,6 +63,11 @@ final class AppPreferences {
         didSet { defaults.set(takenOverSystemShortcuts.sorted(), forKey: Key.takenOverSystemShortcuts) }
     }
 
+    /// Whether the Command Palette shows Keyboard Shortcutter's Hotkeys tab. Off by default.
+    var showsHotkeysTab: Bool {
+        didSet { defaults.set(showsHotkeysTab, forKey: Key.showsHotkeysTab) }
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
@@ -87,6 +93,7 @@ final class AppPreferences {
             ?? .appleSpeech
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
+        showsHotkeysTab = defaults.bool(forKey: Key.showsHotkeysTab)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

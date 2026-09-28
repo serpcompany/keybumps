@@ -11,7 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .keyboardShortcutter,
             name: "Hotkeys",
-            commandKey: 4,
+            commandKey: 5,
             systemImage: "keyboard",
             prompt: "Search hotkeys",
             primaryActionTitle: nil,

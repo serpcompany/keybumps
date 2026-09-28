@@ -33,7 +33,10 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ## Shared Command Palette
 
-- Search, Clipboard, Dictation, Hotkeys (Keyboard Shortcutter history), and Screenshots are peer tabs selected by Command-1/2/3/4/5.
+- Search, Clipboard, Dictation, Screenshots, and Hotkeys (Keyboard Shortcutter history) are peer tabs selected by Command-1/2/3/4/5. Hotkeys is hidden by default; Keyboard Shortcutter settings can show it, and Open Keyboard Shortcutter History always opens it.
+- Delete removes the highlighted row in Search's Recent Items, Clipboard, and Screenshots once the search field is empty; Command-Delete works while typing.
+- Copying from Clipboard, Screenshots, or Dictation closes the palette and shows a brief **Copied to Clipboard** confirmation.
+- Search results show the name and kind; apps show no path, and files and folders show only their enclosing folder's name.
 - The tab chrome shows only the shortcut and tab name.
 - One dominant input filters the active tab; history inputs use the label **Search**.
 - Arrow keys move selection, Return performs the primary action where one exists, and Escape closes the palette.
@@ -103,7 +106,7 @@ User outcome: screenshots taken with Keybumps' hotkeys or the standard macOS sho
 
 ### Screenshots tab
 
-- Command-5 shows only screenshot items from Clipboard History, newest first, with thumbnails and the shared Search input. Copied images and copied image files stay in the Clipboard tab only.
+- Command-4 shows only screenshot items from Clipboard History, newest first, with thumbnails and the shared Search input. Copied images and copied image files stay in the Clipboard tab only.
 - Return, or a click, opens the Screenshot Editor; Command-Return, or Command-click, restores the screenshot to the clipboard; Command-E also edits. The footer shows Edit and ⌘ Copy.
 - Per-item delete and confirmed Clear All remove screenshot items from history only; files stay where macOS saved them.
 - When Screenshot Tools is off, the tab says so. Screenshots share Clipboard History's 50-item limit, so heavy copying can displace older screenshots.
@@ -170,7 +173,7 @@ User outcome: passively recognize supported manual actions and present the corre
 
 - Detect the supported menu, Chrome, standard-window-control, and Finder-to-Trash actions.
 - Persist one durable event per verified action with unread state and searchable history.
-- Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘4); Settings keeps the Keyboard Shortcutter name.
+- Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘5, hidden by default); Settings keeps the Keyboard Shortcutter name.
 - Deliver through Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound.
 - Preview through the same production delivery adapters without writing a history event.
 - Custom presentations share close, Escape, horizontal-trackpad-scroll, hover-pause, and dismissal behavior.
@@ -225,7 +228,7 @@ The functional MVP is accepted only when one stable installed Keybumps build dem
 - Every configured Window Manager shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
 - Each Screenshot Tools hotkey captures from another app after granting Screen Recording, ⇧⌘3 opens the editor, and macOS's ⇧⌘3/⇧⌘4 work again when Screenshot Tools is off.
-- A macOS screenshot appears in Clipboard History and the ⌘5 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
+- A macOS screenshot appears in Clipboard History and the ⌘4 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.
 - Skipped permissions remain recoverable without disabling unrelated capabilities.
 - Relaunch preserves intended preferences and histories.

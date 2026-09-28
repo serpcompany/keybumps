@@ -2278,7 +2278,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     func testCommandPaletteHasTheFiveRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
-        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyboardShortcutter, .screenshots])
+        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .screenshots, .keyboardShortcutter])
         XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"])
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
@@ -2286,16 +2286,24 @@ final class KeybumpsFeatureTests: XCTestCase {
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
                 CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Hotkeys"),
-                CommandPaletteTabLabel(shortcut: "⌘5", name: "Screenshots")
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Screenshots"),
+                CommandPaletteTabLabel(shortcut: "⌘5", name: "Hotkeys")
             ]
         )
         XCTAssertEqual(
             CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
             [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"], ["⌘", "5"]]
         )
-        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyboardShortcutter)
-        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("5"), .screenshots)
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .screenshots)
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("5"), .keyboardShortcutter)
+
+        // The Hotkeys tab is hidden by default, except while it is open.
+        XCTAssertFalse(AppPreferences(defaults: InMemoryDefaults()).showsHotkeysTab)
+        let hidden = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search)
+        XCTAssertEqual(hidden, [.search, .clipboard, .dictation, .screenshots])
+        XCTAssertNil(CommandPaletteTab.matchingCommandKey("5", in: hidden))
+        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .keyboardShortcutter).last, .keyboardShortcutter)
+        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search), CommandPaletteTab.allCases)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("6"))
         XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Edit")
         XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActionTitle, "Copy")

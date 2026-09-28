@@ -20,7 +20,7 @@ struct PaletteSectionHeader: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 12))
+            .font(.system(size: 13))
             .foregroundStyle(.secondary)
             .accessibilityAddTraits(.isHeader)
     }
@@ -34,9 +34,9 @@ struct PaletteKeycap: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
         Text(key)
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.secondary)
-            .frame(minWidth: 20, minHeight: 20)
+            .frame(minWidth: 22, minHeight: 22)
             .padding(.horizontal, 2)
             .background(PaletteTheme.keycapFill, in: shape)
             .overlay(shape.strokeBorder(PaletteTheme.keycapBorder, lineWidth: 1))
@@ -83,5 +83,78 @@ extension View {
                 .fill(isSelected ? PaletteTheme.selection : .clear)
                 .padding(.horizontal, 6)
         )
+    }
+}
+
+/// Raycast's confirmation after an action closes the palette: a small pill near the bottom of
+/// the screen, such as "Copied to Clipboard", that fades out on its own.
+@MainActor
+final class PaletteHUD {
+    private var panel: NSPanel?
+    private var hideWork: DispatchWorkItem?
+
+    func show(_ message: String) {
+        let panel = panel ?? makePanel()
+        self.panel = panel
+        let host = NSHostingView(rootView: PaletteHUDView(message: message))
+        panel.contentView = host
+        panel.setContentSize(host.fittingSize)
+        if let screen = NSScreen.main {
+            panel.setFrameOrigin(NSPoint(
+                x: screen.visibleFrame.midX - panel.frame.width / 2,
+                y: screen.visibleFrame.minY + 120
+            ))
+        }
+        panel.alphaValue = 1
+        panel.hideDuringUnitTests()
+        panel.orderFrontRegardless()
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+        )
+
+        hideWork?.cancel()
+        let work = DispatchWorkItem { [weak panel] in
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; panel?.animator().alphaValue = 0 }) {
+                panel?.orderOut(nil)
+            }
+        }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+    }
+
+    private func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.isReleasedWhenClosed = false
+        panel.identifier = NSUserInterfaceItemIdentifier("paletteHUD")
+        return panel
+    }
+}
+
+private struct PaletteHUDView: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text(message)
+                .foregroundStyle(.primary)
+        }
+        .font(.system(size: 14, weight: .medium))
+        .padding(.horizontal, 16)
+        .frame(height: 38)
+        .background(PaletteTheme.pill, in: Capsule())
+        .overlay(Capsule().strokeBorder(PaletteTheme.border, lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+        .padding(16)
+        .environment(\.colorScheme, .dark)
     }
 }
