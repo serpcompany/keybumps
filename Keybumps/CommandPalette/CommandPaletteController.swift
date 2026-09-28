@@ -499,26 +499,24 @@ private struct CommandPaletteView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PaletteTabBar(selected: state.tab, select: selectTab)
-            Divider().opacity(0.55)
             PaletteSearchField(
                 tab: state.tab,
                 searchQuery: $search.query,
                 historyQuery: $state.historyQuery,
                 focused: $inputFocused
             )
-            Divider().opacity(0.55)
+            PaletteTabBar(selected: state.tab, select: selectTab)
             content
-            Divider().opacity(0.55)
+            Divider().opacity(0.35)
             PaletteFooter(tab: state.tab)
         }
-        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(PaletteTheme.background, in: RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous)
+                .strokeBorder(PaletteTheme.border, lineWidth: 1)
         }
         .compositingGroup()
-        .clipShape(.rect(cornerRadius: 18, style: .continuous))
+        .clipShape(.rect(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 30, y: 14)
         .defaultFocus($inputFocused, true)
         .onChange(of: state.tab) {
@@ -658,9 +656,13 @@ private struct PaletteTabBar: View {
                             .lineLimit(1)
                             .fixedSize()
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(selected == tab ? Color.white.opacity(0.11) : .clear, in: Capsule())
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        selected == tab ? PaletteTheme.selection : .clear,
+                        in: RoundedRectangle(cornerRadius: PaletteTheme.rowRadius - 2, style: .continuous)
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected == tab ? .isSelected : [])
@@ -674,8 +676,8 @@ private struct PaletteTabBar: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Palette tabs")
     }
@@ -698,9 +700,7 @@ private struct KeyboardShortcutterResultsView: View {
             case .entries(let entries):
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
                             confirmationTitle: "Clear Keyboard Shortcutter history?",
@@ -710,8 +710,9 @@ private struct KeyboardShortcutterResultsView: View {
                             clear: clear
                         )
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
 
                     List(Array(entries.enumerated()), id: \.element.id) { index, event in
                         Button { select(index) } label: {
@@ -723,7 +724,7 @@ private struct KeyboardShortcutterResultsView: View {
                         .buttonStyle(.plain)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -740,11 +741,11 @@ private struct PaletteSearchField: View {
     var focused: FocusState<Bool>.Binding
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: tab.systemImage)
-                .font(.system(size: 22, weight: .medium))
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 28)
+                .frame(width: 22)
             if tab == .search {
                 TextField(tab.prompt, text: $searchQuery)
                     .focused(focused)
@@ -754,9 +755,10 @@ private struct PaletteSearchField: View {
             }
         }
         .textFieldStyle(.plain)
-        .font(.system(size: 23, weight: .medium))
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
+        .font(.system(size: 20))
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
     }
 }
 
@@ -782,9 +784,7 @@ private struct SearchResultsView: View {
                 } else {
                     VStack(spacing: 0) {
                         HStack {
-                            Text("Recent Items")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                            PaletteSectionHeader("Recent Items")
                             Spacer()
                             ClearAllButton(
                                 confirmationTitle: "Clear recent items?",
@@ -794,15 +794,16 @@ private struct SearchResultsView: View {
                                 clear: clearRecentItems
                             )
                         }
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        .padding(.bottom, 4)
 
                         List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
                             HStack(spacing: 10) {
                                 Button { open(item.result) } label: {
-                                    SearchResultRow(result: item.result, showsReturn: index == selection)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 7)
+                                    SearchResultRow(result: item.result)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 6)
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
@@ -815,7 +816,7 @@ private struct SearchResultsView: View {
                             }
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
-                            .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                            .paletteRowBackground(isSelected: index == selection)
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
@@ -832,15 +833,15 @@ private struct SearchResultsView: View {
                         Button {
                             open(result)
                         } label: {
-                            SearchResultRow(result: result, showsReturn: index == selection)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
+                            SearchResultRow(result: result)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .paletteRowBackground(isSelected: index == selection)
                         .contextMenu {
                             Button("Reveal in Finder") { reveal(result) }
                         }
@@ -859,30 +860,28 @@ private struct SearchResultsView: View {
     }
 }
 
+/// Raycast's result row: icon, name, gray detail on one line, and the kind on the right.
 private struct SearchResultRow: View {
     let result: QuickSearchResult
-    let showsReturn: Bool
 
     var body: some View {
-        HStack(spacing: 13) {
+        HStack(spacing: 10) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: result.url.path))
                 .resizable()
-                .frame(width: 34, height: 34)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(result.name)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Text("\(result.kind.rawValue) · \(result.detail)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            if showsReturn {
-                Text("↩")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+                .frame(width: 24, height: 24)
+            Text(result.name)
+                .font(.system(size: 14, weight: .medium))
+                .lineLimit(1)
+                .layoutPriority(1)
+            Text(result.detail)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 12)
+            Text(result.kind.rawValue)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -906,9 +905,7 @@ private struct ClipboardResultsView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
                             confirmationTitle: clearTitle,
@@ -918,8 +915,9 @@ private struct ClipboardResultsView: View {
                             clear: clear
                         )
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
 
                     List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         HStack(spacing: 10) {
@@ -943,8 +941,8 @@ private struct ClipboardResultsView: View {
                                         .foregroundStyle(.secondary)
                                     }
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 5)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -957,7 +955,7 @@ private struct ClipboardResultsView: View {
                         }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -983,9 +981,9 @@ private struct ClipboardEntryPreview: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 58, height: 42)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
-        .clipShape(.rect(cornerRadius: 7))
+        .frame(width: 44, height: 32)
+        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .clipShape(.rect(cornerRadius: 6))
         .accessibilityLabel(entry.isScreenshot ? "Screenshot preview" : entry.kind == .image ? "Copied image preview" : "Copied text")
         .task(id: entry.mediaPath) {
             guard entry.kind == .image, let imageURL = entry.imageURL else {
@@ -1035,9 +1033,7 @@ private struct DictationResultsView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
                             confirmationTitle: "Clear all dictation history?",
@@ -1049,8 +1045,9 @@ private struct DictationResultsView: View {
                             clear()
                         }
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
 
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -1105,7 +1102,6 @@ private struct PaletteResultsContainer<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.black.opacity(0.08))
     }
 }
 
@@ -1119,23 +1115,35 @@ private struct PaletteEmptyState: View {
     }
 }
 
+/// Raycast's footer: the tab's actions on the right, each with its keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
 
     var body: some View {
-        HStack(spacing: 14) {
-            Label("Select", systemImage: "arrow.up.arrow.down")
+        HStack(spacing: 12) {
+            Image(systemName: tab.systemImage)
+                .foregroundStyle(.secondary)
+            Spacer()
+            hint("Select", keys: ["↑", "↓"])
             if let primaryActionTitle = tab.primaryActionTitle {
-                Label(primaryActionTitle, systemImage: "return")
+                Divider().frame(height: 14)
+                hint(primaryActionTitle, keys: ["↵"])
             }
             if let secondaryActionTitle = tab.secondaryActionTitle {
-                Label("⌘ \(secondaryActionTitle)", systemImage: "return")
+                Divider().frame(height: 14)
+                hint(secondaryActionTitle, keys: ["⌘", "↵"])
             }
-            Spacer()
         }
-        .font(.caption)
+        .font(.system(size: 12, weight: .medium))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private func hint(_ title: String, keys: [String]) -> some View {
+        HStack(spacing: 4) {
+            Text(title).foregroundStyle(.primary)
+            ForEach(keys, id: \.self) { PaletteKeycap($0) }
+        }
     }
 }

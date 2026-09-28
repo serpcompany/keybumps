@@ -1304,7 +1304,8 @@ final class KeybumpsFeatureTests: XCTestCase {
         router.configure { openCount += 1 }
         let statusController = NativeStatusItemController(router: router)
 
-        statusController.makeMenu().performActionForItem(at: 5)
+        let menu = statusController.makeMenu()
+        menu.performActionForItem(at: menu.indexOfItem(withTitle: "Settings…"))
         XCTAssertTrue(router.open()) // Command-comma uses this same route.
 
         XCTAssertEqual(openCount, 2)
@@ -1334,7 +1335,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(applicationActivationCount, 1)
     }
 
-    func testStatusItemOffersAndRoutesQuickSearchSeparatelyFromSettings() {
+    func testStatusItemOffersAndRoutesQuickSearchSeparatelyFromSettings() throws {
         let controller = NativeStatusItemController(router: MainWindowRouter())
         var quickSearchVisible = false
         controller.configureQuickSearch(
@@ -1346,15 +1347,14 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(
             menu.items.filter { !$0.isSeparatorItem }.map(\.title),
             [
-                "Toggle Keybumps",
-                AppVersionDisplay.title(),
+                "Open Keybumps",
+                "About Keybumps",
                 "Check for Updates…",
                 "Settings…",
                 "Quit Keybumps"
             ]
         )
-        XCTAssertFalse(menu.items[2].isEnabled)
-        XCTAssertFalse(menu.items[3].isEnabled)
+        XCTAssertFalse(try XCTUnwrap(menu.item(withTitle: "Check for Updates…")).isEnabled)
         controller.menuWillOpen(menu)
         menu.performActionForItem(at: 0)
         XCTAssertTrue(quickSearchVisible)

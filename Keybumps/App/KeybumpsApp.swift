@@ -127,7 +127,8 @@ enum AppShellLaunch {
         }
         NativeStatusItemController.shared.configureQuickSearch(
             isVisible: { model.isQuickSearchVisible },
-            setVisible: model.setQuickSearchVisible
+            setVisible: model.setQuickSearchVisible,
+            shortcut: { model.preferences.capabilityShortcut(for: .quickSearch) }
         )
         NativeStatusItemController.shared.configureUpdater(
             snapshot: { model.updateSnapshot },

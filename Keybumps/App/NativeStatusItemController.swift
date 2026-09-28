@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 @MainActor
 final class MainWindowRouter {
@@ -112,6 +113,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     private let router: MainWindowRouter
     private var quickSearchIsVisible: () -> Bool = { false }
     private var setQuickSearchVisible: (Bool) -> Void = { _ in }
+    private var quickSearchShortcut: () -> ShortcutBinding? = { nil }
     private var quickSearchWasVisibleWhenMenuOpened = false
     private var updateSnapshot: () -> UpdateSnapshot = {
         UpdateSnapshot(status: .unavailable("Updates unavailable"), automaticallyChecks: false, canCheck: false, canRestart: false)
@@ -130,10 +132,12 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
 
     func configureQuickSearch(
         isVisible: @escaping () -> Bool,
-        setVisible: @escaping (Bool) -> Void
+        setVisible: @escaping (Bool) -> Void,
+        shortcut: @escaping () -> ShortcutBinding? = { nil }
     ) {
         quickSearchIsVisible = isVisible
         setQuickSearchVisible = setVisible
+        quickSearchShortcut = shortcut
     }
 
     func configureUpdater(
@@ -171,12 +175,18 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         return menu
     }
 
+    /// Raycast's menu: open the app (with its hotkey), then About, updates, and Settings, then Quit.
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(withTitle: "Toggle Keybumps", action: #selector(toggleQuickSearch), keyEquivalent: "").target = self
+        let open = menu.addItem(withTitle: "Open Keybumps", action: #selector(toggleQuickSearch), keyEquivalent: "")
+        open.target = self
+        open.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        if let shortcut = quickSearchShortcut(), let key = Self.menuKeyEquivalent(for: shortcut) {
+            open.keyEquivalent = key.character
+            open.keyEquivalentModifierMask = key.modifiers
+        }
         menu.addItem(.separator())
-        let version = menu.addItem(withTitle: AppVersionDisplay.title(), action: nil, keyEquivalent: "")
-        version.isEnabled = false
+        menu.addItem(withTitle: "About Keybumps", action: #selector(showAbout), keyEquivalent: "").target = self
         let snapshot = updateSnapshot()
         let updates = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
@@ -186,8 +196,9 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
             restart.target = self
             restart.isEnabled = true
         }
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Keybumps", action: #selector(quit), keyEquivalent: "q").target = self
     }
@@ -209,7 +220,33 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
             NotificationCenter.default.post(name: .openMainWindow, object: nil)
         }
     }
+    @objc private func showAbout() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.orderFrontStandardAboutPanel(nil)
+    }
+
+    /// The key equivalent that displays a global shortcut beside a menu item; nil when the key
+    /// has no single-character equivalent.
+    static func menuKeyEquivalent(for binding: ShortcutBinding) -> (character: String, modifiers: NSEvent.ModifierFlags)? {
+        let modifiers = NSEvent.ModifierFlags(carbonModifiers: binding.modifiers)
+        if binding.keyCode == UInt32(kVK_Space) { return (" ", modifiers) }
+        let key = binding.displayName.drop { "⌃⌥⇧⌘".contains($0) }
+        guard key.count == 1 else { return nil }
+        return (key.lowercased(), modifiers)
+    }
+
     @objc private func checkForUpdates() { checkForUpdatesAction() }
     @objc private func restartToUpdate() { restartToUpdateAction() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
+}
+
+extension NSEvent.ModifierFlags {
+    init(carbonModifiers: UInt32) {
+        var flags: NSEvent.ModifierFlags = []
+        if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
+        if carbonModifiers & UInt32(optionKey) != 0 { flags.insert(.option) }
+        if carbonModifiers & UInt32(shiftKey) != 0 { flags.insert(.shift) }
+        if carbonModifiers & UInt32(cmdKey) != 0 { flags.insert(.command) }
+        self = flags
+    }
 }
