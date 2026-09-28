@@ -66,7 +66,7 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testCommandEOnClipboardImageOpensScreenshotEditor() {
-        launch(permissions: "granted", ["-KBOpenPalette", "clipboard", "-KBUITestSeedClipboardImage"])
+        launch(permissions: "granted", ["-KBOpenPalette", "clipboard", "-KBUITestSeedClipboardImage", "YES"])
         XCTAssertTrue(paletteField("Search clipboard history").waitForExistence(timeout: 20))
 
         app.typeKey("e", modifierFlags: .command)

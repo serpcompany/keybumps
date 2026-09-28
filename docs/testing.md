@@ -35,12 +35,28 @@ Permission-gated and system-level features are faked in automated tests, never g
 - Every interactive control that tests touch gets an accessibility identifier. Animations are disabled under the test flag. The non-activating palette panel already returns `canBecomeKey = true`, which `typeText` needs.
 - Tests never touch real user folders or the real pasteboard: inject readers, named pasteboards, and temporary directories, as the existing Screenshot Tools and Clipboard tests do.
 
+### UI test launch arguments
+
+`UITestLaunchConfiguration` parses these; `AppModel.forLaunch()` in `Keybumps/App/UITestComposition.swift` builds the UI test composition. UI test mode starts only with `-KBUITestPermissions`. The other flags are ignored without it, so a production launch is unchanged (covered by `UITestLaunchConfigurationTests`).
+
+| Argument | Effect |
+| --- | --- |
+| `-KBUITestPermissions granted\|denied` | Enters UI test mode and fakes every permission check (Accessibility, Input Monitoring, Microphone, Speech, notifications) as all granted or all denied. It also swaps in an inert pointer event tap, a fake screenshot-folder reader (denied throws access-denied), and an inert Spotlight resolver. Dictation refuses audio capture before the microphone opens. Data goes to a disposable `$TMPDIR/KeybumpsUITests-<pid>` root, preferences to a wiped `com.serp.keybumps.uitests` suite with onboarding marked complete, and the clipboard poller reads a named pasteboard. SwiftUI animations are off. |
+| `-KBOpenPalette <tab>` | Opens the Command Palette on `search`, `clipboard`, `dictation`, `keyboardShortcutter`, or `screenshots` after launch |
+| `-KBOpenSettings <section>` | Opens Settings on a `SettingsSection` case name (`search`, `clipboard`, `screenshotTools`, `dictation`, `windows`, `keyboardShortcutter`, `permissions`, `general`) |
+| `-KBDisableHotKeys YES` | Registers shortcuts with an inert backend, so no Carbon hot keys are installed |
+| `-KBUITestSeedClipboardImage YES` | Adds one generated PNG to the sandboxed Clipboard History |
+
+Give boolean flags an explicit `YES`. In CI, adding AppKit arguments (`-NSAutomaticWindowAnimationsEnabled NO -ApplePersistenceIgnoreState YES`) after a bare flag stopped the main window from appearing, so the smoke suite doesn't pass them.
+
+Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, and the `commandPalette` and `screenshotEditor` windows.
+
 ## CI
 
 - **Runner:** GitHub-hosted `macos-26` (arm64), pinning Xcode with `xcode-select`. Evaluate the `xcode-27` image labels separately before moving. macOS minutes cost about 10× Linux, so jobs set `timeout-minutes`.
 - **Per PR:**
   - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure. The existing `keybumps-release-checks.yml` runs only the two update-tooling test classes and should be widened.
-  - **UI smoke job:** 3–5 XCUITests, ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES`), added only once it proves stable.
+  - **UI smoke job:** `SmokeUITests` (5 XCUITests) in `keybumps-ui-tests.yml`, ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`). The #70 spike proved this path on image `20260907.0351.1`, and it was enabled per PR after three consecutive green runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
 - **Nightly / `workflow_dispatch`:** the full UI suite with `-retry-tests-on-failure -test-iterations 3`. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x.
 - **Hygiene:**
   - `build-for-testing` then `test-without-building`
