@@ -10,6 +10,8 @@ struct CapabilityDescriptor: Identifiable {
     let capability: Capability
     let title: String
     let systemImage: String
+    /// The fill of the capability's rounded-square icon tile in Settings.
+    let iconTint: Color
     /// macOS permissions the module needs while enabled, granted through `PermissionCoordinator`.
     let requiredPermissions: Set<MacPermission>
     /// Modules that must be enabled for this module's resources to run.
@@ -40,7 +42,9 @@ struct CapabilityPaletteTab {
 /// A module's Settings destination. The section title is the capability title.
 struct CapabilitySettingsPage {
     let section: SettingsSection
-    /// The caption under the enable switch describing what turning the module off releases.
+    /// The one line under the capability's name at the top of its page.
+    let summary: String
+    /// What turning the module off releases; the tooltip on its toolbar enable switch.
     let disableExplanation: String?
     let content: @MainActor () -> AnyView
 }
@@ -202,7 +206,7 @@ final class CapabilityRegistry {
     }
 
     /// Runs in reverse registry order, the order the wiring used before modules existed: Keyboard
-    /// Shortcutter retries its detector before Window Management re-arms drag-to-snap.
+    /// Shortcutter retries its detector before Window Manager re-arms drag-to-snap.
     func permissionsDidRefresh(_ context: CapabilityContext) {
         for module in modules.reversed() { module.permissionsDidRefresh(context) }
     }

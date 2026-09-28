@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .dictation,
         title: "Dictation",
         systemImage: "waveform",
+        iconTint: .blue,
         requiredPermissions: [.microphone, .speechRecognition],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(
@@ -19,6 +20,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .dictation,
+            summary: "Speech to text anywhere, transcribed on this Mac.",
             disableExplanation: "Turning this off cancels active Dictation and releases its global shortcut.",
             content: { AnyView(DictationSettingsView()) }
         ),

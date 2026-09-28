@@ -96,15 +96,6 @@ enum WindowAction: String, CaseIterable, Identifiable, Hashable {
         case .lastThreeFourths: .region(CGRect(x: 0.25, y: 0, width: 0.75, height: 1))
         }
     }
-
-    var startsSettingsSubgroup: Bool {
-        switch self {
-        case .upperLeft, .nextDisplay, .topLeftSixth, .firstThreeFourths:
-            true
-        default:
-            false
-        }
-    }
 }
 
 enum WindowActionPreview: Equatable {

@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .quickSearch,
         title: "Quick Search",
         systemImage: "magnifyingglass",
+        iconTint: .red,
         requiredPermissions: [],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(
@@ -19,6 +20,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .search,
+            summary: "Open apps, files, and folders from the keyboard.",
             disableExplanation: "Turning this off closes Quick Search and releases its global shortcut.",
             content: { AnyView(QuickSearchSettingsView()) }
         ),

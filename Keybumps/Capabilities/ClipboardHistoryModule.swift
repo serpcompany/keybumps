@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .clipboardHistory,
         title: "Clipboard History",
         systemImage: "clipboard",
+        iconTint: .orange,
         requiredPermissions: [],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(
@@ -19,6 +20,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .clipboard,
+            summary: "Search text and images you copied earlier and paste them again.",
             disableExplanation: "Turning this off stops clipboard monitoring, closes its panel, and releases its global shortcut.",
             content: { AnyView(ClipboardSettingsView()) }
         ),

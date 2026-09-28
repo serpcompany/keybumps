@@ -3,13 +3,15 @@ import SwiftUI
 extension CapabilityDescriptor {
     static let windowManagement = CapabilityDescriptor(
         capability: .windowManagement,
-        title: "Window Management",
+        title: "Window Manager",
         systemImage: "rectangle.split.2x1",
+        iconTint: .teal,
         requiredPermissions: [.accessibility],
         dependencies: [],
         paletteTab: nil,
         settingsPage: CapabilitySettingsPage(
             section: .windows,
+            summary: "Move and resize your application windows.",
             disableExplanation: "Turning this off stops drag-to-snap and releases all window shortcuts.",
             content: { AnyView(WindowSettingsView()) }
         ),

@@ -5,12 +5,13 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
-    case windows = "Window Management", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
+    case windows = "Window Manager", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
+    case account = "Account"
     var id: String { rawValue }
 
     /// Capability pages in registry order, then the fixed shell destinations.
     static var allCases: [SettingsSection] {
-        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general]
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general, .account]
     }
 
     /// The module whose Settings page this is; nil for the shell's Permissions and General.
@@ -20,29 +21,80 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var icon: String {
         if let capability { return capability.systemImage }
-        return self == .permissions ? "hand.raised" : "gearshape"
+        switch self {
+        case .permissions: return "hand.raised"
+        case .account: return "person.crop.circle"
+        default: return "gearshape"
+        }
     }
+
+    var iconTint: Color { capability?.descriptor.iconTint ?? .gray }
 }
 
 struct SettingsNavigationHistory: Equatable {
     private(set) var selection: SettingsSection
     private(set) var backStack: [SettingsSection] = []
+    private(set) var forwardStack: [SettingsSection] = []
 
     init(selection: SettingsSection = .permissions) {
         self.selection = selection
     }
 
     var canGoBack: Bool { !backStack.isEmpty }
+    var canGoForward: Bool { !forwardStack.isEmpty }
 
     mutating func navigate(to section: SettingsSection) {
         guard section != selection else { return }
         backStack.append(selection)
+        forwardStack = []
         selection = section
     }
 
     mutating func goBack() {
         guard let previous = backStack.popLast() else { return }
+        forwardStack.append(selection)
         selection = previous
+    }
+
+    mutating func goForward() {
+        guard let next = forwardStack.popLast() else { return }
+        backStack.append(selection)
+        selection = next
+    }
+}
+
+extension View {
+    /// Raycast's Settings window shows no title; macOS 14 keeps the title.
+    @ViewBuilder func hidingWindowTitle() -> some View {
+        if #available(macOS 15.0, *) {
+            toolbar(removing: .title)
+        } else {
+            self
+        }
+    }
+}
+
+/// The Settings sidebar, modeled on Raycast's: the account row on top (outside these groups), the
+/// app's own pages, then one row per capability module (Quick Search first, then alphabetical),
+/// filtered by search.
+enum SettingsSidebar {
+    static func isSearching(_ query: String) -> Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func groups(matching query: String) -> [[SettingsSection]] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches: (SettingsSection) -> Bool = {
+            trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
+        }
+        let app = [SettingsSection.general, .permissions].filter(matches)
+        // Quick Search first, then alphabetical.
+        let capabilities = SettingsSection.allCases.filter { $0.capability != nil && matches($0) }
+            .sorted { lhs, rhs in
+                if (lhs == .search) != (rhs == .search) { return lhs == .search }
+                return lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
+            }
+        return [app, capabilities].filter { !$0.isEmpty }
     }
 }
 
@@ -51,57 +103,97 @@ struct SettingsRootView: View {
     @State private var navigation = SettingsNavigationHistory(
         selection: UITestLaunchConfiguration.current.openSettings ?? .permissions
     )
+    @State private var query = ""
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsSection.allCases, selection: selectionBinding) { section in
-                SettingsSidebarRow(
-                    section: section,
-                    attentionCount: model.settingsAttentionCount(for: section)
-                )
-                .tag(section)
-                .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
+            VStack(spacing: 12) {
+                SettingsSearchField(text: $query)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if !SettingsSidebar.isSearching(query) {
+                            SettingsAccountRow(isSelected: navigation.selection == .account) {
+                                navigation.navigate(to: .account)
+                            }
+                            .accessibilityIdentifier("settings.sidebar.account")
+                        }
+                        ForEach(SettingsSidebar.groups(matching: query), id: \.self) { group in
+                            VStack(spacing: 2) {
+                                ForEach(group) { section in
+                                    SettingsSidebarRow(
+                                        section: section,
+                                        isSelected: navigation.selection == section,
+                                        attentionCount: model.settingsAttentionCount(for: section)
+                                    ) {
+                                        navigation.navigate(to: section)
+                                    }
+                                    .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
+                                }
+                            }
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
             }
-                .navigationSplitViewColumnWidth(min: 190, ideal: 220)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(SettingsTheme.sidebarBackground)
+            .toolbar(removing: .sidebarToggle)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
             Group {
                 if let page = navigation.selection.capability?.descriptor.settingsPage {
                     page.content()
                 } else if navigation.selection == .permissions {
                     PermissionsView()
+                } else if navigation.selection == .account {
+                    AccountView()
                 } else {
                     GeneralView()
                 }
             }
             .environment(model)
+            .toolbar {
+                if #available(macOS 26.0, *) {
+                    ToolbarSpacer(.flexible)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if let capability = navigation.selection.capability {
+                        CapabilityToggle(capability: capability)
+                    }
+                }
+            }
             .accessibilityIdentifier("settings.detail.\(navigation.selection.launchToken)")
         }
         .navigationTitle("Keybumps")
+        .hidingWindowTitle()
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button {
-                    navigation.goBack()
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
+                ControlGroup {
+                    Button {
+                        navigation.goBack()
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .disabled(!navigation.canGoBack)
+                    .help("Return to the previous Settings screen")
+                    .keyboardShortcut("[", modifiers: .command)
+                    Button {
+                        navigation.goForward()
+                    } label: {
+                        Label("Forward", systemImage: "chevron.right")
+                    }
+                    .disabled(!navigation.canGoForward)
+                    .help("Go to the next Settings screen")
+                    .keyboardShortcut("]", modifiers: .command)
                 }
-                .disabled(!navigation.canGoBack)
-                .help("Return to the previous Settings screen")
-                .keyboardShortcut("[", modifiers: .command)
+                .controlGroupStyle(.navigation)
             }
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
-    }
-
-    private var selectionBinding: Binding<SettingsSection?> {
-        Binding(
-            get: { navigation.selection },
-            set: { section in
-                guard let section else { return }
-                navigation.navigate(to: section)
-            }
-        )
     }
 }
 
@@ -115,46 +207,147 @@ extension AppModel {
 
 private struct SettingsSidebarRow: View {
     let section: SettingsSection
+    let isSelected: Bool
     let attentionCount: Int
+    let select: () -> Void
 
     var body: some View {
-        HStack {
-            Label(section.rawValue, systemImage: section.icon)
-            Spacer()
-            if attentionCount > 0 {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundStyle(.red)
-                    .accessibilityLabel("\(attentionCount) permission items need attention")
+        Button(action: select) {
+            HStack(spacing: 11) {
+                SettingsIconTile(systemImage: section.icon, tint: section.iconTint, size: 22)
+                Text(section.rawValue)
+                    .font(.system(size: SettingsTheme.sidebarTextSize))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 4)
+                if attentionCount > 0 {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("\(attentionCount) permission items need attention")
+                }
+            }
+            .frame(minHeight: 32)
+        }
+        .buttonStyle(SettingsSidebarButtonStyle(isSelected: isSelected))
+    }
+}
+
+/// The Mac user's name and initials; Keybumps has no account service.
+enum SettingsAccount {
+    static let name: String = {
+        let name = NSFullUserName()
+        return name.isEmpty ? NSUserName() : name
+    }()
+
+    static let initials: String = {
+        let parts = name.split(separator: " ").prefix(2)
+        return parts.compactMap(\.first).map(String.init).joined().uppercased()
+    }()
+}
+
+private struct SettingsAvatar: View {
+    let size: CGFloat
+
+    var body: some View {
+        Text(SettingsAccount.initials)
+            .font(.system(size: size * 0.38, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Color.gray.gradient, in: Circle())
+    }
+}
+
+private struct SettingsAccountRow: View {
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 10) {
+                SettingsAvatar(size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(SettingsAccount.name)
+                        .font(.system(size: SettingsTheme.sidebarTextSize, weight: .medium))
+                        .lineLimit(1)
+                    SettingsNote("Account")
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 6)
+        }
+        .buttonStyle(SettingsSidebarButtonStyle(isSelected: isSelected))
+    }
+}
+
+private struct AccountView: View {
+    var body: some View {
+        SettingsPage {
+            VStack(spacing: 8) {
+                SettingsAvatar(size: 88)
+                    .padding(.bottom, 6)
+                Text(SettingsAccount.name)
+                    .font(.system(size: 20, weight: .semibold))
+                Text("Signed in on this Mac")
+                    .font(.system(size: SettingsTheme.titleSize))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 28)
+            .padding(.bottom, 12)
+            SettingsGroup("License") {
+                SettingsRowLabel(
+                    title: "Local Preview",
+                    subtitle: "Purchasing and license activation are not part of this local preview."
+                )
             }
         }
+        .navigationTitle("Account")
+    }
+}
+
+private struct SettingsSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search settings…", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: SettingsTheme.titleSize))
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 29)
+        .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+        .accessibilityIdentifier("settings.search")
     }
 }
 
 struct QuickSearchSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        Form {
-            CapabilityControl(capability: .quickSearch)
-            CapabilityShortcutEditor(shortcut: .quickSearch)
-            Section {
-                Button("Open Quick Search") { model.showQuickSearch() }
-                    .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
+        SettingsPage {
+            CapabilityControl(capability: .quickSearch, shortcut: .quickSearch)
+            SettingsGroup {
+                LabeledContent {
+                    Button("Open") { model.showQuickSearch() }
+                        .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
+                } label: {
+                    SettingsRowLabel(title: "Open Quick Search", subtitle: "Search apps, files, and folders.")
+                }
             }
-        }.formStyle(.grouped).navigationTitle("Quick Search")
+        }.navigationTitle("Quick Search")
     }
 }
 
 struct ClipboardSettingsView: View {
     var body: some View {
-        Form {
-            CapabilityControl(capability: .clipboardHistory)
-            CapabilityShortcutEditor(shortcut: .clipboardHistory, showsInstructions: false)
-            Section("History") {
-                Text("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        SettingsPage {
+            CapabilityControl(capability: .clipboardHistory, shortcut: .clipboardHistory)
+            SettingsGroup("History") {
+                SettingsNote("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
             }
-        }.formStyle(.grouped).navigationTitle("Clipboard History")
+        }.navigationTitle("Clipboard History")
     }
 }
 
@@ -162,15 +355,13 @@ struct ScreenshotToolsSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .screenshotTools)
-            Section("Screenshots") {
+            SettingsGroup("Screenshots") {
                 status
-                Text("Screenshots you take with Shift-Command-3, 4, or 5 appear in Clipboard History, ready to paste. Keybumps never captures your screen itself, and the original files stay where macOS saved them.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                SettingsNote("Screenshots you take with Shift-Command-3, 4, or 5 appear in Clipboard History, ready to paste. Keybumps never captures your screen itself, and the original files stay where macOS saved them.")
             }
-        }.formStyle(.grouped).navigationTitle("Screenshot Tools")
+        }.navigationTitle("Screenshot Tools")
     }
 
     @ViewBuilder private var status: some View {
@@ -186,9 +377,7 @@ struct ScreenshotToolsSettingsView: View {
         case .folderAccessDenied(let folder):
             Label("Keybumps can’t read \(FileManager.default.displayName(atPath: folder.path))", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text("Allow access in System Settings › Privacy & Security › Files & Folders, then return to Keybumps.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            SettingsNote("Allow access in System Settings › Privacy & Security › Files & Folders, then return to Keybumps.")
             Button("Open Privacy & Security") {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
                     NSWorkspace.shared.open(url)
@@ -197,9 +386,7 @@ struct ScreenshotToolsSettingsView: View {
         case .folderUnavailable(let folder):
             Label("\(FileManager.default.displayName(atPath: folder.path)) is unavailable", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text("Keybumps keeps checking and resumes when the screenshot folder is available.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            SettingsNote("Keybumps keeps checking and resumes when the screenshot folder is available.")
         }
     }
 }
@@ -207,42 +394,45 @@ struct ScreenshotToolsSettingsView: View {
 struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        Form {
-            CapabilityControl(capability: .dictation)
-            CapabilityShortcutEditor(shortcut: .dictation, showsInstructions: false)
+        SettingsPage {
+            CapabilityControl(capability: .dictation, shortcut: .dictation)
             if model.preferences.enabledCapabilities.contains(.dictation),
                !model.missingPermissions(for: .dictation).isEmpty {
-                Section("Setup required") {
+                SettingsGroup("Setup required") {
                     Text("Dictation needs Microphone and Speech Recognition access before its shortcut can record.")
                         .foregroundStyle(.secondary)
-                    Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+                    OpenPermissionsButton()
                 }
             }
-            Section("Language") {
-                Picker("Recognition language", selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) })) {
-                    ForEach(model.dictation.availableLanguages, id: \.self) { code in
-                        Text(Locale.current.localizedString(forIdentifier: code) ?? code).tag(code)
-                    }
+            SettingsGroup("Language") {
+                LabeledContent("Recognition language") {
+                    SettingsDropdown(
+                        title: "Recognition language",
+                        selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) }),
+                        options: model.dictation.availableLanguages.map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
+                    )
                 }
             }
             DictationTranscriptionEngineSection()
-            Section("Recording length") {
-                Picker(
-                    "Maximum recording length",
-                    selection: Binding(
-                        get: { model.preferences.dictationDurationLimit },
-                        set: { model.setDictationDurationLimit($0) }
+            SettingsGroup("Recording length") {
+                LabeledContent {
+                    SettingsDropdown(
+                        title: "Maximum recording length",
+                        selection: Binding(
+                            get: { model.preferences.dictationDurationLimit },
+                            set: { model.setDictationDurationLimit($0) }
+                        ),
+                        options: DictationDurationLimit.allCases.map { ($0, $0.title) }
                     )
-                ) {
-                    ForEach(DictationDurationLimit.allCases) { limit in
-                        Text(limit.title).tag(limit)
-                    }
+                    .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
+                } label: {
+                    SettingsRowLabel(
+                        title: "Maximum recording length",
+                        subtitle: "Keybumps stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut."
+                    )
                 }
-                .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
-                Text("Keybumps stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut.")
-                    .foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).navigationTitle("Dictation")
+        }.navigationTitle("Dictation")
     }
 }
 
@@ -250,13 +440,11 @@ private struct DictationTranscriptionEngineSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Section("Transcription model") {
+        SettingsGroup("Transcription model") {
             ForEach(DictationTranscriptionEngine.allCases) { engine in
                 DictationTranscriptionEngineRow(engine: engine)
             }
-            Text("Downloaded models stay on this Mac. Dictation audio is transcribed locally with the selected model.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            SettingsNote("Downloaded models stay on this Mac. Dictation audio is transcribed locally with the selected model.")
         }
     }
 }
@@ -283,11 +471,11 @@ private struct DictationTranscriptionEngineRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(engine.title)
                 Text(isCompatible ? engine.detail : "English language selection required")
-                    .font(.caption)
+                    .font(.system(size: SettingsTheme.subtitleSize))
                     .foregroundStyle(isCompatible ? Color.secondary : Color.orange)
                 if case .failed(let message) = state {
                     Text(message)
-                        .font(.caption)
+                        .font(.system(size: SettingsTheme.subtitleSize))
                         .foregroundStyle(.red)
                         .lineLimit(2)
                 }
@@ -348,80 +536,67 @@ struct WindowSettingsView: View {
         let readiness = model.permissionReadiness(for: [.windowManagement])
         let isEnabled = model.preferences.enabledCapabilities.contains(.windowManagement)
         let isReady = isEnabled && readiness.isReady
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                CapabilityToggle(capability: .windowManagement)
-                Spacer()
-                Label(
-                    isEnabled ? (isReady ? "Ready" : "Setup Needed") : "Off",
-                    systemImage: isEnabled ? (isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill") : "power"
-                )
-                .foregroundStyle(isEnabled ? (isReady ? .green : .orange) : .secondary)
-                if isEnabled && !isReady {
-                    Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+        SettingsPage {
+            CapabilityControl(capability: .windowManagement)
+            SettingsGroup {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Label(
+                            isEnabled ? (isReady ? "Ready" : "Setup Needed") : "Off",
+                            systemImage: isEnabled ? (isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill") : "power"
+                        )
+                        .foregroundStyle(isEnabled ? (isReady ? .green : .orange) : .secondary)
+                        if isEnabled && !isReady {
+                            OpenPermissionsButton()
+                        }
+                    }
+                } label: {
+                    SettingsRowLabel(title: "Status", subtitle: "Window Manager needs Accessibility access to move other apps' windows.")
                 }
-                Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
-                    .disabled(recorder.identifier != nil)
-            }
-            .padding(16)
-
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 18) {
-                    Text("Click a shortcut to record a new combination. Press Delete to clear it or Escape to cancel.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    shortcutColumns(
-                        leading: WindowSettingsLayout.primaryLeading,
-                        trailing: WindowSettingsLayout.primaryTrailing
-                    )
-
-                    Divider()
-
-                    shortcutColumns(
-                        leading: WindowSettingsLayout.secondaryLeading,
-                        trailing: WindowSettingsLayout.secondaryTrailing
-                    )
+                LabeledContent {
+                    Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
+                        .disabled(recorder.identifier != nil)
+                } label: {
+                    SettingsRowLabel(title: "Default Shortcuts", subtitle: "Reset every window shortcut to its default.")
                 }
-                .padding(18)
             }
-
             if let error = recorder.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 12)
+                SettingsNote(error, tint: .orange)
+            }
+            SettingsGroup("Commands") {
+                shortcutColumns(WindowSettingsLayout.primaryLeading, WindowSettingsLayout.primaryTrailing)
+            }
+            SettingsGroup {
+                shortcutColumns(WindowSettingsLayout.secondaryLeading, WindowSettingsLayout.secondaryTrailing)
             }
         }
-        .navigationTitle("Window Management")
+        .navigationTitle("Window Manager")
         .onDisappear { recorder.cancel() }
     }
 
-    private func shortcutColumns(
-        leading: [WindowAction],
-        trailing: [WindowAction]
-    ) -> some View {
-        HStack(alignment: .top, spacing: 30) {
-            WindowShortcutColumn(
-                actions: leading,
-                activeRecorderID: recorder.identifier,
-                binding: model.preferences.windowShortcut,
-                record: beginRecording,
-                clear: clearShortcut
-            )
-            WindowShortcutColumn(
-                actions: trailing,
-                activeRecorderID: recorder.identifier,
-                binding: model.preferences.windowShortcut,
-                record: beginRecording,
-                clear: clearShortcut
-            )
+    /// The two-column shortcut grid, one card per pair of columns.
+    private func shortcutColumns(_ leading: [WindowAction], _ trailing: [WindowAction]) -> some View {
+        HStack(alignment: .top, spacing: 28) {
+            shortcutColumn(leading)
+            shortcutColumn(trailing)
         }
+        .padding(.vertical, 8)
+    }
+
+    private func shortcutColumn(_ actions: [WindowAction]) -> some View {
+        VStack(spacing: 4) {
+            ForEach(actions) { action in
+                WindowCommandRow(
+                    action: action,
+                    shortcut: model.preferences.windowShortcut(for: action),
+                    activeRecorderID: recorder.identifier,
+                    liveModifiers: recorder.identifier == action.rawValue ? recorder.liveModifiers : "",
+                    record: { beginRecording(action) },
+                    clear: { model.finishWindowShortcutRecording(nil, for: action) }
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private func beginRecording(_ action: WindowAction) {
@@ -432,57 +607,35 @@ struct WindowSettingsView: View {
             cancel: { model.cancelShortcutRecording() }
         )
     }
-
-    private func clearShortcut(_ action: WindowAction) {
-        model.finishWindowShortcutRecording(nil, for: action)
-    }
 }
 
-private struct WindowShortcutColumn: View {
-    let actions: [WindowAction]
+/// One cell of Window Manager's shortcut grid: preview, name, and hotkey field.
+private struct WindowCommandRow: View {
+    let action: WindowAction
+    let shortcut: ShortcutBinding?
     let activeRecorderID: String?
-    let binding: (WindowAction) -> ShortcutBinding?
-    let record: (WindowAction) -> Void
-    let clear: (WindowAction) -> Void
+    let liveModifiers: String
+    let record: () -> Void
+    let clear: () -> Void
 
     var body: some View {
-        VStack(spacing: 7) {
-            ForEach(actions) { action in
-                let shortcut = binding(action)
-                HStack(spacing: 8) {
-                    Text(action.title)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    WindowActionPreviewView(action: action)
-                        .frame(width: 25, height: 18)
-
-                    Button(activeRecorderID == action.rawValue ? "Press shortcut…" : (shortcut?.displayName ?? "Record Shortcut")) {
-                        record(action)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .frame(width: 126)
-                    .disabled(activeRecorderID != nil && activeRecorderID != action.rawValue)
-                    .accessibilityLabel("Record shortcut for \(action.title)")
-
-                    Button {
-                        clear(action)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 18, height: 18)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(shortcut == nil || activeRecorderID != nil)
-                    .help("Clear \(action.title) shortcut")
-                    .accessibilityLabel("Clear shortcut for \(action.title)")
-                }
-                .frame(minHeight: 25)
-                .padding(.top, action.startsSettingsSubgroup ? 9 : 0)
-            }
+        HStack(spacing: 10) {
+            WindowActionPreviewView(action: action)
+                .frame(width: 22, height: 16)
+            Text(action.title)
+                .lineLimit(1)
+            Spacer(minLength: 12)
+            SettingsHotkeyField(
+                shortcut: shortcut,
+                isRecording: activeRecorderID == action.rawValue,
+                liveModifiers: liveModifiers,
+                title: action.title,
+                width: 136,
+                record: record,
+                clear: clear
+            )
+            .disabled(activeRecorderID != nil && activeRecorderID != action.rawValue)
         }
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -526,30 +679,30 @@ struct KeyboardShortcutterSettingsView: View {
     var body: some View {
         let isEnabled = model.preferences.enabledCapabilities.contains(.keyboardShortcutter)
         let readiness = model.permissionReadiness(for: [.keyboardShortcutter])
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .keyboardShortcutter)
             if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                model.requiresPermissionRelaunch(for: .keyboardShortcutter) {
-                Section("Restart required") {
+                SettingsGroup("Restart required") {
                     Text("Restart Keybumps to finish applying Accessibility or Input Monitoring access.")
                         .foregroundStyle(.secondary)
                     Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
                 }
             } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                       !model.missingPermissions(for: .keyboardShortcutter).isEmpty {
-                Section("Setup required") {
+                SettingsGroup("Setup required") {
                     Text("Keyboard Shortcutter needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
-                    Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+                    OpenPermissionsButton()
                 }
             } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                       model.permissionReadiness(for: [.keyboardShortcutter]).nativeNotificationNeedsAttention {
-                Section("Setup required") {
+                SettingsGroup("Setup required") {
                     Text("Native macOS Banner needs Notifications access before it can appear.")
                         .foregroundStyle(.secondary)
-                    Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+                    OpenPermissionsButton()
                 }
             }
-            Section("Status") {
+            SettingsGroup("Status") {
                 if !isEnabled {
                     Label("Off", systemImage: "power")
                         .foregroundStyle(.secondary)
@@ -567,50 +720,49 @@ struct KeyboardShortcutterSettingsView: View {
                 Button("Send Test Suggestion") { Task { await model.deliverSample() } }
                     .disabled(!isEnabled || !readiness.isReady)
             }
-            Section("Presentation channels") {
+            SettingsGroup("Presentation channels") {
                 ForEach(NotificationChannel.allCases.filter { $0 != .sound }) { channel in
                     channelControl(channel)
                 }
             }
-            Section("Sound") {
+            SettingsGroup("Sound") {
                 channelControl(.sound)
             }
-            Section("Keyboard symbols") {
+            SettingsGroup("Keyboard symbols") {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
-            Section {
+            SettingsGroup {
                 Button("Open Keyboard Shortcutter History") { model.showKeyboardShortcutterHistory() }
                 Text("View, filter, and clear detected actions in the quick switcher.")
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Keyboard Shortcutter")
     }
 
     @ViewBuilder
     private func channelControl(_ channel: NotificationChannel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 10) {
+                Text(channel.title)
+                Spacer(minLength: 12)
+                if channel.supportsPreview {
+                    Button("Preview") { Task { await model.previewSample(channel: channel) } }
+                }
                 Toggle(channel.title, isOn: Binding(
                     get: { model.preferences.selectedChannels.contains(channel) },
                     set: { model.setChannel(channel, enabled: $0) }
                 ))
-                if channel.supportsPreview {
-                    Button("Preview") { Task { await model.previewSample(channel: channel) } }
-                }
+                .settingsCompactSwitch()
+                .labelsHidden()
             }
             ForEach(model.previewOutcomes(for: channel).keys.sorted(by: { $0.rawValue < $1.rawValue })) { deliveredChannel in
                 if let outcome = model.previewOutcomes(for: channel)[deliveredChannel] {
                     switch outcome {
                     case .delivered:
-                        Text("\(deliveredChannel.title) preview sent")
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                        SettingsNote("\(deliveredChannel.title) preview sent", tint: .green)
                     case .failed(let message):
-                        Text("\(deliveredChannel.title) preview failed: \(message)")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                        SettingsNote("\(deliveredChannel.title) preview failed: \(message)", tint: .orange)
                         if deliveredChannel == .nativeBanner {
                             Button("Open Notification Settings…") {
                                 model.openNotificationSettings()
@@ -653,17 +805,14 @@ private struct PermissionsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
-            Section("Permissions") {
-                VStack(spacing: 8) {
-                    ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
-                        PermissionRow(permission: permission, compact: true)
-                    }
-                    NotificationPermissionRow()
+        SettingsPage {
+            SettingsGroup {
+                ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
+                    PermissionRow(permission: permission)
                 }
+                NotificationPermissionRow()
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Permissions")
         .task {
             await model.monitorSystemPermissionChanges()
@@ -676,12 +825,7 @@ private struct NotificationPermissionRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Notifications").font(.headline)
-                Text("Lets the native macOS banner presentation appear in Notification Center.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            SettingsRowLabel(title: "Notifications", subtitle: "Lets the native macOS banner presentation appear in Notification Center.")
             Spacer()
             Text(statusText)
                 .font(.caption.weight(.medium))
@@ -692,8 +836,6 @@ private struct NotificationPermissionRow: View {
                 }
             }
         }
-        .padding(10)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         .task {
             await model.monitorNotificationPermissionChanges()
         }
@@ -720,8 +862,19 @@ private struct GeneralView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
-            Section("Updates") {
+        SettingsPage {
+            SettingsGroup("Updates") {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        if model.updateSnapshot.canRestart {
+                            Button("Restart to Update") { model.restartToUpdate() }
+                        }
+                        Button("Check now") { model.checkForUpdates() }
+                            .disabled(!model.updateSnapshot.canCheck)
+                    }
+                } label: {
+                    SettingsRowLabel(title: "Keybumps Updates", subtitle: "\(AppVersionDisplay.title()) · \(model.updateSnapshot.status.summary)")
+                }
                 Toggle(
                     "Automatically check for updates",
                     isOn: Binding(
@@ -730,24 +883,11 @@ private struct GeneralView: View {
                     )
                 )
                 .disabled(!model.updateSnapshot.canCheck)
-
-                LabeledContent("Status", value: model.updateSnapshot.status.summary)
-
-                HStack {
-                    Button("Check for Updates…") { model.checkForUpdates() }
-                        .disabled(!model.updateSnapshot.canCheck)
-                    if model.updateSnapshot.canRestart {
-                        Button("Restart to Update") { model.restartToUpdate() }
-                            .buttonStyle(.borderedProminent)
-                    }
-                }
-
                 if case .unavailable = model.updateSnapshot.status {
-                    Text("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
-                        .foregroundStyle(.secondary)
+                    SettingsNote("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
                 }
             }
-        }.formStyle(.grouped).navigationTitle("General")
+        }.navigationTitle("General")
     }
 }
 
@@ -886,7 +1026,7 @@ private struct PermissionWalkthroughView: View {
                     Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
                         .buttonStyle(.borderedProminent)
                 } else {
-                    PermissionRow(permission: permission, compact: true)
+                    PermissionRow(permission: permission)
                     Text("After changing a macOS setting, return to Keybumps. This step advances as soon as macOS confirms access.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -912,22 +1052,25 @@ private struct PermissionWalkthroughView: View {
     }
 }
 
+/// The top of a capability's page, as on a Raycast extension page: its icon, name, and summary,
+/// then its command with the hotkey. The enable switch lives in the toolbar.
 private struct CapabilityControl: View {
     let capability: Capability
+    var shortcut: CapabilityShortcut?
 
     var body: some View {
-        Section("Capability") {
-            CapabilityToggle(capability: capability)
-            if let disableExplanation {
-                Text(disableExplanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        let descriptor = capability.descriptor
+        SettingsHero(
+            systemImage: descriptor.systemImage,
+            tint: descriptor.iconTint,
+            title: descriptor.title,
+            summary: descriptor.settingsPage?.summary ?? ""
+        )
+        if let shortcut {
+            SettingsGroup("Commands") {
+                CapabilityShortcutEditor(shortcut: shortcut)
             }
         }
-    }
-
-    private var disableExplanation: String? {
-        capability.descriptor.settingsPage?.disableExplanation
     }
 }
 
@@ -936,11 +1079,11 @@ private struct CapabilityToggle: View {
     let capability: Capability
 
     var body: some View {
-        Toggle(
-            "Enable \(capability.title)",
-            isOn: CapabilityToggleBinding(model: model, capability: capability).value
-        )
-        .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
+        Toggle("Enable \(capability.title)", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
+            .settingsCompactSwitch()
+            .labelsHidden()
+            .help(capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
+            .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
     }
 }
 
@@ -961,67 +1104,50 @@ private struct CapabilityShortcutEditor: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
     let shortcut: CapabilityShortcut
-    var showsInstructions = true
 
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
-        Section("Shortcut") {
-            if showsInstructions {
-                Text("Record a new shortcut, clear it, or restore the default. Escape cancels recording.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            HStack {
+        Group {
+            HStack(spacing: 8) {
+                SettingsIconTile(systemImage: shortcut.capability.systemImage, tint: shortcut.capability.descriptor.iconTint, size: 16)
                 Text(shortcut.title)
-                Spacer()
-                Button {
-                    recorder.begin(
-                        identifier: shortcut.rawValue,
-                        suspend: { model.beginShortcutRecording() },
-                        capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
-                        cancel: { model.cancelShortcutRecording() }
-                    )
-                } label: {
-                    if recorder.identifier == shortcut.rawValue {
-                        Text("Press shortcut…")
-                    } else if let binding {
-                        ShortcutKeycaps(shortcut: binding.displayName, compact: true)
-                    } else {
-                        Text("Record Shortcut")
+                Spacer(minLength: 12)
+                SettingsHotkeyField(
+                    shortcut: binding,
+                    isRecording: recorder.identifier == shortcut.rawValue,
+                    liveModifiers: recorder.liveModifiers,
+                    title: shortcut.title,
+                    record: {
+                        recorder.begin(
+                            identifier: shortcut.rawValue,
+                            suspend: { model.beginShortcutRecording() },
+                            capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
+                            cancel: { model.cancelShortcutRecording() }
+                        )
+                    },
+                    clear: { model.finishCapabilityShortcutRecording(nil, for: shortcut) }
+                )
+                if binding?.usesSameKeys(as: shortcut.defaultBinding) != true {
+                    SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
+                        model.restoreDefaultCapabilityShortcut(shortcut)
                     }
+                    .disabled(recorder.identifier != nil)
                 }
-                .accessibilityLabel("Record shortcut for \(shortcut.title)")
-                .accessibilityValue(shortcutAccessibilityValue(binding: binding))
-                Button("Clear") {
-                    model.finishCapabilityShortcutRecording(nil, for: shortcut)
-                }
-                .disabled(binding == nil || recorder.identifier != nil)
-                Button("Restore Default") {
-                    model.restoreDefaultCapabilityShortcut(shortcut)
-                }
-                .disabled(binding?.usesSameKeys(as: shortcut.defaultBinding) == true || recorder.identifier != nil)
             }
             if let error = recorder.error {
-                Text(error).font(.caption).foregroundStyle(.orange)
+                SettingsNote(error, tint: .orange)
             }
             if let failure = model.shortcuts.failures[shortcut.ownerID] {
-                Text(failure).font(.caption).foregroundStyle(.orange)
+                SettingsNote(failure, tint: .orange)
             }
         }
         .onDisappear { recorder.cancel() }
-    }
-
-    private func shortcutAccessibilityValue(binding: ShortcutBinding?) -> String {
-        if recorder.identifier == shortcut.rawValue { return "Waiting for shortcut" }
-        guard let binding else { return "No shortcut assigned" }
-        return KeyboardShortcutRegistry.accessibilityCopy(for: binding.displayName)
     }
 }
 
 private struct PermissionRow: View {
     @Environment(AppModel.self) private var model
     let permission: MacPermission
-    var compact = false
 
     var body: some View {
         let readiness = model.permissionReadiness
@@ -1031,24 +1157,13 @@ private struct PermissionRow: View {
             state: state,
             requiresRelaunch: model.requiresPermissionRelaunch(permission)
         )
-        Group {
-            if compact {
-                content(state: state, action: action)
-                    .padding(10)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
-            } else {
-                Section(permission.title) { content(state: state, action: action) }
-            }
-        }
+        content(state: state, action: action)
     }
 
     @ViewBuilder
     private func content(state: PermissionAuthorizationState, action: PermissionSettingsRowAction) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                if compact { Text(permission.title).font(.headline) }
-                Text(permission.explanation).font(.caption).foregroundStyle(.secondary)
-            }
+            SettingsRowLabel(title: permission.title, subtitle: permission.explanation)
             Spacer()
             Text(model.requiresPermissionRelaunch(permission) ? "Restart Required" : state.rawValue)
                 .font(.caption.weight(.medium))
@@ -1072,6 +1187,13 @@ private struct PermissionRow: View {
     }
 }
 
+/// Jumps to the Permissions page from a capability page.
+private struct OpenPermissionsButton: View {
+    var body: some View {
+        Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+    }
+}
+
 extension Notification.Name {
     static let openPermissions = Notification.Name("Keybumps.openPermissions")
     static let openDictationHistory = Notification.Name("Keybumps.openDictationHistory")
@@ -1081,6 +1203,8 @@ extension Notification.Name {
 private final class ShortcutRecorderState {
     private(set) var identifier: String?
     private(set) var error: String?
+    /// The modifier symbols held down while recording, shown live in the field.
+    private(set) var liveModifiers = ""
     private var monitor: Any?
     private var cancelAction: (() -> Void)?
 
@@ -1095,8 +1219,13 @@ private final class ShortcutRecorderState {
         error = nil
         cancelAction = cancel
         suspend()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        liveModifiers = ""
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
+            if event.type == .flagsChanged {
+                self.liveModifiers = ShortcutBinding.modifierSymbols(for: event.modifierFlags)
+                return event
+            }
             if event.keyCode == UInt16(kVK_Escape) {
                 self.finish()
                 cancel()
@@ -1129,8 +1258,10 @@ private final class ShortcutRecorderState {
         stopMonitor()
         identifier = nil
         error = nil
+        liveModifiers = ""
         cancelAction = nil
     }
+
 
     private func stopMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }

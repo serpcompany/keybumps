@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .keyboardShortcutter,
         title: "Keyboard Shortcutter",
         systemImage: "keyboard",
+        iconTint: .gray,
         requiredPermissions: [.accessibility, .inputMonitoring],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(
@@ -19,6 +20,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .keyboardShortcutter,
+            summary: "Learn the shortcuts for actions you do by hand.",
             disableExplanation: nil,
             content: { AnyView(KeyboardShortcutterSettingsView()) }
         ),
