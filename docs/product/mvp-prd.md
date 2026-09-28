@@ -18,10 +18,10 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 ## Application shell
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
-- Settings contains Setup, Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Keyboard Shortcutter, Permissions, and General destinations.
+- Settings follows Raycast's dark settings layout: an account row showing the local macOS user (no sign-in), then Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Keyboard Shortcutter, Permissions, and General. Each capability page has its enable switch in the toolbar and a Commands group of Raycast-style hotkey fields.
 - Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed.
 - Clicking the Dock icon opens Quick Search.
-- The menu-bar menu contains Toggle Keybumps, version/build information, Settings, Check for Updates, and Quit Keybumps.
+- The menu-bar menu contains Open Keybumps (showing the Quick Search shortcut), About Keybumps, Check for Updates…, Settings…, and Quit Keybumps.
 - Each capability owns its detailed settings. Disabling one immediately stops its services and releases its shortcuts without erasing retained local history.
 - Keybumps registers Launch at Login after fresh onboarding. Users manage the resulting item through macOS System Settings.
 
@@ -33,15 +33,19 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ## Shared Command Palette
 
-- Search, Clipboard, Dictation, Screenshots, and Hotkeys (Keyboard Shortcutter history) are peer tabs selected by Command-1/2/3/4/5. Hotkeys is hidden by default; Keyboard Shortcutter settings can show it, and Open Keyboard Shortcutter History always opens it.
-- Delete removes the highlighted row in Search's Recent Items, Clipboard, and Screenshots once the search field is empty; Command-Delete works while typing.
-- Copying from Clipboard, Screenshots, or Dictation closes the palette and shows a brief **Copied to Clipboard** confirmation.
-- Search results show the name and kind; apps show no path, and files and folders show only their enclosing folder's name.
-- The tab chrome shows only the shortcut and tab name.
+- The palette copies Raycast's launcher: a near-black window, the search input on top, tabs below it, compact rows with a rounded neutral highlight, outlined keycaps, and a floating action pill at the bottom right listing the tab's keys.
+- Search, Clipboard, Screenshots, Dictation, and Hotkeys (Keyboard Shortcutter history) are peer tabs selected by Command-1/2/3/4/5. Hotkeys is hidden by default; Keyboard Shortcutter settings can show it, and Open Keyboard Shortcutter History always opens it.
+- The tab chrome shows only the shortcut keycaps and tab name.
+- Delete removes the highlighted row in Search's Recent Items, Clipboard, and Screenshots once the search field is empty; Command-Delete works while typing. Dictation entries are deleted from their card.
+- Copying from Clipboard, Screenshots, Dictation, or the Screenshot Editor closes the surface and shows **Copied to Clipboard** at the notch (see Notch notices).
 - One dominant input filters the active tab; history inputs use the label **Search**.
-- Arrow keys move selection, Return performs the primary action where one exists, and Escape closes the palette.
+- Arrow keys move selection (the Screenshots grid also uses Left and Right), Return performs the primary action where one exists, and Escape closes the palette.
 - Keyboard Shortcutter rows are informational: selection and Return never copy content or mutate history.
 - History surfaces share the same native `Clear All` control and destructive confirmation behavior. Confirmation presentation must not trigger outside-click dismissal.
+
+### Notch notices
+
+Brief confirmations and warnings grow out of the notch: the message sits left of the camera housing and an icon or shortcut keycaps right of it, on black that blends with the notch. Screens without a notch show the same black tab hanging from the top of the menu bar. Notices spring open, stay about 1.6 seconds (3 seconds for warnings and coaching), and fade; they never take focus or intercept clicks.
 
 ## Quick Search
 
@@ -49,7 +53,7 @@ User outcome: find and open local applications, files, and folders from any app.
 
 - The default shortcut is Command-Space and is recordable, clearable, and restorable.
 - Present a centered floating panel above the current application.
-- Search indexed local applications, files, and folders and show name, icon, kind, and useful path context.
+- Search indexed local applications, files, and folders and show name, icon, and kind. Apps show no path; files and folders show only their enclosing folder's name, with the full path in the tooltip.
 - Return opens or focuses the selected result; Command-Return reveals a file or folder in Finder.
 - Escape and outside click dismiss the panel.
 - Opening a result must not leave Keybumps as the active foreground app.
@@ -94,7 +98,6 @@ User outcome: screenshots taken with Keybumps' hotkeys or the standard macOS sho
 
 ### Ingestion
 
-
 - Read the macOS screenshot location (`com.apple.screencapture` `location`, default Desktop) without writing system preferences, and follow changes to it.
 - Add only new files macOS marks as screen captures (PNG, JPEG, HEIC, TIFF, GIF) to Clipboard History as screenshot items, after the file finishes writing. Existing files, other images, and other file types are ignored.
 - Clipboard History keeps its own media copy and remembers the original file for later editing. Deleting a history item never deletes the original screenshot. Ingestion never writes the pasteboard.
@@ -106,23 +109,23 @@ User outcome: screenshots taken with Keybumps' hotkeys or the standard macOS sho
 
 ### Screenshots tab
 
-- Command-4 shows only screenshot items from Clipboard History, newest first, as a three-column grid of large thumbnails with name and age, and the shared Search input. Arrow keys move through the grid (Left/Right once the search field is empty). Copied images and copied image files stay in the Clipboard tab only.
-- Return, or a click, opens the Screenshot Editor; Command-Return, or Command-click, restores the screenshot to the clipboard; Command-E also edits. The footer shows Edit and ⌘ Copy.
-- Per-item delete and confirmed Clear All remove screenshot items from history only; files stay where macOS saved them.
+- Command-3 shows only screenshot items from Clipboard History, newest first, as a three-column grid of large thumbnails with name and age, and the shared Search input. Arrow keys move through the grid (Left/Right once the search field is empty). Copied images and copied image files stay in the Clipboard tab only.
+- Return, or a click, opens the Screenshot Editor; Command-Return, or Command-click, restores the screenshot to the clipboard; Command-E also edits. The footer shows Select, Edit, and ⌘ Copy.
+- Delete, the card's trash button, and confirmed Clear All remove screenshot items from history only; files stay where macOS saved them.
 - When Screenshot Tools is off, the tab says so. Screenshots share Clipboard History's 50-item limit, so heavy copying can displace older screenshots.
 
 ### Screenshot Editor
 
 - Command-E on a highlighted image row, or Command-click on the row, opens the editor for any Clipboard History image while Screenshot Tools is enabled. Return and plain click keep restoring the item. Image rows show a Command-E hint.
 - Tools: pixelate, solid redact block, arrow, free draw, and text, selectable with 1–5 (number row or keypad) or P, R, A, D, and T; each tool button shows its number. Tool keys are ignored while typing text. Arrow, draw, and text use a small fixed palette. Undo and redo cover each completed gesture.
-- Done (Return) flattens at the image's own pixel density, copies PNG to the clipboard, and saves `<name> (edited).png` next to the original screenshot, numbering on collision. Copied images and unwritable folders save to the macOS screenshot location. Originals are never overwritten. Cancel or Escape discards.
+- Done (Return) flattens at the image's own pixel density, copies PNG to the clipboard (confirmed with **Copied to Clipboard** at the notch), and saves `<name> (edited).png` next to the original screenshot, numbering on collision. Copied images and unwritable folders save to the macOS screenshot location. Originals are never overwritten. Cancel or Escape discards.
 - Redaction safety: exported pixels under pixelate or redact regions never contain original content. Pixelate uses a minimum block size and averages each block; any rendering failure fills the region opaquely instead of showing the original.
 - While the editor is open it counts as unsaved work for update safety. Closing it returns focus to the previous app.
 - Never log image content, text annotations, or filenames.
 
-Out of scope: Keybumps screen capture, Screen Recording permission, scrolling capture, OCR, recording, beautification, pinning, uploads, crop (deferred), shapes beyond arrow, numbered steps, highlighter, moving or restyling existing marks, and sharing.
+Out of scope: screen recording video, scrolling capture, window capture, OCR, recording, beautification, pinning, uploads, crop (deferred), shapes beyond arrow, numbered steps, highlighter, moving or restyling existing marks, and sharing.
 
-Acceptance requires a physical Shift-Command-4 screenshot appearing in the Clipboard tab and restoring correctly to the clipboard, disabling and re-enabling ingestion, the Clipboard History dependency, relaunch persistence, and editing both a screenshot and a copied image with every tool, with an unreadable pasted redaction, in the exact signed build.
+Acceptance requires each capture hotkey from another app, a physical macOS Shift-Command-5 screenshot appearing in the Clipboard tab and restoring correctly to the clipboard, disabling and re-enabling ingestion, the Clipboard History dependency, relaunch persistence, and editing both a screenshot and a copied image with every tool, with an unreadable pasted redaction, in the exact signed build.
 
 ## Dictation
 
@@ -174,7 +177,7 @@ User outcome: passively recognize supported manual actions and present the corre
 - Detect the supported menu, Chrome, standard-window-control, and Finder-to-Trash actions.
 - Persist one durable event per verified action with unread state and searchable history.
 - Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘5, hidden by default); Settings keeps the Keyboard Shortcutter name.
-- Deliver through Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound.
+- Deliver through Native macOS Banner, Top-right Toast (the default), Top-center Shelf, Notch (the action and its shortcut keycaps as a notch notice), and separately configured Sound. Several can be on at once.
 - Preview through the same production delivery adapters without writing a history event.
 - Custom presentations share close, Escape, horizontal-trackpad-scroll, hover-pause, and dismissal behavior.
 - Reflect native notification authorization truthfully in Settings and the Dock attention badge.
@@ -228,7 +231,7 @@ The functional MVP is accepted only when one stable installed Keybumps build dem
 - Every configured Window Manager shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
 - Each Screenshot Tools hotkey captures from another app after granting Screen Recording, ⇧⌘3 opens the editor, and macOS's ⇧⌘3/⇧⌘4 work again when Screenshot Tools is off.
-- A macOS screenshot appears in Clipboard History and the ⌘4 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
+- A macOS screenshot appears in Clipboard History and the ⌘3 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.
 - Skipped permissions remain recoverable without disabling unrelated capabilities.
 - Relaunch preserves intended preferences and histories.

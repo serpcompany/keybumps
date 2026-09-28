@@ -54,8 +54,8 @@ final class SmokeUITests: XCTestCase {
 
         let prompts: [(key: String, prompt: String)] = [
             ("2", "Search clipboard history"),
-            ("3", "Search dictation history"),
-            ("4", "Search screenshots"),
+            ("3", "Search screenshots"),
+            ("4", "Search dictation history"),
             ("1", "Search apps, files, and folders"),
         ]
         for (key, prompt) in prompts {

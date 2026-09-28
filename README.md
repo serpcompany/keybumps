@@ -1,8 +1,8 @@
 # Keybumps
 
-Keybumps is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, Screenshot Tools, on-device Dictation, Window Manager, and Keyboard Shortcutter in one app. Search, Clipboard History, Dictation History, Keyboard Shortcutter History (Hotkeys), and Screenshots share one five-tab keyboard-first Command Palette.
+Keybumps is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, Screenshot Tools, on-device Dictation, Window Manager, and Keyboard Shortcutter in one app. Search (⌘1), Clipboard History (⌘2), Screenshots (⌘3), Dictation History (⌘4), and Keyboard Shortcutter History (Hotkeys, ⌘5, hidden by default) share one Raycast-style, keyboard-first Command Palette. Delete removes the highlighted row, and copies confirm with a brief notice that grows out of the notch.
 
-Screenshot Tools adds screenshots you take with Shift-Command-3/4/5 to Clipboard History and the ⌘5 Screenshots tab. Return (or ⌘E on any image) opens a lightweight editor with pixelate, redact, arrow, draw, and text; Done copies the flattened image and saves `<name> (edited).png` beside the original. Keybumps never captures the screen itself.
+Screenshot Tools takes screenshots with its own hotkeys (⇧⌘2 every screen, ⇧⌘3 every screen then edit, ⇧⌘4 a selected area; it needs Screen Recording and temporarily takes over macOS's own ⇧⌘3/⇧⌘4), and adds those and macOS's ⇧⌘5 screenshots to Clipboard History and the ⌘3 Screenshots grid. Return (or ⌘E on any image) opens a lightweight editor with pixelate, redact, arrow, draw, and text; Done copies the flattened image and saves `<name> (edited).png` beside the original.
 
 Automatic Dictation insertion and reuse from Dictation History are excluded from Clipboard History even though macOS pasteboard transport is used to deliver the text. An explicit user Copy remains normal clipboard activity.
 
