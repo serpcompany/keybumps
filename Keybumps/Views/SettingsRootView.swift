@@ -118,6 +118,8 @@ struct SettingsRootView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 6)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(SettingsTheme.sidebarBackground)
             .toolbar(removing: .sidebarToggle)
             .navigationSplitViewColumnWidth(min: 250, ideal: 270, max: 300)
         } detail: {
@@ -190,7 +192,7 @@ private struct SettingsSidebarRow: View {
                     .frame(width: 26, height: 26)
                     .background(section.iconTint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 Text(section.rawValue)
-                    .font(.system(size: 14))
+                    .font(.system(size: SettingsTheme.titleSize))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 4)
                 if attentionCount > 0 {
@@ -203,7 +205,7 @@ private struct SettingsSidebarRow: View {
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                isSelected ? Color.primary.opacity(0.09) : .clear,
+                isSelected ? SettingsTheme.selection : .clear,
                 in: RoundedRectangle(cornerRadius: 9, style: .continuous)
             )
             .contentShape(Rectangle())
@@ -222,11 +224,11 @@ private struct SettingsSearchField: View {
                 .foregroundStyle(.secondary)
             TextField("Search settings…", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 14))
+                .font(.system(size: SettingsTheme.titleSize))
         }
         .padding(.horizontal, 12)
-        .frame(height: 34)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .frame(height: 38)
+        .background(SettingsTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
         .accessibilityIdentifier("settings.search")
     }
@@ -235,28 +237,28 @@ private struct SettingsSearchField: View {
 struct QuickSearchSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .quickSearch)
             CapabilityShortcutEditor(shortcut: .quickSearch)
-            Section {
+            SettingsGroup {
                 Button("Open Quick Search") { model.showQuickSearch() }
                     .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
             }
-        }.formStyle(.grouped).navigationTitle("Quick Search")
+        }.navigationTitle("Quick Search")
     }
 }
 
 struct ClipboardSettingsView: View {
     var body: some View {
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .clipboardHistory)
-            CapabilityShortcutEditor(shortcut: .clipboardHistory, showsInstructions: false)
-            Section("History") {
+            CapabilityShortcutEditor(shortcut: .clipboardHistory)
+            SettingsGroup("History") {
                 Text("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
-                    .font(.caption)
+                    .font(.system(size: SettingsTheme.subtitleSize))
                     .foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).navigationTitle("Clipboard History")
+        }.navigationTitle("Clipboard History")
     }
 }
 
@@ -264,15 +266,15 @@ struct ScreenshotToolsSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .screenshotTools)
-            Section("Screenshots") {
+            SettingsGroup("Screenshots") {
                 status
                 Text("Screenshots you take with Shift-Command-3, 4, or 5 appear in Clipboard History, ready to paste. Keybumps never captures your screen itself, and the original files stay where macOS saved them.")
-                    .font(.caption)
+                    .font(.system(size: SettingsTheme.subtitleSize))
                     .foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).navigationTitle("Screenshot Tools")
+        }.navigationTitle("Screenshot Tools")
     }
 
     @ViewBuilder private var status: some View {
@@ -289,7 +291,7 @@ struct ScreenshotToolsSettingsView: View {
             Label("Keybumps can’t read \(FileManager.default.displayName(atPath: folder.path))", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             Text("Allow access in System Settings › Privacy & Security › Files & Folders, then return to Keybumps.")
-                .font(.caption)
+                .font(.system(size: SettingsTheme.subtitleSize))
                 .foregroundStyle(.secondary)
             Button("Open Privacy & Security") {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
@@ -300,7 +302,7 @@ struct ScreenshotToolsSettingsView: View {
             Label("\(FileManager.default.displayName(atPath: folder.path)) is unavailable", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             Text("Keybumps keeps checking and resumes when the screenshot folder is available.")
-                .font(.caption)
+                .font(.system(size: SettingsTheme.subtitleSize))
                 .foregroundStyle(.secondary)
         }
     }
@@ -309,42 +311,53 @@ struct ScreenshotToolsSettingsView: View {
 struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .dictation)
-            CapabilityShortcutEditor(shortcut: .dictation, showsInstructions: false)
+            CapabilityShortcutEditor(shortcut: .dictation)
             if model.preferences.enabledCapabilities.contains(.dictation),
                !model.missingPermissions(for: .dictation).isEmpty {
-                Section("Setup required") {
+                SettingsGroup("Setup required") {
                     Text("Dictation needs Microphone and Speech Recognition access before its shortcut can record.")
                         .foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
             }
-            Section("Language") {
-                Picker("Recognition language", selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) })) {
-                    ForEach(model.dictation.availableLanguages, id: \.self) { code in
-                        Text(Locale.current.localizedString(forIdentifier: code) ?? code).tag(code)
+            SettingsGroup("Language") {
+                LabeledContent("Recognition language") {
+                    Picker("Recognition language", selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) })) {
+                        ForEach(model.dictation.availableLanguages, id: \.self) { code in
+                            Text(Locale.current.localizedString(forIdentifier: code) ?? code).tag(code)
+                        }
                     }
+                    .labelsHidden()
+                    .fixedSize()
                 }
             }
             DictationTranscriptionEngineSection()
-            Section("Recording length") {
-                Picker(
-                    "Maximum recording length",
-                    selection: Binding(
-                        get: { model.preferences.dictationDurationLimit },
-                        set: { model.setDictationDurationLimit($0) }
-                    )
-                ) {
-                    ForEach(DictationDurationLimit.allCases) { limit in
-                        Text(limit.title).tag(limit)
+            SettingsGroup("Recording length") {
+                LabeledContent {
+                    Picker(
+                        "Maximum recording length",
+                        selection: Binding(
+                            get: { model.preferences.dictationDurationLimit },
+                            set: { model.setDictationDurationLimit($0) }
+                        )
+                    ) {
+                        ForEach(DictationDurationLimit.allCases) { limit in
+                            Text(limit.title).tag(limit)
+                        }
                     }
+                    .labelsHidden()
+                    .fixedSize()
+                    .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
+                } label: {
+                    SettingsRowLabel(
+                        title: "Maximum recording length",
+                        subtitle: "Keybumps stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut."
+                    )
                 }
-                .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
-                Text("Keybumps stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut.")
-                    .foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).navigationTitle("Dictation")
+        }.navigationTitle("Dictation")
     }
 }
 
@@ -352,12 +365,12 @@ private struct DictationTranscriptionEngineSection: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Section("Transcription model") {
+        SettingsGroup("Transcription model") {
             ForEach(DictationTranscriptionEngine.allCases) { engine in
                 DictationTranscriptionEngineRow(engine: engine)
             }
             Text("Downloaded models stay on this Mac. Dictation audio is transcribed locally with the selected model.")
-                .font(.caption)
+                .font(.system(size: SettingsTheme.subtitleSize))
                 .foregroundStyle(.secondary)
         }
     }
@@ -385,11 +398,11 @@ private struct DictationTranscriptionEngineRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(engine.title)
                 Text(isCompatible ? engine.detail : "English language selection required")
-                    .font(.caption)
+                    .font(.system(size: SettingsTheme.subtitleSize))
                     .foregroundStyle(isCompatible ? Color.secondary : Color.orange)
                 if case .failed(let message) = state {
                     Text(message)
-                        .font(.caption)
+                        .font(.system(size: SettingsTheme.subtitleSize))
                         .foregroundStyle(.red)
                         .lineLimit(2)
                 }
@@ -465,14 +478,17 @@ struct WindowSettingsView: View {
                 Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
                     .disabled(recorder.identifier != nil)
             }
-            .padding(16)
-
-            Divider()
+            .toggleStyle(SettingsSwitchToggleStyle())
+            .padding(.horizontal, SettingsTheme.rowInset)
+            .frame(minHeight: SettingsTheme.rowMinHeight + 12)
+            .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
 
             ScrollView {
                 VStack(spacing: 18) {
                     Text("Click a shortcut to record a new combination. Press Delete to clear it or Escape to cancel.")
-                        .font(.caption)
+                        .font(.system(size: SettingsTheme.subtitleSize))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -489,17 +505,21 @@ struct WindowSettingsView: View {
                     )
                 }
                 .padding(18)
+                .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
+                .padding(22)
             }
 
             if let error = recorder.error {
                 Text(error)
-                    .font(.caption)
+                    .font(.system(size: SettingsTheme.subtitleSize))
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 12)
             }
         }
+        .font(.system(size: SettingsTheme.titleSize))
+        .background(SettingsTheme.pageBackground)
         .navigationTitle("Window Management")
         .onDisappear { recorder.cancel() }
     }
@@ -628,30 +648,30 @@ struct KeyboardShortcutterSettingsView: View {
     var body: some View {
         let isEnabled = model.preferences.enabledCapabilities.contains(.keyboardShortcutter)
         let readiness = model.permissionReadiness(for: [.keyboardShortcutter])
-        Form {
+        SettingsPage {
             CapabilityControl(capability: .keyboardShortcutter)
             if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                model.requiresPermissionRelaunch(for: .keyboardShortcutter) {
-                Section("Restart required") {
+                SettingsGroup("Restart required") {
                     Text("Restart Keybumps to finish applying Accessibility or Input Monitoring access.")
                         .foregroundStyle(.secondary)
                     Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
                 }
             } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                       !model.missingPermissions(for: .keyboardShortcutter).isEmpty {
-                Section("Setup required") {
+                SettingsGroup("Setup required") {
                     Text("Keyboard Shortcutter needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
             } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                       model.permissionReadiness(for: [.keyboardShortcutter]).nativeNotificationNeedsAttention {
-                Section("Setup required") {
+                SettingsGroup("Setup required") {
                     Text("Native macOS Banner needs Notifications access before it can appear.")
                         .foregroundStyle(.secondary)
                     Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
                 }
             }
-            Section("Status") {
+            SettingsGroup("Status") {
                 if !isEnabled {
                     Label("Off", systemImage: "power")
                         .foregroundStyle(.secondary)
@@ -669,24 +689,23 @@ struct KeyboardShortcutterSettingsView: View {
                 Button("Send Test Suggestion") { Task { await model.deliverSample() } }
                     .disabled(!isEnabled || !readiness.isReady)
             }
-            Section("Presentation channels") {
+            SettingsGroup("Presentation channels") {
                 ForEach(NotificationChannel.allCases.filter { $0 != .sound }) { channel in
                     channelControl(channel)
                 }
             }
-            Section("Sound") {
+            SettingsGroup("Sound") {
                 channelControl(.sound)
             }
-            Section("Keyboard symbols") {
+            SettingsGroup("Keyboard symbols") {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
-            Section {
+            SettingsGroup {
                 Button("Open Keyboard Shortcutter History") { model.showKeyboardShortcutterHistory() }
                 Text("View, filter, and clear detected actions in the quick switcher.")
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Keyboard Shortcutter")
     }
 
@@ -707,11 +726,11 @@ struct KeyboardShortcutterSettingsView: View {
                     switch outcome {
                     case .delivered:
                         Text("\(deliveredChannel.title) preview sent")
-                            .font(.caption)
+                            .font(.system(size: SettingsTheme.subtitleSize))
                             .foregroundStyle(.green)
                     case .failed(let message):
                         Text("\(deliveredChannel.title) preview failed: \(message)")
-                            .font(.caption)
+                            .font(.system(size: SettingsTheme.subtitleSize))
                             .foregroundStyle(.orange)
                         if deliveredChannel == .nativeBanner {
                             Button("Open Notification Settings…") {
@@ -755,15 +774,14 @@ private struct PermissionsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
-            Section("Permissions") {
+        SettingsPage {
+            SettingsGroup {
                 ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
                     PermissionRow(permission: permission, compact: true)
                 }
                 NotificationPermissionRow()
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Permissions")
         .task {
             await model.monitorSystemPermissionChanges()
@@ -818,8 +836,8 @@ private struct GeneralView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Form {
-            Section("Updates") {
+        SettingsPage {
+            SettingsGroup("Updates") {
                 Toggle(
                     "Automatically check for updates",
                     isOn: Binding(
@@ -845,7 +863,7 @@ private struct GeneralView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-        }.formStyle(.grouped).navigationTitle("General")
+        }.navigationTitle("General")
     }
 }
 
@@ -1014,13 +1032,8 @@ private struct CapabilityControl: View {
     let capability: Capability
 
     var body: some View {
-        Section("Capability") {
-            CapabilityToggle(capability: capability)
-            if let disableExplanation {
-                Text(disableExplanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        SettingsGroup {
+            CapabilityToggle(capability: capability, subtitle: disableExplanation)
         }
     }
 
@@ -1032,12 +1045,12 @@ private struct CapabilityControl: View {
 private struct CapabilityToggle: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
+    var subtitle: String?
 
     var body: some View {
-        Toggle(
-            "Enable \(capability.title)",
-            isOn: CapabilityToggleBinding(model: model, capability: capability).value
-        )
+        Toggle(isOn: CapabilityToggleBinding(model: model, capability: capability).value) {
+            SettingsRowLabel(title: "Enable \(capability.title)", subtitle: subtitle)
+        }
         .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
     }
 }
@@ -1059,19 +1072,13 @@ private struct CapabilityShortcutEditor: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
     let shortcut: CapabilityShortcut
-    var showsInstructions = true
 
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
-        Section("Shortcut") {
-            if showsInstructions {
-                Text("Record a new shortcut, clear it, or restore the default. Escape cancels recording.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            HStack {
+        SettingsGroup {
+            HStack(spacing: 8) {
                 Text(shortcut.title)
-                Spacer()
+                Spacer(minLength: 12)
                 Button {
                     recorder.begin(
                         identifier: shortcut.rawValue,
@@ -1080,33 +1087,37 @@ private struct CapabilityShortcutEditor: View {
                         cancel: { model.cancelShortcutRecording() }
                     )
                 } label: {
-                    if recorder.identifier == shortcut.rawValue {
-                        Text("Press shortcut…")
-                    } else if let binding {
-                        ShortcutKeycaps(shortcut: binding.displayName, compact: true)
-                    } else {
-                        Text("Record Shortcut")
-                    }
+                    SettingsHotkeyPill(label: pillLabel(binding: binding))
                 }
+                .buttonStyle(.plain)
+                .help("Click, then press a new shortcut. Escape cancels.")
                 .accessibilityLabel("Record shortcut for \(shortcut.title)")
                 .accessibilityValue(shortcutAccessibilityValue(binding: binding))
-                Button("Clear") {
-                    model.finishCapabilityShortcutRecording(nil, for: shortcut)
+                if binding != nil {
+                    SettingsIconButton(systemImage: "xmark", help: "Clear shortcut") {
+                        model.finishCapabilityShortcutRecording(nil, for: shortcut)
+                    }
+                    .disabled(recorder.identifier != nil)
                 }
-                .disabled(binding == nil || recorder.identifier != nil)
-                Button("Restore Default") {
+                SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
                     model.restoreDefaultCapabilityShortcut(shortcut)
                 }
                 .disabled(binding?.usesSameKeys(as: shortcut.defaultBinding) == true || recorder.identifier != nil)
             }
             if let error = recorder.error {
-                Text(error).font(.caption).foregroundStyle(.orange)
+                SettingsNote(error).foregroundStyle(.orange)
             }
             if let failure = model.shortcuts.failures[shortcut.ownerID] {
-                Text(failure).font(.caption).foregroundStyle(.orange)
+                SettingsNote(failure).foregroundStyle(.orange)
             }
         }
         .onDisappear { recorder.cancel() }
+    }
+
+    private func pillLabel(binding: ShortcutBinding?) -> String {
+        if recorder.identifier == shortcut.rawValue { return "Press shortcut…" }
+        guard let binding else { return "Record Shortcut" }
+        return ShortcutKeycapPresentation(shortcut: binding.displayName).keys.joined(separator: " ")
     }
 
     private func shortcutAccessibilityValue(binding: ShortcutBinding?) -> String {
@@ -1133,7 +1144,7 @@ private struct PermissionRow: View {
             if compact {
                 content(state: state, action: action)
             } else {
-                Section(permission.title) { content(state: state, action: action) }
+                SettingsGroup(permission.title) { content(state: state, action: action) }
             }
         }
     }
