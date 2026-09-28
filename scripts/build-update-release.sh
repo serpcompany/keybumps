@@ -27,15 +27,23 @@ update_url_is_keybumps_feed "$feed_url" || { print -u2 "release feed must use up
 
 mkdir -p "$output_directory/archive" "$output_directory/export" "$output_directory/feed" "$output_directory/dmg-root" "$output_directory/publication/assets" "$output_directory/publication/publish-last"
 cd "$repository_root"
+# CI (KEYBUMPS_MANUAL_SIGNING=1) signs explicitly with the imported Developer ID certificate;
+# local builds keep Xcode automatic signing.
+typeset -a signing_settings
+export_options="$repository_root/scripts/ExportOptions-DeveloperID.plist"
+if [[ -n "${KEYBUMPS_MANUAL_SIGNING:-}" ]]; then
+  signing_settings=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" DEVELOPMENT_TEAM=847HR8U8D9 PROVISIONING_PROFILE_SPECIFIER=)
+  export_options="$repository_root/scripts/ExportOptions-DeveloperID-Manual.plist"
+fi
 xcodegen generate
 xcodebuild -project Keybumps.xcodeproj -scheme Keybumps-Release -configuration Release \
   -archivePath "$output_directory/archive/Keybumps.xcarchive" \
   MARKETING_VERSION="$release_version" CURRENT_PROJECT_VERSION="$release_build" \
-  KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" archive
+  KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" $signing_settings archive
 xcodebuild -exportArchive \
   -archivePath "$output_directory/archive/Keybumps.xcarchive" \
   -exportPath "$output_directory/export" \
-  -exportOptionsPlist "$repository_root/scripts/ExportOptions-DeveloperID.plist"
+  -exportOptionsPlist "$export_options"
 
 app_path="$output_directory/export/Keybumps.app"
 notary_archive="$output_directory/Keybumps-notary.zip"

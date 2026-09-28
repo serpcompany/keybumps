@@ -38,6 +38,29 @@ The normal entry point is `scripts/build-update-release.sh`. It refuses a reused
 10. Promote to production with `scripts/publish-release.sh <output-directory> production --publish` (owner-authorized). The immutable assets are already published and are skipped after byte verification; it then publishes `appcast.xml` and `latest.json` last and verifies both.
 11. Publish `publication/publish-last/latest.json` beside the production `appcast.xml` (`https://updates.keybumps.app/latest.json`) at the same time as the appcast. `scripts/write-latest-release-pointer.sh` derives it from the validated appcast: `version`, `build`, `dmgURL` (the DMG beside the archive enclosure), and the DMG `sha256`. It refuses a foreign origin, a version or build mismatch, or a malformed checksum. The keybumps.app download page (`serpcompany/keybumps.app`) reads this file, so a release needs no website edit.
 
+## Release in CI
+
+Releases are built and published by the manually triggered **Release Keybumps** workflow (`.github/workflows/release.yml`) on a macOS runner. Merging to `main` never releases. Run it from Actions → Release Keybumps with:
+
+- `version`: marketing version. `docs/releases/v<version>.md` must exist on the chosen ref.
+- `build`: optional. Defaults to the live production build + 1 and must exceed it.
+- `channel`: `staging` or `production` (which appcast pointer to publish).
+- `publish`: off builds, signs, notarizes, packages, validates, previews publication, and keeps the `publication/` files as a workflow artifact for 90 days. On also runs `scripts/publish-release.sh --publish`.
+
+The workflow uses a temporary keychain for the Developer ID identity and the Sparkle key, pins Sparkle's tools by SHA-256, and fails early if the Sparkle private key doesn't match the public key embedded in Keybumps. The build uses `KEYBUMPS_MANUAL_SIGNING=1` (explicit Developer ID signing via `scripts/ExportOptions-DeveloperID-Manual.plist`); local builds keep automatic signing.
+
+Repository secrets (Settings → Secrets and variables → Actions). The owner creates these; never paste their values into chat, issues, or logs:
+
+| Secret | Contents |
+| --- | --- |
+| `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a `.p12` exported from Keychain Access containing the **Developer ID Application: … (847HR8U8D9)** certificate and its private key (`base64 -i cert.p12 \| pbcopy`) |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The `.p12` export password |
+| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | App Store Connect API key used by `asc notarization`; `ASC_PRIVATE_KEY` is the full `.p8` contents |
+| `SPARKLE_PRIVATE_KEY` | The Sparkle EdDSA private key (`generate_keys --account <account> -x key.txt` on the Mac that holds it; delete the file afterwards) |
+| `CLOUDFLARE_R2_TOKEN` | Cloudflare API token with Workers R2 Storage: Edit on `keybumps-updates` (see [`cloudflare.md`](cloudflare.md)) |
+
+**Check release credentials** (`.github/workflows/release-credentials.yml`) is a read-only workflow that lists which secrets are set and verifies the R2 token can read `keybumps-updates`. Both workflows use the `release` GitHub environment, where the owner can require approval before any run.
+
 ## Local fixture harness
 
 Resolve packages once so Sparkle's `bin/generate_keys` and `bin/generate_appcast` tools are available. Use a dedicated `keybumps-staged` Keychain account; it is not the production key. Build harmless N and N+1 apps with increasing build numbers and the staged public key, package N+1, add matching release notes, and generate the feed:

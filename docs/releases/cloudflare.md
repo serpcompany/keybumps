@@ -25,5 +25,5 @@ Found at inventory time: releases 4006 (`0.0.3-beta.2`) and 4007 (`0.0.3-beta.3`
 
 ## Access
 
-- Publishing uses `wrangler r2 object put` with `CLOUDFLARE_API_TOKEN` set to an API token scoped to **Workers R2 Storage: Edit** on the `keybumps-updates` bucket only. Keep it in the macOS Keychain, never in the repository or shell history.
+- Publishing uses `wrangler r2 object put` with `CLOUDFLARE_API_TOKEN` set to an API token scoped to **Workers R2 Storage: Edit** on the `keybumps-updates` bucket only. It lives in the `CLOUDFLARE_R2_TOKEN` repository secret for the Release Keybumps workflow; anywhere else, provide it through the environment. Never put it in the repository, shell history, or chat.
 - Publishing, DNS, and bucket changes require fresh owner authorization (see `AGENTS.md`).
