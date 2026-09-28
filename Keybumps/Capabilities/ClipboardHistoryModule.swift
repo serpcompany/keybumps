@@ -26,3 +26,32 @@ extension CapabilityDescriptor {
         criticalOperations: []
     )
 }
+
+/// Owns clipboard monitoring, the Clipboard History shortcut, and the Clipboard tab.
+@MainActor
+final class ClipboardHistoryModule: CapabilityModule {
+    let descriptor = CapabilityDescriptor.clipboardHistory
+    private let clipboard: ClipboardHistoryService
+    private let palette: CommandPaletteController
+
+    init(clipboard: ClipboardHistoryService, palette: CommandPaletteController) {
+        self.clipboard = clipboard
+        self.palette = palette
+    }
+
+    func apply(_ context: CapabilityContext) {
+        context.configureShortcut(
+            owner: CapabilityShortcut.clipboardHistory.ownerID,
+            for: capability,
+            binding: context.preferences.capabilityShortcut(for: .clipboardHistory)
+        ) { [weak palette] in
+            palette?.toggle(.clipboard)
+        }
+        context.isEnabled(capability) ? clipboard.start() : clipboard.stop()
+    }
+
+    func deactivate(_ context: CapabilityContext) {
+        palette.dismiss(ifDisplaying: .clipboard)
+        clipboard.stop()
+    }
+}

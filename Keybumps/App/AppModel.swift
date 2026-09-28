@@ -207,7 +207,8 @@ final class AppModel {
             preferences: preferences
         )
         capabilities = CapabilityRegistry(modules: [
-            QuickSearchModule(palette: commandPalette)
+            QuickSearchModule(palette: commandPalette),
+            ClipboardHistoryModule(clipboard: clipboard, palette: commandPalette)
         ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
@@ -310,13 +311,11 @@ final class AppModel {
     func applyCapabilities() {
         capabilities.apply(capabilityContext)
         let enabled = preferences.enabledCapabilities
-        configure(owner: CapabilityShortcut.clipboardHistory.ownerID, capability: .clipboardHistory, binding: preferences.capabilityShortcut(for: .clipboardHistory)) { [weak self] in self?.commandPalette.toggle(.clipboard) }
         configure(owner: CapabilityShortcut.dictation.ownerID, capability: .dictation, binding: preferences.capabilityShortcut(for: .dictation)) { [weak self] in self?.handleDictationShortcut() }
         for action in WindowAction.allCases {
             let owner = "window.\(action.rawValue)"
             configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
         }
-        enabled.contains(.clipboardHistory) ? clipboard.start() : clipboard.stop()
         screenshotTools.apply(
             enabled: enabled.contains(.screenshotTools),
             clipboardHistoryEnabled: enabled.contains(.clipboardHistory)
@@ -668,8 +667,7 @@ final class AppModel {
         case .quickSearch:
             break
         case .clipboardHistory:
-            commandPalette.dismiss(ifDisplaying: .clipboard)
-            clipboard.stop()
+            break
         case .dictation:
             dictation.cancel()
             shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
