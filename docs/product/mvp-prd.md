@@ -221,7 +221,7 @@ The functional MVP is accepted only when one stable installed Keybumps build dem
 - Option-Space records, transcribes locally, inserts text, and supports Escape cancellation.
 - Every configured Window Management shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
-- A macOS screenshot appears in Clipboard History and pastes correctly.
+- A macOS screenshot appears in Clipboard History and the ⌘5 Screenshots tab, pastes correctly, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.
 - Skipped permissions remain recoverable without disabling unrelated capabilities.
 - Relaunch preserves intended preferences and histories.
