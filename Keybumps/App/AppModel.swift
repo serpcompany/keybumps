@@ -28,6 +28,7 @@ final class AppModel {
     let inbox: InboxStore
     let shortcuts: GlobalShortcutCoordinator
     let permissions: PermissionCoordinator
+    @ObservationIgnored private let notice = PaletteHUD()
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
@@ -229,9 +230,7 @@ final class AppModel {
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
-        screenshotModule.onNeedsScreenRecording = { [weak self] in
-            Task { await self?.recoverPermission(.screenRecording) }
-        }
+        screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         refreshDetectorState()
     }
@@ -393,6 +392,14 @@ final class AppModel {
 
     func dismissPermissionRelaunchPrompt() {
         relaunchPromptPermission = nil
+    }
+
+    /// A screenshot hotkey without Screen Recording never jumps to System Settings: macOS asks
+    /// once, and afterwards a brief notice points to Screenshot Tools settings, where Allow and
+    /// Restart live (macOS reports a new grant only after Keybumps reopens).
+    private func screenshotHotkeyNeedsScreenRecording() {
+        permissions.requestScreenRecordingAccess()
+        notice.show("Screen Recording needed — see Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
     }
 
     func restartForPermissionRelaunch() {

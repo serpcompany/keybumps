@@ -297,6 +297,9 @@ final class PermissionCoordinator {
     var speechGranted: Bool { speechState.isGranted }
     var screenRecordingGranted: Bool { screenRecordingState.isGranted }
 
+    /// Shows macOS's Screen Recording prompt the first time; later calls do nothing visible.
+    func requestScreenRecordingAccess() { requestScreenRecording() }
+
     init(
         accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
         inputMonitoringAuthorized: @escaping () -> Bool = { CGPreflightListenEventAccess() },

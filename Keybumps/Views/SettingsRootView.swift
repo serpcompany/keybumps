@@ -363,11 +363,14 @@ struct ScreenshotToolsSettingsView: View {
             SettingsGroup("Screenshots") {
                 if !model.permissions.screenRecordingGranted {
                     LabeledContent {
-                        Button("Allow…") { Task { await model.recoverPermission(.screenRecording) } }
+                        HStack {
+                            Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
+                            Button("Allow…") { Task { await model.recoverPermission(.screenRecording) } }
+                        }
                     } label: {
                         SettingsRowLabel(
                             title: "Screen Recording required",
-                            subtitle: "The screenshot hotkeys need Screen Recording access. After allowing it, macOS may ask you to reopen Keybumps."
+                            subtitle: "The screenshot hotkeys need Screen Recording access. Allow Keybumps in System Settings, then restart Keybumps so macOS applies it."
                         )
                     }
                 }

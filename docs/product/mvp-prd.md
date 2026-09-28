@@ -88,7 +88,7 @@ User outcome: screenshots taken with Keybumps' hotkeys or the standard macOS sho
 
 - Three editable hotkeys, on by default: **Screenshot Screen** (⇧⌘2) saves one file per display; **Screenshot Screen and Edit** (⇧⌘3) does the same and opens the first display's screenshot in the Screenshot Editor; **Screenshot Area** (⇧⌘4) lets the user drag an area, and Escape cancels without a file.
 - Captures use macOS's `screencapture`, are saved to the macOS screenshot location with macOS-style names, and are marked as screen captures so they flow into Clipboard History like any macOS screenshot.
-- Capturing requires Screen Recording. Without it, the hotkey routes to the permission (macOS prompt, then Privacy & Security › Screen Recording) instead of capturing, and Settings shows attention with an Allow action.
+- Capturing requires Screen Recording. Without it, a hotkey never opens System Settings: macOS asks once, and afterwards a brief notice points to Screenshot Tools settings, which shows attention with Allow and Restart Keybumps actions (macOS applies a new grant only after Keybumps reopens).
 - While a Keybumps hotkey uses the same keys as macOS's "Save picture of screen" (⇧⌘3) or "Save picture of selected area" (⇧⌘4), Keybumps turns that macOS shortcut off in `com.apple.symbolichotkeys` and records that it did. Turning Screenshot Tools off, or moving the hotkey, turns only those recorded shortcuts back on. Shortcuts the owner turned off themselves are never turned on.
 - Existing installs receive the three hotkeys once, unless those keys are already in use; clearing one is respected afterwards.
 
