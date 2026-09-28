@@ -297,7 +297,7 @@ final class PermissionCoordinator {
     var speechGranted: Bool { speechState.isGranted }
     var screenRecordingGranted: Bool { screenRecordingState.isGranted }
 
-    /// Shows macOS's Screen Recording prompt the first time; later calls do nothing visible.
+    /// Asks macOS for Screen Recording, which can open System Settings.
     func requestScreenRecordingAccess() { requestScreenRecording() }
 
     init(

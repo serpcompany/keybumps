@@ -18,6 +18,7 @@ final class AppPreferences {
         static let takenOverSystemShortcuts = "takenOverSystemShortcuts"
         static let windowShortcuts = "windowShortcuts"
         static let showsHotkeysTab = "showsHotkeysTab"
+        static let didRequestScreenRecording = "didRequestScreenRecording"
     }
 
     private let defaults: UserDefaults
@@ -68,6 +69,12 @@ final class AppPreferences {
         didSet { defaults.set(showsHotkeysTab, forKey: Key.showsHotkeysTab) }
     }
 
+    /// Whether a screenshot hotkey has already shown macOS's Screen Recording request, which
+    /// opens System Settings on recent macOS and so must happen only once.
+    var didRequestScreenRecording: Bool {
+        didSet { defaults.set(didRequestScreenRecording, forKey: Key.didRequestScreenRecording) }
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
@@ -94,6 +101,7 @@ final class AppPreferences {
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
         showsHotkeysTab = defaults.bool(forKey: Key.showsHotkeysTab)
+        didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

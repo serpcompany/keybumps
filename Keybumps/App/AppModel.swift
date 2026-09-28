@@ -394,11 +394,15 @@ final class AppModel {
         relaunchPromptPermission = nil
     }
 
-    /// A screenshot hotkey without Screen Recording never jumps to System Settings: macOS asks
-    /// once, and afterwards a brief notice points to Screenshot Tools settings, where Allow and
+    /// A screenshot hotkey without Screen Recording asks macOS once (which may open System
+    /// Settings); afterwards a brief notice points to Screenshot Tools settings, where Allow and
     /// Restart live (macOS reports a new grant only after Keybumps reopens).
     private func screenshotHotkeyNeedsScreenRecording() {
-        permissions.requestScreenRecordingAccess()
+        guard preferences.didRequestScreenRecording else {
+            preferences.didRequestScreenRecording = true
+            permissions.requestScreenRecordingAccess()
+            return
+        }
         notice.show("Screen Recording needed — see Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
     }
 
