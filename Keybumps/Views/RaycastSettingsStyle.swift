@@ -3,10 +3,10 @@ import SwiftUI
 
 /// Colors and metrics copied from Raycast's Settings window (dark), with light equivalents.
 enum SettingsTheme {
-    static let pageBackground = Color(light: NSColor(white: 0.95, alpha: 1), dark: NSColor(white: 0.08, alpha: 1))
-    static let sidebarBackground = Color(light: NSColor(white: 0.91, alpha: 1), dark: NSColor(white: 0.06, alpha: 1))
-    static let card = Color(light: .white, dark: NSColor(white: 0.115, alpha: 1))
-    static let control = Color(light: NSColor(white: 0.9, alpha: 1), dark: NSColor(white: 0.17, alpha: 1))
+    static let pageBackground = Color(light: gray(0.96), dark: gray(0.078))
+    static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.071))
+    static let card = Color(light: .white, dark: gray(0.114))
+    static let control = Color(light: gray(0.9), dark: gray(0.165))
     static let separator = Color.primary.opacity(0.07)
     static let selection = Color.primary.opacity(0.09)
 
@@ -15,6 +15,10 @@ enum SettingsTheme {
     static let cardRadius: CGFloat = 12
     static let titleSize: CGFloat = 15
     static let subtitleSize: CGFloat = 13
+
+    private static func gray(_ value: CGFloat) -> NSColor {
+        NSColor(srgbRed: value, green: value, blue: value, alpha: 1)
+    }
 }
 
 extension Color {
@@ -43,6 +47,26 @@ struct SettingsPage<Content: View>: View {
         .font(.system(size: SettingsTheme.titleSize))
         .toggleStyle(SettingsSwitchToggleStyle())
         .labeledContentStyle(SettingsRowLabeledContentStyle())
+        .buttonStyle(SettingsButtonStyle())
+    }
+}
+
+/// Raycast's rounded-rectangle buttons with a dark fill.
+struct SettingsButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: SettingsTheme.titleSize - 1, weight: .medium))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 30)
+            .background(
+                SettingsTheme.control.opacity(configuration.isPressed ? 0.7 : 1),
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(Rectangle())
     }
 }
 
@@ -126,6 +150,7 @@ struct SettingsSwitchToggleStyle: ToggleStyle {
             configuration.label.frame(maxWidth: .infinity, alignment: .leading)
         }
         .toggleStyle(.switch)
+        .controlSize(.regular)
     }
 }
 

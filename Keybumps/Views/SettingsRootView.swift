@@ -238,11 +238,14 @@ struct QuickSearchSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .quickSearch)
-            CapabilityShortcutEditor(shortcut: .quickSearch)
+            CapabilityControl(capability: .quickSearch, shortcut: .quickSearch)
             SettingsGroup {
-                Button("Open Quick Search") { model.showQuickSearch() }
-                    .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
+                LabeledContent {
+                    Button("Open") { model.showQuickSearch() }
+                        .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
+                } label: {
+                    SettingsRowLabel(title: "Open Quick Search", subtitle: "Search apps, files, and folders.")
+                }
             }
         }.navigationTitle("Quick Search")
     }
@@ -251,8 +254,7 @@ struct QuickSearchSettingsView: View {
 struct ClipboardSettingsView: View {
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .clipboardHistory)
-            CapabilityShortcutEditor(shortcut: .clipboardHistory)
+            CapabilityControl(capability: .clipboardHistory, shortcut: .clipboardHistory)
             SettingsGroup("History") {
                 Text("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
                     .font(.system(size: SettingsTheme.subtitleSize))
@@ -312,8 +314,7 @@ struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .dictation)
-            CapabilityShortcutEditor(shortcut: .dictation)
+            CapabilityControl(capability: .dictation, shortcut: .dictation)
             if model.preferences.enabledCapabilities.contains(.dictation),
                !model.missingPermissions(for: .dictation).isEmpty {
                 SettingsGroup("Setup required") {
@@ -1030,10 +1031,14 @@ private struct PermissionWalkthroughView: View {
 
 private struct CapabilityControl: View {
     let capability: Capability
+    var shortcut: CapabilityShortcut?
 
     var body: some View {
         SettingsGroup {
             CapabilityToggle(capability: capability, subtitle: disableExplanation)
+            if let shortcut {
+                CapabilityShortcutEditor(shortcut: shortcut)
+            }
         }
     }
 
@@ -1075,7 +1080,7 @@ private struct CapabilityShortcutEditor: View {
 
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
-        SettingsGroup {
+        Group {
             HStack(spacing: 8) {
                 Text(shortcut.title)
                 Spacer(minLength: 12)
