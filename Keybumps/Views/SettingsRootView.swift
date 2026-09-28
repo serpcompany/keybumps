@@ -456,13 +456,6 @@ struct WindowSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
 
-    private static let commandGroups: [(title: String, actions: [WindowAction])] = [
-        ("Halves & Corners", WindowSettingsLayout.primaryLeading),
-        ("Size, Position & Displays", WindowSettingsLayout.primaryTrailing),
-        ("Thirds & Sixths", WindowSettingsLayout.secondaryLeading),
-        ("Fourths", WindowSettingsLayout.secondaryTrailing)
-    ]
-
     var body: some View {
         let readiness = model.permissionReadiness(for: [.windowManagement])
         let isEnabled = model.preferences.enabledCapabilities.contains(.windowManagement)
@@ -494,22 +487,39 @@ struct WindowSettingsView: View {
             if let error = recorder.error {
                 SettingsNote(error).foregroundStyle(.orange)
             }
-            ForEach(Array(Self.commandGroups.enumerated()), id: \.offset) { index, group in
-                SettingsGroup(index == 0 ? "Commands" : nil, subtitle: group.title) {
-                    ForEach(group.actions) { action in
-                        WindowCommandRow(
-                            action: action,
-                            shortcut: model.preferences.windowShortcut(for: action),
-                            activeRecorderID: recorder.identifier,
-                            record: { beginRecording(action) },
-                            clear: { model.finishWindowShortcutRecording(nil, for: action) }
-                        )
-                    }
-                }
+            SettingsGroup("Commands", subtitle: "Click a shortcut to record a new combination. Delete clears it; Escape cancels.") {
+                shortcutColumns(WindowSettingsLayout.primaryLeading, WindowSettingsLayout.primaryTrailing)
+            }
+            SettingsGroup {
+                shortcutColumns(WindowSettingsLayout.secondaryLeading, WindowSettingsLayout.secondaryTrailing)
             }
         }
         .navigationTitle("Window Management")
         .onDisappear { recorder.cancel() }
+    }
+
+    /// The two-column shortcut grid, one card per pair of columns.
+    private func shortcutColumns(_ leading: [WindowAction], _ trailing: [WindowAction]) -> some View {
+        HStack(alignment: .top, spacing: 28) {
+            shortcutColumn(leading)
+            shortcutColumn(trailing)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func shortcutColumn(_ actions: [WindowAction]) -> some View {
+        VStack(spacing: 4) {
+            ForEach(actions) { action in
+                WindowCommandRow(
+                    action: action,
+                    shortcut: model.preferences.windowShortcut(for: action),
+                    activeRecorderID: recorder.identifier,
+                    record: { beginRecording(action) },
+                    clear: { model.finishWindowShortcutRecording(nil, for: action) }
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private func beginRecording(_ action: WindowAction) {
@@ -522,7 +532,7 @@ struct WindowSettingsView: View {
     }
 }
 
-/// One row of Window Management's Commands table: preview, name, hotkey, and clear.
+/// One cell of Window Management's shortcut grid: preview, name, hotkey, and clear.
 private struct WindowCommandRow: View {
     let action: WindowAction
     let shortcut: ShortcutBinding?
