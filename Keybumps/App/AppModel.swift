@@ -54,6 +54,7 @@ final class AppModel {
     private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
     let commandPalette: CommandPaletteController
+    let capabilities: CapabilityRegistry
     private let transcriptionCoordinator: DictationTranscriptionCoordinator
     private let permissionDragAssistant = PermissionDragAssistantController()
     private let dictationIndicator: DictationIndicatorController
@@ -205,6 +206,9 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
+        capabilities = CapabilityRegistry(modules: [
+            QuickSearchModule(palette: commandPalette)
+        ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
@@ -292,9 +296,20 @@ final class AppModel {
         applyCapabilities()
     }
 
+    /// What every capability module receives when the shell applies, deactivates, or refreshes it.
+    var capabilityContext: CapabilityContext {
+        CapabilityContext(
+            enabledCapabilities: preferences.enabledCapabilities,
+            preferences: preferences,
+            shortcuts: shortcuts,
+            permissions: permissions,
+            permissionReadiness: { self.permissionReadiness(for: $0) }
+        )
+    }
+
     func applyCapabilities() {
+        capabilities.apply(capabilityContext)
         let enabled = preferences.enabledCapabilities
-        configure(owner: CapabilityShortcut.quickSearch.ownerID, capability: .quickSearch, binding: preferences.capabilityShortcut(for: .quickSearch)) { [weak self] in self?.commandPalette.toggle(.search) }
         configure(owner: CapabilityShortcut.clipboardHistory.ownerID, capability: .clipboardHistory, binding: preferences.capabilityShortcut(for: .clipboardHistory)) { [weak self] in self?.commandPalette.toggle(.clipboard) }
         configure(owner: CapabilityShortcut.dictation.ownerID, capability: .dictation, binding: preferences.capabilityShortcut(for: .dictation)) { [weak self] in self?.handleDictationShortcut() }
         for action in WindowAction.allCases {
@@ -456,6 +471,7 @@ final class AppModel {
         if preferences.enabledCapabilities.contains(.windowManagement), permissions.accessibilityGranted {
             windows.startDragSnapping()
         }
+        capabilities.permissionsDidRefresh(capabilityContext)
         refreshDetectorState()
         updateMissingPermissionBadge()
     }
@@ -644,9 +660,13 @@ final class AppModel {
     }
 
     private func deactivate(_ capability: Capability) {
+        if let module = capabilities.module(for: capability) {
+            module.deactivate(capabilityContext)
+            return
+        }
         switch capability {
         case .quickSearch:
-            commandPalette.dismiss(ifDisplaying: .search)
+            break
         case .clipboardHistory:
             commandPalette.dismiss(ifDisplaying: .clipboard)
             clipboard.stop()

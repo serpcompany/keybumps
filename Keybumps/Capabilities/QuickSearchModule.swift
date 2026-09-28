@@ -26,3 +26,28 @@ extension CapabilityDescriptor {
         criticalOperations: []
     )
 }
+
+/// Owns the Quick Search shortcut and the Search tab.
+@MainActor
+final class QuickSearchModule: CapabilityModule {
+    let descriptor = CapabilityDescriptor.quickSearch
+    private let palette: CommandPaletteController
+
+    init(palette: CommandPaletteController) {
+        self.palette = palette
+    }
+
+    func apply(_ context: CapabilityContext) {
+        context.configureShortcut(
+            owner: CapabilityShortcut.quickSearch.ownerID,
+            for: capability,
+            binding: context.preferences.capabilityShortcut(for: .quickSearch)
+        ) { [weak palette] in
+            palette?.toggle(.search)
+        }
+    }
+
+    func deactivate(_ context: CapabilityContext) {
+        palette.dismiss(ifDisplaying: .search)
+    }
+}

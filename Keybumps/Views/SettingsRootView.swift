@@ -110,6 +110,8 @@ extension AppModel {
         switch section {
         case .permissions:
             return missingPermissionCount
+        case _ where section.capability.flatMap(capabilities.module(for:)) != nil:
+            return capabilities.attentionCount(for: section.capability!, context: capabilityContext)
         case .screenshotTools:
             switch screenshotTools.status {
             case .requiresClipboardHistory, .folderAccessDenied: return 1
