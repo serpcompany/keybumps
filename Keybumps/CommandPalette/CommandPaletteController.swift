@@ -8,6 +8,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case clipboard
     case dictation
     case keyboardShortcutter
+    case screenshots
 
     var id: String { rawValue }
 
@@ -16,7 +17,8 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search"
         case .clipboard: "Clipboard"
         case .dictation: "Dictation"
-        case .keyboardShortcutter: "Keyboard Shortcutter"
+        case .keyboardShortcutter: "Hotkeys"
+        case .screenshots: "Screenshots"
         }
     }
 
@@ -26,6 +28,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .clipboard: "clipboard"
         case .dictation: "waveform"
         case .keyboardShortcutter: "keyboard"
+        case .screenshots: "camera.viewfinder"
         }
     }
 
@@ -35,6 +38,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .clipboard: "⌘2"
         case .dictation: "⌘3"
         case .keyboardShortcutter: "⌘4"
+        case .screenshots: "⌘5"
         }
     }
 
@@ -43,7 +47,8 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search apps, files, and folders"
         case .clipboard: "Search clipboard history"
         case .dictation: "Search dictation history"
-        case .keyboardShortcutter: "Search Keyboard Shortcutter history"
+        case .keyboardShortcutter: "Search hotkeys"
+        case .screenshots: "Search screenshots"
         }
     }
 
@@ -53,6 +58,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case "2": .clipboard
         case "3": .dictation
         case "4": .keyboardShortcutter
+        case "5": .screenshots
         default: nil
         }
     }
@@ -66,7 +72,32 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Open"
         case .clipboard, .dictation: "Copy"
         case .keyboardShortcutter: nil
+        case .screenshots: "Edit"
         }
+    }
+
+    /// Shown in the footer after the primary action.
+    var secondaryActionTitle: String? {
+        self == .screenshots ? "Copy" : nil
+    }
+}
+
+/// What the Screenshots tab shows: only screen captures from Clipboard History.
+enum ScreenshotPaletteContent: Equatable {
+    case disabled
+    case empty
+    case entries([ClipboardEntry])
+
+    static func resolve(entries: [ClipboardEntry], query: String, isEnabled: Bool) -> ScreenshotPaletteContent {
+        guard isEnabled else { return .disabled }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = entries.filter { $0.isScreenshot && (trimmed.isEmpty || $0.searchableText.localizedCaseInsensitiveContains(trimmed)) }
+        return matches.isEmpty ? .empty : .entries(matches)
+    }
+
+    var entries: [ClipboardEntry] {
+        guard case .entries(let entries) = self else { return [] }
+        return entries
     }
 }
 
@@ -149,6 +180,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
+    /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
+    var editImage: ((ClipboardEntry) -> Bool)?
 
     init(
         clipboard: ClipboardHistoryService,
@@ -234,7 +267,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
-                copyClipboardEntry: copyClipboardEntry,
+                copyClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
+                chooseScreenshot: { [weak self] entry in self?.chooseScreenshot(entry) },
                 copyDictationText: { [weak self] text in
                     self?.copy(text, suppressClipboardHistory: true)
                 },
@@ -291,6 +325,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
                 if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers) {
                     self.selectTab(tab)
+                    return nil
+                }
+                if event.charactersIgnoringModifiers?.lowercased() == "e", self.state.tab == .clipboard || self.state.tab == .screenshots {
+                    self.editSelectedClipboardImage()
                     return nil
                 }
             }
@@ -359,7 +397,17 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             filteredDictations.count
         case .keyboardShortcutter:
             filteredKeyboardShortcutter.count
+        case .screenshots:
+            screenshotContent.entries.count
         }
+    }
+
+    private var screenshotContent: ScreenshotPaletteContent {
+        ScreenshotPaletteContent.resolve(
+            entries: clipboard.entries,
+            query: state.historyQuery,
+            isEnabled: preferences.enabledCapabilities.contains(.screenshotTools)
+        )
     }
 
     private var filteredClipboard: [ClipboardEntry] {
@@ -408,6 +456,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             copy(text, suppressClipboardHistory: true)
         case .keyboardShortcutter:
             break
+        case .screenshots:
+            let entries = screenshotContent.entries
+            guard entries.indices.contains(state.selection) else { return }
+            if reveal {
+                copyClipboardEntry(entries[state.selection])
+            } else {
+                editClipboardImage(entries[state.selection])
+            }
         }
     }
 
@@ -434,6 +490,34 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard clipboard.restore(entry) else { return }
         dismiss()
     }
+
+    /// Command-click edits an image; a plain click keeps restoring it.
+    private func chooseClipboardEntry(_ entry: ClipboardEntry) {
+        if NSEvent.modifierFlags.contains(.command), editClipboardImage(entry) { return }
+        copyClipboardEntry(entry)
+    }
+
+    private func editSelectedClipboardImage() {
+        let entries = state.tab == .screenshots ? screenshotContent.entries : filteredClipboard
+        guard entries.indices.contains(state.selection) else { return }
+        editClipboardImage(entries[state.selection])
+    }
+
+    /// In the Screenshots tab a click edits; Command-click copies.
+    private func chooseScreenshot(_ entry: ClipboardEntry) {
+        if NSEvent.modifierFlags.contains(.command) {
+            copyClipboardEntry(entry)
+        } else {
+            editClipboardImage(entry)
+        }
+    }
+
+    @discardableResult
+    private func editClipboardImage(_ entry: ClipboardEntry) -> Bool {
+        guard entry.kind == .image, let editImage else { return false }
+        dismiss()
+        return editImage(entry)
+    }
 }
 
 private struct CommandPaletteView: View {
@@ -448,6 +532,7 @@ private struct CommandPaletteView: View {
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
     let copyClipboardEntry: (ClipboardEntry) -> Void
+    let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
@@ -515,6 +600,7 @@ private struct CommandPaletteView: View {
                 entries: filteredClipboard,
                 selection: state.selection,
                 choose: copyClipboardEntry,
+                showsEditHint: preferences.enabledCapabilities.contains(.screenshotTools),
                 delete: clipboard.delete,
                 clear: clipboard.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -539,7 +625,42 @@ private struct CommandPaletteView: View {
                 clear: inbox.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
+        case .screenshots:
+            switch screenshotContent {
+            case .disabled:
+                PaletteResultsContainer {
+                    PaletteEmptyState(title: "Screenshot Tools is turned off", systemImage: "camera.viewfinder")
+                }
+            case .empty:
+                PaletteResultsContainer {
+                    PaletteEmptyState(
+                        title: state.historyQuery.isEmpty ? "Take a screenshot with ⇧⌘4 and it appears here" : "No matching screenshots",
+                        systemImage: "camera.viewfinder"
+                    )
+                }
+            case .entries(let entries):
+                ClipboardResultsView(
+                    entries: entries,
+                    selection: state.selection,
+                    choose: chooseScreenshot,
+                    showsEditHint: false,
+                    delete: clipboard.delete,
+                    clear: clipboard.clearScreenshots,
+                    confirmationPresentationChanged: confirmationPresentationChanged,
+                    emptyTitle: "No screenshots yet",
+                    clearTitle: "Clear screenshots?",
+                    clearMessage: "This removes screenshots from Keybumps history. The screenshot files stay where macOS saved them."
+                )
+            }
         }
+    }
+
+    private var screenshotContent: ScreenshotPaletteContent {
+        ScreenshotPaletteContent.resolve(
+            entries: clipboard.entries,
+            query: state.historyQuery,
+            isEnabled: preferences.enabledCapabilities.contains(.screenshotTools)
+        )
     }
 
     private var filteredClipboard: [ClipboardEntry] {
@@ -568,7 +689,7 @@ private struct PaletteTabBar: View {
     let select: (CommandPaletteTab) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 2) {
             ForEach(CommandPaletteTab.allCases) { tab in
                 Button {
                     select(tab)
@@ -576,8 +697,10 @@ private struct PaletteTabBar: View {
                     HStack(spacing: 7) {
                         ShortcutKeycaps(shortcut: tab.labelPresentation.shortcut, compact: true)
                         Text(tab.labelPresentation.name)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(selected == tab ? Color.white.opacity(0.11) : .clear, in: Capsule())
                 }
@@ -612,7 +735,7 @@ private struct KeyboardShortcutterResultsView: View {
             case .disabled:
                 PaletteEmptyState(title: "Keyboard Shortcutter is turned off", systemImage: "keyboard")
             case .empty:
-                PaletteEmptyState(title: "No matching Keyboard Shortcutter", systemImage: "keyboard")
+                PaletteEmptyState(title: "No matching hotkeys", systemImage: "keyboard")
             case .entries(let entries):
                 VStack(spacing: 0) {
                     HStack {
@@ -809,14 +932,18 @@ private struct ClipboardResultsView: View {
     let entries: [ClipboardEntry]
     let selection: Int
     let choose: (ClipboardEntry) -> Void
+    let showsEditHint: Bool
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
+    var emptyTitle = "No clipboard items yet"
+    var clearTitle = "Clear clipboard history?"
+    var clearMessage = "This permanently removes all clipboard items and image previews saved by Keybumps."
 
     var body: some View {
         PaletteResultsContainer {
             if entries.isEmpty {
-                PaletteEmptyState(title: "No clipboard items yet", systemImage: "clipboard")
+                PaletteEmptyState(title: emptyTitle, systemImage: "clipboard")
             } else {
                 VStack(spacing: 0) {
                     HStack {
@@ -825,8 +952,8 @@ private struct ClipboardResultsView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         ClearAllButton(
-                            confirmationTitle: "Clear clipboard history?",
-                            confirmationMessage: "This permanently removes all clipboard items and image previews saved by Keybumps.",
+                            confirmationTitle: clearTitle,
+                            confirmationMessage: clearMessage,
                             disabled: entries.isEmpty,
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
@@ -845,9 +972,13 @@ private struct ClipboardResultsView: View {
                                             .lineLimit(entry.kind == .image ? 1 : 2)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                         HStack(spacing: 5) {
-                                            Text(entry.kind == .image ? "Image" : "Text")
+                                            Text(entry.kindLabel)
                                             Text("·")
                                             Text(entry.capturedAt, style: .relative)
+                                            if showsEditHint, entry.kind == .image {
+                                                Text("·")
+                                                Text("⌘E to edit")
+                                            }
                                         }
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
@@ -896,7 +1027,7 @@ private struct ClipboardEntryPreview: View {
         .frame(width: 58, height: 42)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
         .clipShape(.rect(cornerRadius: 7))
-        .accessibilityLabel(entry.kind == .image ? "Copied image preview" : "Copied text")
+        .accessibilityLabel(entry.isScreenshot ? "Screenshot preview" : entry.kind == .image ? "Copied image preview" : "Copied text")
         .task(id: entry.mediaPath) {
             guard entry.kind == .image, let imageURL = entry.imageURL else {
                 thumbnail = nil
@@ -1037,6 +1168,9 @@ private struct PaletteFooter: View {
             Label("Select", systemImage: "arrow.up.arrow.down")
             if let primaryActionTitle = tab.primaryActionTitle {
                 Label(primaryActionTitle, systemImage: "return")
+            }
+            if let secondaryActionTitle = tab.secondaryActionTitle {
+                Label("⌘ \(secondaryActionTitle)", systemImage: "return")
             }
             Spacer()
         }

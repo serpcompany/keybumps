@@ -2,13 +2,14 @@
 
 ## Product boundary
 
-Keybumps is one native macOS companion with five independently enabled capabilities:
+Keybumps is one native macOS companion with six independently enabled capabilities:
 
 1. Quick Search
 2. Clipboard History
 3. Dictation
 4. Window Management
 5. Keyboard Shortcutter
+6. Screenshot Tools
 
 The permanent bundle identifier is `com.serp.keybumps`. The supported baseline is Apple Silicon on macOS 14.2 or newer. User content and processing remain local: no account, sync, analytics backend, cloud transcription, hosted history, or uploaded search, clipboard, transcript, filename, recording, or coaching content.
 
@@ -17,7 +18,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 ## Application shell
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
-- Settings contains Setup, Quick Search, Clipboard History, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General destinations.
+- Settings contains Setup, Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General destinations.
 - Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed.
 - Clicking the Dock icon opens Quick Search.
 - The menu-bar menu contains Toggle Keybumps, version/build information, Settings, Check for Updates, and Quit Keybumps.
@@ -40,7 +41,7 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ## Shared Command Palette
 
-- Search, Clipboard, Dictation, and Keyboard Shortcutter are peer tabs selected by Command-1/2/3/4.
+- Search, Clipboard, Dictation, Hotkeys (Keyboard Shortcutter history), and Screenshots are peer tabs selected by Command-1/2/3/4/5.
 - The tab chrome shows only the shortcut and tab name.
 - One dominant input filters the active tab; history inputs use the label **Search**.
 - Arrow keys move selection, Return performs the primary action where one exists, and Escape closes the palette.
@@ -67,21 +68,55 @@ Acceptance requires physical shortcut invocation from another app; successful ap
 
 ## Clipboard History
 
-User outcome: recover and reuse the ten most recent copied text or image items.
+User outcome: recover and reuse the fifty most recent copied text or image items.
 
 - The default shortcut is Shift-Command-Space and is recordable, clearable, and restorable.
 - Capture text and PNG, JPEG, HEIC, GIF, and TIFF changes while enabled.
-- Persist at most ten items locally. Store image payloads as separate files capped at 50 MB each rather than embedding them in JSON.
+- When an image file (PNG, JPEG, HEIC, GIF, TIFF) is copied in Finder, store the file's image and remember its location; never store the file icon Finder places on the pasteboard. Other copied files add nothing.
+- Persist at most fifty items locally. Store image payloads as separate files capped at 50 MB each rather than embedding them in JSON.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the pasteboard and pastes into the focused destination when safe.
 - Exclude the exact temporary pasteboard write used by automatic Dictation insertion or Dictation-history paste. A later user-originated copy of identical text remains eligible.
 - Support visible image previews, individual deletion, and confirmed Clear All.
 - Disabling Clipboard History stops monitoring without erasing retained items.
-- Explain that recent copied secrets may remain until removed or displaced.
+- Explain in Clipboard History settings that recent copied secrets may remain until removed or displaced, and that a full image history can use several gigabytes of local storage.
 
 Out of scope: arbitrary copied files, audio/video media, cloud sync, accounts, permanent archives, and source classification.
 
-Acceptance covers ordering, duplicate collapse, exact image restoration, ten-item/media-file eviction, persistence, deletion, clearing, safe paste, and disabled monitoring in the exact signed build.
+Acceptance covers ordering, duplicate collapse, exact image restoration, fifty-item/media-file eviction, persistence, deletion, clearing, safe paste, and disabled monitoring in the exact signed build.
+
+## Screenshot Tools
+
+User outcome: screenshots taken with the standard macOS shortcuts are immediately available in Clipboard History for pasting and lightweight markup.
+
+- Read the macOS screenshot location (`com.apple.screencapture` `location`, default Desktop) without writing system preferences, and follow changes to it.
+- Add only new files macOS marks as screen captures (PNG, JPEG, HEIC, TIFF, GIF) to Clipboard History as screenshot items, after the file finishes writing. Existing files, other images, and other file types are ignored.
+- Clipboard History keeps its own media copy and remembers the original file for later editing. Deleting a history item never deletes the original screenshot. Ingestion never writes the pasteboard.
+- Screenshot items show the screenshot's name and a **Screenshot** label; Return pastes them like any image.
+- Screenshot Tools requires Clipboard History. When Clipboard History is off, Screenshot Tools shows **Requires Clipboard History** with an action to enable it.
+- If macOS denies access to the screenshot folder, show that state truthfully with a route to Privacy & Security › Files & Folders. A missing folder is reported and retried.
+- Existing installs receive Screenshot Tools enabled once when it first ships; after that the owner's switch is respected. Disabling it stops watching without removing existing items.
+- Never log screenshot filenames, paths, or image content.
+
+### Screenshots tab
+
+- Command-5 shows only screenshot items from Clipboard History, newest first, with thumbnails and the shared Search input. Copied images and copied image files stay in the Clipboard tab only.
+- Return, or a click, opens the Screenshot Editor; Command-Return, or Command-click, restores the screenshot to the clipboard; Command-E also edits. The footer shows Edit and ⌘ Copy.
+- Per-item delete and confirmed Clear All remove screenshot items from history only; files stay where macOS saved them.
+- When Screenshot Tools is off, the tab says so. Screenshots share Clipboard History's 50-item limit, so heavy copying can displace older screenshots.
+
+### Screenshot Editor
+
+- Command-E on a highlighted image row, or Command-click on the row, opens the editor for any Clipboard History image while Screenshot Tools is enabled. Return and plain click keep restoring the item. Image rows show a Command-E hint.
+- Tools: pixelate, solid redact block, arrow, free draw, and text, selectable with P, R, A, D, and T. Arrow, draw, and text use a small fixed palette. Undo and redo cover each completed gesture.
+- Done (Return) flattens at the image's own pixel density, copies PNG to the clipboard, and saves `<name> (edited).png` next to the original screenshot, numbering on collision. Copied images and unwritable folders save to the macOS screenshot location. Originals are never overwritten. Cancel or Escape discards.
+- Redaction safety: exported pixels under pixelate or redact regions never contain original content. Pixelate uses a minimum block size and averages each block; any rendering failure fills the region opaquely instead of showing the original.
+- While the editor is open it counts as unsaved work for update safety. Closing it returns focus to the previous app.
+- Never log image content, text annotations, or filenames.
+
+Out of scope: Keybumps screen capture, Screen Recording permission, scrolling capture, OCR, recording, beautification, pinning, uploads, crop (deferred), shapes beyond arrow, numbered steps, highlighter, moving or restyling existing marks, and sharing.
+
+Acceptance requires a physical Shift-Command-4 screenshot appearing in the Clipboard tab and pasting correctly, disabling and re-enabling ingestion, the Clipboard History dependency, relaunch persistence, and editing both a screenshot and a copied image with every tool, with an unreadable pasted redaction, in the exact signed build.
 
 ## Dictation
 
@@ -107,7 +142,7 @@ User outcome: record speech, transcribe it locally, and insert it at the origina
 
 Required permissions are Microphone and Speech Recognition, plus Accessibility where focused-field insertion requires it.
 
-Out of scope: automatic per-recording language detection, guide/assistant behavior, screen capture, AI rewriting, cloud transcription, meeting or system-audio recording, speaker identification, accounts, and uploaded history.
+Out of scope: automatic per-recording language detection, guide/assistant behavior, screen capture (Screenshot Tools only ingests macOS screenshots), AI rewriting, cloud transcription, meeting or system-audio recording, speaker identification, accounts, and uploaded history.
 
 Acceptance requires successful insertion in a standard text editor and browser field plus cancellation, denied-permission recovery, offline operation, language switching, interruption recovery, retry, and failed-insertion recovery.
 
@@ -157,6 +192,7 @@ One coordinator reports truthful state and recovery for all permissions. Keybump
 | --- | --- |
 | Quick Search | None for ordinary indexed search |
 | Clipboard History | None for ordinary pasteboard monitoring |
+| Screenshot Tools | None; macOS may ask for Files & Folders access to the screenshot folder |
 | Dictation | Microphone, Speech Recognition, conditional Accessibility |
 | Window Management | Accessibility |
 | Keyboard Shortcutter | Accessibility and Input Monitoring |
@@ -178,13 +214,14 @@ Customer distribution is a Developer ID-signed, hardened, notarized direct downl
 
 ## Functional acceptance
 
-The functional MVP is accepted only when one stable installed Keybumps build demonstrates all five capabilities together:
+The functional MVP is accepted only when one stable installed Keybumps build demonstrates all six capabilities together:
 
 - Command-Space opens Quick Search and successfully opens apps, files, and folders.
 - Shift-Command-Space recalls and pastes bounded text and image history.
 - Option-Space records, transcribes locally, inserts text, and supports Escape cancellation.
 - Every configured Window Management shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
+- A macOS screenshot appears in Clipboard History and the ⌘5 Screenshots tab, pastes correctly, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.
 - Skipped permissions remain recoverable without disabling unrelated capabilities.
 - Relaunch preserves intended preferences and histories.

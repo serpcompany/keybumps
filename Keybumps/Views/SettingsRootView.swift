@@ -4,10 +4,10 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case search = "Quick Search", clipboard = "Clipboard History", dictation = "Dictation"
+    case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Management", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
     var id: String { rawValue }
-    var icon: String { switch self { case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .keyboardShortcutter: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
+    var icon: String { switch self { case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .screenshotTools: "camera.viewfinder"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .keyboardShortcutter: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -47,6 +47,7 @@ struct SettingsRootView: View {
                 switch navigation.selection {
                 case .search: QuickSearchSettingsView()
                 case .clipboard: ClipboardSettingsView()
+                case .screenshotTools: ScreenshotToolsSettingsView()
                 case .dictation: DictationSettingsView()
                 case .windows: WindowSettingsView()
                 case .keyboardShortcutter: KeyboardShortcutterSettingsView()
@@ -87,6 +88,11 @@ struct SettingsRootView: View {
         switch section {
         case .permissions:
             return model.missingPermissionCount
+        case .screenshotTools:
+            switch model.screenshotTools.status {
+            case .requiresClipboardHistory, .folderAccessDenied: return 1
+            case .stopped, .watching, .folderUnavailable: return 0
+            }
         case .keyboardShortcutter:
             guard model.preferences.enabledCapabilities.contains(.keyboardShortcutter) else { return 0 }
             return model.permissionReadiness(for: [.keyboardShortcutter]).missingCount
@@ -132,7 +138,58 @@ private struct ClipboardSettingsView: View {
         Form {
             CapabilityControl(capability: .clipboardHistory)
             CapabilityShortcutEditor(shortcut: .clipboardHistory, showsInstructions: false)
+            Section("History") {
+                Text("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }.formStyle(.grouped).navigationTitle("Clipboard History")
+    }
+}
+
+private struct ScreenshotToolsSettingsView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Form {
+            CapabilityControl(capability: .screenshotTools)
+            Section("Screenshots") {
+                status
+                Text("Screenshots you take with Shift-Command-3, 4, or 5 appear in Clipboard History, ready to paste. Keybumps never captures your screen itself, and the original files stay where macOS saved them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }.formStyle(.grouped).navigationTitle("Screenshot Tools")
+    }
+
+    @ViewBuilder private var status: some View {
+        switch model.screenshotTools.status {
+        case .stopped:
+            Label("Off", systemImage: "pause.circle").foregroundStyle(.secondary)
+        case .watching(let folder):
+            Label("Watching \(FileManager.default.displayName(atPath: folder.path))", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .requiresClipboardHistory:
+            Label("Requires Clipboard History", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Button("Enable Clipboard History") { model.setCapability(.clipboardHistory, enabled: true) }
+        case .folderAccessDenied(let folder):
+            Label("Keybumps can’t read \(FileManager.default.displayName(atPath: folder.path))", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Allow access in System Settings › Privacy & Security › Files & Folders, then return to Keybumps.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open Privacy & Security") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        case .folderUnavailable(let folder):
+            Label("\(FileManager.default.displayName(atPath: folder.path)) is unavailable", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Keybumps keeps checking and resumes when the screenshot folder is available.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -696,7 +753,7 @@ private struct OnboardingView: View {
                 case 0:
                     VStack(spacing: 12) { Text("Welcome to Keybumps").font(.largeTitle.bold()); Text("Set up the local preview").font(.headline); Text("This build is ready for hands-on testing. Purchasing and license activation are not part of this local preview.").foregroundStyle(.secondary).multilineTextAlignment(.center) }
                 case 1:
-                    VStack(spacing: 12) { Text("Five capabilities, one app").font(.largeTitle.bold()); ForEach(Capability.allCases) { Label($0.title, systemImage: $0.systemImage) } }
+                    VStack(spacing: 12) { Text("Six capabilities, one app").font(.largeTitle.bold()); ForEach(Capability.allCases) { Label($0.title, systemImage: $0.systemImage) } }
                 case 2:
                     VStack(spacing: 12) {
                         Text("Enable macOS permissions").font(.largeTitle.bold())
@@ -842,6 +899,7 @@ private struct CapabilityControl: View {
         case .dictation: "Turning this off cancels active Dictation and releases its global shortcut."
         case .windowManagement: "Turning this off stops drag-to-snap and releases all window shortcuts."
         case .keyboardShortcutter: nil
+        case .screenshotTools: "Turning this off stops adding new screenshots to Clipboard History. Screenshots already there stay until removed."
         }
     }
 }

@@ -1886,17 +1886,57 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(assembler.transcript, "A sentence that is still being recognized.")
     }
 
-    func testClipboardKeepsTenAndCollapsesDuplicates() {
+    func testClipboardKeepsFiftyAndCollapsesDuplicates() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
         let service = ClipboardHistoryService(storageURL: url)
-        for number in 0..<12 { service.ingestForTesting("item \(number)") }
-        XCTAssertEqual(service.entries.count, 10)
-        XCTAssertEqual(service.entries.first?.text, "item 11")
-        XCTAssertFalse(service.entries.contains { $0.text == "item 0" })
-        service.ingestForTesting("item 11")
-        XCTAssertEqual(service.entries.count, 10)
-        XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 10)
+        XCTAssertEqual(ClipboardHistoryService.capacity, 50)
+        for number in 0..<52 { service.ingestForTesting("item \(number)") }
+        XCTAssertEqual(service.entries.count, 50)
+        XCTAssertEqual(service.entries.first?.text, "item 51")
+        XCTAssertEqual(service.entries.last?.text, "item 2")
+        XCTAssertFalse(service.entries.contains { $0.text == "item 0" || $0.text == "item 1" })
+        service.ingestForTesting("item 51")
+        XCTAssertEqual(service.entries.count, 50)
+        XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 50)
+    }
+
+    func testClipboardEvictsOldestImageMediaAtCapacity() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-evict-\(UUID().uuidString)")
+        let storageURL = root.appendingPathComponent("history.json")
+        let mediaURL = root.appendingPathComponent("media", isDirectory: true)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsEvictClipboard-\(UUID().uuidString)"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII="))
+        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL)
+
+        pasteboard.clearContents()
+        pasteboard.setData(png, forType: .png)
+        service.pollForTesting()
+        let imageURL = try XCTUnwrap(service.entries.first?.imageURL)
+        for number in 0..<(ClipboardHistoryService.capacity - 1) { service.ingestForTesting("text \(number)") }
+        XCTAssertEqual(service.entries.last?.kind, .image)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: imageURL.path))
+
+        service.ingestForTesting("one more")
+        XCTAssertEqual(service.entries.count, ClipboardHistoryService.capacity)
+        XCTAssertFalse(service.entries.contains { $0.kind == .image })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imageURL.path))
+    }
+
+    func testClipboardLoadsExistingTenItemHistoryUnchanged() throws {
+        let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-ten-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let existing = (0..<10).map {
+            ClipboardEntry(id: UUID(), text: "saved \($0)", capturedAt: Date(timeIntervalSince1970: 1_700_000_000 - Double($0)))
+        }
+        try JSONEncoder().encode(existing).write(to: storageURL)
+
+        let loaded = ClipboardHistoryService(storageURL: storageURL)
+        XCTAssertEqual(loaded.entries, existing)
+        loaded.ingestForTesting("new copy")
+        XCTAssertEqual(loaded.entries.count, 11)
+        XCTAssertEqual(Array(loaded.entries.dropFirst()), existing)
     }
 
     func testClipboardPersistsPreviewsAndRestoresCopiedImages() throws {
@@ -2226,32 +2266,38 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
     }
 
-    func testCommandPaletteHasTheFourRequestedTabsWithSearchAsDefault() {
+    func testCommandPaletteHasTheFiveRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
-        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyboardShortcutter])
-        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4"])
+        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyboardShortcutter, .screenshots])
+        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"])
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
             [
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
                 CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Keyboard Shortcutter")
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Hotkeys"),
+                CommandPaletteTabLabel(shortcut: "⌘5", name: "Screenshots")
             ]
         )
         XCTAssertEqual(
             CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
-            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"]]
+            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"], ["⌘", "5"]]
         )
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyboardShortcutter)
-        XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("5"), .screenshots)
+        XCTAssertNil(CommandPaletteTab.matchingCommandKey("6"))
+        XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Edit")
+        XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActionTitle, "Copy")
+        XCTAssertNil(CommandPaletteTab.clipboard.secondaryActionTitle)
+        XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search screenshots")
         XCTAssertNil(CommandPaletteTab.keyboardShortcutter.primaryActionTitle)
         XCTAssertEqual(CommandPaletteTab.clipboard.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.clipboard.prompt, "Search clipboard history")
         XCTAssertEqual(CommandPaletteTab.dictation.prompt, "Search dictation history")
-        XCTAssertEqual(CommandPaletteTab.keyboardShortcutter.prompt, "Search Keyboard Shortcutter history")
+        XCTAssertEqual(CommandPaletteTab.keyboardShortcutter.prompt, "Search hotkeys")
         XCTAssertEqual(ClearAllButton.title, "Clear All")
 
         state.historyQuery = "private filter"

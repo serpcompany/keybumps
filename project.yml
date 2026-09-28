@@ -31,6 +31,8 @@ targets:
       - Keybumps
       - path: LICENSE.rectangle
         buildPhase: resources
+      - path: LICENSE.shotnix
+        buildPhase: resources
       - path: LICENSE.argmax-oss-swift
         buildPhase: resources
       - path: NOTICES.argmax-oss-swift
