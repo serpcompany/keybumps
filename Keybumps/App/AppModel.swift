@@ -21,14 +21,6 @@ enum DictationShortcutRouting {
     }
 }
 
-enum DictationEscapeRegistration {
-    static let ownerID = "dictation.cancel"
-
-    static func shouldRegister(for phase: DictationPhase) -> Bool {
-        phase == .recording || phase == .transcribing
-    }
-}
-
 @MainActor @Observable
 final class AppModel {
     let releaseLane = ReleaseLane.current
@@ -56,7 +48,6 @@ final class AppModel {
     let capabilities: CapabilityRegistry
     private let transcriptionCoordinator: DictationTranscriptionCoordinator
     private let permissionDragAssistant = PermissionDragAssistantController()
-    private let dictationIndicator: DictationIndicatorController
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
     @ObservationIgnored private var presentedWalkthroughPermission: MacPermission?
     @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
@@ -161,7 +152,6 @@ final class AppModel {
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
         self.windows = injectedWindows ?? WindowManagementService()
-        self.dictationIndicator = injectedDictationIndicator ?? DictationIndicatorController()
         // Only the production composition reads the real screenshot folder; injected models stay inert.
         screenshotTools = injectedScreenshotTools ?? ScreenshotToolsService(
             reader: screenshotDirectoryReader ?? UnavailableScreenshotDirectoryReader(),
@@ -198,6 +188,12 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
+        let dictationModule = DictationModule(
+            dictation: dictation,
+            indicator: injectedDictationIndicator ?? DictationIndicatorController(),
+            shortcuts: shortcuts,
+            updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .dictation)
+        )
         capabilities = CapabilityRegistry(modules: [
             QuickSearchModule(palette: commandPalette),
             ClipboardHistoryModule(clipboard: clipboard, palette: commandPalette),
@@ -206,19 +202,14 @@ final class AppModel {
                 palette: commandPalette,
                 editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
-            )
+            ),
+            dictationModule
         ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
-        dictation.onPhaseChange = { [weak self] phase in
-            guard let self else { return }
-            self.dictationIndicator.update(phase)
-            self.updateDictationEscapeRegistration(for: phase)
-            self.updateSafetyPolicy.update(dictationPhase: phase)
-            self.updater.installationSafetyDidChange()
-        }
+        dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         windows.onDragActivityChange = { [weak self] isActive in
             guard let self else { return }
@@ -309,7 +300,6 @@ final class AppModel {
     func applyCapabilities() {
         capabilities.apply(capabilityContext)
         let enabled = preferences.enabledCapabilities
-        configure(owner: CapabilityShortcut.dictation.ownerID, capability: .dictation, binding: preferences.capabilityShortcut(for: .dictation)) { [weak self] in self?.handleDictationShortcut() }
         for action in WindowAction.allCases {
             let owner = "window.\(action.rawValue)"
             configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
@@ -348,19 +338,6 @@ final class AppModel {
             }
         case .toggleDictation:
             dictation.toggle()
-        }
-    }
-
-    private func updateDictationEscapeRegistration(for phase: DictationPhase) {
-        guard DictationEscapeRegistration.shouldRegister(for: phase) else {
-            shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
-            return
-        }
-        shortcuts.register(
-            owner: DictationEscapeRegistration.ownerID,
-            binding: DefaultShortcut.cancelDictation
-        ) { [weak self] in
-            self?.dictation.cancel()
         }
     }
 
@@ -660,8 +637,7 @@ final class AppModel {
         case .clipboardHistory:
             break
         case .dictation:
-            dictation.cancel()
-            shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
+            break
         case .windowManagement:
             windows.stop()
         case .keyboardShortcutter:
