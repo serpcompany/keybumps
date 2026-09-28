@@ -33,7 +33,9 @@ Permission-gated and system-level features are faked in automated tests, never g
 - **Permissions:** CI runners have SIP enabled, so Accessibility and Input Monitoring grants live in a system TCC database that can't be written. Ad-hoc builds change signature every build, and an un-granted Microphone or Files & Folders request raises a blocking system dialog. So every permission check, audio capture, event tap, and folder access goes through an injectable seam. UI tests pass `-KBUITestPermissions granted|denied` to select fakes.
 - **Entry points:** UI tests reach surfaces through launch arguments rather than global hot keys, e.g. `-KBOpenPalette <tab>`, `-KBOpenSettings <section>`, `-KBDisableHotKeys`, plus in-memory stores and a fresh defaults domain. Global hot-key routing is covered by unit tests (`GlobalShortcutCoordinator`) and the owner checklist.
 - Every interactive control that tests touch gets an accessibility identifier. Animations are disabled under the test flag. The non-activating palette panel already returns `canBecomeKey = true`, which `typeText` needs.
-- Tests never touch real user folders or the real pasteboard: inject readers, named pasteboards, and temporary directories, as the existing Screenshot Tools and Clipboard tests do.
+- Tests never touch real user folders or the real pasteboard: inject readers, named pasteboards, and temporary directories, as the existing Screenshot Tools and Clipboard tests do. Release a named pasteboard (`releaseGlobally()`) when the test is done, because it otherwise stays in the pasteboard server until logout.
+- Tests never create a real preferences domain. Pass `InMemoryDefaults()` wherever a `UserDefaults` is needed: cfprefsd writes a removed suite's plist back to `~/Library/Preferences` after the test deletes it. `InMemoryDefaultsTests` fails if any test file calls `UserDefaults(suiteName:)`.
+- Keybumps.app hosts the unit tests. Under XCTest, Debug builds run a bare `NSApplication` instead of the app (`KeybumpsMain`), so the host never uses the real `com.serp.keybumps` preferences, hot keys, status item, or pasteboard.
 
 ### UI test launch arguments
 

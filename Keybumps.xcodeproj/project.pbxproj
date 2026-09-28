@@ -53,6 +53,7 @@
 		84156585EA619D8BBFB145F3 /* chrome-green-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B4BE38E7AF2268494DAE9E2 /* chrome-green-captured-sanitized-trace.json */; };
 		85868CCFFF8CE1C0294CBE42 /* GlobalShortcutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */; };
 		898609FBD52337225953DE11 /* PresentationWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F84D2C75C3619AC08893A51 /* PresentationWindowController.swift */; };
+		8D12A7B05C292CF6905EB8D7 /* InMemoryDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26EB5CBFC50DDF739E755BC /* InMemoryDefaults.swift */; };
 		8FD80A923E357790F894A93C /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059D55AF379C93A1EABF75A1 /* SharedViews.swift */; };
 		8FDF0BF1D3FEF7336E60D22B /* EntitlementsSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DD01BC4E67AC750F7DCB3E6 /* EntitlementsSourceTests.swift */; };
 		906AF4F5B61D66F206EBD737 /* fixture.zip in Resources */ = {isa = PBXBuildFile; fileRef = 323E102DD6374B05A2E71420 /* fixture.zip */; };
@@ -98,6 +99,7 @@
 		F2C72DC369FD3FDD4586E311 /* UpdateControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */; };
 		F43F37F847B4D894E2B90B57 /* fixture.md in Resources */ = {isa = PBXBuildFile; fileRef = 3EF5ED7D3614F5E7E907D83B /* fixture.md */; };
 		FB1EF3A045635D619E187E8D /* RecentItemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE31E47A0F652B4E42CD60 /* RecentItemStore.swift */; };
+		FB7D39975763A7647595CBBF /* InMemoryDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DCD9E725F517DA4D5BEE2E /* InMemoryDefaultsTests.swift */; };
 		FD8E7DB4FEB1D67D4B46E1AD /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = 3BB76ED2E173127B8361F2B8 /* appcast.xml */; };
 		FEE8BAB393C914FFECD752A3 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E50394667FC5D2DE8B5333 /* AppDelegate.swift */; };
 		FF97CDE8A3490AA04F8B76B0 /* ShortcutCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D547C96CB0A8C34AE6C8D05C /* ShortcutCatalog.swift */; };
@@ -140,6 +142,7 @@
 		2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		323E102DD6374B05A2E71420 /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
 		3296278ACCFD1FEA1A0A40E8 /* ScreenshotEditorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorWindowController.swift; sourceTree = "<group>"; };
+		33DCD9E725F517DA4D5BEE2E /* InMemoryDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryDefaultsTests.swift; sourceTree = "<group>"; };
 		3B4BE38E7AF2268494DAE9E2 /* chrome-green-captured-sanitized-trace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "chrome-green-captured-sanitized-trace.json"; sourceTree = "<group>"; };
 		3BB76ED2E173127B8361F2B8 /* appcast.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = appcast.xml; sourceTree = "<group>"; };
 		3DF48890AB96ECDC791B1116 /* ProductPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductPaths.swift; sourceTree = "<group>"; };
@@ -213,6 +216,7 @@
 		E61586690B952F46EBCDED78 /* NOTICES.argmax-oss-swift */ = {isa = PBXFileReference; path = "NOTICES.argmax-oss-swift"; sourceTree = "<group>"; };
 		EBBB83D782A2BF34F2C7854D /* WhisperKitModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitModelDownloader.swift; sourceTree = "<group>"; };
 		ECF5180228D1F28AB0362C61 /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
+		F26EB5CBFC50DDF739E755BC /* InMemoryDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryDefaults.swift; sourceTree = "<group>"; };
 		F3872107ED622E1702DAE730 /* finder-trash-captured-sanitized-trace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "finder-trash-captured-sanitized-trace.json"; sourceTree = "<group>"; };
 		F61176BC5A52592CB08999D5 /* KeyboardShortcutterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutterTests.swift; sourceTree = "<group>"; };
 		F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStatusItemController.swift; sourceTree = "<group>"; };
@@ -354,6 +358,8 @@
 				CD492B963F2E1C378C206508 /* DictationWarmRuntimeBenchmarkTests.swift */,
 				6DD01BC4E67AC750F7DCB3E6 /* EntitlementsSourceTests.swift */,
 				A18BF5E21B6787A034888698 /* FinderTrashDetectionTests.swift */,
+				F26EB5CBFC50DDF739E755BC /* InMemoryDefaults.swift */,
+				33DCD9E725F517DA4D5BEE2E /* InMemoryDefaultsTests.swift */,
 				F61176BC5A52592CB08999D5 /* KeyboardShortcutterTests.swift */,
 				C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */,
 				1A364445928DF760A5349FFE /* MicrophonePermissionFlowTests.swift */,
@@ -763,6 +769,8 @@
 				713E9A8F6D1DC841FE032B7B /* DictationWarmRuntimeBenchmarkTests.swift in Sources */,
 				8FDF0BF1D3FEF7336E60D22B /* EntitlementsSourceTests.swift in Sources */,
 				5D29894075C352B646141A29 /* FinderTrashDetectionTests.swift in Sources */,
+				8D12A7B05C292CF6905EB8D7 /* InMemoryDefaults.swift in Sources */,
+				FB7D39975763A7647595CBBF /* InMemoryDefaultsTests.swift in Sources */,
 				331F72AEC4344E569F6BEB91 /* KeyboardShortcutterTests.swift in Sources */,
 				EFDCF1CF3AEFE100555404D9 /* KeybumpsFeatureTests.swift in Sources */,
 				DEBF5A3933E405A4EB8A14A5 /* MicrophonePermissionFlowTests.swift in Sources */,

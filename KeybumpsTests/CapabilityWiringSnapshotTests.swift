@@ -95,10 +95,7 @@ enum WiringRecorder {
     static func renderSnapshot() throws -> String {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityWiring-\(UUID().uuidString)", isDirectory: true)
-        defer {
-            try? FileManager.default.removeItem(at: root)
-            WiringHarness.removeDefaultsSuites()
-        }
+        defer { try? FileManager.default.removeItem(at: root) }
 
         var combinations: [String: CapabilityWiringSnapshot.Combination] = [:]
         for mask in 0..<(1 << Capability.allCases.count) {
@@ -236,42 +233,29 @@ enum WiringRecorder {
 
 @MainActor
 final class WiringHarness {
-    static var suites: [String] = []
-
-    static func removeDefaultsSuites() {
-        // Removing a domain leaves an empty plist behind, so delete the files as well.
-        let preferencesDirectory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences", isDirectory: true)
-        for suite in suites {
-            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent("\(suite).plist"))
-        }
-        suites = []
-    }
-
     let log = LifecycleLog()
     let model: AppModel
     private let coordinator: GlobalShortcutCoordinator
+    private let pasteboard: NSPasteboard
     private var lastShortcuts: [String: String] = [:]
 
     init(enabled: Set<Capability>, missing: MacPermission?, root: URL, didCompleteOnboarding: Bool = true) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let suite = "KeybumpsCapabilityWiring-\(id)"
-        let defaults = UserDefaults(suiteName: suite)!
-        WiringHarness.suites.append(suite)
-        let preferences = AppPreferences(defaults: defaults)
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.enabledCapabilities = enabled
         preferences.didCompleteOnboarding = didCompleteOnboarding
 
         let log = log
         let grants = FakePermissionState(missing: missing)
         coordinator = GlobalShortcutCoordinator(backend: LoggingHotKeyBackend(log: log))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityWiring-\(id)"))
+        self.pasteboard = pasteboard
         let clipboard = SpyClipboardHistoryService(
             log: log,
             storageURL: directory.appendingPathComponent("clipboard-history.json"),
-            pasteboard: NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityWiring-\(id)")),
+            pasteboard: pasteboard,
             mediaDirectoryURL: directory.appendingPathComponent("clipboard-media", isDirectory: true)
         )
         let screenshotHome = directory.appendingPathComponent("home", isDirectory: true)
@@ -320,6 +304,11 @@ final class WiringHarness {
         )
         _ = log.drain()
         lastShortcuts = shortcuts()
+    }
+
+    /// Named pasteboards live in the pasteboard server until released, so drop each one with its harness.
+    deinit {
+        pasteboard.releaseGlobally()
     }
 
     func shortcuts() -> [String: String] {
