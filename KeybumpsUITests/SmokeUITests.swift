@@ -55,14 +55,18 @@ final class SmokeUITests: XCTestCase {
         let prompts: [(key: String, prompt: String)] = [
             ("2", "Search clipboard history"),
             ("3", "Search dictation history"),
-            ("4", "Search hotkeys"),
-            ("5", "Search screenshots"),
+            ("4", "Search screenshots"),
             ("1", "Search apps, files, and folders"),
         ]
         for (key, prompt) in prompts {
             app.typeKey(key, modifierFlags: .command)
             XCTAssertTrue(paletteField(prompt).waitForExistence(timeout: 5), "⌘\(key)")
         }
+
+        // The Hotkeys tab (⌘5) is hidden by default.
+        XCTAssertFalse(app.buttons["palette.tab.keyboardShortcutter"].exists)
+        app.typeKey("5", modifierFlags: .command)
+        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘5 is ignored")
     }
 
     func testCommandEOnClipboardImageOpensScreenshotEditor() {
