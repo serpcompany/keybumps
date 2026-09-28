@@ -134,6 +134,9 @@ struct SettingsRootView: View {
             }
             .environment(model)
             .toolbar {
+                if #available(macOS 26.0, *) {
+                    ToolbarSpacer(.flexible)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     if let capability = navigation.selection.capability {
                         CapabilityToggle(capability: capability)
