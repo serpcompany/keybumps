@@ -794,9 +794,8 @@ private struct OnboardingView: View {
     private var welcome: some View {
         VStack(spacing: 12) {
             Text("Welcome to Keybumps").font(.largeTitle.bold())
-            Text("Grant the permissions your features need. When macOS reports one enabled, the next appears automatically.")
+            Text("Grant the permissions your features need.")
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
             PermissionWalkthroughView(compact: true)
             if let shortcut = model.preferences.capabilityShortcut(for: .quickSearch),
                model.preferences.enabledCapabilities.contains(.quickSearch) {
@@ -804,6 +803,7 @@ private struct OnboardingView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text("Purchasing and license activation are not part of this local preview.")
                 .font(.caption)
