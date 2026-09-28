@@ -73,7 +73,8 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
 
     func present() {
         window?.center()
-        NSApp.activate(ignoringOtherApps: true)
+        window?.hideDuringUnitTests()
+        if !UnitTestHost.isActive { NSApp.activate(ignoringOtherApps: true) }
         showWindow(nil)
         window?.makeFirstResponder(canvas)
         installKeyMonitor()

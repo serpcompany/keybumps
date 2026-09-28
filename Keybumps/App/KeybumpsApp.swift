@@ -10,12 +10,10 @@ enum KeybumpsMain {
     private(set) static var launchedApp = false
 
     static func main() {
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+        if UnitTestHost.isActive {
             NSApplication.shared.run()
             return
         }
-        #endif
         launchedApp = true
         KeybumpsApp.main()
     }

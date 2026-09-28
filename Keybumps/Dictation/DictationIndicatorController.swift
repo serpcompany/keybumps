@@ -42,6 +42,7 @@ class DictationIndicatorController {
                 .frame(width: size.width, height: size.height)
         )
         panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.minY + 42))
+        panel.hideDuringUnitTests()
         panel.orderFrontRegardless()
     }
 }
