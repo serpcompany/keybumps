@@ -166,6 +166,65 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertEqual(normalizedParent.output.trimmingCharacters(in: .whitespacesAndNewlines), "https://updates.example.com/beta/nested/")
     }
 
+    func testLatestReleasePointerFollowsTheAppcastAndFailsClosed() throws {
+        let pointer = repositoryRoot.appendingPathComponent("scripts/write-latest-release-pointer.sh")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("latest-pointer-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let digest = String(repeating: "ab", count: 32)
+        let checksum = work.appendingPathComponent("Keybumps-0.0.3-beta.4.dmg.sha256")
+        try "\(digest)  Keybumps-0.0.3-beta.4.dmg\n".write(to: checksum, atomically: true, encoding: .utf8)
+
+        func appcast(url: String, build: Int = 4008, version: String = "0.0.3-beta.4") throws -> URL {
+            let file = work.appendingPathComponent("appcast-\(UUID().uuidString).xml")
+            try """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>
+            <item><sparkle:version>\(build)</sparkle:version><sparkle:shortVersionString>\(version)</sparkle:shortVersionString>
+            <enclosure url="\(url)" length="1" type="application/octet-stream" sparkle:edSignature="x"/></item>
+            </channel></rss>
+            """.write(to: file, atomically: true, encoding: .utf8)
+            return file
+        }
+
+        let output = work.appendingPathComponent("latest.json")
+        let production = try run(pointer, [
+            try appcast(url: "https://updates.keybumps.app/releases/4008/Keybumps-0.0.3-beta.4.zip").path,
+            "4008", "0.0.3-beta.4", checksum.path, output.path
+        ])
+        XCTAssertEqual(production.status, 0, production.output)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: output)) as? [String: Any])
+        XCTAssertEqual(json["version"] as? String, "0.0.3-beta.4")
+        XCTAssertEqual(json["build"] as? Int, 4008)
+        XCTAssertEqual(json["dmgURL"] as? String, "https://updates.keybumps.app/releases/4008/Keybumps-0.0.3-beta.4.dmg")
+        XCTAssertEqual(json["sha256"] as? String, digest)
+
+        let rootLayout = try run(pointer, [
+            try appcast(url: "https://updates.keybumps.app/Keybumps-0.0.3-beta.4.zip").path,
+            "4008", "0.0.3-beta.4", checksum.path, output.path
+        ])
+        XCTAssertEqual(rootLayout.status, 0, rootLayout.output)
+        let rootJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: output)) as? [String: Any])
+        XCTAssertEqual(rootJSON["dmgURL"] as? String, "https://updates.keybumps.app/Keybumps-0.0.3-beta.4.dmg", "the DMG sits beside the archive")
+
+        let failures: [(String, [String])] = [
+            ("foreign origin", [try appcast(url: "https://example.com/Keybumps-0.0.3-beta.4.zip").path, "4008", "0.0.3-beta.4", checksum.path]),
+            ("plain HTTP", [try appcast(url: "http://updates.keybumps.app/Keybumps-0.0.3-beta.4.zip").path, "4008", "0.0.3-beta.4", checksum.path]),
+            ("version mismatch", [try appcast(url: "https://updates.keybumps.app/a.zip").path, "4008", "0.0.3-beta.5", checksum.path]),
+            ("build missing", [try appcast(url: "https://updates.keybumps.app/a.zip").path, "4009", "0.0.3-beta.4", checksum.path])
+        ]
+        for (name, arguments) in failures {
+            let result = try run(pointer, arguments + [work.appendingPathComponent("\(name).json").path])
+            XCTAssertNotEqual(result.status, 0, name)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: work.appendingPathComponent("\(name).json").path), name)
+        }
+
+        let badChecksum = work.appendingPathComponent("bad.sha256")
+        try "not-a-digest  x.dmg\n".write(to: badChecksum, atomically: true, encoding: .utf8)
+        let bad = try run(pointer, [try appcast(url: "https://updates.keybumps.app/a.zip").path, "4008", "0.0.3-beta.4", badChecksum.path, work.appendingPathComponent("bad.json").path])
+        XCTAssertNotEqual(bad.status, 0)
+    }
+
     private func run(_ executable: URL, _ arguments: [String]) throws -> (status: Int32, output: String) {
         let process = Process()
         let pipe = Pipe()

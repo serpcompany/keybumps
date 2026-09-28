@@ -61,5 +61,8 @@ cp "$update_archive" "$update_archive.sha256" "$output_directory/feed/Keybumps-$
   "$output_directory/Keybumps-$release_version.dmg" "$output_directory/Keybumps-$release_version.dmg.sha256" \
   "$output_directory/publication/assets/"
 cp "$output_directory/feed/appcast.xml" "$output_directory/publication/publish-last/appcast.xml"
+"$repository_root/scripts/write-latest-release-pointer.sh" \
+  "$output_directory/feed/appcast.xml" "$release_build" "$release_version" \
+  "$output_directory/Keybumps-$release_version.dmg.sha256" "$output_directory/publication/publish-last/latest.json"
 
-print "Release prepared. Publish publication/assets first and publication/publish-last/appcast.xml last."
+print "Release prepared. Publish publication/assets first, then publication/publish-last/appcast.xml and latest.json last (latest.json beside appcast.xml)."

@@ -18,7 +18,7 @@ Generate the production key once with Sparkle's `generate_keys --account keybump
 
 ## Hosting and publication boundary
 
-The remote repository is `serpcompany/keybumps`, but this repository does not deploy the update origin. Release preparation produces immutable ZIP/DMG assets, release notes, and a signed appcast for an owner-controlled upload. Upload assets and notes first and publish the signed appcast pointer last.
+The remote repository is `serpcompany/keybumps`, but this repository does not deploy the update origin. Release preparation produces immutable ZIP/DMG assets, release notes, and a signed appcast for an owner-controlled upload. Upload assets and notes first and publish the signed appcast pointer last, together with `latest.json`.
 
 Historical SuperMac Pages artifacts belong to a different bundle identity and trust chain. Never copy or recreate that feed as a Keybumps update bridge; existing SuperMac testers must install Keybumps manually.
 
@@ -36,6 +36,7 @@ The normal entry point is `scripts/build-update-release.sh`. It refuses a reused
 8. Install build N in `/Applications`, advertise N+1 on the staged feed, and verify check, download, signature validation, restart, exact N+1 version, and retained non-private fixture preferences. Repeat with active Dictation and confirm restart is refused until Dictation is idle.
 9. Corrupt a copy of the signed archive without regenerating the appcast and confirm Sparkle rejects it. Never weaken verification for this test.
 10. Promote the exact already-validated files from the staging path to the production path, preserving filenames and bytes. Verify the public production archive and notes before accepting the production appcast.
+11. Publish `publication/publish-last/latest.json` beside the production `appcast.xml` (`https://updates.keybumps.app/latest.json`) at the same time as the appcast. `scripts/write-latest-release-pointer.sh` derives it from the validated appcast: `version`, `build`, `dmgURL` (the DMG beside the archive enclosure), and the DMG `sha256`. It refuses a foreign origin, a version or build mismatch, or a malformed checksum. The keybumps.app download page (`serpcompany/keybumps.app`) reads this file, so a release needs no website edit.
 
 ## Local fixture harness
 
