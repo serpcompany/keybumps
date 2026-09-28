@@ -491,14 +491,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
-        dismiss()
-        hud.show("Copied to Clipboard")
+        confirmCopy()
     }
 
     private func copyClipboardEntry(_ entry: ClipboardEntry) {
         guard clipboard.restore(entry) else { return }
+        confirmCopy()
+    }
+
+    /// Closes the palette and confirms the copy where the palette was.
+    private func confirmCopy() {
+        let frame = panel?.frame
         dismiss()
-        hud.show("Copied to Clipboard")
+        hud.show("Copied to Clipboard", over: frame)
     }
 
     /// Command-click edits an image; a plain click keeps restoring it.

@@ -86,20 +86,23 @@ extension View {
     }
 }
 
-/// Raycast's confirmation after an action closes the palette: a small pill near the bottom of
-/// the screen, such as "Copied to Clipboard", that fades out on its own.
+/// Confirmation after an action closes the palette: a pill such as "Copied to Clipboard" that
+/// pops in where the palette was (or near the bottom of the screen) and fades out on its own.
 @MainActor
 final class PaletteHUD {
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
 
-    func show(_ message: String, systemImage: String = "checkmark.circle.fill", tint: Color = .green) {
+    /// - Parameter anchor: the frame to center the pill in, such as the palette that just closed.
+    func show(_ message: String, systemImage: String = "checkmark.circle.fill", tint: Color = .green, over anchor: NSRect? = nil) {
         let panel = panel ?? makePanel()
         self.panel = panel
         let host = NSHostingView(rootView: PaletteHUDView(message: message, systemImage: systemImage, tint: tint))
         panel.contentView = host
         panel.setContentSize(host.fittingSize)
-        if let screen = NSScreen.main {
+        if let anchor {
+            panel.setFrameOrigin(NSPoint(x: anchor.midX - panel.frame.width / 2, y: anchor.midY - panel.frame.height / 2))
+        } else if let screen = NSScreen.main {
             panel.setFrameOrigin(NSPoint(
                 x: screen.visibleFrame.midX - panel.frame.width / 2,
                 y: screen.visibleFrame.minY + 120
@@ -117,11 +120,12 @@ final class PaletteHUD {
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak panel] in
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; panel?.animator().alphaValue = 0 }) {
-                panel?.orderOut(nil)
+                // A newer show may have started during the fade.
+                if panel?.alphaValue == 0 { panel?.orderOut(nil) }
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (tint == .green ? 1.2 : 3), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (tint == .green ? 1.6 : 3), execute: work)
     }
 
     private func makePanel() -> NSPanel {
@@ -142,21 +146,29 @@ private struct PaletteHUDView: View {
     let message: String
     let systemImage: String
     let tint: Color
+    @State private var isShown = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(tint)
+                .symbolEffect(.bounce, value: isShown)
             Text(message)
                 .foregroundStyle(.primary)
         }
-        .font(.system(size: 14, weight: .medium))
-        .padding(.horizontal, 16)
-        .frame(height: 38)
+        .font(.system(size: 16, weight: .semibold))
+        .padding(.horizontal, 20)
+        .frame(height: 46)
         .background(PaletteTheme.pill, in: Capsule())
         .overlay(Capsule().strokeBorder(PaletteTheme.border, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+        .scaleEffect(isShown ? 1 : 0.85)
+        .opacity(isShown ? 1 : 0)
         .padding(16)
         .environment(\.colorScheme, .dark)
+        .onAppear {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) { isShown = true }
+        }
     }
 }
