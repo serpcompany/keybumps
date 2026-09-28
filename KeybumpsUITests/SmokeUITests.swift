@@ -83,9 +83,8 @@ final class SmokeUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = [
             "-KBUITestPermissions", permissions,
-            "-KBDisableHotKeys",
-            "-NSAutomaticWindowAnimationsEnabled", "NO",
-            "-ApplePersistenceIgnoreState", "YES",
+            // Pass a value so Foundation's argument domain never pairs the flag with the next argument.
+            "-KBDisableHotKeys", "YES",
         ] + arguments
         app.launch()
     }
