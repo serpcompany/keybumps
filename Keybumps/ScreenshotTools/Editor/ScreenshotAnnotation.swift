@@ -37,8 +37,13 @@ enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Number key in toolbar order: 1 Pixelate … 5 Text.
+    var number: String { String((Self.allCases.firstIndex(of: self) ?? 0) + 1) }
+
+    /// Matches a number (1–5) or letter (P/R/A/D/T) shortcut.
     static func matching(key: String) -> ScreenshotEditorTool? {
-        allCases.first { $0.key == key.lowercased() }
+        let key = key.lowercased()
+        return allCases.first { $0.number == key || $0.key == key }
     }
 
     /// Redaction tools cover content and ignore the selected color.
