@@ -22,7 +22,6 @@ extension CapabilityDescriptor {
             disableExplanation: nil,
             content: { AnyView(KeyboardShortcutterSettingsView()) }
         ),
-        showsOnboardingCard: true,
         criticalOperations: []
     )
 }

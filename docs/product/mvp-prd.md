@@ -27,15 +27,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 
 ## First launch
 
-The pre-commerce onboarding sequence is:
-
-1. Welcome
-2. Capability overview
-3. Guided permission setup
-4. Shortcut conflict resolution
-5. Ready
-
-The local product must state truthfully that purchasing and activation are not configured. Capabilities whose permissions are skipped remain enabled but show **Permission Required** with a recovery action. Unrelated capabilities remain usable.
+Onboarding is one screen: a short welcome, guided setup for the permissions the enabled capabilities need, a note that Quick Search uses its default shortcut, and the truthful statement that purchasing and activation are not configured. Default shortcuts apply without prompting. **Start Keybumps** runs shortcut conflict resolution, and a second screen appears only when the Quick Search shortcut still needs attention or a supported reference app is running. Capabilities whose permissions are skipped remain enabled but show **Permission Required** with a recovery action. Unrelated capabilities remain usable.
 
 Conflict resolution detects the supported reference apps when they are running and may offer to quit them without uninstalling them or changing their data. For a fresh user whose enabled Spotlight shortcut exactly matches the configured Quick Search binding, Keybumps attempts to release that exact system shortcut, retries registration through the shared shortcut coordinator, and blocks completion with manual Keyboard Shortcuts guidance if resolution fails. Custom and nonmatching shortcuts remain unchanged.
 

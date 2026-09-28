@@ -22,7 +22,6 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off cancels active Dictation and releases its global shortcut.",
             content: { AnyView(DictationSettingsView()) }
         ),
-        showsOnboardingCard: true,
         criticalOperations: []
     )
 }

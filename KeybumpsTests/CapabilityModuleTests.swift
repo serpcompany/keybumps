@@ -37,7 +37,7 @@ struct CapabilityModuleTests {
         #expect(CapabilityDescriptor.screenshotTools.dependencies == [.clipboardHistory])
     }
 
-    @Test("Palette tabs, Settings pages, and onboarding cards come from their owning modules")
+    @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs
         #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5])
@@ -60,7 +60,6 @@ struct CapabilityModuleTests {
         #expect(SettingsSection.permissions.capability == nil)
         #expect(SettingsSection.general.capability == nil)
         #expect(Array(SettingsSection.allCases.suffix(2)) == [.permissions, .general])
-        #expect(OnboardingCapabilityOverview.capabilities.map(\.capability) == Capability.allCases)
     }
 
     @Test("Only the modules that own critical operations declare them")

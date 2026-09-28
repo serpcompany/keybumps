@@ -4862,17 +4862,6 @@
       ]
     }
   },
-  "onboarding" : {
-    "capabilities" : [
-      "Quick Search (magnifyingglass)",
-      "Clipboard History (clipboard)",
-      "Dictation (waveform)",
-      "Window Management (rectangle.split.2x1)",
-      "Keyboard Shortcutter (keyboard)",
-      "Screenshot Tools (camera.viewfinder)"
-    ],
-    "title" : "Six capabilities, one app"
-  },
   "paletteTabs" : [
     {
       "commandKey" : "⌘1",

@@ -54,11 +54,6 @@ struct CapabilityWiringSnapshot: Codable {
         let icon: String
     }
 
-    struct Onboarding: Codable {
-        let title: String
-        let capabilities: [String]
-    }
-
     struct State: Codable {
         let shortcuts: [String: String]
         let screenshotToolsStatus: String
@@ -84,7 +79,6 @@ struct CapabilityWiringSnapshot: Codable {
 
     let paletteTabs: [PaletteTab]
     let settingsDestinations: [Destination]
-    let onboarding: Onboarding
     let combinations: [String: Combination]
 }
 
@@ -121,10 +115,6 @@ enum WiringRecorder {
                 )
             },
             settingsDestinations: SettingsSection.allCases.map { .init(section: $0.rawValue, icon: $0.icon) },
-            onboarding: .init(
-                title: OnboardingCapabilityOverview.title,
-                capabilities: OnboardingCapabilityOverview.capabilities.map { "\($0.title) (\($0.systemImage))" }
-            ),
             combinations: combinations
         )
         let encoder = JSONEncoder()

@@ -4,8 +4,8 @@ import SwiftUI
 // MARK: - Static contract
 
 /// The static half of a capability module: identity, names, and what it contributes to the shared
-/// app surfaces. Descriptors are plain values, so permission planning, palette tabs, Settings, and
-/// onboarding read them without an `AppModel`. `Capability` raw values stay the saved preference IDs.
+/// app surfaces. Descriptors are plain values, so permission planning, palette tabs, and Settings
+/// read them without an `AppModel`. `Capability` raw values stay the saved preference IDs.
 struct CapabilityDescriptor: Identifiable {
     let capability: Capability
     let title: String
@@ -16,7 +16,6 @@ struct CapabilityDescriptor: Identifiable {
     let dependencies: Set<Capability>
     let paletteTab: CapabilityPaletteTab?
     let settingsPage: CapabilitySettingsPage?
-    let showsOnboardingCard: Bool
     /// Named app-owned operations the module reports to `UpdateInstallationSafetyPolicy`.
     let criticalOperations: Set<ApplicationCriticalOperation>
 
@@ -77,11 +76,6 @@ enum CapabilityCatalog {
             preconditionFailure("\(tab.rawValue) has no owning capability module")
         }
         return entry
-    }
-
-    /// Onboarding cards in `Capability` declaration order, which is the order capabilities shipped.
-    static var onboardingCards: [CapabilityDescriptor] {
-        Capability.allCases.map(descriptor(for:)).filter(\.showsOnboardingCard)
     }
 
     static func requiredPermissions(for enabledCapabilities: Set<Capability>) -> [MacPermission] {

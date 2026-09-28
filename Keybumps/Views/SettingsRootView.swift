@@ -751,106 +751,116 @@ private struct GeneralView: View {
     }
 }
 
-enum OnboardingCapabilityOverview {
-    static var title: String { "\(spelledCount(capabilities.count)) capabilities, one app" }
-    static var capabilities: [CapabilityDescriptor] { CapabilityCatalog.onboardingCards }
-
-    private static func spelledCount(_ count: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.numberStyle = .spellOut
-        let words = formatter.string(from: NSNumber(value: count)) ?? String(count)
-        return words.prefix(1).uppercased() + words.dropFirst()
+/// Onboarding is one screen; the conflict screen appears only when Quick Search's shortcut still
+/// needs attention or a supported reference app that may claim the same shortcuts is running.
+enum OnboardingFlow {
+    static func needsConflictScreen(
+        shortcut: QuickSearchShortcutOnboardingPresentation,
+        runningReferenceApps: [ReferenceApp]
+    ) -> Bool {
+        !shortcut.canContinue || !runningReferenceApps.isEmpty
     }
 }
 
 private struct OnboardingView: View {
     @Environment(AppModel.self) private var model
-    @State private var step = 0
+    @State private var showsConflicts = false
+
     var body: some View {
         let shortcutPresentation = model.quickSearchShortcutOnboardingPresentation
         VStack(spacing: 24) {
             Spacer()
             Image(ProductIdentity.inAppBrandImageName).resizable().scaledToFit().frame(width: 72, height: 72)
             Group {
-                switch step {
-                case 0:
-                    VStack(spacing: 12) { Text("Welcome to Keybumps").font(.largeTitle.bold()); Text("Set up the local preview").font(.headline); Text("This build is ready for hands-on testing. Purchasing and license activation are not part of this local preview.").foregroundStyle(.secondary).multilineTextAlignment(.center) }
-                case 1:
-                    VStack(spacing: 12) { Text(OnboardingCapabilityOverview.title).font(.largeTitle.bold()); ForEach(OnboardingCapabilityOverview.capabilities) { Label($0.title, systemImage: $0.systemImage) } }
-                case 2:
-                    VStack(spacing: 12) {
-                        Text("Enable macOS permissions").font(.largeTitle.bold())
-                        Text("Grant one permission at a time. When macOS reports it enabled, the next required permission appears automatically.")
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                        PermissionWalkthroughView(compact: true)
-                    }
-                case 3:
-                    VStack(spacing: 12) {
-                        Text("Resolve shortcut conflicts").font(.largeTitle.bold())
-                        Text("Keybumps checks whether Spotlight owns your Quick Search shortcut. For an exact conflict, Keybumps turns off only Spotlight's keyboard shortcut and leaves Spotlight search available everywhere else.")
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                        if shortcutPresentation.canContinue {
-                            Label("Quick Search is ready.", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        } else if let manualRecovery = shortcutPresentation.manualRecovery {
-                            Label("Quick Search still needs attention.", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                            Text(manualRecovery)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                            HStack {
-                                Button("Open Keyboard Shortcuts…") { model.openKeyboardShortcutSettings() }
-                                Button("Check Again") { model.refreshQuickSearchShortcutConflict() }
-                                    .buttonStyle(.borderedProminent)
-                            }
-                        } else {
-                            ProgressView("Resolving the Spotlight shortcut…")
-                        }
-                        ForEach(ReferenceApp.allCases) { app in
-                            HStack {
-                                Text(app.name)
-                                Spacer()
-                                if !model.conflicts.isRunning(app) {
-                                    Text("Not running").foregroundStyle(.secondary)
-                                } else {
-                                    Button("Quit") { model.conflicts.quit(app) }
-                                }
-                            }
-                        }
-                    }
-                default:
-                    VStack(spacing: 12) {
-                        Text("Ready").font(.largeTitle.bold())
-                        Text("Permissions shows what is working and what still needs attention.")
-                            .foregroundStyle(.secondary)
-                    }
+                if showsConflicts {
+                    conflicts(shortcutPresentation)
+                } else {
+                    welcome
                 }
             }.frame(maxWidth: 620)
             Spacer()
             HStack {
-                if step > 0 { Button("Back") { step -= 1 } }
+                if showsConflicts { Button("Back") { showsConflicts = false } }
                 Spacer()
-                if step < 4 {
-                    Button("Continue") { step += 1 }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(step == 3 && !shortcutPresentation.canContinue)
-                } else {
-                    Button("Start Keybumps") { model.completeOnboarding() }
-                        .buttonStyle(.borderedProminent)
-                }
+                Button("Start Keybumps") { start() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(showsConflicts && !shortcutPresentation.canContinue)
             }
         }
         .padding(36)
         .frame(width: 760, height: 520)
-        .task(id: step) {
-            if step == 3 {
-                model.refreshQuickSearchShortcutConflict()
+    }
+
+    private var welcome: some View {
+        VStack(spacing: 12) {
+            Text("Welcome to Keybumps").font(.largeTitle.bold())
+            Text("Grant the permissions your features need. When macOS reports one enabled, the next appears automatically.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            PermissionWalkthroughView(compact: true)
+            if let shortcut = model.preferences.capabilityShortcut(for: .quickSearch),
+               model.preferences.enabledCapabilities.contains(.quickSearch) {
+                Text("Quick Search opens with \(shortcut.displayName). If Spotlight uses the same shortcut, Keybumps turns off only Spotlight's keyboard shortcut; Spotlight search stays available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Text("Purchasing and license activation are not part of this local preview.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func conflicts(_ shortcutPresentation: QuickSearchShortcutOnboardingPresentation) -> some View {
+        VStack(spacing: 12) {
+            Text("Resolve shortcut conflicts").font(.largeTitle.bold())
+            if shortcutPresentation.canContinue {
+                Label("Quick Search is ready.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else if let manualRecovery = shortcutPresentation.manualRecovery {
+                Label("Quick Search still needs attention.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(manualRecovery)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                HStack {
+                    Button("Open Keyboard Shortcuts…") { model.openKeyboardShortcutSettings() }
+                    Button("Check Again") { model.refreshQuickSearchShortcutConflict() }
+                        .buttonStyle(.borderedProminent)
+                }
+            } else {
+                ProgressView("Resolving the Spotlight shortcut…")
+            }
+            ForEach(ReferenceApp.allCases) { app in
+                HStack {
+                    Text(app.name)
+                    Spacer()
+                    if !model.conflicts.isRunning(app) {
+                        Text("Not running").foregroundStyle(.secondary)
+                    } else {
+                        Button("Quit") { model.conflicts.quit(app) }
+                    }
+                }
             }
         }
+    }
+
+    /// The first press applies the default Quick Search shortcut through the Spotlight check and
+    /// finishes, unless something still conflicts.
+    private func start() {
+        if !showsConflicts {
+            model.refreshQuickSearchShortcutConflict()
+            model.conflicts.refresh()
+            if OnboardingFlow.needsConflictScreen(
+                shortcut: model.quickSearchShortcutOnboardingPresentation,
+                runningReferenceApps: ReferenceApp.allCases.filter(model.conflicts.isRunning)
+            ) {
+                showsConflicts = true
+                return
+            }
+        }
+        model.completeOnboarding()
     }
 }
 
