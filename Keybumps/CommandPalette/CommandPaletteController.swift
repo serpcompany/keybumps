@@ -23,8 +23,13 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var shortcutLabel: String { "⌘\(registration.commandKey)" }
     var prompt: String { registration.prompt }
 
-    static func matchingCommandKey(_ characters: String?) -> CommandPaletteTab? {
-        allCases.first { characters == String($0.registration.commandKey) }
+    /// The tabs in the tab bar. The Hotkeys tab is hidden unless the owner shows it, or it is open.
+    static func visibleTabs(showsHotkeys: Bool, selected: CommandPaletteTab) -> [CommandPaletteTab] {
+        allCases.filter { $0 != .keyboardShortcutter || showsHotkeys || $0 == selected }
+    }
+
+    static func matchingCommandKey(_ characters: String?, in tabs: [CommandPaletteTab] = allCases) -> CommandPaletteTab? {
+        tabs.first { characters == String($0.registration.commandKey) }
     }
 
     var labelPresentation: CommandPaletteTabLabel {
@@ -135,6 +140,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
+    private let hud = PaletteHUD()
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
 
@@ -201,7 +207,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func makePanel() {
-        let size = NSSize(width: 760, height: 520)
+        let size = NSSize(width: 840, height: 560)
         let panel = CommandPalettePanel(contentRect: NSRect(origin: .zero, size: size))
         panel.delegate = self
         panel.isOpaque = false
@@ -281,7 +287,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard let self else { return event }
 
             if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
-                if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers) {
+                let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: self.preferences.showsHotkeysTab, selected: self.state.tab)
+                if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
                     self.selectTab(tab)
                     return nil
                 }
@@ -303,6 +310,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 return nil
             case 36:
                 self.activateSelection(reveal: event.modifierFlags.contains(.command))
+                return nil
+            case 51, 117:
+                // Delete removes the highlighted row once the search field is empty (or with Command).
+                guard self.activeQuery.isEmpty || event.modifierFlags.contains(.command),
+                      self.deleteSelection() else { return event }
                 return nil
             default:
                 return event
@@ -358,6 +370,32 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .screenshots:
             screenshotContent.entries.count
         }
+    }
+
+    private var activeQuery: String {
+        state.tab == .search ? search.query : state.historyQuery
+    }
+
+    /// Deletes the highlighted row in tabs with a per-row trash button.
+    private func deleteSelection() -> Bool {
+        let index = state.selection
+        switch state.tab {
+        case .search:
+            guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  search.recentItems.items.indices.contains(index) else { return false }
+            search.recentItems.delete(search.recentItems.items[index])
+        case .clipboard:
+            guard filteredClipboard.indices.contains(index) else { return false }
+            clipboard.delete(filteredClipboard[index])
+        case .screenshots:
+            let entries = screenshotContent.entries
+            guard entries.indices.contains(index) else { return false }
+            clipboard.delete(entries[index])
+        case .dictation, .keyboardShortcutter:
+            return false
+        }
+        state.selection = min(index, max(0, itemCount - 1))
+        return true
     }
 
     private var screenshotContent: ScreenshotPaletteContent {
@@ -442,11 +480,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
         dismiss()
+        hud.show("Copied to Clipboard")
     }
 
     private func copyClipboardEntry(_ entry: ClipboardEntry) {
         guard clipboard.restore(entry) else { return }
         dismiss()
+        hud.show("Copied to Clipboard")
     }
 
     /// Command-click edits an image; a plain click keeps restoring it.
@@ -499,26 +539,28 @@ private struct CommandPaletteView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PaletteTabBar(selected: state.tab, select: selectTab)
-            Divider().opacity(0.55)
             PaletteSearchField(
                 tab: state.tab,
                 searchQuery: $search.query,
                 historyQuery: $state.historyQuery,
                 focused: $inputFocused
             )
-            Divider().opacity(0.55)
+            PaletteTabBar(
+                tabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab),
+                selected: state.tab,
+                select: selectTab
+            )
             content
-            Divider().opacity(0.55)
-            PaletteFooter(tab: state.tab)
+                .contentMargins(.bottom, 56, for: .scrollContent)
+                .overlay(alignment: .bottom) { PaletteFooter(tab: state.tab) }
         }
-        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(PaletteTheme.background, in: RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous)
+                .strokeBorder(PaletteTheme.border, lineWidth: 1)
         }
         .compositingGroup()
-        .clipShape(.rect(cornerRadius: 18, style: .continuous))
+        .clipShape(.rect(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 30, y: 14)
         .defaultFocus($inputFocused, true)
         .onChange(of: state.tab) {
@@ -643,24 +685,29 @@ private struct CommandPaletteView: View {
 }
 
 private struct PaletteTabBar: View {
+    let tabs: [CommandPaletteTab]
     let selected: CommandPaletteTab
     let select: (CommandPaletteTab) -> Void
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(CommandPaletteTab.allCases) { tab in
+            ForEach(tabs) { tab in
                 Button {
                     select(tab)
                 } label: {
                     HStack(spacing: 7) {
-                        ShortcutKeycaps(shortcut: tab.labelPresentation.shortcut, compact: true)
+                        PaletteKeycaps(shortcut: tab.labelPresentation.shortcut)
                         Text(tab.labelPresentation.name)
                             .lineLimit(1)
                             .fixedSize()
                     }
+                    .font(.system(size: 14))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(selected == tab ? Color.white.opacity(0.11) : .clear, in: Capsule())
+                    .padding(.vertical, 6)
+                    .background(
+                        selected == tab ? PaletteTheme.selection : .clear,
+                        in: RoundedRectangle(cornerRadius: PaletteTheme.rowRadius - 2, style: .continuous)
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected == tab ? .isSelected : [])
@@ -674,8 +721,8 @@ private struct PaletteTabBar: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Palette tabs")
     }
@@ -698,9 +745,7 @@ private struct KeyboardShortcutterResultsView: View {
             case .entries(let entries):
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
                             confirmationTitle: "Clear Keyboard Shortcutter history?",
@@ -709,21 +754,23 @@ private struct KeyboardShortcutterResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
+                        .buttonStyle(PaletteChipButtonStyle())
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
 
                     List(Array(entries.enumerated()), id: \.element.id) { index, event in
                         Button { select(index) } label: {
                             CoachingEventRow(event: event)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 7)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -740,11 +787,11 @@ private struct PaletteSearchField: View {
     var focused: FocusState<Bool>.Binding
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             Image(systemName: tab.systemImage)
-                .font(.system(size: 22, weight: .medium))
+                .font(.system(size: 19, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 28)
+                .frame(width: 24)
             if tab == .search {
                 TextField(tab.prompt, text: $searchQuery)
                     .focused(focused)
@@ -754,9 +801,10 @@ private struct PaletteSearchField: View {
             }
         }
         .textFieldStyle(.plain)
-        .font(.system(size: 23, weight: .medium))
+        .font(.system(size: 22))
         .padding(.horizontal, 20)
-        .padding(.vertical, 18)
+        .padding(.top, 20)
+        .padding(.bottom, 12)
     }
 }
 
@@ -782,9 +830,7 @@ private struct SearchResultsView: View {
                 } else {
                     VStack(spacing: 0) {
                         HStack {
-                            Text("Recent Items")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                            PaletteSectionHeader("Recent Items")
                             Spacer()
                             ClearAllButton(
                                 confirmationTitle: "Clear recent items?",
@@ -793,16 +839,18 @@ private struct SearchResultsView: View {
                                 confirmationPresentationChanged: confirmationPresentationChanged,
                                 clear: clearRecentItems
                             )
+                            .buttonStyle(PaletteChipButtonStyle())
                         }
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 10)
+                        .padding(.bottom, 6)
 
                         List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
                             HStack(spacing: 10) {
                                 Button { open(item.result) } label: {
-                                    SearchResultRow(result: item.result, showsReturn: index == selection)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 7)
+                                    SearchResultRow(result: item.result)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
@@ -811,11 +859,12 @@ private struct SearchResultsView: View {
                                         .frame(width: 24, height: 24)
                                 }
                                 .buttonStyle(.borderless)
+                                .help("Delete (⌫)")
                                 .accessibilityLabel("Delete recent item \(item.result.name)")
                             }
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
-                            .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                            .paletteRowBackground(isSelected: index == selection)
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
@@ -832,15 +881,15 @@ private struct SearchResultsView: View {
                         Button {
                             open(result)
                         } label: {
-                            SearchResultRow(result: result, showsReturn: index == selection)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
+                            SearchResultRow(result: result)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .paletteRowBackground(isSelected: index == selection)
                         .contextMenu {
                             Button("Reveal in Finder") { reveal(result) }
                         }
@@ -859,31 +908,32 @@ private struct SearchResultsView: View {
     }
 }
 
+/// Raycast's result row: icon, name, and the kind on the right. Apps show no path; files and
+/// folders show only their enclosing folder's name. The full path is in the tooltip.
 private struct SearchResultRow: View {
     let result: QuickSearchResult
-    let showsReturn: Bool
 
     var body: some View {
-        HStack(spacing: 13) {
+        HStack(spacing: 12) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: result.url.path))
                 .resizable()
-                .frame(width: 34, height: 34)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(result.name)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Text("\(result.kind.rawValue) · \(result.detail)")
-                    .font(.caption)
+                .frame(width: 28, height: 28)
+            Text(result.name)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+                .layoutPriority(1)
+            if result.kind != .application {
+                Text(result.url.deletingLastPathComponent().lastPathComponent)
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            Spacer()
-            if showsReturn {
-                Text("↩")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+            Spacer(minLength: 12)
+            Text(result.kind.rawValue)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
         }
+        .help(result.detail)
     }
 }
 
@@ -906,9 +956,7 @@ private struct ClipboardResultsView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
                             confirmationTitle: clearTitle,
@@ -917,17 +965,20 @@ private struct ClipboardResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
+                        .buttonStyle(PaletteChipButtonStyle())
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
 
                     List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         HStack(spacing: 10) {
                             Button { choose(entry) } label: {
-                                HStack(spacing: 12) {
+                                HStack(spacing: 14) {
                                     ClipboardEntryPreview(entry: entry)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(entry.displayText)
+                                            .font(.system(size: 15))
                                             .lineLimit(entry.kind == .image ? 1 : 2)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                         HStack(spacing: 5) {
@@ -939,12 +990,12 @@ private struct ClipboardResultsView: View {
                                                 Text("⌘E to edit")
                                             }
                                         }
-                                        .font(.caption2)
+                                        .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
                                     }
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -953,11 +1004,12 @@ private struct ClipboardResultsView: View {
                                     .frame(width: 24, height: 24)
                             }
                             .buttonStyle(.borderless)
+                            .help("Delete (⌫)")
                             .accessibilityLabel("Delete history item \(index + 1)")
                         }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
-                        .listRowBackground(index == selection ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -983,9 +1035,9 @@ private struct ClipboardEntryPreview: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 58, height: 42)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
-        .clipShape(.rect(cornerRadius: 7))
+        .frame(width: 52, height: 38)
+        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .clipShape(.rect(cornerRadius: 6))
         .accessibilityLabel(entry.isScreenshot ? "Screenshot preview" : entry.kind == .image ? "Copied image preview" : "Copied text")
         .task(id: entry.mediaPath) {
             guard entry.kind == .image, let imageURL = entry.imageURL else {
@@ -1035,9 +1087,7 @@ private struct DictationResultsView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack {
-                        Text("Recent")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
                             confirmationTitle: "Clear all dictation history?",
@@ -1048,9 +1098,11 @@ private struct DictationResultsView: View {
                             audioPlayer.stop()
                             clear()
                         }
+                        .buttonStyle(PaletteChipButtonStyle())
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
 
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -1105,7 +1157,6 @@ private struct PaletteResultsContainer<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.black.opacity(0.08))
     }
 }
 
@@ -1119,23 +1170,40 @@ private struct PaletteEmptyState: View {
     }
 }
 
+/// Raycast's footer: a floating pill at the bottom right with the tab's actions and their keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
 
     var body: some View {
-        HStack(spacing: 14) {
-            Label("Select", systemImage: "arrow.up.arrow.down")
-            if let primaryActionTitle = tab.primaryActionTitle {
-                Label(primaryActionTitle, systemImage: "return")
-            }
-            if let secondaryActionTitle = tab.secondaryActionTitle {
-                Label("⌘ \(secondaryActionTitle)", systemImage: "return")
-            }
+        HStack {
             Spacer()
+            HStack(spacing: 14) {
+                hint("Select", keys: ["↑", "↓"], isPrimary: false)
+                if let primaryActionTitle = tab.primaryActionTitle {
+                    hint(primaryActionTitle, keys: ["↵"], isPrimary: true)
+                }
+                if let secondaryActionTitle = tab.secondaryActionTitle {
+                    hint(secondaryActionTitle, keys: ["⌘", "↵"], isPrimary: false)
+                }
+            }
+            .font(.system(size: 14, weight: .medium))
+            .padding(.leading, 16)
+            .padding(.trailing, 7)
+            .frame(height: 38)
+            .background(PaletteTheme.pill, in: Capsule())
+            .overlay(Capsule().strokeBorder(PaletteTheme.border, lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(10)
+        .allowsHitTesting(false)
+    }
+
+    private func hint(_ title: String, keys: [String], isPrimary: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(title).foregroundStyle(isPrimary ? .primary : .secondary)
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { PaletteKeycap($0) }
+            }
+        }
     }
 }

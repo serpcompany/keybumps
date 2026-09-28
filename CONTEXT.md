@@ -48,7 +48,7 @@ The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipbo
 _Avoid_: Screen capture, screenshot app, CleanShot clone
 
 **Screenshots tab**:
-The ⌘5 Command Palette tab listing screen-capture items from Clipboard History; Return opens the Screenshot Editor. Owned by Screenshot Tools.
+The ⌘4 Command Palette tab listing screen-capture items from Clipboard History; Return opens the Screenshot Editor. Owned by Screenshot Tools.
 _Avoid_: Screenshot library, gallery
 
 **Screenshot Editor**:

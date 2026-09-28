@@ -4956,14 +4956,6 @@
     },
     {
       "commandKey" : "⌘4",
-      "label" : "Hotkeys",
-      "matchedByCommandKey" : "keyboardShortcutter",
-      "prompt" : "Search hotkeys",
-      "systemImage" : "keyboard",
-      "tab" : "keyboardShortcutter"
-    },
-    {
-      "commandKey" : "⌘5",
       "label" : "Screenshots",
       "matchedByCommandKey" : "screenshots",
       "primaryAction" : "Edit",
@@ -4971,6 +4963,14 @@
       "secondaryAction" : "Copy",
       "systemImage" : "camera.viewfinder",
       "tab" : "screenshots"
+    },
+    {
+      "commandKey" : "⌘5",
+      "label" : "Hotkeys",
+      "matchedByCommandKey" : "keyboardShortcutter",
+      "prompt" : "Search hotkeys",
+      "systemImage" : "keyboard",
+      "tab" : "keyboardShortcutter"
     }
   ],
   "settingsDestinations" : [
