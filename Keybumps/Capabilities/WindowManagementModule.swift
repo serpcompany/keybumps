@@ -17,3 +17,47 @@ extension CapabilityDescriptor {
         criticalOperations: [.windowAction, .windowDrag]
     )
 }
+
+/// Owns the window shortcuts and drag-to-snap, and reports window actions and drags to
+/// update-installation safety.
+@MainActor
+final class WindowManagementModule: CapabilityModule {
+    let descriptor = CapabilityDescriptor.windowManagement
+    private let windows: WindowManagementService
+    private let updateSafety: CapabilityUpdateSafety
+
+    init(windows: WindowManagementService, updateSafety: CapabilityUpdateSafety) {
+        self.windows = windows
+        self.updateSafety = updateSafety
+        windows.onDragActivityChange = { isActive in
+            updateSafety.setCriticalOperation(.windowDrag, active: isActive)
+        }
+    }
+
+    func apply(_ context: CapabilityContext) {
+        for action in WindowAction.allCases {
+            context.configureShortcut(
+                owner: "window.\(action.rawValue)",
+                for: capability,
+                binding: context.preferences.windowShortcut(for: action)
+            ) { [weak self] in
+                self?.perform(action)
+            }
+        }
+        context.isEnabled(capability) ? windows.startDragSnapping() : windows.stop()
+    }
+
+    func deactivate(_ context: CapabilityContext) {
+        windows.stop()
+    }
+
+    func permissionsDidRefresh(_ context: CapabilityContext) {
+        if context.isEnabled(capability), context.permissions.accessibilityGranted {
+            windows.startDragSnapping()
+        }
+    }
+
+    private func perform(_ action: WindowAction) {
+        updateSafety.performSynchronously(.windowAction) { windows.perform(action) }
+    }
+}

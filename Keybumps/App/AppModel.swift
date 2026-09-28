@@ -203,7 +203,11 @@ final class AppModel {
                 editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
             ),
-            dictationModule
+            dictationModule,
+            WindowManagementModule(
+                windows: windows,
+                updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
+            )
         ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
@@ -211,11 +215,6 @@ final class AppModel {
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
-        windows.onDragActivityChange = { [weak self] isActive in
-            guard let self else { return }
-            self.updateSafetyPolicy.updateCriticalOperation(.windowDrag, active: isActive)
-            self.updater.installationSafetyDidChange()
-        }
         refreshDetectorState()
     }
 
@@ -300,21 +299,8 @@ final class AppModel {
     func applyCapabilities() {
         capabilities.apply(capabilityContext)
         let enabled = preferences.enabledCapabilities
-        for action in WindowAction.allCases {
-            let owner = "window.\(action.rawValue)"
-            configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
-        }
-        enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
         enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
         refreshDetectorState()
-    }
-
-    private func performWindowAction(_ action: WindowAction) {
-        updateSafetyPolicy.performSynchronousCriticalOperation(
-            .windowAction,
-            notify: updater.installationSafetyDidChange,
-            operation: { windows.perform(action) }
-        )
     }
 
     private func configure(owner: String, capability: Capability, binding: ShortcutBinding?, handler: @escaping () -> Void) {
@@ -434,9 +420,6 @@ final class AppModel {
         advancePermissionWalkthroughIfNeeded()
         if preferences.enabledCapabilities.contains(.keyboardShortcutter), detector.status != .monitoring {
             detector.start()
-        }
-        if preferences.enabledCapabilities.contains(.windowManagement), permissions.accessibilityGranted {
-            windows.startDragSnapping()
         }
         capabilities.permissionsDidRefresh(capabilityContext)
         refreshDetectorState()
@@ -639,7 +622,7 @@ final class AppModel {
         case .dictation:
             break
         case .windowManagement:
-            windows.stop()
+            break
         case .keyboardShortcutter:
             detector.stop()
             presenter.dismissAll()
