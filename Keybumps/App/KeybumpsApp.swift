@@ -23,14 +23,28 @@ enum KeybumpsMain {
 
 struct KeybumpsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel.forLaunch()
+    @State private var model: AppModel
+
+    init() {
+        let model = AppModel.forLaunch()
+        _model = State(initialValue: model)
+        // macOS can relaunch Keybumps at login with no window, so start at launch rather than when
+        // the main window first appears.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishLaunchingNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { AppShellLaunch.start(model) }
+        }
+    }
 
     var body: some Scene {
         Window(ReleaseLane.current.productName, id: "main") {
             SettingsRootView()
                 .environment(model)
                 .task {
-                    model.start()
+                    AppShellLaunch.start(model)
                     model.performUITestLaunchActions()
                 }
                 .uiTestAnimationsDisabled()
@@ -72,23 +86,7 @@ private struct MainWindowRoutingModifier: ViewModifier {
         content
             .onAppear {
                 MainWindowRouter.shared.configure(openMainWindow)
-                QuickSearchRouter.shared.configure(model.showQuickSearch)
-                AppShellRouter.shared.configure { destination in
-                    switch destination {
-                    case .keyboardShortcutterHistory:
-                        model.showKeyboardShortcutterHistory()
-                    }
-                }
-                NativeStatusItemController.shared.configureQuickSearch(
-                    isVisible: { model.isQuickSearchVisible },
-                    setVisible: model.setQuickSearchVisible
-                )
-                NativeStatusItemController.shared.configureUpdater(
-                    snapshot: { model.updateSnapshot },
-                    checkNow: model.checkForUpdates,
-                    restartWhenSafe: model.restartToUpdate
-                )
-                NativeStatusItemController.shared.install()
+                AppShellLaunch.start(model)
             }
             .onReceive(NotificationCenter.default.publisher(for: .openMainWindow)) { _ in
                 openMainWindow()
@@ -108,5 +106,35 @@ private struct OpenMainWindowButton: View {
         Button(title) {
             MainWindowRouter.shared.open()
         }
+    }
+}
+
+/// Everything Keybumps needs to run, none of which depends on a window: capabilities and global
+/// shortcuts, the status item, and the Dock, notification, and Quick Search routes. Runs once.
+@MainActor
+enum AppShellLaunch {
+    private static var didStart = false
+
+    static func start(_ model: AppModel) {
+        guard !didStart else { return }
+        didStart = true
+        model.start()
+        QuickSearchRouter.shared.configure(model.showQuickSearch)
+        AppShellRouter.shared.configure { destination in
+            switch destination {
+            case .keyboardShortcutterHistory:
+                model.showKeyboardShortcutterHistory()
+            }
+        }
+        NativeStatusItemController.shared.configureQuickSearch(
+            isVisible: { model.isQuickSearchVisible },
+            setVisible: model.setQuickSearchVisible
+        )
+        NativeStatusItemController.shared.configureUpdater(
+            snapshot: { model.updateSnapshot },
+            checkNow: model.checkForUpdates,
+            restartWhenSafe: model.restartToUpdate
+        )
+        NativeStatusItemController.shared.install()
     }
 }

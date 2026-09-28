@@ -2,15 +2,23 @@ import AppKit
 
 @MainActor
 final class MainWindowRouter {
-    static let shared = MainWindowRouter()
+    /// The app's router. Before the main window has ever appeared (macOS can relaunch Keybumps at
+    /// login with no window), it asks macOS to reopen the app so SwiftUI creates the window.
+    static let shared = MainWindowRouter(openWithoutWindow: { router in
+        router.requestWindowOnNextReopen()
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: NSWorkspace.OpenConfiguration())
+    })
 
     private var opener: (() -> Void)?
     private let activate: () -> Void
+    private let openWithoutWindow: ((MainWindowRouter) -> Void)?
+    private var opensWindowOnNextReopen = false
 
-    init(activate: (() -> Void)? = nil) {
+    init(activate: (() -> Void)? = nil, openWithoutWindow: ((MainWindowRouter) -> Void)? = nil) {
         self.activate = activate ?? {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
+        self.openWithoutWindow = openWithoutWindow
     }
 
     func configure(_ opener: @escaping () -> Void) {
@@ -19,10 +27,25 @@ final class MainWindowRouter {
 
     @discardableResult
     func open() -> Bool {
-        guard let opener else { return false }
+        guard let opener else {
+            guard let openWithoutWindow else { return false }
+            openWithoutWindow(self)
+            return true
+        }
         opener()
         activate()
         return true
+    }
+
+    /// Whether the next app reopen should let SwiftUI create the main window instead of routing
+    /// to Quick Search. Reading it clears it.
+    func consumeReopenRequest() -> Bool {
+        defer { opensWindowOnNextReopen = false }
+        return opensWindowOnNextReopen
+    }
+
+    func requestWindowOnNextReopen() {
+        opensWindowOnNextReopen = true
     }
 }
 
