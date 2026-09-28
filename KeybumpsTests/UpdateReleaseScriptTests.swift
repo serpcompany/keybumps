@@ -166,13 +166,217 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertEqual(normalizedParent.output.trimmingCharacters(in: .whitespacesAndNewlines), "https://updates.example.com/beta/nested/")
     }
 
-    private func run(_ executable: URL, _ arguments: [String]) throws -> (status: Int32, output: String) {
+    func testLatestReleasePointerFollowsTheAppcastAndFailsClosed() throws {
+        let pointer = repositoryRoot.appendingPathComponent("scripts/write-latest-release-pointer.sh")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("latest-pointer-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let digest = String(repeating: "ab", count: 32)
+        let checksum = work.appendingPathComponent("Keybumps-0.0.3-beta.4.dmg.sha256")
+        try "\(digest)  Keybumps-0.0.3-beta.4.dmg\n".write(to: checksum, atomically: true, encoding: .utf8)
+
+        func appcast(url: String, build: Int = 4008, version: String = "0.0.3-beta.4") throws -> URL {
+            let file = work.appendingPathComponent("appcast-\(UUID().uuidString).xml")
+            try """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>
+            <item><sparkle:version>\(build)</sparkle:version><sparkle:shortVersionString>\(version)</sparkle:shortVersionString>
+            <enclosure url="\(url)" length="1" type="application/octet-stream" sparkle:edSignature="x"/></item>
+            </channel></rss>
+            """.write(to: file, atomically: true, encoding: .utf8)
+            return file
+        }
+
+        let output = work.appendingPathComponent("latest.json")
+        let production = try run(pointer, [
+            try appcast(url: "https://updates.keybumps.app/releases/4008/Keybumps-0.0.3-beta.4.zip").path,
+            "4008", "0.0.3-beta.4", checksum.path, output.path
+        ])
+        XCTAssertEqual(production.status, 0, production.output)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: output)) as? [String: Any])
+        XCTAssertEqual(json["version"] as? String, "0.0.3-beta.4")
+        XCTAssertEqual(json["build"] as? Int, 4008)
+        XCTAssertEqual(json["dmgURL"] as? String, "https://updates.keybumps.app/releases/4008/Keybumps-0.0.3-beta.4.dmg")
+        XCTAssertEqual(json["sha256"] as? String, digest)
+
+        let rootLayout = try run(pointer, [
+            try appcast(url: "https://updates.keybumps.app/Keybumps-0.0.3-beta.4.zip").path,
+            "4008", "0.0.3-beta.4", checksum.path, output.path
+        ])
+        XCTAssertEqual(rootLayout.status, 0, rootLayout.output)
+        let rootJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: output)) as? [String: Any])
+        XCTAssertEqual(rootJSON["dmgURL"] as? String, "https://updates.keybumps.app/Keybumps-0.0.3-beta.4.dmg", "the DMG sits beside the archive")
+
+        let failures: [(String, [String])] = [
+            ("foreign origin", [try appcast(url: "https://example.com/Keybumps-0.0.3-beta.4.zip").path, "4008", "0.0.3-beta.4", checksum.path]),
+            ("plain HTTP", [try appcast(url: "http://updates.keybumps.app/Keybumps-0.0.3-beta.4.zip").path, "4008", "0.0.3-beta.4", checksum.path]),
+            ("version mismatch", [try appcast(url: "https://updates.keybumps.app/a.zip").path, "4008", "0.0.3-beta.5", checksum.path]),
+            ("build missing", [try appcast(url: "https://updates.keybumps.app/a.zip").path, "4009", "0.0.3-beta.4", checksum.path])
+        ]
+        for (name, arguments) in failures {
+            let result = try run(pointer, arguments + [work.appendingPathComponent("\(name).json").path])
+            XCTAssertNotEqual(result.status, 0, name)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: work.appendingPathComponent("\(name).json").path), name)
+        }
+
+        let badChecksum = work.appendingPathComponent("bad.sha256")
+        try "not-a-digest  x.dmg\n".write(to: badChecksum, atomically: true, encoding: .utf8)
+        let bad = try run(pointer, [try appcast(url: "https://updates.keybumps.app/a.zip").path, "4008", "0.0.3-beta.4", badChecksum.path, work.appendingPathComponent("bad.json").path])
+        XCTAssertNotEqual(bad.status, 0)
+    }
+
+    func testPublishReleaseUploadsAssetsBeforePointersAndNeverOverwrites() throws {
+        let publisher = repositoryRoot.appendingPathComponent("scripts/publish-release.sh")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("publish-\(UUID().uuidString)")
+        let output = work.appendingPathComponent("release")
+        let assets = output.appendingPathComponent("publication/assets")
+        let last = output.appendingPathComponent("publication/publish-last")
+        let bucketRoot = work.appendingPathComponent("r2")
+        for directory in [assets, last, bucketRoot] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        let version = "0.0.3-beta.4", build = 4008
+        for (name, body) in [("zip", "archive"), ("zip.sha256", "sum"), ("md", "# notes"), ("dmg", "disk image"), ("dmg.sha256", "sum")] {
+            try Data(body.utf8).write(to: assets.appendingPathComponent("Keybumps-\(version).\(name)"))
+        }
+        func writeAppcast(_ url: String) throws {
+            try """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>
+            <item><sparkle:version>\(build)</sparkle:version><sparkle:shortVersionString>\(version)</sparkle:shortVersionString>
+            <enclosure url="\(url)" length="7" type="application/octet-stream" sparkle:edSignature="x"/></item>
+            </channel></rss>
+            """.write(to: last.appendingPathComponent("appcast.xml"), atomically: true, encoding: .utf8)
+        }
+        try writeAppcast("https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).zip")
+        try """
+        {"version": "\(version)", "build": \(build), "dmgURL": "https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).dmg", "sha256": "\(String(repeating: "ab", count: 32))"}
+        """.write(to: last.appendingPathComponent("latest.json"), atomically: true, encoding: .utf8)
+
+        // A fake wrangler that "uploads" into a directory served over loopback, logging each key.
+        let log = work.appendingPathComponent("uploads.log")
+        let fakeWrangler = work.appendingPathComponent("fake-wrangler")
+        try """
+        #!/bin/zsh
+        set -euo pipefail
+        [[ "$1 $2 $3" == "r2 object put" ]] || exit 9
+        key=${4#keybumps-updates/}
+        shift 4
+        while (( $# )); do
+          case $1 in --file) file=$2; shift 2 ;; --content-type|--cache-control) print -r -- "$key $1=$2" >> "\(log.path).meta"; shift 2 ;; --remote) shift ;; *) exit 8 ;; esac
+        done
+        mkdir -p "\(bucketRoot.path)/${key:h}"
+        cp "$file" "\(bucketRoot.path)/$key"
+        print -r -- "$key" >> "\(log.path)"
+        """.write(to: fakeWrangler, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeWrangler.path)
+
+        let server = Process()
+        server.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        server.arguments = ["-m", "http.server", "18767", "--bind", "127.0.0.1", "--directory", bucketRoot.path]
+        server.standardOutput = Pipe(); server.standardError = Pipe()
+        try server.run()
+        defer { server.terminate(); server.waitUntilExit() }
+        for _ in 0..<50 where try run(URL(fileURLWithPath: "/usr/bin/curl"), ["--silent", "--output", "/dev/null", "http://127.0.0.1:18767/"]).status != 0 {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        let environment = ["KEYBUMPS_WRANGLER": fakeWrangler.path, "KEYBUMPS_RELEASE_ORIGIN": "http://127.0.0.1:18767"]
+
+        let dryRun = try run(publisher, [output.path, "production"], environment: environment)
+        XCTAssertEqual(dryRun.status, 0, dryRun.output)
+        XCTAssertTrue(dryRun.output.contains("Dry run only"))
+        XCTAssertTrue(dryRun.output.contains("releases/4008/Keybumps-0.0.3-beta.4.dmg"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: log.path), "a dry run uploads nothing")
+
+        let published = try run(publisher, [output.path, "production", "--publish"], environment: environment)
+        XCTAssertEqual(published.status, 0, published.output)
+        let keys = try String(contentsOf: log, encoding: .utf8).split(separator: "\n").map(String.init)
+        XCTAssertEqual(Array(keys.suffix(2)), ["appcast.xml", "latest.json"], "pointers are published last")
+        XCTAssertEqual(Set(keys.dropLast(2)), Set(["zip", "zip.sha256", "md", "dmg", "dmg.sha256"].map { "releases/4008/Keybumps-0.0.3-beta.4.\($0)" }))
+        let metadata = try String(contentsOf: URL(fileURLWithPath: log.path + ".meta"), encoding: .utf8)
+        XCTAssertTrue(metadata.contains("releases/4008/Keybumps-0.0.3-beta.4.dmg --content-type=application/x-apple-diskimage"))
+        XCTAssertTrue(metadata.contains("releases/4008/Keybumps-0.0.3-beta.4.zip --cache-control=public, max-age=31536000, immutable"))
+        XCTAssertTrue(metadata.contains("appcast.xml --cache-control=public, max-age=60, must-revalidate"))
+        XCTAssertTrue(metadata.contains("latest.json --content-type=application/json; charset=utf-8"))
+
+        let rerun = try run(publisher, [output.path, "production", "--publish"], environment: environment)
+        XCTAssertEqual(rerun.status, 0, rerun.output)
+        XCTAssertTrue(rerun.output.contains("already published releases/4008/Keybumps-0.0.3-beta.4.zip"))
+
+        try Data("different".utf8).write(to: bucketRoot.appendingPathComponent("releases/4008/Keybumps-0.0.3-beta.4.dmg"))
+        let overwrite = try run(publisher, [output.path, "production", "--publish"], environment: environment)
+        XCTAssertNotEqual(overwrite.status, 0)
+        XCTAssertTrue(overwrite.output.contains("refusing to overwrite immutable releases/4008/Keybumps-0.0.3-beta.4.dmg"))
+
+        let staging = try run(publisher, [output.path, "staging"], environment: environment)
+        XCTAssertTrue(staging.output.contains("staging/appcast.xml"), staging.output)
+        XCTAssertFalse(staging.output.contains("latest.json"), "only production moves the download page")
+
+        XCTAssertNotEqual(try run(publisher, [output.path, "beta"], environment: environment).status, 0)
+        XCTAssertNotEqual(try run(publisher, [output.path, "production"], environment: ["KEYBUMPS_RELEASE_ORIGIN": "https://evil.example"]).status, 0)
+        try writeAppcast("https://updates.keybumps.app/Keybumps-\(version).zip")
+        let wrongLayout = try run(publisher, [output.path, "production"], environment: environment)
+        XCTAssertNotEqual(wrongLayout.status, 0)
+        XCTAssertTrue(wrongLayout.output.contains("releases/4008"))
+        try FileManager.default.removeItem(at: last.appendingPathComponent("latest.json"))
+        try writeAppcast("https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).zip")
+        XCTAssertNotEqual(try run(publisher, [output.path, "production"], environment: environment).status, 0, "production needs latest.json")
+        XCTAssertEqual(try run(publisher, [output.path, "staging"], environment: environment).status, 0)
+    }
+
+    func testReleaseNotesComeFromTheChangelogWithoutLinks() throws {
+        let writer = repositoryRoot.appendingPathComponent("scripts/write-release-notes.sh")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("notes-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+        let changelog = work.appendingPathComponent("CHANGELOG.md")
+        try """
+        # Changelog
+
+        ## [0.0.3-beta.4](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.3...v0.0.3-beta.4) (2026-09-28)
+
+        ### Features
+
+        * add a Screenshots tab ([88f94da](https://github.com/serpcompany/keybumps/commit/88f94da)), closes [#59](https://github.com/serpcompany/keybumps/issues/59)
+        * **editor:** number keys select tools ([#62](https://github.com/serpcompany/keybumps/issues/62)) ([3ce4272](https://github.com/serpcompany/keybumps/commit/3ce4272))
+
+        ### Fixes
+
+        * recover denied Microphone access ([2764245](https://github.com/serpcompany/keybumps/commit/2764245))
+
+        ## [0.0.3-beta.3](https://github.com/serpcompany/keybumps/compare/x) (2026-09-19)
+
+        * older entry
+        """.write(to: changelog, atomically: true, encoding: .utf8)
+
+        let output = work.appendingPathComponent("v0.0.3-beta.4.md")
+        let result = try run(writer, [changelog.path, "0.0.3-beta.4", output.path])
+        XCTAssertEqual(result.status, 0, result.output)
+        let notes = try String(contentsOf: output, encoding: .utf8)
+        XCTAssertTrue(notes.hasPrefix("# Keybumps 0.0.3-beta.4\n"))
+        XCTAssertTrue(notes.contains("- add a Screenshots tab\n"))
+        XCTAssertTrue(notes.contains("- **editor:** number keys select tools\n"))
+        XCTAssertTrue(notes.contains("### Fixes"))
+        XCTAssertFalse(notes.contains("http"), "no commit, PR, or compare links reach users")
+        XCTAssertFalse(notes.contains("older entry"), "only the requested version's section")
+
+        let handWritten = work.appendingPathComponent("v0.0.3-beta.3.md")
+        try "# Keybumps 0.0.3-beta.3\n\nHand-written.\n".write(to: handWritten, atomically: true, encoding: .utf8)
+        XCTAssertEqual(try run(writer, [changelog.path, "0.0.3-beta.3", handWritten.path]).status, 0)
+        XCTAssertEqual(try String(contentsOf: handWritten, encoding: .utf8), "# Keybumps 0.0.3-beta.3\n\nHand-written.\n", "hand-written notes win")
+
+        let missing = try run(writer, [changelog.path, "0.0.3-beta.9", work.appendingPathComponent("missing.md").path])
+        XCTAssertNotEqual(missing.status, 0)
+        XCTAssertNotEqual(try run(writer, [changelog.path, "latest", work.appendingPathComponent("bad.md").path]).status, 0)
+    }
+
+    private func run(_ executable: URL, _ arguments: [String], environment: [String: String] = [:]) throws -> (status: Int32, output: String) {
         let process = Process()
         let pipe = Pipe()
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = repositoryRoot
-        process.environment = cleanChildEnvironment
+        process.environment = cleanChildEnvironment.merging(environment) { $1 }
         process.standardOutput = pipe
         process.standardError = pipe
         try process.run()

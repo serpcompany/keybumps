@@ -78,4 +78,4 @@ Computer-use or other screen control drives the owner's real mouse, keyboard, an
 ## 6. Publish only when requested
 
 - A local manual-QA build is not a public beta or Sparkle release.
-- Tagging, notarized distribution, GitHub Releases, Pages assets, and appcast publication follow the separate release operations document and require explicit owner authorization.
+- Releases are cut by merging the release-please `release: Keybumps <version>` PR, which tags, builds, notarizes, and publishes to staging; production waits for owner approval on the `production` environment. See the release operations document. Never tag or publish by hand without explicit owner authorization.

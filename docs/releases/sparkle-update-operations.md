@@ -18,7 +18,7 @@ Generate the production key once with Sparkle's `generate_keys --account keybump
 
 ## Hosting and publication boundary
 
-The remote repository is `serpcompany/keybumps`, but this repository does not deploy the update origin. Release preparation produces immutable ZIP/DMG assets, release notes, and a signed appcast for an owner-controlled upload. Upload assets and notes first and publish the signed appcast pointer last.
+The remote repository is `serpcompany/keybumps`. The update origin is the `keybumps-updates` R2 bucket; see [`cloudflare.md`](cloudflare.md) for the inventory, object layout, and access. Release preparation produces immutable ZIP/DMG assets, release notes, a signed appcast, and `latest.json`; `scripts/publish-release.sh` performs the owner-authorized upload. Upload assets and notes first and publish the signed appcast pointer last, together with `latest.json`.
 
 Historical SuperMac Pages artifacts belong to a different bundle identity and trust chain. Never copy or recreate that feed as a Keybumps update bridge; existing SuperMac testers must install Keybumps manually.
 
@@ -32,10 +32,38 @@ The normal entry point is `scripts/build-update-release.sh`. It refuses a reused
 4. Put the update archive and matching `.md` release notes in a clean staging directory.
 5. Run Sparkle's `generate_appcast` through `scripts/generate-staged-appcast.sh`. The private key stays in Keychain.
 6. Run `scripts/validate-update-release.sh` with both the feed URL embedded in the candidate app and the appcast URL currently advertising it. These are normally identical; staged promotion may validate a production-configured candidate advertised from the staging channel. The validator uses Sparkle's official tools and the selected Keychain account to verify that the app's public key matches, then cryptographically verifies the signed feed, archive, and linked release notes. It also fails closed on malformed XML, checksum/size drift, identity/version/feed/compatibility, Apple signature, Gatekeeper, notarization-ticket failures, or appcast assets outside the publication directory. The fixture-only trust-skip option is never valid release evidence.
-7. Run `scripts/verify-update-publication.sh <appcast> <archive> <notes> <feed-url> --dry-run` to inspect the two-phase order. Upload immutable archive and notes first, publish the signed appcast last, then use `--verify-live` to compare the exact remote bytes with the locally validated artifacts. This repository does not publish the feed automatically.
+7. Run `scripts/publish-release.sh <output-directory> staging` (dry run) to review the plan, then, with owner authorization, add `--publish`. It uploads immutable assets to `releases/<build>/` first (refusing to overwrite different bytes), verifies each public copy byte for byte, and only then publishes the pointer (`staging/appcast.xml`). `scripts/verify-update-publication.sh … --verify-live` remains available for an independent byte check.
 8. Install build N in `/Applications`, advertise N+1 on the staged feed, and verify check, download, signature validation, restart, exact N+1 version, and retained non-private fixture preferences. Repeat with active Dictation and confirm restart is refused until Dictation is idle.
 9. Corrupt a copy of the signed archive without regenerating the appcast and confirm Sparkle rejects it. Never weaken verification for this test.
-10. Promote the exact already-validated files from the staging path to the production path, preserving filenames and bytes. Verify the public production archive and notes before accepting the production appcast.
+10. Promote to production with `scripts/publish-release.sh <output-directory> production --publish` (owner-authorized). The immutable assets are already published and are skipped after byte verification; it then publishes `appcast.xml` and `latest.json` last and verifies both.
+11. Publish `publication/publish-last/latest.json` beside the production `appcast.xml` (`https://updates.keybumps.app/latest.json`) at the same time as the appcast. `scripts/write-latest-release-pointer.sh` derives it from the validated appcast: `version`, `build`, `dmgURL` (the DMG beside the archive enclosure), and the DMG `sha256`. It refuses a foreign origin, a version or build mismatch, or a malformed checksum. The keybumps.app download page (`serpcompany/keybumps.app`) reads this file, so a release needs no website edit.
+
+## Release in CI
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please) and built in CI. Nobody types versions or tags.
+
+1. Merge ordinary PRs to `main` with Conventional Commit titles. `feat:` and `fix:` (plus `perf:` and `refactor:`) become user-facing notes; `docs:`, `test:`, `build:`, `ci:`, and `chore:` stay out.
+2. The **Release Please** workflow keeps one open PR titled `release: Keybumps <next version>`. It bumps `version.txt` and `.release-please-manifest.json` and writes `CHANGELOG.md`. Beta versions count up (`0.0.3-beta.4` → `beta.5`). To start a new line, add `Release-As: 0.1.0` to a commit body. Edit the changelog text in that PR if needed.
+3. Merging the release PR tags `v<version>`, creates the GitHub Release, and calls **Release Keybumps** (`.github/workflows/release.yml`):
+   - `build` (macOS, `release` environment): turns the `CHANGELOG.md` section into `docs/releases/v<version>.md` via `scripts/write-release-notes.sh` (a hand-written file for that version wins); sets the build number to the live production build + 1; builds, signs, notarizes, packages, and validates; keeps the `publication/` artifact for 90 days; publishes to **staging**.
+   - `production` (`production` environment): after approval, publishes `appcast.xml` and `latest.json`, which updates in-app updates and keybumps.app/download.
+4. Release Keybumps can also be run manually from Actions. It takes a version, an optional build number, and `publish` (off = build and notarize only).
+
+The owner should require reviewers on the `production` environment (Settings → Environments). Without that, production publishes right after staging. Release Please needs **Allow GitHub Actions to create and approve pull requests** enabled (Settings → Actions → General) to open its PR.
+
+The workflow uses a temporary keychain for the Developer ID identity and the Sparkle key, pins Sparkle's tools by SHA-256, and fails early if the Sparkle private key doesn't match the public key embedded in Keybumps. The build uses `KEYBUMPS_MANUAL_SIGNING=1` (explicit Developer ID signing via `scripts/ExportOptions-DeveloperID-Manual.plist`); local builds keep automatic signing.
+
+Repository secrets (Settings → Secrets and variables → Actions). The owner creates these; never paste their values into chat, issues, or logs:
+
+| Secret | Contents |
+| --- | --- |
+| `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a `.p12` exported from Keychain Access containing the **Developer ID Application: … (847HR8U8D9)** certificate and its private key (`base64 -i cert.p12 \| pbcopy`) |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The `.p12` export password |
+| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | App Store Connect API key used by `asc notarization`; `ASC_PRIVATE_KEY` is the full `.p8` contents |
+| `SPARKLE_PRIVATE_KEY` | The Sparkle EdDSA private key (`generate_keys --account <account> -x key.txt` on the Mac that holds it; delete the file afterwards) |
+| `CLOUDFLARE_R2_TOKEN` | Cloudflare API token with Workers R2 Storage: Edit on `keybumps-updates` (see [`cloudflare.md`](cloudflare.md)) |
+
+**Check release credentials** (`.github/workflows/release-credentials.yml`) is a read-only workflow that lists which secrets are set and verifies the R2 token can read `keybumps-updates`. Both workflows use the `release` GitHub environment, where the owner can require approval before any run.
 
 ## Local fixture harness
 
