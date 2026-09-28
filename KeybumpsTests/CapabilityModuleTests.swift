@@ -136,9 +136,7 @@ struct CapabilityModuleTests {
             .quickSearch, .clipboardHistory, .dictation, .windowManagement, .keyboardShortcutter
         ])
 
-        let suite = "KeybumpsCapabilityModules-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { ModuleHarness.removeDefaults(suite: suite) }
+        let defaults = InMemoryDefaults()
 
         // An install from before per-capability tracking gets Screenshot Tools once.
         defaults.set(["dictation", "quickSearch"], forKey: "enabledCapabilities")
@@ -162,20 +160,20 @@ private final class ModuleHarness {
     let windows = TrackingWindowManagementService()
     let model: AppModel
     private let root: URL
-    private let suite: String
+    private let pasteboard: NSPasteboard
 
     init() {
         let id = UUID().uuidString
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityModules-\(id)", isDirectory: true)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        suite = "KeybumpsCapabilityModules-\(id)"
-        let preferences = AppPreferences(defaults: UserDefaults(suiteName: suite)!)
+        pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityModules-\(id)"))
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.didCompleteOnboarding = true
 
         clipboard = TrackingClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
-            pasteboard: NSPasteboard(name: NSPasteboard.Name(suite)),
+            pasteboard: pasteboard,
             mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true)
         )
         let screenshotHome = root.appendingPathComponent("home", isDirectory: true)
@@ -224,15 +222,8 @@ private final class ModuleHarness {
     func tearDown() {
         model.screenshotTools.stop()
         clipboard.stop()
-        ModuleHarness.removeDefaults(suite: suite)
+        pasteboard.releaseGlobally()
         try? FileManager.default.removeItem(at: root)
-    }
-
-    static func removeDefaults(suite: String) {
-        UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
-        let preferencesDirectory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences", isDirectory: true)
-        try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent("\(suite).plist"))
     }
 
     static func ownedShortcuts(for capability: Capability) -> Set<String> {
