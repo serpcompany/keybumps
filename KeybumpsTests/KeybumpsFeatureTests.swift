@@ -1550,6 +1550,23 @@ final class KeybumpsFeatureTests: XCTestCase {
         )
     }
 
+    func testPromptablePermissionRowsRequestAccessOnlyBeforeTheFirstDecision() {
+        for permission in [MacPermission.microphone, .speechRecognition] {
+            XCTAssertEqual(
+                PermissionSettingsRowAction.resolve(permission: permission, state: .notDetermined, requiresRelaunch: false),
+                .requestAccess,
+                "\(permission.title) should use the native prompt before the first decision"
+            )
+            for state in [PermissionAuthorizationState.denied, .restricted] {
+                XCTAssertEqual(
+                    PermissionSettingsRowAction.resolve(permission: permission, state: state, requiresRelaunch: false),
+                    .recoverInSystemSettings,
+                    "\(permission.title) \(state.rawValue) cannot be re-prompted and must recover in System Settings"
+                )
+            }
+        }
+    }
+
     func testEverySystemSettingsRecoveryShowsTheMatchingVisibleAssistant() {
         XCTAssertEqual(
             PermissionRecoveryPresentation.resolve(

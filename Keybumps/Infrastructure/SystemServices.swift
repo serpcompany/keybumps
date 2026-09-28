@@ -196,7 +196,7 @@ enum PermissionSettingsRowAction: Equatable {
         if requiresRelaunch { return .restartKeybumps }
         if state.isGranted { return .openSystemSettings }
         switch permission {
-        case .microphone, .speechRecognition where state == .notDetermined:
+        case .microphone where state == .notDetermined, .speechRecognition where state == .notDetermined:
             return .requestAccess
         case .accessibility, .inputMonitoring, .microphone, .speechRecognition:
             return .recoverInSystemSettings
