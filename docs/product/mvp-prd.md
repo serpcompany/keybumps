@@ -108,7 +108,7 @@ User outcome: screenshots taken with the standard macOS shortcuts are immediatel
 ### Screenshot Editor
 
 - Command-E on a highlighted image row, or Command-click on the row, opens the editor for any Clipboard History image while Screenshot Tools is enabled. Return and plain click keep restoring the item. Image rows show a Command-E hint.
-- Tools: pixelate, solid redact block, arrow, free draw, and text, selectable with P, R, A, D, and T. Arrow, draw, and text use a small fixed palette. Undo and redo cover each completed gesture.
+- Tools: pixelate, solid redact block, arrow, free draw, and text, selectable with 1–5 (number row or keypad) or P, R, A, D, and T; each tool button shows its number. Tool keys are ignored while typing text. Arrow, draw, and text use a small fixed palette. Undo and redo cover each completed gesture.
 - Done (Return) flattens at the image's own pixel density, copies PNG to the clipboard, and saves `<name> (edited).png` next to the original screenshot, numbering on collision. Copied images and unwritable folders save to the macOS screenshot location. Originals are never overwritten. Cancel or Escape discards.
 - Redaction safety: exported pixels under pixelate or redact regions never contain original content. Pixelate uses a minimum block size and averages each block; any rendering failure fills the region opaquely instead of showing the original.
 - While the editor is open it counts as unsaved work for update safety. Closing it returns focus to the previous app.

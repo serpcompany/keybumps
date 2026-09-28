@@ -120,7 +120,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window else { return event }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let flags = Self.shortcutFlags(event.modifierFlags)
             let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
             if event.keyCode == 53 { self.cancel(); return nil }
             if self.model.isEditingText { return event }
@@ -129,12 +129,23 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             case ([.command, .shift], "z"): self.model.redo(); return nil
             case (.command, "\r"), ([], "\r"): self.done(); return nil
             case ([], _):
-                if let tool = ScreenshotEditorTool.matching(key: key) { self.model.tool = tool; return nil }
+                if let tool = Self.tool(forKey: key, modifiers: event.modifierFlags) { self.model.tool = tool; return nil }
                 return event
             default:
                 return event
             }
         }
+    }
+
+    /// Keypad digits carry .numericPad (and arrows .function); treat them like the main keys.
+    static func shortcutFlags(_ modifiers: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
+        modifiers.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
+    }
+
+    /// Unmodified 1–5 or P/R/A/D/T select a tool; anything with Command, Option, or Control does not.
+    static func tool(forKey key: String, modifiers: NSEvent.ModifierFlags) -> ScreenshotEditorTool? {
+        guard shortcutFlags(modifiers).isEmpty else { return nil }
+        return ScreenshotEditorTool.matching(key: key)
     }
 
     private func removeKeyMonitor() {
@@ -246,12 +257,24 @@ private struct ToolButton: View {
                     .font(.caption2)
             }
             .frame(width: 58, height: 44)
+            .overlay(alignment: .topTrailing) {
+                Text(tool.number)
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+                    .frame(width: 13, height: 13)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .strokeBorder(isSelected ? Color.white.opacity(0.5) : Color.secondary.opacity(0.5), lineWidth: 0.75)
+                    )
+                    .padding(3)
+                    .accessibilityHidden(true)
+            }
             .foregroundStyle(isSelected ? Color.white : Color.primary)
             .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 7))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(tool.title) (\(tool.key.uppercased()))")
+        .help("\(tool.title) (\(tool.number) or \(tool.key.uppercased()))")
         .accessibilityLabel(tool.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
