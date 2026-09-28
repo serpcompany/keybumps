@@ -35,7 +35,7 @@ Report evidence at the level actually established:
 
 A lower level never proves a higher one. In particular, a build does not prove global shortcuts, permissions, window movement, paste, microphone capture, or installed-update replacement.
 
-Keep durable test inputs under `KeybumpsTests/Fixtures`. Keep generated builds, result bundles, screenshots, recordings, and logs out of Git. Record concise, privacy-safe evidence and remaining gates in the owning GitHub issue; never commit user content.
+Tooling, frameworks, and CI placement for each level are decided in [`testing.md`](testing.md). Keep durable test inputs under `KeybumpsTests/Fixtures`. Keep generated builds, result bundles, screenshots, recordings, and logs out of Git. Record concise, privacy-safe evidence and remaining gates in the owning GitHub issue; never commit user content.
 
 ## 3. Prepare a local manual-QA build
 
