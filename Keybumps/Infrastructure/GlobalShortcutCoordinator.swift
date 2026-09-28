@@ -16,14 +16,20 @@ extension ShortcutBinding {
 }
 
 extension ShortcutBinding {
+    /// Modifier symbols in the order shortcuts display them (⌃⌥⇧⌘).
+    static func modifierSymbols(for flags: NSEvent.ModifierFlags) -> String {
+        modifierOrder.filter { flags.contains($0.flag) }.map(\.symbol).joined()
+    }
+
+    private static let modifierOrder: [(flag: NSEvent.ModifierFlags, carbon: Int, symbol: String)] = [
+        (.control, controlKey, "⌃"), (.option, optionKey, "⌥"), (.shift, shiftKey, "⇧"), (.command, cmdKey, "⌘")
+    ]
+
     init?(event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        var carbonModifiers: UInt32 = 0
-        var symbols = ""
-        if flags.contains(.control) { carbonModifiers |= UInt32(controlKey); symbols += "⌃" }
-        if flags.contains(.option) { carbonModifiers |= UInt32(optionKey); symbols += "⌥" }
-        if flags.contains(.shift) { carbonModifiers |= UInt32(shiftKey); symbols += "⇧" }
-        if flags.contains(.command) { carbonModifiers |= UInt32(cmdKey); symbols += "⌘" }
+        let carbonModifiers = Self.modifierOrder.filter { flags.contains($0.flag) }
+            .reduce(UInt32(0)) { $0 | UInt32($1.carbon) }
+        let symbols = Self.modifierSymbols(for: flags)
         guard carbonModifiers != 0 else { return nil }
         let key = Self.keyName(for: event)
         guard !key.isEmpty else { return nil }

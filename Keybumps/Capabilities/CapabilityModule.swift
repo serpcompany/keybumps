@@ -44,7 +44,7 @@ struct CapabilitySettingsPage {
     let section: SettingsSection
     /// The one line under the capability's name at the top of its page.
     let summary: String
-    /// The caption under the enable switch describing what turning the module off releases.
+    /// What turning the module off releases; the tooltip on its toolbar enable switch.
     let disableExplanation: String?
     let content: @MainActor () -> AnyView
 }
