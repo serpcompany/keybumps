@@ -327,7 +327,7 @@ struct QuickSearchSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .quickSearch, shortcut: .quickSearch)
+            CapabilityControl(capability: .quickSearch, shortcuts: [.quickSearch])
             SettingsGroup {
                 LabeledContent {
                     Button("Open") { model.showQuickSearch() }
@@ -343,7 +343,7 @@ struct QuickSearchSettingsView: View {
 struct ClipboardSettingsView: View {
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .clipboardHistory, shortcut: .clipboardHistory)
+            CapabilityControl(capability: .clipboardHistory, shortcuts: [.clipboardHistory])
             SettingsGroup("History") {
                 SettingsNote("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
             }
@@ -356,10 +356,23 @@ struct ScreenshotToolsSettingsView: View {
 
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .screenshotTools)
+            CapabilityControl(
+                capability: .screenshotTools,
+                shortcuts: [.screenshotScreen, .screenshotScreenAndEdit, .screenshotArea]
+            )
             SettingsGroup("Screenshots") {
+                if !model.permissions.screenRecordingGranted {
+                    LabeledContent {
+                        Button("Allow…") { Task { await model.recoverPermission(.screenRecording) } }
+                    } label: {
+                        SettingsRowLabel(
+                            title: "Screen Recording required",
+                            subtitle: "The screenshot hotkeys need Screen Recording access. After allowing it, macOS may ask you to reopen Keybumps."
+                        )
+                    }
+                }
                 status
-                SettingsNote("Screenshots you take with Shift-Command-3, 4, or 5 appear in Clipboard History, ready to paste. Keybumps never captures your screen itself, and the original files stay where macOS saved them.")
+                SettingsNote("Screenshots from these hotkeys, and ones you take with macOS's own ⇧⌘5, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. While Screenshot Tools is on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS's own; turning it off gives them back.")
             }
         }.navigationTitle("Screenshot Tools")
     }
@@ -395,7 +408,7 @@ struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .dictation, shortcut: .dictation)
+            CapabilityControl(capability: .dictation, shortcuts: [.dictation])
             if model.preferences.enabledCapabilities.contains(.dictation),
                !model.missingPermissions(for: .dictation).isEmpty {
                 SettingsGroup("Setup required") {
@@ -1056,7 +1069,7 @@ private struct PermissionWalkthroughView: View {
 /// then its command with the hotkey. The enable switch lives in the toolbar.
 private struct CapabilityControl: View {
     let capability: Capability
-    var shortcut: CapabilityShortcut?
+    var shortcuts: [CapabilityShortcut] = []
 
     var body: some View {
         let descriptor = capability.descriptor
@@ -1066,9 +1079,9 @@ private struct CapabilityControl: View {
             title: descriptor.title,
             summary: descriptor.settingsPage?.summary ?? ""
         )
-        if let shortcut {
+        if !shortcuts.isEmpty {
             SettingsGroup("Commands") {
-                CapabilityShortcutEditor(shortcut: shortcut)
+                ForEach(shortcuts) { CapabilityShortcutEditor(shortcut: $0) }
             }
         }
     }

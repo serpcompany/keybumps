@@ -79,7 +79,18 @@ Acceptance covers ordering, duplicate collapse, exact image restoration, fifty-i
 
 ## Screenshot Tools
 
-User outcome: screenshots taken with the standard macOS shortcuts are immediately available in Clipboard History for pasting and lightweight markup.
+User outcome: screenshots taken with Keybumps' hotkeys or the standard macOS shortcuts are immediately available in Clipboard History for pasting and lightweight markup.
+
+### Capture hotkeys
+
+- Three editable hotkeys, on by default: **Screenshot Screen** (⇧⌘2) saves one file per display; **Screenshot Screen and Edit** (⇧⌘3) does the same and opens the first display's screenshot in the Screenshot Editor; **Screenshot Area** (⇧⌘4) lets the user drag an area, and Escape cancels without a file.
+- Captures use macOS's `screencapture`, are saved to the macOS screenshot location with macOS-style names, and are marked as screen captures so they flow into Clipboard History like any macOS screenshot.
+- Capturing requires Screen Recording. Without it, the hotkey routes to the permission (macOS prompt, then Privacy & Security › Screen Recording) instead of capturing, and Settings shows attention with an Allow action.
+- While a Keybumps hotkey uses the same keys as macOS's "Save picture of screen" (⇧⌘3) or "Save picture of selected area" (⇧⌘4), Keybumps turns that macOS shortcut off in `com.apple.symbolichotkeys` and records that it did. Turning Screenshot Tools off, or moving the hotkey, turns only those recorded shortcuts back on. Shortcuts the owner turned off themselves are never turned on.
+- Existing installs receive the three hotkeys once, unless those keys are already in use; clearing one is respected afterwards.
+
+### Ingestion
+
 
 - Read the macOS screenshot location (`com.apple.screencapture` `location`, default Desktop) without writing system preferences, and follow changes to it.
 - Add only new files macOS marks as screen captures (PNG, JPEG, HEIC, TIFF, GIF) to Clipboard History as screenshot items, after the file finishes writing. Existing files, other images, and other file types are ignored.
@@ -134,7 +145,7 @@ User outcome: record speech, transcribe it locally, and insert it at the origina
 
 Required permissions are Microphone and Speech Recognition, plus Accessibility where focused-field insertion requires it.
 
-Out of scope: automatic per-recording language detection, guide/assistant behavior, screen capture (Screenshot Tools only ingests macOS screenshots), AI rewriting, cloud transcription, meeting or system-audio recording, speaker identification, accounts, and uploaded history.
+Out of scope: automatic per-recording language detection, guide/assistant behavior, screen recording video, scrolling capture, AI rewriting, cloud transcription, meeting or system-audio recording, speaker identification, accounts, and uploaded history.
 
 Acceptance requires successful insertion in a standard text editor and browser field plus cancellation, denied-permission recovery, offline operation, language switching, interruption recovery, retry, and failed-insertion recovery.
 
@@ -184,7 +195,7 @@ One coordinator reports truthful state and recovery for all permissions. Keybump
 | --- | --- |
 | Quick Search | None for ordinary indexed search |
 | Clipboard History | None for ordinary pasteboard monitoring |
-| Screenshot Tools | None; macOS may ask for Files & Folders access to the screenshot folder |
+| Screenshot Tools | Screen Recording for its capture hotkeys; macOS may ask for Files & Folders access to the screenshot folder |
 | Dictation | Microphone, Speech Recognition, conditional Accessibility |
 | Window Manager | Accessibility |
 | Keyboard Shortcutter | Accessibility and Input Monitoring |
@@ -213,6 +224,7 @@ The functional MVP is accepted only when one stable installed Keybumps build dem
 - Option-Space records, transcribes locally, inserts text, and supports Escape cancellation.
 - Every configured Window Manager shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
+- Each Screenshot Tools hotkey captures from another app after granting Screen Recording, ⇧⌘3 opens the editor, and macOS's ⇧⌘3/⇧⌘4 work again when Screenshot Tools is off.
 - A macOS screenshot appears in Clipboard History and the ⌘5 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.
 - Skipped permissions remain recoverable without disabling unrelated capabilities.

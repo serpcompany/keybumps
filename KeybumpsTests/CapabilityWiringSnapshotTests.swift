@@ -274,6 +274,8 @@ final class WiringHarness {
                 inputMonitoringAuthorized: { grants.isGranted(.inputMonitoring) },
                 microphoneAuthorizationStatus: { grants.isGranted(.microphone) ? .authorized : .denied },
                 speechAuthorizationStatus: { grants.isGranted(.speechRecognition) ? .authorized : .denied },
+                screenRecordingAuthorized: { grants.isGranted(.screenRecording) },
+                requestScreenRecording: {},
                 openSettings: { _ in }
             ),
             nativeNotificationCenter: FakeNativeNotificationCenter(granted: true),

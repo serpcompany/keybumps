@@ -44,7 +44,7 @@ _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
 The Command Palette tab label for Keyboard Shortcutter history. Settings and the capability keep the name Keyboard Shortcutter.
 
 **Screenshot Tools**:
-The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipboard History as screenshot items and owns the **Screenshot Editor**. It never captures the screen itself.
+The capability that takes screenshots with its own hotkeys (Shift-Command-2 screens, Shift-Command-3 screens then edit, Shift-Command-4 area), adds screenshots macOS or Keybumps saves to Clipboard History as screenshot items, and owns the **Screenshot Editor**. While its hotkeys use macOS's Shift-Command-3/4, it turns those macOS shortcuts off and gives them back when it stops using them.
 _Avoid_: Screen capture, screenshot app, CleanShot clone
 
 **Screenshots tab**:

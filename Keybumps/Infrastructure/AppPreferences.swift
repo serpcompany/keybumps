@@ -14,6 +14,8 @@ final class AppPreferences {
         static let dictationTranscriptionEngine = "dictationTranscriptionEngine"
         static let didCompleteOnboarding = "didCompleteOnboarding"
         static let capabilityShortcuts = "capabilityShortcuts"
+        static let knownCapabilityShortcuts = "knownCapabilityShortcuts"
+        static let takenOverSystemShortcuts = "takenOverSystemShortcuts"
         static let windowShortcuts = "windowShortcuts"
     }
 
@@ -55,6 +57,11 @@ final class AppPreferences {
         didSet { persistWindowShortcuts() }
     }
 
+    /// macOS symbolic hotkey IDs Keybumps turned off for its screenshot hotkeys, to restore later.
+    var takenOverSystemShortcuts: Set<String> {
+        didSet { defaults.set(takenOverSystemShortcuts.sorted(), forKey: Key.takenOverSystemShortcuts) }
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
@@ -79,14 +86,26 @@ final class AppPreferences {
             .flatMap(DictationTranscriptionEngine.init(rawValue:))
             ?? .appleSpeech
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
+        takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
+        var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
-           let decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {
+           var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {
+            // A shortcut introduced after this install gets its default once, unless those keys
+            // are already taken; the owner's later choices (including clearing it) are kept.
+            let known = (defaults.array(forKey: Key.knownCapabilityShortcuts) as? [String])
+                .map { Set($0.compactMap(CapabilityShortcut.init(rawValue:))) } ?? CapabilityShortcut.originalShortcuts
+            for shortcut in CapabilityShortcut.allCases where !known.contains(shortcut)
+                && !decoded.values.contains(where: { $0.usesSameKeys(as: shortcut.defaultBinding) }) {
+                decoded[shortcut.rawValue] = shortcut.defaultBinding
+                introducedShortcuts = true
+            }
             capabilityShortcuts = decoded
         } else {
             capabilityShortcuts = Dictionary(uniqueKeysWithValues: CapabilityShortcut.allCases.map {
                 ($0.rawValue, $0.defaultBinding)
             })
         }
+        defaults.set(CapabilityShortcut.allCases.map(\.rawValue).sorted(), forKey: Key.knownCapabilityShortcuts)
         if let data = defaults.data(forKey: Key.windowShortcuts),
            let decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {
             windowShortcuts = decoded
@@ -123,6 +142,9 @@ final class AppPreferences {
 
         if (currentChannels == nil && legacyChannels != nil) || channelsWereNormalized {
             persistChannels()
+        }
+        if introducedShortcuts {
+            persistCapabilityShortcuts()
         }
         if defaults.object(forKey: Key.showInDockAndSwitcher) == nil,
            legacyDefaults.contains(where: { $0.object(forKey: Key.showInDockAndSwitcher) != nil }) {

@@ -1692,7 +1692,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         let allCapabilities = Set(Capability.allCases)
         XCTAssertEqual(
             PermissionSetupPlan.requiredPermissions(for: allCapabilities),
-            [.accessibility, .inputMonitoring, .microphone, .speechRecognition]
+            [.accessibility, .inputMonitoring, .microphone, .speechRecognition, .screenRecording]
         )
 
         var granted: Set<MacPermission> = []
@@ -1701,7 +1701,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         }
         XCTAssertEqual(progress.currentPermission, .accessibility)
         XCTAssertEqual(progress.completedCount, 0)
-        XCTAssertEqual(progress.totalCount, 4)
+        XCTAssertEqual(progress.totalCount, 5)
 
         granted.formUnion([.accessibility, .inputMonitoring])
         progress = PermissionSetupPlan.progress(for: allCapabilities) {
@@ -1723,6 +1723,7 @@ final class KeybumpsFeatureTests: XCTestCase {
             PermissionSetupPlan.requiredPermissions(for: [.keyboardShortcutter]),
             [.accessibility, .inputMonitoring]
         )
+        XCTAssertEqual(PermissionSetupPlan.requiredPermissions(for: [.screenshotTools]), [.screenRecording])
 
         granted = Set(MacPermission.allCases)
         progress = PermissionSetupPlan.progress(for: allCapabilities) {
@@ -1730,7 +1731,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         }
         XCTAssertTrue(progress.isComplete)
         XCTAssertNil(progress.currentPermission)
-        XCTAssertEqual(progress.completedCount, 4)
+        XCTAssertEqual(progress.completedCount, 5)
     }
 
     func testSettingsNavigationBackReturnsThroughVisitedScreensWithoutLooping() {

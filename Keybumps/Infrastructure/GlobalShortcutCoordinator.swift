@@ -252,21 +252,32 @@ enum DefaultShortcut {
     static let clipboard = ShortcutBinding(keyCode: UInt32(kVK_Space), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘ Space")
     static let dictation = ShortcutBinding(keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey), displayName: "⌥ Space")
     static let cancelDictation = ShortcutBinding(keyCode: UInt32(kVK_Escape), modifiers: 0, displayName: "Escape")
+    static let screenshotScreen = ShortcutBinding(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘2")
+    static let screenshotScreenAndEdit = ShortcutBinding(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘3")
+    static let screenshotArea = ShortcutBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘4")
 }
 
 enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case quickSearch
     case clipboardHistory
     case dictation
+    case screenshotScreen
+    case screenshotScreenAndEdit
+    case screenshotArea
 
     var id: String { rawValue }
     var ownerID: String { rawValue }
+
+    /// The shortcuts that shipped before per-shortcut introduction tracking. Anything else gets its
+    /// default once when it first ships, as new capabilities are enabled once.
+    static let originalShortcuts: Set<CapabilityShortcut> = [.quickSearch, .clipboardHistory, .dictation]
 
     var capability: Capability {
         switch self {
         case .quickSearch: .quickSearch
         case .clipboardHistory: .clipboardHistory
         case .dictation: .dictation
+        case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea: .screenshotTools
         }
     }
 
@@ -275,6 +286,9 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .quickSearch: "Open Quick Search"
         case .clipboardHistory: "Open Clipboard History"
         case .dictation: "Start or stop Dictation"
+        case .screenshotScreen: "Screenshot Screen"
+        case .screenshotScreenAndEdit: "Screenshot Screen and Edit"
+        case .screenshotArea: "Screenshot Area"
         }
     }
 
@@ -283,6 +297,9 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .quickSearch: DefaultShortcut.quickSearch
         case .clipboardHistory: DefaultShortcut.clipboard
         case .dictation: DefaultShortcut.dictation
+        case .screenshotScreen: DefaultShortcut.screenshotScreen
+        case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
+        case .screenshotArea: DefaultShortcut.screenshotArea
         }
     }
 }
