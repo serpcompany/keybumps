@@ -256,17 +256,7 @@ struct PermissionReadinessSnapshot: Equatable {
 
 enum PermissionSetupPlan {
     static func requiredPermissions(for enabledCapabilities: Set<Capability>) -> [MacPermission] {
-        var required: Set<MacPermission> = []
-        if enabledCapabilities.contains(.dictation) {
-            required.formUnion([.microphone, .speechRecognition])
-        }
-        if enabledCapabilities.contains(.windowManagement) {
-            required.insert(.accessibility)
-        }
-        if enabledCapabilities.contains(.keyboardShortcutter) {
-            required.formUnion([.accessibility, .inputMonitoring])
-        }
-        return MacPermission.allCases.filter(required.contains)
+        CapabilityCatalog.requiredPermissions(for: enabledCapabilities)
     }
 
     static func progress(

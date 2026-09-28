@@ -7,7 +7,21 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Management", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
     var id: String { rawValue }
-    var icon: String { switch self { case .search: "magnifyingglass"; case .clipboard: "clipboard"; case .screenshotTools: "camera.viewfinder"; case .dictation: "waveform"; case .windows: "rectangle.split.2x1"; case .keyboardShortcutter: "keyboard"; case .permissions: "hand.raised"; case .general: "gearshape" } }
+
+    /// Capability pages in registry order, then the fixed shell destinations.
+    static var allCases: [SettingsSection] {
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general]
+    }
+
+    /// The module whose Settings page this is; nil for the shell's Permissions and General.
+    var capability: Capability? {
+        CapabilityCatalog.descriptors.first { $0.settingsPage?.section == self }?.capability
+    }
+
+    var icon: String {
+        if let capability { return capability.systemImage }
+        return self == .permissions ? "hand.raised" : "gearshape"
+    }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -51,15 +65,12 @@ struct SettingsRootView: View {
                 .navigationSplitViewColumnWidth(min: 190, ideal: 220)
         } detail: {
             Group {
-                switch navigation.selection {
-                case .search: QuickSearchSettingsView()
-                case .clipboard: ClipboardSettingsView()
-                case .screenshotTools: ScreenshotToolsSettingsView()
-                case .dictation: DictationSettingsView()
-                case .windows: WindowSettingsView()
-                case .keyboardShortcutter: KeyboardShortcutterSettingsView()
-                case .permissions: PermissionsView()
-                case .general: GeneralView()
+                if let page = navigation.selection.capability?.descriptor.settingsPage {
+                    page.content()
+                } else if navigation.selection == .permissions {
+                    PermissionsView()
+                } else {
+                    GeneralView()
                 }
             }
             .environment(model)
@@ -130,7 +141,7 @@ private struct SettingsSidebarRow: View {
     }
 }
 
-private struct QuickSearchSettingsView: View {
+struct QuickSearchSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         Form {
@@ -144,7 +155,7 @@ private struct QuickSearchSettingsView: View {
     }
 }
 
-private struct ClipboardSettingsView: View {
+struct ClipboardSettingsView: View {
     var body: some View {
         Form {
             CapabilityControl(capability: .clipboardHistory)
@@ -158,7 +169,7 @@ private struct ClipboardSettingsView: View {
     }
 }
 
-private struct ScreenshotToolsSettingsView: View {
+struct ScreenshotToolsSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -204,7 +215,7 @@ private struct ScreenshotToolsSettingsView: View {
     }
 }
 
-private struct DictationSettingsView: View {
+struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         Form {
@@ -340,7 +351,7 @@ private struct DictationTranscriptionEngineRow: View {
     }
 }
 
-private struct WindowSettingsView: View {
+struct WindowSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
 
@@ -520,7 +531,7 @@ private struct WindowActionPreviewView: View {
     }
 }
 
-private struct KeyboardShortcutterSettingsView: View {
+struct KeyboardShortcutterSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -752,8 +763,16 @@ private struct GeneralView: View {
 }
 
 enum OnboardingCapabilityOverview {
-    static let title = "Six capabilities, one app"
-    static var capabilities: [Capability] { Capability.allCases }
+    static var title: String { "\(spelledCount(capabilities.count)) capabilities, one app" }
+    static var capabilities: [CapabilityDescriptor] { CapabilityCatalog.onboardingCards }
+
+    private static func spelledCount(_ count: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .spellOut
+        let words = formatter.string(from: NSNumber(value: count)) ?? String(count)
+        return words.prefix(1).uppercased() + words.dropFirst()
+    }
 }
 
 private struct OnboardingView: View {
@@ -909,14 +928,7 @@ private struct CapabilityControl: View {
     }
 
     private var disableExplanation: String? {
-        switch capability {
-        case .quickSearch: "Turning this off closes Quick Search and releases its global shortcut."
-        case .clipboardHistory: "Turning this off stops clipboard monitoring, closes its panel, and releases its global shortcut."
-        case .dictation: "Turning this off cancels active Dictation and releases its global shortcut."
-        case .windowManagement: "Turning this off stops drag-to-snap and releases all window shortcuts."
-        case .keyboardShortcutter: nil
-        case .screenshotTools: "Turning this off stops adding new screenshots to Clipboard History. Screenshots already there stay until removed."
-        }
+        capability.descriptor.settingsPage?.disableExplanation
     }
 }
 
