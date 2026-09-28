@@ -12,74 +12,29 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .search: "Search"
-        case .clipboard: "Clipboard"
-        case .dictation: "Dictation"
-        case .keyboardShortcutter: "Hotkeys"
-        case .screenshots: "Screenshots"
-        }
-    }
+    /// Tabs in Command-number order, as their owning modules register them.
+    static var allCases: [CommandPaletteTab] { CapabilityCatalog.paletteTabs.map(\.tab) }
 
-    var systemImage: String {
-        switch self {
-        case .search: "magnifyingglass"
-        case .clipboard: "clipboard"
-        case .dictation: "waveform"
-        case .keyboardShortcutter: "keyboard"
-        case .screenshots: "camera.viewfinder"
-        }
-    }
-
-    var shortcutLabel: String {
-        switch self {
-        case .search: "⌘1"
-        case .clipboard: "⌘2"
-        case .dictation: "⌘3"
-        case .keyboardShortcutter: "⌘4"
-        case .screenshots: "⌘5"
-        }
-    }
-
-    var prompt: String {
-        switch self {
-        case .search: "Search apps, files, and folders"
-        case .clipboard: "Search clipboard history"
-        case .dictation: "Search dictation history"
-        case .keyboardShortcutter: "Search hotkeys"
-        case .screenshots: "Search screenshots"
-        }
-    }
+    private var registration: CapabilityPaletteTab { CapabilityCatalog.paletteTab(for: self).tab }
+    /// The module that owns the tab.
+    var owner: Capability { CapabilityCatalog.paletteTab(for: self).owner }
+    var title: String { registration.name }
+    var systemImage: String { registration.systemImage }
+    var shortcutLabel: String { "⌘\(registration.commandKey)" }
+    var prompt: String { registration.prompt }
 
     static func matchingCommandKey(_ characters: String?) -> CommandPaletteTab? {
-        switch characters {
-        case "1": .search
-        case "2": .clipboard
-        case "3": .dictation
-        case "4": .keyboardShortcutter
-        case "5": .screenshots
-        default: nil
-        }
+        allCases.first { characters == String($0.registration.commandKey) }
     }
 
     var labelPresentation: CommandPaletteTabLabel {
         CommandPaletteTabLabel(shortcut: shortcutLabel, name: title)
     }
 
-    var primaryActionTitle: String? {
-        switch self {
-        case .search: "Open"
-        case .clipboard, .dictation: "Copy"
-        case .keyboardShortcutter: nil
-        case .screenshots: "Edit"
-        }
-    }
+    var primaryActionTitle: String? { registration.primaryActionTitle }
 
     /// Shown in the footer after the primary action.
-    var secondaryActionTitle: String? {
-        self == .screenshots ? "Copy" : nil
-    }
+    var secondaryActionTitle: String? { registration.secondaryActionTitle }
 }
 
 /// What the Screenshots tab shows: only screen captures from Clipboard History.

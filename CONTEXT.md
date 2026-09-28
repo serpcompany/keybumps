@@ -8,6 +8,10 @@ Keybumps is one installed native macOS companion with six independently enabled 
 A user-enabled area providing one coherent outcome. Disabling it stops the resources and shortcuts it owns.
 _Avoid_: Mini-app, embedded app
 
+**Capability Module**:
+The first-party unit that implements one Capability and is registered with the app shell: a descriptor (names, icon, required permissions, dependencies, optional Command Palette tab, Settings page, onboarding card, and update-safety operations) plus the runtime owner of its resources and shortcuts. Internal only; not an extension point.
+_Avoid_: Plugin, extension, mini-app
+
 **Command Palette**:
 The single floating, keyboard-first surface with Search, Clipboard, Dictation, Hotkeys, and Screenshots tabs.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone

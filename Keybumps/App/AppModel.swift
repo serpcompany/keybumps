@@ -21,14 +21,6 @@ enum DictationShortcutRouting {
     }
 }
 
-enum DictationEscapeRegistration {
-    static let ownerID = "dictation.cancel"
-
-    static func shouldRegister(for phase: DictationPhase) -> Bool {
-        phase == .recording || phase == .transcribing
-    }
-}
-
 @MainActor @Observable
 final class AppModel {
     let releaseLane = ReleaseLane.current
@@ -38,7 +30,6 @@ final class AppModel {
     let permissions: PermissionCoordinator
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
-    private let screenshotEditor: ScreenshotEditorPresenter
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
     let windows: WindowManagementService
@@ -54,9 +45,9 @@ final class AppModel {
     private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
     let commandPalette: CommandPaletteController
+    let capabilities: CapabilityRegistry
     private let transcriptionCoordinator: DictationTranscriptionCoordinator
     private let permissionDragAssistant = PermissionDragAssistantController()
-    private let dictationIndicator: DictationIndicatorController
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
     @ObservationIgnored private var presentedWalkthroughPermission: MacPermission?
     @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
@@ -161,7 +152,6 @@ final class AppModel {
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
         self.windows = injectedWindows ?? WindowManagementService()
-        self.dictationIndicator = injectedDictationIndicator ?? DictationIndicatorController()
         // Only the production composition reads the real screenshot folder; injected models stay inert.
         screenshotTools = injectedScreenshotTools ?? ScreenshotToolsService(
             reader: screenshotDirectoryReader ?? UnavailableScreenshotDirectoryReader(),
@@ -191,13 +181,6 @@ final class AppModel {
             didWritePasteboard: clipboard.suppressCurrentChange,
             allowsSystemAccess: allowsDictationSystemAccess
         )
-        screenshotEditor = ScreenshotEditorPresenter(
-            fallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
-            editingChanged: { isEditing in
-                updateSafetyPolicy.updateCriticalOperation(.unsavedWork, active: isEditing)
-                updater.installationSafetyDidChange()
-            }
-        )
         commandPalette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -205,23 +188,34 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
+        let dictationModule = DictationModule(
+            dictation: dictation,
+            indicator: injectedDictationIndicator ?? DictationIndicatorController(),
+            shortcuts: shortcuts,
+            updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .dictation)
+        )
+        capabilities = CapabilityRegistry(modules: [
+            QuickSearchModule(palette: commandPalette),
+            ClipboardHistoryModule(clipboard: clipboard, palette: commandPalette),
+            ScreenshotToolsModule(
+                service: screenshotTools,
+                palette: commandPalette,
+                editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
+                updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
+            ),
+            dictationModule,
+            WindowManagementModule(
+                windows: windows,
+                updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
+            ),
+            KeyboardShortcutterModule(detector: detector, presenter: presenter)
+        ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
-        dictation.onPhaseChange = { [weak self] phase in
-            guard let self else { return }
-            self.dictationIndicator.update(phase)
-            self.updateDictationEscapeRegistration(for: phase)
-            self.updateSafetyPolicy.update(dictationPhase: phase)
-            self.updater.installationSafetyDidChange()
-        }
+        dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
-        windows.onDragActivityChange = { [weak self] isActive in
-            guard let self else { return }
-            self.updateSafetyPolicy.updateCriticalOperation(.windowDrag, active: isActive)
-            self.updater.installationSafetyDidChange()
-        }
         refreshDetectorState()
     }
 
@@ -287,47 +281,25 @@ final class AppModel {
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
-        if !enabled { deactivate(capability) }
+        if !enabled { capabilities.deactivate(capability, context: capabilityContext) }
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
     }
 
+    /// What every capability module receives when the shell applies, deactivates, or refreshes it.
+    var capabilityContext: CapabilityContext {
+        CapabilityContext(
+            enabledCapabilities: preferences.enabledCapabilities,
+            preferences: preferences,
+            shortcuts: shortcuts,
+            permissions: permissions,
+            permissionReadiness: { self.permissionReadiness(for: $0) }
+        )
+    }
+
     func applyCapabilities() {
-        let enabled = preferences.enabledCapabilities
-        configure(owner: CapabilityShortcut.quickSearch.ownerID, capability: .quickSearch, binding: preferences.capabilityShortcut(for: .quickSearch)) { [weak self] in self?.commandPalette.toggle(.search) }
-        configure(owner: CapabilityShortcut.clipboardHistory.ownerID, capability: .clipboardHistory, binding: preferences.capabilityShortcut(for: .clipboardHistory)) { [weak self] in self?.commandPalette.toggle(.clipboard) }
-        configure(owner: CapabilityShortcut.dictation.ownerID, capability: .dictation, binding: preferences.capabilityShortcut(for: .dictation)) { [weak self] in self?.handleDictationShortcut() }
-        for action in WindowAction.allCases {
-            let owner = "window.\(action.rawValue)"
-            configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
-        }
-        enabled.contains(.clipboardHistory) ? clipboard.start() : clipboard.stop()
-        screenshotTools.apply(
-            enabled: enabled.contains(.screenshotTools),
-            clipboardHistoryEnabled: enabled.contains(.clipboardHistory)
-        )
-        commandPalette.editImage = enabled.contains(.screenshotTools)
-            ? { [weak self] entry in self?.screenshotEditor.edit(entry) ?? false }
-            : nil
-        enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
-        enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
+        capabilities.apply(capabilityContext)
         refreshDetectorState()
-    }
-
-    private func performWindowAction(_ action: WindowAction) {
-        updateSafetyPolicy.performSynchronousCriticalOperation(
-            .windowAction,
-            notify: updater.installationSafetyDidChange,
-            operation: { windows.perform(action) }
-        )
-    }
-
-    private func configure(owner: String, capability: Capability, binding: ShortcutBinding?, handler: @escaping () -> Void) {
-        guard preferences.enabledCapabilities.contains(capability), let binding else {
-            shortcuts.unregister(owner: owner)
-            return
-        }
-        shortcuts.register(owner: owner, binding: binding, handler: handler)
     }
 
     private func handleDictationShortcut() {
@@ -343,19 +315,6 @@ final class AppModel {
             }
         case .toggleDictation:
             dictation.toggle()
-        }
-    }
-
-    private func updateDictationEscapeRegistration(for phase: DictationPhase) {
-        guard DictationEscapeRegistration.shouldRegister(for: phase) else {
-            shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
-            return
-        }
-        shortcuts.register(
-            owner: DictationEscapeRegistration.ownerID,
-            binding: DefaultShortcut.cancelDictation
-        ) { [weak self] in
-            self?.dictation.cancel()
         }
     }
 
@@ -450,12 +409,7 @@ final class AppModel {
         permissionsRequiringRelaunch = permissionRelaunchAdvisor.permissionsRequiringRelaunch
         permissionDragAssistant.dismissIfGranted(using: permissions)
         advancePermissionWalkthroughIfNeeded()
-        if preferences.enabledCapabilities.contains(.keyboardShortcutter), detector.status != .monitoring {
-            detector.start()
-        }
-        if preferences.enabledCapabilities.contains(.windowManagement), permissions.accessibilityGranted {
-            windows.startDragSnapping()
-        }
+        capabilities.permissionsDidRefresh(capabilityContext)
         refreshDetectorState()
         updateMissingPermissionBadge()
     }
@@ -641,27 +595,6 @@ final class AppModel {
 
     private func updateMissingPermissionBadge() {
         NSApplication.shared.dockTile.badgeLabel = missingPermissionCount > 0 ? "!" : nil
-    }
-
-    private func deactivate(_ capability: Capability) {
-        switch capability {
-        case .quickSearch:
-            commandPalette.dismiss(ifDisplaying: .search)
-        case .clipboardHistory:
-            commandPalette.dismiss(ifDisplaying: .clipboard)
-            clipboard.stop()
-        case .dictation:
-            dictation.cancel()
-            shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
-        case .windowManagement:
-            windows.stop()
-        case .keyboardShortcutter:
-            detector.stop()
-            presenter.dismissAll()
-        case .screenshotTools:
-            screenshotTools.stop()
-            screenshotEditor.close()
-        }
     }
 
 }
