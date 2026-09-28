@@ -273,6 +273,9 @@ final class ScreenshotEditorCanvasView: NSView, NSTextFieldDelegate {
         self.model = model
         self.renderer = renderer
         super.init(frame: .zero)
+        // macOS 14 no longer clips views by default, and dirty rects can extend past
+        // bounds; without this the canvas background painted over the toolbar.
+        clipsToBounds = true
     }
 
     @available(*, unavailable)
@@ -307,7 +310,7 @@ final class ScreenshotEditorCanvasView: NSView, NSTextFieldDelegate {
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.setFill()
-        dirtyRect.fill()
+        bounds.intersection(dirtyRect).fill()
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let rect = imageRect
         ctx.saveGState()

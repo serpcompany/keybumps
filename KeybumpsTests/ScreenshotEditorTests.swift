@@ -173,6 +173,30 @@ final class ScreenshotEditorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(controller.window?.minSize.width ?? 0, ScreenshotEditorWindowController.minimumWidth)
     }
 
+    func testToolbarIsNotPaintedOverByTheCanvas() throws {
+        let source = ScreenshotRenderSource(cgImage: try solid(width: 1200, height: 700, gray: 245), pointSize: CGSize(width: 600, height: 350))
+        let controller = ScreenshotEditorWindowController(source: source, sourceURL: nil, fallbackFolder: FileManager.default.temporaryDirectory)
+        let window = try XCTUnwrap(controller.window)
+        window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        let root = try XCTUnwrap(window.contentView)
+        let rep = try XCTUnwrap(root.bitmapImageRepForCachingDisplay(in: root.bounds))
+        root.cacheDisplay(in: root.bounds, to: rep)
+
+        // The toolbar band must contain drawn controls, not one flat background color.
+        var colors: Set<UInt32> = []
+        let bandHeight = Int(ScreenshotEditorWindowController.toolbarHeight * CGFloat(rep.pixelsHigh) / root.bounds.height)
+        for y in stride(from: 4, to: bandHeight - 4, by: 3) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 3) {
+                guard let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                colors.insert(UInt32(color.redComponent * 255) << 16 | UInt32(color.greenComponent * 255) << 8 | UInt32(color.blueComponent * 255))
+            }
+        }
+        XCTAssertGreaterThan(colors.count, 20, "toolbar band is blank; the canvas painted over it")
+    }
+
     // MARK: Helpers
 
     private struct Pixels: Equatable {
