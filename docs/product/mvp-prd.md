@@ -167,7 +167,7 @@ User outcome: passively recognize supported manual actions and present the corre
 
 - Detect the supported menu, Chrome, standard-window-control, and Finder-to-Trash actions.
 - Persist one durable event per verified action with unread state and searchable history.
-- Keep Command Palette history passive aside from explicit confirmed Clear All.
+- Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘4); Settings keeps the Keyboard Shortcutter name.
 - Deliver through Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound.
 - Preview through the same production delivery adapters without writing a history event.
 - Custom presentations share close, Escape, horizontal-trackpad-scroll, hover-pause, and dismissal behavior.
@@ -197,7 +197,7 @@ One coordinator reports truthful state and recovery for all permissions. Keybump
 | Window Management | Accessibility |
 | Keyboard Shortcutter | Accessibility and Input Monitoring |
 
-Accessibility and Input Monitoring use silent preflight, exact System Settings navigation, and the app-owned helper. Microphone and Speech Recognition use their required native prompts. Returning to Keybumps refreshes state and advances the guided flow when access is granted.
+Accessibility and Input Monitoring use silent preflight, exact System Settings navigation, and the app-owned helper. Microphone and Speech Recognition use their required native prompts only before the first decision; once denied or restricted they recover through their exact System Settings pane, because macOS will not prompt again. Changing Microphone access in System Settings restarts Keybumps, which then reports the new state. Returning to Keybumps refreshes state and advances the guided flow when access is granted.
 
 ### Privacy and storage
 
