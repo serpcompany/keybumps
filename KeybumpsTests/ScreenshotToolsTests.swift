@@ -171,6 +171,57 @@ final class ScreenshotToolsTests: XCTestCase {
         XCTAssertTrue(service.entries.isEmpty)
     }
 
+    func testFinderImageFileCopyStoresTheRealImageNotItsIcon() throws {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsFileCopy-\(UUID().uuidString)"))
+        let service = ClipboardHistoryService(
+            storageURL: root.appendingPathComponent("history.json"),
+            pasteboard: pasteboard,
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true)
+        )
+        let file = root.appendingPathComponent("Design mock.png")
+        try png.write(to: file)
+        let icon = try XCTUnwrap(NSWorkspace.shared.icon(forFile: file.path).tiffRepresentation)
+
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file as NSURL])
+        pasteboard.setData(icon, forType: .tiff)
+        service.pollForTesting()
+
+        let entry = try XCTUnwrap(service.entries.first)
+        XCTAssertEqual(service.entries.count, 1)
+        XCTAssertEqual(entry.kind, .image)
+        XCTAssertFalse(entry.isScreenshot)
+        XCTAssertEqual(entry.kindLabel, "Image")
+        XCTAssertEqual(entry.displayText, "Design mock")
+        XCTAssertEqual(entry.sourceURL, file, "the editor saves its edited copy beside the copied file")
+        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(entry.imageURL)), png, "stores the file's pixels, not Finder's icon")
+    }
+
+    func testFinderNonImageFileCopyIsIgnored() throws {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsFileCopyText-\(UUID().uuidString)"))
+        let service = ClipboardHistoryService(
+            storageURL: root.appendingPathComponent("history.json"),
+            pasteboard: pasteboard,
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true)
+        )
+        let file = root.appendingPathComponent("notes.pdf")
+        try Data("pdf".utf8).write(to: file)
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file as NSURL])
+        pasteboard.setData(try XCTUnwrap(NSWorkspace.shared.icon(forFile: file.path).tiffRepresentation), forType: .tiff)
+        pasteboard.setString("notes.pdf", forType: .string)
+        service.pollForTesting()
+        XCTAssertTrue(service.entries.isEmpty)
+    }
+
+    func testEarlierScreenshotItemsStayLabelledAsScreenshots() throws {
+        let json = #"[{"id":"\#(UUID().uuidString)","text":"","capturedAt":0,"kind":"image","mediaPath":"/tmp/a.png","mediaPasteboardType":"public.png","sourcePath":"/Users/x/Desktop/Screenshot.png"}]"#
+        let storageURL = root.appendingPathComponent("legacy.json")
+        try Data(json.utf8).write(to: storageURL)
+        let entry = try XCTUnwrap(ClipboardHistoryService(storageURL: storageURL, mediaDirectoryURL: root.appendingPathComponent("m", isDirectory: true)).entries.first)
+        XCTAssertTrue(entry.isScreenshot)
+    }
+
     func testCopiedImagesKeepTheirExistingLabels() {
         let copied = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: "/tmp/x.png", mediaPasteboardType: "public.png")
         XCTAssertFalse(copied.isScreenshot)

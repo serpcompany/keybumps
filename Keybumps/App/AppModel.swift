@@ -155,7 +155,7 @@ final class AppModel {
         // Only the production composition reads the real screenshot folder; injected models stay inert.
         screenshotTools = ScreenshotToolsService(
             reader: screenshotDirectoryReader ?? UnavailableScreenshotDirectoryReader(),
-            ingest: { clipboard.ingestImageFile(at: $0) }
+            ingest: { clipboard.ingestImageFile(at: $0, isScreenCapture: true) }
         )
         self.dictationHistory = dictationHistory
         let dictationModelManager = injectedDictationModelManager ?? DictationModelManager(

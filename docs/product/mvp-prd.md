@@ -72,6 +72,7 @@ User outcome: recover and reuse the fifty most recent copied text or image items
 
 - The default shortcut is Shift-Command-Space and is recordable, clearable, and restorable.
 - Capture text and PNG, JPEG, HEIC, GIF, and TIFF changes while enabled.
+- When an image file (PNG, JPEG, HEIC, GIF, TIFF) is copied in Finder, store the file's image and remember its location; never store the file icon Finder places on the pasteboard. Other copied files add nothing.
 - Persist at most fifty items locally. Store image payloads as separate files capped at 50 MB each rather than embedding them in JSON.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the pasteboard and pastes into the focused destination when safe.

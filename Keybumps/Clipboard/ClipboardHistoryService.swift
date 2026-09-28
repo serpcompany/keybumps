@@ -13,8 +13,10 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let mediaPath: String?
     let mediaPasteboardType: String?
     let fingerprint: String?
-    /// Original screenshot file for items ingested by Screenshot Tools; nil for pasteboard copies.
+    /// Original file for screenshots and copied image files; nil for image data copied from apps.
     let sourcePath: String?
+    /// True only for files macOS marked as screen captures (ingested by Screenshot Tools).
+    let isScreenCapture: Bool
 
     init(
         id: UUID,
@@ -24,7 +26,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         mediaPath: String? = nil,
         mediaPasteboardType: String? = nil,
         fingerprint: String? = nil,
-        sourcePath: String? = nil
+        sourcePath: String? = nil,
+        isScreenCapture: Bool = false
     ) {
         self.id = id
         self.text = text
@@ -34,9 +37,10 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         self.mediaPasteboardType = mediaPasteboardType
         self.fingerprint = fingerprint
         self.sourcePath = sourcePath
+        self.isScreenCapture = isScreenCapture
     }
 
-    var isScreenshot: Bool { kind == .image && sourcePath != nil }
+    var isScreenshot: Bool { kind == .image && isScreenCapture }
     var kindLabel: String { kind == .text ? "Text" : (isScreenshot ? "Screenshot" : "Image") }
     var displayText: String {
         switch kind {
@@ -50,7 +54,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     var contentKey: String { fingerprint ?? "text:\(text)" }
 
     private enum CodingKeys: String, CodingKey {
-        case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint, sourcePath
+        case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint, sourcePath, isScreenCapture
     }
 
     init(from decoder: Decoder) throws {
@@ -63,6 +67,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         mediaPasteboardType = try container.decodeIfPresent(String.self, forKey: .mediaPasteboardType)
         fingerprint = try container.decodeIfPresent(String.self, forKey: .fingerprint)
         sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath)
+        // Items written before copied files were supported only had a source when they were screenshots.
+        isScreenCapture = try container.decodeIfPresent(Bool.self, forKey: .isScreenCapture) ?? (sourcePath != nil)
     }
 }
 
@@ -145,9 +151,9 @@ final class ClipboardHistoryService {
 
     /// Adds a screenshot file as an image item without touching the pasteboard.
     @discardableResult
-    func ingestImageFile(at url: URL) -> Bool {
+    func ingestImageFile(at url: URL, isScreenCapture: Bool = true) -> Bool {
         guard let payload = ClipboardImagePayload.read(fileAt: url) else { return false }
-        return ingestImage(payload, sourcePath: url.path)
+        return ingestImage(payload, sourcePath: url.path, isScreenCapture: isScreenCapture)
     }
 
     func ingestForTesting(_ text: String) { ingestText(text) }
@@ -163,6 +169,16 @@ final class ClipboardHistoryService {
             return
         }
         suppressedChangeCount = nil
+
+        // Finder file copies also carry a TIFF of the file's icon; never store that.
+        // Keep the first copied image file's real contents and ignore other files.
+        let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        if !fileURLs.isEmpty {
+            if let imageFile = fileURLs.first(where: ClipboardImagePayload.isSupportedImageFile) {
+                ingestImageFile(at: imageFile, isScreenCapture: false)
+            }
+            return
+        }
 
         if let image = ClipboardImagePayload.read(from: pasteboard) {
             ingestImage(image)
@@ -182,7 +198,7 @@ final class ClipboardHistoryService {
     }
 
     @discardableResult
-    private func ingestImage(_ payload: ClipboardImagePayload, sourcePath: String? = nil) -> Bool {
+    private func ingestImage(_ payload: ClipboardImagePayload, sourcePath: String? = nil, isScreenCapture: Bool = false) -> Bool {
         guard payload.data.count <= Self.maximumImageBytes else { return false }
         let fingerprint = "image:" + SHA256.hash(data: payload.data)
             .map { String(format: "%02x", $0) }
@@ -201,7 +217,8 @@ final class ClipboardHistoryService {
                 mediaPath: mediaURL.path,
                 mediaPasteboardType: payload.type.rawValue,
                 fingerprint: fingerprint,
-                sourcePath: sourcePath
+                sourcePath: sourcePath,
+                isScreenCapture: isScreenCapture
             ))
             return true
         } catch {
@@ -249,6 +266,11 @@ private struct ClipboardImagePayload {
             }
         }
         return nil
+    }
+
+    static func isSupportedImageFile(_ url: URL) -> Bool {
+        let fileExtension = url.pathExtension.lowercased()
+        return candidates.contains { $0.fileExtensions.contains(fileExtension) }
     }
 
     static func read(fileAt url: URL) -> ClipboardImagePayload? {
