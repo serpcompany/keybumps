@@ -59,7 +59,7 @@ struct CapabilityModuleTests {
         }
         #expect(SettingsSection.permissions.capability == nil)
         #expect(SettingsSection.general.capability == nil)
-        #expect(Array(SettingsSection.allCases.suffix(2)) == [.permissions, .general])
+        #expect(Array(SettingsSection.allCases.suffix(3)) == [.permissions, .general, .account])
     }
 
     @Test("Only the modules that own critical operations declare them")

@@ -10,7 +10,8 @@ struct SettingsSidebarTests {
             [.general, .permissions],
             [.clipboard, .dictation, .keyboardShortcutter, .search, .screenshotTools, .windows]
         ])
-        #expect(Set(groups.flatMap { $0 }) == Set(SettingsSection.allCases))
+        // The account row sits above the groups, as in Raycast.
+        #expect(Set(groups.flatMap { $0 }) == Set(SettingsSection.allCases).subtracting([.account]))
     }
 
     @Test("Search filters pages by name and drops empty groups")

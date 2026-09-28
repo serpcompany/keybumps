@@ -3,11 +3,11 @@ import SwiftUI
 
 /// Colors and metrics copied from Raycast's Settings window (dark), with light equivalents.
 enum SettingsTheme {
-    static let pageBackground = Color(light: gray(0.96), dark: gray(0.086))
-    static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.106))
-    static let card = Color(light: .white, dark: gray(0.118))
-    static let control = Color(light: gray(0.9), dark: gray(0.173))
-    static let field = Color(light: gray(0.9), dark: gray(0.137))
+    static let pageBackground = Color(light: gray(0.96), dark: gray(0.059))
+    static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.075))
+    static let card = Color(light: .white, dark: gray(0.09))
+    static let control = Color(light: gray(0.9), dark: gray(0.15))
+    static let field = Color(light: gray(0.9), dark: gray(0.1))
     static let separator = Color.primary.opacity(0.07)
     static let selection = Color.primary.opacity(0.08)
 

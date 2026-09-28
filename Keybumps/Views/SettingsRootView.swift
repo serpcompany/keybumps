@@ -6,11 +6,12 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Management", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
+    case account = "Account"
     var id: String { rawValue }
 
     /// Capability pages in registry order, then the fixed shell destinations.
     static var allCases: [SettingsSection] {
-        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general]
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general, .account]
     }
 
     /// The module whose Settings page this is; nil for the shell's Permissions and General.
@@ -20,7 +21,11 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var icon: String {
         if let capability { return capability.systemImage }
-        return self == .permissions ? "hand.raised" : "gearshape"
+        switch self {
+        case .permissions: return "hand.raised"
+        case .account: return "person.crop.circle"
+        default: return "gearshape"
+        }
     }
 
     var iconTint: Color { capability?.descriptor.iconTint ?? .gray }
@@ -69,15 +74,15 @@ extension View {
     }
 }
 
-/// The Settings sidebar, modeled on Raycast's: the app's own pages first, then one row per
-/// capability module in alphabetical order, filtered by the search field.
+/// The Settings sidebar, modeled on Raycast's: the account row on top (outside these groups), the
+/// app's own pages, then one row per capability module in alphabetical order, filtered by search.
 enum SettingsSidebar {
     static func groups(matching query: String) -> [[SettingsSection]] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches: (SettingsSection) -> Bool = {
             trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
         }
-        let app = SettingsSection.allCases.filter { $0.capability == nil && matches($0) }
+        let app = SettingsSection.allCases.filter { $0.capability == nil && $0 != .account && matches($0) }
             .sorted { $0 == .general && $1 != .general }
         let capabilities = SettingsSection.allCases.filter { $0.capability != nil && matches($0) }
             .sorted { $0.rawValue.localizedStandardCompare($1.rawValue) == .orderedAscending }
@@ -98,6 +103,12 @@ struct SettingsRootView: View {
                 SettingsSearchField(text: $query)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        if query.trimmingCharacters(in: .whitespaces).isEmpty {
+                            SettingsAccountRow(isSelected: navigation.selection == .account) {
+                                navigation.navigate(to: .account)
+                            }
+                            .accessibilityIdentifier("settings.sidebar.account")
+                        }
                         ForEach(SettingsSidebar.groups(matching: query), id: \.self) { group in
                             VStack(spacing: 2) {
                                 ForEach(group) { section in
@@ -128,6 +139,8 @@ struct SettingsRootView: View {
                     page.content()
                 } else if navigation.selection == .permissions {
                     PermissionsView()
+                } else if navigation.selection == .account {
+                    AccountView()
                 } else {
                     GeneralView()
                 }
@@ -218,6 +231,89 @@ private struct SettingsSidebarRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// The Mac user's name and initials; Keybumps has no account service.
+enum SettingsAccount {
+    static var name: String {
+        let name = NSFullUserName()
+        return name.isEmpty ? NSUserName() : name
+    }
+
+    static var initials: String {
+        let parts = name.split(separator: " ").prefix(2)
+        return parts.compactMap(\.first).map(String.init).joined().uppercased()
+    }
+}
+
+private struct SettingsAvatar: View {
+    let size: CGFloat
+
+    var body: some View {
+        Text(SettingsAccount.initials)
+            .font(.system(size: size * 0.38, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Color.gray.gradient, in: Circle())
+    }
+}
+
+private struct SettingsAccountRow: View {
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 10) {
+                SettingsAvatar(size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(SettingsAccount.name)
+                        .font(.system(size: SettingsTheme.sidebarTextSize, weight: .medium))
+                        .lineLimit(1)
+                    Text("Account")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                isSelected ? SettingsTheme.selection : .clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct AccountView: View {
+    var body: some View {
+        SettingsPage {
+            VStack(spacing: 8) {
+                SettingsAvatar(size: 88)
+                    .padding(.bottom, 6)
+                Text(SettingsAccount.name)
+                    .font(.system(size: 20, weight: .semibold))
+                Text("Signed in on this Mac")
+                    .font(.system(size: SettingsTheme.titleSize))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 28)
+            .padding(.bottom, 12)
+            SettingsGroup("License") {
+                SettingsRowLabel(
+                    title: "Local Preview",
+                    subtitle: "Purchasing and license activation are not part of this local preview."
+                )
+            }
+        }
+        .navigationTitle("Account")
     }
 }
 
