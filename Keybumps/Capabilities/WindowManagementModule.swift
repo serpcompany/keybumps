@@ -3,7 +3,7 @@ import SwiftUI
 extension CapabilityDescriptor {
     static let windowManagement = CapabilityDescriptor(
         capability: .windowManagement,
-        title: "Window Management",
+        title: "Window Manager",
         systemImage: "rectangle.split.2x1",
         iconTint: .teal,
         requiredPermissions: [.accessibility],

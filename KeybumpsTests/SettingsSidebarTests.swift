@@ -3,12 +3,12 @@ import Testing
 
 @Suite("Settings sidebar")
 struct SettingsSidebarTests {
-    @Test("App pages come first, then capabilities alphabetically, as in Raycast's Settings")
-    func groupsAppPagesThenCapabilitiesAlphabetically() {
+    @Test("App pages come first, then Quick Search and the other capabilities alphabetically")
+    func groupsAppPagesThenCapabilities() {
         let groups = SettingsSidebar.groups(matching: "")
         #expect(groups == [
             [.general, .permissions],
-            [.clipboard, .dictation, .keyboardShortcutter, .search, .screenshotTools, .windows]
+            [.search, .clipboard, .dictation, .keyboardShortcutter, .screenshotTools, .windows]
         ])
         // The account row sits above the groups, as in Raycast.
         #expect(Set(groups.flatMap { $0 }) == Set(SettingsSection.allCases).subtracting([.account]))

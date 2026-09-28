@@ -32,9 +32,9 @@ _Avoid_: Voice guide, assistant
 The local per-recording archive of completed Dictation transcripts and playable audio, shown in its dedicated History screen and exposed for transcript reuse in the Command Palette.
 _Avoid_: Cloud transcript, monolithic history file
 
-**Window Management**:
+**Window Manager**:
 Rectangle-derived window movement and sizing under the owner's selected shortcuts.
-_Avoid_: Rectangle app
+_Avoid_: Rectangle app, Window Management
 
 **Keyboard Shortcutter**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.

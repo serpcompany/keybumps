@@ -7,7 +7,7 @@ Keybumps is one native macOS companion with six independently enabled capabiliti
 1. Quick Search
 2. Clipboard History
 3. Dictation
-4. Window Management
+4. Window Manager
 5. Keyboard Shortcutter
 6. Screenshot Tools
 
@@ -18,7 +18,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 ## Application shell
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
-- Settings contains Setup, Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General destinations.
+- Settings contains Setup, Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Keyboard Shortcutter, Permissions, and General destinations.
 - Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed.
 - Clicking the Dock icon opens Quick Search.
 - The menu-bar menu contains Toggle Keybumps, version/build information, Settings, Check for Updates, and Quit Keybumps.
@@ -138,7 +138,7 @@ Out of scope: automatic per-recording language detection, guide/assistant behavi
 
 Acceptance requires successful insertion in a standard text editor and browser field plus cancellation, denied-permission recovery, offline operation, language switching, interruption recovery, retry, and failed-insertion recovery.
 
-## Window Management
+## Window Manager
 
 User outcome: move and resize windows with the configured shortcut profile and drag-to-snap.
 
@@ -186,7 +186,7 @@ One coordinator reports truthful state and recovery for all permissions. Keybump
 | Clipboard History | None for ordinary pasteboard monitoring |
 | Screenshot Tools | None; macOS may ask for Files & Folders access to the screenshot folder |
 | Dictation | Microphone, Speech Recognition, conditional Accessibility |
-| Window Management | Accessibility |
+| Window Manager | Accessibility |
 | Keyboard Shortcutter | Accessibility and Input Monitoring |
 
 Accessibility and Input Monitoring use silent preflight, exact System Settings navigation, and the app-owned helper. Microphone and Speech Recognition use their required native prompts only before the first decision; once denied or restricted they recover through their exact System Settings pane, because macOS will not prompt again. Changing Microphone access in System Settings restarts Keybumps, which then reports the new state. Returning to Keybumps refreshes state and advances the guided flow when access is granted.
@@ -211,7 +211,7 @@ The functional MVP is accepted only when one stable installed Keybumps build dem
 - Command-Space opens Quick Search and successfully opens apps, files, and folders.
 - Shift-Command-Space recalls bounded text and image history and restores the chosen item to the clipboard.
 - Option-Space records, transcribes locally, inserts text, and supports Escape cancellation.
-- Every configured Window Management shortcut and supported drag region works.
+- Every configured Window Manager shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
 - A macOS screenshot appears in Clipboard History and the ⌘5 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.

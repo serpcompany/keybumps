@@ -15,7 +15,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
 
@@ -73,7 +73,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]"
@@ -131,7 +131,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]"
@@ -189,7 +189,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -249,7 +249,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]"
@@ -308,7 +308,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -369,7 +369,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -430,7 +430,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -493,7 +493,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "window.bottom" : "⌃⌥⇧⌘↓ [125/6912]",
@@ -580,7 +580,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]",
@@ -669,7 +669,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -758,7 +758,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -849,7 +849,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -940,7 +940,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -1033,7 +1033,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -1126,7 +1126,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -1221,7 +1221,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
 
@@ -1281,7 +1281,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]"
@@ -1342,7 +1342,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]"
@@ -1403,7 +1403,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -1466,7 +1466,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]"
@@ -1529,7 +1529,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -1594,7 +1594,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -1659,7 +1659,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -1726,7 +1726,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "window.bottom" : "⌃⌥⇧⌘↓ [125/6912]",
@@ -1816,7 +1816,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]",
@@ -1908,7 +1908,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2000,7 +2000,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2094,7 +2094,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -2188,7 +2188,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -2284,7 +2284,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2380,7 +2380,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2478,7 +2478,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
 
@@ -2535,7 +2535,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]"
@@ -2593,7 +2593,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]"
@@ -2651,7 +2651,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2711,7 +2711,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]"
@@ -2770,7 +2770,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -2831,7 +2831,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2892,7 +2892,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -2955,7 +2955,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "window.bottom" : "⌃⌥⇧⌘↓ [125/6912]",
@@ -3042,7 +3042,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]",
@@ -3131,7 +3131,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -3220,7 +3220,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -3311,7 +3311,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -3402,7 +3402,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -3495,7 +3495,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -3588,7 +3588,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -3683,7 +3683,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
 
@@ -3743,7 +3743,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]"
@@ -3804,7 +3804,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]"
@@ -3865,7 +3865,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -3928,7 +3928,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]"
@@ -3991,7 +3991,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -4056,7 +4056,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -4121,7 +4121,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -4188,7 +4188,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "window.bottom" : "⌃⌥⇧⌘↓ [125/6912]",
@@ -4278,7 +4278,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "quickSearch" : "⌘ Space [49/256]",
@@ -4370,7 +4370,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -4462,7 +4462,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -4556,7 +4556,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -4650,7 +4650,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 1,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "dictation" : "⌥ Space [49/2048]",
@@ -4746,7 +4746,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -4842,7 +4842,7 @@
           "Permissions" : 0,
           "Quick Search" : 0,
           "Screenshot Tools" : 0,
-          "Window Management" : 0
+          "Window Manager" : 0
         },
         "shortcuts" : {
           "clipboardHistory" : "⇧⌘ Space [49/768]",
@@ -4992,7 +4992,7 @@
     },
     {
       "icon" : "rectangle.split.2x1",
-      "section" : "Window Management"
+      "section" : "Window Manager"
     },
     {
       "icon" : "keyboard",

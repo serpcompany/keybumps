@@ -206,7 +206,7 @@ final class CapabilityRegistry {
     }
 
     /// Runs in reverse registry order, the order the wiring used before modules existed: Keyboard
-    /// Shortcutter retries its detector before Window Management re-arms drag-to-snap.
+    /// Shortcutter retries its detector before Window Manager re-arms drag-to-snap.
     func permissionsDidRefresh(_ context: CapabilityContext) {
         for module in modules.reversed() { module.permissionsDidRefresh(context) }
     }

@@ -5,7 +5,7 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
-    case windows = "Window Management", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
+    case windows = "Window Manager", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
     case account = "Account"
     var id: String { rawValue }
 
@@ -75,7 +75,8 @@ extension View {
 }
 
 /// The Settings sidebar, modeled on Raycast's: the account row on top (outside these groups), the
-/// app's own pages, then one row per capability module in alphabetical order, filtered by search.
+/// app's own pages, then one row per capability module (Quick Search first, then alphabetical),
+/// filtered by search.
 enum SettingsSidebar {
     static func groups(matching query: String) -> [[SettingsSection]] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -84,8 +85,12 @@ enum SettingsSidebar {
         }
         let app = SettingsSection.allCases.filter { $0.capability == nil && $0 != .account && matches($0) }
             .sorted { $0 == .general && $1 != .general }
+        // Quick Search first, then alphabetical.
         let capabilities = SettingsSection.allCases.filter { $0.capability != nil && matches($0) }
-            .sorted { $0.rawValue.localizedStandardCompare($1.rawValue) == .orderedAscending }
+            .sorted { lhs, rhs in
+                if (lhs == .search) != (rhs == .search) { return lhs == .search }
+                return lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
+            }
         return [app, capabilities].filter { !$0.isEmpty }
     }
 }
@@ -574,7 +579,7 @@ struct WindowSettingsView: View {
                         }
                     }
                 } label: {
-                    SettingsRowLabel(title: "Status", subtitle: "Window Management needs Accessibility access to move other apps' windows.")
+                    SettingsRowLabel(title: "Status", subtitle: "Window Manager needs Accessibility access to move other apps' windows.")
                 }
                 LabeledContent {
                     Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
@@ -593,7 +598,7 @@ struct WindowSettingsView: View {
                 shortcutColumns(WindowSettingsLayout.secondaryLeading, WindowSettingsLayout.secondaryTrailing)
             }
         }
-        .navigationTitle("Window Management")
+        .navigationTitle("Window Manager")
         .onDisappear { recorder.cancel() }
     }
 
@@ -632,7 +637,7 @@ struct WindowSettingsView: View {
     }
 }
 
-/// One cell of Window Management's shortcut grid: preview, name, and hotkey field.
+/// One cell of Window Manager's shortcut grid: preview, name, and hotkey field.
 private struct WindowCommandRow: View {
     let action: WindowAction
     let shortcut: ShortcutBinding?
