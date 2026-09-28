@@ -32,6 +32,7 @@ final class PermissionDragAssistantController {
         if panel == nil { makePanel() }
         updateDragContent()
         positionPanel()
+        panel?.hideDuringUnitTests()
         panel?.orderFrontRegardless()
     }
 
@@ -41,6 +42,7 @@ final class PermissionDragAssistantController {
         if panel == nil { makePanel() }
         updateSwitchContent(for: permission)
         positionPanel()
+        panel?.hideDuringUnitTests()
         panel?.orderFrontRegardless()
     }
 
@@ -62,6 +64,7 @@ final class PermissionDragAssistantController {
             .frame(width: 560, height: 92)
         )
         positionPanel()
+        panel?.hideDuringUnitTests()
         panel?.orderFrontRegardless()
     }
 
