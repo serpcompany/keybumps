@@ -41,7 +41,7 @@ final class AppModel {
     private let screenshotEditor: ScreenshotEditorPresenter
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
-    let windows = WindowManagementService()
+    let windows: WindowManagementService
     let launchAtLogin = LaunchAtLoginController()
     let conflicts = ConflictDetector()
     private let spotlightShortcutResolver: any SpotlightShortcutConflictResolving
@@ -53,10 +53,10 @@ final class AppModel {
     private let detector: ManualActionDetector
     private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
-    private let commandPalette: CommandPaletteController
+    let commandPalette: CommandPaletteController
     private let transcriptionCoordinator: DictationTranscriptionCoordinator
     private let permissionDragAssistant = PermissionDragAssistantController()
-    private let dictationIndicator = DictationIndicatorController()
+    private let dictationIndicator: DictationIndicatorController
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
     @ObservationIgnored private var presentedWalkthroughPermission: MacPermission?
     @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
@@ -135,7 +135,13 @@ final class AppModel {
         updater injectedUpdater: (any UpdateControlling)? = nil,
         dictationModelManager injectedDictationModelManager: DictationModelManager? = nil,
         spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil,
-        screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil
+        screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil,
+        clipboard injectedClipboard: ClipboardHistoryService? = nil,
+        dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
+        windows injectedWindows: WindowManagementService? = nil,
+        screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
+        dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
+        dictationFileManager: FileManager = .default
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -149,11 +155,13 @@ final class AppModel {
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
         self.updater = updater
         self.updateSnapshot = updater.snapshot
-        let clipboard = ClipboardHistoryService()
-        let dictationHistory = DictationHistoryService()
+        let clipboard = injectedClipboard ?? ClipboardHistoryService()
+        let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
+        self.windows = injectedWindows ?? WindowManagementService()
+        self.dictationIndicator = injectedDictationIndicator ?? DictationIndicatorController()
         // Only the production composition reads the real screenshot folder; injected models stay inert.
-        screenshotTools = ScreenshotToolsService(
+        screenshotTools = injectedScreenshotTools ?? ScreenshotToolsService(
             reader: screenshotDirectoryReader ?? UnavailableScreenshotDirectoryReader(),
             ingest: { clipboard.ingestImageFile(at: $0, isScreenCapture: true) }
         )
@@ -175,6 +183,7 @@ final class AppModel {
         dictation = DictationService(
             language: preferences.dictationLanguage,
             durationLimit: preferences.dictationDurationLimit,
+            fileManager: dictationFileManager,
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
             didWritePasteboard: clipboard.suppressCurrentChange

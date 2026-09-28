@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class DictationIndicatorController {
+class DictationIndicatorController {
     private var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
 
