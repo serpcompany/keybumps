@@ -22,7 +22,6 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off stops clipboard monitoring, closes its panel, and releases its global shortcut.",
             content: { AnyView(ClipboardSettingsView()) }
         ),
-        showsOnboardingCard: true,
         criticalOperations: []
     )
 }

@@ -22,7 +22,6 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off closes Quick Search and releases its global shortcut.",
             content: { AnyView(QuickSearchSettingsView()) }
         ),
-        showsOnboardingCard: true,
         criticalOperations: []
     )
 }

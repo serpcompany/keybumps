@@ -13,7 +13,6 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off stops drag-to-snap and releases all window shortcuts.",
             content: { AnyView(WindowSettingsView()) }
         ),
-        showsOnboardingCard: true,
         criticalOperations: [.windowAction, .windowDrag]
     )
 }

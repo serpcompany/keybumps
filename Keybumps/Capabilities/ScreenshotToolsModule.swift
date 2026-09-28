@@ -22,7 +22,6 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off stops adding new screenshots to Clipboard History. Screenshots already there stay until removed.",
             content: { AnyView(ScreenshotToolsSettingsView()) }
         ),
-        showsOnboardingCard: true,
         criticalOperations: [.unsavedWork]
     )
 }
