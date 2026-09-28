@@ -133,9 +133,13 @@ struct SettingsRootView: View {
                 }
             }
             .environment(model)
-            .font(.system(size: 14))
-            .headerProminence(.increased)
-            .controlSize(.large)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    if let capability = navigation.selection.capability {
+                        CapabilityToggle(capability: capability)
+                    }
+                }
+            }
             .accessibilityIdentifier("settings.detail.\(navigation.selection.launchToken)")
         }
         .navigationTitle("Keybumps")
@@ -161,11 +165,6 @@ struct SettingsRootView: View {
                     .keyboardShortcut("]", modifiers: .command)
                 }
                 .controlGroupStyle(.navigation)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                if let capability = navigation.selection.capability {
-                    CapabilityToggle(capability: capability)
-                }
             }
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
