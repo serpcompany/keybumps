@@ -350,9 +350,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testFirstRunAutomaticallyDisablesSpotlightAndRetriesQuickSearchRegistration() {
-        let suite = "KeybumpsSpotlightOnboarding-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.setCapability(.clipboardHistory, enabled: false)
         preferences.setCapability(.dictation, enabled: false)
@@ -405,9 +403,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testCompletedOnboardingDoesNotInspectOrModifySpotlight() {
-        let suite = "KeybumpsExistingUserSpotlight-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.didCompleteOnboarding = true
         let symbolicPreferences = StubSymbolicHotKeyPreferences(hotKeys: [
@@ -436,9 +432,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testFailedQuickSearchRetryKeepsOnboardingBlocked() {
-        let suite = "KeybumpsSpotlightRetryFailure-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.setCapability(.clipboardHistory, enabled: false)
         preferences.setCapability(.dictation, enabled: false)
@@ -564,9 +558,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testDictationTranscriptionEngineCatalogPersistsACompatibleSelection() {
-        let suite = "KeybumpsFeatureTests-dictation-engine-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
 
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertEqual(preferences.dictationTranscriptionEngine, .appleSpeech)
@@ -1171,9 +1163,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testDeletingSelectedDictationModelReturnsSelectionToAppleSpeech() async throws {
-        let suite = "KeybumpsModelSelection-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsModelSelection-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -1212,9 +1202,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testAppLaunchRepairsAStoredSelectionWhoseModelFilesAreMissing() {
-        let suite = "KeybumpsMissingModelSelection-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.dictationTranscriptionEngine = .whisperTurboCompressed
         let root = FileManager.default.temporaryDirectory
@@ -1279,9 +1267,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testAppShellRestoresEveryConfiguredGlobalShortcutWhenRecordingLosesFocus() {
-        let suite = "KeybumpsHotKeyFocus-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.didCompleteOnboarding = true
         preferences.setCapability(.clipboardHistory, enabled: false)
@@ -1399,9 +1385,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testWindowShortcutCustomizationPersistsAndMovesDuplicateBinding() {
-        let suite = "KeybumpsWindowShortcuts-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         let binding = WindowAction.left.defaultShortcut!
 
@@ -1415,9 +1399,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testCapabilityShortcutsCanBeRecordedClearedPersistedAndReassigned() throws {
-        let suite = "KeybumpsCapabilityShortcuts-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
 
         XCTAssertEqual(preferences.capabilityShortcut(for: .quickSearch), DefaultShortcut.quickSearch)
@@ -1439,9 +1421,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertNil(preferences.capabilityShortcut(for: .quickSearch))
         XCTAssertEqual(preferences.windowShortcut(for: .left), custom)
 
-        let migrationSuite = "KeybumpsCapabilityShortcutMigration-\(UUID().uuidString)"
-        let migrationDefaults = UserDefaults(suiteName: migrationSuite)!
-        defer { migrationDefaults.removePersistentDomain(forName: migrationSuite) }
+        let migrationDefaults = InMemoryDefaults()
         migrationDefaults.set(
             try JSONEncoder().encode([WindowAction.left.rawValue: DefaultShortcut.dictation]),
             forKey: "windowShortcuts"
@@ -1774,9 +1754,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testCapabilitiesDefaultEnabledAndPersist() {
-        let suite = "KeybumpsCapabilities-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let first = AppPreferences(defaults: defaults)
         XCTAssertEqual(first.enabledCapabilities, Set(Capability.allCases))
         first.setCapability(.dictation, enabled: false)
@@ -1784,9 +1762,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testDictationDurationDefaultsToFiveMinutesAndPersistsLongerChoices() {
-        let suite = "KeybumpsDictationDuration-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
 
         let first = AppPreferences(defaults: defaults)
         XCTAssertEqual(first.dictationDurationLimit, .fiveMinutes)
@@ -1809,9 +1785,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testWindowManagementSharedToggleBindingReadsAndWritesCapabilityState() {
-        let suite = "KeybumpsWindowCapability-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(persistence: InMemoryEventPersistence()),

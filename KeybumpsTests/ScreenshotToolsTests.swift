@@ -264,9 +264,7 @@ final class ScreenshotToolsTests: XCTestCase {
     // MARK: Capability migration
 
     func testScreenshotToolsIsEnabledOnceForExistingInstallsAndThenRespected() {
-        let suite = "KeybumpsScreenshotMigration-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         defaults.set(["clipboardHistory", "quickSearch", "windowManagement"], forKey: "enabledCapabilities")
 
         let upgraded = AppPreferences(defaults: defaults)

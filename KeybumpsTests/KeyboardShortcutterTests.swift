@@ -219,9 +219,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testAppModelPublishesPermissionAndStatusSnapshotsAfterRequestsAndRetry() async {
-        let suite = "KeyboardShortcutterTests-permissions-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let permissions = StubDetectorPermissions(accessibility: false, inputMonitoring: false)
         permissions.grantsAccessibilityOnRequest = true
         permissions.grantsInputMonitoringOnRequest = true
@@ -586,9 +584,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testEnabledNativeBannerSurfacesMissingNotificationAuthorization() async {
-        let suite = "KeyboardShortcutterTests-notification-attention-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         defaults.set([NotificationChannel.nativeBanner.rawValue], forKey: "selectedNotificationChannels")
         let center = StubNativeNotificationCenter(status: .denied)
         let model = AppModel(
@@ -609,9 +605,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testVisiblePermissionMonitoringRefreshesNotificationStatusWithoutAppReactivation() async {
-        let suite = "KeyboardShortcutterTests-notification-monitoring-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let center = StubNativeNotificationCenter(status: .authorizedWithoutAlerts)
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
@@ -639,9 +633,7 @@ final class KeyboardShortcutterTests: XCTestCase {
             accessibilityTrusted: { accessibilityTrusted },
             openSettings: { openedSettings.append($0) }
         )
-        let suite = "KeyboardShortcutterTests-permission-recheck-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(persistence: MemoryPersistence()),
@@ -662,9 +654,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     func testVisiblePermissionMonitoringRecognizesAccessGrantedWhileSystemSettingsIsForeground() async {
         var accessibilityTrusted = false
         let permissions = PermissionCoordinator(accessibilityTrusted: { accessibilityTrusted })
-        let suite = "KeyboardShortcutterTests-permission-monitoring-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(persistence: MemoryPersistence()),
@@ -683,9 +673,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testPermissionRelaunchAlertBindingDismissesThePresentedPermission() {
-        let suite = "KeyboardShortcutterTests-relaunch-alert-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(persistence: MemoryPersistence()),
@@ -751,9 +739,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testDisablingKeyboardShortcutterDismissesPresentationsAndStopsInteractionMonitors() {
-        let suite = "KeyboardShortcutterTests-disable-presentations-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.didCompleteOnboarding = true
         let keyboard = StubKeyboardEventMonitor()
@@ -867,9 +853,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testPreferencesDefaultToVisiblePresenceAndPersistChannelCombinations() {
-        let suite = "KeyboardShortcutterTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
 
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.showInDockAndSwitcher)
@@ -885,9 +869,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testLegacyCursorHaloSelectionIsRemovedAndRewritten() {
-        let suite = "KeyboardShortcutterTests-remove-cursor-halo-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         defaults.set(["cursorHalo", NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
 
         let preferences = AppPreferences(defaults: defaults)
@@ -898,9 +880,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testRetainedPresentationChannelsCanBeCombined() {
-        let suite = "KeyboardShortcutterTests-overlap-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
 
         preferences.set(.topCenterShelf, enabled: true)
@@ -908,9 +888,7 @@ final class KeyboardShortcutterTests: XCTestCase {
     }
 
     func testRemovedPresentationChannelsAreMigratedOutOfPersistedPreferences() {
-        let suite = "KeyboardShortcutterTests-normalized-overlap-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         defaults.set([
             "statusFeedback",
             NotificationChannel.topCenterShelf.rawValue,
@@ -933,17 +911,9 @@ final class KeyboardShortcutterTests: XCTestCase {
 
     func testPreferencesMigrateFromEitherPreviousBundleIdentity() {
         for sourceIndex in 0..<2 {
-            let currentSuite = "KeyboardShortcutterTests-current-\(UUID().uuidString)"
-            let oldestSuite = "KeyboardShortcutterTests-oldest-\(UUID().uuidString)"
-            let recentSuite = "KeyboardShortcutterTests-recent-\(UUID().uuidString)"
-            let current = UserDefaults(suiteName: currentSuite)!
-            let oldest = UserDefaults(suiteName: oldestSuite)!
-            let recent = UserDefaults(suiteName: recentSuite)!
-            defer {
-                current.removePersistentDomain(forName: currentSuite)
-                oldest.removePersistentDomain(forName: oldestSuite)
-                recent.removePersistentDomain(forName: recentSuite)
-            }
+            let current = InMemoryDefaults()
+            let oldest = InMemoryDefaults()
+            let recent = InMemoryDefaults()
             let source = [recent, oldest][sourceIndex]
             source.set([NotificationChannel.topCenterShelf.rawValue, NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
             source.set(false, forKey: "showInDockAndSwitcher")

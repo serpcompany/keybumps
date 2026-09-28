@@ -194,9 +194,7 @@ final class UpdateControllerTests: XCTestCase {
     }
 
     func testAppModelLaunchMenuPreferenceRetryAndInstallStatesUseInjectedUpdater() {
-        let suite = "UpdateControllerTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = InMemoryDefaults()
         let fake = FakeUpdateController()
         let detector = ManualActionDetector(
             monitor: UpdaterTestPointerMonitor(),

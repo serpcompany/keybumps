@@ -95,10 +95,7 @@ enum WiringRecorder {
     static func renderSnapshot() throws -> String {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityWiring-\(UUID().uuidString)", isDirectory: true)
-        defer {
-            try? FileManager.default.removeItem(at: root)
-            WiringHarness.removeDefaultsSuites()
-        }
+        defer { try? FileManager.default.removeItem(at: root) }
 
         var combinations: [String: CapabilityWiringSnapshot.Combination] = [:]
         for mask in 0..<(1 << Capability.allCases.count) {
@@ -236,19 +233,6 @@ enum WiringRecorder {
 
 @MainActor
 final class WiringHarness {
-    static var suites: [String] = []
-
-    static func removeDefaultsSuites() {
-        // Removing a domain leaves an empty plist behind, so delete the files as well.
-        let preferencesDirectory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences", isDirectory: true)
-        for suite in suites {
-            UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
-            try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent("\(suite).plist"))
-        }
-        suites = []
-    }
-
     let log = LifecycleLog()
     let model: AppModel
     private let coordinator: GlobalShortcutCoordinator
@@ -258,10 +242,7 @@ final class WiringHarness {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let suite = "KeybumpsCapabilityWiring-\(id)"
-        let defaults = UserDefaults(suiteName: suite)!
-        WiringHarness.suites.append(suite)
-        let preferences = AppPreferences(defaults: defaults)
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.enabledCapabilities = enabled
         preferences.didCompleteOnboarding = didCompleteOnboarding
 
