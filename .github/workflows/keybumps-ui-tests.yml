@@ -1,9 +1,8 @@
 name: Keybumps UI tests
 
 # UI tests launch an ad-hoc signed build with faked permissions and disabled global hot keys
-# (see docs/testing.md). Pull requests run the smoke suite; nightly and manual runs run the
-# whole KeybumpsUITests target with retries. The nightly run is skipped when main already
-# passed a scheduled run at the same commit, so unchanged days cost only a short Linux job.
+# (see docs/testing.md). Pull requests run the smoke suite; manual runs (workflow_dispatch) run
+# the whole KeybumpsUITests target with retries. There is no nightly schedule (see #73).
 
 on:
   pull_request:
@@ -13,13 +12,10 @@ on:
       - KeybumpsUITests/**
       - project.yml
       - .github/workflows/keybumps-ui-tests.yml
-  schedule:
-    - cron: "17 9 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: keybumps-ui-tests-${{ github.ref }}
@@ -29,33 +25,7 @@ env:
   XCODE_APP: /Applications/Xcode_26.6.app
 
 jobs:
-  changes:
-    name: Check for new commits
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      run: ${{ steps.check.outputs.run }}
-    steps:
-      - id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow keybumps-ui-tests.yml \
-            --event schedule --status success --limit 1 --json headSha --jq '.[0].headSha // ""') || last=""
-          if [ "$last" = "$GITHUB_SHA" ]; then
-            echo "main is unchanged since the last green nightly run ($GITHUB_SHA); skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
   ui:
-    needs: changes
-    if: needs.changes.outputs.run == 'true'
     name: ${{ github.event_name == 'pull_request' && 'UI smoke tests' || 'UI tests (full, with retries)' }}
     runs-on: macos-26
     timeout-minutes: 30

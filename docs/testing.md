@@ -7,7 +7,7 @@ Decisions for how Keybumps is tested, researched against current sources on 2026
 | Level | What it proves | Tooling | Where |
 | --- | --- | --- | --- |
 | Deterministic tests | Domain logic, state, adapter contracts, wiring snapshots, release scripts | Swift Testing (new) and XCTest (existing) in `KeybumpsTests` | Every PR in CI; locally before every hand-off |
-| UI smoke tests | App launches; Settings, palette tabs, and editor open and respond | XCUITest in a `KeybumpsUITests` target, driven by launch arguments with faked permissions | Small suite per PR once stable; full suite nightly or on demand |
+| UI smoke tests | App launches; Settings, palette tabs, and editor open and respond | XCUITest in a `KeybumpsUITests` target, driven by launch arguments with faked permissions | Small suite per PR once stable; full suite on demand (see #73 for release gating) |
 | Signed runtime and installed artifact | Global hot keys, real permissions, cross-app paste/insertion, window movement, real screenshots | `scripts/build-qa-candidate.sh` plus a short manual checklist | Owner's Mac (agent first pass headless; screen only when handed over) |
 | Owner acceptance | The scoped workflow works for the owner | Issue hit list | Owner's Mac |
 
@@ -57,13 +57,13 @@ Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `s
 - **Per PR:**
   - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure. The existing `keybumps-release-checks.yml` runs only the two update-tooling test classes and should be widened.
   - **UI smoke job:** `SmokeUITests` (5 XCUITests) in `keybumps-ui-tests.yml`, ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`). The #70 spike proved this path on image `20260907.0351.1`, and it was enabled per PR after three consecutive green runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
-- **Nightly / `workflow_dispatch`:** the full UI suite with `-retry-tests-on-failure -test-iterations 3`. The nightly run skips (after a short Linux check) when `main` already passed a scheduled run at the same commit; a failed night reruns the next night. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x.
+- **On demand (`workflow_dispatch`):** the full UI suite with `-retry-tests-on-failure -test-iterations 3`. There is no nightly schedule: the repo is private (macOS minutes count 10×) and the full suite currently equals the smoke suite. #73 decides whether the grown suite gates releases. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x.
 - **Hygiene:**
   - `build-for-testing` then `test-without-building`
   - cache SPM packages (`-clonedSourcePackagesDirPath`, keyed on `Package.resolved`), not DerivedData
   - unit and UI tests in separate jobs; macOS UI tests don't run in parallel
 - **Known risk:** hosted-runner UI automation has broken on past image updates ("UI testing failed to initialize", automation-mode timeouts). A red UI job gets investigated against the runner image version before the app is blamed. Proven reference: kiwix-apple passes macOS XCUITest on `macos-26` (with a real signing certificate). The ad-hoc signed path must be proven by a spike first.
-- **Fallback if hosted UI tests stay flaky:** keep UI tests nightly/manual only, or add a self-hosted Apple Silicon runner with a logged-in session (owner decision: maintenance and security cost).
+- **Fallback if hosted UI tests stay flaky:** keep UI tests manual only, or add a self-hosted Apple Silicon runner with a logged-in session (owner decision: maintenance and security cost).
 
 ## Owner checklist (what automation can't prove)
 
