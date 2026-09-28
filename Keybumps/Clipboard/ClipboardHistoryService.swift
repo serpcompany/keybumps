@@ -74,7 +74,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 
 @MainActor
 @Observable
-final class ClipboardHistoryService {
+class ClipboardHistoryService {
     nonisolated static let capacity = 50
     nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 

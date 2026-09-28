@@ -164,6 +164,7 @@ final class GlobalShortcutCoordinator {
 
     var activeOwners: Set<String> { Set(activeIdentifiers.keys) }
     var desiredOwners: Set<String> { Set(desiredRegistrations.keys) }
+    var desiredBindings: [String: ShortcutBinding] { desiredRegistrations.mapValues(\.binding) }
     var registrationScope: GlobalHotKeyRegistrationScope { backend.registrationScope }
 
     init(backend: (any GlobalHotKeyRegistering)? = nil) {

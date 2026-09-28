@@ -15,7 +15,7 @@ struct WindowDragActivityTracker {
 
 @MainActor
 @Observable
-final class WindowManagementService {
+class WindowManagementService {
     private struct WindowKey: Hashable {
         let pid: pid_t
         let token: CFHashCode

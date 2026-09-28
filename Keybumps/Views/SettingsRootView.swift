@@ -37,7 +37,7 @@ struct SettingsRootView: View {
             List(SettingsSection.allCases, selection: selectionBinding) { section in
                 SettingsSidebarRow(
                     section: section,
-                    attentionCount: attentionCount(for: section)
+                    attentionCount: model.settingsAttentionCount(for: section)
                 )
                 .tag(section)
             }
@@ -83,19 +83,21 @@ struct SettingsRootView: View {
             }
         )
     }
+}
 
-    private func attentionCount(for section: SettingsSection) -> Int {
+extension AppModel {
+    func settingsAttentionCount(for section: SettingsSection) -> Int {
         switch section {
         case .permissions:
-            return model.missingPermissionCount
+            return missingPermissionCount
         case .screenshotTools:
-            switch model.screenshotTools.status {
+            switch screenshotTools.status {
             case .requiresClipboardHistory, .folderAccessDenied: return 1
             case .stopped, .watching, .folderUnavailable: return 0
             }
         case .keyboardShortcutter:
-            guard model.preferences.enabledCapabilities.contains(.keyboardShortcutter) else { return 0 }
-            return model.permissionReadiness(for: [.keyboardShortcutter]).missingCount
+            guard preferences.enabledCapabilities.contains(.keyboardShortcutter) else { return 0 }
+            return permissionReadiness(for: [.keyboardShortcutter]).missingCount
         default:
             return 0
         }
@@ -740,6 +742,11 @@ private struct GeneralView: View {
     }
 }
 
+enum OnboardingCapabilityOverview {
+    static let title = "Six capabilities, one app"
+    static var capabilities: [Capability] { Capability.allCases }
+}
+
 private struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @State private var step = 0
@@ -753,7 +760,7 @@ private struct OnboardingView: View {
                 case 0:
                     VStack(spacing: 12) { Text("Welcome to Keybumps").font(.largeTitle.bold()); Text("Set up the local preview").font(.headline); Text("This build is ready for hands-on testing. Purchasing and license activation are not part of this local preview.").foregroundStyle(.secondary).multilineTextAlignment(.center) }
                 case 1:
-                    VStack(spacing: 12) { Text("Six capabilities, one app").font(.largeTitle.bold()); ForEach(Capability.allCases) { Label($0.title, systemImage: $0.systemImage) } }
+                    VStack(spacing: 12) { Text(OnboardingCapabilityOverview.title).font(.largeTitle.bold()); ForEach(OnboardingCapabilityOverview.capabilities) { Label($0.title, systemImage: $0.systemImage) } }
                 case 2:
                     VStack(spacing: 12) {
                         Text("Enable macOS permissions").font(.largeTitle.bold())

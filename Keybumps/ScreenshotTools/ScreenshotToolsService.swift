@@ -115,7 +115,7 @@ enum ScreenshotToolsStatus: Equatable {
 /// Never captures the screen and never logs filenames or paths.
 @MainActor
 @Observable
-final class ScreenshotToolsService {
+class ScreenshotToolsService {
     private(set) var status: ScreenshotToolsStatus = .stopped
 
     @ObservationIgnored private let resolver: ScreenshotLocationResolver
