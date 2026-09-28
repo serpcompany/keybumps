@@ -9,19 +9,23 @@ extension Notification.Name {
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let quickSearchRouter: QuickSearchRouter
     private let appShellRouter: AppShellRouter
+    private let mainWindowRouter: MainWindowRouter
 
     override init() {
         quickSearchRouter = .shared
         appShellRouter = .shared
+        mainWindowRouter = .shared
         super.init()
     }
 
     init(
         quickSearchRouter: QuickSearchRouter,
-        appShellRouter: AppShellRouter? = nil
+        appShellRouter: AppShellRouter? = nil,
+        mainWindowRouter: MainWindowRouter? = nil
     ) {
         self.quickSearchRouter = quickSearchRouter
         self.appShellRouter = appShellRouter ?? .shared
+        self.mainWindowRouter = mainWindowRouter ?? .shared
         super.init()
     }
 
@@ -35,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Settings asked for the window before it ever existed: let SwiftUI create it.
+        if mainWindowRouter.consumeReopenRequest() { return true }
         DispatchQueue.main.async { [weak self] in
             guard let self,
                   !self.appShellRouter.shouldSuppressGenericReopen else { return }
