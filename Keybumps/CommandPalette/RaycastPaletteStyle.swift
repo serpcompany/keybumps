@@ -87,25 +87,33 @@ extension View {
 }
 
 /// A brief notice such as "Copied to Clipboard" that grows out of the notch: the message sits
-/// left of the notch and the icon right of it, on black that blends with the notch. Screens
-/// without a notch show the same black tab hanging from the top of the menu bar.
+/// left of the notch and an icon (or a shortcut's keycaps) right of it, on black that blends with
+/// the notch. Screens without a notch show the same black tab hanging from the top of the menu bar.
 @MainActor
 final class PaletteHUD {
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
 
-    func show(_ message: String, systemImage: String = "checkmark.circle.fill", tint: Color = .green) {
+    func show(
+        _ message: String,
+        systemImage: String = "checkmark.circle.fill",
+        tint: Color = .green,
+        shortcut: String? = nil,
+        duration: TimeInterval? = nil
+    ) {
         guard let screen = NSScreen.main else { return }
         let panel = panel ?? makePanel()
         self.panel = panel
 
         let notchWidth = Self.notchWidth(of: screen)
         let height = max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28)
-        // Both sides of the notch are as wide as the message, so the notch stays centered.
+        // Both sides of the notch are equally wide, so the notch stays centered.
         let textWidth = ceil((message as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width)
+        let keys = shortcut.map { ShortcutKeycapPresentation(shortcut: $0).keys } ?? []
+        let trailingWidth = keys.isEmpty ? 20 : CGFloat(keys.count) * 25
         let host = NSHostingView(rootView: NotchNoticeView(
-            message: message, systemImage: systemImage, tint: tint,
-            notchWidth: notchWidth, wingWidth: textWidth + 32, height: height
+            message: message, systemImage: systemImage, tint: tint, keys: keys,
+            notchWidth: notchWidth, wingWidth: max(textWidth, trailingWidth) + 32, height: height
         ))
         panel.contentView = host
         let size = host.fittingSize
@@ -128,7 +136,7 @@ final class PaletteHUD {
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (tint == .green ? 1.6 : 3), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (duration ?? (tint == .green ? 1.6 : 3)), execute: work)
     }
 
     /// The width of the camera housing, or zero on screens without one.
@@ -156,6 +164,7 @@ private struct NotchNoticeView: View {
     let message: String
     let systemImage: String
     let tint: Color
+    let keys: [String]
     let notchWidth: CGFloat
     let wingWidth: CGFloat
     let height: CGFloat
@@ -172,10 +181,7 @@ private struct NotchNoticeView: View {
                 .padding(.trailing, notchWidth > 0 ? 14 : 8)
                 .frame(width: notchWidth > 0 ? wingWidth : nil, alignment: .trailing)
             Color.clear.frame(width: notchWidth)
-            Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(tint)
-                .symbolEffect(.bounce, value: isShown)
+            trailing
                 .padding(.leading, notchWidth > 0 ? 14 : 0)
                 .padding(.trailing, notchWidth > 0 ? 0 : 16)
                 .frame(width: notchWidth > 0 ? wingWidth : nil, alignment: .leading)
@@ -187,8 +193,22 @@ private struct NotchNoticeView: View {
         )
         .scaleEffect(x: isShown ? 1 : 0.6, y: 1, anchor: .top)
         .opacity(isShown ? 1 : 0)
+        .environment(\.colorScheme, .dark)
         .onAppear {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { isShown = true }
+        }
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if keys.isEmpty {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .symbolEffect(.bounce, value: isShown)
+        } else {
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { PaletteKeycap($0) }
+            }
         }
     }
 }

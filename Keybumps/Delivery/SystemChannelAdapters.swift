@@ -190,3 +190,13 @@ final class PanelChannelAdapter: ChannelDelivering {
         presenter.show(event: event, style: channel)
     }
 }
+
+/// Shows a coaching event as a notch notice: the action on the left, its shortcut on the right.
+@MainActor
+final class NotchChannelAdapter: ChannelDelivering {
+    private let notice = PaletteHUD()
+
+    func deliver(_ event: CoachingEvent) async throws {
+        notice.show(event.actionTitle, shortcut: event.shortcut, duration: 3)
+    }
+}
