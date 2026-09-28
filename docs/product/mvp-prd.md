@@ -41,7 +41,7 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ## Shared Command Palette
 
-- Search, Clipboard, Dictation, and Keyboard Shortcutter are peer tabs selected by Command-1/2/3/4.
+- Search, Clipboard, Dictation, and Hotkeys (Keyboard Shortcutter history) are peer tabs selected by Command-1/2/3/4.
 - The tab chrome shows only the shortcut and tab name.
 - One dominant input filters the active tab; history inputs use the label **Search**.
 - Arrow keys move selection, Return performs the primary action where one exists, and Escape closes the palette.

@@ -9,7 +9,7 @@ A user-enabled area providing one coherent outcome. Disabling it stops the resou
 _Avoid_: Mini-app, embedded app
 
 **Command Palette**:
-The single floating, keyboard-first surface with Search, Clipboard, Dictation, and Keyboard Shortcutter tabs.
+The single floating, keyboard-first surface with Search, Clipboard, Dictation, and Hotkeys tabs.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Quick Search**:
@@ -35,6 +35,9 @@ _Avoid_: Rectangle app
 **Keyboard Shortcutter**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.
 _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
+
+**Hotkeys**:
+The Command Palette tab label for Keyboard Shortcutter history. Settings and the capability keep the name Keyboard Shortcutter.
 
 **Screenshot Tools**:
 The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipboard History as screenshot items and owns the **Screenshot Editor**. It never captures the screen itself.

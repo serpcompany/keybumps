@@ -16,7 +16,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search"
         case .clipboard: "Clipboard"
         case .dictation: "Dictation"
-        case .keyboardShortcutter: "Keyboard Shortcutter"
+        case .keyboardShortcutter: "Hotkeys"
         }
     }
 
@@ -43,7 +43,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         case .search: "Search apps, files, and folders"
         case .clipboard: "Search clipboard history"
         case .dictation: "Search dictation history"
-        case .keyboardShortcutter: "Search Keyboard Shortcutter history"
+        case .keyboardShortcutter: "Search hotkeys"
         }
     }
 
@@ -637,7 +637,7 @@ private struct KeyboardShortcutterResultsView: View {
             case .disabled:
                 PaletteEmptyState(title: "Keyboard Shortcutter is turned off", systemImage: "keyboard")
             case .empty:
-                PaletteEmptyState(title: "No matching Keyboard Shortcutter", systemImage: "keyboard")
+                PaletteEmptyState(title: "No matching hotkeys", systemImage: "keyboard")
             case .entries(let entries):
                 VStack(spacing: 0) {
                     HStack {

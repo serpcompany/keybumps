@@ -2277,7 +2277,7 @@ final class KeybumpsFeatureTests: XCTestCase {
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
                 CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Keyboard Shortcutter")
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Hotkeys")
             ]
         )
         XCTAssertEqual(
@@ -2291,7 +2291,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.clipboard.prompt, "Search clipboard history")
         XCTAssertEqual(CommandPaletteTab.dictation.prompt, "Search dictation history")
-        XCTAssertEqual(CommandPaletteTab.keyboardShortcutter.prompt, "Search Keyboard Shortcutter history")
+        XCTAssertEqual(CommandPaletteTab.keyboardShortcutter.prompt, "Search hotkeys")
         XCTAssertEqual(ClearAllButton.title, "Clear All")
 
         state.historyQuery = "private filter"
