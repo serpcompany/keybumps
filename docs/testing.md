@@ -57,7 +57,7 @@ Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `s
 - **Per PR:**
   - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure. The existing `keybumps-release-checks.yml` runs only the two update-tooling test classes and should be widened.
   - **UI smoke job:** `SmokeUITests` (5 XCUITests) in `keybumps-ui-tests.yml`, ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`). The #70 spike proved this path on image `20260907.0351.1`, and it was enabled per PR after three consecutive green runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
-- **Nightly / `workflow_dispatch`:** the full UI suite with `-retry-tests-on-failure -test-iterations 3`. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x.
+- **Nightly / `workflow_dispatch`:** the full UI suite with `-retry-tests-on-failure -test-iterations 3`. The nightly run skips (after a short Linux check) when `main` already passed a scheduled run at the same commit; a failed night reruns the next night. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x.
 - **Hygiene:**
   - `build-for-testing` then `test-without-building`
   - cache SPM packages (`-clonedSourcePackagesDirPath`, keyed on `Package.resolved`), not DerivedData
