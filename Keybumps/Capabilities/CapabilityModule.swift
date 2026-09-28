@@ -10,6 +10,8 @@ struct CapabilityDescriptor: Identifiable {
     let capability: Capability
     let title: String
     let systemImage: String
+    /// The fill of the capability's rounded-square icon tile in Settings.
+    let iconTint: Color
     /// macOS permissions the module needs while enabled, granted through `PermissionCoordinator`.
     let requiredPermissions: Set<MacPermission>
     /// Modules that must be enabled for this module's resources to run.

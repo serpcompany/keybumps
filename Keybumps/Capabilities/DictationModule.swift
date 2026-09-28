@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .dictation,
         title: "Dictation",
         systemImage: "waveform",
+        iconTint: .blue,
         requiredPermissions: [.microphone, .speechRecognition],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(

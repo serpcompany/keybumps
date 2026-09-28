@@ -22,27 +22,66 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         if let capability { return capability.systemImage }
         return self == .permissions ? "hand.raised" : "gearshape"
     }
+
+    var iconTint: Color { capability?.descriptor.iconTint ?? .gray }
 }
 
 struct SettingsNavigationHistory: Equatable {
     private(set) var selection: SettingsSection
     private(set) var backStack: [SettingsSection] = []
+    private(set) var forwardStack: [SettingsSection] = []
 
     init(selection: SettingsSection = .permissions) {
         self.selection = selection
     }
 
     var canGoBack: Bool { !backStack.isEmpty }
+    var canGoForward: Bool { !forwardStack.isEmpty }
 
     mutating func navigate(to section: SettingsSection) {
         guard section != selection else { return }
         backStack.append(selection)
+        forwardStack = []
         selection = section
     }
 
     mutating func goBack() {
         guard let previous = backStack.popLast() else { return }
+        forwardStack.append(selection)
         selection = previous
+    }
+
+    mutating func goForward() {
+        guard let next = forwardStack.popLast() else { return }
+        backStack.append(selection)
+        selection = next
+    }
+}
+
+extension View {
+    /// Raycast's Settings window shows no title; macOS 14 keeps the title.
+    @ViewBuilder func hidingWindowTitle() -> some View {
+        if #available(macOS 15.0, *) {
+            toolbar(removing: .title)
+        } else {
+            self
+        }
+    }
+}
+
+/// The Settings sidebar, modeled on Raycast's: the app's own pages first, then one row per
+/// capability module in alphabetical order, filtered by the search field.
+enum SettingsSidebar {
+    static func groups(matching query: String) -> [[SettingsSection]] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches: (SettingsSection) -> Bool = {
+            trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
+        }
+        let app = SettingsSection.allCases.filter { $0.capability == nil && matches($0) }
+            .sorted { $0 == .general && $1 != .general }
+        let capabilities = SettingsSection.allCases.filter { $0.capability != nil && matches($0) }
+            .sorted { $0.rawValue.localizedStandardCompare($1.rawValue) == .orderedAscending }
+        return [app, capabilities].filter { !$0.isEmpty }
     }
 }
 
@@ -51,18 +90,36 @@ struct SettingsRootView: View {
     @State private var navigation = SettingsNavigationHistory(
         selection: UITestLaunchConfiguration.current.openSettings ?? .permissions
     )
+    @State private var query = ""
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsSection.allCases, selection: selectionBinding) { section in
-                SettingsSidebarRow(
-                    section: section,
-                    attentionCount: model.settingsAttentionCount(for: section)
-                )
-                .tag(section)
-                .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
+            VStack(spacing: 14) {
+                SettingsSearchField(text: $query)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        ForEach(SettingsSidebar.groups(matching: query), id: \.self) { group in
+                            VStack(spacing: 2) {
+                                ForEach(group) { section in
+                                    SettingsSidebarRow(
+                                        section: section,
+                                        isSelected: navigation.selection == section,
+                                        attentionCount: model.settingsAttentionCount(for: section)
+                                    ) {
+                                        navigation.navigate(to: section)
+                                    }
+                                    .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
+                                }
+                            }
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
             }
-                .navigationSplitViewColumnWidth(min: 190, ideal: 220)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .toolbar(removing: .sidebarToggle)
+            .navigationSplitViewColumnWidth(min: 250, ideal: 270, max: 300)
         } detail: {
             Group {
                 if let page = navigation.selection.capability?.descriptor.settingsPage {
@@ -77,31 +134,33 @@ struct SettingsRootView: View {
             .accessibilityIdentifier("settings.detail.\(navigation.selection.launchToken)")
         }
         .navigationTitle("Keybumps")
+        .hidingWindowTitle()
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button {
-                    navigation.goBack()
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
+                ControlGroup {
+                    Button {
+                        navigation.goBack()
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .disabled(!navigation.canGoBack)
+                    .help("Return to the previous Settings screen")
+                    .keyboardShortcut("[", modifiers: .command)
+                    Button {
+                        navigation.goForward()
+                    } label: {
+                        Label("Forward", systemImage: "chevron.right")
+                    }
+                    .disabled(!navigation.canGoForward)
+                    .help("Go to the next Settings screen")
+                    .keyboardShortcut("]", modifiers: .command)
                 }
-                .disabled(!navigation.canGoBack)
-                .help("Return to the previous Settings screen")
-                .keyboardShortcut("[", modifiers: .command)
+                .controlGroupStyle(.navigation)
             }
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
-    }
-
-    private var selectionBinding: Binding<SettingsSection?> {
-        Binding(
-            get: { navigation.selection },
-            set: { section in
-                guard let section else { return }
-                navigation.navigate(to: section)
-            }
-        )
     }
 }
 
@@ -115,18 +174,58 @@ extension AppModel {
 
 private struct SettingsSidebarRow: View {
     let section: SettingsSection
+    let isSelected: Bool
     let attentionCount: Int
+    let select: () -> Void
 
     var body: some View {
-        HStack {
-            Label(section.rawValue, systemImage: section.icon)
-            Spacer()
-            if attentionCount > 0 {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundStyle(.red)
-                    .accessibilityLabel("\(attentionCount) permission items need attention")
+        Button(action: select) {
+            HStack(spacing: 11) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(section.iconTint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Text(section.rawValue)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 4)
+                if attentionCount > 0 {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("\(attentionCount) permission items need attention")
+                }
             }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                isSelected ? Color.primary.opacity(0.09) : .clear,
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct SettingsSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search settings…", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+        .accessibilityIdentifier("settings.search")
     }
 }
 

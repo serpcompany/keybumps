@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .keyboardShortcutter,
         title: "Keyboard Shortcutter",
         systemImage: "keyboard",
+        iconTint: .gray,
         requiredPermissions: [.accessibility, .inputMonitoring],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(

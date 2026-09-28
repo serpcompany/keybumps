@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .windowManagement,
         title: "Window Management",
         systemImage: "rectangle.split.2x1",
+        iconTint: .teal,
         requiredPermissions: [.accessibility],
         dependencies: [],
         paletteTab: nil,

@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .quickSearch,
         title: "Quick Search",
         systemImage: "magnifyingglass",
+        iconTint: .red,
         requiredPermissions: [],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(

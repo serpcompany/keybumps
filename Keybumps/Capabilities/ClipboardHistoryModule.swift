@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .clipboardHistory,
         title: "Clipboard History",
         systemImage: "clipboard",
+        iconTint: .orange,
         requiredPermissions: [],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(

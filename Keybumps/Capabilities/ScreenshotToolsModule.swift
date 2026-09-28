@@ -5,6 +5,7 @@ extension CapabilityDescriptor {
         capability: .screenshotTools,
         title: "Screenshot Tools",
         systemImage: "camera.viewfinder",
+        iconTint: .purple,
         requiredPermissions: [],
         dependencies: [.clipboardHistory],
         paletteTab: CapabilityPaletteTab(
