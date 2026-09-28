@@ -141,7 +141,9 @@ final class AppModel {
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
-        dictationFileManager: FileManager = .default
+        dictationFileManager: FileManager = .default,
+        allowsDictationSystemAccess: Bool = true,
+        screenshotEditorFallbackFolder: (() -> URL)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -186,10 +188,11 @@ final class AppModel {
             fileManager: dictationFileManager,
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
-            didWritePasteboard: clipboard.suppressCurrentChange
+            didWritePasteboard: clipboard.suppressCurrentChange,
+            allowsSystemAccess: allowsDictationSystemAccess
         )
         screenshotEditor = ScreenshotEditorPresenter(
-            fallbackFolder: { ScreenshotLocationResolver.system.resolve() },
+            fallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
             editingChanged: { isEditing in
                 updateSafetyPolicy.updateCriticalOperation(.unsavedWork, active: isEditing)
                 updater.installationSafetyDidChange()
@@ -599,6 +602,7 @@ final class AppModel {
     }
     func showDictationHistory() { commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { commandPalette.show(.keyboardShortcutter) }
+    func showCommandPalette(_ tab: CommandPaletteTab) { commandPalette.show(tab) }
     func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
     func previewSample(channel: NotificationChannel) async {
         let channels = PreviewChannelPlan.channels(

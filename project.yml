@@ -88,6 +88,20 @@ targets:
         DEVELOPMENT_TEAM: 847HR8U8D9
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Keybumps.app/Contents/MacOS/Keybumps"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  KeybumpsUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - KeybumpsUITests
+    dependencies:
+      - target: Keybumps
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 847HR8U8D9
+        TEST_TARGET_NAME: Keybumps
 schemes:
   Keybumps:
     build:
@@ -105,3 +119,11 @@ schemes:
       config: Release
     archive:
       config: Release
+  KeybumpsUITests:
+    build:
+      targets:
+        Keybumps: all
+        KeybumpsUITests: [test]
+    test:
+      targets:
+        - KeybumpsUITests

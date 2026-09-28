@@ -156,6 +156,7 @@ final class DictationService {
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
     private let didWritePasteboard: () -> Void
+    private let allowsSystemAccess: Bool
     var durationLimit: DictationDurationLimit
 
     init(
@@ -164,8 +165,10 @@ final class DictationService {
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
-        didWritePasteboard: @escaping () -> Void = {}
+        didWritePasteboard: @escaping () -> Void = {},
+        allowsSystemAccess: Bool = true
     ) {
+        self.allowsSystemAccess = allowsSystemAccess
         selectedLanguage = language
         self.durationLimit = durationLimit
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
@@ -209,6 +212,11 @@ final class DictationService {
     func start() {
         guard phase == .idle || isFailed else { return }
         guard retryingEntryID == nil else { return }
+        // UI test compositions never open the microphone, whatever the faked permission state.
+        guard allowsSystemAccess else {
+            fail("Audio capture is unavailable in this session.")
+            return
+        }
         guard microphoneGranted, speechGranted else {
             fail("Microphone and Speech Recognition permissions are required.")
             return
@@ -256,8 +264,8 @@ final class DictationService {
 
     func copyRecoveredTranscript() {
         guard let recoveredTranscript else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(recoveredTranscript, forType: .string)
+        NSPasteboard.keybumps.clearContents()
+        NSPasteboard.keybumps.setString(recoveredTranscript, forType: .string)
     }
 
     func clearRecoveredTranscript() {
@@ -375,13 +383,15 @@ final class DictationService {
     }
 
     private func paste(_ text: String) async throws {
+        // UI test compositions never activate another app or synthesize Command-V.
+        guard allowsSystemAccess else { throw NSError(domain: "Keybumps.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "Insertion is unavailable in this session. Your transcript was preserved."]) }
         guard let destination = destination?.runningApplication() else { throw NSError(domain: "Keybumps.Dictation", code: 2, userInfo: [NSLocalizedDescriptionKey: "The destination app is no longer available. Your transcript was preserved."]) }
         destination.activate(options: [])
         try await Task.sleep(for: .milliseconds(160))
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier else {
             throw NSError(domain: "Keybumps.Dictation", code: 4, userInfo: [NSLocalizedDescriptionKey: "The destination app could not be focused. Your transcript was preserved."])
         }
-        let pasteboard = NSPasteboard.general
+        let pasteboard = NSPasteboard.keybumps
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else {
             throw NSError(domain: "Keybumps.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])

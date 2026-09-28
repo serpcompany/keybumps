@@ -255,6 +255,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
+        panel.identifier = NSUserInterfaceItemIdentifier("commandPalette")
         panel.contentViewController = NSHostingController(
             rootView: CommandPaletteView(
                 state: state,
@@ -278,6 +279,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
+            .uiTestAnimationsDisabled()
         )
         panel.setContentSize(size)
         self.panel = panel
@@ -479,7 +481,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func copy(_ text: String, suppressClipboardHistory: Bool) {
-        let pasteboard = NSPasteboard.general
+        let pasteboard = NSPasteboard.keybumps
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
@@ -706,6 +708,7 @@ private struct PaletteTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected == tab ? .isSelected : [])
+                .accessibilityIdentifier("palette.tab.\(tab.rawValue)")
             }
             Spacer()
             Image("KeybumpsArrow")

@@ -36,7 +36,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private var didFinish = false
     var onFinish: ((Result?) -> Void)?
 
-    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .general) {
+    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .keybumps) {
         self.source = source
         self.sourceURL = sourceURL
         self.fallbackFolder = fallbackFolder
@@ -50,6 +50,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             defer: false
         )
         window.title = "Edit Screenshot"
+        window.identifier = NSUserInterfaceItemIdentifier("screenshotEditor")
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: Self.minimumWidth, height: 420)
         window.tabbingMode = .disallowed
@@ -62,7 +63,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             canvas: canvas,
             cancel: { [weak self] in self?.cancel() },
             done: { [weak self] in self?.done() }
-        ))
+        ).uiTestAnimationsDisabled())
         window.contentView = root
         model.onChange = { [weak self] in self?.canvas.needsDisplay = true }
     }
