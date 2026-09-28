@@ -42,7 +42,7 @@ struct KeybumpsApp: App {
     var body: some Scene {
         Window(ReleaseLane.current.productName, id: "main") {
             SettingsRootView()
-                .frame(minWidth: 960, minHeight: 720)
+                .frame(minWidth: 960, idealWidth: 960, minHeight: 720, idealHeight: 944)
                 .environment(model)
                 .task {
                     AppShellLaunch.start(model)
@@ -69,7 +69,6 @@ struct KeybumpsApp: App {
                 .modifier(MainWindowRoutingModifier(model: model))
         }
         .defaultSize(width: 960, height: 944)
-        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 OpenMainWindowButton(title: "Settings…")
