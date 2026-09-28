@@ -403,7 +403,7 @@ final class AppModel {
             permissions.requestScreenRecordingAccess()
             return
         }
-        notice.show("Screen Recording needed — see Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
+        notice.show("Screen Recording needed · Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
     }
 
     func restartForPermissionRelaunch() {

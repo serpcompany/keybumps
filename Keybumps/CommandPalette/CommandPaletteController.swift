@@ -499,11 +499,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         confirmCopy()
     }
 
-    /// Closes the palette and confirms the copy where the palette was.
+    /// Closes the palette and confirms the copy at the notch.
     private func confirmCopy() {
-        let frame = panel?.frame
         dismiss()
-        hud.show("Copied to Clipboard", over: frame)
+        hud.show("Copied to Clipboard")
     }
 
     /// Command-click edits an image; a plain click keeps restoring it.
