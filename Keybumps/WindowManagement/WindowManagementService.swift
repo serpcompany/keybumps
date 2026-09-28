@@ -99,7 +99,9 @@ class WindowManagementService {
             }
             dragTarget = DragTarget(pid: target.pid, window: target.window, startingFrame: startingFrame)
             sawWindowDrag = false
-            updateDragActivity(true)
+            // A press is not a drag: a plain click whose mouse-up never reaches the global monitor
+            // must not leave a drag marked active.
+            updateDragActivity(false)
         case .leftMouseDragged:
             guard let target = dragTarget, let current = frame(of: target.window) else {
                 dragTarget = nil
@@ -108,6 +110,7 @@ class WindowManagementService {
                 return
             }
             sawWindowDrag = !approximatelyEqual(current, target.startingFrame)
+            updateDragActivity(sawWindowDrag)
         case .leftMouseUp:
             defer {
                 dragTarget = nil
