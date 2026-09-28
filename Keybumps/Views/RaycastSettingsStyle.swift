@@ -225,15 +225,10 @@ struct SettingsDropdown<Value: Hashable>: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            HStack(spacing: 6) {
-                Text(options.first { $0.value == selection }?.label ?? "")
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
+            Text(options.first { $0.value == selection }?.label ?? "")
         }
         .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .menuIndicator(.visible)
         .fixedSize()
         .accessibilityLabel(title)
     }
