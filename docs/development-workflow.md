@@ -37,6 +37,7 @@ Keep durable test inputs under `KeybumpsTests/Fixtures`. Keep generated builds, 
 - Sign installed manual-QA candidates with `Developer ID Application` using the same designated requirement as the accepted baseline. An Apple Development-signed Debug/test host is a different TCC identity and must never be installed as a permission-continuity candidate.
 - Keybumps registers its own Launch at Login item only after fresh onboarding.
 - Replace the installed app with the intended candidate, launch it from `/Applications`, and verify that the running artifact is the candidate just built.
+- `scripts/build-qa-candidate.sh <issue>` performs this step from a clean tree: it archives and Developer ID-exports the current commit as `<release>-dev.issue<N>` with build `<release build>.<issue>.<n>` (ordered above the installed release and below the next public build for Sparkle), refuses if the designated requirement differs from the installed baseline, backs up the installed app under `~/Library/Developer/Keybumps-QA/backups`, installs and launches the candidate, and verifies the running artifact. It never notarizes or publishes. `scripts/restore-previous-keybumps.sh` reinstalls the most recent backup.
 
 ## 4. Give the owner a scoped hit list
 

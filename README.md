@@ -25,6 +25,13 @@ xcodegen generate
 xcodebuild -project Keybumps.xcodeproj -scheme Keybumps -configuration Debug -derivedDataPath .derived test
 ```
 
+Build, install, and launch a Developer ID-signed manual-QA candidate for an issue (backs up the installed app first):
+
+```sh
+./scripts/build-qa-candidate.sh <issue-number>
+./scripts/restore-previous-keybumps.sh   # roll back
+```
+
 The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.
 
 ## Attribution
