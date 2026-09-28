@@ -1,0 +1,97 @@
+name: Keybumps UI tests
+
+# UI tests launch an ad-hoc signed build with faked permissions and disabled global hot keys
+# (see docs/testing.md). Pull requests run the smoke suite; nightly and manual runs run the
+# whole KeybumpsUITests target with retries.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Keybumps/**
+      - KeybumpsUITests/**
+      - project.yml
+      - .github/workflows/keybumps-ui-tests.yml
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keybumps-ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  XCODE_APP: /Applications/Xcode_26.6.app
+
+jobs:
+  ui:
+    name: ${{ github.event_name == 'pull_request' && 'UI smoke tests' || 'UI tests (full, with retries)' }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out Keybumps
+        uses: actions/checkout@v7.0.1
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+          echo "Runner image $ImageOS $ImageVersion"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Keybumps project
+        run: xcodegen generate
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .spm
+          key: spm-${{ runner.os }}-${{ hashFiles('Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Build for testing (ad-hoc signed)
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project Keybumps.xcodeproj -scheme KeybumpsUITests \
+            -configuration Debug -destination 'platform=macOS' \
+            -derivedDataPath .derived-ui -clonedSourcePackagesDirPath .spm \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO \
+            | xcbeautify --renderer github-actions
+
+      - name: Run UI smoke tests
+        if: github.event_name == 'pull_request'
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project Keybumps.xcodeproj -scheme KeybumpsUITests \
+            -destination 'platform=macOS' \
+            -derivedDataPath .derived-ui -clonedSourcePackagesDirPath .spm \
+            -only-testing:KeybumpsUITests/SmokeUITests \
+            -resultBundlePath KeybumpsUITests.xcresult \
+            | xcbeautify --renderer github-actions
+
+      - name: Run full UI suite with retries
+        if: github.event_name != 'pull_request'
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project Keybumps.xcodeproj -scheme KeybumpsUITests \
+            -destination 'platform=macOS' \
+            -derivedDataPath .derived-ui -clonedSourcePackagesDirPath .spm \
+            -retry-tests-on-failure -test-iterations 3 \
+            -resultBundlePath KeybumpsUITests.xcresult \
+            | xcbeautify --renderer github-actions
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KeybumpsUITests-xcresult
+          path: KeybumpsUITests.xcresult
+          retention-days: 7
