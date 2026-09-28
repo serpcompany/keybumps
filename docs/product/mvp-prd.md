@@ -86,7 +86,7 @@ Acceptance covers ordering, duplicate collapse, exact image restoration, fifty-i
 
 ## Screenshot Tools
 
-User outcome: screenshots taken with the standard macOS shortcuts are immediately available in Clipboard History for pasting and, in a later slice, lightweight markup.
+User outcome: screenshots taken with the standard macOS shortcuts are immediately available in Clipboard History for pasting and lightweight markup.
 
 - Read the macOS screenshot location (`com.apple.screencapture` `location`, default Desktop) without writing system preferences, and follow changes to it.
 - Add only new files macOS marks as screen captures (PNG, JPEG, HEIC, TIFF, GIF) to Clipboard History as screenshot items, after the file finishes writing. Existing files, other images, and other file types are ignored.
@@ -97,9 +97,18 @@ User outcome: screenshots taken with the standard macOS shortcuts are immediatel
 - Existing installs receive Screenshot Tools enabled once when it first ships; after that the owner's switch is respected. Disabling it stops watching without removing existing items.
 - Never log screenshot filenames, paths, or image content.
 
-Out of scope: Keybumps screen capture, Screen Recording permission, scrolling capture, OCR, recording, beautification, pinning, uploads, and crop (deferred).
+### Screenshot Editor
 
-Acceptance requires a physical Shift-Command-4 screenshot appearing in the Clipboard tab and pasting correctly, disabling and re-enabling ingestion, the Clipboard History dependency, and relaunch persistence in the exact signed build.
+- Command-E on a highlighted image row, or Command-click on the row, opens the editor for any Clipboard History image while Screenshot Tools is enabled. Return and plain click keep restoring the item. Image rows show a Command-E hint.
+- Tools: pixelate, solid redact block, arrow, free draw, and text, selectable with P, R, A, D, and T. Arrow, draw, and text use a small fixed palette. Undo and redo cover each completed gesture.
+- Done (Return) flattens at the image's own pixel density, copies PNG to the clipboard, and saves `<name> (edited).png` next to the original screenshot, numbering on collision. Copied images and unwritable folders save to the macOS screenshot location. Originals are never overwritten. Cancel or Escape discards.
+- Redaction safety: exported pixels under pixelate or redact regions never contain original content. Pixelate uses a minimum block size and averages each block; any rendering failure fills the region opaquely instead of showing the original.
+- While the editor is open it counts as unsaved work for update safety. Closing it returns focus to the previous app.
+- Never log image content, text annotations, or filenames.
+
+Out of scope: Keybumps screen capture, Screen Recording permission, scrolling capture, OCR, recording, beautification, pinning, uploads, crop (deferred), shapes beyond arrow, numbered steps, highlighter, moving or restyling existing marks, and sharing.
+
+Acceptance requires a physical Shift-Command-4 screenshot appearing in the Clipboard tab and pasting correctly, disabling and re-enabling ingestion, the Clipboard History dependency, relaunch persistence, and editing both a screenshot and a copied image with every tool, with an unreadable pasted redaction, in the exact signed build.
 
 ## Dictation
 

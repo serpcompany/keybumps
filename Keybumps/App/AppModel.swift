@@ -38,6 +38,7 @@ final class AppModel {
     let permissions: PermissionCoordinator
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
+    private let screenshotEditor: ScreenshotEditorPresenter
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
     let windows = WindowManagementService()
@@ -178,6 +179,13 @@ final class AppModel {
             transcriber: transcriptionCoordinator,
             didWritePasteboard: clipboard.suppressCurrentChange
         )
+        screenshotEditor = ScreenshotEditorPresenter(
+            fallbackFolder: { ScreenshotLocationResolver.system.resolve() },
+            editingChanged: { isEditing in
+                updateSafetyPolicy.updateCriticalOperation(.unsavedWork, active: isEditing)
+                updater.installationSafetyDidChange()
+            }
+        )
         commandPalette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -286,6 +294,9 @@ final class AppModel {
             enabled: enabled.contains(.screenshotTools),
             clipboardHistoryEnabled: enabled.contains(.clipboardHistory)
         )
+        commandPalette.editImage = enabled.contains(.screenshotTools)
+            ? { [weak self] entry in self?.screenshotEditor.edit(entry) ?? false }
+            : nil
         enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
         enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
         refreshDetectorState()
@@ -636,6 +647,7 @@ final class AppModel {
             presenter.dismissAll()
         case .screenshotTools:
             screenshotTools.stop()
+            screenshotEditor.close()
         }
     }
 

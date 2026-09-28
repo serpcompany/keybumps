@@ -37,8 +37,12 @@ Passive recognition of currently supported manual actions, durable history, and 
 _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
 
 **Screenshot Tools**:
-The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipboard History as screenshot items and owns their markup editor. It never captures the screen itself.
+The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipboard History as screenshot items and owns the **Screenshot Editor**. It never captures the screen itself.
 _Avoid_: Screen capture, screenshot app, CleanShot clone
+
+**Screenshot Editor**:
+The Screenshot Tools window that marks up a Clipboard History image with pixelate, redact, arrow, draw, and text, then copies the flattened result and saves an `(edited)` copy.
+_Avoid_: Image editor, annotation app, Markup
 
 **Development License Adapter**:
 An explicit non-production local gate used only to exercise onboarding before a commerce provider is chosen.

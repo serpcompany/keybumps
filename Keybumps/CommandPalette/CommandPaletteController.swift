@@ -149,6 +149,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
+    /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
+    var editImage: ((ClipboardEntry) -> Bool)?
 
     init(
         clipboard: ClipboardHistoryService,
@@ -234,7 +236,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
-                copyClipboardEntry: copyClipboardEntry,
+                copyClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
                 copyDictationText: { [weak self] text in
                     self?.copy(text, suppressClipboardHistory: true)
                 },
@@ -291,6 +293,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
                 if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers) {
                     self.selectTab(tab)
+                    return nil
+                }
+                if event.charactersIgnoringModifiers?.lowercased() == "e", self.state.tab == .clipboard {
+                    self.editSelectedClipboardImage()
                     return nil
                 }
             }
@@ -434,6 +440,24 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard clipboard.restore(entry) else { return }
         dismiss()
     }
+
+    /// Command-click edits an image; a plain click keeps restoring it.
+    private func chooseClipboardEntry(_ entry: ClipboardEntry) {
+        if NSEvent.modifierFlags.contains(.command), editClipboardImage(entry) { return }
+        copyClipboardEntry(entry)
+    }
+
+    private func editSelectedClipboardImage() {
+        guard filteredClipboard.indices.contains(state.selection) else { return }
+        editClipboardImage(filteredClipboard[state.selection])
+    }
+
+    @discardableResult
+    private func editClipboardImage(_ entry: ClipboardEntry) -> Bool {
+        guard entry.kind == .image, let editImage else { return false }
+        dismiss()
+        return editImage(entry)
+    }
 }
 
 private struct CommandPaletteView: View {
@@ -515,6 +539,7 @@ private struct CommandPaletteView: View {
                 entries: filteredClipboard,
                 selection: state.selection,
                 choose: copyClipboardEntry,
+                showsEditHint: preferences.enabledCapabilities.contains(.screenshotTools),
                 delete: clipboard.delete,
                 clear: clipboard.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -809,6 +834,7 @@ private struct ClipboardResultsView: View {
     let entries: [ClipboardEntry]
     let selection: Int
     let choose: (ClipboardEntry) -> Void
+    let showsEditHint: Bool
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -848,6 +874,10 @@ private struct ClipboardResultsView: View {
                                             Text(entry.kindLabel)
                                             Text("·")
                                             Text(entry.capturedAt, style: .relative)
+                                            if showsEditHint, entry.kind == .image {
+                                                Text("·")
+                                                Text("⌘E to edit")
+                                            }
                                         }
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)

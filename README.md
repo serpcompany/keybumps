@@ -38,4 +38,6 @@ The local preview does not present fake commerce or update controls. Production 
 
 Window Management behavior is derived from the MIT-licensed Rectangle project and the owner's independently identified fork. See `LICENSE.rectangle` and `docs/provenance/donor-ledger.md`.
 
+Screenshot Tools redaction and markup rendering is adapted from the MIT-licensed Shotnix project. See `LICENSE.shotnix` and `docs/provenance/donor-ledger.md`.
+
 Local Whisper transcription uses the MIT-licensed Argmax OSS Swift/WhisperKit package and OpenAI Whisper model family. See `LICENSE.argmax-oss-swift`, `NOTICES.argmax-oss-swift`, and `LICENSE.openai-whisper`.
