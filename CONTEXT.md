@@ -9,7 +9,7 @@ A user-enabled area providing one coherent outcome. Disabling it stops the resou
 _Avoid_: Mini-app, embedded app
 
 **Command Palette**:
-The single floating, keyboard-first surface with Search, Clipboard, Dictation, and Hotkeys tabs.
+The single floating, keyboard-first surface with Search, Clipboard, Dictation, Hotkeys, and Screenshots tabs.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Quick Search**:
@@ -42,6 +42,10 @@ The Command Palette tab label for Keyboard Shortcutter history. Settings and the
 **Screenshot Tools**:
 The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipboard History as screenshot items and owns the **Screenshot Editor**. It never captures the screen itself.
 _Avoid_: Screen capture, screenshot app, CleanShot clone
+
+**Screenshots tab**:
+The ⌘5 Command Palette tab listing screen-capture items from Clipboard History; Return opens the Screenshot Editor. Owned by Screenshot Tools.
+_Avoid_: Screenshot library, gallery
 
 **Screenshot Editor**:
 The Screenshot Tools window that marks up a Clipboard History image with pixelate, redact, arrow, draw, and text, then copies the flattened result and saves an `(edited)` copy.

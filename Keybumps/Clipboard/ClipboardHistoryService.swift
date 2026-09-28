@@ -130,6 +130,13 @@ final class ClipboardHistoryService {
         persist()
     }
 
+    /// Removes screen-capture items and their media copies; original files are never touched.
+    func clearScreenshots() {
+        entries.filter(\.isScreenshot).forEach(removeMedia)
+        entries.removeAll(where: \.isScreenshot)
+        persist()
+    }
+
     @discardableResult
     func restore(_ entry: ClipboardEntry) -> Bool {
         pasteboard.clearContents()

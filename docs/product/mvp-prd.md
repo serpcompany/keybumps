@@ -41,7 +41,7 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ## Shared Command Palette
 
-- Search, Clipboard, Dictation, and Hotkeys (Keyboard Shortcutter history) are peer tabs selected by Command-1/2/3/4.
+- Search, Clipboard, Dictation, Hotkeys (Keyboard Shortcutter history), and Screenshots are peer tabs selected by Command-1/2/3/4/5.
 - The tab chrome shows only the shortcut and tab name.
 - One dominant input filters the active tab; history inputs use the label **Search**.
 - Arrow keys move selection, Return performs the primary action where one exists, and Escape closes the palette.
@@ -97,6 +97,13 @@ User outcome: screenshots taken with the standard macOS shortcuts are immediatel
 - If macOS denies access to the screenshot folder, show that state truthfully with a route to Privacy & Security › Files & Folders. A missing folder is reported and retried.
 - Existing installs receive Screenshot Tools enabled once when it first ships; after that the owner's switch is respected. Disabling it stops watching without removing existing items.
 - Never log screenshot filenames, paths, or image content.
+
+### Screenshots tab
+
+- Command-5 shows only screenshot items from Clipboard History, newest first, with thumbnails and the shared Search input. Copied images and copied image files stay in the Clipboard tab only.
+- Return, or a click, opens the Screenshot Editor; Command-Return, or Command-click, restores the screenshot to the clipboard; Command-E also edits. The footer shows Edit and ⌘ Copy.
+- Per-item delete and confirmed Clear All remove screenshot items from history only; files stay where macOS saved them.
+- When Screenshot Tools is off, the tab says so. Screenshots share Clipboard History's 50-item limit, so heavy copying can displace older screenshots.
 
 ### Screenshot Editor
 

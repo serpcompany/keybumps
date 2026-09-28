@@ -222,6 +222,38 @@ final class ScreenshotToolsTests: XCTestCase {
         XCTAssertTrue(entry.isScreenshot)
     }
 
+    func testScreenshotsTabShowsOnlyScreenCapturesAndFilters() {
+        let shot = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: "/tmp/a.png", mediaPasteboardType: "public.png", sourcePath: "/d/Screenshot at 9.41.png", isScreenCapture: true)
+        let older = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: "/tmp/b.png", mediaPasteboardType: "public.png", sourcePath: "/d/Screenshot at 8.00.png", isScreenCapture: true)
+        let copiedFile = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: "/tmp/c.png", mediaPasteboardType: "public.png", sourcePath: "/d/Mock.png")
+        let copiedImage = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: "/tmp/d.png", mediaPasteboardType: "public.png")
+        let text = ClipboardEntry(id: UUID(), text: "Screenshot", capturedAt: Date())
+        let all = [shot, copiedFile, text, older, copiedImage]
+
+        XCTAssertEqual(ScreenshotPaletteContent.resolve(entries: all, query: "", isEnabled: true), .entries([shot, older]))
+        XCTAssertEqual(ScreenshotPaletteContent.resolve(entries: all, query: "8.00", isEnabled: true), .entries([older]))
+        XCTAssertEqual(ScreenshotPaletteContent.resolve(entries: all, query: "zzz", isEnabled: true), .empty)
+        XCTAssertEqual(ScreenshotPaletteContent.resolve(entries: [copiedFile, text], query: "", isEnabled: true), .empty)
+        XCTAssertEqual(ScreenshotPaletteContent.resolve(entries: all, query: "", isEnabled: false), .disabled)
+    }
+
+    func testClearScreenshotsKeepsOtherItemsAndOriginalFiles() throws {
+        let storageURL = root.appendingPathComponent("history.json")
+        let mediaURL = root.appendingPathComponent("media", isDirectory: true)
+        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: NSPasteboard(name: NSPasteboard.Name("KeybumpsClearShots-\(UUID().uuidString)")), mediaDirectoryURL: mediaURL)
+        let shot = root.appendingPathComponent("Screenshot.png")
+        try png.write(to: shot)
+        XCTAssertTrue(service.ingestImageFile(at: shot, isScreenCapture: true))
+        service.ingestForTesting("keep me")
+        let screenshotMedia = try XCTUnwrap(service.entries.first { $0.isScreenshot }?.imageURL)
+
+        service.clearScreenshots()
+        XCTAssertEqual(service.entries.map(\.text), ["keep me"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: screenshotMedia.path), "the media copy is removed")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: shot.path), "the original screenshot file stays")
+        XCTAssertEqual(ClipboardHistoryService(storageURL: storageURL, mediaDirectoryURL: mediaURL).entries.map(\.text), ["keep me"])
+    }
+
     func testCopiedImagesKeepTheirExistingLabels() {
         let copied = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: "/tmp/x.png", mediaPasteboardType: "public.png")
         XCTAssertFalse(copied.isScreenshot)

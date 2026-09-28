@@ -2266,26 +2266,32 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
     }
 
-    func testCommandPaletteHasTheFourRequestedTabsWithSearchAsDefault() {
+    func testCommandPaletteHasTheFiveRequestedTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
-        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyboardShortcutter])
-        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4"])
+        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .dictation, .keyboardShortcutter, .screenshots])
+        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"])
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
             [
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
                 CommandPaletteTabLabel(shortcut: "⌘3", name: "Dictation"),
-                CommandPaletteTabLabel(shortcut: "⌘4", name: "Hotkeys")
+                CommandPaletteTabLabel(shortcut: "⌘4", name: "Hotkeys"),
+                CommandPaletteTabLabel(shortcut: "⌘5", name: "Screenshots")
             ]
         )
         XCTAssertEqual(
             CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
-            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"]]
+            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"], ["⌘", "5"]]
         )
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .keyboardShortcutter)
-        XCTAssertNil(CommandPaletteTab.matchingCommandKey("5"))
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("5"), .screenshots)
+        XCTAssertNil(CommandPaletteTab.matchingCommandKey("6"))
+        XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Edit")
+        XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActionTitle, "Copy")
+        XCTAssertNil(CommandPaletteTab.clipboard.secondaryActionTitle)
+        XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search screenshots")
         XCTAssertNil(CommandPaletteTab.keyboardShortcutter.primaryActionTitle)
         XCTAssertEqual(CommandPaletteTab.clipboard.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")
