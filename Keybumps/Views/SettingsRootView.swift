@@ -132,6 +132,11 @@ private struct ClipboardSettingsView: View {
         Form {
             CapabilityControl(capability: .clipboardHistory)
             CapabilityShortcutEditor(shortcut: .clipboardHistory, showsInstructions: false)
+            Section("History") {
+                Text("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }.formStyle(.grouped).navigationTitle("Clipboard History")
     }
 }

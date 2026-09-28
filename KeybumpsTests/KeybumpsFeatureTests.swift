@@ -1886,17 +1886,57 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(assembler.transcript, "A sentence that is still being recognized.")
     }
 
-    func testClipboardKeepsTenAndCollapsesDuplicates() {
+    func testClipboardKeepsFiftyAndCollapsesDuplicates() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
         let service = ClipboardHistoryService(storageURL: url)
-        for number in 0..<12 { service.ingestForTesting("item \(number)") }
-        XCTAssertEqual(service.entries.count, 10)
-        XCTAssertEqual(service.entries.first?.text, "item 11")
-        XCTAssertFalse(service.entries.contains { $0.text == "item 0" })
-        service.ingestForTesting("item 11")
-        XCTAssertEqual(service.entries.count, 10)
-        XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 10)
+        XCTAssertEqual(ClipboardHistoryService.capacity, 50)
+        for number in 0..<52 { service.ingestForTesting("item \(number)") }
+        XCTAssertEqual(service.entries.count, 50)
+        XCTAssertEqual(service.entries.first?.text, "item 51")
+        XCTAssertEqual(service.entries.last?.text, "item 2")
+        XCTAssertFalse(service.entries.contains { $0.text == "item 0" || $0.text == "item 1" })
+        service.ingestForTesting("item 51")
+        XCTAssertEqual(service.entries.count, 50)
+        XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 50)
+    }
+
+    func testClipboardEvictsOldestImageMediaAtCapacity() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-evict-\(UUID().uuidString)")
+        let storageURL = root.appendingPathComponent("history.json")
+        let mediaURL = root.appendingPathComponent("media", isDirectory: true)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsEvictClipboard-\(UUID().uuidString)"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII="))
+        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL)
+
+        pasteboard.clearContents()
+        pasteboard.setData(png, forType: .png)
+        service.pollForTesting()
+        let imageURL = try XCTUnwrap(service.entries.first?.imageURL)
+        for number in 0..<(ClipboardHistoryService.capacity - 1) { service.ingestForTesting("text \(number)") }
+        XCTAssertEqual(service.entries.last?.kind, .image)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: imageURL.path))
+
+        service.ingestForTesting("one more")
+        XCTAssertEqual(service.entries.count, ClipboardHistoryService.capacity)
+        XCTAssertFalse(service.entries.contains { $0.kind == .image })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imageURL.path))
+    }
+
+    func testClipboardLoadsExistingTenItemHistoryUnchanged() throws {
+        let storageURL = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-ten-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let existing = (0..<10).map {
+            ClipboardEntry(id: UUID(), text: "saved \($0)", capturedAt: Date(timeIntervalSince1970: 1_700_000_000 - Double($0)))
+        }
+        try JSONEncoder().encode(existing).write(to: storageURL)
+
+        let loaded = ClipboardHistoryService(storageURL: storageURL)
+        XCTAssertEqual(loaded.entries, existing)
+        loaded.ingestForTesting("new copy")
+        XCTAssertEqual(loaded.entries.count, 11)
+        XCTAssertEqual(Array(loaded.entries.dropFirst()), existing)
     }
 
     func testClipboardPersistsPreviewsAndRestoresCopiedImages() throws {

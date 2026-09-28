@@ -56,6 +56,9 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 @MainActor
 @Observable
 final class ClipboardHistoryService {
+    static let capacity = 50
+    static let maximumImageBytes = 50 * 1_024 * 1_024
+
     private(set) var entries: [ClipboardEntry] = []
     private var timer: Timer?
     private var lastChangeCount: Int
@@ -81,7 +84,7 @@ final class ClipboardHistoryService {
         try? fileManager.createDirectory(at: self.mediaDirectoryURL, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: self.storageURL),
            let decoded = try? JSONDecoder().decode([ClipboardEntry].self, from: data) {
-            entries = Array(decoded.prefix(10))
+            entries = Array(decoded.prefix(Self.capacity))
         }
     }
 
@@ -159,7 +162,7 @@ final class ClipboardHistoryService {
     }
 
     private func ingestImage(_ payload: ClipboardImagePayload) {
-        guard payload.data.count <= 50 * 1_024 * 1_024 else { return }
+        guard payload.data.count <= Self.maximumImageBytes else { return }
         let fingerprint = "image:" + SHA256.hash(data: payload.data)
             .map { String(format: "%02x", $0) }
             .joined()
@@ -189,9 +192,9 @@ final class ClipboardHistoryService {
         duplicates.forEach(removeMedia)
         entries.removeAll { $0.contentKey == entry.contentKey }
         entries.insert(entry, at: 0)
-        if entries.count > 10 {
-            entries.suffix(from: 10).forEach(removeMedia)
-            entries.removeLast(entries.count - 10)
+        if entries.count > Self.capacity {
+            entries.suffix(from: Self.capacity).forEach(removeMedia)
+            entries.removeLast(entries.count - Self.capacity)
         }
         persist()
     }

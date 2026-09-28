@@ -67,21 +67,21 @@ Acceptance requires physical shortcut invocation from another app; successful ap
 
 ## Clipboard History
 
-User outcome: recover and reuse the ten most recent copied text or image items.
+User outcome: recover and reuse the fifty most recent copied text or image items.
 
 - The default shortcut is Shift-Command-Space and is recordable, clearable, and restorable.
 - Capture text and PNG, JPEG, HEIC, GIF, and TIFF changes while enabled.
-- Persist at most ten items locally. Store image payloads as separate files capped at 50 MB each rather than embedding them in JSON.
+- Persist at most fifty items locally. Store image payloads as separate files capped at 50 MB each rather than embedding them in JSON.
 - Collapse consecutive duplicates.
 - Selecting an item restores it to the pasteboard and pastes into the focused destination when safe.
 - Exclude the exact temporary pasteboard write used by automatic Dictation insertion or Dictation-history paste. A later user-originated copy of identical text remains eligible.
 - Support visible image previews, individual deletion, and confirmed Clear All.
 - Disabling Clipboard History stops monitoring without erasing retained items.
-- Explain that recent copied secrets may remain until removed or displaced.
+- Explain in Clipboard History settings that recent copied secrets may remain until removed or displaced, and that a full image history can use several gigabytes of local storage.
 
 Out of scope: arbitrary copied files, audio/video media, cloud sync, accounts, permanent archives, and source classification.
 
-Acceptance covers ordering, duplicate collapse, exact image restoration, ten-item/media-file eviction, persistence, deletion, clearing, safe paste, and disabled monitoring in the exact signed build.
+Acceptance covers ordering, duplicate collapse, exact image restoration, fifty-item/media-file eviction, persistence, deletion, clearing, safe paste, and disabled monitoring in the exact signed build.
 
 ## Dictation
 
