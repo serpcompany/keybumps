@@ -86,15 +86,20 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(policy.isSafeToInstall)
     }
 
-    func testSharedInstallationSafetyRejectsQuitDuringActiveDictation() {
-        let delegate = AppDelegate(quickSearchRouter: QuickSearchRouter())
+    func testQuitDuringActiveDictationAsksBeforeQuitting() {
+        var asked: [[String]] = []
+        let declines = AppDelegate(quickSearchRouter: QuickSearchRouter()) { asked.append($0); return false }
+        let confirms = AppDelegate(quickSearchRouter: QuickSearchRouter()) { _ in true }
         defer { UpdateInstallationSafetyPolicy.shared.update(dictationPhase: .idle) }
 
         UpdateInstallationSafetyPolicy.shared.update(dictationPhase: .recording)
-        XCTAssertEqual(delegate.applicationShouldTerminate(.shared), .terminateCancel)
+        XCTAssertEqual(declines.applicationShouldTerminate(.shared), .terminateCancel)
+        XCTAssertEqual(asked, [["Dictation is still in progress."]])
+        XCTAssertEqual(confirms.applicationShouldTerminate(.shared), .terminateNow)
 
         UpdateInstallationSafetyPolicy.shared.update(dictationPhase: .idle)
-        XCTAssertEqual(delegate.applicationShouldTerminate(.shared), .terminateNow)
+        XCTAssertEqual(declines.applicationShouldTerminate(.shared), .terminateNow)
+        XCTAssertEqual(asked.count, 1)
     }
 
     func testDisabledUpdaterNeverContactsOrMutatesAFeed() {

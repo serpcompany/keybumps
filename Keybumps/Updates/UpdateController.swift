@@ -78,6 +78,19 @@ final class UpdateInstallationSafetyPolicy {
         activeCriticalOperations.isEmpty && !dictationPhase.blocksUpdateInstallation
     }
 
+    /// What quitting now would lose, for confirming a quit the user asked for. Momentary window
+    /// actions and drags matter only to automatic update relaunches, never to a user's quit.
+    var quitConfirmationReasons: [String] {
+        var reasons: [String] = []
+        if activeCriticalOperations.contains(.unsavedWork) {
+            reasons.append("The Screenshot Editor has unsaved changes.")
+        }
+        if dictationPhase.blocksUpdateInstallation {
+            reasons.append("Dictation is still in progress.")
+        }
+        return reasons
+    }
+
     func update(dictationPhase: DictationPhase) {
         self.dictationPhase = dictationPhase
     }
