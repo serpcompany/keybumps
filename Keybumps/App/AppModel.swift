@@ -140,7 +140,8 @@ final class AppModel {
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
-        dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil
+        dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
+        dictationFileManager: FileManager = .default
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -182,6 +183,7 @@ final class AppModel {
         dictation = DictationService(
             language: preferences.dictationLanguage,
             durationLimit: preferences.dictationDurationLimit,
+            fileManager: dictationFileManager,
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
             didWritePasteboard: clipboard.suppressCurrentChange

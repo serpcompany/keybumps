@@ -78,6 +78,8 @@ struct CapabilityWiringSnapshot: Codable {
         /// Keyed by the missing permission; each line records start lifecycle, detector status,
         /// non-zero Settings attention, and missing permissions.
         let permissionsMissing: [String: String]
+        /// `start()` while onboarding is incomplete: lifecycle, shortcut owners, and detector status.
+        let startBeforeOnboarding: String
     }
 
     let paletteTabs: [PaletteTab]
@@ -165,13 +167,22 @@ enum WiringRecorder {
             ].joined(separator: "; ")
         }
 
+        let onboarding = WiringHarness(enabled: enabled, missing: nil, root: root, didCompleteOnboarding: false)
+        onboarding.model.start()
+        let startBeforeOnboarding = [
+            "start \(list(onboarding.log.drain()))",
+            "shortcuts \(list(onboarding.shortcuts().keys.sorted()))",
+            "detector \(describe(onboarding.model.detectorStatus))"
+        ].joined(separator: "; ")
+
         return .init(
             enabled: Capability.allCases.filter(enabled.contains).map(\.rawValue),
             requiredPermissions: PermissionSetupPlan.requiredPermissions(for: enabled).map(\.rawValue),
             startLifecycle: startLifecycle,
             afterStart: afterStart,
             steps: steps,
-            permissionsMissing: permissionsMissing
+            permissionsMissing: permissionsMissing,
+            startBeforeOnboarding: startBeforeOnboarding
         )
     }
 
@@ -243,7 +254,7 @@ final class WiringHarness {
     private let coordinator: GlobalShortcutCoordinator
     private var lastShortcuts: [String: String] = [:]
 
-    init(enabled: Set<Capability>, missing: MacPermission?, root: URL) {
+    init(enabled: Set<Capability>, missing: MacPermission?, root: URL, didCompleteOnboarding: Bool = true) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -252,7 +263,7 @@ final class WiringHarness {
         WiringHarness.suites.append(suite)
         let preferences = AppPreferences(defaults: defaults)
         preferences.enabledCapabilities = enabled
-        preferences.didCompleteOnboarding = true
+        preferences.didCompleteOnboarding = didCompleteOnboarding
 
         let log = log
         let grants = FakePermissionState(missing: missing)
@@ -304,7 +315,8 @@ final class WiringHarness {
             ),
             windows: SpyWindowManagementService(log: log),
             screenshotTools: screenshotTools,
-            dictationIndicator: SilentDictationIndicator()
+            dictationIndicator: SilentDictationIndicator(),
+            dictationFileManager: SandboxedFileManager(root: directory)
         )
         _ = log.drain()
         lastShortcuts = shortcuts()
@@ -466,6 +478,20 @@ private final class SpyWindowManagementService: WindowManagementService {
 
 private final class SilentDictationIndicator: DictationIndicatorController {
     override func update(_ phase: DictationPhase) {}
+}
+
+/// Keeps Dictation's recovery file out of the user's real Application Support folder.
+private final class SandboxedFileManager: FileManager {
+    private let root: URL
+
+    init(root: URL) {
+        self.root = root
+        super.init()
+    }
+
+    override func urls(for directory: FileManager.SearchPathDirectory, in domainMask: FileManager.SearchPathDomainMask) -> [URL] {
+        [root.appendingPathComponent("\(directory.rawValue)", isDirectory: true)]
+    }
 }
 
 private struct EmptyScreenshotDirectoryReader: ScreenshotDirectoryReading {

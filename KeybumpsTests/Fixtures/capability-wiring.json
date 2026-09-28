@@ -32,6 +32,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -88,6 +89,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -144,6 +146,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -202,6 +205,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -259,6 +263,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -318,6 +323,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -377,6 +383,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -438,6 +445,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -522,6 +530,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -609,6 +618,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -696,6 +706,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -785,6 +796,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -874,6 +886,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -965,6 +978,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1056,6 +1070,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1149,6 +1164,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1207,6 +1223,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1266,6 +1283,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1325,6 +1343,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1386,6 +1405,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1447,6 +1467,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1510,6 +1531,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1573,6 +1595,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1638,6 +1661,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1725,6 +1749,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1815,6 +1840,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -1905,6 +1931,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -1997,6 +2024,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -2089,6 +2117,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -2183,6 +2212,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false)",
@@ -2277,6 +2307,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -2373,6 +2404,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true)",
@@ -2431,6 +2463,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -2487,6 +2520,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -2543,6 +2577,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -2601,6 +2636,7 @@
       "requiredPermissions" : [
 
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -2658,6 +2694,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -2717,6 +2754,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -2776,6 +2814,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -2837,6 +2876,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start []; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -2921,6 +2961,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3008,6 +3049,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3095,6 +3137,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -3184,6 +3227,7 @@
       "requiredPermissions" : [
         "accessibility"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -3273,6 +3317,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3364,6 +3409,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3455,6 +3501,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -3548,6 +3595,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [dragToSnap.start]; shortcuts []; detector stopped",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -3606,6 +3654,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3665,6 +3714,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3724,6 +3774,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -3785,6 +3836,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -3846,6 +3898,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3909,6 +3962,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -3972,6 +4026,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -4037,6 +4092,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -4124,6 +4180,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -4214,6 +4271,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -4304,6 +4362,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -4396,6 +4455,7 @@
         "accessibility",
         "inputMonitoring"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -4488,6 +4548,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -4582,6 +4643,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.stop",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false)",
@@ -4676,6 +4738,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
@@ -4772,6 +4835,7 @@
         "microphone",
         "speechRecognition"
       ],
+      "startBeforeOnboarding" : "start [detector.eventTap.stop, detector.eventTap.start, dragToSnap.start]; shortcuts []; detector monitoring",
       "startLifecycle" : [
         "clipboardMonitor.start",
         "screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true)",
