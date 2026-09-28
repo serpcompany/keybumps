@@ -2,6 +2,15 @@
 
 This is the general Keybumps development cycle for feature work, bug fixes, local builds, and owner acceptance. Public Sparkle distribution is a later, separate operation documented in [`releases/sparkle-update-operations.md`](releases/sparkle-update-operations.md).
 
+## Local QA loop at a glance
+
+1. Implement one issue on its branch; commit a clean tree.
+2. Agent first pass without taking over the owner's screen (section 3a).
+3. `scripts/build-qa-candidate.sh <issue>` builds, backs up, installs, and launches the candidate.
+4. Agent posts the scoped hit list and evidence table to the issue (section 4).
+5. Owner tests the installed candidate and replies **accept**, **fail** (with findings), or runs `scripts/restore-previous-keybumps.sh` to roll back.
+6. Failures are fixed on the same branch and rebuilt; the script increments the candidate build (`.n+1`). Acceptance leads to promotion (section 5).
+
 ## 1. Establish the base
 
 - Treat `main` as the accepted product baseline.
@@ -39,18 +48,31 @@ Keep durable test inputs under `KeybumpsTests/Fixtures`. Keep generated builds, 
 - Replace the installed app with the intended candidate, launch it from `/Applications`, and verify that the running artifact is the candidate just built.
 - `scripts/build-qa-candidate.sh <issue>` performs this step from a clean tree: it archives and Developer ID-exports the current commit as `<release>-dev.issue<N>` with build `<release build>.<issue>.<n>` (ordered above the installed release and below the next public build for Sparkle), refuses if the designated requirement differs from the installed baseline, backs up the installed app under `~/Library/Developer/Keybumps-QA/backups`, installs and launches the candidate, and verifies the running artifact. It never notarizes or publishes. `scripts/restore-previous-keybumps.sh` reinstalls the most recent backup.
 
+## 3a. Agent first pass
+
+Before handing a candidate to the owner, the agent verifies what it can without interrupting the owner's work:
+
+- Deterministic tests, extended for the changed behavior.
+- Offscreen renders of changed surfaces (for example SwiftUI `ImageRenderer` snapshots) inspected by the agent for layout, truncation, and state.
+- The installed candidate launches from `/Applications`, has a valid signature and matching designated requirement, stays running, and loads existing local data. Check persisted data structurally only (counts, kinds, schema) and never read or report user content.
+
+Computer-use or other screen control drives the owner's real mouse, keyboard, and focus. Use it only after the owner explicitly hands over the screen, announce when it starts and ends, and keep it to checks that require real focus (global shortcuts, cross-app paste, permissions, Dictation insertion). Report the first pass as its own evidence; it never substitutes for owner acceptance.
+
 ## 4. Give the owner a scoped hit list
 
 - List only behavior actually present in that candidate.
 - Distinguish regression checks from new acceptance checks.
 - Explicitly list related work that is not included yet.
 - Record pass, failure, skipped, blocked, and follow-up findings in the owning GitHub issue.
+- Post the hit list on the issue with the candidate version and build, branch, full commit SHA, an evidence table using the levels above, and the rollback command.
+- The owner's result is one of: **accept**, **fail** with findings (fix on the branch and produce the next candidate), or **roll back** with `scripts/restore-previous-keybumps.sh` when the candidate blocks everyday use.
 
 ## 5. Promote accepted work
 
 - Do not treat a local candidate as the new baseline merely because it was installed.
 - After owner acceptance and independent review, merge the accepted issue boundary into `main`.
 - Update dependent branches from the new `main` before producing their next candidates.
+- While a candidate awaits acceptance, dependent work may continue on a branch stacked on it; rebase it onto `main` after the parent is promoted, and carry any fixes forward before building its candidate.
 - Delete superseded local candidates and derived build caches after preserving any required release or issue evidence.
 
 ## 6. Publish only when requested

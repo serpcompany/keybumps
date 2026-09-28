@@ -3,6 +3,7 @@
 Build the functional MVP in `docs/product/mvp-prd.md`. Use `CONTEXT.md` terminology and preserve the module boundaries documented in `docs/architecture.md`.
 
 - [`docs/development-workflow.md`](docs/development-workflow.md): Follow this branch, local-build, installed-artifact, manual-QA, and promotion cycle for all product work.
+  Hand the owner work through `scripts/build-qa-candidate.sh <issue>` after your own first pass; never take over the owner's screen without an explicit handoff.
 
 - User content and processing stay local. Do not log searches, filenames, clipboard values, transcripts, or coaching content.
 - Keybumps uses the clean-break `com.serp.keybumps` identity and starts with its
