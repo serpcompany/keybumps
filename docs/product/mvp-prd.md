@@ -2,13 +2,14 @@
 
 ## Product boundary
 
-Keybumps is one native macOS companion with five independently enabled capabilities:
+Keybumps is one native macOS companion with six independently enabled capabilities:
 
 1. Quick Search
 2. Clipboard History
 3. Dictation
 4. Window Management
 5. Keyboard Shortcutter
+6. Screenshot Tools
 
 The permanent bundle identifier is `com.serp.keybumps`. The supported baseline is Apple Silicon on macOS 14.2 or newer. User content and processing remain local: no account, sync, analytics backend, cloud transcription, hosted history, or uploaded search, clipboard, transcript, filename, recording, or coaching content.
 
@@ -17,7 +18,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 ## Application shell
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
-- Settings contains Setup, Quick Search, Clipboard History, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General destinations.
+- Settings contains Setup, Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Management, Keyboard Shortcutter, Permissions, and General destinations.
 - Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed.
 - Clicking the Dock icon opens Quick Search.
 - The menu-bar menu contains Toggle Keybumps, version/build information, Settings, Check for Updates, and Quit Keybumps.
@@ -83,6 +84,23 @@ Out of scope: arbitrary copied files, audio/video media, cloud sync, accounts, p
 
 Acceptance covers ordering, duplicate collapse, exact image restoration, fifty-item/media-file eviction, persistence, deletion, clearing, safe paste, and disabled monitoring in the exact signed build.
 
+## Screenshot Tools
+
+User outcome: screenshots taken with the standard macOS shortcuts are immediately available in Clipboard History for pasting and, in a later slice, lightweight markup.
+
+- Read the macOS screenshot location (`com.apple.screencapture` `location`, default Desktop) without writing system preferences, and follow changes to it.
+- Add only new files macOS marks as screen captures (PNG, JPEG, HEIC, TIFF, GIF) to Clipboard History as screenshot items, after the file finishes writing. Existing files, other images, and other file types are ignored.
+- Clipboard History keeps its own media copy and remembers the original file for later editing. Deleting a history item never deletes the original screenshot. Ingestion never writes the pasteboard.
+- Screenshot items show the screenshot's name and a **Screenshot** label; Return pastes them like any image.
+- Screenshot Tools requires Clipboard History. When Clipboard History is off, Screenshot Tools shows **Requires Clipboard History** with an action to enable it.
+- If macOS denies access to the screenshot folder, show that state truthfully with a route to Privacy & Security › Files & Folders. A missing folder is reported and retried.
+- Existing installs receive Screenshot Tools enabled once when it first ships; after that the owner's switch is respected. Disabling it stops watching without removing existing items.
+- Never log screenshot filenames, paths, or image content.
+
+Out of scope: Keybumps screen capture, Screen Recording permission, scrolling capture, OCR, recording, beautification, pinning, uploads, and crop (deferred).
+
+Acceptance requires a physical Shift-Command-4 screenshot appearing in the Clipboard tab and pasting correctly, disabling and re-enabling ingestion, the Clipboard History dependency, and relaunch persistence in the exact signed build.
+
 ## Dictation
 
 User outcome: record speech, transcribe it locally, and insert it at the original cursor.
@@ -107,7 +125,7 @@ User outcome: record speech, transcribe it locally, and insert it at the origina
 
 Required permissions are Microphone and Speech Recognition, plus Accessibility where focused-field insertion requires it.
 
-Out of scope: automatic per-recording language detection, guide/assistant behavior, screen capture, AI rewriting, cloud transcription, meeting or system-audio recording, speaker identification, accounts, and uploaded history.
+Out of scope: automatic per-recording language detection, guide/assistant behavior, screen capture (Screenshot Tools only ingests macOS screenshots), AI rewriting, cloud transcription, meeting or system-audio recording, speaker identification, accounts, and uploaded history.
 
 Acceptance requires successful insertion in a standard text editor and browser field plus cancellation, denied-permission recovery, offline operation, language switching, interruption recovery, retry, and failed-insertion recovery.
 
@@ -157,6 +175,7 @@ One coordinator reports truthful state and recovery for all permissions. Keybump
 | --- | --- |
 | Quick Search | None for ordinary indexed search |
 | Clipboard History | None for ordinary pasteboard monitoring |
+| Screenshot Tools | None; macOS may ask for Files & Folders access to the screenshot folder |
 | Dictation | Microphone, Speech Recognition, conditional Accessibility |
 | Window Management | Accessibility |
 | Keyboard Shortcutter | Accessibility and Input Monitoring |
@@ -178,13 +197,14 @@ Customer distribution is a Developer ID-signed, hardened, notarized direct downl
 
 ## Functional acceptance
 
-The functional MVP is accepted only when one stable installed Keybumps build demonstrates all five capabilities together:
+The functional MVP is accepted only when one stable installed Keybumps build demonstrates all six capabilities together:
 
 - Command-Space opens Quick Search and successfully opens apps, files, and folders.
 - Shift-Command-Space recalls and pastes bounded text and image history.
 - Option-Space records, transcribes locally, inserts text, and supports Escape cancellation.
 - Every configured Window Management shortcut and supported drag region works.
 - Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
+- A macOS screenshot appears in Clipboard History and pastes correctly.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.
 - Skipped permissions remain recoverable without disabling unrelated capabilities.
 - Relaunch preserves intended preferences and histories.

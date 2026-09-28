@@ -845,7 +845,7 @@ private struct ClipboardResultsView: View {
                                             .lineLimit(entry.kind == .image ? 1 : 2)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                         HStack(spacing: 5) {
-                                            Text(entry.kind == .image ? "Image" : "Text")
+                                            Text(entry.kindLabel)
                                             Text("·")
                                             Text(entry.capturedAt, style: .relative)
                                         }
@@ -896,7 +896,7 @@ private struct ClipboardEntryPreview: View {
         .frame(width: 58, height: 42)
         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
         .clipShape(.rect(cornerRadius: 7))
-        .accessibilityLabel(entry.kind == .image ? "Copied image preview" : "Copied text")
+        .accessibilityLabel(entry.isScreenshot ? "Screenshot preview" : entry.kind == .image ? "Copied image preview" : "Copied text")
         .task(id: entry.mediaPath) {
             guard entry.kind == .image, let imageURL = entry.imageURL else {
                 thumbnail = nil

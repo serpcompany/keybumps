@@ -37,6 +37,7 @@ final class AppModel {
     let shortcuts: GlobalShortcutCoordinator
     let permissions: PermissionCoordinator
     let clipboard: ClipboardHistoryService
+    let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
     let windows = WindowManagementService()
@@ -115,7 +116,8 @@ final class AppModel {
             inbox: InboxStore(),
             presenceController: AppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController()
+            presenter: PresentationWindowController(),
+            screenshotDirectoryReader: FileSystemScreenshotDirectoryReader()
         )
     }
 
@@ -131,7 +133,8 @@ final class AppModel {
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
         updater injectedUpdater: (any UpdateControlling)? = nil,
         dictationModelManager injectedDictationModelManager: DictationModelManager? = nil,
-        spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil
+        spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil,
+        screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
@@ -148,6 +151,11 @@ final class AppModel {
         let clipboard = ClipboardHistoryService()
         let dictationHistory = DictationHistoryService()
         self.clipboard = clipboard
+        // Only the production composition reads the real screenshot folder; injected models stay inert.
+        screenshotTools = ScreenshotToolsService(
+            reader: screenshotDirectoryReader ?? UnavailableScreenshotDirectoryReader(),
+            ingest: { clipboard.ingestImageFile(at: $0) }
+        )
         self.dictationHistory = dictationHistory
         let dictationModelManager = injectedDictationModelManager ?? DictationModelManager(
             modelsRoot: ProductPaths.keybumps().dictationModels,
@@ -274,6 +282,10 @@ final class AppModel {
             configure(owner: owner, capability: .windowManagement, binding: preferences.windowShortcut(for: action)) { [weak self] in self?.performWindowAction(action) }
         }
         enabled.contains(.clipboardHistory) ? clipboard.start() : clipboard.stop()
+        screenshotTools.apply(
+            enabled: enabled.contains(.screenshotTools),
+            clipboardHistoryEnabled: enabled.contains(.clipboardHistory)
+        )
         enabled.contains(.windowManagement) ? windows.startDragSnapping() : windows.stop()
         enabled.contains(.keyboardShortcutter) ? detector.start() : detector.stop()
         refreshDetectorState()
@@ -622,6 +634,8 @@ final class AppModel {
         case .keyboardShortcutter:
             detector.stop()
             presenter.dismissAll()
+        case .screenshotTools:
+            screenshotTools.stop()
         }
     }
 

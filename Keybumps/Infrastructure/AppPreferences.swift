@@ -8,6 +8,7 @@ final class AppPreferences {
         static let selectedChannels = "selectedNotificationChannels"
         static let showInDockAndSwitcher = "showInDockAndSwitcher"
         static let enabledCapabilities = "enabledCapabilities"
+        static let knownCapabilities = "knownCapabilities"
         static let dictationLanguage = "dictationLanguage"
         static let dictationDurationLimit = "dictationDurationLimit"
         static let dictationTranscriptionEngine = "dictationTranscriptionEngine"
@@ -57,10 +58,16 @@ final class AppPreferences {
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
-            enabledCapabilities = Set(raw.compactMap(Capability.init(rawValue:)))
+            let known = (defaults.array(forKey: Key.knownCapabilities) as? [String])
+                .map { Set($0.compactMap(Capability.init(rawValue:))) } ?? Capability.originalCapabilities
+            let introduced = Set(Capability.allCases).subtracting(known)
+            let migrated = Set(raw.compactMap(Capability.init(rawValue:))).union(introduced)
+            enabledCapabilities = migrated
+            defaults.set(migrated.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities)
         } else {
             enabledCapabilities = Set(Capability.allCases)
         }
+        defaults.set(Capability.allCases.map(\.rawValue).sorted(), forKey: Key.knownCapabilities)
         dictationLanguage = defaults.string(forKey: Key.dictationLanguage) ?? "en-US"
         if defaults.object(forKey: Key.dictationDurationLimit) != nil,
            let storedLimit = DictationDurationLimit(rawValue: defaults.integer(forKey: Key.dictationDurationLimit)) {

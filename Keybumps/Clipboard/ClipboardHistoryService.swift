@@ -13,6 +13,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let mediaPath: String?
     let mediaPasteboardType: String?
     let fingerprint: String?
+    /// Original screenshot file for items ingested by Screenshot Tools; nil for pasteboard copies.
+    let sourcePath: String?
 
     init(
         id: UUID,
@@ -21,7 +23,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         kind: Kind = .text,
         mediaPath: String? = nil,
         mediaPasteboardType: String? = nil,
-        fingerprint: String? = nil
+        fingerprint: String? = nil,
+        sourcePath: String? = nil
     ) {
         self.id = id
         self.text = text
@@ -30,15 +33,24 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         self.mediaPath = mediaPath
         self.mediaPasteboardType = mediaPasteboardType
         self.fingerprint = fingerprint
+        self.sourcePath = sourcePath
     }
 
-    var displayText: String { kind == .image ? "Image" : text }
-    var searchableText: String { kind == .image ? "Image \(mediaPasteboardType ?? "")" : text }
+    var isScreenshot: Bool { kind == .image && sourcePath != nil }
+    var kindLabel: String { kind == .text ? "Text" : (isScreenshot ? "Screenshot" : "Image") }
+    var displayText: String {
+        switch kind {
+        case .text: text
+        case .image: sourceURL?.deletingPathExtension().lastPathComponent ?? "Image"
+        }
+    }
+    var searchableText: String { kind == .image ? "\(kindLabel) \(displayText) \(mediaPasteboardType ?? "")" : text }
+    var sourceURL: URL? { sourcePath.map { URL(fileURLWithPath: $0) } }
     var imageURL: URL? { mediaPath.map { URL(fileURLWithPath: $0) } }
     var contentKey: String { fingerprint ?? "text:\(text)" }
 
     private enum CodingKeys: String, CodingKey {
-        case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint
+        case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint, sourcePath
     }
 
     init(from decoder: Decoder) throws {
@@ -50,14 +62,15 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         mediaPath = try container.decodeIfPresent(String.self, forKey: .mediaPath)
         mediaPasteboardType = try container.decodeIfPresent(String.self, forKey: .mediaPasteboardType)
         fingerprint = try container.decodeIfPresent(String.self, forKey: .fingerprint)
+        sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath)
     }
 }
 
 @MainActor
 @Observable
 final class ClipboardHistoryService {
-    static let capacity = 50
-    static let maximumImageBytes = 50 * 1_024 * 1_024
+    nonisolated static let capacity = 50
+    nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 
     private(set) var entries: [ClipboardEntry] = []
     private var timer: Timer?
@@ -130,6 +143,13 @@ final class ClipboardHistoryService {
         return true
     }
 
+    /// Adds a screenshot file as an image item without touching the pasteboard.
+    @discardableResult
+    func ingestImageFile(at url: URL) -> Bool {
+        guard let payload = ClipboardImagePayload.read(fileAt: url) else { return false }
+        return ingestImage(payload, sourcePath: url.path)
+    }
+
     func ingestForTesting(_ text: String) { ingestText(text) }
     func pollForTesting() { poll() }
     func suppressCurrentChange() { suppressedChangeCount = pasteboard.changeCount }
@@ -161,12 +181,13 @@ final class ClipboardHistoryService {
         ))
     }
 
-    private func ingestImage(_ payload: ClipboardImagePayload) {
-        guard payload.data.count <= Self.maximumImageBytes else { return }
+    @discardableResult
+    private func ingestImage(_ payload: ClipboardImagePayload, sourcePath: String? = nil) -> Bool {
+        guard payload.data.count <= Self.maximumImageBytes else { return false }
         let fingerprint = "image:" + SHA256.hash(data: payload.data)
             .map { String(format: "%02x", $0) }
             .joined()
-        guard entries.first?.contentKey != fingerprint else { return }
+        guard entries.first?.contentKey != fingerprint else { return false }
 
         let id = UUID()
         let mediaURL = mediaDirectoryURL.appendingPathComponent("\(id.uuidString).\(payload.fileExtension)")
@@ -179,10 +200,13 @@ final class ClipboardHistoryService {
                 kind: .image,
                 mediaPath: mediaURL.path,
                 mediaPasteboardType: payload.type.rawValue,
-                fingerprint: fingerprint
+                fingerprint: fingerprint,
+                sourcePath: sourcePath
             ))
+            return true
         } catch {
             try? fileManager.removeItem(at: mediaURL)
+            return false
         }
     }
 
@@ -227,11 +251,22 @@ private struct ClipboardImagePayload {
         return nil
     }
 
-    private static let candidates: [(type: NSPasteboard.PasteboardType, fileExtension: String)] = [
-        (.png, "png"),
-        (NSPasteboard.PasteboardType("public.jpeg"), "jpg"),
-        (NSPasteboard.PasteboardType("public.heic"), "heic"),
-        (NSPasteboard.PasteboardType("com.compuserve.gif"), "gif"),
-        (.tiff, "tiff")
+    static func read(fileAt url: URL) -> ClipboardImagePayload? {
+        let fileExtension = url.pathExtension.lowercased()
+        guard let candidate = candidates.first(where: { $0.fileExtensions.contains(fileExtension) }),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? Int,
+              size > 0, size <= ClipboardHistoryService.maximumImageBytes,
+              let data = try? Data(contentsOf: url) else { return nil }
+        return ClipboardImagePayload(data: data, type: candidate.type, fileExtension: candidate.fileExtension)
+    }
+
+    private static let candidates: [(type: NSPasteboard.PasteboardType, fileExtension: String, fileExtensions: Set<String>)] = [
+        (.png, "png", ["png"]),
+        (NSPasteboard.PasteboardType("public.jpeg"), "jpg", ["jpg", "jpeg"]),
+        (NSPasteboard.PasteboardType("public.heic"), "heic", ["heic"]),
+        (NSPasteboard.PasteboardType("com.compuserve.gif"), "gif", ["gif"]),
+        (.tiff, "tiff", ["tif", "tiff"])
     ]
 }
+

@@ -1,6 +1,6 @@
 # Keybumps domain
 
-Keybumps is one installed native macOS companion with five independently enabled capabilities presented through shared app surfaces.
+Keybumps is one installed native macOS companion with six independently enabled capabilities presented through shared app surfaces.
 
 ## Language
 
@@ -35,6 +35,10 @@ _Avoid_: Rectangle app
 **Keyboard Shortcutter**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.
 _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
+
+**Screenshot Tools**:
+The capability that adds screenshots macOS saves (Shift-Command-3/4/5) to Clipboard History as screenshot items and owns their markup editor. It never captures the screen itself.
+_Avoid_: Screen capture, screenshot app, CleanShot clone
 
 **Development License Adapter**:
 An explicit non-production local gate used only to exercise onboarding before a commerce provider is chosen.
