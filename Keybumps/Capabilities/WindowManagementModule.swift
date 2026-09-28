@@ -11,6 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: nil,
         settingsPage: CapabilitySettingsPage(
             section: .windows,
+            summary: "Move and resize your application windows.",
             disableExplanation: "Turning this off stops drag-to-snap and releases all window shortcuts.",
             content: { AnyView(WindowSettingsView()) }
         ),

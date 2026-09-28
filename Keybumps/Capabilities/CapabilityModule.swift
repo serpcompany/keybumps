@@ -42,6 +42,8 @@ struct CapabilityPaletteTab {
 /// A module's Settings destination. The section title is the capability title.
 struct CapabilitySettingsPage {
     let section: SettingsSection
+    /// The one line under the capability's name at the top of its page.
+    let summary: String
     /// The caption under the enable switch describing what turning the module off releases.
     let disableExplanation: String?
     let content: @MainActor () -> AnyView

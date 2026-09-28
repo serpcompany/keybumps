@@ -3,18 +3,20 @@ import SwiftUI
 
 /// Colors and metrics copied from Raycast's Settings window (dark), with light equivalents.
 enum SettingsTheme {
-    static let pageBackground = Color(light: gray(0.96), dark: gray(0.078))
-    static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.071))
-    static let card = Color(light: .white, dark: gray(0.114))
-    static let control = Color(light: gray(0.9), dark: gray(0.165))
+    static let pageBackground = Color(light: gray(0.96), dark: gray(0.086))
+    static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.106))
+    static let card = Color(light: .white, dark: gray(0.118))
+    static let control = Color(light: gray(0.9), dark: gray(0.173))
+    static let field = Color(light: gray(0.9), dark: gray(0.137))
     static let separator = Color.primary.opacity(0.07)
-    static let selection = Color.primary.opacity(0.09)
+    static let selection = Color.primary.opacity(0.08)
 
-    static let rowMinHeight: CGFloat = 52
-    static let rowInset: CGFloat = 14
-    static let cardRadius: CGFloat = 12
-    static let titleSize: CGFloat = 15
-    static let subtitleSize: CGFloat = 13
+    static let rowMinHeight: CGFloat = 44
+    static let rowInset: CGFloat = 11
+    static let cardRadius: CGFloat = 10
+    static let titleSize: CGFloat = 13
+    static let subtitleSize: CGFloat = 11
+    static let sidebarTextSize: CGFloat = 14
 
     private static func gray(_ value: CGFloat) -> NSColor {
         NSColor(srgbRed: value, green: value, blue: value, alpha: 1)
@@ -35,12 +37,12 @@ struct SettingsPage<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 16) {
                 content
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 14)
-            .padding(.bottom, 26)
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(SettingsTheme.pageBackground)
@@ -51,42 +53,64 @@ struct SettingsPage<Content: View>: View {
     }
 }
 
-/// Raycast's rounded-rectangle buttons with a dark fill.
-struct SettingsButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
+/// The centered icon, name, and one-line summary at the top of an extension page.
+struct SettingsHero: View {
+    let systemImage: String
+    let tint: Color
+    let title: String
+    let summary: String
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: SettingsTheme.titleSize - 1, weight: .medium))
-            .padding(.horizontal, 12)
-            .frame(minHeight: 30)
-            .background(
-                SettingsTheme.control.opacity(configuration.isPressed ? 0.7 : 1),
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
-            .opacity(isEnabled ? 1 : 0.45)
-            .contentShape(Rectangle())
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(tint.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.bottom, 6)
+            Text(title)
+                .font(.system(size: 22, weight: .bold))
+            Text(summary)
+                .font(.system(size: SettingsTheme.titleSize))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 28)
+        .padding(.bottom, 22)
     }
 }
 
 /// A heading outside a rounded card whose rows are separated by inset dividers.
 struct SettingsGroup<Content: View>: View {
     private let title: String?
+    private let subtitle: String?
     private let content: Content
 
-    init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
+    init(_ title: String? = nil, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.subtitle = subtitle
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let title {
-                Text(title)
-                    .font(.system(size: SettingsTheme.titleSize, weight: .semibold))
-                    .padding(.leading, SettingsTheme.rowInset)
-                    .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 8) {
+            if title != nil || subtitle != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let title {
+                        Text(title)
+                            .font(.system(size: SettingsTheme.titleSize, weight: .medium))
+                            .foregroundStyle(.primary.opacity(0.85))
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: SettingsTheme.subtitleSize))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.leading, SettingsTheme.rowInset)
+                .padding(.top, 8)
             }
             _VariadicView.Tree(DividedRows()) { content }
                 .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
@@ -100,7 +124,7 @@ private struct DividedRows: _VariadicView_MultiViewRoot {
             ForEach(children) { child in
                 child
                     .frame(maxWidth: .infinity, minHeight: SettingsTheme.rowMinHeight, alignment: .leading)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                     .padding(.horizontal, SettingsTheme.rowInset)
                 if child.id != children.last?.id {
                     SettingsTheme.separator
@@ -112,13 +136,13 @@ private struct DividedRows: _VariadicView_MultiViewRoot {
     }
 }
 
-/// A row title with an optional gray subtitle, as in Raycast's "Theme Studio" row.
+/// A row title with an optional gray subtitle.
 struct SettingsRowLabel: View {
     let title: String
     var subtitle: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title)
             if let subtitle {
                 Text(subtitle)
@@ -143,14 +167,14 @@ struct SettingsNote: View {
     }
 }
 
-/// Label on the left, switch on the right.
+/// Label on the left, small switch on the right.
 struct SettingsSwitchToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Toggle(isOn: configuration.$isOn) {
             configuration.label.frame(maxWidth: .infinity, alignment: .leading)
         }
         .toggleStyle(.switch)
-        .controlSize(.regular)
+        .controlSize(.small)
     }
 }
 
@@ -166,6 +190,55 @@ struct SettingsRowLabeledContentStyle: LabeledContentStyle {
     }
 }
 
+/// Raycast's compact rounded-rectangle buttons with a dark fill.
+struct SettingsButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: SettingsTheme.titleSize, weight: .medium))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 26)
+            .background(
+                SettingsTheme.control.opacity(configuration.isPressed ? 0.7 : 1),
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(Rectangle())
+    }
+}
+
+/// Raycast's borderless dropdown: the selected value and a small chevron.
+struct SettingsDropdown<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let options: [(value: Value, label: String)]
+
+    var body: some View {
+        Menu {
+            Picker(title, selection: $selection) {
+                ForEach(options, id: \.value) { option in
+                    Text(option.label).tag(option.value)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            HStack(spacing: 6) {
+                Text(options.first { $0.value == selection }?.label ?? "")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(title)
+    }
+}
+
 /// A shortcut shown as one keycap pill, like Raycast's hotkey field.
 struct SettingsHotkeyPill: View {
     let label: String
@@ -173,9 +246,9 @@ struct SettingsHotkeyPill: View {
     var body: some View {
         Text(label)
             .font(.system(size: SettingsTheme.titleSize, weight: .medium))
-            .padding(.horizontal, 12)
-            .frame(minWidth: 64, minHeight: 30)
-            .background(SettingsTheme.control, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 10)
+            .frame(minWidth: 56, minHeight: 26)
+            .background(SettingsTheme.control, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
@@ -188,13 +261,27 @@ struct SettingsIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 30, height: 30)
-                .background(SettingsTheme.control, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(SettingsTheme.control, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(help)
         .accessibilityLabel(help)
+    }
+}
+
+/// A small icon tile in front of a command name, as in Raycast's Commands tables.
+struct SettingsCommandIcon: View {
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 16, height: 16)
+            .background(tint.gradient, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 }

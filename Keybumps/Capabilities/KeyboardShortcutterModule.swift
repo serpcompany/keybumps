@@ -20,6 +20,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .keyboardShortcutter,
+            summary: "Learn the shortcuts for actions you do by hand.",
             disableExplanation: nil,
             content: { AnyView(KeyboardShortcutterSettingsView()) }
         ),

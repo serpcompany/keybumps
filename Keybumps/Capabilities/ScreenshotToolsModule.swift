@@ -20,6 +20,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .screenshotTools,
+            summary: "Keep your screenshots in Clipboard History and mark them up.",
             disableExplanation: "Turning this off stops adding new screenshots to Clipboard History. Screenshots already there stay until removed.",
             content: { AnyView(ScreenshotToolsSettingsView()) }
         ),

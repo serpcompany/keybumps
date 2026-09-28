@@ -94,10 +94,10 @@ struct SettingsRootView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 SettingsSearchField(text: $query)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 16) {
                         ForEach(SettingsSidebar.groups(matching: query), id: \.self) { group in
                             VStack(spacing: 2) {
                                 ForEach(group) { section in
@@ -121,7 +121,7 @@ struct SettingsRootView: View {
             .frame(maxHeight: .infinity, alignment: .top)
             .background(SettingsTheme.sidebarBackground)
             .toolbar(removing: .sidebarToggle)
-            .navigationSplitViewColumnWidth(min: 250, ideal: 270, max: 300)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
             Group {
                 if let page = navigation.selection.capability?.descriptor.settingsPage {
@@ -162,6 +162,11 @@ struct SettingsRootView: View {
                 }
                 .controlGroupStyle(.navigation)
             }
+            ToolbarItem(placement: .primaryAction) {
+                if let capability = navigation.selection.capability {
+                    CapabilityToggle(capability: capability)
+                }
+            }
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
@@ -187,12 +192,12 @@ private struct SettingsSidebarRow: View {
         Button(action: select) {
             HStack(spacing: 11) {
                 Image(systemName: section.icon)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(section.iconTint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .frame(width: 22, height: 22)
+                    .background(section.iconTint.gradient, in: RoundedRectangle(cornerRadius: 5.5, style: .continuous))
                 Text(section.rawValue)
-                    .font(.system(size: SettingsTheme.titleSize))
+                    .font(.system(size: SettingsTheme.sidebarTextSize))
                     .foregroundStyle(.primary)
                 Spacer(minLength: 4)
                 if attentionCount > 0 {
@@ -202,11 +207,10 @@ private struct SettingsSidebarRow: View {
                 }
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .background(
                 isSelected ? SettingsTheme.selection : .clear,
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
             )
             .contentShape(Rectangle())
         }
@@ -226,9 +230,9 @@ private struct SettingsSearchField: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: SettingsTheme.titleSize))
         }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
-        .background(SettingsTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 10)
+        .frame(height: 29)
+        .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
         .accessibilityIdentifier("settings.search")
     }
@@ -325,31 +329,24 @@ struct DictationSettingsView: View {
             }
             SettingsGroup("Language") {
                 LabeledContent("Recognition language") {
-                    Picker("Recognition language", selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) })) {
-                        ForEach(model.dictation.availableLanguages, id: \.self) { code in
-                            Text(Locale.current.localizedString(forIdentifier: code) ?? code).tag(code)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                    SettingsDropdown(
+                        title: "Recognition language",
+                        selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) }),
+                        options: model.dictation.availableLanguages.map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
+                    )
                 }
             }
             DictationTranscriptionEngineSection()
             SettingsGroup("Recording length") {
                 LabeledContent {
-                    Picker(
-                        "Maximum recording length",
+                    SettingsDropdown(
+                        title: "Maximum recording length",
                         selection: Binding(
                             get: { model.preferences.dictationDurationLimit },
                             set: { model.setDictationDurationLimit($0) }
-                        )
-                    ) {
-                        ForEach(DictationDurationLimit.allCases) { limit in
-                            Text(limit.title).tag(limit)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
+                        ),
+                        options: DictationDurationLimit.allCases.map { ($0, $0.title) }
+                    )
                     .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
                 } label: {
                     SettingsRowLabel(
@@ -460,91 +457,60 @@ struct WindowSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
 
+    private static let commandGroups: [(title: String, actions: [WindowAction])] = [
+        ("Halves & Corners", WindowSettingsLayout.primaryLeading),
+        ("Size, Position & Displays", WindowSettingsLayout.primaryTrailing),
+        ("Thirds & Sixths", WindowSettingsLayout.secondaryLeading),
+        ("Fourths", WindowSettingsLayout.secondaryTrailing)
+    ]
+
     var body: some View {
         let readiness = model.permissionReadiness(for: [.windowManagement])
         let isEnabled = model.preferences.enabledCapabilities.contains(.windowManagement)
         let isReady = isEnabled && readiness.isReady
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                CapabilityToggle(capability: .windowManagement)
-                Spacer()
-                Label(
-                    isEnabled ? (isReady ? "Ready" : "Setup Needed") : "Off",
-                    systemImage: isEnabled ? (isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill") : "power"
-                )
-                .foregroundStyle(isEnabled ? (isReady ? .green : .orange) : .secondary)
-                if isEnabled && !isReady {
-                    Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+        SettingsPage {
+            CapabilityControl(capability: .windowManagement)
+            SettingsGroup {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Label(
+                            isEnabled ? (isReady ? "Ready" : "Setup Needed") : "Off",
+                            systemImage: isEnabled ? (isReady ? "checkmark.circle.fill" : "exclamationmark.triangle.fill") : "power"
+                        )
+                        .foregroundStyle(isEnabled ? (isReady ? .green : .orange) : .secondary)
+                        if isEnabled && !isReady {
+                            Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
+                        }
+                    }
+                } label: {
+                    SettingsRowLabel(title: "Status", subtitle: "Window Management needs Accessibility access to move other apps' windows.")
                 }
-                Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
-                    .disabled(recorder.identifier != nil)
-            }
-            .toggleStyle(SettingsSwitchToggleStyle())
-            .padding(.horizontal, SettingsTheme.rowInset)
-            .frame(minHeight: SettingsTheme.rowMinHeight + 12)
-            .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
-            .padding(.horizontal, 22)
-            .padding(.top, 14)
-
-            ScrollView {
-                VStack(spacing: 18) {
-                    Text("Click a shortcut to record a new combination. Press Delete to clear it or Escape to cancel.")
-                        .font(.system(size: SettingsTheme.subtitleSize))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    shortcutColumns(
-                        leading: WindowSettingsLayout.primaryLeading,
-                        trailing: WindowSettingsLayout.primaryTrailing
-                    )
-
-                    Divider()
-
-                    shortcutColumns(
-                        leading: WindowSettingsLayout.secondaryLeading,
-                        trailing: WindowSettingsLayout.secondaryTrailing
-                    )
+                LabeledContent {
+                    Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
+                        .disabled(recorder.identifier != nil)
+                } label: {
+                    SettingsRowLabel(title: "Default Shortcuts", subtitle: "Reset every window shortcut to its default.")
                 }
-                .padding(18)
-                .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
-                .padding(22)
             }
-
             if let error = recorder.error {
-                Text(error)
-                    .font(.system(size: SettingsTheme.subtitleSize))
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 12)
+                SettingsNote(error).foregroundStyle(.orange)
+            }
+            ForEach(Array(Self.commandGroups.enumerated()), id: \.offset) { index, group in
+                SettingsGroup(index == 0 ? "Commands" : nil, subtitle: group.title) {
+                    ForEach(group.actions) { action in
+                        WindowCommandRow(
+                            action: action,
+                            shortcut: model.preferences.windowShortcut(for: action),
+                            activeRecorderID: recorder.identifier,
+                            record: { beginRecording(action) },
+                            clear: { model.finishWindowShortcutRecording(nil, for: action) }
+                        )
+                    }
+                }
             }
         }
-        .font(.system(size: SettingsTheme.titleSize))
-        .background(SettingsTheme.pageBackground)
         .navigationTitle("Window Management")
         .onDisappear { recorder.cancel() }
-    }
-
-    private func shortcutColumns(
-        leading: [WindowAction],
-        trailing: [WindowAction]
-    ) -> some View {
-        HStack(alignment: .top, spacing: 30) {
-            WindowShortcutColumn(
-                actions: leading,
-                activeRecorderID: recorder.identifier,
-                binding: model.preferences.windowShortcut,
-                record: beginRecording,
-                clear: clearShortcut
-            )
-            WindowShortcutColumn(
-                actions: trailing,
-                activeRecorderID: recorder.identifier,
-                binding: model.preferences.windowShortcut,
-                record: beginRecording,
-                clear: clearShortcut
-            )
-        }
     }
 
     private func beginRecording(_ action: WindowAction) {
@@ -555,57 +521,42 @@ struct WindowSettingsView: View {
             cancel: { model.cancelShortcutRecording() }
         )
     }
-
-    private func clearShortcut(_ action: WindowAction) {
-        model.finishWindowShortcutRecording(nil, for: action)
-    }
 }
 
-private struct WindowShortcutColumn: View {
-    let actions: [WindowAction]
+/// One row of Window Management's Commands table: preview, name, hotkey, and clear.
+private struct WindowCommandRow: View {
+    let action: WindowAction
+    let shortcut: ShortcutBinding?
     let activeRecorderID: String?
-    let binding: (WindowAction) -> ShortcutBinding?
-    let record: (WindowAction) -> Void
-    let clear: (WindowAction) -> Void
+    let record: () -> Void
+    let clear: () -> Void
 
     var body: some View {
-        VStack(spacing: 7) {
-            ForEach(actions) { action in
-                let shortcut = binding(action)
-                HStack(spacing: 8) {
-                    Text(action.title)
-                        .font(.callout)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    WindowActionPreviewView(action: action)
-                        .frame(width: 25, height: 18)
-
-                    Button(activeRecorderID == action.rawValue ? "Press shortcut…" : (shortcut?.displayName ?? "Record Shortcut")) {
-                        record(action)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .frame(width: 126)
-                    .disabled(activeRecorderID != nil && activeRecorderID != action.rawValue)
-                    .accessibilityLabel("Record shortcut for \(action.title)")
-
-                    Button {
-                        clear(action)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 18, height: 18)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(shortcut == nil || activeRecorderID != nil)
-                    .help("Clear \(action.title) shortcut")
-                    .accessibilityLabel("Clear shortcut for \(action.title)")
+        HStack(spacing: 10) {
+            WindowActionPreviewView(action: action)
+                .frame(width: 22, height: 16)
+            Text(action.title)
+                .lineLimit(1)
+            Spacer(minLength: 12)
+            Button(action: record) {
+                if activeRecorderID == action.rawValue {
+                    SettingsHotkeyPill(label: "Press shortcut…")
+                } else if let shortcut {
+                    SettingsHotkeyPill(label: ShortcutKeycapPresentation(shortcut: shortcut.displayName).keys.joined(separator: " "))
+                } else {
+                    Text("Record Hotkey")
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: 26)
                 }
-                .frame(minHeight: 25)
-                .padding(.top, action.startsSettingsSubgroup ? 9 : 0)
             }
+            .buttonStyle(.plain)
+            .disabled(activeRecorderID != nil && activeRecorderID != action.rawValue)
+            .help("Click, then press a new shortcut. Delete clears it; Escape cancels.")
+            .accessibilityLabel("Record shortcut for \(action.title)")
+            SettingsIconButton(systemImage: "xmark", help: "Clear shortcut for \(action.title)", action: clear)
+                .disabled(shortcut == nil || activeRecorderID != nil)
+                .opacity(shortcut == nil ? 0 : 1)
         }
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -713,14 +664,19 @@ struct KeyboardShortcutterSettingsView: View {
     @ViewBuilder
     private func channelControl(_ channel: NotificationChannel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 10) {
+                Text(channel.title)
+                Spacer(minLength: 12)
+                if channel.supportsPreview {
+                    Button("Preview") { Task { await model.previewSample(channel: channel) } }
+                }
                 Toggle(channel.title, isOn: Binding(
                     get: { model.preferences.selectedChannels.contains(channel) },
                     set: { model.setChannel(channel, enabled: $0) }
                 ))
-                if channel.supportsPreview {
-                    Button("Preview") { Task { await model.previewSample(channel: channel) } }
-                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
             }
             ForEach(model.previewOutcomes(for: channel).keys.sorted(by: { $0.rawValue < $1.rawValue })) { deliveredChannel in
                 if let outcome = model.previewOutcomes(for: channel)[deliveredChannel] {
@@ -839,6 +795,17 @@ private struct GeneralView: View {
     var body: some View {
         SettingsPage {
             SettingsGroup("Updates") {
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        if model.updateSnapshot.canRestart {
+                            Button("Restart to Update") { model.restartToUpdate() }
+                        }
+                        Button("Check now") { model.checkForUpdates() }
+                            .disabled(!model.updateSnapshot.canCheck)
+                    }
+                } label: {
+                    SettingsRowLabel(title: "Keybumps Updates", subtitle: "\(AppVersionDisplay.title()) · \(model.updateSnapshot.status.summary)")
+                }
                 Toggle(
                     "Automatically check for updates",
                     isOn: Binding(
@@ -847,21 +814,8 @@ private struct GeneralView: View {
                     )
                 )
                 .disabled(!model.updateSnapshot.canCheck)
-
-                LabeledContent("Status", value: model.updateSnapshot.status.summary)
-
-                HStack {
-                    Button("Check for Updates…") { model.checkForUpdates() }
-                        .disabled(!model.updateSnapshot.canCheck)
-                    if model.updateSnapshot.canRestart {
-                        Button("Restart to Update") { model.restartToUpdate() }
-                            .buttonStyle(.borderedProminent)
-                    }
-                }
-
                 if case .unavailable = model.updateSnapshot.status {
-                    Text("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
-                        .foregroundStyle(.secondary)
+                    SettingsNote("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
                 }
             }
         }.navigationTitle("General")
@@ -1029,34 +983,39 @@ private struct PermissionWalkthroughView: View {
     }
 }
 
+/// The top of a capability's page, as on a Raycast extension page: its icon, name, and summary,
+/// then its command with the hotkey. The enable switch lives in the toolbar.
 private struct CapabilityControl: View {
     let capability: Capability
     var shortcut: CapabilityShortcut?
 
     var body: some View {
-        SettingsGroup {
-            CapabilityToggle(capability: capability, subtitle: disableExplanation)
-            if let shortcut {
+        let descriptor = capability.descriptor
+        SettingsHero(
+            systemImage: descriptor.systemImage,
+            tint: descriptor.iconTint,
+            title: descriptor.title,
+            summary: descriptor.settingsPage?.summary ?? ""
+        )
+        if let shortcut {
+            SettingsGroup("Commands") {
                 CapabilityShortcutEditor(shortcut: shortcut)
             }
         }
-    }
-
-    private var disableExplanation: String? {
-        capability.descriptor.settingsPage?.disableExplanation
     }
 }
 
 private struct CapabilityToggle: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
-    var subtitle: String?
 
     var body: some View {
-        Toggle(isOn: CapabilityToggleBinding(model: model, capability: capability).value) {
-            SettingsRowLabel(title: "Enable \(capability.title)", subtitle: subtitle)
-        }
-        .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
+        Toggle("Enable \(capability.title)", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .labelsHidden()
+            .help(capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
+            .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
     }
 }
 
@@ -1082,6 +1041,7 @@ private struct CapabilityShortcutEditor: View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
         Group {
             HStack(spacing: 8) {
+                SettingsCommandIcon(systemImage: shortcut.capability.systemImage, tint: shortcut.capability.descriptor.iconTint)
                 Text(shortcut.title)
                 Spacer(minLength: 12)
                 Button {
