@@ -5,7 +5,7 @@ import Testing
 @MainActor
 @Suite("In-memory test defaults")
 struct InMemoryDefaultsTests {
-    @Test("Every accessor AppPreferences uses round-trips in memory")
+    @Test("Every typed accessor round-trips in memory without reaching a real domain")
     func typedAccessorsRoundTrip() {
         let defaults = InMemoryDefaults()
         defaults.set(true, forKey: "bool")
@@ -13,27 +13,40 @@ struct InMemoryDefaultsTests {
         defaults.set("text", forKey: "string")
         defaults.set(["a", "b"], forKey: "array")
         defaults.set(Data([1, 2]), forKey: "data")
+        defaults.register(defaults: ["registered": "fallback", "string": "ignored"])
 
         #expect(defaults.bool(forKey: "bool"))
         #expect(defaults.integer(forKey: "integer") == 42)
         #expect(defaults.string(forKey: "string") == "text")
         #expect(defaults.array(forKey: "array") as? [String] == ["a", "b"])
         #expect(defaults.data(forKey: "data") == Data([1, 2]))
+        #expect(defaults.string(forKey: "registered") == "fallback")
         #expect(defaults.object(forKey: "missing") == nil)
+        #expect(defaults.leakedDomain == nil)
 
         defaults.removeObject(forKey: "bool")
         #expect(defaults.object(forKey: "bool") == nil)
-        defaults.removePersistentDomain(forName: InMemoryDefaults.unusedSuiteName)
-        #expect(defaults.dictionaryRepresentation().isEmpty)
+        defaults.setPersistentDomain(["seeded": 1], forName: defaults.domainName)
+        #expect(defaults.integer(forKey: "seeded") == 1)
+        #expect(defaults.persistentDomain(forName: defaults.domainName)?.keys.sorted() == ["seeded"])
+        defaults.removePersistentDomain(forName: defaults.domainName)
+        #expect(defaults.persistentDomain(forName: defaults.domainName) == nil)
+        #expect(defaults.dictionaryRepresentation().keys.sorted() == ["registered", "string"])
+        #expect(defaults.leakedDomain == nil)
     }
 
-    @Test("AppPreferences persists and reloads through in-memory defaults")
+    @Test("AppPreferences persists, migrates, and reloads without reaching a real domain")
     func appPreferencesReloadFromTheSameDefaults() {
         let defaults = InMemoryDefaults()
-        let preferences = AppPreferences(defaults: defaults)
+        let legacy = InMemoryDefaults()
+        legacy.set([NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+        legacy.set(false, forKey: "showInDockAndSwitcher")
+
+        let preferences = AppPreferences(defaults: defaults, legacyDefaults: [legacy])
+        #expect(preferences.selectedChannels == [.sound])
+        #expect(!preferences.showInDockAndSwitcher)
         preferences.setCapability(.dictation, enabled: false)
-        preferences.set(.sound, enabled: true)
-        preferences.showInDockAndSwitcher = false
+        preferences.set(.topRightToast, enabled: true)
         preferences.dictationLanguage = "fr-FR"
         preferences.dictationDurationLimit = .tenMinutes
         preferences.didCompleteOnboarding = true
@@ -50,20 +63,25 @@ struct InMemoryDefaultsTests {
         #expect(reloaded.didCompleteOnboarding)
         #expect(reloaded.capabilityShortcut(for: .clipboardHistory) == nil)
         #expect(reloaded.windowShortcut(for: .left) == nil)
+        #expect(defaults.leakedDomain == nil)
+        #expect(legacy.leakedDomain == nil)
     }
 
-    @Test("Nothing reaches the real preferences domain")
-    func nothingIsPersisted() {
-        let defaults = InMemoryDefaults()
-        let preferences = AppPreferences(defaults: defaults)
-        preferences.setCapability(.windowManagement, enabled: false)
-        preferences.didCompleteOnboarding = true
-        _ = defaults.synchronize()
+    @Test("Tests create preferences only through InMemoryDefaults")
+    func noTestUsesARealSuite() throws {
+        let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let exempt: Set<String> = ["InMemoryDefaults.swift", "InMemoryDefaultsTests.swift"]
+        let sources = try FileManager.default.contentsOfDirectory(at: testsDirectory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "swift" && !exempt.contains($0.lastPathComponent) }
+        #expect(!sources.isEmpty)
+        for source in sources {
+            let text = try String(contentsOf: source, encoding: .utf8)
+            #expect(!text.contains("UserDefaults(suiteName:"), "\(source.lastPathComponent) creates a real preferences suite; use InMemoryDefaults")
+        }
+    }
 
-        let suite = InMemoryDefaults.unusedSuiteName
-        #expect(UserDefaults(suiteName: suite)?.persistentDomain(forName: suite) == nil)
-        let plist = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(suite).plist")
-        #expect(!FileManager.default.fileExists(atPath: plist.path))
+    @Test("The unit-test host doesn't launch the production app")
+    func testHostStaysInert() {
+        #expect(!KeybumpsMain.launchedApp)
     }
 }

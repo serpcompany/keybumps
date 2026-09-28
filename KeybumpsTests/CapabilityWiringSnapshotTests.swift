@@ -236,6 +236,7 @@ final class WiringHarness {
     let log = LifecycleLog()
     let model: AppModel
     private let coordinator: GlobalShortcutCoordinator
+    private let pasteboard: NSPasteboard
     private var lastShortcuts: [String: String] = [:]
 
     init(enabled: Set<Capability>, missing: MacPermission?, root: URL, didCompleteOnboarding: Bool = true) {
@@ -249,10 +250,12 @@ final class WiringHarness {
         let log = log
         let grants = FakePermissionState(missing: missing)
         coordinator = GlobalShortcutCoordinator(backend: LoggingHotKeyBackend(log: log))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityWiring-\(id)"))
+        self.pasteboard = pasteboard
         let clipboard = SpyClipboardHistoryService(
             log: log,
             storageURL: directory.appendingPathComponent("clipboard-history.json"),
-            pasteboard: NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityWiring-\(id)")),
+            pasteboard: pasteboard,
             mediaDirectoryURL: directory.appendingPathComponent("clipboard-media", isDirectory: true)
         )
         let screenshotHome = directory.appendingPathComponent("home", isDirectory: true)
@@ -301,6 +304,11 @@ final class WiringHarness {
         )
         _ = log.drain()
         lastShortcuts = shortcuts()
+    }
+
+    /// Named pasteboards live in the pasteboard server until released, so drop each one with its harness.
+    deinit {
+        pasteboard.releaseGlobally()
     }
 
     func shortcuts() -> [String: String] {
