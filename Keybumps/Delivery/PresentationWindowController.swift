@@ -97,6 +97,7 @@ final class PresentationWindowController {
             }
         ))
         panel.setFrameOrigin(origin(for: style, size: size, event: event))
+        panel.hideDuringUnitTests()
         panel.orderFrontRegardless()
         let session = PresentationSession(
             panel: panel,
