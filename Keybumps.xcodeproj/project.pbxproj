@@ -21,6 +21,7 @@
 		197955C758CB29FF6F4DCA14 /* LICENSE.openai-whisper in Resources */ = {isa = PBXBuildFile; fileRef = 5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */; };
 		1A1112634F9877A12C8E3B19 /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */; };
 		1B97ED234F1E2A347068FC1F /* finder-trash-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = F3872107ED622E1702DAE730 /* finder-trash-captured-sanitized-trace.json */; };
+		1BC4CE4A85BFC0C35F7AD4B4 /* LaunchSpikeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13EF2956246C7547C2D6521B /* LaunchSpikeUITests.swift */; };
 		1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */; };
 		29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */; };
 		3059D8E4728CF39B1A21420A /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */; };
@@ -65,6 +66,7 @@
 		AC51777E49844030C638FFDB /* ScreenshotAnnotationRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEED3BE59B403C1032BD4A4E /* ScreenshotAnnotationRenderer.swift */; };
 		AF01C1FEA6DFAC71142B7305 /* ProductPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF48890AB96ECDC791B1116 /* ProductPaths.swift */; };
 		B276B1127A353841F9623DE6 /* StandardWindowControlMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447B3311AE42A32A9FD01E03 /* StandardWindowControlMonitor.swift */; };
+		B37B58EE507CB1B903B64210 /* capability-wiring.json in Resources */ = {isa = PBXBuildFile; fileRef = 45549BC73E12559150FDA88F /* capability-wiring.json */; };
 		B8AD9EB09F7831E8226756F2 /* ChromeActionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */; };
 		B8EF53C6A451D2E475070D85 /* SparkleUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */; };
 		C49099D24923B8A7C3627B9F /* LICENSE.rectangle in Resources */ = {isa = PBXBuildFile; fileRef = 3FB67EE4BA86CA81A301871D /* LICENSE.rectangle */; };
@@ -106,6 +108,13 @@
 			remoteGlobalIDString = 16EA3C6D651A8AAA3A2782B1;
 			remoteInfo = Keybumps;
 		};
+		FBA11C430204E2112E701681 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 28E15429764BA5F28DAA3D0E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 16EA3C6D651A8AAA3A2782B1;
+			remoteInfo = Keybumps;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -118,12 +127,14 @@
 		0ECDF1BD3B90804BF35BDC11 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		1125D0B1418C5EBF60FFBEBD /* ActionCorrelator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionCorrelator.swift; sourceTree = "<group>"; };
 		124C5FD3D18E6E1D1EC3F91E /* ScreenshotAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotAnnotation.swift; sourceTree = "<group>"; };
+		13EF2956246C7547C2D6521B /* LaunchSpikeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchSpikeUITests.swift; sourceTree = "<group>"; };
 		15DFFB4F5CBB2AC080E88C36 /* SystemChannelAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChannelAdapters.swift; sourceTree = "<group>"; };
 		16C81595BD6B459829442011 /* CompletedAudioTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedAudioTranscriber.swift; sourceTree = "<group>"; };
 		1A364445928DF760A5349FFE /* MicrophonePermissionFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophonePermissionFlowTests.swift; sourceTree = "<group>"; };
 		1FD52164D0E4BEB3C625179B /* Keybumps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Keybumps.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		25A41CB8D7FC4C900A758D77 /* CapabilityWiringSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityWiringSnapshotTests.swift; sourceTree = "<group>"; };
+		2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		323E102DD6374B05A2E71420 /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
 		3296278ACCFD1FEA1A0A40E8 /* ScreenshotEditorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorWindowController.swift; sourceTree = "<group>"; };
 		3B4BE38E7AF2268494DAE9E2 /* chrome-green-captured-sanitized-trace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "chrome-green-captured-sanitized-trace.json"; sourceTree = "<group>"; };
@@ -137,6 +148,7 @@
 		4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteController.swift; sourceTree = "<group>"; };
 		447B3311AE42A32A9FD01E03 /* StandardWindowControlMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandardWindowControlMonitor.swift; sourceTree = "<group>"; };
 		449F73AF218FC186E0DBA248 /* DictationModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationModelManager.swift; sourceTree = "<group>"; };
+		45549BC73E12559150FDA88F /* capability-wiring.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "capability-wiring.json"; sourceTree = "<group>"; };
 		4ED11089604722DD1AF16EAA /* ScreenshotEditorOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorOutput.swift; sourceTree = "<group>"; };
 		509645F9F339E06AC1E564CE /* DictationHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryService.swift; sourceTree = "<group>"; };
 		54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateReleaseScriptTests.swift; sourceTree = "<group>"; };
@@ -216,6 +228,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		01C72AAF6FF0E919AB309D54 /* KeybumpsUITests */ = {
+			isa = PBXGroup;
+			children = (
+				13EF2956246C7547C2D6521B /* LaunchSpikeUITests.swift */,
+			);
+			path = KeybumpsUITests;
+			sourceTree = "<group>";
+		};
 		05C8E0D38AB8DCFDF398F263 /* Detection */ = {
 			isa = PBXGroup;
 			children = (
@@ -252,6 +272,7 @@
 				E61586690B952F46EBCDED78 /* NOTICES.argmax-oss-swift */,
 				10ADA2E15706EB6242F989F3 /* Keybumps */,
 				23064D186B9C35D4D0EA2A3E /* KeybumpsTests */,
+				01C72AAF6FF0E919AB309D54 /* KeybumpsUITests */,
 				8020E928811E8ED941846F8D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -389,6 +410,7 @@
 			children = (
 				1FD52164D0E4BEB3C625179B /* Keybumps.app */,
 				823E92CD42198870BE19775A /* KeybumpsTests.xctest */,
+				2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -456,6 +478,7 @@
 		E5DBE0291391003CE7E8D960 /* Fixtures */ = {
 			isa = PBXGroup;
 			children = (
+				45549BC73E12559150FDA88F /* capability-wiring.json */,
 				C22FF08589D7025A7D25134B /* KeyboardShortcutter */,
 				AA58599891427F66671A3CD5 /* Updates */,
 			);
@@ -534,6 +557,24 @@
 			productReference = 823E92CD42198870BE19775A /* KeybumpsTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		F4E6E2BFC7CC1DD1C3C50FD8 /* KeybumpsUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40E14BDF4DF6A7A75DF563B9 /* Build configuration list for PBXNativeTarget "KeybumpsUITests" */;
+			buildPhases = (
+				EEAAE4B6AFD8DA6C33218155 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DF8347ADC56FD8D640B16FD5 /* PBXTargetDependency */,
+			);
+			name = KeybumpsUITests;
+			packageProductDependencies = (
+			);
+			productName = KeybumpsUITests;
+			productReference = 2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -550,6 +591,11 @@
 					3356307D476DF647068D33C8 = {
 						DevelopmentTeam = 847HR8U8D9;
 						ProvisioningStyle = Automatic;
+					};
+					F4E6E2BFC7CC1DD1C3C50FD8 = {
+						DevelopmentTeam = 847HR8U8D9;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 16EA3C6D651A8AAA3A2782B1;
 					};
 				};
 			};
@@ -573,6 +619,7 @@
 			targets = (
 				16EA3C6D651A8AAA3A2782B1 /* Keybumps */,
 				3356307D476DF647068D33C8 /* KeybumpsTests */,
+				F4E6E2BFC7CC1DD1C3C50FD8 /* KeybumpsUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -583,6 +630,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FD8E7DB4FEB1D67D4B46E1AD /* appcast.xml in Resources */,
+				B37B58EE507CB1B903B64210 /* capability-wiring.json in Resources */,
 				9B257E66334EE5FE93531EAE /* chrome-153-settings-failing-trace.json in Resources */,
 				09B8968F01A240BDA9CF5212 /* chrome-153-tab-strip.json in Resources */,
 				84156585EA619D8BBFB145F3 /* chrome-green-captured-sanitized-trace.json in Resources */,
@@ -717,6 +765,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EEAAE4B6AFD8DA6C33218155 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1BC4CE4A85BFC0C35F7AD4B4 /* LaunchSpikeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -725,9 +781,33 @@
 			target = 16EA3C6D651A8AAA3A2782B1 /* Keybumps */;
 			targetProxy = 07F06C50136DD628F45195F1 /* PBXContainerItemProxy */;
 		};
+		DF8347ADC56FD8D640B16FD5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 16EA3C6D651A8AAA3A2782B1 /* Keybumps */;
+			targetProxy = FBA11C430204E2112E701681 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0523C655CAE105E77DB92080 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 847HR8U8D9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = Keybumps;
+			};
+			name = Release;
+		};
 		3981E3FBB1845BFAB4CDC8D4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -881,6 +961,25 @@
 			};
 			name = Release;
 		};
+		F5450559405A4FBBA5E163DE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = 847HR8U8D9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = Keybumps;
+			};
+			name = Debug;
+		};
 		FE4FD4E5BDC96FDF525F3918 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -951,6 +1050,15 @@
 			buildConfigurations = (
 				71052521015345A77A027496 /* Debug */,
 				3981E3FBB1845BFAB4CDC8D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		40E14BDF4DF6A7A75DF563B9 /* Build configuration list for PBXNativeTarget "KeybumpsUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F5450559405A4FBBA5E163DE /* Debug */,
+				0523C655CAE105E77DB92080 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
