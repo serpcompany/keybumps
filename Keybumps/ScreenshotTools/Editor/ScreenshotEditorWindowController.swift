@@ -51,31 +51,19 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         )
         window.title = "Edit Screenshot"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 520, height: 360)
+        window.minSize = NSSize(width: Self.minimumWidth, height: 420)
         window.tabbingMode = .disallowed
         super.init(window: window)
         window.delegate = self
 
-        let toolbar = NSHostingView(rootView: ScreenshotEditorToolbar(
+        // One SwiftUI root (toolbar above the AppKit canvas) so the toolbar always renders.
+        let root = NSHostingView(rootView: ScreenshotEditorRootView(
             model: model,
+            canvas: canvas,
             cancel: { [weak self] in self?.cancel() },
             done: { [weak self] in self?.done() }
         ))
-        toolbar.translatesAutoresizingMaskIntoConstraints = false
-        canvas.translatesAutoresizingMaskIntoConstraints = false
-        let content = NSView()
-        content.addSubview(toolbar)
-        content.addSubview(canvas)
-        NSLayoutConstraint.activate([
-            toolbar.topAnchor.constraint(equalTo: content.topAnchor),
-            toolbar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            toolbar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            canvas.topAnchor.constraint(equalTo: toolbar.bottomAnchor),
-            canvas.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            canvas.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            canvas.bottomAnchor.constraint(equalTo: content.bottomAnchor)
-        ])
-        window.contentView = content
+        window.contentView = root
         model.onChange = { [weak self] in self?.canvas.needsDisplay = true }
     }
 
@@ -154,14 +142,37 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         keyMonitor = nil
     }
 
+    static let minimumWidth: CGFloat = 760
+    static let toolbarHeight: CGFloat = 64
+
     private static func initialFrame(for imageSize: CGSize) -> NSRect {
         let visible = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
-        let maxSize = CGSize(width: visible.width * 0.8, height: visible.height * 0.8 - 52)
+        let maxSize = CGSize(width: visible.width * 0.8, height: visible.height * 0.8 - toolbarHeight)
         let scale = min(1, maxSize.width / max(imageSize.width, 1), maxSize.height / max(imageSize.height, 1))
-        let width = max(520, imageSize.width * scale + 32)
-        let height = max(360, imageSize.height * scale + 32 + 52)
+        let width = max(minimumWidth, imageSize.width * scale + 32)
+        let height = max(420, imageSize.height * scale + 32 + toolbarHeight)
         return NSRect(x: 0, y: 0, width: width, height: height)
     }
+}
+
+private struct ScreenshotEditorRootView: View {
+    @Bindable var model: ScreenshotEditorModel
+    let canvas: ScreenshotEditorCanvasView
+    let cancel: () -> Void
+    let done: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScreenshotEditorToolbar(model: model, cancel: cancel, done: done)
+            CanvasHost(canvas: canvas)
+        }
+    }
+}
+
+private struct CanvasHost: NSViewRepresentable {
+    let canvas: ScreenshotEditorCanvasView
+    func makeNSView(context: Context) -> ScreenshotEditorCanvasView { canvas }
+    func updateNSView(_ nsView: ScreenshotEditorCanvasView, context: Context) {}
 }
 
 private struct ScreenshotEditorToolbar: View {
@@ -170,18 +181,14 @@ private struct ScreenshotEditorToolbar: View {
     let done: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Picker("Tool", selection: $model.tool) {
+        HStack(spacing: 14) {
+            HStack(spacing: 2) {
                 ForEach(ScreenshotEditorTool.allCases) { tool in
-                    Image(systemName: tool.systemImage)
-                        .help("\(tool.title) (\(tool.key.uppercased()))")
-                        .accessibilityLabel(tool.title)
-                        .tag(tool)
+                    ToolButton(tool: tool, isSelected: model.tool == tool) { model.tool = tool }
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            .padding(3)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 9))
 
             HStack(spacing: 4) {
                 ForEach(ScreenshotAnnotationColor.allCases) { color in
@@ -194,28 +201,59 @@ private struct ScreenshotEditorToolbar: View {
                             .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: model.color == color ? 2 : 0))
                     }
                     .buttonStyle(.plain)
+                    .help(color.rawValue.capitalized)
                     .accessibilityLabel(color.rawValue.capitalized)
                 }
             }
             .opacity(model.tool.usesColor ? 1 : 0.35)
             .disabled(!model.tool.usesColor)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             Button { model.undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .disabled(!model.history.canUndo)
                 .help("Undo (⌘Z)")
+                .accessibilityLabel("Undo")
             Button { model.redo() } label: { Image(systemName: "arrow.uturn.forward") }
                 .disabled(!model.history.canRedo)
                 .help("Redo (⇧⌘Z)")
+                .accessibilityLabel("Redo")
             Button("Cancel", action: cancel)
             Button("Done", action: done)
                 .buttonStyle(.borderedProminent)
                 .help("Copy to clipboard and save an edited copy (Return)")
         }
+        .controlSize(.large)
         .padding(.horizontal, 12)
-        .frame(height: 52)
-        .background(.bar)
+        .frame(height: ScreenshotEditorWindowController.toolbarHeight)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+private struct ToolButton: View {
+    let tool: ScreenshotEditorTool
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            VStack(spacing: 2) {
+                Image(systemName: tool.systemImage)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(height: 18)
+                Text(tool.title)
+                    .font(.caption2)
+            }
+            .frame(width: 58, height: 44)
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("\(tool.title) (\(tool.key.uppercased()))")
+        .accessibilityLabel(tool.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

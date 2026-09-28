@@ -160,6 +160,19 @@ final class ScreenshotEditorTests: XCTestCase {
         XCTAssertEqual(image.rgba(10, 10), [255, 255, 255, 255])
     }
 
+    // MARK: Window
+
+    func testEditorWindowHostsToolbarAndCanvasInOneSwiftUIRoot() throws {
+        let source = ScreenshotRenderSource(cgImage: try solid(width: 400, height: 300, gray: 200), pointSize: CGSize(width: 400, height: 300))
+        let controller = ScreenshotEditorWindowController(source: source, sourceURL: nil, fallbackFolder: FileManager.default.temporaryDirectory)
+        let root = try XCTUnwrap(controller.window?.contentView)
+        XCTAssertTrue(String(describing: type(of: root)).hasPrefix("NSHostingView"), "a nested hosting view over a plain container did not draw the toolbar")
+        root.layoutSubtreeIfNeeded()
+        func contains(_ view: NSView) -> Bool { view is ScreenshotEditorCanvasView || view.subviews.contains(where: contains) }
+        XCTAssertTrue(contains(root))
+        XCTAssertGreaterThanOrEqual(controller.window?.minSize.width ?? 0, ScreenshotEditorWindowController.minimumWidth)
+    }
+
     // MARK: Helpers
 
     private struct Pixels: Equatable {
