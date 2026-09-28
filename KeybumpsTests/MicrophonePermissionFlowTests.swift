@@ -4,9 +4,9 @@ import XCTest
 @testable import Keybumps
 
 /// Locks the Microphone revoke → recover → re-grant flow verified by the owner (#56).
-/// macOS may keep reporting `.authorized` to a running process after access is revoked;
-/// the coordinator must never cache on its own, so the first refresh that sees the new
-/// status (after relaunch, or whenever macOS reports it) drives every surface below.
+/// Changing Microphone access in System Settings restarts Keybumps; the coordinator must
+/// never cache on its own, so whatever status macOS reports at launch or on any refresh
+/// drives every surface below.
 @MainActor
 final class MicrophonePermissionFlowTests: XCTestCase {
     private var microphone: AVAuthorizationStatus = .authorized
