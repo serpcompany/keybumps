@@ -510,6 +510,18 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testSignedAppHasMicrophoneCaptureEntitlement() throws {
+        // CI builds the host with CODE_SIGNING_ALLOWED=NO, which leaves only a linker signature
+        // without entitlements. EntitlementsSourceTests covers the declared entitlement there.
+        var code: SecCode?
+        var information: CFDictionary?
+        if SecCodeCopySelf([], &code) == errSecSuccess, let code,
+           let staticCode = Self.staticCode(for: code) {
+            SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+        }
+        guard (information as? [String: Any])?[kSecCodeInfoEntitlementsDict as String] != nil else {
+            throw XCTSkip("The test host carries no entitlements (built with CODE_SIGNING_ALLOWED=NO).")
+        }
+
         let task = try XCTUnwrap(SecTaskCreateFromSelf(nil))
         let value = SecTaskCopyValueForEntitlement(
             task,
@@ -518,6 +530,11 @@ final class KeybumpsFeatureTests: XCTestCase {
         ) as? Bool
 
         XCTAssertEqual(value, true)
+    }
+
+    private static func staticCode(for code: SecCode) -> SecStaticCode? {
+        var staticCode: SecStaticCode?
+        return SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess ? staticCode : nil
     }
 
     func testDictationShortcutStartsPermissionRecoveryInsteadOfFailingSilently() {
