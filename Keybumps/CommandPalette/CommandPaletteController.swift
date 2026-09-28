@@ -169,6 +169,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         position(panel)
         installKeyMonitor()
         installOutsideMonitors()
+        panel.hideDuringUnitTests()
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async { [weak self] in
             self?.focusInput()
