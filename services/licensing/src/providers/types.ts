@@ -15,7 +15,8 @@ export interface NormalizedOrder {
 
 export type NormalizedEvent =
   | { type: "order.paid"; order: NormalizedOrder }
-  | { type: "order.refunded"; orderRef: string }
+  /** `renewal` is true for subscription renewals and plan changes, which never mint a License. */
+  | { type: "order.refunded"; orderRef: string; renewal: boolean }
   /** The subscription is paid through `currentPeriodEnd` (active, renewed, uncanceled, or canceled at period end). */
   | { type: "subscription.period"; subscriptionRef: string; currentPeriodEnd: number }
   /** The subscription has ended and its License must be revoked. */

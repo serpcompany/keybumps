@@ -29,7 +29,7 @@ export async function applyEvent(db: D1Database, provider: string, event: Normal
     case "order.paid":
       return orderPaid(db, provider, event.order, now);
     case "order.refunded":
-      return orderRefunded(db, provider, event.orderRef, now);
+      return orderRefunded(db, provider, event.orderRef, event.renewal, now);
     case "subscription.period":
       await db.batch([
         db
@@ -140,10 +140,15 @@ async function mint(db: D1Database, offer: OfferRow, order: NormalizedOrder, cus
   if (known?.ended_at != null) await revokeLicense(db, license.id, "subscription_ended", now);
 }
 
-async function orderRefunded(db: D1Database, provider: string, orderRef: string, now: number): Promise<void> {
+async function orderRefunded(db: D1Database, provider: string, orderRef: string, renewal: boolean, now: number): Promise<void> {
   const order = await db.prepare("SELECT 1 FROM orders WHERE provider = ? AND provider_ref = ?").bind(provider, orderRef).first();
-  // A refund delivered before its paid order: have the provider retry once the order is recorded.
-  if (!order) throw new NotYetKnownError();
+  if (!order) {
+    // Renewal orders are never recorded; refunding one keeps access until the paid period ends,
+    // and ending the subscription revokes it. Acknowledge instead of retrying forever.
+    if (renewal) return;
+    // A refund delivered before its paid order: have the provider retry once the order is recorded.
+    throw new NotYetKnownError();
+  }
   const row = await db
     .prepare("SELECT l.id FROM licenses l JOIN orders o ON o.id = l.order_id WHERE o.provider = ? AND o.provider_ref = ?")
     .bind(provider, orderRef)

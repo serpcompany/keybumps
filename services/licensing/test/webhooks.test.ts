@@ -211,6 +211,15 @@ describe("subscriptions", () => {
     expect((await licensesFor("ended-first@example.com"))[0].status).toBe("revoked");
   });
 
+  it("acknowledges a refunded renewal without revoking the License", async () => {
+    const periodEnd = now() + 30 * 86_400;
+    await deliver(subscriptionOrder("subscription_create", periodEnd, "sub_5", "renew-refund@example.com"));
+    const renewal = subscriptionOrder("subscription_cycle", periodEnd + 30 * 86_400, "sub_5", "renew-refund@example.com");
+    await deliver(renewal);
+    expect(await deliver({ type: "order.refunded", data: { ...renewal.data, status: "refunded" } })).toBe(200);
+    expect((await licensesFor("renew-refund@example.com"))[0].status).toBe("active");
+  });
+
   it("extends instead of minting on a plan change, and doesn't extend a past-due subscription", async () => {
     const firstEnd = now() + 30 * 86_400;
     await deliver(subscriptionOrder("subscription_create", firstEnd, "sub_2", "plan@example.com"));

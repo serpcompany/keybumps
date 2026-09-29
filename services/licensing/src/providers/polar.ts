@@ -50,7 +50,11 @@ export function normalize(payload: Json): NormalizedEvent {
     case "order.refunded":
       // Only a full refund revokes; partial refunds keep the License.
       return data.status === "refunded" && typeof data.id === "string"
-        ? { type: "order.refunded", orderRef: data.id }
+        ? {
+            type: "order.refunded",
+            orderRef: data.id,
+            renewal: data.billing_reason !== "purchase" && data.billing_reason !== "subscription_create",
+          }
         : { type: "ignored" };
     case "subscription.active":
     case "subscription.updated":
