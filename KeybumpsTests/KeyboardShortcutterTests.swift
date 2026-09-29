@@ -938,10 +938,10 @@ final class KeyboardShortcutterTests: XCTestCase {
             action: #selector(StatusItemActionTarget.activate(_:))
         )
 
-        XCTAssertEqual(ProductIdentity.statusItemImageName, "KeybumpsMenuBarMark")
+        XCTAssertEqual(ProductIdentity.statusItemImageName, "KeybumpsMascot")
         XCTAssertNotNil(button.image)
         XCTAssertEqual(button.image?.isTemplate, true)
-        XCTAssertEqual(button.image?.size, NSSize(width: 17, height: 17))
+        XCTAssertEqual(button.image?.size, NSSize(width: 22, height: 14), "the wide mascot keeps its shape")
         // NSStatusBarButton normalizes .imageOnly to .imageOverlaps. The empty
         // title is the observable contract that leaves only the image visible.
         XCTAssertEqual(button.imagePosition, .imageOverlaps)
