@@ -35,6 +35,12 @@ class DictationIndicatorController {
         }
     }
 
+    /// The Dictation shortcut, shown while recording as the key that finishes it.
+    var finishShortcut: String? {
+        get { state.finishShortcut }
+        set { state.finishShortcut = newValue }
+    }
+
     func updateLevel(_ level: Float) {
         state.level = level
     }
@@ -80,6 +86,7 @@ final class DictationNotchState {
     var phase: DictationPhase = .idle
     var level: Float = 0
     var recordingStartedAt = Date()
+    var finishShortcut: String?
     var geometry = DictationNotchGeometry(notchWidth: 0, notchHeight: 32, isFailure: false)
 }
 
@@ -192,13 +199,20 @@ struct DictationNotchView: View {
         case .recording:
             HStack(spacing: 8) {
                 LevelBars(level: state.level, reduceMotion: reduceMotion)
-                Text("esc")
-                    .font(.system(size: 10, weight: .semibold))
-                    .fixedSize()
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.horizontal, 4)
-                    .frame(height: 16)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                // The key that finishes the recording (Escape cancels, so it is not shown here).
+                if let shortcut = state.finishShortcut {
+                    HStack(spacing: 2) {
+                        ForEach(ShortcutKeycapPresentation(shortcut: shortcut).keys, id: \.self) { key in
+                            Text(key)
+                                .font(.system(size: 10, weight: .semibold))
+                                .fixedSize()
+                                .foregroundStyle(.white.opacity(0.7))
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                        }
+                    }
+                }
             }
         case .transcribing, .inserting:
             WorkingDots(reduceMotion: reduceMotion)
@@ -209,7 +223,9 @@ struct DictationNotchView: View {
 
     private var accessibilityLabel: String {
         switch state.phase {
-        case .recording: "Dictation recording. Press Escape to cancel."
+        case .recording:
+            state.finishShortcut.map { "Dictation recording. Press \(KeyboardShortcutRegistry.accessibilityCopy(for: $0)) to finish, or Escape to cancel." }
+                ?? "Dictation recording. Press Escape to cancel."
         case .failed(let message): "Dictation failed. \(message)"
         default: "Dictation \(state.phase.label.lowercased())"
         }

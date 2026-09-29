@@ -68,6 +68,7 @@ final class DictationModule: CapabilityModule {
     }
 
     func apply(_ context: CapabilityContext) {
+        indicator.finishShortcut = context.preferences.capabilityShortcut(for: .dictation)?.displayName
         context.configureShortcut(
             owner: CapabilityShortcut.dictation.ownerID,
             for: capability,
