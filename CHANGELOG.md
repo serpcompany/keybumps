@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.3-beta.7](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.6...v0.0.3-beta.7) (2026-09-29)
+
+
+### Features
+
+* email License Keys and resend-key endpoint ([#127](https://github.com/serpcompany/keybumps/issues/127)) ([c286d53](https://github.com/serpcompany/keybumps/commit/c286d533090a49da700f06453c70190e1ad3caf1))
+* in-app licensing with Polar license keys ([#133](https://github.com/serpcompany/keybumps/issues/133)) ([df14c44](https://github.com/serpcompany/keybumps/commit/df14c44b067e535c0dbea525dc5519b10ce6ae0a))
+* licensing service skeleton with signed leases ([#123](https://github.com/serpcompany/keybumps/issues/123)) ([b6bd8fc](https://github.com/serpcompany/keybumps/commit/b6bd8fc247b360d0191c1d771f78e89429bd242b))
+* Polar provider adapter and order fulfillment ([#125](https://github.com/serpcompany/keybumps/issues/125)) ([f978d08](https://github.com/serpcompany/keybumps/commit/f978d0864cfdf65f4b33216cd087e7993df06d3c))
+
 ## [0.0.3-beta.6](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.5...v0.0.3-beta.6) (2026-09-29)
 
 
