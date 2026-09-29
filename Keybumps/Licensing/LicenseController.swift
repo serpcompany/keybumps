@@ -47,8 +47,8 @@ final class LicenseController: LicenseControlling {
         started = true
         snapshot.state = storedState()
         Task { await refresh(force: false) }
-        // Re-evaluate often; a check runs once the hourly refresh interval has passed.
-        timer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+        // Re-evaluate hourly; a check runs once the daily refresh interval has passed.
+        timer = Timer.scheduledTimer(withTimeInterval: 3_600, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh(force: false) }
         }
         // A Mac waking from sleep checks right away if one is due, instead of waiting for the timer.

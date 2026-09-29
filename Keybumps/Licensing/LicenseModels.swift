@@ -77,8 +77,9 @@ struct LicenseSnapshot: Equatable, Sendable {
 
 /// Timing rules from ADR 0002.
 enum LicensePolicy {
-    /// Hourly, so a revoked or refunded key locks within about an hour online.
-    static let refreshInterval: TimeInterval = 3_600
+    /// Once a day (SERP native-app licensing standard): a revoked or refunded key locks within about
+    /// a day online, or at once with Check Again.
+    static let refreshInterval: TimeInterval = 86_400
     static let offlineAllowance: TimeInterval = 45 * 86_400
 
     static func state(for check: LicenseCheck?, now: Date, deviceLabel: String? = nil) -> LicenseState {

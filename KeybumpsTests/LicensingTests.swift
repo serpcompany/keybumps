@@ -28,10 +28,10 @@ struct LicensePolicyTests {
         #expect(LicensePolicy.state(for: check(validatedDaysAgo: 1, expiresAt: now), now: now) == .locked(.expired))
     }
 
-    @Test("Refresh is due after an hour, or when the clock moved backwards")
+    @Test("Refresh is due after a day, or when the clock moved backwards")
     func refreshSchedule() {
-        #expect(!LicensePolicy.needsRefresh(check(validatedDaysAgo: 0.5 / 24), now: now))
-        #expect(LicensePolicy.needsRefresh(check(validatedDaysAgo: 1.0 / 24), now: now))
+        #expect(!LicensePolicy.needsRefresh(check(validatedDaysAgo: 23.0 / 24), now: now))
+        #expect(LicensePolicy.needsRefresh(check(validatedDaysAgo: 1), now: now))
         #expect(LicensePolicy.needsRefresh(check(validatedDaysAgo: -1), now: now))
     }
 
@@ -192,12 +192,12 @@ struct LicenseControllerTests {
         let clock = Clock()
         let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
         let (controller, _, provider, _) = make(store: store, clock: clock)
-        clock.now.addTimeInterval(30 * 60)
+        clock.now.addTimeInterval(23 * 3_600)
         await controller.refresh(force: false)
         #expect(provider.validations == 0)
     }
 
-    @Test("An hourly check renews the license")
+    @Test("A daily check renews the license")
     func refreshRenews() async {
         let clock = Clock()
         let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
