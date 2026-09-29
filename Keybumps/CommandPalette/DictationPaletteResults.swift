@@ -175,6 +175,27 @@ private struct DictationPaletteDetail: View {
     @State private var showsTranslation = false
 
     var body: some View {
+        VStack(spacing: 0) { content }
+    }
+
+    @ViewBuilder private var content: some View {
+        // The player and actions stay pinned at the top; only the transcript and details scroll,
+        // so transcripts of any length never move them.
+        VStack(alignment: .leading, spacing: 12) {
+            DictationAudioTransportView(
+                isPlaying: isPlaying,
+                progress: progress,
+                duration: entry.duration,
+                playbackRate: playbackRate,
+                hasAudio: entry.audioURL != nil,
+                audioURL: entry.audioURL,
+                togglePlayback: togglePlayback,
+                setPlaybackRate: setPlaybackRate
+            )
+            actions
+        }
+        .padding([.horizontal, .top], 18)
+        .padding(.bottom, 12)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(entry.displayText)
@@ -183,19 +204,6 @@ private struct DictationPaletteDetail: View {
                     .lineSpacing(3)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                DictationAudioTransportView(
-                    isPlaying: isPlaying,
-                    progress: progress,
-                    duration: entry.duration,
-                    playbackRate: playbackRate,
-                    hasAudio: entry.audioURL != nil,
-                    audioURL: entry.audioURL,
-                    togglePlayback: togglePlayback,
-                    setPlaybackRate: setPlaybackRate
-                )
-
-                actions
 
                 if showsTranslation, #available(macOS 15.0, *) {
                     LocalDictationTranslationView(
@@ -207,7 +215,8 @@ private struct DictationPaletteDetail: View {
 
                 information
             }
-            .padding(18)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 18)
         }
     }
 

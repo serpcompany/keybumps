@@ -147,7 +147,7 @@ User outcome: record speech, transcribe it locally, and insert it at the origina
 - Dictation History supports search, playback, waveform progress, 0.5×–2× speed, paste, copy, Finder reveal, retry, individual deletion, and confirmed Clear All.
 - Expanded completed cards support Apple's custom on-device `TranslationSession`, a supported target-language picker, and optional speech rendered to a temporary WAV through the shared audio transport.
 - Changing or closing a translation deletes generated audio. Translation never changes the original transcript or enters durable history.
-- The ⌘4 Dictation tab uses Raycast's list-and-detail layout: compact recordings (status icon, first line, duration, age) on the left, and the highlighted recording's full selectable transcript, audio player, Copy/Translate/Show in Finder/Transcribe/Delete chips, and Information (recorded, duration, language, status) on the right. Return or double-click copies; Delete removes the highlighted recording. The dedicated history screen keeps expandable cards.
+- The ⌘4 Dictation tab uses Raycast's list-and-detail layout: compact recordings (status icon, first line, duration, age) on the left, and the highlighted recording's audio player and Copy/Translate/Show in Finder/Transcribe/Delete chips pinned at the top, then its full selectable transcript and Information (recorded, duration, language, status) on the right. Return or double-click copies; Delete removes the highlighted recording. The dedicated history screen keeps expandable cards.
 
 Required permissions are Microphone and Speech Recognition, plus Accessibility where focused-field insertion requires it.
 
