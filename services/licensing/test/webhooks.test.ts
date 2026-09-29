@@ -1,4 +1,4 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { PolarAdapter } from "../src/providers/polar";
 
@@ -111,6 +111,22 @@ describe("order.paid", () => {
     expect(license.updatesUntil - now()).toBeGreaterThan(364 * 86_400);
   });
 
+  it("ignores a retired Offer named in metadata", async () => {
+    await admin("/admin/offers", { id: "keybumps-old", product: "keybumps", provider: "polar", providerRef: "prod_retired", kind: "perpetual", active: false });
+    expect(await deliver(order({ product_id: "prod_retired", metadata: { offer: "keybumps-old" } }))).toBe(422);
+  });
+
+  it("mints on retry when an earlier delivery recorded the order but failed before minting", async () => {
+    const paid = order({ customer_id: "cus_m", customer: { id: "cus_m", email: "m@example.com" } });
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO customers (id, email, provider, provider_ref, created_at) VALUES ('c_m', 'm@example.com', 'polar', 'cus_m', 0)"),
+      env.DB.prepare("INSERT INTO orders (id, provider, provider_ref, customer_id, offer_id, status, created_at) VALUES ('o_m', 'polar', ?, 'c_m', 'keybumps-launch-a', 'paid', 0)").bind(paid.data.id),
+    ]);
+    expect(await deliver(paid)).toBe(200);
+    expect(await deliver(paid)).toBe(200);
+    expect(await licensesFor("m@example.com")).toHaveLength(1);
+  });
+
   it("asks Polar to retry when no Offer matches the product", async () => {
     expect(await deliver(order({ product_id: "prod_unknown" }))).toBe(422);
   });
@@ -136,14 +152,14 @@ describe("subscriptions", () => {
     await admin("/admin/offers", { id: "keybumps-monthly", product: "keybumps", provider: "polar", providerRef: "prod_monthly", kind: "subscription" });
   });
 
-  const subscriptionOrder = (reason: string, periodEnd: number) =>
+  const subscriptionOrder = (reason: string, periodEnd: number, sub = "sub_1", email = "s@example.com") =>
     order({
       billing_reason: reason,
       product_id: "prod_monthly",
-      customer_id: "cus_s",
-      customer: { id: "cus_s", email: "s@example.com" },
-      subscription_id: "sub_1",
-      subscription: { id: "sub_1", current_period_end: iso(periodEnd) },
+      customer_id: `cus_${sub}`,
+      customer: { id: `cus_${sub}`, email },
+      subscription_id: sub,
+      subscription: { id: sub, current_period_end: iso(periodEnd) },
     });
 
   it("sets validUntil from the period, extends on renewal, and revokes when it ends", async () => {
@@ -167,6 +183,18 @@ describe("subscriptions", () => {
 
     await deliver({ type: "subscription.revoked", data: { id: "sub_1", status: "canceled", ended_at: iso(now()) } });
     expect((await licensesFor("s@example.com"))[0].status).toBe("revoked");
+  });
+
+  it("extends instead of minting on a plan change, and doesn't extend a past-due subscription", async () => {
+    const firstEnd = now() + 30 * 86_400;
+    await deliver(subscriptionOrder("subscription_create", firstEnd, "sub_2", "plan@example.com"));
+    await deliver(subscriptionOrder("subscription_update", firstEnd + 86_400, "sub_2", "plan@example.com"));
+    const licenses = await licensesFor("plan@example.com");
+    expect(licenses).toHaveLength(1);
+    expect(licenses[0].validUntil).toBe(firstEnd + 86_400);
+
+    await deliver({ type: "subscription.updated", data: { id: "sub_2", status: "past_due", current_period_end: iso(firstEnd + 60 * 86_400) } });
+    expect((await licensesFor("plan@example.com"))[0].validUntil).toBe(firstEnd + 86_400);
   });
 });
 

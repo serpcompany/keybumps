@@ -86,6 +86,8 @@ function normalizeSubscription(type: string, data: Json): NormalizedEvent {
   if (typeof data.id !== "string") return { type: "ignored" };
   const ended = type === "subscription.revoked" || (data.ended_at != null && data.status !== "active" && data.status !== "trialing");
   if (ended) return { type: "subscription.ended", subscriptionRef: data.id };
+  // A past-due or unpaid subscription keeps its current period (and the app's grace) but isn't extended.
+  if (data.status !== "active" && data.status !== "trialing") return { type: "ignored" };
   const currentPeriodEnd = seconds(data.current_period_end);
   if (currentPeriodEnd === null) return { type: "ignored" };
   return { type: "subscription.period", subscriptionRef: data.id, currentPeriodEnd };

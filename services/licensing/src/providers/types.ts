@@ -8,6 +8,7 @@ export interface NormalizedOrder {
   productRef: string;
   /** Explicit Offer id from checkout metadata, for pricing variants. */
   offerId: string | null;
+  /** Anything but `purchase` and `subscription_create` extends an existing subscription License. */
   billingReason: "purchase" | "subscription_create" | "subscription_cycle" | "other";
   subscription: { ref: string; currentPeriodEnd: number | null } | null;
 }

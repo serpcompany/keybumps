@@ -42,8 +42,9 @@ export async function applyEvent(db: D1Database, provider: string, event: Normal
 }
 
 async function orderPaid(db: D1Database, provider: string, order: NormalizedOrder, now: number): Promise<void> {
-  // A renewal extends the existing subscription License instead of minting a new one.
-  if (order.billingReason === "subscription_cycle" && order.subscription) {
+  // Renewals and plan changes extend the subscription's existing License instead of minting another.
+  const startsSubscription = order.billingReason === "purchase" || order.billingReason === "subscription_create";
+  if (order.subscription && (!startsSubscription || (await hasSubscriptionLicense(db, order.subscription.ref)))) {
     if (order.subscription.currentPeriodEnd !== null) {
       await db
         .prepare("UPDATE licenses SET valid_until = MAX(COALESCE(valid_until, 0), ?) WHERE subscription_ref = ? AND status = 'active'")
@@ -53,8 +54,20 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
     return;
   }
 
-  const existing = await db.prepare("SELECT id FROM orders WHERE provider = ? AND provider_ref = ?").bind(provider, order.ref).first();
-  if (existing) return;
+  const existing = await db
+    .prepare(
+      `SELECT o.id, o.customer_id, o.offer_id, l.id AS license_id
+       FROM orders o LEFT JOIN licenses l ON l.order_id = o.id WHERE o.provider = ? AND o.provider_ref = ?`,
+    )
+    .bind(provider, order.ref)
+    .first<{ id: string; customer_id: string; offer_id: string; license_id: string | null }>();
+  // Fulfilled already, or recorded by a delivery that failed before minting: mint only if missing.
+  if (existing) {
+    if (existing.license_id) return;
+    const offer = await offerById(db, existing.offer_id);
+    if (!offer) throw new UnknownOfferError();
+    return mint(db, offer, order, existing.customer_id, existing.id, now);
+  }
 
   const offer = await findOffer(db, provider, order);
   if (!offer) throw new UnknownOfferError();
@@ -68,9 +81,17 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
     )
     .bind(orderId, provider, order.ref, customerId, offer.id, now)
     .run();
-  // A concurrent delivery of the same order already fulfilled it.
+  // A concurrent delivery recorded it first and mints it (or its retry will).
   if (inserted.meta.changes === 0) return;
+  return mint(db, offer, order, customerId, orderId, now);
+}
 
+async function hasSubscriptionLicense(db: D1Database, subscriptionRef: string): Promise<boolean> {
+  return (await db.prepare("SELECT 1 FROM licenses WHERE subscription_ref = ? LIMIT 1").bind(subscriptionRef).first()) !== null;
+}
+
+/** licenses(order_id) is unique, so a concurrent mint for the same order fails instead of duplicating. */
+async function mint(db: D1Database, offer: OfferRow, order: NormalizedOrder, customerId: string, orderId: string, now: number): Promise<void> {
   const subscription = offer.kind === "subscription" ? order.subscription : null;
   await issueLicense(
     db,
@@ -96,12 +117,18 @@ async function orderRefunded(db: D1Database, provider: string, orderRef: string,
   if (row) await revokeLicense(db, row.id, "refunded", now);
 }
 
+const OFFER_COLUMNS = "id, product_id, kind, updates_days, max_activations";
+
+async function offerById(db: D1Database, id: string): Promise<OfferRow | null> {
+  return db.prepare(`SELECT ${OFFER_COLUMNS} FROM offers WHERE id = ?`).bind(id).first<OfferRow>();
+}
+
 async function findOffer(db: D1Database, provider: string, order: NormalizedOrder): Promise<OfferRow | null> {
-  const columns = "id, product_id, kind, updates_days, max_activations";
+  const columns = OFFER_COLUMNS;
   if (order.offerId) {
-    // The metadata must name an Offer for the product actually bought.
+    // The metadata must name an active Offer for the product actually bought.
     const offer = await db
-      .prepare(`SELECT ${columns} FROM offers WHERE id = ? AND provider = ? AND provider_ref = ?`)
+      .prepare(`SELECT ${columns} FROM offers WHERE id = ? AND provider = ? AND provider_ref = ? AND active = 1`)
       .bind(order.offerId, provider, order.productRef)
       .first<OfferRow>();
     if (offer) return offer;
