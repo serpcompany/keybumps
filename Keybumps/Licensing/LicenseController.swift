@@ -51,11 +51,16 @@ final class LicenseController: LicenseControlling {
         timer = Timer.scheduledTimer(withTimeInterval: 3_600, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh(force: false) }
         }
+        timer?.tolerance = 300
         // A Mac waking from sleep checks right away if one is due, instead of waiting for the timer.
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in await self?.refresh(force: false) }
+            // The network usually isn't back the instant the Mac wakes; a failed check changes nothing.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(30))
+                await self?.refresh(force: false)
+            }
         }
     }
 
