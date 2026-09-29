@@ -103,9 +103,7 @@ struct ActionCorrelator {
             event = CoachingEventFactory.make(
                 applicationName: candidate.applicationName,
                 actionTitle: "Settings",
-                shortcutEvidence: shortcut.evidence,
-                pointerX: candidate.point.x,
-                pointerY: candidate.point.y
+                shortcutEvidence: shortcut.evidence
             )
         default: event = nil
         }
@@ -128,9 +126,7 @@ struct ActionCorrelator {
             actionTitle: title,
             displayShortcut: shortcut,
             adapterID: ChromeShortcutCatalog.adapterID,
-            compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion,
-            pointerX: candidate.point.x,
-            pointerY: candidate.point.y
+            compatibleApplicationVersion: ChromeShortcutCatalog.characterizedChromeVersion
         )
     }
 
@@ -146,9 +142,7 @@ struct ActionCorrelator {
         return CoachingEventFactory.make(
             applicationName: candidate.applicationName,
             actionTitle: title,
-            shortcutEvidence: preShortcut.evidence,
-            pointerX: candidate.point.x,
-            pointerY: candidate.point.y
+            shortcutEvidence: preShortcut.evidence
         )
     }
 

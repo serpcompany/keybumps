@@ -23,7 +23,7 @@ struct SystemDetectorPermissions: DetectorPermissionProviding {
 }
 
 enum MenuActionEventResolver {
-    static func makeEvent(from snapshot: AccessibilitySnapshot, point: CGPoint) -> CoachingEvent? {
+    static func makeEvent(from snapshot: AccessibilitySnapshot) -> CoachingEvent? {
         let menuItems = snapshot.hitAndAncestors.filter { node in
             node.role == kAXMenuItemRole as String
                 && node.enabled == true
@@ -38,9 +38,7 @@ enum MenuActionEventResolver {
         return CoachingEventFactory.make(
             applicationName: snapshot.applicationName,
             actionTitle: title,
-            shortcutEvidence: evidence,
-            pointerX: point.x,
-            pointerY: point.y
+            shortcutEvidence: evidence
         )
     }
 }
@@ -191,7 +189,7 @@ final class ManualActionDetector {
                         self.handleMouseUp(mouseUp, generation: currentGeneration)
                     }
                 } else if !isChromeSettings,
-                          let event = MenuActionEventResolver.makeEvent(from: snapshot, point: sample.location) {
+                          let event = MenuActionEventResolver.makeEvent(from: snapshot) {
                     let signature = "\(event.applicationName)|\(event.actionTitle)|\(event.shortcut)"
                     if signature != self.lastMenuSignature || Date().timeIntervalSince(self.lastMenuEmission) > 1 {
                         self.lastMenuSignature = signature

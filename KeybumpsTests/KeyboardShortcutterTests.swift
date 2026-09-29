@@ -783,7 +783,7 @@ final class KeyboardShortcutterTests: XCTestCase {
                 ancestors: [menuItem]
             )
 
-            let event = try XCTUnwrap(MenuActionEventResolver.makeEvent(from: snapshot, point: .zero))
+            let event = try XCTUnwrap(MenuActionEventResolver.makeEvent(from: snapshot))
             XCTAssertEqual(event.actionTitle, fixture.title)
             XCTAssertEqual(event.shortcut, fixture.expected)
             XCTAssertEqual(event.rawShortcutEvidence, menuItem.menuShortcutEvidence)
@@ -821,8 +821,8 @@ final class KeyboardShortcutterTests: XCTestCase {
             hit: child, ancestors: [menu("one", title: "Fill", evidence: nil)]
         )
 
-        XCTAssertNil(MenuActionEventResolver.makeEvent(from: ambiguous, point: .zero))
-        XCTAssertNil(MenuActionEventResolver.makeEvent(from: incomplete, point: .zero))
+        XCTAssertNil(MenuActionEventResolver.makeEvent(from: ambiguous))
+        XCTAssertNil(MenuActionEventResolver.makeEvent(from: incomplete))
     }
 
     func testEveryDeclaredSpecialKeyInputResolvesThroughTheRealRegistry() {

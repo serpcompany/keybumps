@@ -12,8 +12,6 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
     let applicationName: String
     let actionTitle: String
     let shortcut: String
-    let pointerX: Double?
-    let pointerY: Double?
     let rawShortcutEvidence: AXShortcutEvidence?
     let shortcutProvenance: ShortcutProvenance
     var isRead: Bool
@@ -24,8 +22,6 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         applicationName: String,
         actionTitle: String,
         shortcut: String,
-        pointerX: Double? = nil,
-        pointerY: Double? = nil,
         rawShortcutEvidence: AXShortcutEvidence? = nil,
         shortcutProvenance: ShortcutProvenance = .legacyUnknown,
         isRead: Bool = false
@@ -35,8 +31,6 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         self.applicationName = applicationName
         self.actionTitle = actionTitle
         self.shortcut = shortcut
-        self.pointerX = pointerX
-        self.pointerY = pointerY
         self.rawShortcutEvidence = rawShortcutEvidence
         self.shortcutProvenance = shortcutProvenance
         self.isRead = isRead
@@ -54,7 +48,7 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, occurredAt, applicationName, actionTitle, shortcut
-        case pointerX, pointerY, rawShortcutEvidence, shortcutProvenance, isRead
+        case rawShortcutEvidence, shortcutProvenance, isRead
     }
 
     init(from decoder: Decoder) throws {
@@ -64,8 +58,6 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         applicationName = try container.decode(String.self, forKey: .applicationName)
         actionTitle = try container.decode(String.self, forKey: .actionTitle)
         shortcut = try container.decode(String.self, forKey: .shortcut)
-        pointerX = try container.decodeIfPresent(Double.self, forKey: .pointerX)
-        pointerY = try container.decodeIfPresent(Double.self, forKey: .pointerY)
         rawShortcutEvidence = try container.decodeIfPresent(AXShortcutEvidence.self, forKey: .rawShortcutEvidence)
         shortcutProvenance = try container.decodeIfPresent(ShortcutProvenance.self, forKey: .shortcutProvenance)
             ?? .legacyUnknown
@@ -79,8 +71,6 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         try container.encode(applicationName, forKey: .applicationName)
         try container.encode(actionTitle, forKey: .actionTitle)
         try container.encode(shortcut, forKey: .shortcut)
-        try container.encodeIfPresent(pointerX, forKey: .pointerX)
-        try container.encodeIfPresent(pointerY, forKey: .pointerY)
         try container.encodeIfPresent(rawShortcutEvidence, forKey: .rawShortcutEvidence)
         try container.encode(shortcutProvenance, forKey: .shortcutProvenance)
         try container.encode(isRead, forKey: .isRead)
@@ -91,17 +81,13 @@ enum CoachingEventFactory {
     static func make(
         applicationName: String,
         actionTitle: String,
-        shortcutEvidence: AXShortcutEvidence,
-        pointerX: Double? = nil,
-        pointerY: Double? = nil
+        shortcutEvidence: AXShortcutEvidence
     ) -> CoachingEvent? {
         guard let shortcut = KeyboardShortcutRegistry.resolve(shortcutEvidence) else { return nil }
         return make(
             applicationName: applicationName,
             actionTitle: actionTitle,
             shortcut: shortcut,
-            pointerX: pointerX,
-            pointerY: pointerY,
             rawShortcutEvidence: shortcutEvidence,
             provenance: .liveAX
         )
@@ -112,17 +98,13 @@ enum CoachingEventFactory {
         actionTitle: String,
         displayShortcut: String,
         adapterID: String,
-        compatibleApplicationVersion: String,
-        pointerX: Double? = nil,
-        pointerY: Double? = nil
+        compatibleApplicationVersion: String
     ) -> CoachingEvent? {
         guard let shortcut = KeyboardShortcutRegistry.resolve(displayString: displayShortcut) else { return nil }
         return make(
             applicationName: applicationName,
             actionTitle: actionTitle,
             shortcut: shortcut,
-            pointerX: pointerX,
-            pointerY: pointerY,
             rawShortcutEvidence: nil,
             provenance: .characterizedDefault(
                 adapterID: adapterID,
@@ -135,8 +117,6 @@ enum CoachingEventFactory {
         applicationName: String,
         actionTitle: String,
         shortcut: CanonicalKeyboardShortcut,
-        pointerX: Double?,
-        pointerY: Double?,
         rawShortcutEvidence: AXShortcutEvidence?,
         provenance: ShortcutProvenance
     ) -> CoachingEvent {
@@ -144,8 +124,6 @@ enum CoachingEventFactory {
             applicationName: applicationName,
             actionTitle: actionTitle,
             shortcut: shortcut.displayString,
-            pointerX: pointerX,
-            pointerY: pointerY,
             rawShortcutEvidence: rawShortcutEvidence,
             shortcutProvenance: provenance
         )
