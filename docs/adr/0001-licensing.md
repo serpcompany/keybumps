@@ -44,7 +44,7 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
    - A Lease carries `refreshAfter` (about 7 days) and `expiresAt` (about 45 days).
    - The app refreshes silently whenever it's online after `refreshAfter`. The next refresh returns `revoked` after a refund, a dispute, or the end of a subscription's paid period. A subscription that is canceled but still paid for stays valid until `validUntil`.
    - A Mac that stays offline keeps working until `expiresAt`, and sees a warning during the final week. Past that point, one successful refresh is required.
-   - A subscription Lease is refreshed as soon as `validUntil` passes, and stays usable for a 7-day grace period so a renewal that hasn't reached the app yet doesn't lock the Mac.
+   - A subscription Lease is refreshed as soon as `validUntil` passes, and stays usable for a 7-day grace period so a renewal that hasn't reached the app yet doesn't lock the Mac. For subscriptions, the service caps `expiresAt` at `validUntil` plus that grace, so an offline subscriber must reconnect after each paid period.
    - These are the only cases where a paying customer must reconnect.
    - A network or server error never changes the current state.
    - The app keeps a Keychain high-water mark of trusted time. It starts at a Lease's server-issued `issuedAt`.
