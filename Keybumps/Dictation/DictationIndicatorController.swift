@@ -84,7 +84,7 @@ final class DictationNotchState {
 }
 
 struct DictationNotchGeometry: Equatable {
-    static let wingWidth: CGFloat = 92
+    static let wingWidth: CGFloat = 116
     /// Transparent room around the shape for its glow.
     static let margin: CGFloat = 16
 
@@ -160,6 +160,8 @@ struct DictationNotchView: View {
                     Text(Self.elapsed(from: state.recordingStartedAt, to: context.date))
                         .font(.system(size: 13, weight: .semibold).monospacedDigit())
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
         case .transcribing, .inserting:
@@ -171,6 +173,8 @@ struct DictationNotchView: View {
                     .foregroundStyle(.white)
             }
             .font(.system(size: 12, weight: .semibold))
+            .lineLimit(1)
+            .fixedSize()
         case .failed:
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -190,6 +194,7 @@ struct DictationNotchView: View {
                 LevelBars(level: state.level, reduceMotion: reduceMotion)
                 Text("esc")
                     .font(.system(size: 10, weight: .semibold))
+                    .fixedSize()
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.horizontal, 4)
                     .frame(height: 16)
