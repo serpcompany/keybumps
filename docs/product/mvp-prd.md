@@ -19,7 +19,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
 - Settings follows Raycast's dark settings layout: an account row showing the local macOS user (no sign-in), then Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, Permissions, and General. Each capability page has its enable switch in the toolbar and a Commands group of Raycast-style hotkey fields.
-- Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed.
+- Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed. Escape closes Settings like Command-W, except while a hotkey field is recording, a sheet or alert is open, or a text field has text in it.
 - Clicking the Dock icon opens Quick Search.
 - The menu-bar menu contains Open Keybumps (showing the Quick Search shortcut), About Keybumps, Check for Updates…, Settings…, and Quit Keybumps.
 - Each capability owns its detailed settings. Disabling one immediately stops its services and releases its shortcuts without erasing retained local history.
@@ -36,7 +36,7 @@ Conflict resolution detects the supported reference apps when they are running a
 - The palette copies Raycast's launcher: a near-black window, the search input on top, tabs below it, compact rows with a rounded neutral highlight, outlined keycaps, and a floating action pill at the bottom right listing the tab's keys.
 - Search, Clipboard, Screenshots, Dictation, and Hotkeys (Shortcut Coach history) are peer tabs selected by Command-1/2/3/4/5. Hotkeys is hidden by default; Shortcut Coach settings can show it, and Open Shortcut Coach History always opens it.
 - The tab chrome shows only the shortcut keycaps and tab name.
-- Delete removes the highlighted row in Search's Recent Items, Clipboard, and Screenshots once the search field is empty; Command-Delete works while typing. Dictation entries are deleted from their card.
+- Delete removes the highlighted row in Search's Recent Items, Clipboard, Screenshots, and Dictation once the search field is empty; Command-Delete works while typing. Deleting a recording stops its playback.
 - Copying from Clipboard, Screenshots, Dictation, or the Screenshot Editor closes the surface and shows **Copied to Clipboard** at the notch (see Notch notices).
 - One dominant input filters the active tab; history inputs use the label **Search**.
 - Arrow keys move selection (the Screenshots grid also uses Left and Right), Return performs the primary action where one exists, and Escape closes the palette.
@@ -147,7 +147,7 @@ User outcome: record speech, transcribe it locally, and insert it at the origina
 - Dictation History supports search, playback, waveform progress, 0.5×–2× speed, paste, copy, Finder reveal, retry, individual deletion, and confirmed Clear All.
 - Expanded completed cards support Apple's custom on-device `TranslationSession`, a supported target-language picker, and optional speech rendered to a temporary WAV through the shared audio transport.
 - Changing or closing a translation deletes generated audio. Translation never changes the original transcript or enters durable history.
-- The Command Palette and dedicated history screen use the same rich card behavior.
+- The ⌘4 Dictation tab uses Raycast's list-and-detail layout: compact recordings (status icon, first line, duration, age) on the left, and the highlighted recording's audio player and Copy/Translate/Show in Finder/Transcribe/Delete chips pinned at the top, then its full selectable transcript and Information (recorded, duration, language, status) on the right. Return or double-click copies; Delete removes the highlighted recording. The dedicated history screen keeps expandable cards.
 
 Required permissions are Microphone and Speech Recognition, plus Accessibility where focused-field insertion requires it.
 

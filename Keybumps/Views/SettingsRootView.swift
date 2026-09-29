@@ -1220,7 +1220,9 @@ extension Notification.Name {
 }
 
 @MainActor @Observable
-private final class ShortcutRecorderState {
+final class ShortcutRecorderState {
+    /// Whether any hotkey field is recording, so Escape cancels it rather than closing Settings.
+    @ObservationIgnored static private(set) var isRecordingAny = false
     private(set) var identifier: String?
     private(set) var error: String?
     /// The modifier symbols held down while recording, shown live in the field.
@@ -1236,6 +1238,7 @@ private final class ShortcutRecorderState {
     ) {
         stopMonitor()
         self.identifier = identifier
+        Self.isRecordingAny = true
         error = nil
         cancelAction = cancel
         suspend()
@@ -1277,6 +1280,7 @@ private final class ShortcutRecorderState {
     private func finish() {
         stopMonitor()
         identifier = nil
+        Self.isRecordingAny = false
         error = nil
         liveModifiers = ""
         cancelAction = nil
@@ -1285,5 +1289,48 @@ private final class ShortcutRecorderState {
 
     private func stopMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+    }
+}
+
+/// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
+/// a hotkey field that is recording, a sheet or alert, or a text field with text in it.
+struct SettingsEscapeCloser: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { EscapeView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class EscapeView: NSView {
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let window = self?.window, SettingsEscapePolicy.shouldClose(event: event, window: window) else {
+                    return event
+                }
+                window.performClose(nil)
+                return nil
+            }
+        }
+
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+    }
+}
+
+@MainActor
+enum SettingsEscapePolicy {
+    static func shouldClose(event: NSEvent, window: NSWindow) -> Bool {
+        guard event.keyCode == UInt16(kVK_Escape),
+              event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
+              event.window === window, window.isKeyWindow,
+              window.attachedSheet == nil, NSApp.modalWindow == nil,
+              !ShortcutRecorderState.isRecordingAny else { return false }
+        if let editor = window.firstResponder as? NSTextView, editor.isFieldEditor, !editor.string.isEmpty {
+            return false
+        }
+        return true
     }
 }
