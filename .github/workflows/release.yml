@@ -192,6 +192,10 @@ jobs:
           ./scripts/build-update-release.sh "$RELEASE_VERSION" "$RELEASE_BUILD" "$PREVIOUS_BUILD" \
             "$FEED_URL" "$UPDATE_PUBLIC_KEY" "$SPARKLE_ACCOUNT" "$SPARKLE_TOOLS" "$RUNNER_TEMP/release"
 
+      - name: Remove Sparkle key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sparkle-private-key"
+
       - name: Preview publication
         run: |
           ./scripts/publish-release.sh "$RUNNER_TEMP/release" staging

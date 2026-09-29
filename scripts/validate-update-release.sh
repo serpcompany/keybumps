@@ -77,6 +77,8 @@ elif [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
 fi
 
 # CI verifies with the key file (see generate-staged-appcast.sh); local runs use the keychain.
+# The file must hold the same key as the keychain account checked below; CI's setup step imports
+# the file into that account, so never export KEYBUMPS_SPARKLE_KEY_FILE by hand.
 typeset -a verify_key
 if [[ -n "${KEYBUMPS_SPARKLE_KEY_FILE:-}" ]]; then
   verify_key=(--ed-key-file "$KEYBUMPS_SPARKLE_KEY_FILE")
