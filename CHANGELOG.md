@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.6](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.5...v0.0.3-beta.6) (2026-09-29)
+
+
+### Features
+
+* Icon Composer app icon (3D keycap on purple) ([#114](https://github.com/serpcompany/keybumps/issues/114)) ([a3aeb03](https://github.com/serpcompany/keybumps/commit/a3aeb03d17fb992b039ce3f61211a0cc490a71d8))
+
 ## [0.0.3-beta.5](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.4...v0.0.3-beta.5) (2026-09-29)
 
 This beta gives Keybumps a properly sized Mac icon and moves Dictation's recording indicator into the notch.
