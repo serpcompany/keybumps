@@ -210,7 +210,6 @@ final class UpdateControllerTests: XCTestCase {
             inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
             presenceController: UpdaterTestPresenceController(),
             detector: detector,
-            presenter: PresentationWindowController(),
             updater: fake
         )
 

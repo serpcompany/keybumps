@@ -205,7 +205,6 @@ private final class ModuleHarness {
             inbox: InboxStore(persistence: DiscardingEventPersistence()),
             presenceController: InertPresenceController(),
             detector: ManualActionDetector(monitor: InertPointerMonitor(), permissions: GrantedDetectorPermissions()),
-            presenter: PresentationWindowController(),
             shortcutCoordinator: GlobalShortcutCoordinator(backend: backend),
             permissionCoordinator: PermissionCoordinator(
                 accessibilityTrusted: { true },
@@ -216,7 +215,6 @@ private final class ModuleHarness {
                 requestScreenRecording: {},
                 openSettings: { _ in }
             ),
-            nativeNotificationCenter: FakeNativeNotificationCenter(granted: true),
             updater: DisabledUpdateController(reason: "Capability module tests"),
             licensing: licensing,
             dictationModelManager: DictationModelManager(

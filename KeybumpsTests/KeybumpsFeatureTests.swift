@@ -372,7 +372,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(persistence: InMemoryEventPersistence()),
             presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             shortcutCoordinator: coordinator,
             updater: DisabledUpdateController(reason: "Unit test"),
             spotlightShortcutResolver: SpotlightShortcutConflictResolver(
@@ -417,7 +416,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(persistence: InMemoryEventPersistence()),
             presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             updater: DisabledUpdateController(reason: "Unit test"),
             spotlightShortcutResolver: SpotlightShortcutConflictResolver(
                 preferences: symbolicPreferences
@@ -449,7 +447,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(persistence: InMemoryEventPersistence()),
             presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             shortcutCoordinator: coordinator,
             updater: DisabledUpdateController(reason: "Unit test"),
             spotlightShortcutResolver: SpotlightShortcutConflictResolver(
@@ -1190,7 +1187,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(persistence: InMemoryEventPersistence()),
             presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             updater: DisabledUpdateController(reason: "Unit test"),
             dictationModelManager: manager
         )
@@ -1221,7 +1217,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(persistence: InMemoryEventPersistence()),
             presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             updater: DisabledUpdateController(reason: "Unit test"),
             dictationModelManager: manager
         )
@@ -1283,7 +1278,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(),
             presenceController: AppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             shortcutCoordinator: coordinator
         )
         model.applyCapabilities()
@@ -1450,27 +1444,20 @@ final class KeybumpsFeatureTests: XCTestCase {
         let allGranted = Dictionary(
             uniqueKeysWithValues: MacPermission.allCases.map { ($0, PermissionAuthorizationState.granted) }
         )
-        let deniedNotifications = PermissionReadinessSnapshot.resolve(
+        let ready = PermissionReadinessSnapshot.resolve(
             enabledCapabilities: Set(Capability.allCases),
             states: allGranted,
-            permissionsRequiringRelaunch: [],
-            selectedChannels: [.nativeBanner],
-            notificationAuthorization: .denied
+            permissionsRequiringRelaunch: []
         )
-
-        XCTAssertFalse(deniedNotifications.isReady)
-        XCTAssertEqual(deniedNotifications.completedCount, deniedNotifications.totalCount - 1)
-        XCTAssertEqual(deniedNotifications.missingCount, 1)
-        XCTAssertTrue(deniedNotifications.nativeNotificationNeedsAttention)
+        XCTAssertTrue(ready.isReady)
+        XCTAssertEqual(ready.completedCount, ready.totalCount)
 
         var oneDenied = allGranted
         oneDenied[.inputMonitoring] = .denied
         let deniedInputMonitoring = PermissionReadinessSnapshot.resolve(
             enabledCapabilities: Set(Capability.allCases),
             states: oneDenied,
-            permissionsRequiringRelaunch: [.inputMonitoring],
-            selectedChannels: [],
-            notificationAuthorization: .authorized
+            permissionsRequiringRelaunch: [.inputMonitoring]
         )
         XCTAssertFalse(deniedInputMonitoring.isReady)
         XCTAssertEqual(deniedInputMonitoring.currentPermission, .inputMonitoring)
@@ -1479,9 +1466,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         let staleGrantedInputMonitoring = PermissionReadinessSnapshot.resolve(
             enabledCapabilities: [.keyboardShortcutter],
             states: allGranted,
-            permissionsRequiringRelaunch: [.inputMonitoring],
-            selectedChannels: [],
-            notificationAuthorization: .authorized
+            permissionsRequiringRelaunch: [.inputMonitoring]
         )
         XCTAssertFalse(staleGrantedInputMonitoring.isReady)
         XCTAssertEqual(staleGrantedInputMonitoring.missingPermissions, [.inputMonitoring])
@@ -1795,7 +1780,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             inbox: InboxStore(persistence: InMemoryEventPersistence()),
             presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             updater: DisabledUpdateController(reason: "Unit test")
         )
         let toggle = CapabilityToggleBinding(model: model, capability: .windowManagement).value
@@ -2475,10 +2459,6 @@ final class KeybumpsFeatureTests: XCTestCase {
             CoachingEventRowPresentation(event: unread),
             CoachingEventRowPresentation(event: readLater)
         )
-    }
-
-    func testNotificationSettingsRecoveryTargetsKeybumps() {
-        XCTAssertTrue(NotificationSettingsRecovery.url.absoluteString.contains("com.serp.keybumps"))
     }
 
     func testKeyboardShortcutterHistoryContentCentralizesEnablementAndFiltering() {

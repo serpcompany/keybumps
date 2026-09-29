@@ -46,7 +46,7 @@ struct InMemoryDefaultsTests {
         #expect(preferences.selectedChannels == [.sound])
         #expect(!preferences.showInDockAndSwitcher)
         preferences.setCapability(.dictation, enabled: false)
-        preferences.set(.topRightToast, enabled: true)
+        preferences.set(.notch, enabled: true)
         preferences.dictationLanguage = "fr-FR"
         preferences.dictationDurationLimit = .tenMinutes
         preferences.didCompleteOnboarding = true

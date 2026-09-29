@@ -2,18 +2,16 @@ import Foundation
 
 enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable {
     case notch
-    case nativeBanner
-    case topRightToast
-    case topCenterShelf
     case sound
+
+    /// Saved selections of the retired Native macOS Banner, Top-right Toast, and Top-center Shelf,
+    /// which now present through the notch.
+    static let retiredVisualRawValues: Set<String> = ["nativeBanner", "topRightToast", "topCenterShelf"]
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .nativeBanner: "Native macOS Banner"
-        case .topRightToast: "Top-right Toast"
-        case .topCenterShelf: "Top-center Shelf"
         case .notch: "Notch"
         case .sound: "Sound"
         }
@@ -21,9 +19,6 @@ enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable 
 
     var summary: String {
         switch self {
-        case .nativeBanner: "A Notification Center alert that remains available to macOS."
-        case .topRightToast: "A compact keyboard-shortcut card near the top-right corner."
-        case .topCenterShelf: "A prominent expandable shelf centered at the top."
         case .notch: "The action and its shortcut flash out of the notch (or the top of the menu bar)."
         case .sound: "Plays the system notification sound."
         }
@@ -31,29 +26,17 @@ enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable 
 
     var systemImage: String {
         switch self {
-        case .nativeBanner: "macwindow.badge.plus"
-        case .topRightToast: "rectangle.topthird.inset.filled"
-        case .topCenterShelf: "rectangle.tophalf.inset.filled"
         case .notch: "menubar.rectangle"
         case .sound: "speaker.wave.2"
         }
     }
 
-    var supportsPreview: Bool {
-        self != .nativeBanner
-    }
-}
-
-enum PresentationOverlapPolicy {
-    static func selecting(
-        _ channel: NotificationChannel,
-        in channels: Set<NotificationChannel>
-    ) -> Set<NotificationChannel> {
-        channels.union([channel])
-    }
-
-    static func normalized(_ channels: Set<NotificationChannel>) -> Set<NotificationChannel> {
-        channels
+    /// Decodes saved selections, moving retired visual channels to the notch and dropping unknown
+    /// ones (such as the earlier Pointer Card).
+    static func decoding(_ rawValues: [String]) -> Set<NotificationChannel> {
+        var channels = Set(rawValues.compactMap(NotificationChannel.init(rawValue:)))
+        if !retiredVisualRawValues.isDisjoint(with: rawValues) { channels.insert(.notch) }
+        return channels
     }
 }
 

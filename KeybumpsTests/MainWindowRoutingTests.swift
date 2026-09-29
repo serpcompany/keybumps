@@ -34,7 +34,6 @@ struct MainWindowRoutingTests {
         quickSearchRouter.configure { quickSearchOpens += 1 }
         let delegate = AppDelegate(
             quickSearchRouter: quickSearchRouter,
-            appShellRouter: AppShellRouter(),
             mainWindowRouter: mainWindowRouter
         )
 

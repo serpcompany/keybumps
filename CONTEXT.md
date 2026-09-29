@@ -37,7 +37,7 @@ Rectangle-derived window movement and sizing under the owner's selected shortcut
 _Avoid_: Rectangle app, Window Management
 
 **Shortcut Coach**:
-Passive recognition of currently supported manual actions, durable history, and selected presentations.
+Passive recognition of currently supported manual actions, durable history, and a notch notice with optional sound.
 _Avoid_: Keyboard Shortcutter (its former name; code types still use `KeyboardShortcutter`), Shortcut Coaching, Keylume app
 
 **Hotkeys**:

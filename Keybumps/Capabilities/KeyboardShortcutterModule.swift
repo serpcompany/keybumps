@@ -28,17 +28,14 @@ extension CapabilityDescriptor {
     )
 }
 
-/// Owns the manual-action detector and its presentations. Its Settings attention is its own
-/// missing permissions, including native notification authorization when that channel is selected.
+/// Owns the manual-action detector. Its Settings attention is its own missing permissions.
 @MainActor
 final class KeyboardShortcutterModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.keyboardShortcutter
     private let detector: ManualActionDetector
-    private let presenter: PresentationWindowController
 
-    init(detector: ManualActionDetector, presenter: PresentationWindowController) {
+    init(detector: ManualActionDetector) {
         self.detector = detector
-        self.presenter = presenter
     }
 
     func apply(_ context: CapabilityContext) {
@@ -47,7 +44,6 @@ final class KeyboardShortcutterModule: CapabilityModule {
 
     func deactivate(_ context: CapabilityContext) {
         detector.stop()
-        presenter.dismissAll()
     }
 
     func permissionsDidRefresh(_ context: CapabilityContext) {

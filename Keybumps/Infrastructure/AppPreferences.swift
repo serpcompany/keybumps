@@ -135,11 +135,9 @@ final class AppPreferences {
         }.first
         let channelsWereNormalized: Bool
         if let rawChannels = currentChannels ?? legacyChannels {
-            let decodedChannels = Set(rawChannels.compactMap(NotificationChannel.init(rawValue:)))
-            let normalizedChannels = PresentationOverlapPolicy.normalized(decodedChannels)
-            selectedChannels = normalizedChannels
-            channelsWereNormalized = normalizedChannels != decodedChannels
-                || rawChannels.sorted() != normalizedChannels.map(\.rawValue).sorted()
+            let decodedChannels = NotificationChannel.decoding(rawChannels)
+            selectedChannels = decodedChannels
+            channelsWereNormalized = rawChannels.sorted() != decodedChannels.map(\.rawValue).sorted()
         } else {
             selectedChannels = [.notch]
             channelsWereNormalized = false
@@ -170,7 +168,7 @@ final class AppPreferences {
 
     func set(_ channel: NotificationChannel, enabled: Bool) {
         if enabled {
-            selectedChannels = PresentationOverlapPolicy.selecting(channel, in: selectedChannels)
+            selectedChannels.insert(channel)
         } else {
             selectedChannels.remove(channel)
         }

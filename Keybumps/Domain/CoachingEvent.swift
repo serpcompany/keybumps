@@ -48,13 +48,6 @@ struct CoachingEvent: Codable, Identifiable, Equatable, Sendable {
         shortcut: "⌘N"
     )
 
-    var coachingTitle: String {
-        guard let first = actionTitle.first else { return actionTitle }
-        return String(first).uppercased() + actionTitle.dropFirst().lowercased()
-    }
-
-    var coachingBody: String { "\(applicationName) · \(shortcut)" }
-
     var canonicalShortcut: CanonicalKeyboardShortcut? {
         KeyboardShortcutRegistry.resolve(displayString: shortcut)
     }

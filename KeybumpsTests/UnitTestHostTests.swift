@@ -9,9 +9,8 @@ struct UnitTestHostTests {
     @Test("Windows created during unit tests stay invisible and click-through")
     func windowsStayOffScreen() {
         #expect(UnitTestHost.isActive)
-        let presenter = PresentationWindowController()
-        presenter.show(event: .sample, style: .topRightToast)
-        defer { presenter.dismissAll() }
+        let notice = PaletteHUD()
+        notice.showCoach(NotchCoachPresentation(event: .sample))
 
         let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         window.hideDuringUnitTests()
