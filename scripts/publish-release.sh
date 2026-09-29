@@ -87,10 +87,13 @@ if [[ "$mode" != --publish ]]; then
 fi
 
 sha() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}' }
+# Reads the object from the R2 bucket itself. Cloudflare Bot Fight Mode blocks CI runners from the
+# public updates.keybumps.app host, so public-edge checks use scripts/verify-update-publication.sh
+# from a normal network instead.
 remote_sha() {
   local target=$1 temporary
   temporary=$(/usr/bin/mktemp)
-  if /usr/bin/curl --fail --silent --location --max-time 120 "$origin/$target?verify=$RANDOM$RANDOM" --output "$temporary"; then
+  if $wrangler r2 object get "$bucket/$target" --remote --pipe > "$temporary" 2>/dev/null && [[ -s "$temporary" ]]; then
     sha "$temporary"
   fi
   /bin/rm -f "$temporary"
@@ -107,7 +110,7 @@ verify() {
     [[ "$actual" == "$expected" ]] && { print "  verified $key"; return 0; }
     sleep 3
   done
-  print -u2 "public $key does not match the local file"; return 1
+  print -u2 "published $key does not match the local file"; return 1
 }
 
 print "Publishing phase 1…"

@@ -64,8 +64,10 @@ verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBe
 if [[ "$fixture_mode" == --signed-not-notarized ]]; then
   # Interim releases without notarization still require a valid, strict Developer ID signature.
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
-  /usr/bin/codesign -dv --verbose=2 "$app_path" 2>&1 | grep -q '^Authority=Developer ID Application' || {
-    print -u2 "app is not signed with a Developer ID Application certificate"
+  # Capture first: with pipefail, grep -q exiting early can fail the pipeline on a valid app.
+  signature=$(/usr/bin/codesign -dv --verbose=2 "$app_path" 2>&1)
+  [[ "$signature" == *$'\nAuthority=Developer ID Application:'* && "$signature" == *$'\nTeamIdentifier=847HR8U8D9'* ]] || {
+    print -u2 "app is not signed with the Keybumps Developer ID Application certificate"
     exit 70
   }
 elif [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then

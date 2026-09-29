@@ -131,10 +131,12 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           BUILD: ${{ inputs.build }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::Invalid version: $VERSION"; exit 1; }
           [ -f "docs/releases/v${VERSION}.md" ] || { echo "::error::Missing docs/releases/v${VERSION}.md"; exit 1; }
-          previous=$(curl --fail --silent --show-error "$FEED_URL" | xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="version"])' -)
+          # Read the live feed from R2 directly: Bot Fight Mode blocks CI runners on the public host.
+          previous=$(wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe | xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="version"])' -)
           [[ "$previous" =~ ^[0-9]+$ ]] || { echo "::error::Could not read the live production build"; exit 1; }
           build=${BUILD:-$((previous + 1))}
           [[ "$build" =~ ^[0-9]+$ ]] && [ "$build" -gt "$previous" ] || { echo "::error::Build $build must exceed live build $previous"; exit 1; }
