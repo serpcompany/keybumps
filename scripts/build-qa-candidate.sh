@@ -78,10 +78,12 @@ if (( ! install )); then
   exit 0
 fi
 
+# Match only the installed copy, never a Debug build or test host running from DerivedData.
+installed_pid() { pgrep -f "^$installed_app/Contents/MacOS/Keybumps" | head -1 }
 quit_keybumps() {
-  pgrep -xq Keybumps || return 0
+  [[ -n "$(installed_pid)" ]] || return 0
   osascript -e 'tell application id "com.serp.keybumps" to quit' >/dev/null 2>&1 || true
-  for _ in {1..40}; do pgrep -xq Keybumps || return 0; sleep 0.25; done
+  for _ in {1..40}; do [[ -n "$(installed_pid)" ]] || return 0; sleep 0.25; done
   print -u2 "Keybumps did not quit; close it and rerun"; exit 68
 }
 
@@ -93,9 +95,9 @@ ditto "$candidate_app" "$installed_app"
 print "$backup" > "$qa_root/backups/latest"
 open "$installed_app"
 
-for _ in {1..40}; do pgrep -xq Keybumps && break; sleep 0.25; done
-running_path=$(ps -o comm= -p "$(pgrep -x Keybumps | head -1)" 2>/dev/null || true)
-[[ "$running_path" == "$installed_app/Contents/MacOS/Keybumps" ]] || { print -u2 "running Keybumps is not the installed candidate ($running_path)"; exit 69; }
+for _ in {1..40}; do [[ -n "$(installed_pid)" ]] && break; sleep 0.25; done
+running_path=$(ps -o comm= -p "$(installed_pid)" 2>/dev/null || true)
+[[ "$running_path" == "$installed_app/Contents/MacOS/Keybumps" ]] || { print -u2 "the installed candidate is not running from $installed_app${running_path:+ (found $running_path)}; quit any other com.serp.keybumps copy and rerun"; exit 69; }
 [[ "$(plist_value "$installed_app" CFBundleVersion)" == "$candidate_build" ]] || { print -u2 "installed build does not match candidate"; exit 69; }
 
 print "Installed and running: $candidate_version ($candidate_build)"
