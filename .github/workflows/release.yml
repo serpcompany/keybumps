@@ -14,6 +14,10 @@ on:
         required: false
         type: boolean
         default: true
+      notarize:
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       version:
@@ -29,6 +33,11 @@ on:
         required: true
         type: boolean
         default: false
+      notarize:
+        description: Notarize. Off only with owner authorization while notarization is unavailable (signed, not notarized).
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -76,12 +85,20 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
           PUBLISH: ${{ inputs.publish }}
+          NOTARIZE: ${{ inputs.notarize }}
         run: |
           missing=()
-          for name in DEVELOPER_ID_CERTIFICATE_P12 DEVELOPER_ID_CERTIFICATE_PASSWORD ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY SPARKLE_PRIVATE_KEY; do
+          required=(DEVELOPER_ID_CERTIFICATE_P12 DEVELOPER_ID_CERTIFICATE_PASSWORD SPARKLE_PRIVATE_KEY)
+          if [ "$NOTARIZE" = false ]; then
+            echo "::warning::Notarization is off: this release is Developer ID-signed but not notarized."
+          else
+            required+=(ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY)
+          fi
+          for name in "${required[@]}"; do
             [ -n "${!name}" ] || missing+=("$name")
           done
-          if [ "$PUBLISH" = true ] && [ -z "$CLOUDFLARE_R2_TOKEN" ]; then missing+=(CLOUDFLARE_R2_TOKEN); fi
+          # Every run reads the live build from R2, so the R2 token is always required.
+          [ -n "$CLOUDFLARE_R2_TOKEN" ] || missing+=(CLOUDFLARE_R2_TOKEN)
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::Missing repository secrets: ${missing[*]} (see docs/releases/sparkle-update-operations.md)"
             exit 1
@@ -100,7 +117,6 @@ jobs:
           echo "SPARKLE_TOOLS=$RUNNER_TEMP/sparkle/bin" >> "$GITHUB_ENV"
 
       - name: Check R2 access
-        if: inputs.publish
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe > /dev/null
@@ -115,10 +131,12 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           BUILD: ${{ inputs.build }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::Invalid version: $VERSION"; exit 1; }
           [ -f "docs/releases/v${VERSION}.md" ] || { echo "::error::Missing docs/releases/v${VERSION}.md"; exit 1; }
-          previous=$(curl --fail --silent --show-error "$FEED_URL" | xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="version"])' -)
+          # Read the live feed from R2 directly: Bot Fight Mode blocks CI runners on the public host.
+          previous=$(wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe | xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="version"])' -)
           [[ "$previous" =~ ^[0-9]+$ ]] || { echo "::error::Could not read the live production build"; exit 1; }
           build=${BUILD:-$((previous + 1))}
           [[ "$build" =~ ^[0-9]+$ ]] && [ "$build" -gt "$previous" ] || { echo "::error::Build $build must exceed live build $previous"; exit 1; }
@@ -151,15 +169,21 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
           rm -f "$RUNNER_TEMP/developer-id.p12"
           security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application" || { echo "::error::No Developer ID Application identity in the certificate secret"; exit 1; }
+          # Signing reads this file (never the keychain item, whose access prompt would hang the
+          # runner); the keychain copy only lets generate_keys confirm the public key.
+          umask 077
           printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle-private-key"
           "$SPARKLE_TOOLS/generate_keys" --account "$SPARKLE_ACCOUNT" -f "$RUNNER_TEMP/sparkle-private-key"
-          rm -f "$RUNNER_TEMP/sparkle-private-key"
+          echo "KEYBUMPS_SPARKLE_KEY_FILE=$RUNNER_TEMP/sparkle-private-key" >> "$GITHUB_ENV"
           [ "$("$SPARKLE_TOOLS/generate_keys" --account "$SPARKLE_ACCOUNT" -p)" = "$UPDATE_PUBLIC_KEY" ] || { echo "::error::Sparkle private key does not match the embedded public key"; exit 1; }
           echo "RELEASE_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, and package
+        # A normal run takes 10–25 minutes; fail fast instead of waiting on a hidden prompt.
+        timeout-minutes: 45
         env:
           KEYBUMPS_MANUAL_SIGNING: "1"
+          KEYBUMPS_SKIP_NOTARIZATION: ${{ inputs.notarize == false && '1' || '' }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
@@ -167,6 +191,10 @@ jobs:
         run: |
           ./scripts/build-update-release.sh "$RELEASE_VERSION" "$RELEASE_BUILD" "$PREVIOUS_BUILD" \
             "$FEED_URL" "$UPDATE_PUBLIC_KEY" "$SPARKLE_ACCOUNT" "$SPARKLE_TOOLS" "$RUNNER_TEMP/release"
+
+      - name: Remove Sparkle key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sparkle-private-key"
 
       - name: Preview publication
         run: |
@@ -190,6 +218,7 @@ jobs:
       - name: Remove signing keychain
         if: always()
         run: |
+          rm -f "$RUNNER_TEMP/sparkle-private-key"
           [ -n "${RELEASE_KEYCHAIN:-}" ] && security delete-keychain "$RELEASE_KEYCHAIN" || true
 
   production:

@@ -12,6 +12,10 @@ On macOS 15 or newer, each expanded history card can open Keybumps's on-device t
 
 Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. Keybumps transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session.
 
+## Brand assets
+
+`brand/` holds the approved Keybumps brand pack (see `brand/README.md`): the keycap logo with the mascot, the standalone mascot, and platform exports. The macOS app icon is the keycap (`Keybumps/Resources/Assets.xcassets/AppIcon.appiconset`, from `brand/apple/macos/`). The menu-bar item and small in-app marks use the standalone mascot as a template image (`KeybumpsMascot.imageset`, cropped from `brand/monochrome/mascot-dark.png`). The `web/` and `social/` exports are for keybumps.app.
+
 ## Build and run
 
 Requirements: Apple Silicon Mac, macOS 14.2+, Xcode, and XcodeGen.

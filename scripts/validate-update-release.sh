@@ -3,7 +3,7 @@ set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
 
 if (( $# < 11 || $# > 12 )); then
-  print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <embedded-feed-url> <publication-feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture]"
+  print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <embedded-feed-url> <publication-feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture|--signed-not-notarized]"
   exit 64
 fi
 
@@ -24,7 +24,7 @@ checksum_path="$archive_path.sha256"
 sign_update_tool="$sparkle_tools_directory/sign_update"
 generate_keys_tool="$sparkle_tools_directory/generate_keys"
 
-[[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
+[[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture || "$fixture_mode" == --signed-not-notarized ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
 if [[ "$fixture_mode" == --skip-apple-trust-for-fixture ]]; then
   update_url_is_loopback_fixture "$embedded_feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
   update_url_is_loopback_fixture "$publication_feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
@@ -61,12 +61,30 @@ verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBe
   exit 70
 }
 
-if [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
+if [[ "$fixture_mode" == --signed-not-notarized ]]; then
+  # Interim releases without notarization still require a valid, strict Developer ID signature.
+  /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
+  # Capture first: with pipefail, grep -q exiting early can fail the pipeline on a valid app.
+  signature=$(/usr/bin/codesign -dv --verbose=2 "$app_path" 2>&1)
+  [[ "$signature" == *$'\nAuthority=Developer ID Application:'* && "$signature" == *$'\nTeamIdentifier=847HR8U8D9'* ]] || {
+    print -u2 "app is not signed with the Keybumps Developer ID Application certificate"
+    exit 70
+  }
+elif [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
   /usr/sbin/spctl --assess --type execute --verbose=2 "$app_path"
   /usr/bin/xcrun stapler validate "$app_path"
 fi
 
+# CI verifies with the key file (see generate-staged-appcast.sh); local runs use the keychain.
+# The file must hold the same key as the keychain account checked below; CI's setup step imports
+# the file into that account, so never export KEYBUMPS_SPARKLE_KEY_FILE by hand.
+typeset -a verify_key
+if [[ -n "${KEYBUMPS_SPARKLE_KEY_FILE:-}" ]]; then
+  verify_key=(--ed-key-file "$KEYBUMPS_SPARKLE_KEY_FILE")
+else
+  verify_key=(--account "$keychain_account")
+fi
 keychain_public_key=$("$generate_keys_tool" --account "$keychain_account" -p | grep -Eo '[A-Za-z0-9+/]{43}=' | tail -1)
 [[ -n "$keychain_public_key" && "$keychain_public_key" == "$public_key" ]] || {
   print -u2 "Sparkle verification account does not match the public key embedded in the app"
@@ -74,7 +92,7 @@ keychain_public_key=$("$generate_keys_tool" --account "$keychain_account" -p | g
 }
 
 /usr/bin/xmllint --noout "$appcast_path"
-"$sign_update_tool" --account "$keychain_account" --verify "$appcast_path"
+"$sign_update_tool" $verify_key --verify "$appcast_path"
 
 enclosure_url=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='enclosure']/@url)" "$appcast_path")
 enclosure_signature=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][*[local-name()='version' and text()='$expected_build']]/*[local-name()='enclosure']/@*[local-name()='edSignature'])" "$appcast_path")
@@ -95,10 +113,10 @@ hardware_requirements=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'
 
 actual_size=$(/usr/bin/stat -f '%z' "$archive_path")
 [[ "$enclosure_length" == "$actual_size" ]] || { print -u2 "appcast archive length does not match the local archive"; exit 70; }
-"$sign_update_tool" --account "$keychain_account" --verify "$archive_path" "$enclosure_signature"
+"$sign_update_tool" $verify_key --verify "$archive_path" "$enclosure_signature"
 actual_notes_size=$(/usr/bin/stat -f '%z' "$release_notes_path")
 [[ "$release_notes_length" == "$actual_notes_size" ]] || { print -u2 "appcast release-note length does not match local notes"; exit 70; }
-"$sign_update_tool" --account "$keychain_account" --verify "$release_notes_path" "$release_notes_signature"
+"$sign_update_tool" $verify_key --verify "$release_notes_path" "$release_notes_signature"
 
 expected_checksum=$(awk 'NR == 1 { print $1 }' "$checksum_path")
 actual_checksum=$(/usr/bin/shasum -a 256 "$archive_path" | awk '{ print $1 }')

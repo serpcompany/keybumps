@@ -930,7 +930,7 @@ private struct OnboardingView: View {
         let shortcutPresentation = model.quickSearchShortcutOnboardingPresentation
         VStack(spacing: 24) {
             Spacer()
-            Image(ProductIdentity.inAppBrandImageName).resizable().scaledToFit().frame(width: 72, height: 72)
+            Image(nsImage: NSApp.applicationIconImage).resizable().scaledToFit().frame(width: 96, height: 96)
             Group {
                 if showsConflicts {
                     conflicts(shortcutPresentation)
