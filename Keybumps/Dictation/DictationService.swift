@@ -144,6 +144,8 @@ final class DictationService {
     private(set) var retryingEntryID: String?
     var selectedLanguage: String
     var onPhaseChange: ((DictationPhase) -> Void)?
+    /// The microphone's loudness while recording, 0 (silence) to 1, on the main actor.
+    var onInputLevel: ((Float) -> Void)?
 
     private let audioEngine = AVAudioEngine()
     private var inputTapInstalled = false
@@ -238,8 +240,12 @@ final class DictationService {
             activeRecording = recording
             recordingStartedAt = recording.capturedAt
             self.audioFile = audioFile
+            let reportLevel = onInputLevel
             input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
                 try? audioFile.write(from: buffer)
+                guard let reportLevel else { return }
+                let level = DictationInputLevel.normalized(buffer)
+                DispatchQueue.main.async { reportLevel(level) }
             }
         } catch {
             if let preparedRecording { history.discard(preparedRecording) }
@@ -440,4 +446,23 @@ final class DictationService {
 
     private func fail(_ message: String) { lastError = message; setPhase(.failed(message)) }
     private func setPhase(_ phase: DictationPhase) { self.phase = phase; onPhaseChange?(phase) }
+}
+
+/// Converts a microphone buffer to a 0–1 loudness for the recording indicator. Only a single
+/// number leaves the audio thread; no audio content is kept or logged.
+enum DictationInputLevel {
+    static func normalized(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return 0 }
+        let count = Int(buffer.frameLength)
+        var sum: Float = 0
+        for index in 0..<count { sum += samples[index] * samples[index] }
+        return normalized(rms: (sum / Float(count)).squareRoot())
+    }
+
+    /// Maps -50 dBFS (quiet room) … 0 dBFS (loud) onto 0 … 1.
+    static func normalized(rms: Float) -> Float {
+        guard rms > 0 else { return 0 }
+        let decibels = 20 * log10(rms)
+        return min(max((decibels + 50) / 50, 0), 1)
+    }
 }

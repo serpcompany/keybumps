@@ -64,6 +64,7 @@ final class DictationModule: CapabilityModule {
             self.updateEscapeRegistration(for: phase)
             self.updateSafety.update(dictationPhase: phase)
         }
+        dictation.onInputLevel = { [weak indicator] level in indicator?.updateLevel(level) }
     }
 
     func apply(_ context: CapabilityContext) {

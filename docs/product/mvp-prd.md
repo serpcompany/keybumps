@@ -134,7 +134,7 @@ User outcome: record speech, transcribe it locally, and insert it at the origina
 - The default shortcut is Option-Space and is recordable, clearable, and restorable.
 - First press starts recording; second press stops, transcribes the completed local WAV, and inserts the result.
 - Escape is a temporary global cancellation shortcut during Recording and Transcribing. It is released before insertion and whenever Dictation becomes idle or disabled.
-- Display an unmistakable, non-disruptive Recording or Transcribing indicator whenever audio capture or processing is active.
+- Display an unmistakable, non-disruptive Recording or Transcribing indicator in the notch whenever audio capture or processing is active: while recording, a pulsing red dot and elapsed time left of the notch and live microphone-level bars with an esc hint right of it; while transcribing or inserting, a sparkle and moving dots; a failure drops the notch down with the message for five seconds. Screens without a notch show the same black tab from the top of the menu bar. Only a loudness number leaves the audio thread for the level bars.
 - Preserve destination focus as reliably as macOS permits.
 - Add punctuation and capitalization without semantic rewriting.
 - Default to a five-minute limit with 10, 15, 30, and 60-minute choices plus No Limit.
