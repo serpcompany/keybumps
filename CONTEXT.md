@@ -72,7 +72,7 @@ Registering one Mac against a License Key through Polar, up to the key's activat
 _Avoid_: Registration, login
 
 **License Check**:
-The app's cached result of its last successful Polar validation, kept in the Keychain with the key and its Polar activation id. It is revalidated about weekly and honored offline for 45 days; a network error never changes it.
+The app's cached result of its last successful Polar validation, kept in the Keychain with the key and its Polar activation id. It is revalidated every 24 hours and honored offline for 45 days; a network error never changes it.
 _Avoid_: Lease, token, license file
 
 **Locked**:

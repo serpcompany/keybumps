@@ -25,6 +25,30 @@ struct CapabilityModuleTests {
         }
     }
 
+    // MARK: Licensing gate (ADR 0002)
+
+    @Test("Locked runs no capability, and activating starts them")
+    func lockedRunsNoCapability() async {
+        let licensing = FixedLicenseController(state: .unlicensed)
+        let harness = ModuleHarness(licensing: licensing)
+        defer { harness.tearDown() }
+
+        harness.model.start()
+        #expect(harness.model.isLicensed == false)
+        #expect(harness.model.capabilityContext.enabledCapabilities.isEmpty)
+        #expect(harness.backend.registered.isEmpty)
+        #expect(!harness.clipboard.isMonitoring)
+
+        await licensing.activate(key: "KEYBUMPS-TEST")
+        #expect(harness.model.isLicensed)
+        #expect(!harness.backend.registered.isEmpty)
+        #expect(harness.clipboard.isMonitoring)
+
+        await licensing.deactivate()
+        #expect(harness.backend.registered.isEmpty)
+        #expect(!harness.clipboard.isMonitoring)
+    }
+
     @Test("Every module follows the modules it depends on")
     func dependenciesPrecedeDependents() {
         let order = CapabilityCatalog.descriptors.map(\.capability)
@@ -161,7 +185,7 @@ private final class ModuleHarness {
     private let root: URL
     private let pasteboard: NSPasteboard
 
-    init() {
+    init(licensing: (any LicenseControlling)? = nil) {
         let id = UUID().uuidString
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityModules-\(id)", isDirectory: true)
@@ -194,6 +218,7 @@ private final class ModuleHarness {
             ),
             nativeNotificationCenter: FakeNativeNotificationCenter(granted: true),
             updater: DisabledUpdateController(reason: "Capability module tests"),
+            licensing: licensing,
             dictationModelManager: DictationModelManager(
                 modelsRoot: root.appendingPathComponent("models", isDirectory: true),
                 downloader: WhisperKitModelDownloader()

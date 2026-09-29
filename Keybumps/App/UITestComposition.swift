@@ -73,6 +73,13 @@ extension AppModel {
                 openSettings: { _ in }
             ),
             nativeNotificationCenter: FakeNativeNotificationCenter(granted: granted),
+            licensing: FixedLicenseController(state: {
+                switch configuration.licenseState {
+                case .active: return .active(FixedLicenseController.sampleCheck)
+                case .unlicensed: return .unlicensed
+                case .revoked: return .locked(.notAccepted)
+                }
+            }()),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
             screenshotTools: ScreenshotToolsService(

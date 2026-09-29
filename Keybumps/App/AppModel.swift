@@ -39,6 +39,8 @@ final class AppModel {
     private let spotlightShortcutResolver: any SpotlightShortcutConflictResolving
     let dictation: DictationService
     let updater: any UpdateControlling
+    /// The app-shell licensing seam (ADR 0002). Capability modules start only while it is entitled.
+    let licensing: any LicenseControlling
     let updateSafetyPolicy: UpdateInstallationSafetyPolicy
     private let delivery: NotificationDeliveryService
     private let nativeNotificationCenter: any NativeNotificationCenterClient
@@ -69,6 +71,7 @@ final class AppModel {
     }
     private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
+    private(set) var licenseSnapshot: LicenseSnapshot
     private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
         manualRecovery: "Checking the Quick Search shortcut…"
     )
@@ -110,6 +113,7 @@ final class AppModel {
             presenceController: AppPresenceController(),
             detector: ManualActionDetector(),
             presenter: PresentationWindowController(),
+            licensing: LicenseControllerFactory.makeDefault(),
             screenshotDirectoryReader: FileSystemScreenshotDirectoryReader()
         )
     }
@@ -125,6 +129,7 @@ final class AppModel {
         permissionCoordinator: PermissionCoordinator? = nil,
         nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
         updater injectedUpdater: (any UpdateControlling)? = nil,
+        licensing injectedLicensing: (any LicenseControlling)? = nil,
         dictationModelManager injectedDictationModelManager: DictationModelManager? = nil,
         spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil,
         screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil,
@@ -151,6 +156,14 @@ final class AppModel {
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
         self.updater = updater
         self.updateSnapshot = updater.snapshot
+        #if DEBUG
+        // Unit tests and injected compositions run entitled unless they pass a license state.
+        let licensing = injectedLicensing ?? FixedLicenseController()
+        #else
+        let licensing = injectedLicensing ?? LicenseControllerFactory.makeDefault()
+        #endif
+        self.licensing = licensing
+        self.licenseSnapshot = licensing.snapshot
         let clipboard = injectedClipboard ?? ClipboardHistoryService()
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
@@ -233,6 +246,7 @@ final class AppModel {
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
+        licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
         refreshDetectorState()
     }
 
@@ -240,7 +254,8 @@ final class AppModel {
         guard !isStarted else { return }; isStarted = true
         presenceController.apply(showInDockAndSwitcher: true)
         launchAtLogin.refresh()
-        if preferences.didCompleteOnboarding { applyCapabilities() }
+        licensing.start()
+        if preferences.didCompleteOnboarding && isLicensed { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
         Task { await refreshNotificationPermission() }
         updater.start()
@@ -249,6 +264,27 @@ final class AppModel {
     func checkForUpdates() { updater.checkNow() }
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) { updater.setAutomaticallyChecks(enabled) }
     func restartToUpdate() { updater.restartWhenSafe() }
+
+    /// Whether Keybumps may run its capabilities. When false the app is Locked (ADR 0002).
+    var isLicensed: Bool { licenseSnapshot.isEntitled }
+    func activateLicense(key: String) async { await licensing.activate(key: key) }
+    func deactivateLicense() async { await licensing.deactivate() }
+    func refreshLicense(force: Bool = false) async { await licensing.refresh(force: force) }
+    /// What the Dock, the status menu, and the palette shortcuts open while Locked: Settings, which shows the License page.
+    var openLicenseSettings: () -> Void = { MainWindowRouter.shared.open() }
+
+    private func licenseDidChange(_ snapshot: LicenseSnapshot) {
+        let wasLicensed = isLicensed
+        licenseSnapshot = snapshot
+        guard wasLicensed != snapshot.isEntitled, isStarted, preferences.didCompleteOnboarding else { return }
+        if !snapshot.isEntitled {
+            // Locked: stop every capability's resources and shortcuts, and close the palette.
+            let context = capabilityContext
+            for capability in preferences.enabledCapabilities { capabilities.deactivate(capability, context: context) }
+            commandPalette.dismiss()
+        }
+        applyCapabilities()
+    }
 
     func completeOnboarding() {
         preferences.didCompleteOnboarding = true
@@ -281,7 +317,10 @@ final class AppModel {
             owner: CapabilityShortcut.quickSearch.ownerID,
             binding: binding
         ) { [weak self] in
-            self?.commandPalette.toggle(.search)
+            guard let self else { return }
+            // Onboarding registers this before activation; it opens Quick Search only once licensed.
+            guard self.isLicensed else { self.openLicenseSettings(); return }
+            self.commandPalette.toggle(.search)
         }
         quickSearchShortcutConflictStatus = registered
             ? .noConflict
@@ -306,7 +345,8 @@ final class AppModel {
     /// What every capability module receives when the shell applies, deactivates, or refreshes it.
     var capabilityContext: CapabilityContext {
         CapabilityContext(
-            enabledCapabilities: preferences.enabledCapabilities,
+            // Locked runs no capability at all.
+            enabledCapabilities: isLicensed ? preferences.enabledCapabilities : [],
             preferences: preferences,
             shortcuts: shortcuts,
             permissions: permissions,
@@ -568,6 +608,7 @@ final class AppModel {
     }
     func restoreDefaultWindowShortcuts() { preferences.restoreDefaultWindowShortcuts(); applyCapabilities() }
     func showQuickSearch() {
+        guard isLicensed else { openLicenseSettings(); return }
         guard preferences.enabledCapabilities.contains(.quickSearch) else { return }
         commandPalette.show(.search)
     }
@@ -580,12 +621,12 @@ final class AppModel {
         }
     }
     func showClipboardHistory() {
-        guard preferences.enabledCapabilities.contains(.clipboardHistory) else { return }
+        guard isLicensed, preferences.enabledCapabilities.contains(.clipboardHistory) else { return }
         commandPalette.show(.clipboard)
     }
-    func showDictationHistory() { commandPalette.show(.dictation) }
-    func showKeyboardShortcutterHistory() { commandPalette.show(.keyboardShortcutter) }
-    func showCommandPalette(_ tab: CommandPaletteTab) { commandPalette.show(tab) }
+    func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
+    func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
+    func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
     func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
     func previewSample(channel: NotificationChannel) async {
         let channels = PreviewChannelPlan.channels(
