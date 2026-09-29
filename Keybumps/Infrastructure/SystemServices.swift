@@ -413,6 +413,11 @@ final class PermissionCoordinator {
 final class LaunchAtLoginController {
     private(set) var statusText = "Not checked"
     func setEnabled(_ enabled: Bool) {
+        // Only the real product registers a login item; Debug builds (com.serp.keybumps.debug) never do.
+        guard Bundle.main.bundleIdentifier == ProductIdentity.bundleIdentifier else {
+            statusText = "Not available in development builds"
+            return
+        }
         do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }; refresh() }
         catch { statusText = error.localizedDescription }
     }

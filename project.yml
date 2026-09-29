@@ -52,6 +52,11 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 847HR8U8D9
         ENABLE_APP_SANDBOX: NO
+      configs:
+        # Debug builds (the unit- and UI-test host, build-and-run.sh) get their own identity so they
+        # never share preferences, permissions, or quit requests with the installed app.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps.debug
     dependencies:
       - package: Sparkle
       - package: ArgmaxOSS

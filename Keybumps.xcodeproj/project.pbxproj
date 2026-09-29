@@ -955,7 +955,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps;
+				PRODUCT_BUNDLE_IDENTIFIER = com.serp.keybumps.debug;
 				PRODUCT_MODULE_NAME = Keybumps;
 				PRODUCT_NAME = Keybumps;
 				SDKROOT = macosx;

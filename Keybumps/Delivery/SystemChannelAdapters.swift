@@ -156,8 +156,9 @@ final class NativeNotificationAdapter: ChannelDelivering {
 }
 
 enum NotificationSettingsRecovery {
+    /// Opens this build's own notification settings (Debug builds have their own identifier).
     static let url = URL(
-        string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?com.serp.keybumps"
+        string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?\(Bundle.main.bundleIdentifier ?? ProductIdentity.bundleIdentifier)"
     )!
 }
 
