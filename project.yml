@@ -28,7 +28,14 @@ targets:
     type: application
     platform: macOS
     sources:
-      - Keybumps
+      - path: Keybumps
+        excludes:
+          - Resources/Keybumps.icon
+      # The app icon: an Icon Composer file Xcode compiles into the asset catalog, with
+      # fallbacks for macOS before 26.
+      - path: Keybumps/Resources/Keybumps.icon
+        type: file
+        buildPhase: resources
       - path: LICENSE.rectangle
         buildPhase: resources
       - path: LICENSE.shotnix
@@ -47,7 +54,7 @@ targets:
         EXECUTABLE_NAME: Keybumps
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: Keybumps/Resources/Info.plist
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: Keybumps
         CODE_SIGN_ENTITLEMENTS: Keybumps/Resources/Keybumps.entitlements
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 847HR8U8D9
