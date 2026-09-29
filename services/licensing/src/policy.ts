@@ -4,6 +4,8 @@ export const DAY = 86_400;
 export const REFRESH_INTERVAL = 7 * DAY;
 export const LEASE_LIFETIME = 45 * DAY;
 export const SUBSCRIPTION_GRACE = 7 * DAY;
+/** During the grace period, the app retries at most daily. */
+export const GRACE_REFRESH_INTERVAL = DAY;
 
 export interface LeaseWindow {
   refreshAfter: number;
@@ -19,8 +21,10 @@ export function leaseWindow(now: number, validUntil: number | null): LeaseWindow
   let refreshAfter = now + REFRESH_INTERVAL;
   let expiresAt = now + LEASE_LIFETIME;
   if (validUntil !== null) {
-    refreshAfter = Math.min(refreshAfter, Math.max(now, validUntil));
     expiresAt = Math.min(expiresAt, validUntil + SUBSCRIPTION_GRACE);
+    refreshAfter = now < validUntil
+      ? Math.min(refreshAfter, validUntil)
+      : Math.min(now + GRACE_REFRESH_INTERVAL, expiresAt);
   }
   return { refreshAfter, expiresAt };
 }

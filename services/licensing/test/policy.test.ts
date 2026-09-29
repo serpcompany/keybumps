@@ -18,9 +18,9 @@ describe("leaseWindow", () => {
     expect(leaseWindow(now, validUntil).refreshAfter).toBe(validUntil);
   });
 
-  it("refreshes immediately inside the grace period", () => {
-    const validUntil = now - DAY;
-    expect(leaseWindow(now, validUntil)).toEqual({ refreshAfter: now, expiresAt: validUntil + 7 * DAY });
+  it("retries daily inside the grace period, never past expiry", () => {
+    expect(leaseWindow(now, now - DAY)).toEqual({ refreshAfter: now + DAY, expiresAt: now + 6 * DAY });
+    expect(leaseWindow(now, now - 6.5 * DAY)).toEqual({ refreshAfter: now + 0.5 * DAY, expiresAt: now + 0.5 * DAY });
   });
 });
 

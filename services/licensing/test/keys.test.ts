@@ -10,6 +10,10 @@ describe("License Keys", () => {
     expect(normalizeLicenseKey(" kb-abcd-ilo1-2345-6789 ", "KB")).toBe("KB-ABCD-1101-2345-6789");
   });
 
+  it("regroups keys typed without dashes", () => {
+    expect(normalizeLicenseKey("kbabcdefghjkmnpqrs", "KB")).toBe("KB-ABCD-EFGH-JKMN-PQRS");
+  });
+
   it("adds a missing prefix", () => {
     expect(normalizeLicenseKey("ABCD-EFGH-JKMN-PQRS", "KB")).toBe("KB-ABCD-EFGH-JKMN-PQRS");
   });

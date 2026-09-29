@@ -59,6 +59,9 @@ class ApiError extends Error {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
+/** 2100-01-01T00:00:00Z */
+const MAX_UNIX_SECONDS = 4_102_444_800;
+
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 let cachedSigningKey: { secret: string; key: SigningKey } | undefined;
@@ -205,7 +208,8 @@ async function constantTimeEqual(a: string, b: string): Promise<boolean> {
 
 const optionalTime = (value: unknown): number | null => {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) throw new ApiError("bad_request");
+  // Unix seconds only: rejects milliseconds, which would silently mean the year 50,000+.
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_UNIX_SECONDS) throw new ApiError("bad_request");
   return value;
 };
 

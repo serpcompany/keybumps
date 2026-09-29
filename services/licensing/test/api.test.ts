@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fromBase64url, verifyLease } from "../src/lease";
 import { DAY } from "../src/policy";
 
-const device = (n: number) => n.toString(16).padStart(64, "0");
+const device = (n: number) => `${n.toString(16).padStart(62, "0")}ab`;
 const publicKey = () => fromBase64url(env.TEST_PUBLIC_KEY);
 
 async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
@@ -48,8 +48,10 @@ describe("activation", () => {
     expect(await verifyLease(forged, publicKey())).toBeNull();
   });
 
-  it("accepts a key typed in lowercase", async () => {
+  it("accepts a key typed in lowercase and an uppercase device hash", async () => {
     expect((await activate(key.toLowerCase(), 1)).status).toBe(200);
+    const { status } = await post("/v1/refresh", { product: "keybumps", key, deviceHash: device(1).toUpperCase() });
+    expect(status).toBe(200);
   });
 
   it("does not use another slot when the same Mac activates again", async () => {
@@ -124,6 +126,7 @@ describe("admin", () => {
   it("rejects unknown products and bad activation limits", async () => {
     expect((await admin("/admin/licenses", { product: "nope" })).status).toBe(400);
     expect((await admin("/admin/licenses", { product: "keybumps", maxActivations: 0 })).status).toBe(400);
+    expect((await admin("/admin/licenses", { product: "keybumps", validUntil: Date.now() })).status).toBe(400);
   });
 
   it("honors a custom activation limit", async () => {

@@ -14,7 +14,7 @@ export function generateLicenseKey(prefix: string): string {
  * (I/L for 1, O for 0) after the product prefix.
  */
 export function normalizeLicenseKey(input: string, prefix: string): string {
-  const upper = input.toUpperCase().replace(/\s+/g, "");
-  const body = upper.startsWith(`${prefix}-`) ? upper.slice(prefix.length + 1) : upper;
-  return `${prefix}-${body.replace(/[IL]/g, "1").replace(/O/g, "0")}`;
+  const upper = input.toUpperCase().replace(/[\s-]+/g, "");
+  const body = (upper.startsWith(prefix) ? upper.slice(prefix.length) : upper).replace(/[IL]/g, "1").replace(/O/g, "0");
+  return [prefix, ...(body.match(/.{1,4}/g) ?? [])].join("-");
 }
