@@ -300,9 +300,11 @@ final class UpdateReleaseScriptTests: XCTestCase {
 
         var failingReads = environment
         failingReads["FAKE_R2_READ_ERROR"] = "1"
+        let uploadsBeforeReadError = try String(contentsOf: log, encoding: .utf8)
         let unreadable = try run(publisher, [output.path, "production", "--publish"], environment: failingReads)
         XCTAssertNotEqual(unreadable.status, 0, "a read error must not be treated as a missing object")
         XCTAssertTrue(unreadable.output.contains("could not read"), unreadable.output)
+        XCTAssertEqual(try String(contentsOf: log, encoding: .utf8), uploadsBeforeReadError, "nothing is uploaded after a read error")
 
         let rerun = try run(publisher, [output.path, "production", "--publish"], environment: environment)
         XCTAssertEqual(rerun.status, 0, rerun.output)
