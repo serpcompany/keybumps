@@ -127,6 +127,10 @@ describe("order.paid", () => {
     expect(await licensesFor("m@example.com")).toHaveLength(1);
   });
 
+  it("never falls back to another Offer when metadata names an unknown one", async () => {
+    expect(await deliver(order({ metadata: { offer: "keybumps-typo" } }))).toBe(422);
+  });
+
   it("asks Polar to retry when no Offer matches the product", async () => {
     expect(await deliver(order({ product_id: "prod_unknown" }))).toBe(422);
   });
@@ -137,6 +141,15 @@ describe("order.paid", () => {
 });
 
 describe("refunds", () => {
+  it("asks Polar to retry a refund that arrives before its paid order", async () => {
+    const paid = order({ customer_id: "cus_early", customer: { id: "cus_early", email: "early@example.com" } });
+    const refund = { type: "order.refunded", data: { ...paid.data, status: "refunded" } };
+    expect(await deliver(refund)).toBe(409);
+    await deliver(paid);
+    expect(await deliver(refund)).toBe(200);
+    expect((await licensesFor("early@example.com"))[0].status).toBe("revoked");
+  });
+
   it("revokes on a full refund and ignores a partial one", async () => {
     const paid = order({ customer_id: "cus_r", customer: { id: "cus_r", email: "r@example.com" } });
     await deliver(paid);
@@ -183,6 +196,19 @@ describe("subscriptions", () => {
 
     await deliver({ type: "subscription.revoked", data: { id: "sub_1", status: "canceled", ended_at: iso(now()) } });
     expect((await licensesFor("s@example.com"))[0].status).toBe("revoked");
+  });
+
+  it("applies subscription events that arrive before the paid order", async () => {
+    const periodEnd = now() + 30 * 86_400;
+    await deliver({ type: "subscription.active", data: { id: "sub_3", status: "active", current_period_end: iso(periodEnd) } });
+    const paid = subscriptionOrder("subscription_create", periodEnd, "sub_3", "early-sub@example.com");
+    (paid.data as Record<string, unknown>).subscription = null;
+    await deliver(paid);
+    expect((await licensesFor("early-sub@example.com"))[0]).toMatchObject({ status: "active", validUntil: periodEnd });
+
+    await deliver({ type: "subscription.revoked", data: { id: "sub_4", status: "canceled", ended_at: iso(now()) } });
+    await deliver(subscriptionOrder("subscription_create", periodEnd, "sub_4", "ended-first@example.com"));
+    expect((await licensesFor("ended-first@example.com"))[0].status).toBe("revoked");
   });
 
   it("extends instead of minting on a plan change, and doesn't extend a past-due subscription", async () => {

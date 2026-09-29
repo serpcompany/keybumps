@@ -15,7 +15,7 @@ import {
   touchActivation,
   type LicenseRow,
 } from "./licenses";
-import { applyEvent, UnknownOfferError } from "./fulfillment";
+import { applyEvent, NotYetKnownError, UnknownOfferError } from "./fulfillment";
 import { isWithinTerm, leaseWindow } from "./policy";
 import { PolarAdapter } from "./providers/polar";
 import type { ProviderAdapter } from "./providers/types";
@@ -230,6 +230,7 @@ async function receiveWebhook(request: Request, env: Env, name: string): Promise
   } catch (error) {
     // Non-2xx makes the provider retry, e.g. after the missing Offer is added.
     if (error instanceof UnknownOfferError) return json({ error: "unknown_offer" }, 422);
+    if (error instanceof NotYetKnownError) return json({ error: "not_yet_known" }, 409);
     throw error;
   }
   await env.DB.prepare("INSERT OR IGNORE INTO webhook_events (provider, event_id, received_at) VALUES (?, ?, ?)")

@@ -63,7 +63,7 @@ A paid order becomes a License through an Offer. The checkout link's `offer` met
 
 ## Secrets
 
-Nothing here is configured or deployed yet. Deploying requires owner authorization.
+Each environment sets these with `wrangler secret put --env <env>`. Deploying production requires owner authorization.
 
 | Secret | Value |
 | --- | --- |

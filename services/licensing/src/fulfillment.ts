@@ -5,8 +5,11 @@ import { DAY } from "./policy";
 import { issueLicense, revokeLicense } from "./licenses";
 import type { NormalizedEvent, NormalizedOrder } from "./providers/types";
 
-/** Used only if a subscription order arrives without its period end; the next subscription event corrects it. */
-const FALLBACK_SUBSCRIPTION_PERIOD = 35 * DAY;
+/**
+ * Used only if neither the order nor an earlier subscription event carries the period end. It is
+ * deliberately short: period updates only move forward, so any real period end replaces it.
+ */
+const FALLBACK_SUBSCRIPTION_PERIOD = 7 * DAY;
 
 interface OfferRow {
   id: string;
@@ -18,6 +21,9 @@ interface OfferRow {
 
 export class UnknownOfferError extends Error {}
 
+/** The event refers to something not recorded yet (e.g. a refund before its paid order); the provider should retry. */
+export class NotYetKnownError extends Error {}
+
 export async function applyEvent(db: D1Database, provider: string, event: NormalizedEvent, now: number): Promise<void> {
   switch (event.type) {
     case "order.paid":
@@ -25,16 +31,31 @@ export async function applyEvent(db: D1Database, provider: string, event: Normal
     case "order.refunded":
       return orderRefunded(db, provider, event.orderRef, now);
     case "subscription.period":
-      await db
-        .prepare("UPDATE licenses SET valid_until = MAX(COALESCE(valid_until, 0), ?) WHERE subscription_ref = ? AND status = 'active'")
-        .bind(event.currentPeriodEnd, event.subscriptionRef)
-        .run();
+      await db.batch([
+        db
+          .prepare(
+            `INSERT INTO subscriptions (provider, ref, current_period_end) VALUES (?, ?, ?)
+             ON CONFLICT (provider, ref) DO UPDATE SET current_period_end = MAX(COALESCE(current_period_end, 0), excluded.current_period_end)`,
+          )
+          .bind(provider, event.subscriptionRef, event.currentPeriodEnd),
+        db
+          .prepare("UPDATE licenses SET valid_until = MAX(COALESCE(valid_until, 0), ?) WHERE subscription_ref = ? AND status = 'active'")
+          .bind(event.currentPeriodEnd, event.subscriptionRef),
+      ]);
       return;
     case "subscription.ended":
-      await db
-        .prepare("UPDATE licenses SET status = 'revoked', revoked_reason = 'subscription_ended', revoked_at = ? WHERE subscription_ref = ? AND status = 'active'")
-        .bind(now, event.subscriptionRef)
-        .run();
+      // Recorded even without a License, so a paid order delivered later mints it revoked.
+      await db.batch([
+        db
+          .prepare(
+            `INSERT INTO subscriptions (provider, ref, ended_at) VALUES (?, ?, ?)
+             ON CONFLICT (provider, ref) DO UPDATE SET ended_at = COALESCE(ended_at, excluded.ended_at)`,
+          )
+          .bind(provider, event.subscriptionRef, now),
+        db
+          .prepare("UPDATE licenses SET status = 'revoked', revoked_reason = 'subscription_ended', revoked_at = ? WHERE subscription_ref = ? AND status = 'active'")
+          .bind(now, event.subscriptionRef),
+      ]);
       return;
     case "ignored":
       return;
@@ -95,22 +116,34 @@ async function hasSubscriptionLicense(db: D1Database, subscriptionRef: string): 
 /** licenses(order_id) is unique, so a concurrent mint for the same order fails instead of duplicating. */
 async function mint(db: D1Database, offer: OfferRow, order: NormalizedOrder, customerId: string, orderId: string, now: number): Promise<void> {
   const subscription = offer.kind === "subscription" ? order.subscription : null;
-  await issueLicense(
+  // Subscription events can arrive before the paid order; apply what they recorded.
+  const known = subscription
+    ? await db
+        .prepare("SELECT current_period_end, ended_at FROM subscriptions WHERE ref = ?")
+        .bind(subscription.ref)
+        .first<{ current_period_end: number | null; ended_at: number | null }>()
+    : null;
+  const periodEnd = Math.max(subscription?.currentPeriodEnd ?? 0, known?.current_period_end ?? 0) || null;
+  const license = await issueLicense(
     db,
     {
       product: offer.product_id,
       customerId,
       orderId,
       subscriptionRef: subscription?.ref ?? null,
-      validUntil: offer.kind === "subscription" ? (subscription?.currentPeriodEnd ?? now + FALLBACK_SUBSCRIPTION_PERIOD) : null,
+      validUntil: offer.kind === "subscription" ? (periodEnd ?? now + FALLBACK_SUBSCRIPTION_PERIOD) : null,
       updatesUntil: offer.kind === "update_window" && offer.updates_days !== null ? now + offer.updates_days * DAY : null,
       maxActivations: offer.max_activations,
     },
     now,
   );
+  if (known?.ended_at != null) await revokeLicense(db, license.id, "subscription_ended", now);
 }
 
 async function orderRefunded(db: D1Database, provider: string, orderRef: string, now: number): Promise<void> {
+  const order = await db.prepare("SELECT 1 FROM orders WHERE provider = ? AND provider_ref = ?").bind(provider, orderRef).first();
+  // A refund delivered before its paid order: have the provider retry once the order is recorded.
+  if (!order) throw new NotYetKnownError();
   const row = await db
     .prepare("SELECT l.id FROM licenses l JOIN orders o ON o.id = l.order_id WHERE o.provider = ? AND o.provider_ref = ?")
     .bind(provider, orderRef)
@@ -128,12 +161,12 @@ async function offerById(db: D1Database, id: string): Promise<OfferRow | null> {
 async function findOffer(db: D1Database, provider: string, order: NormalizedOrder): Promise<OfferRow | null> {
   const columns = OFFER_COLUMNS;
   if (order.offerId) {
-    // The metadata must name an active Offer for the product actually bought.
-    const offer = await db
+    // The metadata must name an active Offer for the product actually bought. A bad name never
+    // falls back to another variant, which could grant the wrong Entitlement.
+    return db
       .prepare(`SELECT ${columns} FROM offers WHERE id = ? AND provider = ? AND provider_ref = ? AND active = 1`)
       .bind(order.offerId, provider, order.productRef)
       .first<OfferRow>();
-    if (offer) return offer;
   }
   return db
     .prepare(`SELECT ${columns} FROM offers WHERE provider = ? AND provider_ref = ? AND active = 1 ORDER BY created_at LIMIT 1`)
