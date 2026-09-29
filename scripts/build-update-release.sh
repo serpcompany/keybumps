@@ -46,11 +46,20 @@ xcodebuild -exportArchive \
   -exportOptionsPlist "$export_options"
 
 app_path="$output_directory/export/Keybumps.app"
-notary_archive="$output_directory/Keybumps-notary.zip"
-/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_archive"
-asc notarization submit --file "$notary_archive" --wait
-xcrun stapler staple "$app_path"
-xcrun stapler validate "$app_path"
+# KEYBUMPS_SKIP_NOTARIZATION=1 is an owner-authorized interim mode for when notarization is
+# unavailable: the app stays Developer ID-signed and strictly verified, but is not notarized, so
+# Gatekeeper asks customers to allow it on first open.
+typeset -a trust_mode
+if [[ "${KEYBUMPS_SKIP_NOTARIZATION:-}" == 1 ]]; then
+  print -u2 "warning: KEYBUMPS_SKIP_NOTARIZATION=1; this release is signed but NOT notarized"
+  trust_mode=(--signed-not-notarized)
+else
+  notary_archive="$output_directory/Keybumps-notary.zip"
+  /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$notary_archive"
+  asc notarization submit --file "$notary_archive" --wait
+  xcrun stapler staple "$app_path"
+  xcrun stapler validate "$app_path"
+fi
 
 update_archive="$output_directory/feed/Keybumps-$release_version.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$update_archive"
@@ -64,7 +73,8 @@ release_download_prefix="https://updates.keybumps.app/releases/$release_build/"
 "$repository_root/scripts/generate-staged-appcast.sh" "$output_directory/feed" "$release_download_prefix" "$sparkle_tools_directory" "$sparkle_key_account"
 "$repository_root/scripts/validate-update-release.sh" \
   "$app_path" "$update_archive" "$output_directory/feed/appcast.xml" "$output_directory/feed/Keybumps-$release_version.md" \
-  "$feed_url" "$feed_url" "$previous_build" "$release_build" "$release_version" "$sparkle_tools_directory" "$sparkle_key_account"
+  "$feed_url" "$feed_url" "$previous_build" "$release_build" "$release_version" "$sparkle_tools_directory" "$sparkle_key_account" \
+  $trust_mode
 
 cp "$update_archive" "$update_archive.sha256" "$output_directory/feed/Keybumps-$release_version.md" \
   "$output_directory/Keybumps-$release_version.dmg" "$output_directory/Keybumps-$release_version.dmg.sha256" \

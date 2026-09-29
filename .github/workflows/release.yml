@@ -14,6 +14,10 @@ on:
         required: false
         type: boolean
         default: true
+      notarize:
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       version:
@@ -29,6 +33,11 @@ on:
         required: true
         type: boolean
         default: false
+      notarize:
+        description: Notarize. Off only with owner authorization while notarization is unavailable (signed, not notarized).
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -76,9 +85,16 @@ jobs:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
           PUBLISH: ${{ inputs.publish }}
+          NOTARIZE: ${{ inputs.notarize }}
         run: |
           missing=()
-          for name in DEVELOPER_ID_CERTIFICATE_P12 DEVELOPER_ID_CERTIFICATE_PASSWORD ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY SPARKLE_PRIVATE_KEY; do
+          required=(DEVELOPER_ID_CERTIFICATE_P12 DEVELOPER_ID_CERTIFICATE_PASSWORD SPARKLE_PRIVATE_KEY)
+          if [ "$NOTARIZE" = false ]; then
+            echo "::warning::Notarization is off: this release is Developer ID-signed but not notarized."
+          else
+            required+=(ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY)
+          fi
+          for name in "${required[@]}"; do
             [ -n "${!name}" ] || missing+=("$name")
           done
           if [ "$PUBLISH" = true ] && [ -z "$CLOUDFLARE_R2_TOKEN" ]; then missing+=(CLOUDFLARE_R2_TOKEN); fi
@@ -160,6 +176,7 @@ jobs:
       - name: Build, sign, notarize, and package
         env:
           KEYBUMPS_MANUAL_SIGNING: "1"
+          KEYBUMPS_SKIP_NOTARIZATION: ${{ inputs.notarize == false && '1' || '' }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}

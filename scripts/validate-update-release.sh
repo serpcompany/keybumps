@@ -3,7 +3,7 @@ set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
 
 if (( $# < 11 || $# > 12 )); then
-  print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <embedded-feed-url> <publication-feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture]"
+  print -u2 "usage: $0 <app> <archive> <appcast> <release-notes> <embedded-feed-url> <publication-feed-url> <previous-build> <expected-build> <expected-version> <sparkle-tools-directory> <keychain-account> [--skip-apple-trust-for-fixture|--signed-not-notarized]"
   exit 64
 fi
 
@@ -24,7 +24,7 @@ checksum_path="$archive_path.sha256"
 sign_update_tool="$sparkle_tools_directory/sign_update"
 generate_keys_tool="$sparkle_tools_directory/generate_keys"
 
-[[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
+[[ -z "$fixture_mode" || "$fixture_mode" == --skip-apple-trust-for-fixture || "$fixture_mode" == --signed-not-notarized ]] || { print -u2 "unknown option: $fixture_mode"; exit 64; }
 if [[ "$fixture_mode" == --skip-apple-trust-for-fixture ]]; then
   update_url_is_loopback_fixture "$embedded_feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
   update_url_is_loopback_fixture "$publication_feed_url" || { print -u2 "fixture trust bypass accepts loopback feeds only"; exit 65; }
@@ -61,7 +61,14 @@ verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBe
   exit 70
 }
 
-if [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
+if [[ "$fixture_mode" == --signed-not-notarized ]]; then
+  # Interim releases without notarization still require a valid, strict Developer ID signature.
+  /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
+  /usr/bin/codesign -dv --verbose=2 "$app_path" 2>&1 | grep -q '^Authority=Developer ID Application' || {
+    print -u2 "app is not signed with a Developer ID Application certificate"
+    exit 70
+  }
+elif [[ "$fixture_mode" != --skip-apple-trust-for-fixture ]]; then
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
   /usr/sbin/spctl --assess --type execute --verbose=2 "$app_path"
   /usr/bin/xcrun stapler validate "$app_path"
