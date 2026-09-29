@@ -59,6 +59,30 @@ _Avoid_: Image editor, annotation app, Markup
 A brief message, such as Copied to Clipboard or a Shortcut Coach tip, that grows out of the notch (or the top of the menu bar on screens without one) and fades on its own.
 _Avoid_: Toast, HUD, banner
 
-**Development License Adapter**:
-An explicit non-production local gate used only to exercise onboarding before a commerce provider is chosen.
-_Avoid_: License, activation
+**License**:
+A customer's right to use Keybumps, created by the SERP licensing service when a purchase is paid and revoked on refund, dispute, or an ended subscription. It carries one Entitlement. See `docs/adr/0001-licensing.md`.
+_Avoid_: Account, subscription (a subscription is only one kind of Offer)
+
+**License Key**:
+The customer-facing code (`KB-XXXX-XXXX-XXXX-XXXX`) that identifies a License and is entered in the app to activate it.
+_Avoid_: Serial, registration code, password
+
+**Entitlement**:
+What a License allows: `validUntil` (absent means perpetual), `updatesUntil` (builds released after it are not entitled), and `maxActivations`. The app enforces only these fields and never sees prices.
+_Avoid_: Plan, tier
+
+**Offer**:
+One purchasable checkout variant (price, provider product, and the Entitlement it grants). Offers are how pricing is tested. They live only on the licensing service and the website.
+_Avoid_: SKU, price (in app code)
+
+**Activation**:
+Binding a License to one Mac's device hash, up to `maxActivations`. Deactivating from the app frees the slot.
+_Avoid_: Registration, login
+
+**Lease**:
+The Ed25519-signed payload the licensing service returns on Activation or refresh. The app verifies it offline, refreshes it after `refreshAfter`, and stops honoring it after `expiresAt`. Revocation takes effect when the Lease is refreshed or expires.
+_Avoid_: Token, license file
+
+**Locked**:
+The app state without an entitled Lease. Capabilities do not start, and only onboarding, the License settings page, and Quit are available. There is no trial.
+_Avoid_: Trial mode, demo mode, unregistered

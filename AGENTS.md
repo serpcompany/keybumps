@@ -1,6 +1,6 @@
 # Agent instructions
 
-Build the functional MVP in `docs/product/mvp-prd.md`. Use `CONTEXT.md` terminology and preserve the module boundaries documented in `docs/architecture.md`.
+Use `CONTEXT.md` terminology, preserve the module boundaries documented in `docs/architecture.md`, and follow the decisions recorded in `docs/adr/`.
 
 - [`docs/development-workflow.md`](docs/development-workflow.md): Follow this branch, local-build, installed-artifact, manual-QA, and promotion cycle for all product work.
   Hand the owner work through `scripts/build-qa-candidate.sh <issue>` after your own first pass; never take over the owner's screen without an explicit handoff.
