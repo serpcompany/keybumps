@@ -13,7 +13,7 @@ The first-party unit that implements one Capability and is registered with the a
 _Avoid_: Plugin, extension, mini-app
 
 **Command Palette**:
-The single floating, keyboard-first surface with Search, Clipboard, Dictation, Hotkeys, and Screenshots tabs.
+The single floating, keyboard-first surface with Search, Clipboard, Screenshots, Dictation, and Hotkeys tabs (Command-1 to 5; Hotkeys hidden by default).
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Quick Search**:
@@ -41,19 +41,23 @@ Passive recognition of currently supported manual actions, durable history, and 
 _Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
 
 **Hotkeys**:
-The Command Palette tab label for Keyboard Shortcutter history. Settings and the capability keep the name Keyboard Shortcutter.
+The Command Palette tab label for Keyboard Shortcutter history, hidden unless the owner shows it. Settings and the capability keep the name Keyboard Shortcutter.
 
 **Screenshot Tools**:
 The capability that takes screenshots with its own hotkeys (Shift-Command-2 screens, Shift-Command-3 screens then edit, Shift-Command-4 area), adds screenshots macOS or Keybumps saves to Clipboard History as screenshot items, and owns the **Screenshot Editor**. While its hotkeys use macOS's Shift-Command-3/4, it turns those macOS shortcuts off and gives them back when it stops using them.
 _Avoid_: Screen capture, screenshot app, CleanShot clone
 
 **Screenshots tab**:
-The ⌘4 Command Palette tab listing screen-capture items from Clipboard History; Return opens the Screenshot Editor. Owned by Screenshot Tools.
+The ⌘3 Command Palette tab showing screen-capture items from Clipboard History as a grid of thumbnail cards; Return opens the Screenshot Editor. Owned by Screenshot Tools.
 _Avoid_: Screenshot library, gallery
 
 **Screenshot Editor**:
 The Screenshot Tools window that marks up a Clipboard History image with pixelate, redact, arrow, draw, and text, then copies the flattened result and saves an `(edited)` copy.
 _Avoid_: Image editor, annotation app, Markup
+
+**Notch notice**:
+A brief message, such as Copied to Clipboard or a Keyboard Shortcutter tip, that grows out of the notch (or the top of the menu bar on screens without one) and fades on its own.
+_Avoid_: Toast, HUD, banner
 
 **Development License Adapter**:
 An explicit non-production local gate used only to exercise onboarding before a commerce provider is chosen.

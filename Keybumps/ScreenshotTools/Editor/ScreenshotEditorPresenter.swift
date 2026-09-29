@@ -7,6 +7,7 @@ final class ScreenshotEditorPresenter {
     private var controller: ScreenshotEditorWindowController?
     private let fallbackFolder: () -> URL
     private let editingChanged: (Bool) -> Void
+    private let notice = PaletteHUD()
 
     init(fallbackFolder: @escaping () -> URL, editingChanged: @escaping (Bool) -> Void) {
         self.fallbackFolder = fallbackFolder
@@ -33,10 +34,11 @@ final class ScreenshotEditorPresenter {
             sourceURL: entry.sourceURL,
             fallbackFolder: fallbackFolder()
         )
-        controller.onFinish = { [weak self] _ in
+        controller.onFinish = { [weak self] result in
             self?.controller = nil
             self?.editingChanged(false)
             previousApp?.activate()
+            if result?.copied == true { self?.notice.show("Copied to Clipboard") }
         }
         self.controller = controller
         editingChanged(true)

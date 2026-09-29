@@ -86,25 +86,39 @@ extension View {
     }
 }
 
-/// Raycast's confirmation after an action closes the palette: a small pill near the bottom of
-/// the screen, such as "Copied to Clipboard", that fades out on its own.
+/// A brief notice such as "Copied to Clipboard" that grows out of the notch: the message sits
+/// left of the notch and an icon (or a shortcut's keycaps) right of it, on black that blends with
+/// the notch. Screens without a notch show the same black tab hanging from the top of the menu bar.
 @MainActor
 final class PaletteHUD {
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
 
-    func show(_ message: String, systemImage: String = "checkmark.circle.fill", tint: Color = .green) {
+    func show(
+        _ message: String,
+        systemImage: String = "checkmark.circle.fill",
+        tint: Color = .green,
+        shortcut: String? = nil,
+        duration: TimeInterval? = nil
+    ) {
+        guard let screen = NSScreen.main else { return }
         let panel = panel ?? makePanel()
         self.panel = panel
-        let host = NSHostingView(rootView: PaletteHUDView(message: message, systemImage: systemImage, tint: tint))
+
+        let notchWidth = Self.notchWidth(of: screen)
+        let height = max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28)
+        // Both sides of the notch are equally wide, so the notch stays centered.
+        let textWidth = ceil((message as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width)
+        let keys = shortcut.map { ShortcutKeycapPresentation(shortcut: $0).keys } ?? []
+        let trailingWidth = keys.isEmpty ? 20 : CGFloat(keys.count) * 25
+        let host = NSHostingView(rootView: NotchNoticeView(
+            message: message, systemImage: systemImage, tint: tint, keys: keys,
+            notchWidth: notchWidth, wingWidth: max(textWidth, trailingWidth) + 32, height: height
+        ))
         panel.contentView = host
-        panel.setContentSize(host.fittingSize)
-        if let screen = NSScreen.main {
-            panel.setFrameOrigin(NSPoint(
-                x: screen.visibleFrame.midX - panel.frame.width / 2,
-                y: screen.visibleFrame.minY + 120
-            ))
-        }
+        let size = host.fittingSize
+        panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
+                              width: size.width, height: size.height), display: true)
         panel.alphaValue = 1
         panel.hideDuringUnitTests()
         panel.orderFrontRegardless()
@@ -116,12 +130,20 @@ final class PaletteHUD {
 
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak panel] in
-            NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; panel?.animator().alphaValue = 0 }) {
-                panel?.orderOut(nil)
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel?.animator().alphaValue = 0 }) {
+                // A newer show may have started during the fade.
+                if panel?.alphaValue == 0 { panel?.orderOut(nil) }
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (tint == .green ? 1.2 : 3), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (duration ?? (tint == .green ? 1.6 : 3)), execute: work)
+    }
+
+    /// The width of the camera housing, or zero on screens without one.
+    private static func notchWidth(of screen: NSScreen) -> CGFloat {
+        guard screen.safeAreaInsets.top > 0,
+              let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 0 }
+        return max(0, right.minX - left.maxX)
     }
 
     private func makePanel() -> NSPanel {
@@ -129,34 +151,64 @@ final class PaletteHUD {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
-        panel.level = .statusBar
+        panel.level = .popUpMenu
         panel.ignoresMouseEvents = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .transient]
         panel.isReleasedWhenClosed = false
         panel.identifier = NSUserInterfaceItemIdentifier("paletteHUD")
         return panel
     }
 }
 
-private struct PaletteHUDView: View {
+private struct NotchNoticeView: View {
     let message: String
     let systemImage: String
     let tint: Color
+    let keys: [String]
+    let notchWidth: CGFloat
+    let wingWidth: CGFloat
+    let height: CGFloat
+    @State private var isShown = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .foregroundStyle(tint)
+        HStack(spacing: 0) {
             Text(message)
-                .foregroundStyle(.primary)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.leading, notchWidth > 0 ? 0 : 16)
+                .padding(.trailing, notchWidth > 0 ? 14 : 8)
+                .frame(width: notchWidth > 0 ? wingWidth : nil, alignment: .trailing)
+            Color.clear.frame(width: notchWidth)
+            trailing
+                .padding(.leading, notchWidth > 0 ? 14 : 0)
+                .padding(.trailing, notchWidth > 0 ? 0 : 16)
+                .frame(width: notchWidth > 0 ? wingWidth : nil, alignment: .leading)
         }
-        .font(.system(size: 14, weight: .medium))
-        .padding(.horizontal, 16)
-        .frame(height: 38)
-        .background(PaletteTheme.pill, in: Capsule())
-        .overlay(Capsule().strokeBorder(PaletteTheme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
-        .padding(16)
+        .frame(height: height)
+        .background(
+            UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12, style: .continuous)
+                .fill(.black)
+        )
+        .scaleEffect(x: isShown ? 1 : 0.6, y: 1, anchor: .top)
+        .opacity(isShown ? 1 : 0)
         .environment(\.colorScheme, .dark)
+        .onAppear {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { isShown = true }
+        }
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if keys.isEmpty {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .symbolEffect(.bounce, value: isShown)
+        } else {
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { PaletteKeycap($0) }
+            }
+        }
     }
 }

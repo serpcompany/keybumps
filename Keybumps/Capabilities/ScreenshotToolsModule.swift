@@ -11,7 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .screenshots,
             name: "Screenshots",
-            commandKey: 4,
+            commandKey: 3,
             systemImage: "camera.viewfinder",
             prompt: "Search screenshots",
             primaryActionTitle: "Edit",

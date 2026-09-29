@@ -491,12 +491,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         pasteboard.clearContents()
         guard pasteboard.setString(text, forType: .string) else { return }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
-        dismiss()
-        hud.show("Copied to Clipboard")
+        confirmCopy()
     }
 
     private func copyClipboardEntry(_ entry: ClipboardEntry) {
         guard clipboard.restore(entry) else { return }
+        confirmCopy()
+    }
+
+    /// Closes the palette and confirms the copy at the notch.
+    private func confirmCopy() {
         dismiss()
         hud.show("Copied to Clipboard")
     }

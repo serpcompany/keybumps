@@ -5133,15 +5133,6 @@
     },
     {
       "commandKey" : "⌘3",
-      "label" : "Dictation",
-      "matchedByCommandKey" : "dictation",
-      "primaryAction" : "Copy",
-      "prompt" : "Search dictation history",
-      "systemImage" : "waveform",
-      "tab" : "dictation"
-    },
-    {
-      "commandKey" : "⌘4",
       "label" : "Screenshots",
       "matchedByCommandKey" : "screenshots",
       "primaryAction" : "Edit",
@@ -5149,6 +5140,15 @@
       "secondaryAction" : "Copy",
       "systemImage" : "camera.viewfinder",
       "tab" : "screenshots"
+    },
+    {
+      "commandKey" : "⌘4",
+      "label" : "Dictation",
+      "matchedByCommandKey" : "dictation",
+      "primaryAction" : "Copy",
+      "prompt" : "Search dictation history",
+      "systemImage" : "waveform",
+      "tab" : "dictation"
     },
     {
       "commandKey" : "⌘5",

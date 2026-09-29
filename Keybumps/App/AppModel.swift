@@ -226,6 +226,7 @@ final class AppModel {
             KeyboardShortcutterModule(detector: detector, presenter: presenter)
         ])
         var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
+        if adapters[.notch] == nil { adapters[.notch] = NotchChannelAdapter() }
         for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
         delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
         detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
@@ -403,7 +404,7 @@ final class AppModel {
             permissions.requestScreenRecordingAccess()
             return
         }
-        notice.show("Screen Recording needed — see Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
+        notice.show("Screen Recording needed · Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
     }
 
     func restartForPermissionRelaunch() {
