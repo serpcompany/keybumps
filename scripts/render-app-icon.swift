@@ -46,12 +46,21 @@ NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
             }
             // The service may return a larger rendition (for example 1024 px for 512); scale it to
             // the exact size.
-            let context = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
-                                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            // Display P3 at 16 bits keeps the icon's saturated purples, which sRGB would clip.
+            guard image.width >= pixels,
+                  let space = CGColorSpace(name: CGColorSpace.displayP3),
+                  let context = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 16, bytesPerRow: 0,
+                                          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                FileHandle.standardError.write(Data("could not render \(pixels) px (got \(image.width) px)\n".utf8))
+                exit(70)
+            }
             context.interpolationQuality = .high
             context.draw(image, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
-            let bitmap = NSBitmapImageRep(cgImage: context.makeImage()!)
+            guard let scaled = context.makeImage() else {
+                FileHandle.standardError.write(Data("could not render \(pixels) px\n".utf8))
+                exit(70)
+            }
+            let bitmap = NSBitmapImageRep(cgImage: scaled)
             guard opaqueShare(bitmap) > 0.3 else {
                 FileHandle.standardError.write(Data("\(pixels) px render is not the app icon; is \(arguments[1]) built?\n".utf8))
                 exit(70)
