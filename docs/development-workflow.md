@@ -42,7 +42,7 @@ Tooling, frameworks, and CI placement for each level are decided in [`testing.md
 - Build from the exact issue-branch state intended for review.
 - Use a development-only label that identifies the issue or branch; do not reuse public release names for local candidates.
 - Record the branch and full commit SHA in the QA handoff.
-- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful. Only Release and QA candidates carry it; Debug builds (test hosts, `scripts/build-and-run.sh`) are `com.serp.keybumps.debug` and need their own permission grants if run by hand.
+- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful. Only Release and QA candidates carry it; Debug builds (test hosts, `scripts/build-and-run.sh`) are `com.serp.keybumps.debug`: they need their own permission grants if run by hand and never register Launch at Login. A Debug app still uses the same local data folders as the installed app, so `build-and-run.sh` quits both before launching it; unit-test hosts never touch that data.
 - Sign installed manual-QA candidates with `Developer ID Application` using the same designated requirement as the accepted baseline. An Apple Development-signed Debug/test host is a different TCC identity and must never be installed as a permission-continuity candidate.
 - Keybumps registers its own Launch at Login item only after fresh onboarding.
 - Replace the installed app with the intended candidate, launch it from `/Applications`, and verify that the running artifact is the candidate just built.

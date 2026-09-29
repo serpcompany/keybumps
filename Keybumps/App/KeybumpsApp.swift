@@ -5,7 +5,7 @@ import SwiftUI
 enum KeybumpsMain {
     /// Whether this process launched the app itself. Debug unit tests are hosted by Keybumps.app, so
     /// under XCTest a bare `NSApplication` runs instead: tests build their own compositions, and the
-    /// host never composes `AppModel` against the real `com.serp.keybumps` preferences, registers
+    /// host never composes `AppModel` against its preferences (`com.serp.keybumps.debug`), registers
     /// global hot keys, installs the status item, or monitors the real pasteboard.
     private(set) static var launchedApp = false
 
