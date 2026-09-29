@@ -327,7 +327,9 @@ private struct NotchCoachView: View {
             ceil((text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width)
         }
         let leading = 24 + 10 + max(width(presentation.action, 13, .semibold), width(presentation.application, 11, .regular))
-        let keys = CGFloat(presentation.keys.count) * (CoachKeycap.size + 5)
+        // Each key renders max(size, label) wide plus 2 pt padding per side, 5 pt apart.
+        let keys = presentation.keys.map { max(CoachKeycap.size, width($0, 13, .bold)) + 4 }.reduce(0, +)
+            + CGFloat(max(presentation.keys.count - 1, 0)) * 5
         return max(leading, keys) + 6
     }
 
@@ -397,6 +399,8 @@ private struct CoachKeycap: View {
         Text(key)
             .font(.system(size: 13, weight: .bold))
             .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize()
             .frame(minWidth: Self.size, minHeight: Self.size)
             .padding(.horizontal, 2)
             .background(.white.opacity(0.14), in: shape)
