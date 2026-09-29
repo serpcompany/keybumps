@@ -1,5 +1,6 @@
 import { exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { PolarAdapter } from "../src/providers/polar";
 
 const SECRET = "polar_whs_test_secret";
 const PRODUCT_REF = "prod_keybumps";
@@ -7,13 +8,14 @@ const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 const now = () => Math.floor(Date.now() / 1000);
 let deliveries = 0;
 
-async function sign(id: string, timestamp: number, body: string, secret = SECRET): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+async function sign(id: string, timestamp: number, body: string, secret: string | Uint8Array = SECRET): Promise<string> {
+  const raw = typeof secret === "string" ? new TextEncoder().encode(secret) : secret;
+  const key = await crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${timestamp}.${body}`)));
   return `v1,${btoa(String.fromCharCode(...signature))}`;
 }
 
-async function deliver(payload: unknown, options: { id?: string; timestamp?: number; secret?: string } = {}) {
+async function deliver(payload: unknown, options: { id?: string; timestamp?: number; secret?: string | Uint8Array } = {}) {
   const id = options.id ?? `msg_${++deliveries}`;
   const timestamp = options.timestamp ?? now();
   const body = JSON.stringify(payload);
@@ -69,6 +71,19 @@ describe("signature verification", () => {
     expect(await deliver(order(), { timestamp: now() - 600 })).toBe(401);
     const response = await exports.default.fetch("https://licensing.test/webhooks/polar", { method: "POST", body: "{}" });
     expect(response.status).toBe(401);
+  });
+
+  it("accepts whsec_ secrets keyed with their base64-decoded bytes", async () => {
+    const raw = crypto.getRandomValues(new Uint8Array(24));
+    const adapter = new PolarAdapter(`whsec_${btoa(String.fromCharCode(...raw))}`);
+    const body = JSON.stringify({ type: "checkout.created", data: {} });
+    const timestamp = now();
+    const request = new Request("https://licensing.test/webhooks/polar", {
+      method: "POST",
+      headers: { "webhook-id": "msg_whsec", "webhook-timestamp": String(timestamp), "webhook-signature": await sign("msg_whsec", timestamp, body, raw) },
+      body,
+    });
+    expect(await adapter.verifyWebhook(request)).toEqual({ eventId: "msg_whsec", event: { type: "ignored" } });
   });
 
   it("returns not_found for providers without a configured adapter", async () => {

@@ -1,6 +1,7 @@
 // Polar adapter. Polar signs webhooks with the Standard Webhooks scheme: HMAC-SHA256 over
-// `${webhook-id}.${webhook-timestamp}.${body}`, keyed with the UTF-8 bytes of the endpoint
-// secret, sent as `v1,<base64>` in `webhook-signature`.
+// `${webhook-id}.${webhook-timestamp}.${body}`, sent as `v1,<base64>` in `webhook-signature`.
+// Like Polar's SDK, the key is either the secret's UTF-8 bytes or, for `whsec_<base64>`
+// secrets, its base64-decoded bytes; both are tried.
 
 import type { NormalizedEvent, NormalizedOrder, ProviderAdapter, VerifiedWebhook } from "./types";
 
@@ -24,10 +25,11 @@ export class PolarAdapter implements ProviderAdapter {
     if (Math.abs(this.now() - Number(timestamp)) > TOLERANCE_SECONDS) return null;
 
     const body = await request.text();
-    const expected = await hmacBase64(this.secret, `${id}.${timestamp}.${body}`);
+    const message = `${id}.${timestamp}.${body}`;
+    const expected = await Promise.all(signingKeys(this.secret).map((key) => hmacBase64(key, message)));
     const valid = signatures
       .split(" ")
-      .some((entry) => entry.startsWith("v1,") && timingSafeEqual(entry.slice(3), expected));
+      .some((entry) => entry.startsWith("v1,") && expected.some((signature) => timingSafeEqual(entry.slice(3), signature)));
     if (!valid) return null;
 
     let payload: Json;
@@ -100,8 +102,21 @@ function seconds(iso: unknown): number | null {
   return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
 }
 
-async function hmacBase64(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+function signingKeys(secret: string): Uint8Array[] {
+  const utf8 = new TextEncoder().encode(secret);
+  const keys = [utf8];
+  try {
+    const encoded = secret.startsWith("whsec_") ? secret.slice(6) : secret;
+    const decoded = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+    if (decoded.length > 0) keys.push(decoded);
+  } catch {
+    // Not base64; only the UTF-8 key applies.
+  }
+  return keys;
+}
+
+async function hmacBase64(secret: Uint8Array, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
   let binary = "";
   for (const byte of signature) binary += String.fromCharCode(byte);
