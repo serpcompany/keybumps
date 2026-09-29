@@ -12,6 +12,12 @@ guard arguments.count == 3 else {
     FileHandle.standardError.write(Data("usage: swift \(arguments[0]) <Keybumps.app> <output.iconset>\n".utf8))
     exit(64)
 }
+// A missing or wrong path would render macOS's generic document icon, so check the bundle first.
+guard let bundle = Bundle(path: arguments[1]),
+      bundle.object(forInfoDictionaryKey: "CFBundleIconName") as? String == "Keybumps" else {
+    FileHandle.standardError.write(Data("\(arguments[1]) is not a built Keybumps.app\n".utf8))
+    exit(66)
+}
 let output = URL(fileURLWithPath: arguments[2])
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 let icon = NSWorkspace.shared.icon(forFile: arguments[1])
