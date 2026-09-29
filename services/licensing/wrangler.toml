@@ -16,3 +16,17 @@ database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
 # Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN.
+
+# Staging: Polar sandbox only. Deployed with `npx wrangler deploy --env staging`.
+[env.staging]
+name = "keybumps-licensing-staging"
+workers_dev = true
+
+[env.staging.observability]
+enabled = false
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "keybumps-licensing-staging"
+database_id = "1e5cf13b-a512-4d62-b147-3e3bcf6f7fa9"
+migrations_dir = "migrations"
