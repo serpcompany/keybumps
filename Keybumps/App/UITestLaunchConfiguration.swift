@@ -15,6 +15,14 @@ struct UITestLaunchConfiguration: Equatable {
     static let openSettingsArgument = "-KBOpenSettings"
     static let disableHotKeysArgument = "-KBDisableHotKeys"
     static let seedClipboardImageArgument = "-KBUITestSeedClipboardImage"
+    static let licenseStateArgument = "-KBLicenseState"
+
+    /// The fixed license state a UI test starts in (`active` unless `-KBLicenseState` says otherwise).
+    enum LicenseStateMode: String, Equatable {
+        case active
+        case unlicensed
+        case revoked
+    }
 
     /// Release builds never read the flags, so the shipping app has no test mode.
     static let current: UITestLaunchConfiguration = {
@@ -30,6 +38,7 @@ struct UITestLaunchConfiguration: Equatable {
     private(set) var openSettings: SettingsSection?
     private(set) var disablesHotKeys = false
     private(set) var seedsClipboardImage = false
+    private(set) var licenseState: LicenseStateMode = .active
 
     var isUITesting: Bool { permissions != nil }
 
@@ -43,6 +52,8 @@ struct UITestLaunchConfiguration: Equatable {
             .flatMap(SettingsSection.init(launchToken:))
         disablesHotKeys = Self.flag(Self.disableHotKeysArgument, in: arguments)
         seedsClipboardImage = Self.flag(Self.seedClipboardImageArgument, in: arguments)
+        licenseState = Self.value(after: Self.licenseStateArgument, in: arguments)
+            .flatMap(LicenseStateMode.init(rawValue:)) ?? .active
     }
 
     /// Accepts both `-Flag` and `-Flag YES`, since Foundation's argument domain pairs every `-key` with a value.

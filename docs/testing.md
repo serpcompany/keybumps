@@ -47,6 +47,7 @@ Permission-gated and system-level features are faked in automated tests, never g
 | `-KBOpenPalette <tab>` | Opens the Command Palette once, at launch, on `search`, `clipboard`, `screenshots`, `dictation`, or `keyboardShortcutter` (shown even while the Hotkeys tab is hidden) |
 | `-KBOpenSettings <section>` | Opens Settings on a `SettingsSection` case name (`search`, `clipboard`, `screenshotTools`, `dictation`, `windows`, `keyboardShortcutter`, `permissions`, `general`) |
 | `-KBDisableHotKeys YES` | Registers shortcuts with an inert backend, so no Carbon hot keys are installed |
+| `-KBLicenseState <state>` | Starts with a fixed license state: `active` (the default), `unlicensed`, or `revoked`. No Keychain or network access |
 | `-KBUITestSeedClipboardImage YES` | Adds one generated PNG to the sandboxed Clipboard History |
 
 Give boolean flags an explicit `YES`. In CI, adding AppKit arguments (`-NSAutomaticWindowAnimationsEnabled NO -ApplePersistenceIgnoreState YES`) after a bare flag stopped the main window from appearing, so the smoke suite doesn't pass them.

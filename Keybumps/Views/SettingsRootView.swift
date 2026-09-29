@@ -105,6 +105,10 @@ struct SettingsRootView: View {
     )
     @State private var query = ""
 
+    /// Locked (no entitled license after onboarding): only the Account page, with the License group, is available.
+    private var isLocked: Bool { model.preferences.didCompleteOnboarding && !model.isLicensed }
+    private var visibleSelection: SettingsSection { isLocked ? .account : navigation.selection }
+
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 12) {
@@ -112,7 +116,7 @@ struct SettingsRootView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         if !SettingsSidebar.isSearching(query) {
-                            SettingsAccountRow(isSelected: navigation.selection == .account) {
+                            SettingsAccountRow(isSelected: visibleSelection == .account) {
                                 navigation.navigate(to: .account)
                             }
                             .accessibilityIdentifier("settings.sidebar.account")
@@ -127,6 +131,7 @@ struct SettingsRootView: View {
                                     ) {
                                         navigation.navigate(to: section)
                                     }
+                                    .disabled(isLocked)
                                     .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
                                 }
                             }
@@ -143,11 +148,11 @@ struct SettingsRootView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
             Group {
-                if let page = navigation.selection.capability?.descriptor.settingsPage {
+                if let page = visibleSelection.capability?.descriptor.settingsPage {
                     page.content()
-                } else if navigation.selection == .permissions {
+                } else if visibleSelection == .permissions {
                     PermissionsView()
-                } else if navigation.selection == .account {
+                } else if visibleSelection == .account {
                     AccountView()
                 } else {
                     GeneralView()
@@ -159,12 +164,12 @@ struct SettingsRootView: View {
                     ToolbarSpacer(.flexible)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if let capability = navigation.selection.capability {
+                    if let capability = visibleSelection.capability {
                         CapabilityToggle(capability: capability)
                     }
                 }
             }
-            .accessibilityIdentifier("settings.detail.\(navigation.selection.launchToken)")
+            .accessibilityIdentifier("settings.detail.\(visibleSelection.launchToken)")
         }
         .navigationTitle("Keybumps")
         .hidingWindowTitle()
@@ -293,14 +298,97 @@ private struct AccountView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 28)
             .padding(.bottom, 12)
-            SettingsGroup("License") {
-                SettingsRowLabel(
-                    title: "Local Preview",
-                    subtitle: "Purchasing and license activation are not part of this local preview."
-                )
-            }
+            LicenseSettingsGroup()
         }
         .navigationTitle("Account")
+    }
+}
+
+/// Activation, status, and deactivation for this Mac's license key (ADR 0002).
+private struct LicenseSettingsGroup: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
+    @State private var key = ""
+
+    private var snapshot: LicenseSnapshot { model.licenseSnapshot }
+
+    var body: some View {
+        SettingsGroup("License") {
+            LabeledContent {
+                Text(statusText)
+                    .accessibilityIdentifier("license.status")
+            } label: {
+                SettingsRowLabel(title: "Keybumps License", subtitle: statusDetail)
+            }
+            if case .active = snapshot.state {
+                LabeledContent {
+                    Button("Deactivate This Mac") { Task { await model.deactivateLicense() } }
+                        .disabled(snapshot.isBusy)
+                        .accessibilityIdentifier("license.deactivate")
+                } label: {
+                    SettingsRowLabel(title: "Move to another Mac", subtitle: "Frees this Mac’s activation so the key can be used elsewhere.")
+                }
+            } else {
+                HStack(spacing: 8) {
+                    TextField("KEYBUMPS-…", text: $key)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .onSubmit(activate)
+                        .accessibilityIdentifier("license.key")
+                    Button(snapshot.isBusy ? "Activating…" : "Activate", action: activate)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(snapshot.isBusy || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("license.activate")
+                }
+            }
+            if let error = snapshot.lastError {
+                SettingsNote(error.message)
+                    .accessibilityIdentifier("license.error")
+            }
+            HStack(spacing: 12) {
+                if !snapshot.isEntitled {
+                    Button("Buy Keybumps") { openURL(LicenseLinks.buy) }
+                }
+                Button("Find My Key or Manage My Purchase") { openURL(LicenseLinks.customerPortal) }
+            }
+        }
+    }
+
+    private func activate() {
+        let entered = key
+        Task {
+            await model.activateLicense(key: entered)
+            if model.isLicensed { key = "" }
+        }
+    }
+
+    private var statusText: String {
+        switch snapshot.state {
+        case .active: return "Active"
+        case .unlicensed: return "Not activated"
+        case .locked(.revoked): return "Revoked"
+        case .locked(.expired): return "Expired"
+        case .locked(.needsCheck): return "Check required"
+        case .locked(.deactivated): return "Deactivated"
+        }
+    }
+
+    private var statusDetail: String {
+        switch snapshot.state {
+        case .active(let check):
+            let checked = check.validatedAt.formatted(date: .abbreviated, time: .omitted)
+            return "Key \(check.maskedKey) · Checked \(checked)"
+        case .unlicensed:
+            return "Enter the license key from your Polar receipt to use Keybumps on this Mac."
+        case .locked(.revoked):
+            return "This license was revoked, for example after a refund. Contact support@keybumps.app if that’s a mistake."
+        case .locked(.expired):
+            return "This license has expired."
+        case .locked(.needsCheck):
+            return "Keybumps hasn’t been able to check your license for 45 days. Connect to the internet to continue."
+        case .locked(.deactivated):
+            return "This Mac was deactivated, for example from the customer portal. Enter your key to activate it again."
+        }
     }
 }
 
@@ -965,7 +1053,7 @@ private struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Purchasing and license activation are not part of this local preview.")
+            Text("After setup, activate your license key in Settings → Account.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
