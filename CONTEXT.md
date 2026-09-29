@@ -60,7 +60,7 @@ A brief message, such as Copied to Clipboard or a Shortcut Coach tip, that grows
 _Avoid_: Toast, HUD, banner
 
 **License**:
-A customer's right to use Keybumps, created by the SERP licensing service when a purchase is paid and revoked on refund, dispute, or an ended subscription. It carries one Entitlement. See `docs/adr/0001-licensing.md`.
+A customer's right to use Keybumps. The SERP licensing service creates it when a purchase is paid and revokes it on refund, dispute, or when a subscription's paid period ends. It carries one Entitlement. See `docs/adr/0001-licensing.md`.
 _Avoid_: Account, subscription (a subscription is only one kind of Offer)
 
 **License Key**:
@@ -68,7 +68,7 @@ The customer-facing code (`KB-XXXX-XXXX-XXXX-XXXX`) that identifies a License an
 _Avoid_: Serial, registration code, password
 
 **Entitlement**:
-What a License allows: `validUntil` (absent means perpetual), `updatesUntil` (builds released after it are not entitled), and `maxActivations`. The app enforces only these fields and never sees prices.
+What a License allows: `validUntil` (absent means perpetual), `updatesUntil` (builds released after it are not entitled), and `maxActivations`. The app checks the first two, and the licensing service enforces `maxActivations` at Activation. The app never sees prices.
 _Avoid_: Plan, tier
 
 **Offer**:
