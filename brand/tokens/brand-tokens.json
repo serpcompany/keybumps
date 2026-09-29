@@ -1,0 +1,8 @@
+{
+  "color": {
+    "ink": { "value": "#1B1B1C", "type": "color" },
+    "powder": { "value": "#FAF7F0", "type": "color" },
+    "powderShadow": { "value": "#E9E4DA", "type": "color" },
+    "lavender": { "value": "#AA9CFF", "type": "color" }
+  }
+}

@@ -725,10 +725,10 @@ private struct PaletteTabBar: View {
                 .accessibilityIdentifier("palette.tab.\(tab.rawValue)")
             }
             Spacer()
-            Image("KeybumpsArrow")
+            Image(ProductIdentity.inAppBrandImageName)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 22, height: 22)
+                .frame(width: 28, height: 18)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
         }

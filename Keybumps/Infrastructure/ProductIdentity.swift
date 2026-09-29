@@ -11,8 +11,10 @@ enum ReleaseLane: String, CaseIterable {
 
 enum ProductIdentity {
     static let bundleIdentifier = "com.serp.keybumps"
-    static let statusItemImageName = "KeybumpsMenuBarMark"
-    static let inAppBrandImageName = "KeybumpsArrow"
+    /// The standalone mascot, as a template image: the menu-bar item and small in-app marks.
+    /// The app icon is the mascot on a key (AppIcon).
+    static let statusItemImageName = "KeybumpsMascot"
+    static let inAppBrandImageName = "KeybumpsMascot"
 }
 
 enum AppVersionDisplay {
@@ -34,7 +36,9 @@ enum StatusItemBranding {
             return
         }
         image.isTemplate = true
-        image.size = NSSize(width: 17, height: 17)
+        // The mascot is wider than tall; keep its shape at menu-bar height.
+        let height: CGFloat = 14
+        image.size = NSSize(width: (height * image.size.width / max(image.size.height, 1)).rounded(), height: height)
         button.image = image
         button.imagePosition = .imageOnly
         button.title = ""
