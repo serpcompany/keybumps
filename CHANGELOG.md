@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.0.3-beta.5](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.4...v0.0.3-beta.5) (2026-09-29)
+
+This beta gives Keybumps a properly sized Mac icon and moves Dictation's recording indicator into the notch.
+
+> **This beta is not notarized.** It is signed with our Developer ID, but Apple notarization is temporarily unavailable. If you download it fresh, macOS blocks the first launch: open **System Settings › Privacy & Security** and click **Open Anyway** next to the Keybumps message. Updating from inside Keybumps works normally, and later releases will be notarized again.
+
+### Changes
+
+- The Keybumps icon now follows the standard Mac icon shape, so the keycap is no longer small inside a large dark tile.
+- Dictation shows its state in the notch. While recording, a red dot and timer sit to the left of the notch, and live microphone bars and your Dictation shortcut (the key that finishes) sit to the right. While transcribing, a sparkle and moving dots appear. If Dictation fails, the notch drops down with the reason. Escape still cancels.
+
 ## [0.0.3-beta.4](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.3...v0.0.3-beta.4) (2026-09-29)
 
 This beta introduces the new Keybumps icon, adds Screenshot Tools, gives the Command Palette and Settings a Raycast-style look, adds notch notices, and renames Keyboard Shortcutter to Shortcut Coach.
