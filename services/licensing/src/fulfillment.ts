@@ -24,10 +24,21 @@ export class UnknownOfferError extends Error {}
 /** The event refers to something not recorded yet (e.g. a refund before its paid order); the provider should retry. */
 export class NotYetKnownError extends Error {}
 
-export async function applyEvent(db: D1Database, provider: string, event: NormalizedEvent, now: number): Promise<void> {
+/** The customer whose keys may need emailing after this event, if any. */
+export interface EventOutcome {
+  customerId: string | null;
+}
+
+export async function applyEvent(db: D1Database, provider: string, event: NormalizedEvent, now: number): Promise<EventOutcome> {
+  if (event.type === "order.paid") return { customerId: await orderPaid(db, provider, event.order, now) };
+  await applyLicenseChange(db, provider, event, now);
+  return { customerId: null };
+}
+
+async function applyLicenseChange(db: D1Database, provider: string, event: NormalizedEvent, now: number): Promise<void> {
   switch (event.type) {
     case "order.paid":
-      return orderPaid(db, provider, event.order, now);
+      return;
     case "order.refunded":
       return orderRefunded(db, provider, event.orderRef, event.renewal, now);
     case "subscription.period":
@@ -62,7 +73,8 @@ export async function applyEvent(db: D1Database, provider: string, event: Normal
   }
 }
 
-async function orderPaid(db: D1Database, provider: string, order: NormalizedOrder, now: number): Promise<void> {
+/** Returns the customer whose keys may need emailing: the order's owner, or null for renewals and plan changes. */
+async function orderPaid(db: D1Database, provider: string, order: NormalizedOrder, now: number): Promise<string | null> {
   // Renewals and plan changes extend the subscription's existing License instead of minting another.
   const startsSubscription = order.billingReason === "purchase" || order.billingReason === "subscription_create";
   if (order.subscription && (!startsSubscription || (await hasSubscriptionLicense(db, order.subscription.ref)))) {
@@ -72,7 +84,12 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
         .bind(order.subscription.currentPeriodEnd, order.subscription.ref)
         .run();
     }
-    return;
+    // A redelivered first order still gets its key emailed if the earlier send failed.
+    const owner = await db
+      .prepare("SELECT customer_id FROM licenses WHERE subscription_ref = ? AND customer_id IS NOT NULL LIMIT 1")
+      .bind(order.subscription.ref)
+      .first<{ customer_id: string }>();
+    return startsSubscription ? (owner?.customer_id ?? null) : null;
   }
 
   const existing = await db
@@ -83,11 +100,14 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
     .bind(provider, order.ref)
     .first<{ id: string; customer_id: string; offer_id: string; license_id: string | null }>();
   // Fulfilled already, or recorded by a delivery that failed before minting: mint only if missing.
+  // Either way the caller still delivers any key that wasn't emailed.
   if (existing) {
-    if (existing.license_id) return;
-    const offer = await offerById(db, existing.offer_id);
-    if (!offer) throw new UnknownOfferError();
-    return mint(db, offer, order, existing.customer_id, existing.id, now);
+    if (!existing.license_id) {
+      const offer = await offerById(db, existing.offer_id);
+      if (!offer) throw new UnknownOfferError();
+      await mint(db, offer, order, existing.customer_id, existing.id, now);
+    }
+    return existing.customer_id;
   }
 
   const offer = await findOffer(db, provider, order);
@@ -106,7 +126,8 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
   // License is still missing (the unique index stops a double mint), so this delivery never
   // reports success for an order without a License.
   if (inserted.meta.changes === 0) return orderPaid(db, provider, order, now);
-  return mint(db, offer, order, customerId, orderId, now);
+  await mint(db, offer, order, customerId, orderId, now);
+  return customerId;
 }
 
 async function hasSubscriptionLicense(db: D1Database, subscriptionRef: string): Promise<boolean> {

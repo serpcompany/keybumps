@@ -1,9 +1,23 @@
 # SERP licensing service. See docs/adr/0001-licensing.md.
-# Deploying requires fresh owner authorization; database_id is set then.
-name = "serp-licensing"
+# The top level is production (live Polar), provisioned by scripts/provision-production.sh.
+# Deploying it requires owner authorization.
+name = "keybumps-licensing"
 main = "src/index.ts"
 compatibility_date = "2026-06-01"
 workers_dev = false
+routes = [{ pattern = "licensing.keybumps.app", custom_domain = true }]
+
+# Retries key emails that failed at purchase time.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+EMAIL_FROM = "Keybumps <support@keybumps.app>"
+
+# Cloudflare Email Service (Email Sending). keybumps.app must be onboarded in the dashboard.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["support@keybumps.app"]
 
 # Licensing routes must not be request-logged (ADR §10).
 [observability]
@@ -11,16 +25,27 @@ enabled = false
 
 [[d1_databases]]
 binding = "DB"
-database_name = "serp-licensing"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_name = "keybumps-licensing"
+database_id = "0f6ff8d5-60e8-4a41-bd67-6cf01a4871df"
 migrations_dir = "migrations"
 
-# Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN.
+# Secrets (wrangler secret put --env <env>): LEASE_SIGNING_KEY, ADMIN_TOKEN, POLAR_WEBHOOK_SECRET.
 
 # Staging: Polar sandbox only. Deployed with `npx wrangler deploy --env staging`.
 [env.staging]
 name = "keybumps-licensing-staging"
 workers_dev = true
+# `routes` is inherited from the top level; staging must never claim production's domain.
+routes = []
+
+[env.staging.vars]
+EMAIL_FROM = "Keybumps <support@keybumps.app>"
+
+[[env.staging.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["support@keybumps.app"]
+# Staging only emails test recipients (SERP transactional-email standard).
+allowed_destination_addresses = ["devin@serp.co"]
 
 [env.staging.observability]
 enabled = false
