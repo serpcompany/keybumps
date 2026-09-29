@@ -14,7 +14,7 @@ Dictation records for up to five minutes by default. Dictation settings provide 
 
 ## Brand assets
 
-`brand/` holds the approved Keybumps brand pack (see `brand/README.md`): the keycap logo with the mascot, the standalone mascot, and platform exports. The macOS app icon is the keycap on Apple's macOS icon grid (`Keybumps/Resources/Assets.xcassets/AppIcon.appiconset`), generated from `brand/source/keybumps-key-with-accents.png` by `scripts/make-app-icon.py`; the brand pack's own `brand/apple/macos/` set is a full-bleed square and is not used directly. The menu-bar item and small in-app marks use the standalone mascot as a template image (`KeybumpsMascot.imageset`, cropped from `brand/monochrome/mascot-dark.png`). The `web/` and `social/` exports are for keybumps.app.
+`brand/` holds the approved Keybumps brand pack (see `brand/README.md`): the keycap logo with the mascot, the standalone mascot, and platform exports. The macOS app icon is the keycap on Apple's macOS icon grid (`Keybumps/Resources/Assets.xcassets/AppIcon.appiconset`), generated from `brand/source/keybumps-key-with-accents.png` by `scripts/make-app-icon.py`; the same script keeps `brand/apple/macos/` (icon set and `Keybumps.icns`) in sync. The menu-bar item and small in-app marks use the standalone mascot as a template image (`KeybumpsMascot.imageset`, cropped from `brand/monochrome/mascot-dark.png`). The `web/` and `social/` exports are for keybumps.app.
 
 ## Build and run
 

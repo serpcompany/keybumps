@@ -7,15 +7,25 @@ soft shadow, and the artwork fills most of the body. This crops the keycap from 
 source without redrawing it, scales it onto that body, and writes every size the asset catalog
 uses. Requires Pillow.
 
-usage: scripts/make-app-icon.py [source.png] [output.appiconset]
+It writes the app's asset catalog and the brand pack's macOS set (brand/apple/macos/), including
+Keybumps.icns, so both stay in sync. iOS and Android icons stay full-bleed squares; those systems
+apply their own masks.
+
+usage: scripts/make-app-icon.py
 """
-import sys
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "brand/source/keybumps-key-with-accents.png"
-OUTPUT = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "Keybumps/Resources/Assets.xcassets/AppIcon.appiconset"
+SOURCE = ROOT / "brand/source/keybumps-key-with-accents.png"
+OUTPUTS = [
+    ROOT / "Keybumps/Resources/Assets.xcassets/AppIcon.appiconset",
+    ROOT / "brand/apple/macos/AppIcon.appiconset",
+]
+ICNS = ROOT / "brand/apple/macos/Keybumps.icns"
 
 CANVAS, BODY = 1024, 824          # Apple macOS icon grid
 ARTWORK_FILL = 0.86               # keycap width as a share of the body width
@@ -67,12 +77,20 @@ def main() -> None:
     icon = Image.alpha_composite(icon, layer)
 
     sizes = {16: [1, 2], 32: [1, 2], 128: [1, 2], 256: [1, 2], 512: [1, 2]}
-    for point, scales in sizes.items():
-        for factor in scales:
-            pixels = point * factor
-            name = f"icon_{point}x{point}{'@2x' if factor == 2 else ''}.png"
-            icon.resize((pixels, pixels), Image.LANCZOS).save(OUTPUT / name)
-    print(f"Wrote {OUTPUT} (keycap {artwork.width}x{artwork.height} on a {BODY} px body)")
+    for output in OUTPUTS:
+        for point, scales in sizes.items():
+            for factor in scales:
+                pixels = point * factor
+                name = f"icon_{point}x{point}{'@2x' if factor == 2 else ''}.png"
+                icon.resize((pixels, pixels), Image.LANCZOS).save(output / name)
+        print(f"Wrote {output.relative_to(ROOT)} (keycap {artwork.width}x{artwork.height} on a {BODY} px body)")
+
+    # iconutil builds the .icns from an .iconset folder of the same files.
+    with tempfile.TemporaryDirectory() as temporary:
+        iconset = Path(temporary) / "Keybumps.iconset"
+        shutil.copytree(OUTPUTS[1], iconset, ignore=shutil.ignore_patterns("*.json"))
+        subprocess.run(["/usr/bin/iconutil", "-c", "icns", str(iconset), "-o", str(ICNS)], check=True)
+    print(f"Wrote {ICNS.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
