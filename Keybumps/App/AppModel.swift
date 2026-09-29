@@ -28,7 +28,8 @@ final class AppModel {
     let inbox: InboxStore
     let shortcuts: GlobalShortcutCoordinator
     let permissions: PermissionCoordinator
-    @ObservationIgnored private let notice = PaletteHUD()
+    @ObservationIgnored private let notice = PaletteHUD.shared
+    @ObservationIgnored private let coachTips: any CoachTipPresenting
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
@@ -42,7 +43,6 @@ final class AppModel {
     /// The app-shell licensing seam (ADR 0002). Capability modules start only while it is entitled.
     let licensing: any LicenseControlling
     let updateSafetyPolicy: UpdateInstallationSafetyPolicy
-    private let delivery: NotificationDeliveryService
     private let detector: ManualActionDetector
     private let presenceController: any AppPresenceControlling
     let commandPalette: CommandPaletteController
@@ -55,8 +55,6 @@ final class AppModel {
     private(set) var detectorStatus: ManualActionDetector.Status = .stopped
     private(set) var isAccessibilityTrusted = false
     private(set) var isInputMonitoringAuthorized = false
-    private(set) var lastReport: DeliveryReport?
-    private(set) var lastPreviewChannel: NotificationChannel?
     private(set) var isStarted = false
     private(set) var isPermissionWalkthroughActive = false
     private(set) var permissionsRequiringRelaunch: [MacPermission] = []
@@ -129,6 +127,7 @@ final class AppModel {
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
+        coachTips: (any CoachTipPresenting)? = nil,
         dictationFileManager: FileManager = .default,
         allowsDictationSystemAccess: Bool = true,
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
@@ -136,6 +135,7 @@ final class AppModel {
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
+        self.coachTips = coachTips ?? PaletteHUD.shared
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
@@ -227,8 +227,7 @@ final class AppModel {
             ),
             KeyboardShortcutterModule(detector: detector)
         ])
-        delivery = NotificationDeliveryService(inbox: inbox, adapters: [.notch: NotchChannelAdapter(), .sound: SoundAdapter()])
-        detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
+        detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
@@ -585,29 +584,21 @@ final class AppModel {
     func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
     func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
-    func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
-    func previewSample(channel: NotificationChannel) async {
-        let channels = PreviewChannelPlan.channels(
-            for: channel,
-            selectedChannels: preferences.selectedChannels
-        )
-        let outcomes = await delivery.preview(.sample, through: channels)
-        lastPreviewChannel = channel
-        lastReport = DeliveryReport(eventID: CoachingEvent.sample.id, inboxRecorded: false, outcomes: outcomes)
-    }
-    func previewOutcomes(for channel: NotificationChannel) -> [NotificationChannel: DeliveryOutcome] {
-        guard lastPreviewChannel == channel else { return [:] }
-        return lastReport?.outcomes ?? [:]
-    }
+    func deliverSample() { deliver(.sample) }
+    /// Shows the sample tip in the notch without adding it to history.
+    func previewCoachTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
     func openPermissionSettings(_ permission: MacPermission) {
         permissions.openSettings(permission)
     }
-    func setChannel(_ channel: NotificationChannel, enabled: Bool) { preferences.set(channel, enabled: enabled) }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }
     func markRead(_ id: UUID) { inbox.markRead(id) }
     func markAllRead() { inbox.markAllRead() }
     func clearHistory() { inbox.clear() }
-    private func deliver(_ event: CoachingEvent, through channels: Set<NotificationChannel>? = nil) async { lastReport = await delivery.deliver(event, through: channels ?? preferences.selectedChannels) }
+    /// Records a detected action in history, then shows its tip in the notch when that is on.
+    private func deliver(_ event: CoachingEvent) {
+        guard (try? inbox.append(event)) != nil else { return }
+        if preferences.showsCoachTips { coachTips.showCoach(NotchCoachPresentation(event: event)) }
+    }
 
     private func updateMissingPermissionBadge() {
         NSApplication.shared.dockTile.badgeLabel = missingPermissionCount > 0 ? "!" : nil

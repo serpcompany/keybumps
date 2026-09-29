@@ -4,12 +4,12 @@ import XCTest
 @testable import Keybumps
 
 @MainActor
-final class PresentationEvidenceTests: XCTestCase {
+final class KeyboardGlyphGuideEvidenceTests: XCTestCase {
     func testInlineKeyboardGlyphGuideRendersToReviewablePNG() throws {
         let requestedDirectory = ProcessInfo.processInfo.environment["PRESENTATION_EVIDENCE_DIR"]
         let outputDirectory = requestedDirectory.map(URL.init(fileURLWithPath:))
             ?? FileManager.default.temporaryDirectory
-                .appendingPathComponent("KeyboardShortcutterPresentationEvidence")
+                .appendingPathComponent("KeyboardGlyphGuideEvidence")
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
         let size = NSSize(width: 720, height: 420)

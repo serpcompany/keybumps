@@ -56,7 +56,7 @@ struct MenuInboxView: View {
     private var footer: some View {
         HStack {
             Button("Send Test") {
-                Task { await model.deliverSample() }
+                model.deliverSample()
             }
             Spacer()
             Button("Open Settings…") {

@@ -93,13 +93,34 @@ extension View {
     }
 }
 
+/// Shows a Shortcut Coach tip; the seam lets tests observe tips without drawing a panel.
+@MainActor
+protocol CoachTipPresenting: AnyObject {
+    func showCoach(_ presentation: NotchCoachPresentation, duration: TimeInterval)
+}
+
+extension CoachTipPresenting {
+    func showCoach(_ presentation: NotchCoachPresentation) { showCoach(presentation, duration: 4) }
+}
+
 /// A brief notice such as "Copied to Clipboard" that grows out of the notch: the message sits
 /// left of the notch and an icon (or a shortcut's keycaps) right of it, on black that blends with
 /// the notch. Screens without a notch show the same black tab hanging from the top of the menu bar.
 @MainActor
-final class PaletteHUD {
+final class PaletteHUD: CoachTipPresenting {
+    /// The one notch notice every app surface shares, so a new notice replaces the current one
+    /// instead of drawing over it.
+    static let shared = PaletteHUD()
+
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
+    private var isShowingCoach = false
+
+    /// True while Dictation shows its state in the notch. Other notices are dropped rather than
+    /// drawn over it, and one already showing is hidden.
+    var isSuppressed = false {
+        didSet { if isSuppressed { dismiss() } }
+    }
 
     func show(
         _ message: String,
@@ -108,7 +129,7 @@ final class PaletteHUD {
         shortcut: String? = nil,
         duration: TimeInterval? = nil
     ) {
-        guard let screen = NSScreen.main else { return }
+        guard !isSuppressed, let screen = NSScreen.main else { return }
         let panel = panel ?? makePanel()
         self.panel = panel
 
@@ -132,8 +153,8 @@ final class PaletteHUD {
     /// A Shortcut Coach tip: the notch drops down into a two-row panel with the app's icon, the
     /// action and app name, and the shortcut's keycaps, edged with an animated glow so it is hard
     /// to miss.
-    func showCoach(_ presentation: NotchCoachPresentation, duration: TimeInterval = 4) {
-        guard let screen = NSScreen.main else { return }
+    func showCoach(_ presentation: NotchCoachPresentation, duration: TimeInterval) {
+        guard !isSuppressed, let screen = NSScreen.main else { return }
         present(
             NotchCoachView(
                 presentation: presentation,
@@ -145,11 +166,27 @@ final class PaletteHUD {
             announcement: presentation.announcement,
             duration: duration
         )
+        isShowingCoach = true
+    }
+
+    /// Hides the current notice at once.
+    func dismiss() {
+        hideWork?.cancel()
+        hideWork = nil
+        isShowingCoach = false
+        panel?.orderOut(nil)
+        panel?.contentView = nil
+    }
+
+    /// Hides the current notice only if it is a Shortcut Coach tip.
+    func dismissCoach() {
+        if isShowingCoach { dismiss() }
     }
 
     private func present(_ view: some View, on screen: NSScreen, announcement: String, duration: TimeInterval) {
         let panel = panel ?? makePanel()
         self.panel = panel
+        isShowingCoach = false
         let host = NSHostingView(rootView: view)
         panel.contentView = host
         let size = host.fittingSize

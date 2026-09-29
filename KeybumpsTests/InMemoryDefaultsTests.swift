@@ -39,14 +39,14 @@ struct InMemoryDefaultsTests {
     func appPreferencesReloadFromTheSameDefaults() {
         let defaults = InMemoryDefaults()
         let legacy = InMemoryDefaults()
-        legacy.set([NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+        legacy.set(["sound"], forKey: "selectedNotificationChannels")
         legacy.set(false, forKey: "showInDockAndSwitcher")
 
         let preferences = AppPreferences(defaults: defaults, legacyDefaults: [legacy])
-        #expect(preferences.selectedChannels == [.sound])
+        #expect(!preferences.showsCoachTips)
         #expect(!preferences.showInDockAndSwitcher)
         preferences.setCapability(.dictation, enabled: false)
-        preferences.set(.notch, enabled: true)
+        preferences.showsCoachTips = true
         preferences.dictationLanguage = "fr-FR"
         preferences.dictationDurationLimit = .tenMinutes
         preferences.didCompleteOnboarding = true
@@ -56,7 +56,7 @@ struct InMemoryDefaultsTests {
         let reloaded = AppPreferences(defaults: defaults)
         #expect(reloaded.enabledCapabilities == preferences.enabledCapabilities)
         #expect(!reloaded.enabledCapabilities.contains(.dictation))
-        #expect(reloaded.selectedChannels == preferences.selectedChannels)
+        #expect(reloaded.showsCoachTips)
         #expect(!reloaded.showInDockAndSwitcher)
         #expect(reloaded.dictationLanguage == "fr-FR")
         #expect(reloaded.dictationDurationLimit == .tenMinutes)

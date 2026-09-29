@@ -13,17 +13,19 @@ private final class MemoryPersistence: EventPersistence {
 }
 
 @MainActor
-private final class SpyAdapter: ChannelDelivering {
-    private(set) var events: [CoachingEvent] = []
-    var error: Error?
+private final class SpyCoachTips: CoachTipPresenting {
+    private(set) var shown: [NotchCoachPresentation] = []
 
-    func deliver(_ event: CoachingEvent) async throws {
-        if let error { throw error }
-        events.append(event)
+    func showCoach(_ presentation: NotchCoachPresentation, duration: TimeInterval) {
+        shown.append(presentation)
     }
 }
 
-private enum TestError: Error { case expected }
+private final class FailingPersistence: EventPersistence {
+    struct Failure: Error {}
+    func load() throws -> [CoachingEvent] { [] }
+    func save(_ events: [CoachingEvent]) throws { throw Failure() }
+}
 
 private final class StatusItemActionTarget: NSObject {
     @objc func activate(_ sender: NSStatusBarButton) {}
@@ -107,64 +109,64 @@ private struct StubPresenceController: AppPresenceControlling {
 
 @MainActor
 final class KeyboardShortcutterTests: XCTestCase {
-    func testPresentationPreviewDoesNotPersistSyntheticEvent() async {
-        let inbox = InboxStore(persistence: MemoryPersistence())
-        let adapter = SpyAdapter()
-        let service = NotificationDeliveryService(inbox: inbox, adapters: [.notch: adapter])
+    func testDetectedActionIsRecordedAndShownInTheNotch() {
+        let persistence = MemoryPersistence()
+        let tips = SpyCoachTips()
+        let model = makeModel(persistence: persistence, tips: tips)
 
-        let outcome = await service.preview(.sample, through: .notch)
+        model.deliverSample()
 
-        XCTAssertEqual(outcome, .delivered)
-        XCTAssertEqual(adapter.events, [.sample])
-        XCTAssertTrue(inbox.events.isEmpty)
+        XCTAssertEqual(persistence.stored, [.sample])
+        XCTAssertEqual(tips.shown.map(\.action), [CoachingEvent.sample.actionTitle])
     }
 
-    func testSoundPreviewUsesTheConfiguredProductionAdapterWithoutPersistingHistory() async {
-        let inbox = InboxStore(persistence: MemoryPersistence())
-        var playedName: NSSound.Name?
-        let adapter = SoundAdapter { name in
-            playedName = name
-            return true
-        }
-        let service = NotificationDeliveryService(inbox: inbox, adapters: [.sound: adapter])
+    func testTurningNotchTipsOffStillRecordsHistory() {
+        let persistence = MemoryPersistence()
+        let tips = SpyCoachTips()
+        let model = makeModel(persistence: persistence, tips: tips)
+        model.preferences.showsCoachTips = false
 
-        let outcome = await service.preview(.sample, through: .sound)
+        model.deliverSample()
 
-        XCTAssertEqual(outcome, .delivered)
-        XCTAssertEqual(playedName, NSSound.Name("Glass"))
-        XCTAssertTrue(inbox.events.isEmpty)
+        XCTAssertEqual(persistence.stored, [.sample])
+        XCTAssertTrue(tips.shown.isEmpty)
     }
 
-    func testPreviewPlanAddsSelectedSoundWithoutDoublePlayingDirectSoundPreview() async {
-        XCTAssertEqual(
-            PreviewChannelPlan.channels(for: .notch, selectedChannels: [.notch]),
-            [.notch]
-        )
-        XCTAssertEqual(
-            PreviewChannelPlan.channels(for: .notch, selectedChannels: [.notch, .sound]),
-            [.notch, .sound]
-        )
-        XCTAssertEqual(
-            PreviewChannelPlan.channels(for: .sound, selectedChannels: [.sound]),
-            [.sound]
+    func testAHistoryWriteFailureShowsNoTip() {
+        let tips = SpyCoachTips()
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: FailingPersistence()),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            coachTips: tips
         )
 
-        let inbox = InboxStore(persistence: MemoryPersistence())
-        let notch = SpyAdapter()
-        let sound = SpyAdapter()
-        let service = NotificationDeliveryService(
-            inbox: inbox,
-            adapters: [.notch: notch, .sound: sound]
+        model.deliverSample()
+
+        XCTAssertTrue(tips.shown.isEmpty)
+    }
+
+    func testPreviewShowsTheTipWithoutRecordingHistory() {
+        let persistence = MemoryPersistence()
+        let tips = SpyCoachTips()
+        let model = makeModel(persistence: persistence, tips: tips)
+        model.preferences.showsCoachTips = false
+
+        model.previewCoachTip()
+
+        XCTAssertTrue(persistence.stored.isEmpty)
+        XCTAssertEqual(tips.shown.count, 1)
+    }
+
+    private func makeModel(persistence: MemoryPersistence, tips: SpyCoachTips) -> AppModel {
+        AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: persistence),
+            presenceController: StubPresenceController(),
+            detector: ManualActionDetector(monitor: StubPointerMonitor()),
+            coachTips: tips
         )
-
-        let combined = await service.preview(.sample, through: [.notch, .sound])
-        XCTAssertEqual(combined, [.notch: .delivered, .sound: .delivered])
-        XCTAssertEqual(notch.events.count, 1)
-        XCTAssertEqual(sound.events.count, 1)
-        XCTAssertTrue(inbox.events.isEmpty)
-
-        _ = await service.preview(.sample, through: PreviewChannelPlan.channels(for: .sound, selectedChannels: [.sound]))
-        XCTAssertEqual(sound.events.count, 2, "Direct Sound preview must play once, not once as both primary and companion")
     }
 
     func testAppModelPublishesPermissionAndStatusSnapshotsAfterRequestsAndRetry() async {
@@ -314,43 +316,6 @@ final class KeyboardShortcutterTests: XCTestCase {
         )
     }
 
-    func testDeliveryRecordsOnceAndFansOutToSelectedChannels() async {
-        let persistence = MemoryPersistence()
-        let inbox = InboxStore(persistence: persistence)
-        let notch = SpyAdapter()
-        let sound = SpyAdapter()
-        let service = NotificationDeliveryService(inbox: inbox, adapters: [
-            .notch: notch,
-            .sound: sound
-        ])
-        let event = CoachingEvent.sample
-
-        let report = await service.deliver(event, through: [.notch, .sound])
-
-        XCTAssertTrue(report.inboxRecorded)
-        XCTAssertEqual(inbox.events, [event])
-        XCTAssertEqual(persistence.stored, [event])
-        XCTAssertEqual(notch.events, [event])
-        XCTAssertEqual(sound.events, [event])
-        XCTAssertEqual(report.outcomes[.notch], .delivered)
-        XCTAssertEqual(report.outcomes[.sound], .delivered)
-    }
-
-    func testDeliveryReportsOneAdapterFailureWithoutDroppingHistory() async {
-        let inbox = InboxStore(persistence: MemoryPersistence())
-        let failing = SpyAdapter()
-        failing.error = TestError.expected
-        let service = NotificationDeliveryService(inbox: inbox, adapters: [.sound: failing])
-
-        let report = await service.deliver(.sample, through: [.sound])
-
-        XCTAssertTrue(report.inboxRecorded)
-        XCTAssertEqual(inbox.events.count, 1)
-        guard case .failed = report.outcomes[.sound] else {
-            return XCTFail("Expected a per-channel failure")
-        }
-    }
-
     func testPermissionRecoveryRechecksAlreadyGrantedAccessBeforeOpeningSystemSettings() async {
         var accessibilityTrusted = false
         var openedSettings: [MacPermission] = []
@@ -413,24 +378,6 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertFalse(model.isPermissionRelaunchPromptPresented)
     }
 
-    func testSoundInvokesGlassAndReportsUnavailablePlayback() async throws {
-        var playedName: NSSound.Name?
-        let successful = SoundAdapter(playSound: {
-            playedName = $0
-            return true
-        })
-        try await successful.deliver(.sample)
-        XCTAssertEqual(playedName, NSSound.Name("Glass"))
-
-        let unavailable = SoundAdapter(playSound: { _ in false })
-        do {
-            try await unavailable.deliver(.sample)
-            XCTFail("Expected unavailable sound to fail")
-        } catch {
-            XCTAssertEqual(error as? DeliveryAdapterError, .soundUnavailable)
-        }
-    }
-
     func testInboxUnreadAndPersistenceLifecycle() throws {
         let persistence = MemoryPersistence()
         let inbox = InboxStore(persistence: persistence)
@@ -452,70 +399,42 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertTrue(persistence.stored.isEmpty)
     }
 
-    func testPreferencesDefaultToVisiblePresenceAndPersistChannelCombinations() {
+    func testPreferencesDefaultToVisiblePresenceAndNotchTips() {
         let defaults = InMemoryDefaults()
 
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.showInDockAndSwitcher)
-        XCTAssertEqual(preferences.selectedChannels, [.notch])
-        XCTAssertEqual(NotificationChannel.allCases.first, .notch, "Notch leads the Settings list")
+        XCTAssertTrue(preferences.showsCoachTips)
 
-        preferences.set(.sound, enabled: true)
-        preferences.set(.notch, enabled: false)
+        preferences.showsCoachTips = false
         preferences.showInDockAndSwitcher = false
 
         let restored = AppPreferences(defaults: defaults)
         XCTAssertFalse(restored.showInDockAndSwitcher)
-        XCTAssertEqual(restored.selectedChannels, [.sound])
+        XCTAssertFalse(restored.showsCoachTips)
+        XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], [])
     }
 
-    func testLegacyCursorHaloSelectionIsRemovedAndRewritten() {
-        let defaults = InMemoryDefaults()
-        defaults.set(["cursorHalo", NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+    func testSavedChannelListsBecomeTheNotchTipSetting() {
+        let cases: [(saved: [String], showsTips: Bool, persisted: [String])] = [
+            (["notch"], true, ["notch"]),
+            (["notch", "sound"], true, ["notch"]),
+            (["sound"], false, []),
+            ([], false, []),
+            (["nativeBanner"], true, ["notch"]),
+            (["topRightToast", "sound"], true, ["notch"]),
+            (["topCenterShelf"], true, ["notch"]),
+            (["statusFeedback", "decisionBanner", "dockBadge", "dockBounce", "cursorHalo", "pointerCard", "sound"], false, [])
+        ]
+        for (saved, showsTips, persisted) in cases {
+            let defaults = InMemoryDefaults()
+            defaults.set(saved, forKey: "selectedNotificationChannels")
 
-        let preferences = AppPreferences(defaults: defaults)
+            let preferences = AppPreferences(defaults: defaults)
 
-        XCTAssertEqual(preferences.selectedChannels, [.sound])
-        XCTAssertEqual(defaults.stringArray(forKey: "selectedNotificationChannels"), ["sound"])
-        XCTAssertFalse(NotificationChannel.allCases.map(\.rawValue).contains("cursorHalo"))
-    }
-
-    func testRemovedPresentationChannelsAreMigratedOutOfPersistedPreferences() {
-        let defaults = InMemoryDefaults()
-        defaults.set([
-            "statusFeedback",
-            "decisionBanner",
-            "dockBadge",
-            "dockBounce",
-            "cursorHalo",
-            "pointerCard",
-            NotificationChannel.sound.rawValue
-        ], forKey: "selectedNotificationChannels")
-
-        let preferences = AppPreferences(defaults: defaults)
-
-        XCTAssertEqual(preferences.selectedChannels, [.sound])
-        XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], ["sound"])
-    }
-
-    func testRetiredVisualChannelsMoveToTheNotch() {
-        for retired in ["nativeBanner", "topRightToast", "topCenterShelf"] {
-            let cases: [(saved: [String], expected: Set<NotificationChannel>, persisted: [String])] = [
-                ([retired], [.notch], ["notch"]),
-                ([retired, "sound"], [.notch, .sound], ["notch", "sound"]),
-                (["notch", retired], [.notch], ["notch"])
-            ]
-            for (saved, expected, persisted) in cases {
-                let defaults = InMemoryDefaults()
-                defaults.set(saved, forKey: "selectedNotificationChannels")
-
-                let preferences = AppPreferences(defaults: defaults)
-
-                XCTAssertEqual(preferences.selectedChannels, expected, "\(saved)")
-                XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], persisted, "\(saved)")
-            }
+            XCTAssertEqual(preferences.showsCoachTips, showsTips, "\(saved)")
+            XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], persisted, "\(saved)")
         }
-        XCTAssertEqual(NotificationChannel.allCases, [.notch, .sound])
     }
 
     func testPreferencesMigrateFromEitherPreviousBundleIdentity() {
@@ -524,14 +443,14 @@ final class KeyboardShortcutterTests: XCTestCase {
             let oldest = InMemoryDefaults()
             let recent = InMemoryDefaults()
             let source = [recent, oldest][sourceIndex]
-            source.set([NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+            source.set(["sound"], forKey: "selectedNotificationChannels")
             source.set(false, forKey: "showInDockAndSwitcher")
 
             let migrated = AppPreferences(defaults: current, legacyDefaults: [recent, oldest])
 
-            XCTAssertEqual(migrated.selectedChannels, [.sound])
+            XCTAssertFalse(migrated.showsCoachTips)
             XCTAssertFalse(migrated.showInDockAndSwitcher)
-            XCTAssertEqual(current.array(forKey: "selectedNotificationChannels") as? [String], ["sound"])
+            XCTAssertEqual(current.array(forKey: "selectedNotificationChannels") as? [String], [])
             XCTAssertEqual(current.bool(forKey: "showInDockAndSwitcher"), false)
         }
     }
@@ -579,13 +498,6 @@ final class KeyboardShortcutterTests: XCTestCase {
             ShortcutCatalog.matching(searchText: "copy", application: "Safari")
                 .contains(where: { $0.applicationName == "General" })
         )
-    }
-
-    func testEveryPresentationChannelHasStableCopyAndIdentity() {
-        XCTAssertEqual(Set(NotificationChannel.allCases.map(\.id)).count, NotificationChannel.allCases.count)
-        for channel in NotificationChannel.allCases {
-            XCTAssertFalse(channel.title.isEmpty)
-        }
     }
 
     func testCanonicalShortcutRegistryResolvesReportedVSCodeFailures() {
@@ -1090,12 +1002,12 @@ final class KeyboardShortcutterTests: XCTestCase {
         )
         let persistence = MemoryPersistence()
         let inbox = InboxStore(persistence: persistence)
-        let adapter = SpyAdapter()
-        let delivery = NotificationDeliveryService(inbox: inbox, adapters: [.notch: adapter])
+        var deliveredCount = 0
         let delivered = expectation(description: "first Chrome action delivered")
         detector.onEvent = { event in
             Task { @MainActor in
-                _ = await delivery.deliver(event, through: [.notch])
+                try? inbox.append(event)
+                deliveredCount += 1
                 delivered.fulfill()
             }
         }
@@ -1108,7 +1020,7 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertEqual(inbox.events.map(\.actionTitle), [expectedTitle])
         XCTAssertEqual(inbox.events.map(\.shortcut), [expectedShortcut])
         XCTAssertEqual(persistence.stored.count, 1)
-        XCTAssertEqual(adapter.events.count, 1)
+        XCTAssertEqual(deliveredCount, 1)
         XCTAssertEqual(runtimeReader.requests.map(\.requirement), [.tabs, .tabs, .tabs])
         detector.stop()
     }

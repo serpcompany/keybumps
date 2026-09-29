@@ -23,8 +23,10 @@ final class AppPreferences {
 
     private let defaults: UserDefaults
 
-    var selectedChannels: Set<NotificationChannel> {
-        didSet { persistChannels() }
+    /// Whether Shortcut Coach shows its tips in the notch. Stored in the older channel-list key
+    /// (`["notch"]` or `[]`) so earlier builds read the same choice.
+    var showsCoachTips: Bool {
+        didSet { persistCoachTips() }
     }
 
     var showInDockAndSwitcher: Bool {
@@ -135,11 +137,11 @@ final class AppPreferences {
         }.first
         let channelsWereNormalized: Bool
         if let rawChannels = currentChannels ?? legacyChannels {
-            let decodedChannels = NotificationChannel.decoding(rawChannels)
-            selectedChannels = decodedChannels
-            channelsWereNormalized = rawChannels.sorted() != decodedChannels.map(\.rawValue).sorted()
+            let showsTips = !Self.notchPresentingRawChannels.isDisjoint(with: rawChannels)
+            showsCoachTips = showsTips
+            channelsWereNormalized = rawChannels != Self.rawChannels(showsCoachTips: showsTips)
         } else {
-            selectedChannels = [.notch]
+            showsCoachTips = true
             channelsWereNormalized = false
         }
 
@@ -154,7 +156,7 @@ final class AppPreferences {
         }
 
         if (currentChannels == nil && legacyChannels != nil) || channelsWereNormalized {
-            persistChannels()
+            persistCoachTips()
         }
         if introducedShortcuts {
             persistCapabilityShortcuts()
@@ -164,14 +166,6 @@ final class AppPreferences {
             defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher)
         }
         normalizeShortcutConflictsFavoringExistingWindowBindings()
-    }
-
-    func set(_ channel: NotificationChannel, enabled: Bool) {
-        if enabled {
-            selectedChannels.insert(channel)
-        } else {
-            selectedChannels.remove(channel)
-        }
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
@@ -231,8 +225,17 @@ final class AppPreferences {
         windowShortcuts = defaults
     }
 
-    private func persistChannels() {
-        defaults.set(selectedChannels.map(\.rawValue).sorted(), forKey: Key.selectedChannels)
+    /// Saved channel values that now mean "show tips in the notch": the notch itself and the
+    /// retired Native macOS Banner, Top-right Toast, and Top-center Shelf. Sound and other retired
+    /// values are dropped.
+    static let notchPresentingRawChannels: Set<String> = ["notch", "nativeBanner", "topRightToast", "topCenterShelf"]
+
+    static func rawChannels(showsCoachTips: Bool) -> [String] {
+        showsCoachTips ? ["notch"] : []
+    }
+
+    private func persistCoachTips() {
+        defaults.set(Self.rawChannels(showsCoachTips: showsCoachTips), forKey: Key.selectedChannels)
     }
 
     private func persistWindowShortcuts() {

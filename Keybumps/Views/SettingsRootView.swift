@@ -823,11 +823,21 @@ struct KeyboardShortcutterSettingsView: View {
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
-                Button("Send Test Suggestion") { Task { await model.deliverSample() } }
+                Button("Send Test Suggestion") { model.deliverSample() }
                     .disabled(!isEnabled || !readiness.isReady)
             }
             SettingsGroup("Presentation") {
-                ForEach(NotificationChannel.allCases) { channelControl($0) }
+                HStack(spacing: 10) {
+                    Text("Show tips in the notch")
+                    Spacer(minLength: 12)
+                    Button("Preview") { model.previewCoachTip() }
+                    Toggle("Show tips in the notch", isOn: Binding(
+                        get: { model.preferences.showsCoachTips },
+                        set: { model.preferences.showsCoachTips = $0 }
+                    ))
+                    .settingsCompactSwitch()
+                    .labelsHidden()
+                }
             }
             SettingsGroup("Keyboard symbols") {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
@@ -843,33 +853,6 @@ struct KeyboardShortcutterSettingsView: View {
             }
         }
         .navigationTitle("Shortcut Coach")
-    }
-
-    @ViewBuilder
-    private func channelControl(_ channel: NotificationChannel) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text(channel.title)
-                Spacer(minLength: 12)
-                Button("Preview") { Task { await model.previewSample(channel: channel) } }
-                Toggle(channel.title, isOn: Binding(
-                    get: { model.preferences.selectedChannels.contains(channel) },
-                    set: { model.setChannel(channel, enabled: $0) }
-                ))
-                .settingsCompactSwitch()
-                .labelsHidden()
-            }
-            ForEach(model.previewOutcomes(for: channel).keys.sorted(by: { $0.rawValue < $1.rawValue })) { deliveredChannel in
-                if let outcome = model.previewOutcomes(for: channel)[deliveredChannel] {
-                    switch outcome {
-                    case .delivered:
-                        SettingsNote("\(deliveredChannel.title) preview sent", tint: .green)
-                    case .failed(let message):
-                        SettingsNote("\(deliveredChannel.title) preview failed: \(message)", tint: .orange)
-                    }
-                }
-            }
-        }
     }
 }
 

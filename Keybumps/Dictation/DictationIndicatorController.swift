@@ -25,15 +25,18 @@ class DictationIndicatorController {
         switch phase {
         case .recording, .transcribing, .inserting, .failed:
             show()
+            PaletteHUD.shared.isSuppressed = true
             if case .failed = phase {
                 hideTask = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(5))
                     guard !Task.isCancelled else { return }
                     self?.panel?.orderOut(nil)
+                    PaletteHUD.shared.isSuppressed = false
                 }
             }
         case .idle:
             panel?.orderOut(nil)
+            PaletteHUD.shared.isSuppressed = false
         }
     }
 

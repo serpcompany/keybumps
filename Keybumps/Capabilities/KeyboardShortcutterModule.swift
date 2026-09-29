@@ -44,6 +44,7 @@ final class KeyboardShortcutterModule: CapabilityModule {
 
     func deactivate(_ context: CapabilityContext) {
         detector.stop()
+        PaletteHUD.shared.dismissCoach()
     }
 
     func permissionsDidRefresh(_ context: CapabilityContext) {

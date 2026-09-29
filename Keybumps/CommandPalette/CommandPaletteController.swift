@@ -140,7 +140,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
-    private let hud = PaletteHUD()
+    private let hud = PaletteHUD.shared
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
 

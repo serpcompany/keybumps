@@ -59,3 +59,37 @@ struct DictationNotchPanelTests {
         #expect(!panel.isVisible)
     }
 }
+
+@MainActor
+@Suite("Dictation keeps the notch to itself", .serialized)
+struct DictationNotchSuppressionTests {
+    @Test("While Dictation shows its state, other notch notices are dropped; idle lets them through")
+    func dictationSuppressesNotices() {
+        defer { PaletteHUD.shared.isSuppressed = false }
+        let indicator = DictationIndicatorController()
+        for phase: DictationPhase in [.recording, .transcribing, .inserting, .failed("Example")] {
+            indicator.update(phase)
+            #expect(PaletteHUD.shared.isSuppressed, "\(phase)")
+        }
+        indicator.update(.idle)
+        #expect(!PaletteHUD.shared.isSuppressed)
+    }
+
+    @Test("A suppressed notice never appears, and suppression hides one already showing")
+    func suppressedNoticeNeverAppears() {
+        let notice = PaletteHUD()
+        defer { notice.dismiss() }
+        notice.show("Copied to Clipboard")
+        #expect(visibleNotices() == 1)
+
+        notice.isSuppressed = true
+        #expect(visibleNotices() == 0)
+        notice.show("Copied to Clipboard")
+        notice.showCoach(NotchCoachPresentation(event: .sample))
+        #expect(visibleNotices() == 0)
+    }
+
+    private func visibleNotices() -> Int {
+        NSApp.windows.filter { $0.identifier?.rawValue == "paletteHUD" && $0.isVisible }.count
+    }
+}

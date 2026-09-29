@@ -1,4 +1,5 @@
 import AppKit
+import UserNotifications
 
 extension Notification.Name {
     static let openMainWindow = Notification.Name("Keybumps.openMainWindow")
@@ -31,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.configureWindowBehavior()
+        // Keybumps no longer posts banners; clear any an earlier build left in Notification Center.
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
 
     static func configureWindowBehavior() {

@@ -11,6 +11,7 @@ struct UnitTestHostTests {
         #expect(UnitTestHost.isActive)
         let notice = PaletteHUD()
         notice.showCoach(NotchCoachPresentation(event: .sample))
+        defer { notice.dismiss() }
 
         let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         window.hideDuringUnitTests()
