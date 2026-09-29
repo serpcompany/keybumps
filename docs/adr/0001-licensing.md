@@ -47,9 +47,11 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
    - A subscription Lease is refreshed as soon as `validUntil` passes, and stays usable for a 7-day grace period so a renewal that hasn't reached the app yet doesn't lock the Mac.
    - These are the only cases where a paying customer must reconnect.
    - A network or server error never changes the current state.
-   - The app keeps a Keychain high-water mark of trusted time, advanced only by server time: a Lease's `issuedAt`, plus the elapsed monotonic uptime since it was received in this boot.
-   - Every successful refresh resets the mark to the server's time. A local clock earlier than the mark is treated as the mark, so rolling the clock back cannot extend a Lease.
-   - Setting the clock forward cannot poison the mark.
+   - The app keeps a Keychain high-water mark of trusted time. It starts at a Lease's server-issued `issuedAt`.
+   - While Keybumps runs, the mark advances by elapsed `mach_continuous_time` (which counts sleep), and it is saved periodically. The mark keeps accumulating across reboots.
+   - Every successful refresh resets the mark to the server's time. A local clock earlier than the mark is treated as the mark.
+   - Setting the clock forward cannot poison the mark, because the wall clock never moves it.
+   - Rolling the clock back can therefore gain at most the time the Mac spent shut down or with Keybumps not running. A Lease still expires within about 45 days of Keybumps actually running. We accept this remaining gap in the no-DRM posture.
    - We don't use obfuscation, anti-debugging, or DRM. The goal is to deter casual sharing without locking out paying customers.
 8. **Activation slots can be recovered.**
    - Deactivating in the app frees its slot.
