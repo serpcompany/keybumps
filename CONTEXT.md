@@ -60,7 +60,7 @@ A brief message, such as Copied to Clipboard or a Shortcut Coach tip, that grows
 _Avoid_: Toast, HUD, banner
 
 **License**:
-A customer's right to use Keybumps: a Polar License Key benefit granted on purchase and revoked by Polar (for example on refund). See `docs/adr/0002-polar-native-license-keys.md`.
+A customer's right to use Keybumps: a Polar License Key benefit granted on purchase. It is revoked when its benefit is revoked, which every refund must do explicitly. See `docs/adr/0002-polar-native-license-keys.md`.
 _Avoid_: Account, subscription
 
 **License Key**:

@@ -13,10 +13,14 @@ ADR 0001 had the service own keys and signed Leases so the payment provider coul
    - an activation limit of 1 Mac
    - no expiry for the lifetime offer
 
-   Polar delivers the key in its receipt email and customer portal. The customer portal also covers "I lost my key" and freeing a Mac. Polar revokes the key when the benefit is revoked, such as on a refund.
+   The benefit also allows customers to deactivate from the portal.
+
+   Polar delivers the key in its receipt email and customer portal. The portal also covers "I lost my key" and freeing a Mac.
+   - **Refunds:** Polar revokes the key only when its benefit is revoked. For one-time purchases, refunding does not do that by default, so every refund must be issued with **Revoke benefits** turned on, in the dashboard or with `revoke_benefits` in the API.
+   - **Disputes:** Polar settles disputes as merchant of record. If one is lost, revoke the customer's benefit by hand.
 2. **The app talks to Polar's public license-key API.** It uses the customer-portal endpoints (`/v1/customer-portal/license-keys/activate`, `/validate`, `/deactivate`), which take the key and the organization id and need no secret in the app. Activation sends a label built from the device hash, never a Mac name or other personal data.
 3. **One app-side seam.** `LicenseControlling` talks to a `LicenseProviding` protocol. Polar is its first and only implementation. Changing providers means adding another implementation and shipping an app update.
-4. **Offline use without a Lease.** The app stores its key and last successful validation in the Keychain:
+4. **Offline use without a Lease.** The app stores its key, its Polar activation id (which validation and deactivation require), and its last successful validation in the Keychain:
    - It revalidates about weekly when online.
    - It keeps working for 45 days after the last successful validation.
    - A network or server error never changes the current state.
