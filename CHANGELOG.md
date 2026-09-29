@@ -2,15 +2,14 @@
 
 ## [0.0.3-beta.5](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.4...v0.0.3-beta.5) (2026-09-29)
 
+This beta gives Keybumps a properly sized Mac icon and moves Dictation's recording indicator into the notch.
 
-### Features
+> **This beta is not notarized.** It is signed with our Developer ID, but Apple notarization is temporarily unavailable. If you download it fresh, macOS blocks the first launch: open **System Settings › Privacy & Security** and click **Open Anyway** next to the Keybumps message. Updating from inside Keybumps works normally, and later releases will be notarized again.
 
-* show Dictation's state in the notch ([#110](https://github.com/serpcompany/keybumps/issues/110)) ([512a2f9](https://github.com/serpcompany/keybumps/commit/512a2f91a1a572a402e40cc273114f74d2a8a3d1))
+### Changes
 
-
-### Fixes
-
-* app icon on the macOS icon grid ([#109](https://github.com/serpcompany/keybumps/issues/109)) ([4e8ffe9](https://github.com/serpcompany/keybumps/commit/4e8ffe9ceb654e8aa3a43d07b6b026c86311ec6a))
+- The Keybumps icon now follows the standard Mac icon shape, so the keycap is no longer small inside a large dark tile.
+- Dictation shows its state in the notch. While recording, a red dot and timer sit to the left of the notch, and live microphone bars and your Dictation shortcut (the key that finishes) sit to the right. While transcribing, a sparkle and moving dots appear. If Dictation fails, the notch drops down with the reason. Escape still cancels.
 
 ## [0.0.3-beta.4](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.3...v0.0.3-beta.4) (2026-09-29)
 
