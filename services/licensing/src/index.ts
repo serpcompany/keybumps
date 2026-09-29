@@ -119,7 +119,7 @@ async function clientRequest(request: Request, env: Env): Promise<ClientRequest>
   const body = await readJson(request);
   const product = body.product;
   const key = body.key;
-  const deviceHash = body.deviceHash;
+  const deviceHash = typeof body.deviceHash === "string" ? body.deviceHash.toLowerCase() : body.deviceHash;
   if (typeof product !== "string" || !/^[a-z0-9-]{1,32}$/.test(product)) throw new ApiError("bad_request");
   if (typeof key !== "string" || key.length === 0 || key.length > 64) throw new ApiError("bad_request");
   if (typeof deviceHash !== "string" || !/^[0-9a-f]{64}$/.test(deviceHash)) throw new ApiError("bad_request");
@@ -145,7 +145,12 @@ async function activate(request: ClientRequest, env: Env): Promise<Response> {
   const now = nowSeconds();
   const license = await entitledLicense(env, request, now);
   const known = await touchActivation(env.DB, license.id, request.deviceHash, now);
-  if (!known && !(await addActivation(env.DB, license, request.deviceHash, now))) {
+  // A concurrent request from the same Mac may have inserted it first; recheck before refusing.
+  if (
+    !known &&
+    !(await addActivation(env.DB, license, request.deviceHash, now)) &&
+    !(await touchActivation(env.DB, license.id, request.deviceHash, now))
+  ) {
     throw new ApiError("activation_limit");
   }
   return leaseResponse(env, license, request.deviceHash, now);
