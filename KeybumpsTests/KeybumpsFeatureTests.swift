@@ -463,14 +463,17 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertFalse(coordinator.activeOwners.contains(CapabilityShortcut.quickSearch.ownerID))
     }
 
-    func testBuiltTestHostHasCanonicalKeybumpsIdentity() throws {
+    func testTestHostIsTheDebugIdentityBesideTheInstalledApp() throws {
         var appURL = Bundle(for: Self.self).bundleURL
         while appURL.pathExtension != "app", appURL.path != "/" {
             appURL.deleteLastPathComponent()
         }
         XCTAssertEqual(appURL.lastPathComponent, "Keybumps.app")
         let bundle = try XCTUnwrap(Bundle(url: appURL))
-        XCTAssertEqual(bundle.bundleIdentifier, "com.serp.keybumps")
+        // Debug builds use their own identity; Release and QA builds keep com.serp.keybumps
+        // (checked by scripts/build-qa-candidate.sh and the release validator).
+        XCTAssertEqual(bundle.bundleIdentifier, "com.serp.keybumps.debug")
+        XCTAssertEqual(ProductIdentity.bundleIdentifier, "com.serp.keybumps")
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String, "Keybumps")
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "CFBundleName") as? String, "Keybumps")
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String, "Keybumps")
