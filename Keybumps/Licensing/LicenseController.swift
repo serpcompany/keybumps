@@ -26,8 +26,6 @@ final class LicenseController: LicenseControlling {
     private let now: () -> Date
     private var timer: Timer?
     private var started = false
-    /// The provider said no at the last check. Kept until a check or activation succeeds.
-    private var notAccepted = false
 
     init(
         provider: any LicenseProviding,
@@ -77,7 +75,6 @@ final class LicenseController: LicenseControlling {
                 try? await provider.deactivate(key: key, activationID: activation.activationID)
                 throw LicenseActionError.unexpected
             }
-            notAccepted = false
             snapshot.state = storedState()
         } catch {
             snapshot.lastError = (error as? LicenseActionError) ?? .unexpected
@@ -92,7 +89,6 @@ final class LicenseController: LicenseControlling {
         do {
             try await provider.deactivate(key: check.key, activationID: check.activationID)
             store.clear()
-            notAccepted = false
             snapshot.state = .unlicensed
         } catch {
             // Keep the activation locally: the slot is only freed once the provider confirms.
@@ -120,19 +116,17 @@ final class LicenseController: LicenseControlling {
         case .granted(let expiresAt):
             check.validatedAt = now()
             check.expiresAt = expiresAt
-            try? store.save(check)
-            notAccepted = false
+            check.notAccepted = nil
         case .notAccepted:
-            notAccepted = true
+            check.notAccepted = true
         }
+        try? store.save(check)
         snapshot.state = storedState()
     }
 
-    /// Applies time and device rules to the stored check, plus the last provider refusal, with no network call.
+    /// Applies the stored check's refusal, time, and device rules, with no network call.
     private func storedState() -> LicenseState {
-        let state = LicensePolicy.state(for: store.load(), now: now(), deviceLabel: device.activationLabel)
-        if notAccepted, state != .unlicensed { return .locked(.notAccepted) }
-        return state
+        LicensePolicy.state(for: store.load(), now: now(), deviceLabel: device.activationLabel)
     }
 }
 

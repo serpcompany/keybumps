@@ -220,7 +220,11 @@ struct LicenseControllerTests {
         clock.now.addTimeInterval(8 * 86_400)
         await controller.refresh(force: false)
         #expect(controller.snapshot.state == .locked(.notAccepted))
-        #expect(store.check == original)
+        #expect(store.check?.activationID == original.activationID)
+
+        // Relaunching doesn't undo the refusal.
+        let relaunched = LicenseController(provider: provider, store: store, device: FakeDevice(), now: { clock.now })
+        #expect(relaunched.snapshot.state == .locked(.notAccepted))
 
         provider.validation = .success(.granted(expiresAt: nil))
         await controller.refresh(force: false)

@@ -329,7 +329,7 @@ private struct LicenseSettingsGroup: View {
                     SettingsRowLabel(title: "Check license", subtitle: "Asks Polar about this key now.")
                 }
             }
-            if case .active = snapshot.state {
+            if snapshot.state != .unlicensed {
                 LabeledContent {
                     Button("Deactivate This Mac") { Task { await model.deactivateLicense() } }
                         .disabled(snapshot.isBusy)
@@ -337,7 +337,8 @@ private struct LicenseSettingsGroup: View {
                 } label: {
                     SettingsRowLabel(title: "Move to another Mac", subtitle: "Frees this Mac’s activation so the key can be used elsewhere.")
                 }
-            } else {
+            }
+            if !snapshot.isEntitled {
                 HStack(spacing: 8) {
                     TextField("KEYBUMPS-…", text: $key)
                         .textFieldStyle(.roundedBorder)

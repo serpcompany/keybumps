@@ -10,6 +10,9 @@ struct LicenseCheck: Codable, Equatable, Sendable {
     /// The activation label of the Mac that activated. A check restored onto another Mac (for
     /// example by Migration Assistant copying the login keychain) doesn't count there.
     var deviceLabel: String?
+    /// The provider refused this key and activation at the last check. Persisted, so relaunching
+    /// can't undo a refund; cleared by the next successful check or activation.
+    var notAccepted: Bool?
 
     /// The key with only its last four characters visible, for display.
     var maskedKey: String {
@@ -80,6 +83,7 @@ enum LicensePolicy {
     static func state(for check: LicenseCheck?, now: Date, deviceLabel: String? = nil) -> LicenseState {
         guard let check else { return .unlicensed }
         if let deviceLabel, let owner = check.deviceLabel, owner != deviceLabel { return .unlicensed }
+        if check.notAccepted == true { return .locked(.notAccepted) }
         if let expiresAt = check.expiresAt, expiresAt <= now { return .locked(.expired) }
         // A clock set earlier than the last check makes `needsRefresh` true, so the next online
         // moment checks again. While offline it can stretch the allowance; that is accepted with no DRM.
