@@ -17,14 +17,27 @@ struct DictationNotchTests {
 
     @Test("Recording stays notch height; a failure drops down and widens")
     func geometry() {
-        let recording = DictationNotchGeometry(notchWidth: 200, notchHeight: 37, isFailure: false)
-        #expect(recording.shapeSize == CGSize(width: 200 + 2 * DictationNotchGeometry.wingWidth, height: 37))
-        let failed = DictationNotchGeometry(notchWidth: 200, notchHeight: 37, isFailure: true)
+        let recording = DictationNotchGeometry(notchWidth: 200, notchHeight: 37, isFailure: false, finishKeyCount: 2)
+        let side = recording.wingWidth + DictationNotchGeometry.inset
+        #expect(recording.shapeSize == CGSize(width: 200 + 2 * side, height: 37))
+        let failed = DictationNotchGeometry(notchWidth: 200, notchHeight: 37, isFailure: true, finishKeyCount: 2)
         #expect(failed.shapeSize.height == 77)
         #expect(failed.shapeSize.width >= 380)
-        let noNotch = DictationNotchGeometry(notchWidth: 0, notchHeight: 28, isFailure: false)
-        #expect(noNotch.shapeSize.width == 120 + 2 * DictationNotchGeometry.wingWidth)
-        #expect(noNotch.panelSize.width == noNotch.shapeSize.width + 2 * DictationNotchGeometry.margin)
+        // The panel is always the failure size, so switching states never clips the shape.
+        #expect(recording.panelSize == failed.panelSize)
+        #expect(recording.panelSize.height >= failed.shapeSize.height + DictationNotchGeometry.margin)
+        let noNotch = DictationNotchGeometry(notchWidth: 0, notchHeight: 28, isFailure: false, finishKeyCount: 0)
+        #expect(noNotch.shapeSize.width == 120 + 2 * (noNotch.wingWidth + DictationNotchGeometry.inset))
+    }
+
+    @Test("A long finish shortcut widens both sides instead of reaching under the camera")
+    func longShortcutWidensSides() {
+        let short = DictationNotchGeometry(notchWidth: 200, notchHeight: 37, isFailure: false, finishKeyCount: 2)
+        let long = DictationNotchGeometry(notchWidth: 200, notchHeight: 37, isFailure: false, finishKeyCount: 5)
+        #expect(short.wingWidth == DictationNotchGeometry.minimumWingWidth)
+        #expect(long.wingWidth > short.wingWidth)
+        let fiveKeys: CGFloat = 25 + 8 + 90 + 8
+        #expect(long.wingWidth >= fiveKeys)
     }
 }
 

@@ -19,7 +19,9 @@ class DictationIndicatorController {
             state.recordingStartedAt = Date()
             state.level = 0
         }
+        let changed = state.phase != phase
         state.phase = phase
+        if changed { announce(phase) }
         switch phase {
         case .recording, .transcribing, .inserting, .failed:
             show()
@@ -45,6 +47,21 @@ class DictationIndicatorController {
         state.level = level
     }
 
+    private func announce(_ phase: DictationPhase) {
+        let message: String
+        switch phase {
+        case .recording: message = "Dictation recording"
+        case .transcribing: message = "Dictation transcribing"
+        case .failed(let reason): message = "Dictation failed. \(reason)"
+        case .inserting, .idle: return
+        }
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+        )
+    }
+
     private func show() {
         guard let screen = NSScreen.main else { return }
         let panel = panel ?? makePanel()
@@ -52,13 +69,16 @@ class DictationIndicatorController {
         let geometry = DictationNotchGeometry(
             notchWidth: PaletteHUD.notchWidth(of: screen),
             notchHeight: max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28),
-            isFailure: state.phase.isFailure
+            isFailure: state.phase.isFailure,
+            finishKeyCount: state.finishShortcut.map { ShortcutKeycapPresentation(shortcut: $0).keys.count } ?? 0
         )
+        state.geometry = geometry
         // A new panel already has a plain content view, so check for the notch view itself.
         if !(panel.contentView is NSHostingView<DictationNotchView>) {
             panel.contentView = NSHostingView(rootView: DictationNotchView(state: state))
         }
-        state.geometry = geometry
+        // The panel is always the largest (failure) size, so the shape can spring between
+        // states inside it without being clipped.
         let size = geometry.panelSize
         panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
                               width: size.width, height: size.height), display: true)
@@ -87,25 +107,39 @@ final class DictationNotchState {
     var level: Float = 0
     var recordingStartedAt = Date()
     var finishShortcut: String?
-    var geometry = DictationNotchGeometry(notchWidth: 0, notchHeight: 32, isFailure: false)
+    var geometry = DictationNotchGeometry(notchWidth: 0, notchHeight: 32, isFailure: false, finishKeyCount: 0)
 }
 
 struct DictationNotchGeometry: Equatable {
-    static let wingWidth: CGFloat = 116
+    static let minimumWingWidth: CGFloat = 116
+    /// Space between the shape's edge and each side's content.
+    static let inset: CGFloat = 14
     /// Transparent room around the shape for its glow.
     static let margin: CGFloat = 16
+    static let failureHeight: CGFloat = 40
 
     let notchWidth: CGFloat
     let notchHeight: CGFloat
     let isFailure: Bool
+    /// Keys in the finish shortcut; longer shortcuts widen both sides so nothing reaches the camera.
+    let finishKeyCount: Int
 
-    var shapeSize: CGSize {
-        let width = max(notchWidth, 120) + Self.wingWidth * 2
-        return isFailure ? CGSize(width: max(width, 380), height: notchHeight + 40) : CGSize(width: width, height: notchHeight)
+    /// Each side's content width: the level bars (25), a gap (8), and 18 pt per key 2 pt apart.
+    var wingWidth: CGFloat {
+        let keys = CGFloat(finishKeyCount)
+        let trailing = finishKeyCount > 0 ? 25 + 8 + keys * 18 + (keys - 1) * 2 : 25
+        return max(Self.minimumWingWidth, trailing)
     }
 
+    var shapeSize: CGSize {
+        let width = max(notchWidth, 120) + (wingWidth + Self.inset) * 2
+        return isFailure ? CGSize(width: max(width, 380), height: notchHeight + Self.failureHeight) : CGSize(width: width, height: notchHeight)
+    }
+
+    /// Always the failure size, so state changes animate inside the panel.
     var panelSize: CGSize {
-        CGSize(width: shapeSize.width + Self.margin * 2, height: shapeSize.height + Self.margin)
+        let width = max(max(notchWidth, 120) + (wingWidth + Self.inset) * 2, 380)
+        return CGSize(width: width + Self.margin * 2, height: notchHeight + Self.failureHeight + Self.margin)
     }
 }
 
@@ -124,11 +158,11 @@ struct DictationNotchView: View {
         let shape = UnevenRoundedRectangle(bottomLeadingRadius: 14, bottomTrailingRadius: 14, style: .continuous)
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                leading.frame(width: DictationNotchGeometry.wingWidth, alignment: .leading)
+                leading.frame(width: geometry.wingWidth, alignment: .leading)
                 Spacer(minLength: 0)
-                trailing.frame(width: DictationNotchGeometry.wingWidth, alignment: .trailing)
+                trailing.frame(width: geometry.wingWidth, alignment: .trailing)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DictationNotchGeometry.inset)
             .frame(height: geometry.notchHeight)
             if case .failed(let message) = state.phase {
                 Text(message)
@@ -198,7 +232,7 @@ struct DictationNotchView: View {
         switch state.phase {
         case .recording:
             HStack(spacing: 8) {
-                LevelBars(level: state.level, reduceMotion: reduceMotion)
+                LevelBars(state: state, reduceMotion: reduceMotion)
                 // The key that finishes the recording (Escape cancels, so it is not shown here).
                 if let shortcut = state.finishShortcut {
                     HStack(spacing: 2) {
@@ -224,7 +258,8 @@ struct DictationNotchView: View {
     private var accessibilityLabel: String {
         switch state.phase {
         case .recording:
-            state.finishShortcut.map { "Dictation recording. Press \(KeyboardShortcutRegistry.accessibilityCopy(for: $0)) to finish, or Escape to cancel." }
+            state.finishShortcut.flatMap(KeyboardShortcutRegistry.accessibilityDescription(for:))
+                .map { "Dictation recording. Press \($0) to finish, or Escape to cancel." }
                 ?? "Dictation recording. Press Escape to cancel."
         case .failed(let message): "Dictation failed. \(message)"
         default: "Dictation \(state.phase.label.lowercased())"
@@ -255,7 +290,8 @@ private struct PulsingDot: View {
 
 /// Five bars that follow the microphone's loudness, taller in the middle.
 private struct LevelBars: View {
-    let level: Float
+    /// Reads the level here so only the bars redraw as the microphone level changes.
+    let state: DictationNotchState
     let reduceMotion: Bool
     private static let shape: [CGFloat] = [0.55, 0.8, 1, 0.8, 0.55]
 
@@ -264,11 +300,11 @@ private struct LevelBars: View {
             ForEach(Self.shape.indices, id: \.self) { index in
                 Capsule()
                     .fill(.white)
-                    .frame(width: 3, height: 4 + 14 * CGFloat(level) * Self.shape[index])
+                    .frame(width: 3, height: 4 + 14 * CGFloat(state.level) * Self.shape[index])
             }
         }
         .frame(height: 18)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: level)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: state.level)
     }
 }
 
