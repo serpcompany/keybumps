@@ -177,7 +177,7 @@ User outcome: passively recognize supported manual actions and present the corre
 - Detect the supported menu, Chrome, standard-window-control, and Finder-to-Trash actions.
 - Persist one durable event per verified action with unread state and searchable history.
 - Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘5, hidden by default); Settings keeps the Keyboard Shortcutter name.
-- Deliver through Native macOS Banner, Top-right Toast (the default), Top-center Shelf, Notch (the action and its shortcut keycaps as a notch notice), and separately configured Sound. Several can be on at once.
+- Deliver through Notch (the default: the action and its shortcut keycaps as a notch notice), Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Several can be on at once; new installs start with only Notch.
 - Preview through the same production delivery adapters without writing a history event.
 - Custom presentations share close, Escape, horizontal-trackpad-scroll, hover-pause, and dismissal behavior.
 - Reflect native notification authorization truthfully in Settings and the Dock attention badge.
