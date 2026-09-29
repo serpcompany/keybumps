@@ -28,6 +28,7 @@
 		1C16C591081A70B947AD1444 /* OnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F766FFB10FBF4B3FBE6504B /* OnboardingFlowTests.swift */; };
 		1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */; };
 		21132F8335F6C4863D5A56D4 /* CapabilityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E1CD87EB93B65F4E866246 /* CapabilityModule.swift */; };
+		27809D43FBCF8B6211FD5C6B /* DictationPaletteResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200EDB123819788E9D6CE81 /* DictationPaletteResults.swift */; };
 		29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */; };
 		2AEDDDA2780DAD6306D3212D /* MainWindowRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572DC6E9C68A567BE460ED2F /* MainWindowRoutingTests.swift */; };
 		3059D8E4728CF39B1A21420A /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */; };
@@ -250,6 +251,7 @@
 		E61586690B952F46EBCDED78 /* NOTICES.argmax-oss-swift */ = {isa = PBXFileReference; path = "NOTICES.argmax-oss-swift"; sourceTree = "<group>"; };
 		EBBB83D782A2BF34F2C7854D /* WhisperKitModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitModelDownloader.swift; sourceTree = "<group>"; };
 		ECF5180228D1F28AB0362C61 /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
+		F200EDB123819788E9D6CE81 /* DictationPaletteResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPaletteResults.swift; sourceTree = "<group>"; };
 		F26EB5CBFC50DDF739E755BC /* InMemoryDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryDefaults.swift; sourceTree = "<group>"; };
 		F3872107ED622E1702DAE730 /* finder-trash-captured-sanitized-trace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "finder-trash-captured-sanitized-trace.json"; sourceTree = "<group>"; };
 		F4CF4C25AF5BB1C66FD04278 /* CapabilityModuleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityModuleTests.swift; sourceTree = "<group>"; };
@@ -353,6 +355,7 @@
 			isa = PBXGroup;
 			children = (
 				4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */,
+				F200EDB123819788E9D6CE81 /* DictationPaletteResults.swift */,
 				9A89EEB9E257B80261B8DB77 /* RaycastPaletteStyle.swift */,
 			);
 			path = CommandPalette;
@@ -781,6 +784,7 @@
 				356E7F675BBAF3C664BF0C0F /* DictationIndicatorController.swift in Sources */,
 				91832B187D1AA878C0BF6F02 /* DictationModelManager.swift in Sources */,
 				D09441341EE399D39BA7C44D /* DictationModule.swift in Sources */,
+				27809D43FBCF8B6211FD5C6B /* DictationPaletteResults.swift in Sources */,
 				30969CFBA6428F79100205AF /* DictationService.swift in Sources */,
 				6A9CD25220129616C6F0A833 /* DictationTranscriptionEngine.swift in Sources */,
 				1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */,

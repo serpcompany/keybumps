@@ -311,7 +311,7 @@ struct DictationHistoryCard: View {
         .animation(.easeInOut(duration: 0.18), value: isExpanded)
     }
 
-    fileprivate static let durationFormatter: DateComponentsFormatter = {
+    static let durationFormatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.minute, .second]
         formatter.zeroFormattingBehavior = [.pad]
@@ -320,7 +320,7 @@ struct DictationHistoryCard: View {
 
 }
 
-private struct DictationAudioTransportView: View {
+struct DictationAudioTransportView: View {
     let isPlaying: Bool
     let progress: Double
     let duration: TimeInterval
@@ -368,8 +368,9 @@ private struct DictationAudioTransportView: View {
                 .fixedSize()
         }
         .padding(.horizontal, 12)
-        .frame(height: 58)
-        .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 10))
+        .frame(height: 52)
+        .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(PaletteTheme.border, lineWidth: 1))
     }
 
     private static func rateLabel(_ rate: Float) -> String {
@@ -411,7 +412,7 @@ struct ClearAllButton: View {
 }
 
 @available(macOS 15.0, *)
-private struct LocalDictationTranslationView: View {
+struct LocalDictationTranslationView: View {
     let sourceText: String
     let sourceLanguageIdentifier: String
     let close: () -> Void

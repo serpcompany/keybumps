@@ -58,16 +58,23 @@ struct PaletteKeycaps: View {
 
 /// A small outlined chip for secondary actions such as Clear All.
 struct PaletteChipButtonStyle: ButtonStyle {
+    /// Shows the label's icon too, for action rows such as the Dictation detail's.
+    var showsIcon = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        configuration.label
-            .labelStyle(.titleOnly)
+        Group {
+            if showsIcon {
+                configuration.label.labelStyle(.titleAndIcon)
+            } else {
+                configuration.label.labelStyle(.titleOnly)
+            }
+        }
             .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .frame(minHeight: 22)
+            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(.red.opacity(0.85)) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, showsIcon ? 10 : 8)
+            .frame(minHeight: showsIcon ? 26 : 22)
             .background(PaletteTheme.keycapFill.opacity(configuration.isPressed ? 2 : 1), in: shape)
             .overlay(shape.strokeBorder(PaletteTheme.keycapBorder, lineWidth: 1))
             .opacity(isEnabled ? 1 : 0.45)
