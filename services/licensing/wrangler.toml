@@ -12,13 +12,12 @@ routes = [{ pattern = "licensing.keybumps.app", custom_domain = true }]
 crons = ["*/15 * * * *"]
 
 [vars]
-EMAIL_FROM = "Keybumps <licenses@keybumps.app>"
-EMAIL_REPLY_TO = "support@keybumps.app"
+EMAIL_FROM = "Keybumps <support@keybumps.app>"
 
 # Cloudflare Email Service (Email Sending). keybumps.app must be onboarded in the dashboard.
 [[send_email]]
 name = "EMAIL"
-allowed_sender_addresses = ["licenses@keybumps.app"]
+allowed_sender_addresses = ["support@keybumps.app"]
 
 # Licensing routes must not be request-logged (ADR §10).
 [observability]
@@ -40,12 +39,11 @@ workers_dev = true
 routes = []
 
 [env.staging.vars]
-EMAIL_FROM = "Keybumps <licenses@keybumps.app>"
-EMAIL_REPLY_TO = "support@keybumps.app"
+EMAIL_FROM = "Keybumps <support@keybumps.app>"
 
 [[env.staging.send_email]]
 name = "EMAIL"
-allowed_sender_addresses = ["licenses@keybumps.app"]
+allowed_sender_addresses = ["support@keybumps.app"]
 
 [env.staging.observability]
 enabled = false

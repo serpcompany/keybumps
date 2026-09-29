@@ -9,16 +9,18 @@ export interface KeyMailer {
   sendKeys(to: string, keys: KeyEmail[]): Promise<void>;
 }
 
-/** Sends through Cloudflare Email Service's `send_email` binding. `send` rejects on failure. */
+/**
+ * Sends through Cloudflare Email Service's `send_email` binding. `send` rejects on failure.
+ * The sender is also where replies go, so there is no separate reply-to.
+ */
 export class CloudflareMailer implements KeyMailer {
   constructor(
     private readonly binding: SendEmail,
     private readonly from: EmailAddress,
-    private readonly replyTo: string,
   ) {}
 
   async sendKeys(to: string, keys: KeyEmail[]): Promise<void> {
-    await this.binding.send({ from: this.from, to, replyTo: this.replyTo, ...keyEmailContent(keys) });
+    await this.binding.send({ from: this.from, to, ...keyEmailContent(keys) });
   }
 }
 

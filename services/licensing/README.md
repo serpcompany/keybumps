@@ -60,7 +60,7 @@ A paid order becomes a License through an Offer. The checkout link's `offer` met
 
 ## Key email
 
-A paid order emails its License Key through Cloudflare Email Service (the `EMAIL` `send_email` binding, restricted to sending from `licenses@keybumps.app`; `keybumps.app` must be onboarded under Email Service > Email Sending, which needs the Workers Paid plan). Sender and reply-to are the `EMAIL_FROM` and `EMAIL_REPLY_TO` vars. If sending fails, the order is still acknowledged. A cron (every 15 minutes) retries keys whose `licenses.key_emailed_at` is still unset, for up to 7 days. A crash between sending and recording can, rarely, send the same key twice. `/v1/resend-key` does its lookup and sending after responding, so response time never reveals whether an address bought.
+A paid order emails its License Key through Cloudflare Email Service (the `EMAIL` `send_email` binding, restricted to sending from `support@keybumps.app`, which also receives replies (SERP transactional-email standard); `keybumps.app` must be onboarded under Email Service > Email Sending, which needs the Workers Paid plan). The sender is the `EMAIL_FROM` var. If sending fails, the order is still acknowledged. A cron (every 15 minutes) retries keys whose `licenses.key_emailed_at` is still unset, for up to 7 days. A crash between sending and recording can, rarely, send the same key twice. `/v1/resend-key` does its lookup and sending after responding, so response time never reveals whether an address bought.
 
 ## Environments
 

@@ -30,10 +30,8 @@ export interface Env {
   POLAR_WEBHOOK_SECRET?: string;
   /** Cloudflare Email Service binding. Keys aren't emailed while it is missing. */
   EMAIL?: SendEmail;
-  /** Sender, e.g. `Keybumps <licenses@keybumps.app>`, on a domain onboarded to Email Sending. */
+  /** Sender, `Keybumps <support@keybumps.app>`: one address sends and receives replies (SERP transactional-email standard). */
   EMAIL_FROM?: string;
-  /** Where customer replies to key emails go. */
-  EMAIL_REPLY_TO?: string;
   /** Optional Workers rate-limiting binding, keyed per License Key. */
   KEY_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
@@ -272,7 +270,7 @@ export const mailerOverride: { current: KeyMailer | null } = { current: null };
 function keyMailer(env: Env): KeyMailer | null {
   if (mailerOverride.current) return mailerOverride.current;
   if (!env.EMAIL || !env.EMAIL_FROM) return null;
-  return new CloudflareMailer(env.EMAIL, parseSender(env.EMAIL_FROM), env.EMAIL_REPLY_TO ?? "support@keybumps.app");
+  return new CloudflareMailer(env.EMAIL, parseSender(env.EMAIL_FROM));
 }
 
 const RESEND_INTERVAL = 10 * 60;

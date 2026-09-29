@@ -112,17 +112,16 @@ it("builds a plain and HTML email that includes every key", () => {
 });
 
 describe("CloudflareMailer", () => {
-  it("sends one message with sender, reply-to, and both bodies", async () => {
+  it("sends one message from the sender with both bodies", async () => {
     const calls: unknown[] = [];
     const binding = { send: async (message: unknown) => (calls.push(message), { messageId: "m1" }) } as unknown as SendEmail;
-    await new CloudflareMailer(binding, parseSender("Keybumps <licenses@keybumps.app>"), "support@keybumps.app").sendKeys("a@b.co", [
+    await new CloudflareMailer(binding, parseSender("Keybumps <support@keybumps.app>")).sendKeys("a@b.co", [
       { productName: "Keybumps", key: "KB-AAAA-BBBB-CCCC-DDDD" },
     ]);
     expect(calls).toEqual([
       expect.objectContaining({
-        from: { name: "Keybumps", email: "licenses@keybumps.app" },
+        from: { name: "Keybumps", email: "support@keybumps.app" },
         to: "a@b.co",
-        replyTo: "support@keybumps.app",
         subject: "Your Keybumps license key",
         text: expect.stringContaining("KB-AAAA-BBBB-CCCC-DDDD"),
         html: expect.stringContaining("KB-AAAA-BBBB-CCCC-DDDD"),
@@ -131,6 +130,6 @@ describe("CloudflareMailer", () => {
   });
 
   it("parses a bare sender address", () => {
-    expect(parseSender("licenses@keybumps.app")).toEqual({ name: "", email: "licenses@keybumps.app" });
+    expect(parseSender("support@keybumps.app")).toEqual({ name: "", email: "support@keybumps.app" });
   });
 });

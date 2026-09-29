@@ -10,7 +10,7 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
 
 1. **License keys, no accounts.**
    - Customers buy on the website and receive a License Key. The app has no sign-in.
-   - The licensing service emails the key when the purchase is paid.
+   - The licensing service emails the key when the purchase is paid, from `support@keybumps.app` through Cloudflare Email Service. Following the SERP transactional-email standard, that one address both sends and receives replies.
    - A "resend my key" form on the website emails every key on file to the purchase address, and only to that address.
    - We will not use BetterAuth or any other account system unless a later ADR adds accounts.
 2. **Polar is the first payment provider, as merchant of record.**
