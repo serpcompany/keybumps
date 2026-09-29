@@ -9,7 +9,7 @@ violations=()
 
 while IFS= read -r tracked_file; do
   case "$tracked_file" in
-    AGENTS.md|project.yml|Keybumps.xcodeproj/project.pbxproj|scripts/check-legacy-branding.sh|docs/development-workflow.md|Keybumps/Delivery/SystemChannelAdapters.swift|KeybumpsTests/KeyboardShortcutterTests.swift|docs/releases/sparkle-update-operations.md)
+    AGENTS.md|project.yml|Keybumps.xcodeproj/project.pbxproj|scripts/check-legacy-branding.sh|docs/development-workflow.md|KeybumpsTests/KeyboardShortcutterTests.swift|docs/releases/sparkle-update-operations.md)
       continue
       ;;
     docs/provenance/*|public/*)

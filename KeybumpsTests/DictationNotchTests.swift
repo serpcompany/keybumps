@@ -48,6 +48,7 @@ struct DictationNotchPanelTests {
     @Test("Recording shows the notch view in a visible panel at the top of the screen, and idle hides it")
     func showsNotchView() throws {
         let indicator = DictationIndicatorController()
+        defer { indicator.update(.idle) }
         indicator.update(.recording)
         let panel = try #require(indicator.panel)
         #expect(panel.contentView is NSHostingView<DictationNotchView>)

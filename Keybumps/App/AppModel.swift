@@ -596,7 +596,8 @@ final class AppModel {
     func clearHistory() { inbox.clear() }
     /// Records a detected action in history, then shows its tip in the notch when that is on.
     private func deliver(_ event: CoachingEvent) {
-        guard (try? inbox.append(event)) != nil else { return }
+        guard preferences.enabledCapabilities.contains(.keyboardShortcutter),
+              (try? inbox.append(event)) != nil else { return }
         if preferences.showsCoachTips { coachTips.showCoach(NotchCoachPresentation(event: event)) }
     }
 

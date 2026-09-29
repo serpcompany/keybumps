@@ -12,6 +12,12 @@ struct UnitTestHostTests {
         let notice = PaletteHUD()
         notice.showCoach(NotchCoachPresentation(event: .sample))
         defer { notice.dismiss() }
+        notice.show("Copied to Clipboard")
+        notice.dismissCoach()
+        #expect(NSApp.windows.contains { $0.identifier?.rawValue == "paletteHUD" && $0.isVisible }, "dismissCoach leaves a non-tip notice")
+        notice.showCoach(NotchCoachPresentation(event: .sample))
+        notice.dismissCoach()
+        #expect(!NSApp.windows.contains { $0.identifier?.rawValue == "paletteHUD" && $0.isVisible }, "dismissCoach hides a tip")
 
         let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         window.hideDuringUnitTests()
