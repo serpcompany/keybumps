@@ -1,0 +1,18 @@
+# SERP licensing service. See docs/adr/0001-licensing.md.
+# Deploying requires fresh owner authorization; database_id is set then.
+name = "serp-licensing"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+workers_dev = false
+
+# Licensing routes must not be request-logged (ADR §10).
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "serp-licensing"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN.
