@@ -2,8 +2,8 @@
 
 This corrected pack is generated directly from the two approved source images:
 
-- `source/keybumps-approved.png` — the approved keycap logo, unchanged.
-- `source/keybumps-mascot-approved.png` — the approved standalone mascot, trimmed and centered without redrawing it.
+- `source/keybumps-key-with-accents.png` — the approved keycap logo, unchanged.
+- `source/keybumps-mascot-no-accents.png` — the approved standalone mascot, trimmed and centered without redrawing it.
 
 All platform icons are resized or composited from those exact sources. No substitute geometry was introduced.
 
@@ -17,6 +17,11 @@ All platform icons are resized or composited from those exact sources. No substi
 - `png/` — common-size exports of the approved keycap and mascot.
 - `svg/` — faithful SVG containers linked to the approved raster sources. These are intentionally not fake vector redraws.
 - `monochrome/` — silhouette variants derived mechanically from the approved pixels for one-color contexts.
+- `press/` — PDF and JPEG versions for press use.
+- `tokens/` — brand colors as CSS and JSON tokens.
+- `brand-preview.png` — both approved marks side by side.
+
+Provenance: original Keybumps artwork approved by the owner; no third-party assets.
 
 ## Important SVG note
 
