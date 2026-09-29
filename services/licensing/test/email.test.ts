@@ -1,6 +1,7 @@
-import { exports } from "cloudflare:workers";
+import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
+import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mailerOverride } from "../src/index";
+import worker, { mailerOverride } from "../src/index";
 import { keyEmailContent, type KeyEmail } from "../src/mailer";
 import { deliver, order } from "./polar-fixtures";
 
@@ -39,12 +40,23 @@ async function admin(path: string, body: unknown) {
   });
 }
 
-const resend = (email: string) =>
-  exports.default.fetch("https://licensing.test/v1/resend-key", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
+/** Calls the Worker directly so the test can wait for work scheduled after the response. */
+async function resend(email: string) {
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(
+    new Request("https://licensing.test/v1/resend-key", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    }),
+    env,
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  return response;
+}
+
+const runSchedule = () => worker.scheduled(createScheduledController(), env);
 
 describe("key email on purchase", () => {
   it("emails the new key once, even when the order is redelivered", async () => {
@@ -56,15 +68,15 @@ describe("key email on purchase", () => {
     expect(sent[0].keys).toEqual([{ productName: "Keybumps", key: expect.stringMatching(/^KB-/) }]);
   });
 
-  it("asks Polar to retry when sending fails, then sends only the unsent key", async () => {
+  it("acknowledges the order when sending fails, and the scheduled retry sends the key once", async () => {
     const paid = order("retry@example.com");
     failNext = true;
-    expect(await deliver(paid)).toBe(502);
+    expect(await deliver(paid)).toBe(200);
     expect(sent).toHaveLength(0);
-    expect(await deliver(paid)).toBe(200);
-    expect(sent).toHaveLength(1);
-    expect(await deliver(paid)).toBe(200);
-    expect(sent).toHaveLength(1);
+    await runSchedule();
+    expect(sent.filter((mail) => mail.to === "retry@example.com")).toHaveLength(1);
+    await runSchedule();
+    expect(sent.filter((mail) => mail.to === "retry@example.com")).toHaveLength(1);
   });
 });
 

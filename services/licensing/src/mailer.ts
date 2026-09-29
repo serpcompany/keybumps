@@ -20,6 +20,7 @@ export class ResendMailer implements KeyMailer {
       method: "POST",
       headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({ from: this.from, to: [to], ...keyEmailContent(keys) }),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`email provider returned ${response.status}`);
   }
@@ -68,4 +69,26 @@ export async function deliverPendingKeys(db: D1Database, mailer: KeyMailer, cust
   if (results.length === 0) return;
   await mailer.sendKeys(results[0].email, results.map(({ productName, key }) => ({ productName, key })));
   await db.batch(results.map((row) => db.prepare("UPDATE licenses SET key_emailed_at = ? WHERE id = ?").bind(now, row.id)));
+}
+
+/** Keys still unsent a week after purchase are left to support. */
+const RETRY_WINDOW = 7 * 86_400;
+
+/** Emails keys whose purchase-time send failed. Run on a schedule. */
+export async function deliverUnsentKeys(db: D1Database, mailer: KeyMailer, now: number): Promise<void> {
+  const { results } = await db
+    .prepare(
+      `SELECT DISTINCT customer_id FROM licenses
+       WHERE key_emailed_at IS NULL AND status = 'active' AND customer_id IS NOT NULL AND created_at > ?
+       LIMIT 50`,
+    )
+    .bind(now - RETRY_WINDOW)
+    .all<{ customer_id: string }>();
+  for (const { customer_id } of results) {
+    try {
+      await deliverPendingKeys(db, mailer, customer_id, now);
+    } catch {
+      // Try again on the next run.
+    }
+  }
 }

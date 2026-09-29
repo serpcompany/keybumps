@@ -28,6 +28,8 @@ wrangler d1 migrations apply keybumps-licensing --remote
 if [[ ! -f "$secrets_file" ]]; then
   echo "Generating the production signing key and admin token..."
   umask 077
+  # Never leave the private key on disk, even if a later step fails.
+  trap 'rm -f prod-1.signing-key.json' EXIT
   node scripts/generate-signing-key.mjs prod-1 >/dev/null
   wrangler secret put LEASE_SIGNING_KEY --env "" < prod-1.signing-key.json
   node -e '
@@ -59,13 +61,14 @@ node -e '
 
 cat <<'NEXT'
 
-Production licensing is deployed at https://licensing.keybumps.app. Remaining owner steps:
-  1. Polar (live) > Settings > Webhooks > Add Endpoint:
+Production licensing is deployed at https://licensing.keybumps.app. Remaining owner steps,
+in this order so no paid order arrives before keys can be emailed:
+  1. Resend: verify keybumps.app as a sending domain, create an API key, then run:
+       npx wrangler secret put RESEND_API_KEY --env ""
+  2. Polar (live) > Settings > Webhooks > Add Endpoint:
        URL https://licensing.keybumps.app/webhooks/polar, format Raw, API version 2026-04,
        events order.paid, order.refunded, refund.created, subscription.active, .canceled,
        .cycled, .revoked, .uncanceled, .updated. Then copy its secret and run:
        npx wrangler secret put POLAR_WEBHOOK_SECRET --env ""
-  2. Resend: verify keybumps.app as a sending domain, create an API key, then run:
-       npx wrangler secret put RESEND_API_KEY --env ""
   3. Website: set LICENSING_API_URL = "https://licensing.keybumps.app" and deploy the site.
 NEXT

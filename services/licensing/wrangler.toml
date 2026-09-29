@@ -7,6 +7,10 @@ compatibility_date = "2026-06-01"
 workers_dev = false
 routes = [{ pattern = "licensing.keybumps.app", custom_domain = true }]
 
+# Retries key emails that failed at purchase time.
+[triggers]
+crons = ["*/15 * * * *"]
+
 [vars]
 EMAIL_FROM = "Keybumps <licenses@keybumps.app>"
 

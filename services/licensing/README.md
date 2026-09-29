@@ -60,7 +60,7 @@ A paid order becomes a License through an Offer. The checkout link's `offer` met
 
 ## Key email
 
-A paid order emails its License Key through Resend. If sending fails, the webhook returns `502` so Polar retries, and a retry sends only keys not yet emailed (`licenses.key_emailed_at`).
+A paid order emails its License Key through Resend. If sending fails, the order is still acknowledged. A cron (every 15 minutes) retries keys whose `licenses.key_emailed_at` is still unset, for up to 7 days. A crash between sending and recording can, rarely, send the same key twice. `/v1/resend-key` does its lookup and sending after responding, so response time never reveals whether an address bought.
 
 ## Environments
 
