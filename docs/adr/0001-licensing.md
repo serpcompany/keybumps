@@ -28,21 +28,28 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
 
    The app checks `validUntil` and `updatesUntil`. The service enforces `maxActivations` during Activation. One-time, one-time with an update window, and subscription offers can therefore run side by side, and pricing experiments need no app release.
 5. **The updater respects `updatesUntil`.**
-   - Each release embeds its release date in Info.plist (`KBBuildReleaseDate`) and publishes the same date in its appcast item.
-   - Before Sparkle proceeds, the licensing seam compares the update's release date with `updatesUntil`.
-   - An update that isn't entitled is never installed automatically. Sparkle shows it as requiring an upgrade, and the installed, entitled build keeps working.
+   - Each release embeds its release date in Info.plist (`KBBuildReleaseDate`), set by the release script.
+   - The release script also publishes that same date as a custom element on the build's appcast item. Sparkle's `pubDate` is for display only.
+   - The licensing seam filters appcast items in Sparkle's `bestValidUpdate` delegate. Items released after `updatesUntil` are never offered or installed, and the installed, entitled build keeps working.
+   - The License settings page, not Sparkle, shows that a newer version needs an upgrade.
+   - A newer build installed by hand is Locked, with an "outside your update window" message and a link to the last covered version.
 6. **Signed leases, verified offline.**
    - Activation exchanges a License Key and a device hash for a Lease. The Lease is a compact payload the service signs with Ed25519: `{kid, licenseId, product, deviceHash, validUntil?, updatesUntil?, issuedAt, refreshAfter, expiresAt}`.
    - The app verifies the signature with CryptoKit and rejects any Lease whose `product` or `deviceHash` differs from its own.
    - Info.plist embeds a small set of public keys indexed by `kid`, so the signing key can be rotated by shipping the new public key before signing with it. Private keys live only in Worker secrets, like Sparkle's EdDSA key.
+   - A leaked key stays trusted by builds already installed until they update. This is accepted as a risk for software without DRM: the response is to rotate the key and drop the old `kid` in the next release.
    - The app stores the Lease and key in the Keychain.
    - The device hash is SHA-256 of the hardware UUID and a per-product salt embedded in the app. Only the hash leaves the Mac.
 7. **Revocation happens through lease expiry, not a remote kill switch.**
    - A Lease carries `refreshAfter` (about 7 days) and `expiresAt` (about 45 days).
    - The app refreshes silently whenever it's online after `refreshAfter`. The next refresh returns `revoked` after a refund, a dispute, or the end of a subscription's paid period. A subscription that is canceled but still paid for stays valid until `validUntil`.
-   - A Mac that stays offline keeps working until `expiresAt`, and sees a warning during the final week. Past that point, one successful refresh is required. This is the only case where a paying customer must reconnect.
+   - A Mac that stays offline keeps working until `expiresAt`, and sees a warning during the final week. Past that point, one successful refresh is required.
+   - A subscription Lease is refreshed as soon as `validUntil` passes, and stays usable for a 7-day grace period so a renewal that hasn't reached the app yet doesn't lock the Mac.
+   - These are the only cases where a paying customer must reconnect.
    - A network or server error never changes the current state.
-   - The app keeps a Keychain high-water mark of trusted time (the latest `issuedAt` or observed time). A clock set earlier than that mark is treated as the mark, so rolling the clock back cannot extend a Lease.
+   - The app keeps a Keychain high-water mark of trusted time, advanced only by server time: a Lease's `issuedAt`, plus the elapsed monotonic uptime since it was received in this boot.
+   - Every successful refresh resets the mark to the server's time. A local clock earlier than the mark is treated as the mark, so rolling the clock back cannot extend a Lease.
+   - Setting the clock forward cannot poison the mark.
    - We don't use obfuscation, anti-debugging, or DRM. The goal is to deter casual sharing without locking out paying customers.
 8. **Activation slots can be recovered.**
    - Deactivating in the app frees its slot.
@@ -50,11 +57,15 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
 9. **Locked until activated. There is no trial.** Without an entitled Lease, capabilities do not start. Only onboarding, the License settings page, and Quit are available.
 10. **Privacy.**
     - Licensing requests carry only product, License Key, device hash, app version, and OS version.
+    - The service stores the purchase email, which comes from the provider, only to deliver and resend keys.
+    - The resend form always replies with the same message, so it never reveals whether an address has bought.
     - The service does not store client IP addresses. Rate limiting uses short-lived counters.
     - Workers request logging stays off for licensing routes.
     - Neither the app nor the service logs keys or device hashes.
 
 ## Consequences
+
+- Current beta testers are Locked by the first licensed build unless they hold a License. Before that build ships, the owner decides whether to give testers complimentary Licenses (issued through the service's admin surface) and announces the change in its release notes.
 
 - Licensing is an app-shell seam (`LicenseControlling`), modeled on `UpdateControlling`. Capability modules see it only in whether they may start.
 - The Settings account page's "Local Preview" license group and the onboarding sentence saying purchasing is not part of this preview (`SettingsRootView.swift`) are replaced by the License page and an activation step.
