@@ -45,7 +45,7 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ### Notch notices
 
-Brief confirmations and warnings grow out of the notch: the message sits left of the camera housing and an icon or shortcut keycaps right of it, on black that blends with the notch. Screens without a notch show the same black tab hanging from the top of the menu bar. Notices spring open, stay about 1.6 seconds (3 seconds for warnings and coaching), and fade; they never take focus or intercept clicks.
+Brief confirmations and warnings grow out of the notch: the message sits left of the camera housing and an icon or shortcut keycaps right of it, on black that blends with the notch. Screens without a notch show the same black tab hanging from the top of the menu bar. Notices spring open, stay about 1.6 seconds (3 seconds for warnings), and fade; they never take focus or intercept clicks. Shortcut Coach tips use a larger two-row form of the same notice (see Shortcut Coach) and stay 4 seconds. With Reduce Motion on, notices appear without bouncing, popping, or a moving glow.
 
 ## Quick Search
 

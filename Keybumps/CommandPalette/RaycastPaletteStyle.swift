@@ -132,21 +132,17 @@ final class PaletteHUD {
     /// A Shortcut Coach tip: the notch drops down into a two-row panel with the app's icon, the
     /// action and app name, and the shortcut's keycaps, edged with an animated glow so it is hard
     /// to miss.
-    func showCoach(action: String, application: String, shortcut: String, duration: TimeInterval = 4) {
+    func showCoach(_ presentation: NotchCoachPresentation, duration: TimeInterval = 4) {
         guard let screen = NSScreen.main else { return }
-        let icon = NSWorkspace.shared.runningApplications
-            .first { $0.localizedName == application }?.icon
         present(
             NotchCoachView(
-                action: action,
-                application: application,
-                icon: icon,
-                keys: ShortcutKeycapPresentation(shortcut: shortcut).keys,
+                presentation: presentation,
+                icon: presentation.applicationIcon(),
                 notchWidth: Self.notchWidth(of: screen),
                 notchHeight: max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28)
             ),
             on: screen,
-            announcement: "\(action), \(application), \(KeyboardShortcutRegistry.accessibilityCopy(for: shortcut))",
+            announcement: presentation.announcement,
             duration: duration
         )
     }
@@ -172,7 +168,11 @@ final class PaletteHUD {
         let work = DispatchWorkItem { [weak panel] in
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel?.animator().alphaValue = 0 }) {
                 // A newer show may have started during the fade.
-                if panel?.alphaValue == 0 { panel?.orderOut(nil) }
+                if panel?.alphaValue == 0 {
+                    panel?.orderOut(nil)
+                    // Drop the view so its animations stop while nothing is shown.
+                    panel?.contentView = nil
+                }
             }
         }
         hideWork = work
@@ -253,13 +253,32 @@ private struct NotchNoticeView: View {
     }
 }
 
-private struct NotchCoachView: View {
+/// What a Shortcut Coach notch tip shows and says.
+struct NotchCoachPresentation: Equatable {
     let action: String
     let application: String
-    let icon: NSImage?
     let keys: [String]
+    let announcement: String
+
+    init(event: CoachingEvent) {
+        action = event.actionTitle
+        application = event.applicationName
+        keys = ShortcutKeycapPresentation(shortcut: event.shortcut).keys
+        announcement = "\(event.actionTitle), \(event.applicationName), \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))"
+    }
+
+    /// The icon of the running app the tip is about, matched by its display name.
+    func applicationIcon(in running: [NSRunningApplication] = NSWorkspace.shared.runningApplications) -> NSImage? {
+        running.first { $0.localizedName == application }?.icon
+    }
+}
+
+private struct NotchCoachView: View {
+    let presentation: NotchCoachPresentation
+    let icon: NSImage?
     let notchWidth: CGFloat
     let notchHeight: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShown = false
     @State private var glowAngle = 0.0
     @State private var poppedKeys = 0
@@ -278,10 +297,10 @@ private struct NotchCoachView: View {
             }
             .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 0) {
-                Text(action)
+                Text(presentation.action)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
-                Text(application)
+                Text(presentation.application)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
             }
@@ -289,7 +308,7 @@ private struct NotchCoachView: View {
             .fixedSize()
             Spacer(minLength: 24)
             HStack(spacing: 5) {
-                ForEach(Array(keys.enumerated()), id: \.offset) { index, key in
+                ForEach(Array(presentation.keys.enumerated()), id: \.offset) { index, key in
                     PaletteKeycap(key)
                         .scaleEffect(index < poppedKeys ? 1 : 0.4)
                         .opacity(index < poppedKeys ? 1 : 0)
@@ -314,9 +333,15 @@ private struct NotchCoachView: View {
         .padding([.horizontal, .bottom], 24)
         .environment(\.colorScheme, .dark)
         .onAppear {
+            // With Reduce Motion, appear in place with every key showing and a still glow.
+            guard !reduceMotion else {
+                isShown = true
+                poppedKeys = presentation.keys.count
+                return
+            }
             withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) { isShown = true }
             withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) { glowAngle = 360 }
-            for index in keys.indices {
+            for index in presentation.keys.indices {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25 + Double(index) * 0.12) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { poppedKeys = index + 1 }
                 }

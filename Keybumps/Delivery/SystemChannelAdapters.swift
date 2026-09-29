@@ -198,6 +198,6 @@ final class NotchChannelAdapter: ChannelDelivering {
     private let notice = PaletteHUD()
 
     func deliver(_ event: CoachingEvent) async throws {
-        notice.showCoach(action: event.actionTitle, application: event.applicationName, shortcut: event.shortcut)
+        notice.showCoach(NotchCoachPresentation(event: event))
     }
 }
