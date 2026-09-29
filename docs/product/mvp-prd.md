@@ -8,7 +8,7 @@ Keybumps is one native macOS companion with six independently enabled capabiliti
 2. Clipboard History
 3. Dictation
 4. Window Manager
-5. Keyboard Shortcutter
+5. Shortcut Coach
 6. Screenshot Tools
 
 The permanent bundle identifier is `com.serp.keybumps`. The supported baseline is Apple Silicon on macOS 14.2 or newer. User content and processing remain local: no account, sync, analytics backend, cloud transcription, hosted history, or uploaded search, clipboard, transcript, filename, recording, or coaching content.
@@ -18,7 +18,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 ## Application shell
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
-- Settings follows Raycast's dark settings layout: an account row showing the local macOS user (no sign-in), then Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Keyboard Shortcutter, Permissions, and General. Each capability page has its enable switch in the toolbar and a Commands group of Raycast-style hotkey fields.
+- Settings follows Raycast's dark settings layout: an account row showing the local macOS user (no sign-in), then Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, Permissions, and General. Each capability page has its enable switch in the toolbar and a Commands group of Raycast-style hotkey fields.
 - Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed. Escape closes Settings like Command-W, except while a hotkey field is recording, a sheet or alert is open, or a text field has text in it.
 - Clicking the Dock icon opens Quick Search.
 - The menu-bar menu contains Open Keybumps (showing the Quick Search shortcut), About Keybumps, Check for Updates…, Settings…, and Quit Keybumps.
@@ -34,13 +34,13 @@ Conflict resolution detects the supported reference apps when they are running a
 ## Shared Command Palette
 
 - The palette copies Raycast's launcher: a near-black window, the search input on top, tabs below it, compact rows with a rounded neutral highlight, outlined keycaps, and a floating action pill at the bottom right listing the tab's keys.
-- Search, Clipboard, Screenshots, Dictation, and Hotkeys (Keyboard Shortcutter history) are peer tabs selected by Command-1/2/3/4/5. Hotkeys is hidden by default; Keyboard Shortcutter settings can show it, and Open Keyboard Shortcutter History always opens it.
+- Search, Clipboard, Screenshots, Dictation, and Hotkeys (Shortcut Coach history) are peer tabs selected by Command-1/2/3/4/5. Hotkeys is hidden by default; Shortcut Coach settings can show it, and Open Shortcut Coach History always opens it.
 - The tab chrome shows only the shortcut keycaps and tab name.
 - Delete removes the highlighted row in Search's Recent Items, Clipboard, Screenshots, and Dictation once the search field is empty; Command-Delete works while typing. Deleting a recording stops its playback.
 - Copying from Clipboard, Screenshots, Dictation, or the Screenshot Editor closes the surface and shows **Copied to Clipboard** at the notch (see Notch notices).
 - One dominant input filters the active tab; history inputs use the label **Search**.
 - Arrow keys move selection (the Screenshots grid also uses Left and Right), Return performs the primary action where one exists, and Escape closes the palette.
-- Keyboard Shortcutter rows are informational: selection and Return never copy content or mutate history.
+- Shortcut Coach rows are informational: selection and Return never copy content or mutate history.
 - History surfaces share the same native `Clear All` control and destructive confirmation behavior. Confirmation presentation must not trigger outside-click dismissal.
 
 ### Notch notices
@@ -170,13 +170,13 @@ Out of scope: Rectangle Todo Mode, green-stoplight override, and Rectangle brand
 
 Acceptance requires every assigned shortcut against normal resizable windows, repeated-command behavior, cross-display movement where applicable, and physical verification of each supported drag region.
 
-## Keyboard Shortcutter
+## Shortcut Coach
 
 User outcome: passively recognize supported manual actions and present the corresponding keyboard shortcut.
 
 - Detect the supported menu, Chrome, standard-window-control, and Finder-to-Trash actions.
 - Persist one durable event per verified action with unread state and searchable history.
-- Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘5, hidden by default); Settings keeps the Keyboard Shortcutter name.
+- Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘5, hidden by default); Settings keeps the Shortcut Coach name.
 - Deliver through Notch (the default: the action and its shortcut keycaps as a notch notice), Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Several can be on at once; new installs start with only Notch.
 - Preview through the same production delivery adapters without writing a history event.
 - Custom presentations share close, Escape, horizontal-trackpad-scroll, hover-pause, and dismissal behavior.
@@ -204,7 +204,7 @@ One coordinator reports truthful state and recovery for all permissions. Keybump
 | Screenshot Tools | Screen Recording for its capture hotkeys; macOS may ask for Files & Folders access to the screenshot folder |
 | Dictation | Microphone, Speech Recognition, conditional Accessibility |
 | Window Manager | Accessibility |
-| Keyboard Shortcutter | Accessibility and Input Monitoring |
+| Shortcut Coach | Accessibility and Input Monitoring |
 
 Accessibility and Input Monitoring use silent preflight, exact System Settings navigation, and the app-owned helper. Microphone and Speech Recognition use their required native prompts only before the first decision; once denied or restricted they recover through their exact System Settings pane, because macOS will not prompt again. Changing Microphone access in System Settings restarts Keybumps, which then reports the new state. Returning to Keybumps refreshes state and advances the guided flow when access is granted.
 
@@ -229,7 +229,7 @@ The functional MVP is accepted only when one stable installed Keybumps build dem
 - Shift-Command-Space recalls bounded text and image history and restores the chosen item to the clipboard.
 - Option-Space records, transcribes locally, inserts text, and supports Escape cancellation.
 - Every configured Window Manager shortcut and supported drag region works.
-- Supported Finder and Chrome actions create correct Keyboard Shortcutter events.
+- Supported Finder and Chrome actions create correct Shortcut Coach events.
 - Each Screenshot Tools hotkey captures from another app after granting Screen Recording, ⇧⌘3 opens the editor, and macOS's ⇧⌘3/⇧⌘4 work again when Screenshot Tools is off.
 - A macOS screenshot appears in Clipboard History and the ⌘3 Screenshots tab, restores correctly to the clipboard, and opens in the Screenshot Editor, where redactions export unreadable.
 - Capability switches stop and restart owned resources without duplicate shortcuts or monitors.

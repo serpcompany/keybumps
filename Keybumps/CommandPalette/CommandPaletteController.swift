@@ -207,7 +207,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func makePanel() {
-        let size = NSSize(width: 840, height: 560)
+        let size = NSSize(width: 1040, height: 635)
         let panel = CommandPalettePanel(contentRect: NSRect(origin: .zero, size: size))
         panel.delegate = self
         panel.isOpaque = false
@@ -750,7 +750,7 @@ private struct KeyboardShortcutterResultsView: View {
         PaletteResultsContainer {
             switch content {
             case .disabled:
-                PaletteEmptyState(title: "Keyboard Shortcutter is turned off", systemImage: "keyboard")
+                PaletteEmptyState(title: "Shortcut Coach is turned off", systemImage: "keyboard")
             case .empty:
                 PaletteEmptyState(title: "No matching hotkeys", systemImage: "keyboard")
             case .entries(let entries):
@@ -759,8 +759,8 @@ private struct KeyboardShortcutterResultsView: View {
                         PaletteSectionHeader("Recent")
                         Spacer()
                         ClearAllButton(
-                            confirmationTitle: "Clear Keyboard Shortcutter history?",
-                            confirmationMessage: "This permanently removes all saved Keyboard Shortcutter events.",
+                            confirmationTitle: "Clear Shortcut Coach history?",
+                            confirmationMessage: "This permanently removes all saved Shortcut Coach events.",
                             disabled: entries.isEmpty,
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear

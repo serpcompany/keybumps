@@ -3,7 +3,7 @@ import SwiftUI
 extension CapabilityDescriptor {
     static let keyboardShortcutter = CapabilityDescriptor(
         capability: .keyboardShortcutter,
-        title: "Keyboard Shortcutter",
+        title: "Shortcut Coach",
         systemImage: "keyboard",
         iconTint: .gray,
         requiredPermissions: [.accessibility, .inputMonitoring],
