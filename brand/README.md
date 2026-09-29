@@ -10,7 +10,7 @@ All platform icons are resized or composited from those exact sources. No substi
 ## Folder guide
 
 - `apple/ios/AppIcon.appiconset/` — current Xcode light, dark, and tinted 1024px icon appearances.
-- `apple/macos/Keybumps.icon` — the macOS app icon as an Icon Composer file (keycap and mascot layers on a purple gradient), the same file the app uses. `Keybumps.icns` and `png/` (16–1024 px) are renders of it for other uses; regenerate them from a built app with `swift scripts/render-app-icon.swift <Keybumps.app> <out.iconset>` then `iconutil -c icns <out.iconset> -o brand/apple/macos/Keybumps.icns`.
+- `apple/macos/Keybumps.icon` — the macOS app icon as an Icon Composer file (keycap and mascot layers on a purple gradient), the same file the app uses. `Keybumps.icns` and `png/` (16–1024 px) are renders of it for other uses; regenerate them from a built app with `swift scripts/render-app-icon.swift <Keybumps.app> <out.iconset>`, then `iconutil -c icns <out.iconset> -o brand/apple/macos/Keybumps.icns` and `cp <out.iconset>/*.png brand/apple/macos/png/`.
 - `android/res/` — legacy density icons and adaptive icon resources.
 - `web/` — favicon, Apple touch icon, PWA assets, maskable icons, and manifest.
 - `social/` — avatar, Open Graph card, and wide banner using the approved artwork.

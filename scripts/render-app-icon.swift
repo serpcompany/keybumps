@@ -1,19 +1,51 @@
-// Renders a built Keybumps.app's icon (compiled from Keybumps.icon) at every macOS icon size,
-// for the brand pack's brand/apple/macos/png and Keybumps.icns.
+// Renders a built Keybumps.app's icon (compiled from Keybumps.icon) at every macOS icon size, in
+// the light appearance, into an .iconset folder, for the brand pack's brand/apple/macos/png and
+// Keybumps.icns.
+//
 // usage: swift scripts/render-app-icon.swift <Keybumps.app> <output.iconset>
 //        iconutil -c icns <output.iconset> -o brand/apple/macos/Keybumps.icns
+//        cp <output.iconset>/*.png brand/apple/macos/png/
 import AppKit
-let app = CommandLine.arguments[1], out = CommandLine.arguments[2]
-let icon = NSWorkspace.shared.icon(forFile: app)
-for (point, scales) in [(16, [1, 2]), (32, [1, 2]), (128, [1, 2]), (256, [1, 2]), (512, [1, 2])] {
-    for scale in scales {
-        let pixels = point * scale
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        icon.draw(in: NSRect(x: 0, y: 0, width: pixels, height: pixels))
-        NSGraphicsContext.restoreGraphicsState()
-        let name = "icon_\(point)x\(point)\(scale == 2 ? "@2x" : "").png"
-        try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out).appendingPathComponent(name))
+
+let arguments = CommandLine.arguments
+guard arguments.count == 3 else {
+    FileHandle.standardError.write(Data("usage: swift \(arguments[0]) <Keybumps.app> <output.iconset>\n".utf8))
+    exit(64)
+}
+let output = URL(fileURLWithPath: arguments[2])
+try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+let icon = NSWorkspace.shared.icon(forFile: arguments[1])
+
+/// Share of pixels that are at least half opaque; a failed lookup returns a mostly clear placeholder.
+func opaqueShare(_ bitmap: NSBitmapImageRep) -> Double {
+    var opaque = 0
+    for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+        for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 {
+            opaque += 1
+        }
+    }
+    return Double(opaque) / Double(((bitmap.pixelsWide + 3) / 4) * ((bitmap.pixelsHigh + 3) / 4))
+}
+
+NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
+    for point in [16, 32, 128, 256, 512] {
+        for scale in [1, 2] {
+            let pixels = point * scale
+            // Asking for an explicit size makes the icon service render that size; drawing the
+            // image into a bitmap returns a placeholder at 1024 px.
+            var rect = NSRect(x: 0, y: 0, width: pixels, height: pixels)
+            guard let image = icon.cgImage(forProposedRect: &rect, context: nil, hints: [.ctm: AffineTransform()]) else {
+                FileHandle.standardError.write(Data("could not render \(pixels) px\n".utf8))
+                exit(70)
+            }
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            guard bitmap.pixelsWide == pixels, opaqueShare(bitmap) > 0.3 else {
+                FileHandle.standardError.write(Data("\(pixels) px render is not the app icon; is \(arguments[1]) built?\n".utf8))
+                exit(70)
+            }
+            let name = "icon_\(point)x\(point)\(scale == 2 ? "@2x" : "").png"
+            try! bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name))
+        }
     }
 }
+print("Wrote \(output.path)")
