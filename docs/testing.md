@@ -77,7 +77,7 @@ For changes that touch capability wiring or system integration, the hand-off inc
 2. A window shortcut and one drag-to-snap work on a normal app window.
 3. Dictation inserts text into TextEdit; Escape cancels.
 4. Shift-Command-2/3/4 capture from another app (Shift-Command-3 opens the editor), the shot appears in ⌘3, Done shows Copied to Clipboard at the notch and pastes into another app, and macOS's own Shift-Command-3/4 work again with Screenshot Tools off.
-5. A Shortcut Coach action in Finder produces its notification.
+5. A Shortcut Coach action in Finder produces its notch notice.
 6. A denied permission shows System Settings recovery.
 7. Toggling a capability off and on in Settings stops and restores it.
 8. Quit and relaunch keeps settings and histories.
