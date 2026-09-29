@@ -1,10 +1,10 @@
 import Foundation
 
 enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable {
+    case notch
     case nativeBanner
     case topRightToast
     case topCenterShelf
-    case notch
     case sound
 
     var id: String { rawValue }

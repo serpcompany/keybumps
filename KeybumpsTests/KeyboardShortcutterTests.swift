@@ -857,10 +857,11 @@ final class KeyboardShortcutterTests: XCTestCase {
 
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.showInDockAndSwitcher)
-        XCTAssertEqual(preferences.selectedChannels, [.topRightToast])
+        XCTAssertEqual(preferences.selectedChannels, [.notch])
+        XCTAssertEqual(NotificationChannel.allCases.first, .notch, "Notch leads the Settings list")
 
         preferences.set(.sound, enabled: true)
-        preferences.set(.topRightToast, enabled: false)
+        preferences.set(.notch, enabled: false)
         preferences.showInDockAndSwitcher = false
 
         let restored = AppPreferences(defaults: defaults)
@@ -884,7 +885,7 @@ final class KeyboardShortcutterTests: XCTestCase {
         let preferences = AppPreferences(defaults: defaults)
 
         preferences.set(.topCenterShelf, enabled: true)
-        XCTAssertEqual(preferences.selectedChannels, [.topRightToast, .topCenterShelf])
+        XCTAssertEqual(preferences.selectedChannels, [.notch, .topCenterShelf])
     }
 
     func testRemovedPresentationChannelsAreMigratedOutOfPersistedPreferences() {
