@@ -65,6 +65,7 @@ struct KeybumpsApp: App {
                     Text("macOS has not made \(permission.title) available to this running copy of Keybumps. Restart now to finish setup.")
                 }
                 .modifier(MainWindowRoutingModifier(model: model))
+                .background(SettingsEscapeCloser())
         }
         .defaultSize(width: 960, height: 944)
         .commands {

@@ -19,7 +19,7 @@ This document is the source of truth for user-facing behavior and scope. `CONTEX
 
 - Present one Dock icon, one menu-bar item, one reusable Settings window, one onboarding flow, and one Command Palette.
 - Settings follows Raycast's dark settings layout: an account row showing the local macOS user (no sign-in), then Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Keyboard Shortcutter, Permissions, and General. Each capability page has its enable switch in the toolbar and a Commands group of Raycast-style hotkey fields.
-- Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed.
+- Command-comma and the menu-bar Settings action recreate and raise Settings after its window has been closed. Escape closes Settings like Command-W, except while a hotkey field is recording, a sheet or alert is open, or a text field has text in it.
 - Clicking the Dock icon opens Quick Search.
 - The menu-bar menu contains Open Keybumps (showing the Quick Search shortcut), About Keybumps, Check for Updates…, Settings…, and Quit Keybumps.
 - Each capability owns its detailed settings. Disabling one immediately stops its services and releases its shortcuts without erasing retained local history.

@@ -36,6 +36,15 @@ final class SmokeUITests: XCTestCase {
         }
     }
 
+    func testEscapeClosesSettings() {
+        launch(permissions: "granted", ["-KBOpenSettings", "general"])
+        let detail = element("settings.detail.general")
+        XCTAssertTrue(detail.waitForExistence(timeout: 20))
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(detail.waitForNonExistence(timeout: 5), "Escape closes Settings like Command-W")
+    }
+
     func testCapabilityToggleTurnsOffAndOn() {
         launch(permissions: "granted", ["-KBOpenSettings", "clipboard"])
         let toggle = element("capability.toggle.clipboardHistory")
