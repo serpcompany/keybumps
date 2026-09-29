@@ -81,8 +81,10 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
     )
     .bind(orderId, provider, order.ref, customerId, offer.id, now)
     .run();
-  // A concurrent delivery recorded it first and mints it (or its retry will).
-  if (inserted.meta.changes === 0) return;
+  // A concurrent delivery recorded it first: take the recorded-order path, which mints if its
+  // License is still missing (the unique index stops a double mint), so this delivery never
+  // reports success for an order without a License.
+  if (inserted.meta.changes === 0) return orderPaid(db, provider, order, now);
   return mint(db, offer, order, customerId, orderId, now);
 }
 
