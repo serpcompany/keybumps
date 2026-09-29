@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.3-beta.5](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.4...v0.0.3-beta.5) (2026-09-29)
+
+
+### Features
+
+* show Dictation's state in the notch ([#110](https://github.com/serpcompany/keybumps/issues/110)) ([512a2f9](https://github.com/serpcompany/keybumps/commit/512a2f91a1a572a402e40cc273114f74d2a8a3d1))
+
+
+### Fixes
+
+* app icon on the macOS icon grid ([#109](https://github.com/serpcompany/keybumps/issues/109)) ([4e8ffe9](https://github.com/serpcompany/keybumps/commit/4e8ffe9ceb654e8aa3a43d07b6b026c86311ec6a))
+
 ## [0.0.3-beta.4](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.3...v0.0.3-beta.4) (2026-09-29)
 
 This beta introduces the new Keybumps icon, adds Screenshot Tools, gives the Command Palette and Settings a Raycast-style look, adds notch notices, and renames Keyboard Shortcutter to Shortcut Coach.
