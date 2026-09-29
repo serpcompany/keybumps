@@ -18,6 +18,7 @@ export default defineConfig(async () => {
             TEST_PUBLIC_KEY: rawPublicKey,
             LEASE_SIGNING_KEY: JSON.stringify({ kid: "test-1", jwk }),
             ADMIN_TOKEN: "test-admin-token",
+            POLAR_WEBHOOK_SECRET: "polar_whs_test_secret",
           },
         },
       }),

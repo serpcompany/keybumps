@@ -15,13 +15,18 @@ import {
   touchActivation,
   type LicenseRow,
 } from "./licenses";
+import { applyEvent, UnknownOfferError } from "./fulfillment";
 import { isWithinTerm, leaseWindow } from "./policy";
+import { PolarAdapter } from "./providers/polar";
+import type { ProviderAdapter } from "./providers/types";
 
 export interface Env {
   DB: D1Database;
   /** `{"kid": "...", "jwk": {Ed25519 private JWK}}` */
   LEASE_SIGNING_KEY: string;
   ADMIN_TOKEN: string;
+  /** Polar webhook endpoint secret. Webhooks from Polar are rejected while it is unset. */
+  POLAR_WEBHOOK_SECRET?: string;
   /** Optional Workers rate-limiting binding, keyed per License Key. */
   KEY_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
@@ -86,6 +91,8 @@ export default {
 async function route(request: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(request.url);
   if (request.method !== "POST") throw new ApiError("not_found");
+  const webhook = pathname.match(/^\/webhooks\/([a-z]+)$/);
+  if (webhook) return receiveWebhook(request, env, webhook[1]);
   switch (pathname) {
     case "/v1/activate":
       return activate(await clientRequest(request, env), env);
@@ -96,6 +103,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     case "/admin/licenses":
       await requireAdmin(request, env);
       return adminIssue(await readJson(request), env);
+    case "/admin/offers":
+      await requireAdmin(request, env);
+      return adminUpsertOffer(await readJson(request), env);
+    case "/admin/licenses/by-email":
+      await requireAdmin(request, env);
+      return adminLicensesByEmail(await readJson(request), env);
     case "/admin/licenses/lookup":
       await requireAdmin(request, env);
       return adminLookup(await readJson(request), env);
@@ -189,6 +202,42 @@ async function leaseResponse(env: Env, license: LicenseRow, deviceHash: string, 
   return json({ lease: await signLease(payload, key) });
 }
 
+// MARK: - Provider webhooks
+
+function providerAdapter(env: Env, name: string): ProviderAdapter | null {
+  if (name === "polar" && env.POLAR_WEBHOOK_SECRET) return new PolarAdapter(env.POLAR_WEBHOOK_SECRET);
+  return null;
+}
+
+async function receiveWebhook(request: Request, env: Env, name: string): Promise<Response> {
+  const adapter = providerAdapter(env, name);
+  if (!adapter) throw new ApiError("not_found");
+  let verified;
+  try {
+    verified = await adapter.verifyWebhook(request);
+  } catch {
+    throw new ApiError("bad_request");
+  }
+  if (!verified) throw new ApiError("unauthorized");
+
+  const seen = await env.DB.prepare("SELECT 1 FROM webhook_events WHERE provider = ? AND event_id = ?")
+    .bind(adapter.name, verified.eventId)
+    .first();
+  if (seen) return json({ ok: true });
+
+  try {
+    await applyEvent(env.DB, adapter.name, verified.event, nowSeconds());
+  } catch (error) {
+    // Non-2xx makes the provider retry, e.g. after the missing Offer is added.
+    if (error instanceof UnknownOfferError) return json({ error: "unknown_offer" }, 422);
+    throw error;
+  }
+  await env.DB.prepare("INSERT OR IGNORE INTO webhook_events (provider, event_id, received_at) VALUES (?, ?, ?)")
+    .bind(adapter.name, verified.eventId, nowSeconds())
+    .run();
+  return json({ ok: true });
+}
+
 // MARK: - Admin endpoints
 
 async function requireAdmin(request: Request, env: Env): Promise<void> {
@@ -231,6 +280,41 @@ async function adminIssue(body: Record<string, unknown>, env: Env): Promise<Resp
     nowSeconds(),
   );
   return json({ licenseId: license.id, key: license.license_key }, 201);
+}
+
+async function adminUpsertOffer(body: Record<string, unknown>, env: Env): Promise<Response> {
+  const { id, product, provider, providerRef, kind } = body;
+  const updatesDays = body.updatesDays ?? null;
+  const maxActivations = body.maxActivations ?? 3;
+  const active = body.active ?? true;
+  const isString = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 128;
+  if (!isString(id) || !isString(product) || !isString(provider) || !isString(providerRef)) throw new ApiError("bad_request");
+  if (kind !== "perpetual" && kind !== "update_window" && kind !== "subscription") throw new ApiError("bad_request");
+  if (kind === "update_window" && (typeof updatesDays !== "number" || !Number.isInteger(updatesDays) || updatesDays < 1)) throw new ApiError("bad_request");
+  if (typeof maxActivations !== "number" || !Number.isInteger(maxActivations) || maxActivations < 1) throw new ApiError("bad_request");
+  if (typeof active !== "boolean") throw new ApiError("bad_request");
+  if ((await productKeyPrefix(env.DB, product)) === null) throw new ApiError("bad_request");
+  await env.DB.prepare(
+    `INSERT INTO offers (id, product_id, provider, provider_ref, kind, updates_days, max_activations, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET product_id = excluded.product_id, provider = excluded.provider,
+       provider_ref = excluded.provider_ref, kind = excluded.kind, updates_days = excluded.updates_days,
+       max_activations = excluded.max_activations, active = excluded.active`,
+  )
+    .bind(id, product, provider, providerRef, kind, kind === "update_window" ? updatesDays : null, maxActivations, active ? 1 : 0, nowSeconds())
+    .run();
+  return json({ ok: true });
+}
+
+async function adminLicensesByEmail(body: Record<string, unknown>, env: Env): Promise<Response> {
+  if (typeof body.email !== "string" || !body.email.includes("@")) throw new ApiError("bad_request");
+  const { results } = await env.DB.prepare(
+    `SELECT l.product_id AS product, l.license_key AS key, l.status, l.valid_until AS validUntil, l.updates_until AS updatesUntil
+     FROM licenses l JOIN customers c ON c.id = l.customer_id WHERE c.email = ? ORDER BY l.created_at`,
+  )
+    .bind(body.email.toLowerCase())
+    .all();
+  return json({ licenses: results });
 }
 
 async function adminLicense(body: Record<string, unknown>, env: Env): Promise<LicenseRow> {
