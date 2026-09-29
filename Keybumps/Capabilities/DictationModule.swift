@@ -64,9 +64,11 @@ final class DictationModule: CapabilityModule {
             self.updateEscapeRegistration(for: phase)
             self.updateSafety.update(dictationPhase: phase)
         }
+        dictation.onInputLevel = { [weak indicator] level in indicator?.updateLevel(level) }
     }
 
     func apply(_ context: CapabilityContext) {
+        indicator.finishShortcut = context.preferences.capabilityShortcut(for: .dictation)?.displayName
         context.configureShortcut(
             owner: CapabilityShortcut.dictation.ownerID,
             for: capability,

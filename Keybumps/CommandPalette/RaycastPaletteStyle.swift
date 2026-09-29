@@ -180,7 +180,7 @@ final class PaletteHUD {
     }
 
     /// The width of the camera housing, or zero on screens without one.
-    private static func notchWidth(of screen: NSScreen) -> CGFloat {
+    static func notchWidth(of screen: NSScreen) -> CGFloat {
         guard screen.safeAreaInsets.top > 0,
               let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea else { return 0 }
         return max(0, right.minX - left.maxX)
