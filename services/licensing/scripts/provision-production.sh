@@ -26,6 +26,12 @@ fi
 wrangler d1 migrations apply keybumps-licensing --remote
 
 if [[ ! -f "$secrets_file" ]]; then
+  # Regenerating would replace the signing key under the same kid and break every issued Lease.
+  if wrangler secret list --env "" 2>/dev/null | grep -q '"LEASE_SIGNING_KEY"'; then
+    echo "Production already has LEASE_SIGNING_KEY but $secrets_file is missing." >&2
+    echo "Restore $secrets_file from your password manager, or rotate deliberately with a new kid." >&2
+    exit 1
+  fi
   echo "Generating the production signing key and admin token..."
   umask 077
   # Never leave the private key on disk, even if a later step fails.

@@ -73,7 +73,7 @@ async function applyLicenseChange(db: D1Database, provider: string, event: Norma
   }
 }
 
-/** Returns the customer who owns the order's License, or null for renewals and plan changes. */
+/** Returns the customer whose keys may need emailing: the order's owner, or null for renewals and plan changes. */
 async function orderPaid(db: D1Database, provider: string, order: NormalizedOrder, now: number): Promise<string | null> {
   // Renewals and plan changes extend the subscription's existing License instead of minting another.
   const startsSubscription = order.billingReason === "purchase" || order.billingReason === "subscription_create";
@@ -84,7 +84,12 @@ async function orderPaid(db: D1Database, provider: string, order: NormalizedOrde
         .bind(order.subscription.currentPeriodEnd, order.subscription.ref)
         .run();
     }
-    return null;
+    // A redelivered first order still gets its key emailed if the earlier send failed.
+    const owner = await db
+      .prepare("SELECT customer_id FROM licenses WHERE subscription_ref = ? AND customer_id IS NOT NULL LIMIT 1")
+      .bind(order.subscription.ref)
+      .first<{ customer_id: string }>();
+    return startsSubscription ? (owner?.customer_id ?? null) : null;
   }
 
   const existing = await db

@@ -60,39 +60,60 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** Sends any of this customer's active keys not emailed yet, then marks them sent. */
+/** Keys that fail this many sends are left to support and the resend form. */
+const MAX_EMAIL_ATTEMPTS = 5;
+
+/**
+ * Sends this customer's active keys that haven't been emailed. The keys are claimed atomically
+ * first (`key_emailed_at` set by one UPDATE ... RETURNING), so overlapping webhook deliveries and
+ * cron runs never send the same key twice. A failed send releases the claim and counts an attempt.
+ * A crash between claiming and sending leaves the key unsent; the customer can use the resend form.
+ */
 export async function deliverPendingKeys(db: D1Database, mailer: KeyMailer, customerId: string, now: number): Promise<void> {
-  const { results } = await db
+  const { results: claimed } = await db
     .prepare(
-      `SELECT l.id, l.license_key AS key, p.name AS productName, c.email
-       FROM licenses l JOIN products p ON p.id = l.product_id JOIN customers c ON c.id = l.customer_id
-       WHERE l.customer_id = ? AND l.status = 'active' AND l.key_emailed_at IS NULL`,
+      `UPDATE licenses SET key_emailed_at = ?
+       WHERE customer_id = ? AND status = 'active' AND key_emailed_at IS NULL AND email_attempts < ?
+       RETURNING id, license_key AS key, product_id`,
     )
-    .bind(customerId)
-    .all<{ id: string; key: string; productName: string; email: string }>();
-  if (results.length === 0) return;
-  await mailer.sendKeys(results[0].email, results.map(({ productName, key }) => ({ productName, key })));
-  await db.batch(results.map((row) => db.prepare("UPDATE licenses SET key_emailed_at = ? WHERE id = ?").bind(now, row.id)));
+    .bind(now, customerId, MAX_EMAIL_ATTEMPTS)
+    .all<{ id: string; key: string; product_id: string }>();
+  if (claimed.length === 0) return;
+  try {
+    const customer = await db.prepare("SELECT email FROM customers WHERE id = ?").bind(customerId).first<{ email: string }>();
+    const { results: products } = await db.prepare("SELECT id, name FROM products").all<{ id: string; name: string }>();
+    const name = new Map(products.map((product) => [product.id, product.name]));
+    if (!customer) throw new Error("customer missing");
+    await mailer.sendKeys(customer.email, claimed.map((row) => ({ productName: name.get(row.product_id) ?? row.product_id, key: row.key })));
+  } catch (error) {
+    await db.batch(
+      claimed.map((row) =>
+        db.prepare("UPDATE licenses SET key_emailed_at = NULL, email_attempts = email_attempts + 1 WHERE id = ?").bind(row.id),
+      ),
+    );
+    throw error;
+  }
 }
 
 /** Keys still unsent a week after purchase are left to support. */
 const RETRY_WINDOW = 7 * 86_400;
 
-/** Emails keys whose purchase-time send failed. Run on a schedule. */
+/** Emails keys whose purchase-time send failed. Run on a schedule; the fewest-attempted go first. */
 export async function deliverUnsentKeys(db: D1Database, mailer: KeyMailer, now: number): Promise<void> {
   const { results } = await db
     .prepare(
-      `SELECT DISTINCT customer_id FROM licenses
-       WHERE key_emailed_at IS NULL AND status = 'active' AND customer_id IS NOT NULL AND created_at > ?
-       LIMIT 50`,
+      `SELECT customer_id FROM licenses
+       WHERE key_emailed_at IS NULL AND status = 'active' AND customer_id IS NOT NULL
+         AND created_at > ? AND email_attempts < ?
+       GROUP BY customer_id ORDER BY MIN(email_attempts), MIN(created_at) LIMIT 50`,
     )
-    .bind(now - RETRY_WINDOW)
+    .bind(now - RETRY_WINDOW, MAX_EMAIL_ATTEMPTS)
     .all<{ customer_id: string }>();
   for (const { customer_id } of results) {
     try {
       await deliverPendingKeys(db, mailer, customer_id, now);
     } catch {
-      // Try again on the next run.
+      // Counted as an attempt; tried again on a later run.
     }
   }
 }

@@ -2,7 +2,7 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import worker, { mailerOverride } from "../src/index";
-import { CloudflareMailer, keyEmailContent, parseSender, type KeyEmail } from "../src/mailer";
+import { CloudflareMailer, deliverPendingKeys, keyEmailContent, parseSender, type KeyEmail } from "../src/mailer";
 import { deliver, order } from "./polar-fixtures";
 
 interface Sent {
@@ -131,5 +131,32 @@ describe("CloudflareMailer", () => {
 
   it("parses a bare sender address", () => {
     expect(parseSender("support@keybumps.app")).toEqual({ name: "", email: "support@keybumps.app" });
+  });
+});
+
+describe("deliverPendingKeys", () => {
+  it("sends a key once when deliveries overlap", async () => {
+    await deliver(order("overlap@example.com"));
+    const license = await env.DB.prepare(
+      "SELECT l.customer_id FROM licenses l JOIN customers c ON c.id = l.customer_id WHERE c.email = 'overlap@example.com'",
+    ).first<{ customer_id: string }>();
+    await env.DB.prepare("UPDATE licenses SET key_emailed_at = NULL WHERE customer_id = ?").bind(license!.customer_id).run();
+    sent = [];
+    await Promise.all([1, 2, 3].map(() => deliverPendingKeys(env.DB, mailerOverride.current!, license!.customer_id, 1)));
+    expect(sent).toHaveLength(1);
+  });
+
+  it("stops retrying a key after five failed sends", async () => {
+    mailerOverride.current = {
+      async sendKeys() {
+        throw new Error("rejected");
+      },
+    };
+    await deliver(order("bounces@example.com"));
+    for (let run = 0; run < 7; run++) await runSchedule();
+    const row = await env.DB.prepare(
+      "SELECT l.email_attempts, l.key_emailed_at FROM licenses l JOIN customers c ON c.id = l.customer_id WHERE c.email = 'bounces@example.com'",
+    ).first<{ email_attempts: number; key_emailed_at: number | null }>();
+    expect(row).toEqual({ email_attempts: 5, key_emailed_at: null });
   });
 });
