@@ -21,7 +21,7 @@ ADR 0001 had the service own keys and signed Leases so the payment provider coul
 2. **The app talks to Polar's public license-key API.** It uses the customer-portal endpoints (`/v1/customer-portal/license-keys/activate`, `/validate`, `/deactivate`), which take the key and the organization id and need no secret in the app. Activation sends a label built from the device hash, never a Mac name or other personal data.
 3. **One app-side seam.** `LicenseControlling` talks to a `LicenseProviding` protocol. Polar is its first and only implementation. Changing providers means adding another implementation and shipping an app update.
 4. **Offline use without a Lease.** The app stores its key, its Polar activation id (which validation and deactivation require), and its last successful validation in the Keychain:
-   - It revalidates about weekly when online.
+   - It revalidates hourly when online (and on wake from sleep), so a revoked or refunded key locks within about an hour. **Check Again** on the License page checks immediately.
    - It keeps working for 45 days after the last successful validation.
    - A network or server error never changes the current state.
    - A `revoked` or `disabled` answer locks the app at the next check.

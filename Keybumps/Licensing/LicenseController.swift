@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// The single app-shell licensing seam (ADR 0002). Capability modules never read it; `AppModel`
 /// starts them only while the snapshot is entitled.
@@ -25,6 +25,7 @@ final class LicenseController: LicenseControlling {
     private let device: any DeviceIdentifying
     private let now: () -> Date
     private var timer: Timer?
+    private var wakeObserver: NSObjectProtocol?
     private var started = false
 
     init(
@@ -46,8 +47,14 @@ final class LicenseController: LicenseControlling {
         started = true
         snapshot.state = storedState()
         Task { await refresh(force: false) }
-        // Re-evaluate the offline allowance and refresh schedule a few times a day.
-        timer = Timer.scheduledTimer(withTimeInterval: 6 * 3_600, repeats: true) { [weak self] _ in
+        // Re-evaluate often; a check runs once the hourly refresh interval has passed.
+        timer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.refresh(force: false) }
+        }
+        // A Mac waking from sleep checks right away if one is due, instead of waiting for the timer.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in await self?.refresh(force: false) }
         }
     }
