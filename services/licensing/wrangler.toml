@@ -13,6 +13,12 @@ crons = ["*/15 * * * *"]
 
 [vars]
 EMAIL_FROM = "Keybumps <licenses@keybumps.app>"
+EMAIL_REPLY_TO = "support@keybumps.app"
+
+# Cloudflare Email Service (Email Sending). keybumps.app must be onboarded in the dashboard.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["licenses@keybumps.app"]
 
 # Licensing routes must not be request-logged (ADR §10).
 [observability]
@@ -24,7 +30,7 @@ database_name = "keybumps-licensing"
 database_id = "0f6ff8d5-60e8-4a41-bd67-6cf01a4871df"
 migrations_dir = "migrations"
 
-# Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN, POLAR_WEBHOOK_SECRET, RESEND_API_KEY.
+# Secrets (wrangler secret put --env <env>): LEASE_SIGNING_KEY, ADMIN_TOKEN, POLAR_WEBHOOK_SECRET.
 
 # Staging: Polar sandbox only. Deployed with `npx wrangler deploy --env staging`.
 [env.staging]
@@ -35,6 +41,11 @@ routes = []
 
 [env.staging.vars]
 EMAIL_FROM = "Keybumps <licenses@keybumps.app>"
+EMAIL_REPLY_TO = "support@keybumps.app"
+
+[[env.staging.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["licenses@keybumps.app"]
 
 [env.staging.observability]
 enabled = false

@@ -4,7 +4,7 @@
 #
 #   scripts/provision-production.sh <live-polar-product-id>
 #
-# Afterwards it prints the remaining owner steps (Polar webhook, Resend, website var).
+# Afterwards it prints the remaining owner steps (email domain, Polar webhook, website var).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -63,8 +63,8 @@ cat <<'NEXT'
 
 Production licensing is deployed at https://licensing.keybumps.app. Remaining owner steps,
 in this order so no paid order arrives before keys can be emailed:
-  1. Resend: verify keybumps.app as a sending domain, create an API key, then run:
-       npx wrangler secret put RESEND_API_KEY --env ""
+  1. Cloudflare dashboard > Compute > Email Service > Email Sending > Onboard Domain: keybumps.app
+       (adds the cf-bounce DNS records; needs the Workers Paid plan).
   2. Polar (live) > Settings > Webhooks > Add Endpoint:
        URL https://licensing.keybumps.app/webhooks/polar, format Raw, API version 2026-04,
        events order.paid, order.refunded, refund.created, subscription.active, .canceled,

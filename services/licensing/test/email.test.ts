@@ -2,7 +2,7 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import worker, { mailerOverride } from "../src/index";
-import { keyEmailContent, type KeyEmail } from "../src/mailer";
+import { CloudflareMailer, keyEmailContent, parseSender, type KeyEmail } from "../src/mailer";
 import { deliver, order } from "./polar-fixtures";
 
 interface Sent {
@@ -109,4 +109,28 @@ it("builds a plain and HTML email that includes every key", () => {
   expect(content.text).toContain("KB-AAAA-BBBB-CCCC-DDDD");
   expect(content.html).toContain("KB-AAAA-BBBB-CCCC-DDDD");
   expect(content.text).toContain("https://keybumps.app/license");
+});
+
+describe("CloudflareMailer", () => {
+  it("sends one message with sender, reply-to, and both bodies", async () => {
+    const calls: unknown[] = [];
+    const binding = { send: async (message: unknown) => (calls.push(message), { messageId: "m1" }) } as unknown as SendEmail;
+    await new CloudflareMailer(binding, parseSender("Keybumps <licenses@keybumps.app>"), "support@keybumps.app").sendKeys("a@b.co", [
+      { productName: "Keybumps", key: "KB-AAAA-BBBB-CCCC-DDDD" },
+    ]);
+    expect(calls).toEqual([
+      expect.objectContaining({
+        from: { name: "Keybumps", email: "licenses@keybumps.app" },
+        to: "a@b.co",
+        replyTo: "support@keybumps.app",
+        subject: "Your Keybumps license key",
+        text: expect.stringContaining("KB-AAAA-BBBB-CCCC-DDDD"),
+        html: expect.stringContaining("KB-AAAA-BBBB-CCCC-DDDD"),
+      }),
+    ]);
+  });
+
+  it("parses a bare sender address", () => {
+    expect(parseSender("licenses@keybumps.app")).toEqual({ name: "", email: "licenses@keybumps.app" });
+  });
 });

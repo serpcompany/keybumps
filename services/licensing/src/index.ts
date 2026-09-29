@@ -16,7 +16,7 @@ import {
   type LicenseRow,
 } from "./licenses";
 import { applyEvent, NotYetKnownError, UnknownOfferError } from "./fulfillment";
-import { deliverPendingKeys, deliverUnsentKeys, ResendMailer, type KeyMailer } from "./mailer";
+import { CloudflareMailer, deliverPendingKeys, deliverUnsentKeys, parseSender, type KeyMailer } from "./mailer";
 import { isWithinTerm, leaseWindow } from "./policy";
 import { PolarAdapter } from "./providers/polar";
 import type { ProviderAdapter } from "./providers/types";
@@ -28,10 +28,12 @@ export interface Env {
   ADMIN_TOKEN: string;
   /** Polar webhook endpoint secret. Webhooks from Polar are rejected while it is unset. */
   POLAR_WEBHOOK_SECRET?: string;
-  /** Resend API key. Keys aren't emailed while it is unset. */
-  RESEND_API_KEY?: string;
-  /** Sender, e.g. `Keybumps <licenses@keybumps.app>`. */
+  /** Cloudflare Email Service binding. Keys aren't emailed while it is missing. */
+  EMAIL?: SendEmail;
+  /** Sender, e.g. `Keybumps <licenses@keybumps.app>`, on a domain onboarded to Email Sending. */
   EMAIL_FROM?: string;
+  /** Where customer replies to key emails go. */
+  EMAIL_REPLY_TO?: string;
   /** Optional Workers rate-limiting binding, keyed per License Key. */
   KEY_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
@@ -269,8 +271,8 @@ export const mailerOverride: { current: KeyMailer | null } = { current: null };
 
 function keyMailer(env: Env): KeyMailer | null {
   if (mailerOverride.current) return mailerOverride.current;
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return null;
-  return new ResendMailer(env.RESEND_API_KEY, env.EMAIL_FROM);
+  if (!env.EMAIL || !env.EMAIL_FROM) return null;
+  return new CloudflareMailer(env.EMAIL, parseSender(env.EMAIL_FROM), env.EMAIL_REPLY_TO ?? "support@keybumps.app");
 }
 
 const RESEND_INTERVAL = 10 * 60;

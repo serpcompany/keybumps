@@ -9,21 +9,23 @@ export interface KeyMailer {
   sendKeys(to: string, keys: KeyEmail[]): Promise<void>;
 }
 
-export class ResendMailer implements KeyMailer {
+/** Sends through Cloudflare Email Service's `send_email` binding. `send` rejects on failure. */
+export class CloudflareMailer implements KeyMailer {
   constructor(
-    private readonly apiKey: string,
-    private readonly from: string,
+    private readonly binding: SendEmail,
+    private readonly from: EmailAddress,
+    private readonly replyTo: string,
   ) {}
 
   async sendKeys(to: string, keys: KeyEmail[]): Promise<void> {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ from: this.from, to: [to], ...keyEmailContent(keys) }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error(`email provider returned ${response.status}`);
+    await this.binding.send({ from: this.from, to, replyTo: this.replyTo, ...keyEmailContent(keys) });
   }
+}
+
+/** Parses `Name <address>` (or a bare address) from the EMAIL_FROM var. */
+export function parseSender(value: string): EmailAddress {
+  const match = value.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  return match ? { name: match[1], email: match[2] } : { name: "", email: value.trim() };
 }
 
 export function keyEmailContent(keys: KeyEmail[]): { subject: string; text: string; html: string } {

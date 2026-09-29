@@ -60,7 +60,7 @@ A paid order becomes a License through an Offer. The checkout link's `offer` met
 
 ## Key email
 
-A paid order emails its License Key through Resend. If sending fails, the order is still acknowledged. A cron (every 15 minutes) retries keys whose `licenses.key_emailed_at` is still unset, for up to 7 days. A crash between sending and recording can, rarely, send the same key twice. `/v1/resend-key` does its lookup and sending after responding, so response time never reveals whether an address bought.
+A paid order emails its License Key through Cloudflare Email Service (the `EMAIL` `send_email` binding, restricted to sending from `licenses@keybumps.app`; `keybumps.app` must be onboarded under Email Service > Email Sending, which needs the Workers Paid plan). Sender and reply-to are the `EMAIL_FROM` and `EMAIL_REPLY_TO` vars. If sending fails, the order is still acknowledged. A cron (every 15 minutes) retries keys whose `licenses.key_emailed_at` is still unset, for up to 7 days. A crash between sending and recording can, rarely, send the same key twice. `/v1/resend-key` does its lookup and sending after responding, so response time never reveals whether an address bought.
 
 ## Environments
 
@@ -74,7 +74,6 @@ Each environment sets these with `wrangler secret put --env <env>`. Deploying pr
 | --- | --- |
 | `LEASE_SIGNING_KEY` | `{"kid", "jwk"}`. Create it with `npm run generate-signing-key -- <kid>`, which prints the public key for the app's Info.plist. |
 | `ADMIN_TOKEN` | A long random string. |
-| `RESEND_API_KEY` | Resend API key. Keys aren't emailed while it's unset. `EMAIL_FROM` is a plain var in `wrangler.toml`. |
 | `POLAR_WEBHOOK_SECRET` | The Polar endpoint's secret (`whsec_...`). Webhooks are rejected while it's unset. |
 
 Rate limiting is keyed per License Key through the optional `KEY_LIMITER` binding. It isn't configured yet and is added at deploy time. Guessing keys isn't practical against 80-bit keys.
