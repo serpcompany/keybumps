@@ -60,29 +60,21 @@ A brief message, such as Copied to Clipboard or a Shortcut Coach tip, that grows
 _Avoid_: Toast, HUD, banner
 
 **License**:
-A customer's right to use Keybumps. The SERP licensing service creates it when a purchase is paid and revokes it on refund, dispute, or when a subscription's paid period ends. It carries one Entitlement. See `docs/adr/0001-licensing.md`.
-_Avoid_: Account, subscription (a subscription is only one kind of Offer)
+A customer's right to use Keybumps: a Polar License Key benefit granted on purchase and revoked by Polar (for example on refund). See `docs/adr/0002-polar-native-license-keys.md`.
+_Avoid_: Account, subscription
 
 **License Key**:
-The customer-facing code (`KB-XXXX-XXXX-XXXX-XXXX`) that identifies a License and is entered in the app to activate it.
+The customer-facing code (`KEYBUMPS_…`) Polar issues in the receipt and customer portal, entered in the app to activate it.
 _Avoid_: Serial, registration code, password
 
-**Entitlement**:
-What a License allows: `validUntil` (absent means perpetual), `updatesUntil` (builds released after it are not entitled), and `maxActivations`. The app checks the first two, and the licensing service enforces `maxActivations` at Activation. The app never sees prices.
-_Avoid_: Plan, tier
-
-**Offer**:
-One purchasable checkout variant (price, provider product, and the Entitlement it grants). Offers are how pricing is tested. They live only on the licensing service and the website.
-_Avoid_: SKU, price (in app code)
-
 **Activation**:
-Binding a License to one Mac's device hash, up to `maxActivations`. Deactivating from the app frees the slot.
+Registering one Mac against a License Key through Polar, up to the key's activation limit (1). Deactivating in the app, or in Polar's customer portal, frees it.
 _Avoid_: Registration, login
 
-**Lease**:
-The Ed25519-signed payload the licensing service returns on Activation or refresh. The app verifies it offline, refreshes it after `refreshAfter`, and stops honoring it after `expiresAt`. Revocation takes effect when the Lease is refreshed or expires.
-_Avoid_: Token, license file
+**License Check**:
+The app's cached result of its last successful Polar validation, kept in the Keychain. It is revalidated about weekly and honored offline for 45 days; a network error never changes it.
+_Avoid_: Lease, token, license file
 
 **Locked**:
-The app state without an entitled Lease. Capabilities do not start, and only onboarding, the License settings page, and Quit are available. There is no trial.
+The app state without a valid License Check. Capabilities do not start, and only onboarding, the License settings page, and Quit are available. There is no trial.
 _Avoid_: Trial mode, demo mode, unregistered

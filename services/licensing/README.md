@@ -1,5 +1,7 @@
 # SERP licensing service
 
+> **Not in use.** Keybumps sells with Polar-native license keys ([ADR 0002](../../docs/adr/0002-polar-native-license-keys.md)). This service is kept as the route to provider independence (owned keys and signed Leases). Its deployed Workers (`keybumps-licensing`, `keybumps-licensing-staging`), D1 databases, and Polar sandbox webhook are decommissioned only with owner approval.
+
 This Cloudflare Worker with D1 issues License Keys and signs Leases for SERP macOS apps. Decisions and terms are in [`docs/adr/0001-licensing.md`](../../docs/adr/0001-licensing.md) and [`CONTEXT.md`](../../CONTEXT.md). It lives here until a second app needs it.
 
 ## Develop
