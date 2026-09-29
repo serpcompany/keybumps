@@ -1432,14 +1432,14 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testKeyboardShortcutterIsTheCanonicalUserFacingCapabilityName() {
-        XCTAssertEqual(Capability.keyboardShortcutter.title, "Keyboard Shortcutter")
-        XCTAssertEqual(SettingsSection.keyboardShortcutter.rawValue, "Keyboard Shortcutter")
+        XCTAssertEqual(Capability.keyboardShortcutter.title, "Shortcut Coach")
+        XCTAssertEqual(SettingsSection.keyboardShortcutter.rawValue, "Shortcut Coach")
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Setup"))
         XCTAssertEqual(SettingsNavigationHistory().selection, .permissions)
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("About"))
-        XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Keyboard Shortcutter"))
+        XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Shortcut Coach"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
     }
 

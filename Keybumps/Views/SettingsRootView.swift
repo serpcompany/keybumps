@@ -5,7 +5,7 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
-    case windows = "Window Manager", keyboardShortcutter = "Keyboard Shortcutter", permissions = "Permissions", general = "General"
+    case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", permissions = "Permissions", general = "General"
     case account = "Account"
     var id: String { rawValue }
 
@@ -707,7 +707,7 @@ struct KeyboardShortcutterSettingsView: View {
             } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
                       !model.missingPermissions(for: .keyboardShortcutter).isEmpty {
                 SettingsGroup("Setup required") {
-                    Text("Keyboard Shortcutter needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
+                    Text("Shortcut Coach needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     OpenPermissionsButton()
                 }
             } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
@@ -729,7 +729,7 @@ struct KeyboardShortcutterSettingsView: View {
                     Label("Ready", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 } else {
-                    Label("Keyboard Shortcutter needs to reconnect", systemImage: "exclamationmark.triangle.fill")
+                    Label("Shortcut Coach needs to reconnect", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
@@ -752,12 +752,12 @@ struct KeyboardShortcutterSettingsView: View {
                     get: { model.preferences.showsHotkeysTab },
                     set: { model.preferences.showsHotkeysTab = $0 }
                 ))
-                Button("Open Keyboard Shortcutter History") { model.showKeyboardShortcutterHistory() }
+                Button("Open Shortcut Coach History") { model.showKeyboardShortcutterHistory() }
                 Text("View, filter, and clear detected actions in the Command Palette.")
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Keyboard Shortcutter")
+        .navigationTitle("Shortcut Coach")
     }
 
     @ViewBuilder

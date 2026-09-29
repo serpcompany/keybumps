@@ -64,7 +64,7 @@ final class AppPreferences {
         didSet { defaults.set(takenOverSystemShortcuts.sorted(), forKey: Key.takenOverSystemShortcuts) }
     }
 
-    /// Whether the Command Palette shows Keyboard Shortcutter's Hotkeys tab. Off by default.
+    /// Whether the Command Palette shows Shortcut Coach's Hotkeys tab. Off by default.
     var showsHotkeysTab: Bool {
         didSet { defaults.set(showsHotkeysTab, forKey: Key.showsHotkeysTab) }
     }

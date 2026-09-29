@@ -36,12 +36,12 @@ _Avoid_: Cloud transcript, monolithic history file
 Rectangle-derived window movement and sizing under the owner's selected shortcuts.
 _Avoid_: Rectangle app, Window Management
 
-**Keyboard Shortcutter**:
+**Shortcut Coach**:
 Passive recognition of currently supported manual actions, durable history, and selected presentations.
-_Avoid_: Shortcut Coach, Shortcut Coaching, Keylume app
+_Avoid_: Keyboard Shortcutter (its former name; code types still use `KeyboardShortcutter`), Shortcut Coaching, Keylume app
 
 **Hotkeys**:
-The Command Palette tab label for Keyboard Shortcutter history, hidden unless the owner shows it. Settings and the capability keep the name Keyboard Shortcutter.
+The Command Palette tab label for Shortcut Coach history, hidden unless the owner shows it. Settings and the capability keep the name Shortcut Coach.
 
 **Screenshot Tools**:
 The capability that takes screenshots with its own hotkeys (Shift-Command-2 screens, Shift-Command-3 screens then edit, Shift-Command-4 area), adds screenshots macOS or Keybumps saves to Clipboard History as screenshot items, and owns the **Screenshot Editor**. While its hotkeys use macOS's Shift-Command-3/4, it turns those macOS shortcuts off and gives them back when it stops using them.
@@ -56,7 +56,7 @@ The Screenshot Tools window that marks up a Clipboard History image with pixelat
 _Avoid_: Image editor, annotation app, Markup
 
 **Notch notice**:
-A brief message, such as Copied to Clipboard or a Keyboard Shortcutter tip, that grows out of the notch (or the top of the menu bar on screens without one) and fades on its own.
+A brief message, such as Copied to Clipboard or a Shortcut Coach tip, that grows out of the notch (or the top of the menu bar on screens without one) and fades on its own.
 _Avoid_: Toast, HUD, banner
 
 **Development License Adapter**:
