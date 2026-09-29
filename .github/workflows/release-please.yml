@@ -32,4 +32,7 @@ jobs:
     with:
       version: ${{ needs.release-please.outputs.version }}
       publish: true
+      # Repository variable KEYBUMPS_NOTARIZE=false ships a signed but un-notarized release, only
+      # with owner authorization while notarization is unavailable. Unset it to notarize again.
+      notarize: ${{ vars.KEYBUMPS_NOTARIZE != 'false' }}
     secrets: inherit

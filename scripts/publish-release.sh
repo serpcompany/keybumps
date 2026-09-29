@@ -3,11 +3,11 @@
 # Dry run by default; uploads only with --publish, which requires owner authorization.
 #
 # Phase 1 uploads immutable assets to releases/<build>/ (refusing to overwrite different bytes)
-# and verifies each public copy byte for byte. Phase 2 then publishes the pointers last:
+# and verifies each uploaded object byte for byte, read back from R2. Phase 2 then publishes the pointers last:
 # appcast.xml (production) or staging/appcast.xml (staging), plus latest.json on production.
 #
 # usage: publish-release.sh <release-output-directory> <production|staging> [--publish]
-# env:   CLOUDFLARE_API_TOKEN  bucket-scoped R2 write token (read by wrangler; never stored here)
+# env:   CLOUDFLARE_API_TOKEN  bucket-scoped R2 token with read and write (read by wrangler; never stored here)
 #        KEYBUMPS_WRANGLER     wrangler command (default: wrangler)
 set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
@@ -18,12 +18,6 @@ output=${1:A}; channel=$2; mode=${3:-}
 [[ -z "$mode" || "$mode" == --publish ]] || { print -u2 "unknown option: $mode"; exit 64; }
 
 bucket=keybumps-updates
-origin=https://updates.keybumps.app
-# Tests may point at a loopback fixture origin; nothing else may replace production.
-if [[ -n "${KEYBUMPS_RELEASE_ORIGIN:-}" ]]; then
-  update_url_is_loopback_fixture "$KEYBUMPS_RELEASE_ORIGIN/appcast.xml" 2>/dev/null || { print -u2 "KEYBUMPS_RELEASE_ORIGIN must be loopback"; exit 65; }
-  origin=${KEYBUMPS_RELEASE_ORIGIN%/}
-fi
 wrangler=(${=KEYBUMPS_WRANGLER:-wrangler})
 
 assets_dir=$output/publication/assets
@@ -87,13 +81,22 @@ if [[ "$mode" != --publish ]]; then
 fi
 
 sha() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}' }
+# Reads the object from the R2 bucket itself. Cloudflare Bot Fight Mode blocks CI runners from the
+# public updates.keybumps.app host, so public-edge checks use scripts/verify-update-publication.sh
+# from a normal network instead.
+# Prints nothing when the object does not exist; any other read failure stops the publish, so an
+# unreadable object is never mistaken for a missing one and overwritten.
 remote_sha() {
-  local target=$1 temporary
-  temporary=$(/usr/bin/mktemp)
-  if /usr/bin/curl --fail --silent --location --max-time 120 "$origin/$target?verify=$RANDOM$RANDOM" --output "$temporary"; then
+  local target=$1 temporary errors
+  temporary=$(/usr/bin/mktemp); errors=$(/usr/bin/mktemp)
+  if $wrangler r2 object get "$bucket/$target" --remote --pipe > "$temporary" 2> "$errors"; then
     sha "$temporary"
+  elif ! /usr/bin/grep -q "The specified key does not exist" "$errors"; then
+    print -u2 "could not read $target from R2:"; /bin/cat "$errors" >&2
+    /bin/rm -f "$temporary" "$errors"
+    return 1
   fi
-  /bin/rm -f "$temporary"
+  /bin/rm -f "$temporary" "$errors"
 }
 put() {
   local file=$1 key=$2 cache=$3
@@ -107,7 +110,7 @@ verify() {
     [[ "$actual" == "$expected" ]] && { print "  verified $key"; return 0; }
     sleep 3
   done
-  print -u2 "public $key does not match the local file"; return 1
+  print -u2 "published $key does not match the local file"; return 1
 }
 
 print "Publishing phase 1…"

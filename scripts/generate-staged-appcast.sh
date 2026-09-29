@@ -12,6 +12,14 @@ download_url_prefix=$2
 sparkle_tools_directory=${3:A}
 keychain_account=${4:-keybumps-staged}
 generate_appcast_tool="$sparkle_tools_directory/generate_appcast"
+# CI sets KEYBUMPS_SPARKLE_KEY_FILE: reading a keychain item created by another Sparkle tool shows an
+# access prompt that nobody can answer on a runner, so CI signs from a private key file instead.
+typeset -a signing_key
+if [[ -n "${KEYBUMPS_SPARKLE_KEY_FILE:-}" ]]; then
+  signing_key=(--ed-key-file "$KEYBUMPS_SPARKLE_KEY_FILE")
+else
+  signing_key=(--account "$keychain_account")
+fi
 
 [[ -d "$archives_directory" ]] || { print -u2 "archives directory does not exist: $archives_directory"; exit 66; }
 [[ -x "$generate_appcast_tool" ]] || { print -u2 "generate_appcast not found: $generate_appcast_tool"; exit 69; }
@@ -25,7 +33,7 @@ for update_archive in "$archives_directory"/*.(dmg|zip|tar.gz|tar.xz|aar)(N); do
 done
 
 "$generate_appcast_tool" \
-  --account "$keychain_account" \
+  $signing_key \
   --download-url-prefix "$download_url_prefix" \
   --release-notes-url-prefix "$download_url_prefix" \
   --maximum-versions 3 \
