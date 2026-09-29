@@ -169,13 +169,18 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
           rm -f "$RUNNER_TEMP/developer-id.p12"
           security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application" || { echo "::error::No Developer ID Application identity in the certificate secret"; exit 1; }
+          # Signing reads this file (never the keychain item, whose access prompt would hang the
+          # runner); the keychain copy only lets generate_keys confirm the public key.
+          umask 077
           printf '%s' "$SPARKLE_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle-private-key"
           "$SPARKLE_TOOLS/generate_keys" --account "$SPARKLE_ACCOUNT" -f "$RUNNER_TEMP/sparkle-private-key"
-          rm -f "$RUNNER_TEMP/sparkle-private-key"
+          echo "KEYBUMPS_SPARKLE_KEY_FILE=$RUNNER_TEMP/sparkle-private-key" >> "$GITHUB_ENV"
           [ "$("$SPARKLE_TOOLS/generate_keys" --account "$SPARKLE_ACCOUNT" -p)" = "$UPDATE_PUBLIC_KEY" ] || { echo "::error::Sparkle private key does not match the embedded public key"; exit 1; }
           echo "RELEASE_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, and package
+        # A normal run takes 10–25 minutes; fail fast instead of waiting on a hidden prompt.
+        timeout-minutes: 45
         env:
           KEYBUMPS_MANUAL_SIGNING: "1"
           KEYBUMPS_SKIP_NOTARIZATION: ${{ inputs.notarize == false && '1' || '' }}
@@ -209,6 +214,7 @@ jobs:
       - name: Remove signing keychain
         if: always()
         run: |
+          rm -f "$RUNNER_TEMP/sparkle-private-key"
           [ -n "${RELEASE_KEYCHAIN:-}" ] && security delete-keychain "$RELEASE_KEYCHAIN" || true
 
   production:
