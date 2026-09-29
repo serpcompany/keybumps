@@ -40,7 +40,12 @@ class DictationIndicatorController {
     /// The Dictation shortcut, shown while recording as the key that finishes it.
     var finishShortcut: String? {
         get { state.finishShortcut }
-        set { state.finishShortcut = newValue }
+        set {
+            guard state.finishShortcut != newValue else { return }
+            state.finishShortcut = newValue
+            // Resize for the new keys if the notch is showing.
+            if panel?.isVisible == true { show() }
+        }
     }
 
     func updateLevel(_ level: Float) {
@@ -70,9 +75,17 @@ class DictationIndicatorController {
             notchWidth: PaletteHUD.notchWidth(of: screen),
             notchHeight: max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28),
             isFailure: state.phase.isFailure,
-            finishKeyCount: state.finishShortcut.map { ShortcutKeycapPresentation(shortcut: $0).keys.count } ?? 0
+            finishKeysWidth: DictationNotchGeometry.keysWidth(state.finishShortcut)
         )
-        state.geometry = geometry
+        if panel.isVisible {
+            state.geometry = geometry
+        } else {
+            // Appear at the new size rather than springing from the last one (for example the
+            // failure size after it hid itself).
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { state.geometry = geometry }
+        }
         // A new panel already has a plain content view, so check for the notch view itself.
         if !(panel.contentView is NSHostingView<DictationNotchView>) {
             panel.contentView = NSHostingView(rootView: DictationNotchView(state: state))
@@ -107,7 +120,7 @@ final class DictationNotchState {
     var level: Float = 0
     var recordingStartedAt = Date()
     var finishShortcut: String?
-    var geometry = DictationNotchGeometry(notchWidth: 0, notchHeight: 32, isFailure: false, finishKeyCount: 0)
+    var geometry = DictationNotchGeometry(notchWidth: 0, notchHeight: 32, isFailure: false, finishKeysWidth: 0)
 }
 
 struct DictationNotchGeometry: Equatable {
@@ -121,14 +134,25 @@ struct DictationNotchGeometry: Equatable {
     let notchWidth: CGFloat
     let notchHeight: CGFloat
     let isFailure: Bool
-    /// Keys in the finish shortcut; longer shortcuts widen both sides so nothing reaches the camera.
-    let finishKeyCount: Int
+    /// The finish shortcut's rendered width; longer shortcuts widen both sides so nothing reaches
+    /// under the camera.
+    let finishKeysWidth: CGFloat
 
-    /// Each side's content width: the level bars (25), a gap (8), and 18 pt per key 2 pt apart.
+    /// Each side's content width: the level bars (25), a gap (8), and the finish keys.
     var wingWidth: CGFloat {
-        let keys = CGFloat(finishKeyCount)
-        let trailing = finishKeyCount > 0 ? 25 + 8 + keys * 18 + (keys - 1) * 2 : 25
+        let trailing = finishKeysWidth > 0 ? 25 + 8 + finishKeysWidth : 25
         return max(Self.minimumWingWidth, trailing)
+    }
+
+    /// The width the finish keys render at: each label (10 pt semibold) plus 4 pt padding per side,
+    /// at least 16 pt, 2 pt apart, matching the keycaps drawn in the notch.
+    static func keysWidth(_ shortcut: String?) -> CGFloat {
+        guard let shortcut else { return 0 }
+        let keys = ShortcutKeycapPresentation(shortcut: shortcut).keys
+        guard !keys.isEmpty else { return 0 }
+        let font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        let widths = keys.map { max(16, ceil(($0 as NSString).size(withAttributes: [.font: font]).width) + 8) }
+        return widths.reduce(0, +) + CGFloat(keys.count - 1) * 2
     }
 
     var shapeSize: CGSize {
