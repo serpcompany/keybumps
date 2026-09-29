@@ -16,7 +16,7 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
 2. **Polar is the first payment provider, as merchant of record.**
    - Polar collects and remits global VAT and sales tax.
    - Selling through Stripe directly would make us the merchant of record, responsible for registering and filing wherever we pass tax thresholds. EU VAT on digital goods applies from the first sale.
-3. **One SERP licensing service owns keys, licenses, and leases.** It is a Cloudflare Worker with D1, in its own repository, serving every SERP app keyed by product.
+3. **One SERP licensing service owns keys, licenses, and leases.** It is a Cloudflare Worker with D1, serving every SERP app keyed by product. It starts in this repository under `services/licensing/`, with its own toolchain and CI job kept apart from the Swift app. It moves to a shared repository when a second app needs it. Keys and Licenses live in D1, so moving it changes nothing for customers.
    - Apps talk only to this service, never to Polar, Stripe, or Lago.
    - Providers sit behind a server-side `ProviderAdapter`. It verifies webhooks and emits normalized events: order paid, order refunded, dispute opened, and subscription active/renewed/canceled/ended.
    - Domain tables store only `provider` and `provider_ref`.
@@ -72,5 +72,5 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
 - Licensing is an app-shell seam (`LicenseControlling`), modeled on `UpdateControlling`. Capability modules see it only in whether they may start.
 - The Settings account page's "Local Preview" license group and the onboarding sentence saying purchasing is not part of this preview (`SettingsRootView.swift`) are replaced by the License page and an activation step.
 - The development license adapter placeholder is retired.
-- Creating the service repository, the Polar account, production signing keys, and live checkout all require fresh owner authorization.
+- Deploying the service, the Polar account, production signing keys, and live checkout all require fresh owner authorization.
 - Adding Stripe or Lago later means a new `ProviderAdapter` and new Offer rows. No app change and no key migration.
