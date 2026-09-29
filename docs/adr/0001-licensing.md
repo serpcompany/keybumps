@@ -34,7 +34,7 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
    - The License settings page, not Sparkle, shows that a newer version needs an upgrade.
    - A newer build installed by hand is Locked, with an "outside your update window" message and a link to the last covered version.
 6. **Signed leases, verified offline.**
-   - Activation exchanges a License Key and a device hash for a Lease. The Lease is a compact payload the service signs with Ed25519: `{kid, licenseId, product, deviceHash, validUntil?, updatesUntil?, issuedAt, refreshAfter, expiresAt}`.
+   - Activation exchanges a License Key and a device hash for a Lease. The Lease is a compact payload the service signs with Ed25519: `{v, kid, licenseId, product, deviceHash, validUntil, updatesUntil, issuedAt, refreshAfter, expiresAt}`, where `validUntil` and `updatesUntil` are `null` when unlimited. `services/licensing/README.md` is the exact wire contract.
    - The app verifies the signature with CryptoKit and rejects any Lease whose `product` or `deviceHash` differs from its own.
    - Info.plist embeds a small set of public keys indexed by `kid`, so the signing key can be rotated by shipping the new public key before signing with it. Private keys live only in Worker secrets, like Sparkle's EdDSA key.
    - A leaked key stays trusted by builds already installed until they update. This is accepted as a risk for software without DRM: the response is to rotate the key and drop the old `kid` in the next release.
@@ -42,9 +42,9 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
    - The device hash is SHA-256 of the hardware UUID and a per-product salt embedded in the app. Only the hash leaves the Mac.
 7. **Revocation happens through lease expiry, not a remote kill switch.**
    - A Lease carries `refreshAfter` (about 7 days) and `expiresAt` (about 45 days).
-   - The app refreshes silently whenever it's online after `refreshAfter`. The next refresh returns `revoked` after a refund, a dispute, or the end of a subscription's paid period. A subscription that is canceled but still paid for stays valid until `validUntil`.
+   - The app refreshes silently whenever it's online after `refreshAfter`. The next refresh returns `revoked` after a refund or dispute, and `expired` once a subscription's paid period and grace have ended. A subscription that is canceled but still paid for stays valid until `validUntil`.
    - A Mac that stays offline keeps working until `expiresAt`, and sees a warning during the final week. Past that point, one successful refresh is required.
-   - A subscription Lease is refreshed as soon as `validUntil` passes, and stays usable for a 7-day grace period so a renewal that hasn't reached the app yet doesn't lock the Mac. For subscriptions, the service caps `expiresAt` at `validUntil` plus that grace, so an offline subscriber must reconnect after each paid period.
+   - A subscription Lease is refreshed as soon as `validUntil` passes, and stays usable for a 7-day grace period, retrying about daily, so a renewal that hasn't reached the app yet doesn't lock the Mac. For subscriptions, the service caps `expiresAt` at `validUntil` plus that grace, so an offline subscriber must reconnect after each paid period.
    - These are the only cases where a paying customer must reconnect.
    - A network or server error never changes the current state.
    - The app keeps a Keychain high-water mark of trusted time. It starts at a Lease's server-issued `issuedAt`.

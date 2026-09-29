@@ -24,7 +24,8 @@
   "packages": {
     ".": {
       "package-name": "keybumps",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "exclude-paths": ["services"]
     }
   }
 }
