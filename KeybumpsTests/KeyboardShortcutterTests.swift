@@ -981,6 +981,29 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertEqual(event.canonicalShortcut?.displayString, "⌘N")
     }
 
+    func testSavedEventWithRetiredPointerCoordinatesStillLoadsAndDropsThemOnSave() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "occurredAt": 0,
+          "applicationName": "Finder",
+          "actionTitle": "Open New Window",
+          "shortcut": "⌘N",
+          "pointerX": 120.5,
+          "pointerY": 640,
+          "isRead": true
+        }
+        """
+
+        let event = try JSONDecoder().decode(CoachingEvent.self, from: Data(json.utf8))
+        XCTAssertEqual(event.actionTitle, "Open New Window")
+        XCTAssertTrue(event.isRead)
+
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(event)) as? [String: Any])
+        XCTAssertNil(saved["pointerX"])
+        XCTAssertNil(saved["pointerY"])
+    }
+
     func testCharacterizedChromeShortcutsMustPassRegistryValidation() {
         let supported = [
             ChromeShortcutCatalog.newTab,
