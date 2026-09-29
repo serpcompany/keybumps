@@ -500,13 +500,20 @@ final class KeyboardShortcutterTests: XCTestCase {
 
     func testRetiredVisualChannelsMoveToTheNotch() {
         for retired in ["nativeBanner", "topRightToast", "topCenterShelf"] {
-            let defaults = InMemoryDefaults()
-            defaults.set([retired, NotificationChannel.sound.rawValue], forKey: "selectedNotificationChannels")
+            let cases: [(saved: [String], expected: Set<NotificationChannel>, persisted: [String])] = [
+                ([retired], [.notch], ["notch"]),
+                ([retired, "sound"], [.notch, .sound], ["notch", "sound"]),
+                (["notch", retired], [.notch], ["notch"])
+            ]
+            for (saved, expected, persisted) in cases {
+                let defaults = InMemoryDefaults()
+                defaults.set(saved, forKey: "selectedNotificationChannels")
 
-            let preferences = AppPreferences(defaults: defaults)
+                let preferences = AppPreferences(defaults: defaults)
 
-            XCTAssertEqual(preferences.selectedChannels, [.notch, .sound], retired)
-            XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], ["notch", "sound"], retired)
+                XCTAssertEqual(preferences.selectedChannels, expected, "\(saved)")
+                XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], persisted, "\(saved)")
+            }
         }
         XCTAssertEqual(NotificationChannel.allCases, [.notch, .sound])
     }
@@ -578,8 +585,6 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertEqual(Set(NotificationChannel.allCases.map(\.id)).count, NotificationChannel.allCases.count)
         for channel in NotificationChannel.allCases {
             XCTAssertFalse(channel.title.isEmpty)
-            XCTAssertFalse(channel.summary.isEmpty)
-            XCTAssertFalse(channel.systemImage.isEmpty)
         }
     }
 

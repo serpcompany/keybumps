@@ -17,20 +17,6 @@ enum NotificationChannel: String, Codable, CaseIterable, Identifiable, Sendable 
         }
     }
 
-    var summary: String {
-        switch self {
-        case .notch: "The action and its shortcut flash out of the notch (or the top of the menu bar)."
-        case .sound: "Plays the system notification sound."
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .notch: "menubar.rectangle"
-        case .sound: "speaker.wave.2"
-        }
-    }
-
     /// Decodes saved selections, moving retired visual channels to the notch and dropping unknown
     /// ones (such as the earlier Pointer Card).
     static func decoding(_ rawValues: [String]) -> Set<NotificationChannel> {
