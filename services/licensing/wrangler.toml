@@ -17,7 +17,7 @@ enabled = false
 [[d1_databases]]
 binding = "DB"
 database_name = "keybumps-licensing"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "0f6ff8d5-60e8-4a41-bd67-6cf01a4871df"
 migrations_dir = "migrations"
 
 # Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN, POLAR_WEBHOOK_SECRET, RESEND_API_KEY.
@@ -26,6 +26,8 @@ migrations_dir = "migrations"
 [env.staging]
 name = "keybumps-licensing-staging"
 workers_dev = true
+# `routes` is inherited from the top level; staging must never claim production's domain.
+routes = []
 
 [env.staging.vars]
 EMAIL_FROM = "Keybumps <licenses@keybumps.app>"

@@ -10,6 +10,7 @@ cd "$(dirname "$0")/.."
 
 product_id="${1:?usage: scripts/provision-production.sh <live-polar-product-id>}"
 secrets_file="production.secrets.json"
+# The top level is production; `--env ""` targets it explicitly.
 wrangler() { npx wrangler "$@"; }
 
 placeholder="00000000-0000-0000-0000-000000000000"
@@ -28,7 +29,7 @@ if [[ ! -f "$secrets_file" ]]; then
   echo "Generating the production signing key and admin token..."
   umask 077
   node scripts/generate-signing-key.mjs prod-1 >/dev/null
-  wrangler secret put LEASE_SIGNING_KEY < prod-1.signing-key.json
+  wrangler secret put LEASE_SIGNING_KEY --env "" < prod-1.signing-key.json
   node -e '
     const fs = require("fs"), crypto = require("crypto");
     const x = JSON.parse(fs.readFileSync("prod-1.signing-key.json", "utf8")).jwk.x;
@@ -39,12 +40,12 @@ if [[ ! -f "$secrets_file" ]]; then
     }, null, 2), { mode: 0o600 });
   ' "$secrets_file"
   node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).adminToken)' "$secrets_file" \
-    | wrangler secret put ADMIN_TOKEN
+    | wrangler secret put ADMIN_TOKEN --env ""
   rm prod-1.signing-key.json
   echo "Saved the admin token and public key to $secrets_file (git-ignored). Back it up in your password manager."
 fi
 
-wrangler deploy
+wrangler deploy --env ""
 
 echo "Registering the launch Offer (\$49 lifetime, 1 Mac)..."
 node -e '
@@ -63,8 +64,8 @@ Production licensing is deployed at https://licensing.keybumps.app. Remaining ow
        URL https://licensing.keybumps.app/webhooks/polar, format Raw, API version 2026-04,
        events order.paid, order.refunded, refund.created, subscription.active, .canceled,
        .cycled, .revoked, .uncanceled, .updated. Then copy its secret and run:
-       npx wrangler secret put POLAR_WEBHOOK_SECRET
+       npx wrangler secret put POLAR_WEBHOOK_SECRET --env ""
   2. Resend: verify keybumps.app as a sending domain, create an API key, then run:
-       npx wrangler secret put RESEND_API_KEY
+       npx wrangler secret put RESEND_API_KEY --env ""
   3. Website: set LICENSING_API_URL = "https://licensing.keybumps.app" and deploy the site.
 NEXT
