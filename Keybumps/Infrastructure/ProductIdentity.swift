@@ -12,7 +12,7 @@ enum ReleaseLane: String, CaseIterable {
 enum ProductIdentity {
     static let bundleIdentifier = "com.serp.keybumps"
     /// The standalone mascot, as a template image: the menu-bar item and small in-app marks.
-    /// The app icon is the mascot on a key (AppIcon).
+    /// The app icon is the mascot on a keycap (Keybumps.icon, compiled as the Keybumps app icon).
     static let statusItemImageName = "KeybumpsMascot"
     static let inAppBrandImageName = "KeybumpsMascot"
 }
