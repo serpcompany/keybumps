@@ -208,6 +208,7 @@ private struct NotchNoticeView: View {
     let notchWidth: CGFloat
     let wingWidth: CGFloat
     let height: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShown = false
 
     var body: some View {
@@ -235,6 +236,8 @@ private struct NotchNoticeView: View {
         .opacity(isShown ? 1 : 0)
         .environment(\.colorScheme, .dark)
         .onAppear {
+            // With Reduce Motion, appear in place instead of springing open.
+            guard !reduceMotion else { isShown = true; return }
             withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { isShown = true }
         }
     }
