@@ -8,7 +8,7 @@ import SwiftUI
 /// black tab hanging from the top of the menu bar.
 @MainActor
 class DictationIndicatorController {
-    private var panel: NSPanel?
+    private(set) var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
     private let state = DictationNotchState()
 
@@ -48,7 +48,8 @@ class DictationIndicatorController {
             notchHeight: max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28),
             isFailure: state.phase.isFailure
         )
-        if panel.contentView == nil {
+        // A new panel already has a plain content view, so check for the notch view itself.
+        if !(panel.contentView is NSHostingView<DictationNotchView>) {
             panel.contentView = NSHostingView(rootView: DictationNotchView(state: state))
         }
         state.geometry = geometry
@@ -107,7 +108,7 @@ private extension DictationPhase {
     }
 }
 
-private struct DictationNotchView: View {
+struct DictationNotchView: View {
     let state: DictationNotchState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

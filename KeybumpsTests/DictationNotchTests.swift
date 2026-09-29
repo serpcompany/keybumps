@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import Keybumps
 
@@ -23,5 +25,23 @@ struct DictationNotchTests {
         let noNotch = DictationNotchGeometry(notchWidth: 0, notchHeight: 28, isFailure: false)
         #expect(noNotch.shapeSize.width == 120 + 2 * DictationNotchGeometry.wingWidth)
         #expect(noNotch.panelSize.width == noNotch.shapeSize.width + 2 * DictationNotchGeometry.margin)
+    }
+}
+
+@MainActor
+@Suite("Dictation notch panel")
+struct DictationNotchPanelTests {
+    @Test("Recording shows the notch view in a visible panel at the top of the screen, and idle hides it")
+    func showsNotchView() throws {
+        let indicator = DictationIndicatorController()
+        indicator.update(.recording)
+        let panel = try #require(indicator.panel)
+        #expect(panel.contentView is NSHostingView<DictationNotchView>)
+        #expect(panel.isVisible)
+        if let screen = NSScreen.main {
+            #expect(panel.frame.maxY == screen.frame.maxY)
+        }
+        indicator.update(.idle)
+        #expect(!panel.isVisible)
     }
 }
