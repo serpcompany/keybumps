@@ -286,19 +286,18 @@ private struct NotchCoachView: View {
     @State private var glowAngle = 0.0
     @State private var poppedKeys = 0
 
-    private static let glow: [Color] = [.purple, .blue, .cyan, .pink, .purple]
+    static let glow: [Color] = [.purple, .blue, .cyan, .pink, .purple]
 
-    var body: some View {
-        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16, style: .continuous)
+    private var appAndAction: some View {
         HStack(spacing: 10) {
             Group {
                 if let icon {
                     Image(nsImage: icon).resizable()
                 } else {
-                    Image(systemName: "keyboard").font(.system(size: 18)).foregroundStyle(.white.opacity(0.7))
+                    Image(systemName: "keyboard").font(.system(size: 16)).foregroundStyle(.white.opacity(0.7))
                 }
             }
-            .frame(width: 26, height: 26)
+            .frame(width: 24, height: 24)
             VStack(alignment: .leading, spacing: 0) {
                 Text(presentation.action)
                     .font(.system(size: 13, weight: .semibold))
@@ -309,19 +308,53 @@ private struct NotchCoachView: View {
             }
             .lineLimit(1)
             .fixedSize()
-            Spacer(minLength: 24)
-            HStack(spacing: 5) {
-                ForEach(Array(presentation.keys.enumerated()), id: \.offset) { index, key in
-                    PaletteKeycap(key)
-                        .scaleEffect(index < poppedKeys ? 1 : 0.4)
-                        .opacity(index < poppedKeys ? 1 : 0)
-                }
+        }
+    }
+
+    private var keycaps: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(presentation.keys.enumerated()), id: \.offset) { index, key in
+                CoachKeycap(key: key)
+                    .scaleEffect(index < poppedKeys ? 1 : 0.4)
+                    .opacity(index < poppedKeys ? 1 : 0)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, notchHeight + 1)
-        .padding(.bottom, 8)
-        .frame(minWidth: max(notchWidth + 120, 380))
+    }
+
+    /// Each side of the notch is as wide as the wider of the two contents.
+    private var wingWidth: CGFloat {
+        func width(_ text: String, _ size: CGFloat, _ weight: NSFont.Weight) -> CGFloat {
+            ceil((text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width)
+        }
+        let leading = 24 + 10 + max(width(presentation.action, 13, .semibold), width(presentation.application, 11, .regular))
+        let keys = CGFloat(presentation.keys.count) * (CoachKeycap.size + 5)
+        return max(leading, keys) + 6
+    }
+
+    var body: some View {
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16, style: .continuous)
+        Group {
+            if notchWidth > 0 {
+                // Both rows sit beside the camera housing: the app and action on the left, the
+                // keys on the right, each side equally wide so the notch stays centered.
+                HStack(spacing: 0) {
+                    appAndAction.frame(width: wingWidth, alignment: .leading)
+                    Color.clear.frame(width: notchWidth)
+                    keycaps.frame(width: wingWidth, alignment: .trailing)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: max(notchHeight, 34) + 10)
+            } else {
+                HStack(spacing: 24) {
+                    appAndAction
+                    Spacer(minLength: 0)
+                    keycaps
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .frame(minWidth: 340)
+            }
+        }
         .background(shape.fill(.black))
         .overlay(
             shape.strokeBorder(
@@ -350,5 +383,27 @@ private struct NotchCoachView: View {
                 }
             }
         }
+    }
+}
+
+/// A Shortcut Coach key: bright, bold, and edged with the tip's glow colors so the shortcut is the
+/// first thing noticed.
+private struct CoachKeycap: View {
+    static let size: CGFloat = 26
+    let key: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        Text(key)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(minWidth: Self.size, minHeight: Self.size)
+            .padding(.horizontal, 2)
+            .background(.white.opacity(0.14), in: shape)
+            .overlay(shape.strokeBorder(
+                LinearGradient(colors: [.purple, .blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+                lineWidth: 1.5
+            ))
+            .shadow(color: .cyan.opacity(0.45), radius: 4)
     }
 }
