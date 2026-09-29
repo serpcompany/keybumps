@@ -126,7 +126,7 @@ struct SettingsRootView: View {
                                 ForEach(group) { section in
                                     SettingsSidebarRow(
                                         section: section,
-                                        isSelected: navigation.selection == section,
+                                        isSelected: visibleSelection == section,
                                         attentionCount: model.settingsAttentionCount(for: section)
                                     ) {
                                         navigation.navigate(to: section)
@@ -320,6 +320,15 @@ private struct LicenseSettingsGroup: View {
             } label: {
                 SettingsRowLabel(title: "Keybumps License", subtitle: statusDetail)
             }
+            if case .locked(let reason) = snapshot.state, reason != .expired {
+                LabeledContent {
+                    Button(snapshot.isBusy ? "Checking…" : "Check Again") { Task { await model.refreshLicense(force: true) } }
+                        .disabled(snapshot.isBusy)
+                        .accessibilityIdentifier("license.check")
+                } label: {
+                    SettingsRowLabel(title: "Check license", subtitle: "Asks Polar about this key now.")
+                }
+            }
             if case .active = snapshot.state {
                 LabeledContent {
                     Button("Deactivate This Mac") { Task { await model.deactivateLicense() } }
@@ -352,6 +361,8 @@ private struct LicenseSettingsGroup: View {
                 Button("Find My Key or Manage My Purchase") { openURL(LicenseLinks.customerPortal) }
             }
         }
+        // Opening the page runs a check when one is due, so a Locked Mac recovers without waiting.
+        .task { await model.refreshLicense() }
     }
 
     private func activate() {
@@ -366,10 +377,9 @@ private struct LicenseSettingsGroup: View {
         switch snapshot.state {
         case .active: return "Active"
         case .unlicensed: return "Not activated"
-        case .locked(.revoked): return "Revoked"
+        case .locked(.notAccepted): return "Not accepted"
         case .locked(.expired): return "Expired"
         case .locked(.needsCheck): return "Check required"
-        case .locked(.deactivated): return "Deactivated"
         }
     }
 
@@ -380,14 +390,12 @@ private struct LicenseSettingsGroup: View {
             return "Key \(check.maskedKey) · Checked \(checked)"
         case .unlicensed:
             return "Enter the license key from your Polar receipt to use Keybumps on this Mac."
-        case .locked(.revoked):
-            return "This license was revoked, for example after a refund. Contact support@keybumps.app if that’s a mistake."
+        case .locked(.notAccepted):
+            return "Polar no longer accepts this key on this Mac. It may have been refunded or revoked, or this Mac was deactivated in the customer portal. Check again, or enter your key to activate this Mac again."
         case .locked(.expired):
             return "This license has expired."
         case .locked(.needsCheck):
-            return "Keybumps hasn’t been able to check your license for 45 days. Connect to the internet to continue."
-        case .locked(.deactivated):
-            return "This Mac was deactivated, for example from the customer portal. Enter your key to activate it again."
+            return "Keybumps hasn’t been able to check your license for 45 days. Connect to the internet and check again."
         }
     }
 }

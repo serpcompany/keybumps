@@ -9,7 +9,8 @@ protocol LicenseControlling: AnyObject {
     func start()
     func activate(key: String) async
     func deactivate() async
-    func refreshIfNeeded() async
+    /// Checks with the provider when one is due, or always when `force` is true (the "Check Again" button).
+    func refresh(force: Bool) async
 }
 
 @MainActor
@@ -25,6 +26,8 @@ final class LicenseController: LicenseControlling {
     private let now: () -> Date
     private var timer: Timer?
     private var started = false
+    /// The provider said no at the last check. Kept until a check or activation succeeds.
+    private var notAccepted = false
 
     init(
         provider: any LicenseProviding,
@@ -36,17 +39,18 @@ final class LicenseController: LicenseControlling {
         self.store = store
         self.device = device
         self.now = now
-        snapshot = LicenseSnapshot(state: LicensePolicy.state(for: store.load(), now: now()))
+        snapshot = LicenseSnapshot(state: .unlicensed)
+        snapshot.state = storedState()
     }
 
     func start() {
         guard !started else { return }
         started = true
-        publishStoredState()
-        Task { await refreshIfNeeded() }
+        snapshot.state = storedState()
+        Task { await refresh(force: false) }
         // Re-evaluate the offline allowance and refresh schedule a few times a day.
         timer = Timer.scheduledTimer(withTimeInterval: 6 * 3_600, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refreshIfNeeded() }
+            Task { @MainActor in await self?.refresh(force: false) }
         }
     }
 
@@ -56,16 +60,25 @@ final class LicenseController: LicenseControlling {
         snapshot.isBusy = true
         snapshot.lastError = nil
         defer { snapshot.isBusy = false }
+        let label = device.activationLabel
         do {
-            let activation = try await provider.activate(key: key, label: device.activationLabel)
+            let activation = try await provider.activate(key: key, label: label)
             let check = LicenseCheck(
                 key: key,
                 activationID: activation.activationID,
                 validatedAt: now(),
-                expiresAt: activation.expiresAt
+                expiresAt: activation.expiresAt,
+                deviceLabel: label
             )
-            try store.save(check)
-            snapshot.state = LicensePolicy.state(for: check, now: now())
+            do {
+                try store.save(check)
+            } catch {
+                // Don't leave a used activation slot that this Mac can't remember.
+                try? await provider.deactivate(key: key, activationID: activation.activationID)
+                throw LicenseActionError.unexpected
+            }
+            notAccepted = false
+            snapshot.state = storedState()
         } catch {
             snapshot.lastError = (error as? LicenseActionError) ?? .unexpected
         }
@@ -79,6 +92,7 @@ final class LicenseController: LicenseControlling {
         do {
             try await provider.deactivate(key: check.key, activationID: check.activationID)
             store.clear()
+            notAccepted = false
             snapshot.state = .unlicensed
         } catch {
             // Keep the activation locally: the slot is only freed once the provider confirms.
@@ -86,39 +100,39 @@ final class LicenseController: LicenseControlling {
         }
     }
 
-    func refreshIfNeeded() async {
-        publishStoredState()
-        guard var check = store.load() else { return }
-        let lockedForCheck = snapshot.state == .locked(.needsCheck)
-        guard lockedForCheck || LicensePolicy.needsRefresh(check, now: now()) else { return }
+    func refresh(force: Bool) async {
+        guard !snapshot.isBusy else { return }
+        snapshot.state = storedState()
+        guard var check = store.load(), snapshot.state != .unlicensed else { return }
+        let locked = !snapshot.isEntitled
+        guard force || locked || LicensePolicy.needsRefresh(check, now: now()) else { return }
+        snapshot.isBusy = true
+        defer { snapshot.isBusy = false }
         let result: LicenseValidation
         do {
             result = try await provider.validate(key: check.key, activationID: check.activationID)
         } catch {
             return // Unknown answer: never change the current state.
         }
+        // A deactivate or re-activation replaced the stored check while this ran; ignore the stale answer.
+        guard store.load()?.activationID == check.activationID else { return }
         switch result {
         case .granted(let expiresAt):
             check.validatedAt = now()
             check.expiresAt = expiresAt
             try? store.save(check)
-            snapshot.state = LicensePolicy.state(for: check, now: now())
-        case .revoked:
-            snapshot.state = .locked(.revoked)
-        case .notFound:
-            store.clear()
-            snapshot.state = .locked(.deactivated)
+            notAccepted = false
+        case .notAccepted:
+            notAccepted = true
         }
+        snapshot.state = storedState()
     }
 
-    /// Applies time-based rules (offline allowance, expiry) to the stored check without a network call.
-    private func publishStoredState() {
-        switch snapshot.state {
-        case .locked(.revoked), .locked(.deactivated):
-            return // Only a successful activation or check clears these.
-        default:
-            snapshot.state = LicensePolicy.state(for: store.load(), now: now())
-        }
+    /// Applies time and device rules to the stored check, plus the last provider refusal, with no network call.
+    private func storedState() -> LicenseState {
+        let state = LicensePolicy.state(for: store.load(), now: now(), deviceLabel: device.activationLabel)
+        if notAccepted, state != .unlicensed { return .locked(.notAccepted) }
+        return state
     }
 }
 
@@ -144,7 +158,7 @@ final class FixedLicenseController: LicenseControlling {
         snapshot = LicenseSnapshot(state: state)
     }
 
-    static let sampleCheck = LicenseCheck(
+    nonisolated static let sampleCheck = LicenseCheck(
         key: "KEYBUMPS-TEST-0000",
         activationID: "test-activation",
         validatedAt: Date(timeIntervalSince1970: 1_800_000_000),
@@ -154,6 +168,6 @@ final class FixedLicenseController: LicenseControlling {
     func start() {}
     func activate(key: String) async { snapshot.state = .active(Self.sampleCheck) }
     func deactivate() async { snapshot.state = .unlicensed }
-    func refreshIfNeeded() async {}
+    func refresh(force: Bool) async {}
 }
 #endif

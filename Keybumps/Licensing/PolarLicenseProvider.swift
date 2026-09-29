@@ -7,9 +7,9 @@ struct LicenseActivation: Equatable, Sendable {
 
 enum LicenseValidation: Equatable, Sendable {
     case granted(expiresAt: Date?)
-    case revoked
-    /// The key or this Mac's activation no longer exists.
-    case notFound
+    /// Revoked or refunded, disabled, expired, unknown, or this activation removed. Polar answers
+    /// all of these with 404, so they can't be told apart.
+    case notAccepted
 }
 
 /// The license provider seam. Polar is the only implementation (ADR 0002); another provider is
@@ -85,8 +85,8 @@ struct PolarLicenseProvider: LicenseProviding {
             let body = try decode(ValidationBody.self, from: data)
             return body.status == "granted"
                 ? .granted(expiresAt: body.expiresAt.flatMap(PolarDates.parse))
-                : .revoked
-        case 404: return .notFound
+                : .notAccepted
+        case 404: return .notAccepted
         default: throw LicenseActionError.unexpected
         }
     }

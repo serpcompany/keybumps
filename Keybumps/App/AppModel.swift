@@ -269,7 +269,9 @@ final class AppModel {
     var isLicensed: Bool { licenseSnapshot.isEntitled }
     func activateLicense(key: String) async { await licensing.activate(key: key) }
     func deactivateLicense() async { await licensing.deactivate() }
-    func refreshLicense() async { await licensing.refreshIfNeeded() }
+    func refreshLicense(force: Bool = false) async { await licensing.refresh(force: force) }
+    /// What the Dock, the status menu, and the palette shortcuts open while Locked: Settings, which shows the License page.
+    var openLicenseSettings: () -> Void = { MainWindowRouter.shared.open() }
 
     private func licenseDidChange(_ snapshot: LicenseSnapshot) {
         let wasLicensed = isLicensed
@@ -315,7 +317,10 @@ final class AppModel {
             owner: CapabilityShortcut.quickSearch.ownerID,
             binding: binding
         ) { [weak self] in
-            self?.commandPalette.toggle(.search)
+            guard let self else { return }
+            // Onboarding registers this before activation; it opens Quick Search only once licensed.
+            guard self.isLicensed else { self.openLicenseSettings(); return }
+            self.commandPalette.toggle(.search)
         }
         quickSearchShortcutConflictStatus = registered
             ? .noConflict
@@ -603,7 +608,8 @@ final class AppModel {
     }
     func restoreDefaultWindowShortcuts() { preferences.restoreDefaultWindowShortcuts(); applyCapabilities() }
     func showQuickSearch() {
-        guard isLicensed, preferences.enabledCapabilities.contains(.quickSearch) else { return }
+        guard isLicensed else { openLicenseSettings(); return }
+        guard preferences.enabledCapabilities.contains(.quickSearch) else { return }
         commandPalette.show(.search)
     }
     var isQuickSearchVisible: Bool { commandPalette.isDisplaying(.search) }

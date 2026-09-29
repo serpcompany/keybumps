@@ -95,20 +95,20 @@ struct PolarLicenseProviderTests {
         await #expect(throws: LicenseActionError.network) { try await provider(http).activate(key: "K", label: "L") }
     }
 
-    @Test("Validation reads granted, revoked or disabled, and not found")
+    @Test("Validation: 200 granted is accepted; Polar's 404 (revoked, refunded, removed) is not")
     func validate() async throws {
         let http = RecordingHTTPClient()
         http.responses = [
             (200, #"{"status":"granted","expires_at":null}"#),
-            (200, #"{"status":"revoked","expires_at":null}"#),
-            (200, #"{"status":"disabled","expires_at":null}"#),
             (404, #"{"error":"ResourceNotFound"}"#),
+            (200, #"{"status":"revoked","expires_at":null}"#),
+            (500, ""),
         ]
         let polar = provider(http)
         #expect(try await polar.validate(key: "K", activationID: "A") == .granted(expiresAt: nil))
-        #expect(try await polar.validate(key: "K", activationID: "A") == .revoked)
-        #expect(try await polar.validate(key: "K", activationID: "A") == .revoked)
-        #expect(try await polar.validate(key: "K", activationID: "A") == .notFound)
+        #expect(try await polar.validate(key: "K", activationID: "A") == .notAccepted)
+        #expect(try await polar.validate(key: "K", activationID: "A") == .notAccepted)
+        await #expect(throws: LicenseActionError.unexpected) { try await polar.validate(key: "K", activationID: "A") }
         #expect(http.body(0) == ["key": "K", "organization_id": "org-1", "activation_id": "A"])
     }
 
@@ -140,7 +140,17 @@ private final class FakeProvider: LicenseProviding, @unchecked Sendable {
         validations += 1
         return try validation.get()
     }
-    func deactivate(key: String, activationID: String) async throws { try deactivation.get() }
+    private(set) var deactivations = 0
+    func deactivate(key: String, activationID: String) async throws {
+        deactivations += 1
+        try deactivation.get()
+    }
+}
+
+private final class FailingStore: LicenseStoring {
+    func load() -> LicenseCheck? { nil }
+    func save(_ check: LicenseCheck) throws { throw LicenseActionError.unexpected }
+    func clear() {}
 }
 
 private struct FakeDevice: DeviceIdentifying { let activationLabel = "mac-test" }
@@ -160,7 +170,7 @@ struct LicenseControllerTests {
         let (controller, store, provider, clock) = make()
         #expect(controller.snapshot.state == .unlicensed)
         await controller.activate(key: "  KEYBUMPS-1 \n")
-        let check = LicenseCheck(key: "KEYBUMPS-1", activationID: "act-1", validatedAt: clock.now, expiresAt: nil)
+        let check = LicenseCheck(key: "KEYBUMPS-1", activationID: "act-1", validatedAt: clock.now, expiresAt: nil, deviceLabel: "mac-test")
         #expect(store.check == check)
         #expect(controller.snapshot.state == .active(check))
         #expect(provider.activatedLabels == ["mac-test"])
@@ -183,7 +193,7 @@ struct LicenseControllerTests {
         let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
         let (controller, _, provider, _) = make(store: store, clock: clock)
         clock.now.addTimeInterval(6 * 86_400)
-        await controller.refreshIfNeeded()
+        await controller.refresh(force: false)
         #expect(provider.validations == 0)
     }
 
@@ -193,30 +203,56 @@ struct LicenseControllerTests {
         let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
         let (controller, _, provider, _) = make(store: store, clock: clock)
         clock.now.addTimeInterval(8 * 86_400)
-        await controller.refreshIfNeeded()
+        await controller.refresh(force: false)
         #expect(provider.validations == 1)
         #expect(store.check?.validatedAt == clock.now)
         #expect(controller.snapshot.isEntitled)
     }
 
-    @Test("Revocation locks; a removed activation locks and clears the key")
-    func revocationAndRemoval() async {
+    @Test("A refusal locks but keeps the key, and a later success unlocks")
+    func refusalRecovers() async {
         let clock = Clock()
         let original = LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil)
-        let revokedProvider = FakeProvider()
-        revokedProvider.validation = .success(.revoked)
-        let (revoked, _, _, _) = make(store: InMemoryLicenseStore(original), provider: revokedProvider, clock: clock)
+        let provider = FakeProvider()
+        provider.validation = .success(.notAccepted)
+        let store = InMemoryLicenseStore(original)
+        let (controller, _, _, _) = make(store: store, provider: provider, clock: clock)
         clock.now.addTimeInterval(8 * 86_400)
-        await revoked.refreshIfNeeded()
-        #expect(revoked.snapshot.state == .locked(.revoked))
+        await controller.refresh(force: false)
+        #expect(controller.snapshot.state == .locked(.notAccepted))
+        #expect(store.check == original)
 
-        let goneProvider = FakeProvider()
-        goneProvider.validation = .success(.notFound)
-        let goneStore = InMemoryLicenseStore(original)
-        let (gone, _, _, _) = make(store: goneStore, provider: goneProvider, clock: clock)
-        await gone.refreshIfNeeded()
-        #expect(gone.snapshot.state == .locked(.deactivated))
-        #expect(goneStore.check == nil)
+        provider.validation = .success(.granted(expiresAt: nil))
+        await controller.refresh(force: false)
+        #expect(controller.snapshot.isEntitled)
+    }
+
+    @Test("Check Again validates even when no check is due")
+    func forcedCheck() async {
+        let clock = Clock()
+        let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
+        let (controller, _, provider, _) = make(store: store, clock: clock)
+        await controller.refresh(force: true)
+        #expect(provider.validations == 1)
+    }
+
+    @Test("A check restored onto another Mac doesn't count there")
+    func otherMac() {
+        let store = InMemoryLicenseStore(LicenseCheck(
+            key: "K", activationID: "A", validatedAt: Date(timeIntervalSince1970: 1_800_000_000), expiresAt: nil, deviceLabel: "mac-other"
+        ))
+        let (controller, _, _, _) = make(store: store)
+        #expect(controller.snapshot.state == .unlicensed)
+    }
+
+    @Test("If the activation can't be saved, its slot is freed")
+    func saveFailureFreesSlot() async {
+        let provider = FakeProvider()
+        let controller = LicenseController(provider: provider, store: FailingStore(), device: FakeDevice())
+        await controller.activate(key: "KEYBUMPS-1")
+        #expect(controller.snapshot.lastError == .unexpected)
+        #expect(provider.deactivations == 1)
+        #expect(controller.snapshot.state == .unlicensed)
     }
 
     @Test("A network failure never changes the state; past the allowance, one success unlocks")
@@ -227,15 +263,15 @@ struct LicenseControllerTests {
         provider.validation = .failure(.network)
         let (controller, _, _, _) = make(store: store, provider: provider, clock: clock)
         clock.now.addTimeInterval(10 * 86_400)
-        await controller.refreshIfNeeded()
+        await controller.refresh(force: false)
         #expect(controller.snapshot.isEntitled)
 
         clock.now.addTimeInterval(40 * 86_400)
-        await controller.refreshIfNeeded()
+        await controller.refresh(force: false)
         #expect(controller.snapshot.state == .locked(.needsCheck))
 
         provider.validation = .success(.granted(expiresAt: nil))
-        await controller.refreshIfNeeded()
+        await controller.refresh(force: false)
         #expect(controller.snapshot.isEntitled)
     }
 

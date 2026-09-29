@@ -7,6 +7,9 @@ struct LicenseCheck: Codable, Equatable, Sendable {
     var activationID: String
     var validatedAt: Date
     var expiresAt: Date?
+    /// The activation label of the Mac that activated. A check restored onto another Mac (for
+    /// example by Migration Assistant copying the login keychain) doesn't count there.
+    var deviceLabel: String?
 
     /// The key with only its last four characters visible, for display.
     var maskedKey: String {
@@ -17,14 +20,14 @@ struct LicenseCheck: Codable, Equatable, Sendable {
 
 /// Why Keybumps is Locked.
 enum LicenseLockReason: Equatable, Sendable {
-    /// The provider reports the license revoked or disabled (for example after a refund).
-    case revoked
+    /// The provider no longer accepts this key and activation: revoked or refunded, disabled, or
+    /// this Mac deactivated elsewhere (Polar reports all of these the same way). The stored check
+    /// is kept, so a later successful check unlocks it again.
+    case notAccepted
     /// The license's own expiry date has passed.
     case expired
     /// No successful check within the offline allowance; one successful check unlocks it.
     case needsCheck
-    /// This Mac's activation no longer exists (deactivated elsewhere, such as the customer portal).
-    case deactivated
 }
 
 enum LicenseState: Equatable, Sendable {
@@ -74,10 +77,12 @@ enum LicensePolicy {
     static let refreshInterval: TimeInterval = 7 * 86_400
     static let offlineAllowance: TimeInterval = 45 * 86_400
 
-    static func state(for check: LicenseCheck?, now: Date) -> LicenseState {
+    static func state(for check: LicenseCheck?, now: Date, deviceLabel: String? = nil) -> LicenseState {
         guard let check else { return .unlicensed }
+        if let deviceLabel, let owner = check.deviceLabel, owner != deviceLabel { return .unlicensed }
         if let expiresAt = check.expiresAt, expiresAt <= now { return .locked(.expired) }
-        // A clock set before the last check counts as needing a fresh check, never as a longer allowance.
+        // A clock set earlier than the last check makes `needsRefresh` true, so the next online
+        // moment checks again. While offline it can stretch the allowance; that is accepted with no DRM.
         let age = now.timeIntervalSince(check.validatedAt)
         if age > offlineAllowance { return .locked(.needsCheck) }
         return .active(check)
