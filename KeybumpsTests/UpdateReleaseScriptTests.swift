@@ -253,12 +253,20 @@ final class UpdateReleaseScriptTests: XCTestCase {
         {"version": "\(version)", "build": \(build), "dmgURL": "https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).dmg", "sha256": "\(String(repeating: "ab", count: 32))"}
         """.write(to: last.appendingPathComponent("latest.json"), atomically: true, encoding: .utf8)
 
-        // A fake wrangler that "uploads" into a directory served over loopback, logging each key.
+        // A fake wrangler backed by a directory: `put` uploads and logs each key, and `get --pipe`
+        // reads an object back (failing when it is missing), as publish-release.sh verifies from R2.
         let log = work.appendingPathComponent("uploads.log")
         let fakeWrangler = work.appendingPathComponent("fake-wrangler")
         try """
         #!/bin/zsh
         set -euo pipefail
+        if [[ "$1 $2 $3" == "r2 object get" ]]; then
+          [[ -z "${FAKE_R2_READ_ERROR:-}" ]] || { print -u2 "Authentication error [code: 10000]"; exit 1; }
+          object="\(bucketRoot.path)/${4#keybumps-updates/}"
+          [[ -f "$object" ]] || { print -u2 "The specified key does not exist."; exit 1; }
+          cat "$object"
+          exit 0
+        fi
         [[ "$1 $2 $3" == "r2 object put" ]] || exit 9
         key=${4#keybumps-updates/}
         shift 4
@@ -271,16 +279,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
         """.write(to: fakeWrangler, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeWrangler.path)
 
-        let server = Process()
-        server.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        server.arguments = ["-m", "http.server", "18767", "--bind", "127.0.0.1", "--directory", bucketRoot.path]
-        server.standardOutput = Pipe(); server.standardError = Pipe()
-        try server.run()
-        defer { server.terminate(); server.waitUntilExit() }
-        for _ in 0..<50 where try run(URL(fileURLWithPath: "/usr/bin/curl"), ["--silent", "--output", "/dev/null", "http://127.0.0.1:18767/"]).status != 0 {
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        let environment = ["KEYBUMPS_WRANGLER": fakeWrangler.path, "KEYBUMPS_RELEASE_ORIGIN": "http://127.0.0.1:18767"]
+        let environment = ["KEYBUMPS_WRANGLER": fakeWrangler.path]
 
         let dryRun = try run(publisher, [output.path, "production"], environment: environment)
         XCTAssertEqual(dryRun.status, 0, dryRun.output)
@@ -299,6 +298,12 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertTrue(metadata.contains("appcast.xml --cache-control=public, max-age=60, must-revalidate"))
         XCTAssertTrue(metadata.contains("latest.json --content-type=application/json; charset=utf-8"))
 
+        var failingReads = environment
+        failingReads["FAKE_R2_READ_ERROR"] = "1"
+        let unreadable = try run(publisher, [output.path, "production", "--publish"], environment: failingReads)
+        XCTAssertNotEqual(unreadable.status, 0, "a read error must not be treated as a missing object")
+        XCTAssertTrue(unreadable.output.contains("could not read"), unreadable.output)
+
         let rerun = try run(publisher, [output.path, "production", "--publish"], environment: environment)
         XCTAssertEqual(rerun.status, 0, rerun.output)
         XCTAssertTrue(rerun.output.contains("already published releases/4008/Keybumps-0.0.3-beta.4.zip"))
@@ -313,7 +318,6 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertFalse(staging.output.contains("latest.json"), "only production moves the download page")
 
         XCTAssertNotEqual(try run(publisher, [output.path, "beta"], environment: environment).status, 0)
-        XCTAssertNotEqual(try run(publisher, [output.path, "production"], environment: ["KEYBUMPS_RELEASE_ORIGIN": "https://evil.example"]).status, 0)
         try writeAppcast("https://updates.keybumps.app/Keybumps-\(version).zip")
         let wrongLayout = try run(publisher, [output.path, "production"], environment: environment)
         XCTAssertNotEqual(wrongLayout.status, 0)

@@ -97,7 +97,8 @@ jobs:
           for name in "${required[@]}"; do
             [ -n "${!name}" ] || missing+=("$name")
           done
-          if [ "$PUBLISH" = true ] && [ -z "$CLOUDFLARE_R2_TOKEN" ]; then missing+=(CLOUDFLARE_R2_TOKEN); fi
+          # Every run reads the live build from R2, so the R2 token is always required.
+          [ -n "$CLOUDFLARE_R2_TOKEN" ] || missing+=(CLOUDFLARE_R2_TOKEN)
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::Missing repository secrets: ${missing[*]} (see docs/releases/sparkle-update-operations.md)"
             exit 1
@@ -116,7 +117,6 @@ jobs:
           echo "SPARKLE_TOOLS=$RUNNER_TEMP/sparkle/bin" >> "$GITHUB_ENV"
 
       - name: Check R2 access
-        if: inputs.publish
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe > /dev/null

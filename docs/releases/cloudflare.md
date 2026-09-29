@@ -25,5 +25,5 @@ Found at inventory time: releases 4006 (`0.0.3-beta.2`) and 4007 (`0.0.3-beta.3`
 
 ## Access
 
-- Publishing uses `wrangler r2 object put` with `CLOUDFLARE_API_TOKEN` set to an API token scoped to **Workers R2 Storage: Edit** on the `keybumps-updates` bucket only. It lives in the `CLOUDFLARE_R2_TOKEN` repository secret for the Release Keybumps workflow; anywhere else, provide it through the environment. Never put it in the repository, shell history, or chat.
+- Publishing uses `wrangler r2 object put` with `CLOUDFLARE_API_TOKEN` set to an API token scoped to **Workers R2 Storage: Edit** on the `keybumps-updates` bucket only. The same token reads objects back (`wrangler r2 object get`): every Release Keybumps run reads the live `appcast.xml` for the build number, and publishing verifies each upload byte for byte. Reads go to R2 directly because Cloudflare Bot Fight Mode returns 403 to GitHub-hosted runners on `updates.keybumps.app`; check the public host with `scripts/verify-update-publication.sh` from a normal network. It lives in the `CLOUDFLARE_R2_TOKEN` repository secret for the Release Keybumps workflow; anywhere else, provide it through the environment. Never put it in the repository, shell history, or chat.
 - Publishing, DNS, and bucket changes require fresh owner authorization (see `AGENTS.md`).
