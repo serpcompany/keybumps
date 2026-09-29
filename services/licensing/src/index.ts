@@ -16,6 +16,7 @@ import {
   type LicenseRow,
 } from "./licenses";
 import { applyEvent, NotYetKnownError, UnknownOfferError } from "./fulfillment";
+import { deliverPendingKeys, ResendMailer, type KeyMailer } from "./mailer";
 import { isWithinTerm, leaseWindow } from "./policy";
 import { PolarAdapter } from "./providers/polar";
 import type { ProviderAdapter } from "./providers/types";
@@ -27,6 +28,10 @@ export interface Env {
   ADMIN_TOKEN: string;
   /** Polar webhook endpoint secret. Webhooks from Polar are rejected while it is unset. */
   POLAR_WEBHOOK_SECRET?: string;
+  /** Resend API key. Keys aren't emailed while it is unset. */
+  RESEND_API_KEY?: string;
+  /** Sender, e.g. `Keybumps <licenses@keybumps.app>`. */
+  EMAIL_FROM?: string;
   /** Optional Workers rate-limiting binding, keyed per License Key. */
   KEY_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
@@ -100,6 +105,8 @@ async function route(request: Request, env: Env): Promise<Response> {
       return refresh(await clientRequest(request, env), env);
     case "/v1/deactivate":
       return deactivate(await clientRequest(request, env), env);
+    case "/v1/resend-key":
+      return resendKey(await readJson(request), env);
     case "/admin/licenses":
       await requireAdmin(request, env);
       return adminIssue(await readJson(request), env);
@@ -225,18 +232,74 @@ async function receiveWebhook(request: Request, env: Env, name: string): Promise
     .first();
   if (seen) return json({ ok: true });
 
+  let outcome;
   try {
-    await applyEvent(env.DB, adapter.name, verified.event, nowSeconds());
+    outcome = await applyEvent(env.DB, adapter.name, verified.event, nowSeconds());
   } catch (error) {
     // Non-2xx makes the provider retry, e.g. after the missing Offer is added.
     if (error instanceof UnknownOfferError) return json({ error: "unknown_offer" }, 422);
     if (error instanceof NotYetKnownError) return json({ error: "not_yet_known" }, 409);
     throw error;
   }
+  const mailer = keyMailer(env);
+  if (outcome.customerId && mailer) {
+    try {
+      await deliverPendingKeys(env.DB, mailer, outcome.customerId, nowSeconds());
+    } catch {
+      // The License exists; the provider's retry sends only the keys still unsent.
+      return json({ error: "email_failed" }, 502);
+    }
+  }
   await env.DB.prepare("INSERT OR IGNORE INTO webhook_events (provider, event_id, received_at) VALUES (?, ?, ?)")
     .bind(adapter.name, verified.eventId, nowSeconds())
     .run();
   return json({ ok: true });
+}
+
+// MARK: - Key email
+
+/** Test compositions may replace the mailer. */
+export const mailerOverride: { current: KeyMailer | null } = { current: null };
+
+function keyMailer(env: Env): KeyMailer | null {
+  if (mailerOverride.current) return mailerOverride.current;
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return null;
+  return new ResendMailer(env.RESEND_API_KEY, env.EMAIL_FROM);
+}
+
+const RESEND_INTERVAL = 10 * 60;
+
+/**
+ * Emails every active key on file to the purchase address, and only that address. The response
+ * is identical whether or not the address bought, and each address can trigger it once per interval.
+ */
+async function resendKey(body: Record<string, unknown>, env: Env): Promise<Response> {
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!/^[^\s@]+@[^\s@]+$/.test(email) || email.length > 254) throw new ApiError("bad_request");
+  const now = nowSeconds();
+  const mailer = keyMailer(env);
+  const claimed = await env.DB.prepare(
+    "UPDATE customers SET last_resend_at = ? WHERE email = ? AND (last_resend_at IS NULL OR last_resend_at <= ?)",
+  )
+    .bind(now, email, now - RESEND_INTERVAL)
+    .run();
+  if (mailer && claimed.meta.changes > 0) {
+    const { results } = await env.DB.prepare(
+      `SELECT l.license_key AS key, p.name AS productName
+       FROM licenses l JOIN products p ON p.id = l.product_id JOIN customers c ON c.id = l.customer_id
+       WHERE c.email = ? AND l.status = 'active' ORDER BY l.created_at`,
+    )
+      .bind(email)
+      .all<{ key: string; productName: string }>();
+    if (results.length > 0) {
+      try {
+        await mailer.sendKeys(email, results);
+      } catch {
+        // Same response either way, so the form never reveals whether an address bought.
+      }
+    }
+  }
+  return json({ ok: true }, 202);
 }
 
 // MARK: - Admin endpoints

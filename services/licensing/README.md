@@ -19,6 +19,7 @@ All endpoints take a JSON body and return JSON. Errors look like `{"error": "<co
 | `POST /v1/activate` | `product`, `key`, `deviceHash` (64 hex chars, any case; stored lowercase) | `{lease}` |
 | `POST /v1/refresh` | same | `{lease}` |
 | `POST /v1/deactivate` | same | `{ok: true}` |
+| `POST /v1/resend-key` | `email` | Always `202 {ok: true}`. Emails active keys to that address at most once per 10 minutes. The website calls it server-side. |
 | `POST /admin/licenses` | `product`, optional `validUntil`, `updatesUntil` (Unix seconds), `maxActivations` | `201 {licenseId, key}` |
 | `POST /webhooks/polar` | Polar webhook (Standard Webhooks signature) | `{ok: true}`; `422 unknown_offer` makes Polar retry |
 | `POST /admin/offers` | `id`, `product`, `provider`, `providerRef` (provider product id), `kind` (`perpetual`, `update_window`, `subscription`), optional `updatesDays`, `maxActivations`, `active` | `{ok: true}` (upsert) |
@@ -57,6 +58,10 @@ This is the contract the app's verifier implements. All times are Unix seconds. 
 
 A paid order becomes a License through an Offer. The checkout link's `offer` metadata picks the Offer. Without it, the service uses the first active Offer for the Polar product. Register each Offer with `POST /admin/offers` before its checkout link goes live. Until then, Polar gets `422` and retries.
 
+## Key email
+
+A paid order emails its License Key through Resend. If sending fails, the webhook returns `502` so Polar retries, and a retry sends only keys not yet emailed (`licenses.key_emailed_at`).
+
 ## Environments
 
 `--env staging` is `keybumps-licensing-staging`, backed by the Polar sandbox. Its admin token and public key live in the git-ignored `staging.secrets.json`. Production isn't configured.
@@ -69,6 +74,7 @@ Each environment sets these with `wrangler secret put --env <env>`. Deploying pr
 | --- | --- |
 | `LEASE_SIGNING_KEY` | `{"kid", "jwk"}`. Create it with `npm run generate-signing-key -- <kid>`, which prints the public key for the app's Info.plist. |
 | `ADMIN_TOKEN` | A long random string. |
+| `RESEND_API_KEY` | Resend API key. Keys aren't emailed while it's unset. `EMAIL_FROM` is a plain var in `wrangler.toml`. |
 | `POLAR_WEBHOOK_SECRET` | The Polar endpoint's secret (`whsec_...`). Webhooks are rejected while it's unset. |
 
 Rate limiting is keyed per License Key through the optional `KEY_LIMITER` binding. It isn't configured yet and is added at deploy time. Guessing keys isn't practical against 80-bit keys.

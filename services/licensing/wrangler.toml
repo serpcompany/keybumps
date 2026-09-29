@@ -15,12 +15,15 @@ database_name = "serp-licensing"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
-# Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN.
+# Secrets (wrangler secret put): LEASE_SIGNING_KEY, ADMIN_TOKEN, POLAR_WEBHOOK_SECRET, RESEND_API_KEY.
 
 # Staging: Polar sandbox only. Deployed with `npx wrangler deploy --env staging`.
 [env.staging]
 name = "keybumps-licensing-staging"
 workers_dev = true
+
+[env.staging.vars]
+EMAIL_FROM = "Keybumps <licenses@keybumps.app>"
 
 [env.staging.observability]
 enabled = false
