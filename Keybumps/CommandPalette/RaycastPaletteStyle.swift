@@ -118,10 +118,43 @@ final class PaletteHUD {
         let textWidth = ceil((message as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width)
         let keys = shortcut.map { ShortcutKeycapPresentation(shortcut: $0).keys } ?? []
         let trailingWidth = keys.isEmpty ? 20 : CGFloat(keys.count) * 25
-        let host = NSHostingView(rootView: NotchNoticeView(
-            message: message, systemImage: systemImage, tint: tint, keys: keys,
-            notchWidth: notchWidth, wingWidth: max(textWidth, trailingWidth) + 32, height: height
-        ))
+        present(
+            NotchNoticeView(
+                message: message, systemImage: systemImage, tint: tint, keys: keys,
+                notchWidth: notchWidth, wingWidth: max(textWidth, trailingWidth) + 32, height: height
+            ),
+            on: screen,
+            announcement: message,
+            duration: duration ?? (tint == .green ? 1.6 : 3)
+        )
+    }
+
+    /// A Shortcut Coach tip: the notch drops down into a two-row panel with the app's icon, the
+    /// action and app name, and the shortcut's keycaps, edged with an animated glow so it is hard
+    /// to miss.
+    func showCoach(action: String, application: String, shortcut: String, duration: TimeInterval = 4) {
+        guard let screen = NSScreen.main else { return }
+        let icon = NSWorkspace.shared.runningApplications
+            .first { $0.localizedName == application }?.icon
+        present(
+            NotchCoachView(
+                action: action,
+                application: application,
+                icon: icon,
+                keys: ShortcutKeycapPresentation(shortcut: shortcut).keys,
+                notchWidth: Self.notchWidth(of: screen),
+                notchHeight: max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28)
+            ),
+            on: screen,
+            announcement: "\(action), \(application), \(KeyboardShortcutRegistry.accessibilityCopy(for: shortcut))",
+            duration: duration
+        )
+    }
+
+    private func present(_ view: some View, on screen: NSScreen, announcement: String, duration: TimeInterval) {
+        let panel = panel ?? makePanel()
+        self.panel = panel
+        let host = NSHostingView(rootView: view)
         panel.contentView = host
         let size = host.fittingSize
         panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
@@ -132,7 +165,7 @@ final class PaletteHUD {
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
-            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+            userInfo: [.announcement: announcement, .priority: NSAccessibilityPriorityLevel.high.rawValue]
         )
 
         hideWork?.cancel()
@@ -143,7 +176,7 @@ final class PaletteHUD {
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (duration ?? (tint == .green ? 1.6 : 3)), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 
     /// The width of the camera housing, or zero on screens without one.
@@ -215,6 +248,78 @@ private struct NotchNoticeView: View {
         } else {
             HStack(spacing: 3) {
                 ForEach(keys, id: \.self) { PaletteKeycap($0) }
+            }
+        }
+    }
+}
+
+private struct NotchCoachView: View {
+    let action: String
+    let application: String
+    let icon: NSImage?
+    let keys: [String]
+    let notchWidth: CGFloat
+    let notchHeight: CGFloat
+    @State private var isShown = false
+    @State private var glowAngle = 0.0
+    @State private var poppedKeys = 0
+
+    private static let glow: [Color] = [.purple, .blue, .cyan, .pink, .purple]
+
+    var body: some View {
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22, style: .continuous)
+        HStack(spacing: 12) {
+            Group {
+                if let icon {
+                    Image(nsImage: icon).resizable()
+                } else {
+                    Image(systemName: "keyboard").font(.system(size: 18)).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(application)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .lineLimit(1)
+            .fixedSize()
+            Spacer(minLength: 24)
+            HStack(spacing: 5) {
+                ForEach(Array(keys.enumerated()), id: \.offset) { index, key in
+                    PaletteKeycap(key)
+                        .scaleEffect(index < poppedKeys ? 1 : 0.4)
+                        .opacity(index < poppedKeys ? 1 : 0)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, notchHeight + 8)
+        .padding(.bottom, 14)
+        .frame(minWidth: max(notchWidth + 120, 380))
+        .background(shape.fill(.black))
+        .overlay(
+            shape.strokeBorder(
+                AngularGradient(colors: Self.glow, center: .center, angle: .degrees(glowAngle)),
+                lineWidth: 2
+            )
+            .mask(LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
+        )
+        .shadow(color: .purple.opacity(0.55), radius: 14, y: 4)
+        .scaleEffect(x: isShown ? 1 : 0.5, y: isShown ? 1 : 0.2, anchor: .top)
+        .opacity(isShown ? 1 : 0)
+        .padding([.horizontal, .bottom], 24)
+        .environment(\.colorScheme, .dark)
+        .onAppear {
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) { isShown = true }
+            withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) { glowAngle = 360 }
+            for index in keys.indices {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25 + Double(index) * 0.12) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { poppedKeys = index + 1 }
+                }
             }
         }
     }
