@@ -118,10 +118,39 @@ final class PaletteHUD {
         let textWidth = ceil((message as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width)
         let keys = shortcut.map { ShortcutKeycapPresentation(shortcut: $0).keys } ?? []
         let trailingWidth = keys.isEmpty ? 20 : CGFloat(keys.count) * 25
-        let host = NSHostingView(rootView: NotchNoticeView(
-            message: message, systemImage: systemImage, tint: tint, keys: keys,
-            notchWidth: notchWidth, wingWidth: max(textWidth, trailingWidth) + 32, height: height
-        ))
+        present(
+            NotchNoticeView(
+                message: message, systemImage: systemImage, tint: tint, keys: keys,
+                notchWidth: notchWidth, wingWidth: max(textWidth, trailingWidth) + 32, height: height
+            ),
+            on: screen,
+            announcement: message,
+            duration: duration ?? (tint == .green ? 1.6 : 3)
+        )
+    }
+
+    /// A Shortcut Coach tip: the notch drops down into a two-row panel with the app's icon, the
+    /// action and app name, and the shortcut's keycaps, edged with an animated glow so it is hard
+    /// to miss.
+    func showCoach(_ presentation: NotchCoachPresentation, duration: TimeInterval = 4) {
+        guard let screen = NSScreen.main else { return }
+        present(
+            NotchCoachView(
+                presentation: presentation,
+                icon: presentation.applicationIcon(),
+                notchWidth: Self.notchWidth(of: screen),
+                notchHeight: max(screen.frame.maxY - screen.visibleFrame.maxY, screen.safeAreaInsets.top, 28)
+            ),
+            on: screen,
+            announcement: presentation.announcement,
+            duration: duration
+        )
+    }
+
+    private func present(_ view: some View, on screen: NSScreen, announcement: String, duration: TimeInterval) {
+        let panel = panel ?? makePanel()
+        self.panel = panel
+        let host = NSHostingView(rootView: view)
         panel.contentView = host
         let size = host.fittingSize
         panel.setFrame(NSRect(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height,
@@ -132,18 +161,22 @@ final class PaletteHUD {
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
-            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+            userInfo: [.announcement: announcement, .priority: NSAccessibilityPriorityLevel.high.rawValue]
         )
 
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak panel] in
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel?.animator().alphaValue = 0 }) {
                 // A newer show may have started during the fade.
-                if panel?.alphaValue == 0 { panel?.orderOut(nil) }
+                if panel?.alphaValue == 0 {
+                    panel?.orderOut(nil)
+                    // Drop the view so its animations stop while nothing is shown.
+                    panel?.contentView = nil
+                }
             }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (duration ?? (tint == .green ? 1.6 : 3)), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 
     /// The width of the camera housing, or zero on screens without one.
@@ -175,6 +208,7 @@ private struct NotchNoticeView: View {
     let notchWidth: CGFloat
     let wingWidth: CGFloat
     let height: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isShown = false
 
     var body: some View {
@@ -202,6 +236,8 @@ private struct NotchNoticeView: View {
         .opacity(isShown ? 1 : 0)
         .environment(\.colorScheme, .dark)
         .onAppear {
+            // With Reduce Motion, appear in place instead of springing open.
+            guard !reduceMotion else { isShown = true; return }
             withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) { isShown = true }
         }
     }
@@ -217,5 +253,161 @@ private struct NotchNoticeView: View {
                 ForEach(keys, id: \.self) { PaletteKeycap($0) }
             }
         }
+    }
+}
+
+/// What a Shortcut Coach notch tip shows and says.
+struct NotchCoachPresentation: Equatable {
+    let action: String
+    let application: String
+    let keys: [String]
+    let announcement: String
+
+    init(event: CoachingEvent) {
+        action = event.actionTitle
+        application = event.applicationName
+        keys = ShortcutKeycapPresentation(shortcut: event.shortcut).keys
+        announcement = "\(event.actionTitle), \(event.applicationName), \(KeyboardShortcutRegistry.accessibilityCopy(for: event.shortcut))"
+    }
+
+    /// The icon of the running app the tip is about, matched by its display name.
+    func applicationIcon(in running: [NSRunningApplication] = NSWorkspace.shared.runningApplications) -> NSImage? {
+        running.first { $0.localizedName == application }?.icon
+    }
+}
+
+private struct NotchCoachView: View {
+    let presentation: NotchCoachPresentation
+    let icon: NSImage?
+    let notchWidth: CGFloat
+    let notchHeight: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isShown = false
+    @State private var glowAngle = 0.0
+    @State private var poppedKeys = 0
+
+    static let glow: [Color] = [.purple, .blue, .cyan, .pink, .purple]
+
+    private var appAndAction: some View {
+        HStack(spacing: 10) {
+            Group {
+                if let icon {
+                    Image(nsImage: icon).resizable()
+                } else {
+                    Image(systemName: "keyboard").font(.system(size: 16)).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(presentation.action)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(presentation.application)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .lineLimit(1)
+            .fixedSize()
+        }
+    }
+
+    private var keycaps: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(presentation.keys.enumerated()), id: \.offset) { index, key in
+                CoachKeycap(key: key)
+                    .scaleEffect(index < poppedKeys ? 1 : 0.4)
+                    .opacity(index < poppedKeys ? 1 : 0)
+            }
+        }
+    }
+
+    /// Each side of the notch is as wide as the wider of the two contents.
+    private var wingWidth: CGFloat {
+        func width(_ text: String, _ size: CGFloat, _ weight: NSFont.Weight) -> CGFloat {
+            ceil((text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width)
+        }
+        let leading = 24 + 10 + max(width(presentation.action, 13, .semibold), width(presentation.application, 11, .regular))
+        // Each key renders max(size, label) wide plus 2 pt padding per side, 5 pt apart.
+        let keys = presentation.keys.map { max(CoachKeycap.size, width($0, 13, .bold)) + 4 }.reduce(0, +)
+            + CGFloat(max(presentation.keys.count - 1, 0)) * 5
+        return max(leading, keys) + 6
+    }
+
+    var body: some View {
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16, style: .continuous)
+        Group {
+            if notchWidth > 0 {
+                // Both rows sit beside the camera housing: the app and action on the left, the
+                // keys on the right, each side equally wide so the notch stays centered.
+                HStack(spacing: 0) {
+                    appAndAction.frame(width: wingWidth, alignment: .leading)
+                    Color.clear.frame(width: notchWidth)
+                    keycaps.frame(width: wingWidth, alignment: .trailing)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: max(notchHeight, 34) + 10)
+            } else {
+                HStack(spacing: 24) {
+                    appAndAction
+                    Spacer(minLength: 0)
+                    keycaps
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .frame(minWidth: 340)
+            }
+        }
+        .background(shape.fill(.black))
+        .overlay(
+            shape.strokeBorder(
+                AngularGradient(colors: Self.glow, center: .center, angle: .degrees(glowAngle)),
+                lineWidth: 2
+            )
+            .mask(LinearGradient(colors: [.clear, .white], startPoint: .top, endPoint: .init(x: 0.5, y: 0.35)))
+        )
+        .shadow(color: .purple.opacity(0.55), radius: 14, y: 4)
+        .scaleEffect(x: isShown ? 1 : 0.5, y: isShown ? 1 : 0.2, anchor: .top)
+        .opacity(isShown ? 1 : 0)
+        .padding([.horizontal, .bottom], 24)
+        .environment(\.colorScheme, .dark)
+        .onAppear {
+            // With Reduce Motion, appear in place with every key showing and a still glow.
+            guard !reduceMotion else {
+                isShown = true
+                poppedKeys = presentation.keys.count
+                return
+            }
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) { isShown = true }
+            withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) { glowAngle = 360 }
+            for index in presentation.keys.indices {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25 + Double(index) * 0.12) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { poppedKeys = index + 1 }
+                }
+            }
+        }
+    }
+}
+
+/// A Shortcut Coach key: bright, bold, and edged with the tip's glow colors so the shortcut is the
+/// first thing noticed.
+private struct CoachKeycap: View {
+    static let size: CGFloat = 26
+    let key: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        Text(key)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize()
+            .frame(minWidth: Self.size, minHeight: Self.size)
+            .padding(.horizontal, 2)
+            .background(.white.opacity(0.14), in: shape)
+            .overlay(shape.strokeBorder(
+                LinearGradient(colors: [.purple, .blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+                lineWidth: 1.5
+            ))
+            .shadow(color: .cyan.opacity(0.45), radius: 4)
     }
 }

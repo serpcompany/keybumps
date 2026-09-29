@@ -45,7 +45,7 @@ Conflict resolution detects the supported reference apps when they are running a
 
 ### Notch notices
 
-Brief confirmations and warnings grow out of the notch: the message sits left of the camera housing and an icon or shortcut keycaps right of it, on black that blends with the notch. Screens without a notch show the same black tab hanging from the top of the menu bar. Notices spring open, stay about 1.6 seconds (3 seconds for warnings and coaching), and fade; they never take focus or intercept clicks.
+Brief confirmations and warnings grow out of the notch: the message sits left of the camera housing and an icon or shortcut keycaps right of it, on black that blends with the notch. Screens without a notch show the same black tab hanging from the top of the menu bar. Notices spring open, stay about 1.6 seconds (3 seconds for warnings), and fade; they never take focus or intercept clicks. Shortcut Coach tips use a larger two-row form of the same notice (see Shortcut Coach) and stay 4 seconds. With Reduce Motion on, notices appear without bouncing, popping, or a moving glow.
 
 ## Quick Search
 
@@ -177,7 +177,7 @@ User outcome: passively recognize supported manual actions and present the corre
 - Detect the supported menu, Chrome, standard-window-control, and Finder-to-Trash actions.
 - Persist one durable event per verified action with unread state and searchable history.
 - Keep Command Palette history passive aside from explicit confirmed Clear All. The palette tab is labelled **Hotkeys** (⌘5, hidden by default); Settings keeps the Shortcut Coach name.
-- Deliver through Notch (the default: the action and its shortcut keycaps as a notch notice), Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Several can be on at once; new installs start with only Notch.
+- Deliver through Notch (the default: the notch widens and drops slightly to show the app's icon, the action, and the app name on its left and the shortcut's keys on its right, with glow-edged keys and an animated glowing border, for four seconds), Native macOS Banner, Top-right Toast, Top-center Shelf, and separately configured Sound. Several can be on at once; new installs start with only Notch.
 - Preview through the same production delivery adapters without writing a history event.
 - Custom presentations share close, Escape, horizontal-trackpad-scroll, hover-pause, and dismissal behavior.
 - Reflect native notification authorization truthfully in Settings and the Dock attention badge.
