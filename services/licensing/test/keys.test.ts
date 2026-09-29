@@ -16,5 +16,6 @@ describe("License Keys", () => {
 
   it("adds a missing prefix", () => {
     expect(normalizeLicenseKey("ABCD-EFGH-JKMN-PQRS", "KB")).toBe("KB-ABCD-EFGH-JKMN-PQRS");
+    expect(normalizeLicenseKey("KB12-EFGH-JKMN-PQRS", "KB")).toBe("KB-KB12-EFGH-JKMN-PQRS");
   });
 });
