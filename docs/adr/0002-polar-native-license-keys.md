@@ -38,7 +38,7 @@ ADR 0001 had the service own keys and signed Leases so the payment provider coul
 
 ## Consequences
 
-- `services/licensing` stays in the repository, unused, as the route to provider independence. Its deployed Workers, D1 databases, and Polar sandbox webhook are decommissioned only with owner approval.
+- The owned licensing service was decommissioned (Workers, D1 databases, and the Polar sandbox webhook deleted) and its code removed in #134. It's recoverable from git history (last present at `df14c44`, under `services/licensing/`) if provider independence is ever needed.
 - **Moving off Polar later:**
   1. Export keys, owners, and activation counts from Polar's API.
   2. Import them into an owned service.
