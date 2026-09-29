@@ -1,6 +1,6 @@
 # 0001: Licensing, payments, and entitlement
 
-Status: Accepted (2026-09-28). Tracked by #118.
+Status: Partly superseded by [0002](0002-polar-native-license-keys.md) (2026-09-29): Keybumps uses Polar-native license keys, not the owned service, keys, and Leases below. Tracked by #118.
 
 ## Context
 
