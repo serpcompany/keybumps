@@ -267,8 +267,8 @@ private struct NotchCoachView: View {
     private static let glow: [Color] = [.purple, .blue, .cyan, .pink, .purple]
 
     var body: some View {
-        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 22, bottomTrailingRadius: 22, style: .continuous)
-        HStack(spacing: 12) {
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16, style: .continuous)
+        HStack(spacing: 10) {
             Group {
                 if let icon {
                     Image(nsImage: icon).resizable()
@@ -276,13 +276,13 @@ private struct NotchCoachView: View {
                     Image(systemName: "keyboard").font(.system(size: 18)).foregroundStyle(.white.opacity(0.7))
                 }
             }
-            .frame(width: 34, height: 34)
-            VStack(alignment: .leading, spacing: 2) {
+            .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 0) {
                 Text(action)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(application)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
             }
             .lineLimit(1)
@@ -296,9 +296,9 @@ private struct NotchCoachView: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, notchHeight + 8)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 16)
+        .padding(.top, notchHeight + 1)
+        .padding(.bottom, 8)
         .frame(minWidth: max(notchWidth + 120, 380))
         .background(shape.fill(.black))
         .overlay(
