@@ -44,8 +44,15 @@ NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
                 FileHandle.standardError.write(Data("could not render \(pixels) px\n".utf8))
                 exit(70)
             }
-            let bitmap = NSBitmapImageRep(cgImage: image)
-            guard bitmap.pixelsWide == pixels, opaqueShare(bitmap) > 0.3 else {
+            // The service may return a larger rendition (for example 1024 px for 512); scale it to
+            // the exact size.
+            let context = CGContext(data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.interpolationQuality = .high
+            context.draw(image, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
+            let bitmap = NSBitmapImageRep(cgImage: context.makeImage()!)
+            guard opaqueShare(bitmap) > 0.3 else {
                 FileHandle.standardError.write(Data("\(pixels) px render is not the app icon; is \(arguments[1]) built?\n".utf8))
                 exit(70)
             }
