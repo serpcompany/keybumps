@@ -20,6 +20,9 @@ All endpoints take a JSON body and return JSON. Errors look like `{"error": "<co
 | `POST /v1/refresh` | same | `{lease}` |
 | `POST /v1/deactivate` | same | `{ok: true}` |
 | `POST /admin/licenses` | `product`, optional `validUntil`, `updatesUntil` (Unix seconds), `maxActivations` | `201 {licenseId, key}` |
+| `POST /webhooks/polar` | Polar webhook (Standard Webhooks signature) | `{ok: true}`; `422 unknown_offer` makes Polar retry |
+| `POST /admin/offers` | `id`, `product`, `provider`, `providerRef` (provider product id), `kind` (`perpetual`, `update_window`, `subscription`), optional `updatesDays`, `maxActivations`, `active` | `{ok: true}` (upsert) |
+| `POST /admin/licenses/by-email` | `email` | `{licenses}` |
 | `POST /admin/licenses/lookup` | `product`, `key` | status, Entitlement, activation count |
 | `POST /admin/licenses/revoke` | `product`, `key` | `{ok: true}` |
 | `POST /admin/licenses/reset-activations` | `product`, `key` | `{ok: true}` |
@@ -50,14 +53,23 @@ v, kid, licenseId, product, deviceHash, validUntil, updatesUntil, issuedAt, refr
 
 This is the contract the app's verifier implements. All times are Unix seconds. `v` is the format version (currently `1`). `validUntil` and `updatesUntil` are always present and may be `null`, meaning no limit. Timing rules are in `src/policy.ts`.
 
+## Offers and Polar
+
+A paid order becomes a License through an Offer. The checkout link's `offer` metadata picks the Offer. Without it, the service uses the first active Offer for the Polar product. Register each Offer with `POST /admin/offers` before its checkout link goes live. Until then, Polar gets `422` and retries.
+
+## Environments
+
+`--env staging` is `keybumps-licensing-staging`, backed by the Polar sandbox. Its admin token and public key live in the git-ignored `staging.secrets.json`. Production isn't configured.
+
 ## Secrets
 
-Nothing here is configured or deployed yet. Deploying requires owner authorization.
+Each environment sets these with `wrangler secret put --env <env>`. Deploying production requires owner authorization.
 
 | Secret | Value |
 | --- | --- |
 | `LEASE_SIGNING_KEY` | `{"kid", "jwk"}`. Create it with `npm run generate-signing-key -- <kid>`, which prints the public key for the app's Info.plist. |
 | `ADMIN_TOKEN` | A long random string. |
+| `POLAR_WEBHOOK_SECRET` | The Polar endpoint's secret (`whsec_...`). Webhooks are rejected while it's unset. |
 
 Rate limiting is keyed per License Key through the optional `KEY_LIMITER` binding. It isn't configured yet and is added at deploy time. Guessing keys isn't practical against 80-bit keys.
 

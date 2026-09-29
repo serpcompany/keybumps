@@ -18,7 +18,7 @@ Keybumps ships as a Developer ID-signed direct download updated through Sparkle,
    - Selling through Stripe directly would make us the merchant of record, responsible for registering and filing wherever we pass tax thresholds. EU VAT on digital goods applies from the first sale.
 3. **One SERP licensing service owns keys, licenses, and leases.** It is a Cloudflare Worker with D1, serving every SERP app keyed by product. It starts in this repository under `services/licensing/`, with its own toolchain and CI job kept apart from the Swift app. It moves to a shared repository when a second app needs it. Keys and Licenses live in D1, so moving it changes nothing for customers.
    - Apps talk only to this service, never to Polar, Stripe, or Lago.
-   - Providers sit behind a server-side `ProviderAdapter`. It verifies webhooks and emits normalized events: order paid, order refunded, dispute opened, and subscription active/renewed/canceled/ended.
+   - Providers sit behind a server-side `ProviderAdapter`. It verifies webhooks and emits normalized events: order paid, order refunded, dispute opened, and subscription active/renewed/canceled/ended. Providers that settle disputes themselves and send no dispute event (Polar, as merchant of record) report the outcome as a refund.
    - Domain tables store only `provider` and `provider_ref`.
    - We mint our own keys instead of using a provider's license keys, so changing providers never invalidates a customer's key.
 4. **Entitlements do not depend on pricing.** Each checkout variant is an Offer, and each Offer maps to an Entitlement on the License:
