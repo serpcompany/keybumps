@@ -116,10 +116,22 @@ final class PaletteHUD: CoachTipPresenting {
     private var hideWork: DispatchWorkItem?
     private var isShowingCoach = false
 
-    /// True while Dictation shows its state in the notch. Other notices are dropped rather than
-    /// drawn over it, and one already showing is hidden.
-    var isSuppressed = false {
-        didSet { if isSuppressed { dismiss() } }
+    /// The surface that currently owns the notch (Dictation while its indicator shows). While set,
+    /// other notices are dropped rather than drawn over it, and one already showing is hidden. It is
+    /// weak, so an owner that goes away can never leave notices suppressed.
+    private weak var notchOwner: AnyObject?
+
+    var isSuppressed: Bool { notchOwner != nil }
+
+    /// Hands the notch to `owner`, hiding any notice that is showing.
+    func claimNotch(for owner: AnyObject) {
+        notchOwner = owner
+        dismiss()
+    }
+
+    /// Gives the notch back, if `owner` still holds it.
+    func releaseNotch(from owner: AnyObject) {
+        if notchOwner === owner { notchOwner = nil }
     }
 
     func show(
@@ -202,10 +214,11 @@ final class PaletteHUD: CoachTipPresenting {
         )
 
         hideWork?.cancel()
-        let work = DispatchWorkItem { [weak panel] in
+        let work = DispatchWorkItem { [weak self, weak panel] in
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel?.animator().alphaValue = 0 }) {
                 // A newer show may have started during the fade.
                 if panel?.alphaValue == 0 {
+                    self?.isShowingCoach = false
                     panel?.orderOut(nil)
                     // Drop the view so its animations stop while nothing is shown.
                     panel?.contentView = nil

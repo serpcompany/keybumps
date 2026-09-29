@@ -11,6 +11,8 @@ class DictationIndicatorController {
     private(set) var panel: NSPanel?
     private var hideTask: Task<Void, Never>?
     private let state = DictationNotchState()
+    /// How long a failure stays in the notch; tests shorten it.
+    var failureDisplayDuration: Duration = .seconds(5)
 
     func update(_ phase: DictationPhase) {
         hideTask?.cancel()
@@ -25,18 +27,24 @@ class DictationIndicatorController {
         switch phase {
         case .recording, .transcribing, .inserting, .failed:
             show()
-            PaletteHUD.shared.isSuppressed = true
+            // Only hold the notch while the indicator is actually on screen.
+            if panel?.isVisible == true {
+                PaletteHUD.shared.claimNotch(for: self)
+            } else {
+                PaletteHUD.shared.releaseNotch(from: self)
+            }
             if case .failed = phase {
+                let delay = failureDisplayDuration
                 hideTask = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(5))
-                    guard !Task.isCancelled else { return }
-                    self?.panel?.orderOut(nil)
-                    PaletteHUD.shared.isSuppressed = false
+                    try? await Task.sleep(for: delay)
+                    guard !Task.isCancelled, let self else { return }
+                    panel?.orderOut(nil)
+                    PaletteHUD.shared.releaseNotch(from: self)
                 }
             }
         case .idle:
             panel?.orderOut(nil)
-            PaletteHUD.shared.isSuppressed = false
+            PaletteHUD.shared.releaseNotch(from: self)
         }
     }
 

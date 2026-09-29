@@ -32,8 +32,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.configureWindowBehavior()
-        // Keybumps no longer posts banners; clear any an earlier build left in Notification Center.
+        Self.clearLegacyBannersOnce(defaults: .standard)
+    }
+
+    /// Keybumps no longer posts banners; clears any an earlier build left in Notification Center,
+    /// once per install.
+    static func clearLegacyBannersOnce(defaults: UserDefaults, clear: () -> Void = {
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+    }) {
+        let key = "didClearLegacyNotificationBanners"
+        guard !UnitTestHost.isActive || defaults !== UserDefaults.standard,
+              !defaults.bool(forKey: key) else { return }
+        clear()
+        defaults.set(true, forKey: key)
     }
 
     static func configureWindowBehavior() {
