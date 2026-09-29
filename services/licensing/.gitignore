@@ -1,5 +1,0 @@
-node_modules/
-.wrangler/
-.dev.vars
-*.signing-key.json
-*.secrets.json
