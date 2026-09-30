@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageShell } from '@/components/page-shell'
+import { StripQuery } from './strip-query'
 
 export const metadata: Metadata = {
   title: { absolute: 'Thanks for buying Keybumps' },
@@ -11,10 +12,11 @@ export const metadata: Metadata = {
 }
 
 // Polar appends checkout and customer-session parameters to this URL. The page never reads
-// or echoes them.
+// or echoes them, and StripQuery removes them from the address bar and history once it renders.
 export default function ThanksPage() {
   return (
     <PageShell title="Thanks for buying Keybumps">
+      <StripQuery />
       <p>
         Your license key is in the receipt email from Polar, sent to the address you used at
         checkout. It usually arrives within a minute.

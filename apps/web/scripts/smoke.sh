@@ -72,8 +72,10 @@ done
 expect_redirect /sitemap.xml /sitemap-index.xml
 
 # Sitemaps list only canonical URLs: child sitemaps are unslashed files, pages end in a slash.
-index_locs="$(curl -s "${smoke[@]}" "$base/sitemap-index.xml" | grep -oE '<loc>[^<]+</loc>' || true)"
-page_locs="$(curl -s "${smoke[@]}" "$base/sitemaps/pages.xml" | grep -oE '<loc>[^<]+</loc>' || true)"
+index_xml="$(curl -s "${smoke[@]}" "$base/sitemap-index.xml" || true)"
+page_xml="$(curl -s "${smoke[@]}" "$base/sitemaps/pages.xml" || true)"
+index_locs="$(grep -oE '<loc>[^<]+</loc>' <<<"$index_xml" || true)"
+page_locs="$(grep -oE '<loc>[^<]+</loc>' <<<"$page_xml" || true)"
 if [ -n "$index_locs" ] && ! grep -vqE "^<loc>https://keybumps\.app/[^<]*\.xml</loc>$" <<<"$index_locs"; then
   pass 'sitemap index lists unslashed .xml files on keybumps.app'
 else
@@ -96,12 +98,21 @@ if [ "$env" = production ]; then
   [ -z "$robots_header" ] && pass 'no X-Robots-Tag' || fail "unexpected $robots_header"
   # GTM loads on ordinary pages, and never on pages whose URLs carry checkout, session, or
   # license data. The query values are placeholders.
+  # Each body is captured before grep, as for robots.txt: piping curl into `grep -q` under
+  # pipefail can fail when grep exits early, which would flip these results.
   gtm='googletagmanager\.com/gtm\.js'
-  curl -s "${smoke[@]}" "$base/" | grep -q "$gtm" && pass 'GTM loads on /' ||
+  home="$(curl -s "${smoke[@]}" "$base/" || true)"
+  grep -q "$gtm" <<<"$home" && pass 'GTM loads on /' ||
     fail 'GTM missing on / (is NEXT_PUBLIC_GTM_ID set in the build?)'
   for path in '/thanks/?checkout_id=x&customer_session_token=x' '/license/?customer_session_token=x'; do
-    curl -s "${smoke[@]}" "$base$path" | grep -q "$gtm" && fail "GTM loads on $path" ||
+    page="$(curl -s "${smoke[@]}" "$base$path" || true)"
+    if [ -z "$page" ]; then
+      fail "empty response for $path"
+    elif grep -q "$gtm" <<<"$page"; then
+      fail "GTM loads on $path"
+    else
       pass "no GTM on $path"
+    fi
   done
 else
   grep -q '^Disallow: /$' <<<"$robots" && pass 'robots.txt disallows crawling' ||

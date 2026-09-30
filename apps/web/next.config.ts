@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
   // The trailing-slash redirects live in siteRedirects() instead, so legacy URLs such as /privacy
   // reach their page in one hop. See src/lib/redirects.ts.
   skipTrailingSlashRedirect: true,
+  experimental: {
+    // The site has two root layouts (src/app/(analytics), src/app/(no-analytics)) and no shared
+    // one, so unmatched URLs render src/app/global-not-found.tsx.
+    globalNotFound: true
+  },
   turbopack: {
     // Keep lockfiles outside apps/web from changing the workspace root.
     root: process.cwd()

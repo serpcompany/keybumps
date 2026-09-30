@@ -87,10 +87,13 @@ The site uses Google Tag Manager only. `src/components/analytics.tsx` renders no
 
 Analytics never run on pages whose URLs carry checkout, session, or license data. Polar sends buyers to `/thanks/` with a customer-session token in the query string, and GTM tags read the full page URL, so stripping the query string in the container isn't enough. Structurally:
 
-- Only the `src/app/(analytics)/` route group layout renders `<Analytics />`. The root layout doesn't.
-- `/thanks/` and `/license/` (`noAnalyticsPaths` in `src/lib/pages.ts`) live outside that group. New pages go inside it unless their URLs can carry such data, in which case they join `noAnalyticsPaths`.
-- `src/lib/analytics-scope.test.ts` fails if another file renders `<Analytics />`, if a `noAnalyticsPaths` page moves into the group, or if any other page sits outside it.
-- `scripts/smoke.sh <url> production` asserts that `/` loads GTM and that `/thanks/?customer_session_token=x` and `/license/?…` don't. The `/` check needs `NEXT_PUBLIC_GTM_ID` set in the build.
+- The site has **two root layouts** and no shared `src/app/layout.tsx`: `src/app/(analytics)/layout.tsx` renders `<Analytics />`, and `src/app/(no-analytics)/layout.tsx` never does. Both render the same document and chrome through `SiteDocument` and `siteMetadata` (`src/components/site-document.tsx`). Next.js always does a full page load when navigation crosses root layouts, so GTM, which stays loaded for the life of a document, never carries into these pages through `next/link` or the Back button.
+- `/thanks/` and `/license/` (`noAnalyticsPaths` in `src/lib/pages.ts`) live in `(no-analytics)`. New pages go in `(analytics)` unless their URLs can carry such data, in which case they go in `(no-analytics)` and join `noAnalyticsPaths`.
+- As a second layer, `/thanks/` removes its query string from the address bar and history with `history.replaceState` once it renders. Nothing on the page reads the parameters.
+- `src/lib/analytics-scope.test.ts` fails if `src/app/layout.tsx` exists, if the root layouts aren't exactly these two, if anything in `src/` other than `components/analytics.tsx` and the `(analytics)` layout mentions `<Analytics`, `GoogleTagManager`, `googletagmanager`, or `cloudflareinsights`, or if a page sits in the wrong group.
+- `scripts/smoke.sh <url> production` asserts that `/` loads GTM and that `/thanks/?customer_session_token=x` and `/license/?…` don't. The `/` check needs `NEXT_PUBLIC_GTM_ID` set in the build. It checks first page loads; the separate root layouts cover client-side navigation.
+- With no shared root layout, unmatched URLs render `src/app/global-not-found.tsx` (`experimental.globalNotFound` in `next.config.ts`). It uses `SiteDocument` and never renders analytics, because a mistyped URL can still carry a checkout or session query.
+- `src/app/opengraph-image.jpg` sits above the route groups, so the root layouts name it explicitly in `rootLayoutMetadata` (`src/components/site-document.tsx`), with the URL and cache key Next.js generated for it. Update both if the image changes.
 
 ## Styling
 
