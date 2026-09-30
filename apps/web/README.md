@@ -12,7 +12,7 @@ The product landing page for `keybumps.app`.
 
 The download page reads `https://updates.keybumps.app/latest.json` (re-checked at most every five minutes) and links to the DMG it names. The Keybumps release tooling writes that file (`scripts/write-latest-release-pointer.sh` in `serpcompany/keybumps`) and publishes it beside `appcast.xml`, so a new release needs no change here. The page only accepts a pointer whose DMG is HTTPS on `updates.keybumps.app` and matches the stated version; otherwise, or if the file is unavailable, it shows `FALLBACK_RELEASE` in `src/lib/latest-release.ts` (currently `0.0.3-beta.3` build `4007`).
 
-Sparkle appcasts and immutable release assets remain owned and published by `serpcompany/keybumps`; do not copy them into this repository.
+Sparkle appcasts and immutable release assets are owned by the Mac app's release tooling at the repo root and published to `updates.keybumps.app`; do not copy them into `apps/web/`.
 
 ## Commands
 
