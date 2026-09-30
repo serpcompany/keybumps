@@ -107,10 +107,13 @@ Steps:
 
 **Cutover rollback** (only while `keybumps-website` exists). If the problem is the new code rather than the domain move, prefer the [Rollback](#rollback) below: it keeps the domains where they are. To move the domains back, go in this order, because every `Web deploy` run from a `main` that lists the production routes takes the domains again:
 
-1. **Stop CI from taking them back:** disable the workflow (Actions → `Web deploy` → Disable workflow, or `gh workflow disable web-deploy.yml`). Don't skip this step. Reverting the routes alone isn't enough, because merging the revert starts a run, and a run already queued from before the revert would still list the routes.
+1. **Stop CI from taking them back.** Don't skip this step. Reverting the routes alone isn't enough, because merging the revert starts a run, and any run from before the revert still checks out a commit that lists the routes.
+   1. Disable the workflow (Actions → `Web deploy` → Disable workflow, or `gh workflow disable web-deploy.yml`), so nothing new starts.
+   2. Disabling doesn't stop runs that already exist. List them with `gh run list --workflow web-deploy.yml --limit 20`, and cancel every run that is `in_progress`, `queued`, or `waiting` with `gh run cancel <run-id>`.
+   3. Repeat the list until none of those remain. Don't go on to step 3 while one exists: a production `Deploy` step that finishes afterwards takes the domains again.
 2. **Revert the routes commit** on `main` through a pull request. While the workflow is disabled, the merge deploys nothing. Removing the routes also doesn't detach anything: Wrangler calls the Custom Domains API only when `routes` lists at least one custom domain, so a deploy without routes leaves existing domains where they are.
 3. **Move the domains back:** in the dashboard, remove `keybumps.app` and `www.keybumps.app` from `keybumps-web-production` (Settings → Domains & Routes), then add both to `keybumps-website` as Custom Domains. The site is down between the removal and the add, usually a minute or two. `keybumps-website` serves its last deployed version, because Workers Builds stays disconnected. Don't reconnect it unless it becomes the deploy path again.
-4. **Re-enable `Web deploy`** once `main` has no production routes. From then on, deploys update only `keybumps-web-staging` and the production Worker's `workers.dev` URL, and never touch the domains. Re-run the cutover when the problem is fixed.
+4. **Re-enable `Web deploy`** once `main` has no production routes. From then on, new runs update only `keybumps-web-staging` and the production Worker's `workers.dev` URL, and never touch the domains. **Never re-run a `Web deploy` run from before the revert** (Re-run jobs in Actions, or `gh run rerun`): a re-run checks out its original commit, which lists the routes, so it would move the domains back to `keybumps-web-production`. To deploy again, push to `main` or start a new run. Re-run the cutover when the problem is fixed.
 
 ## Rollback
 
@@ -130,7 +133,7 @@ Configuration is explicit per environment and falls back to the safe behavior: a
 | Setting | Kind | Where it is set | Used by |
 | --- | --- | --- | --- |
 | `SITE_ENV` | build time **and** runtime | The `deploy:staging` and `deploy:production` scripts (build), and each environment's `vars` in `wrangler.jsonc` (runtime) | `isProductionSite()` in `src/lib/site.ts`. `next.config.ts` (the `X-Robots-Tag` header and the `workers.dev` redirect target) reads the build-time value. OpenNext renders `robots.txt` and pages on the Worker at request time, so they, and the analytics in the layout, read the runtime value. Both must match, or production ships a `robots.txt` that disallows crawling. |
-| `NEXT_PUBLIC_GTM_ID` | build time | The production job of `web-deploy.yml`, from the GitHub `production` environment's variables. Staging builds never get it. | `src/components/analytics.tsx` |
+| `NEXT_PUBLIC_GTM_ID` | build time | The production job of `web-deploy.yml`, from the GitHub `production` environment's variables. Staging builds get the placeholder `GTM-STAGING0`, which the `SITE_ENV` gate keeps from rendering; the staging smoke test checks that. | `src/components/analytics.tsx` |
 | `NEXT_PUBLIC_CF_BEACON_TOKEN` | build time | **Must not be set** until the privacy policy covers Cloudflare Web Analytics. The owner chose Google Tag Manager only; setting this token would turn on the beacon without the policy describing it. `web-deploy.yml` doesn't pass it. | `src/components/analytics.tsx` |
 | Secrets | runtime | None today. Use `wrangler secret put --env <env>`, never `wrangler.jsonc` or the repository. | none |
 | `.dev.vars`, `.env*` | local only | Uncommitted (`.gitignore`) | local runs |

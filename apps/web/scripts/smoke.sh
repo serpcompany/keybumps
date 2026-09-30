@@ -26,6 +26,8 @@ env="${2:?usage: smoke.sh <base-url> <staging|production>}"
 base="${base%/}"
 failed=0
 smoke=(-H 'x-keybumps-smoke-test: 1')
+# Bounds every request, so a stalled connection counts as one failed try instead of hanging.
+limits=(--connect-timeout 5 --max-time 20)
 case "$env" in
   production) canonical=https://keybumps.app ;;
   staging) canonical=https://staging.keybumps.app ;;
@@ -63,14 +65,14 @@ eventually() {
 fetch() {
   local path="$1"
   shift
-  curl -s "${smoke[@]}" "$@" "$base$path" || true
+  curl -s "${limits[@]}" "${smoke[@]}" "$@" "$base$path" || true
 }
 
 # status_is <url> <want> [curl options...]: `<code> <redirect target>` must equal <want>.
 status_is() {
   local url="$1" want="$2" got
   shift 2
-  got="$(curl -s "$@" -o /dev/null -w '%{http_code} %{redirect_url}' "$url" || true)"
+  got="$(curl -s "${limits[@]}" "$@" -o /dev/null -w '%{http_code} %{redirect_url}' "$url" || true)"
   got="${got% }"
   [ "$got" = "$want" ] || {
     why="got '$got'"
@@ -103,7 +105,7 @@ body_lacks() {
 robots_header_is() {
   local headers tag
   why=''
-  headers="$(curl -sI "${smoke[@]}" "$base/" || true)"
+  headers="$(curl -sI "${limits[@]}" "${smoke[@]}" "$base/" || true)"
   headers="${headers//$'\r'/}"
   if ! grep -qE '^HTTP/[0-9.]+ 200' <<<"$headers"; then
     why='/ did not return 200'
@@ -167,7 +169,7 @@ missing='/thanks/x/?customer_session_token=x'
 missing_page=''
 not_found_page() {
   local status
-  status="$(curl -s "${smoke[@]}" -o /dev/null -w '%{http_code}' "$base$missing" || true)"
+  status="$(curl -s "${limits[@]}" "${smoke[@]}" -o /dev/null -w '%{http_code}' "$base$missing" || true)"
   missing_page="$(fetch "$missing")"
   if [ "$status" = 404 ] && grep -q '<meta name="robots" content="noindex' <<<"$missing_page" &&
     grep -q '<meta name="referrer" content="no-referrer"' <<<"$missing_page" &&
