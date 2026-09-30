@@ -11,6 +11,10 @@ import type { SensitiveUrlPath } from './pages'
  * `dataLayer`. So stripping the address bar alone isn't enough: the page must never render with
  * the query. A redirect also replaces the history entry, so Back never returns to the query.
  * StripQuery in `<head>` stays as the second layer, for any response that skips this.
+ *
+ * This only works for document requests. For a client-side navigation, the redirect arrives in the
+ * RSC payload after the router has pushed the URL, so the pages are never reached client-side
+ * (sensitiveUrlRewrites in src/lib/sensitive-url-routes.ts).
  */
 export async function redirectWithoutQuery(
   path: SensitiveUrlPath,

@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono'
  * session data always starts a new document, which strips the query (`head`) before GTM loads.
  * Never render analytics from here: the 404 uses it too.
  *
- * `head` renders first in `<head>`, before anything in `<body>`; the (sensitive-url) layout and the
- * 404 pass `<StripQuery />`.
+ * `head` renders inside `<head>`, so it runs before the browser parses `<body>`. It is first in the
+ * source, not in the rendered HTML: React and Next.js hoist stylesheets, scripts, preloads, and
+ * metadata above it. The (sensitive-url) layout and the 404 pass `<StripQuery />`.
  */
 export function SiteDocument({ children, head }: { children: ReactNode; head?: ReactNode }) {
   return (

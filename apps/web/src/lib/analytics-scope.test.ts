@@ -132,24 +132,6 @@ function jsxChildren(node: ts.JsxElement) {
   )
 }
 
-/** Every string a source file spells out: string literals and template literal text. */
-function stringLiterals(file: string) {
-  const sourceFile = ts.createSourceFile(
-    file,
-    readFileSync(file, 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX
-  )
-  const strings: string[] = []
-  const visit = (node: ts.Node) => {
-    if (ts.isStringLiteralLike(node) || ts.isTemplateHead(node)) strings.push(node.text)
-    ts.forEachChild(node, visit)
-  }
-  visit(sourceFile)
-  return strings
-}
-
 /** Every page.tsx under src/app, with the URL it serves and its top-level route group. */
 function appPages() {
   return files(appDir)
@@ -211,7 +193,7 @@ describe('analytics scope', () => {
     expect(resolveImport(footer, '@next/third-parties/google')).toBeNull()
   })
 
-  it('strips the query in <head> before anything else runs on documents for sensitive URLs', () => {
+  it('strips the query in <head>, before <body>, on documents for sensitive URLs', () => {
     for (const file of strippingDocuments) {
       // <SiteDocument head={<StripQuery />}>, as elements: a commented-out one doesn't count.
       const heads = jsxElements(file)
@@ -228,7 +210,9 @@ describe('analytics scope', () => {
         relative(srcDir, file)
       ).toBe('StripQuery')
     }
-    // SiteDocument renders `head` as the only content of <head>, the first child of <html>.
+    // SiteDocument renders `head` as the only source content of <head>, the first child of <html>,
+    // so it runs before the browser parses <body>. This checks source order: in the rendered HTML,
+    // React and Next.js hoist stylesheets, scripts, preloads, and metadata above it.
     const html = jsxElements(siteDocument).find(element => element.tag === 'html')?.node
     expect(html && ts.isJsxElement(html)).toBe(true)
     const [first] = html && ts.isJsxElement(html) ? jsxChildren(html) : []
@@ -237,16 +221,25 @@ describe('analytics scope', () => {
     expect(headChildren.map(child => child.getText())).toEqual(['{head}'])
   })
 
-  it('never links to a sensitive URL with a query, which a soft navigation would show to GTM', () => {
-    const prefixes = sensitiveUrlPaths.map(path => path.replace(/\/$/, ''))
-    const found = sourceFiles().flatMap(file =>
-      stringLiterals(file)
-        .filter(text =>
-          prefixes.some(prefix => new RegExp(`^${prefix}/?\\?`, 'i').test(text.trim()))
-        )
-        .map(text => `${relative(srcDir, file)}: ${text}`)
+  it('reaches sensitive-url pages only by full page loads, never client-side', () => {
+    // next.config.ts rewrites every RSC request for them to a 404 (sensitiveUrlRewrites), so a
+    // <Link>, router.push(), or prefetch to them, with or without a query, becomes a document
+    // request that the page redirects. src/lib/sensitive-url-routes.test.ts checks the matching.
+    const config = ts.createSourceFile(
+      'next.config.ts',
+      readFileSync(join(webDir, 'next.config.ts'), 'utf8'),
+      ts.ScriptTarget.Latest,
+      true
     )
-    expect(found).toEqual([])
+    const beforeFiles: string[] = []
+    const visit = (node: ts.Node) => {
+      if (ts.isPropertyAssignment(node) && node.name.getText() === 'beforeFiles') {
+        beforeFiles.push(node.initializer.getText())
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(config)
+    expect(beforeFiles).toEqual(['sensitiveUrlRewrites()'])
   })
 
   it('redirects every sensitive-url page to its bare URL before it renders', () => {

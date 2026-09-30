@@ -7,12 +7,13 @@ export const metadata = sensitiveUrlLayoutMetadata
 
 /**
  * Root layout for pages whose URLs can carry checkout, session, or license data (/thanks/,
- * /license/; `sensitiveUrlPaths` in src/lib/pages.ts). `<StripQuery />` removes the query string
- * at the top of `<head>`, before the App Router starts and before `<Analytics />` can load GTM
- * after hydration, so GTM only ever sees the clean URL. Because this is a separate root layout,
- * every navigation into these pages from the rest of the site is a full page load, so the strip
- * always runs first in the new document. It also sends no Referer.
- * src/lib/analytics-scope.test.ts enforces this.
+ * /license/; `sensitiveUrlPaths` in src/lib/pages.ts). The pages redirect a request with a query
+ * before rendering (src/lib/sensitive-url.ts). As a second layer, `<StripQuery />` removes any query
+ * in `<head>`: not first there, but before the browser parses `<body>`, so before the App Router
+ * can start (it needs the RSC payload in `<body>`) and before `<Analytics />` loads GTM after
+ * hydration. These pages are only ever reached by full page loads: this is a separate root layout,
+ * and every RSC request for them is rewritten to a 404 (src/lib/sensitive-url-routes.ts). It also
+ * sends no Referer. src/lib/analytics-scope.test.ts enforces this.
  */
 export default function SensitiveUrlRootLayout({ children }: LayoutProps<'/'>) {
   return (

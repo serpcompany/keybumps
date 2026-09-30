@@ -2,8 +2,8 @@
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
 # trailing-slash and legacy redirects take one 308 hop; search-engine rules match the environment
 # (only production may be indexed); in production, GTM loads on /, /thanks/, and /license/;
-# /thanks/ and /license/ redirect a query away before rendering; and a workers.dev URL redirects to
-# its branded domain.
+# /thanks/ and /license/ redirect a query away before rendering and are never served to client-side
+# navigation; and a workers.dev URL redirects to its branded domain.
 # Requests carry the smoke-test header so a workers.dev URL serves the site instead of redirecting.
 #
 # usage: scripts/smoke.sh <base-url> <staging|production>
@@ -112,6 +112,14 @@ for path in /thanks/ /license/; do
     pass "307 $path?customer_session_token=… -> $path"
   else
     fail "$path?customer_session_token=… gave '$got' (want 307 -> $path)"
+  fi
+  # Client-side navigation can't reach them: RSC requests 404, so the router does a full load
+  # (src/lib/sensitive-url-routes.ts).
+  got="$(curl -s "${smoke[@]}" -H 'rsc: 1' -o /dev/null -w '%{http_code}' "$base$path" || true)"
+  if [ "$got" = 404 ]; then
+    pass "RSC request for $path gets 404 (full page loads only)"
+  else
+    fail "RSC request for $path gave $got (want 404)"
   fi
 done
 grep -q 'window.history.replaceState(window.history.state' <<<"$missing_page" &&
