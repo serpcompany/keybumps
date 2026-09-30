@@ -19,8 +19,13 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  // Workers Logs record each request's URL. Polar sends buyers to /thanks/ with a checkout ID and
+  // a customer-session token in the query string, so the query is always redacted. Every
+  // environment inherits this block; an environment that sets its own `observability` replaces
+  // all of it and must repeat `redact_query_string`. src/lib/worker-config.test.ts checks each one.
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "redact_query_string": true
   },
   "upload_source_maps": true,
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web" }],

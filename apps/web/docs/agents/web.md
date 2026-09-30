@@ -135,6 +135,12 @@ Configuration is explicit per environment and falls back to the safe behavior: a
 | Secrets | runtime | None today. Use `wrangler secret put --env <env>`, never `wrangler.jsonc` or the repository. | none |
 | `.dev.vars`, `.env*` | local only | Uncommitted (`.gitignore`) | local runs |
 
+### Logs
+
+Workers Logs (`observability` in `wrangler.jsonc`) are on in every environment, with `redact_query_string: true`. Logs and traces record each request's URL, and Polar sends buyers to `/thanks/?checkout_id=…&customer_session_token=…`. Without redaction, every purchase would put a session credential into the account's logs. The block is set at the top level and every environment inherits it. An environment that sets its own `observability` replaces the whole block and must repeat `redact_query_string`. `src/lib/worker-config.test.ts` resolves each environment with Wrangler's own config reader and fails if any of them loses the setting.
+
+The setting covers only Workers Logs and traces. Cloudflare's own zone request logs and analytics for `keybumps.app`, which are outside this repo, can still contain the full URL, including the query string: HTTP traffic analytics, security events, and Logpush, if anyone turns it on. `wrangler tail` output may too; it isn't verified that tail applies the redaction. Treat all of these as holding query strings, and never copy them into issues, pull requests, or logs.
+
 ## Canonical URLs and hosts
 
 - Pages end in a slash (`/pricing/`) and files never do (`/robots.txt`). Write only the canonical form in links, canonical tags, sitemaps, and redirect destinations.
