@@ -2,7 +2,8 @@ import AppKit
 
 /// Debug unit tests are hosted by Keybumps.app. Code under test still creates real windows, so
 /// they stay invisible and click-through: layout and state are exercised without anything
-/// appearing on the owner's screen. Release builds compile none of this.
+/// appearing on the owner's screen. In Release builds `isActive` is always false, so none of this
+/// takes effect.
 enum UnitTestHost {
     /// True only in a Debug build that XCTest loaded as a unit-test host. Release builds (and so QA
     /// candidates) compile it as false. A UI-test launch isn't a unit-test host: XCUITest starts the

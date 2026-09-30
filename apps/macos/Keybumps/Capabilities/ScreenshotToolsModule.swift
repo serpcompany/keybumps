@@ -45,7 +45,8 @@ final class ScreenshotToolsModule: CapabilityModule {
     private let clipboard: ClipboardHistoryService
     private let delivery: ScreenshotClipboardDelivery
     private let capturer: ScreenshotCapturer
-    private let systemShortcuts: SystemScreenshotShortcutTakeover
+    /// Read by the unit-test isolation guard.
+    let systemShortcuts: SystemScreenshotShortcutTakeover
     private let permissions: PermissionCoordinator
     /// Set by the shell: asks for Screen Recording when a hotkey is pressed without it.
     var onNeedsScreenRecording: (() -> Void)?

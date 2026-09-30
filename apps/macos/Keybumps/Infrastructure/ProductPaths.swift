@@ -22,25 +22,31 @@ struct ProductPaths: Equatable {
         )
     }
 
-    /// Resolves each root folder: the sandbox's when there is one; otherwise the file manager's,
-    /// except that with a `unitTestRoot` a folder that is the user's real one (as
-    /// `FileManager.default` resolves it) moves into `unitTestRoot`. A test's own rooted file
-    /// manager already points elsewhere, so it's kept.
+    /// Resolves each root folder: the sandbox's when there is one; otherwise the file manager's.
+    /// With a `unitTestRoot`, a folder that is the user's real one (as `userFolders` resolves it) or
+    /// inside it moves to the same place in `unitTestRoot`, however it's spelled (a trailing slash,
+    /// `/var` or `/private/var`, a symlink). So a test's own rooted file manager keeps only the
+    /// folders it overrides with ones elsewhere. Production passes no `unitTestRoot` and touches
+    /// nothing here.
     static func make(
         productDirectoryName: String,
         fileManager: FileManager,
         sandboxRoot: URL?,
-        unitTestRoot: URL?
+        unitTestRoot: URL?,
+        userFolders: FileManager = .default
     ) -> ProductPaths {
         func root(_ name: String, _ resolve: (FileManager) -> URL) -> URL {
             if let sandboxRoot {
                 return sandboxRoot.appendingPathComponent(name, isDirectory: true)
             }
             let folder = resolve(fileManager)
-            guard let unitTestRoot,
-                  folder.standardizedFileURL == resolve(.default).standardizedFileURL
-            else { return folder }
-            return unitTestRoot.appendingPathComponent(name, isDirectory: true)
+            guard let unitTestRoot else { return folder }
+            let path = canonicalPath(folder)
+            let userPath = canonicalPath(resolve(userFolders))
+            guard path == userPath || path.hasPrefix(userPath + "/") else { return folder }
+            return path.dropFirst(userPath.count).split(separator: "/").reduce(
+                unitTestRoot.appendingPathComponent(name, isDirectory: true)
+            ) { $0.appendingPathComponent(String($1), isDirectory: true) }
         }
         let applicationSupportRoot = root("Application Support") {
             $0.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -62,5 +68,22 @@ struct ProductPaths: Equatable {
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("TranslatedAudio", isDirectory: true)
         )
+    }
+
+    /// A folder's path with `..` removed, no trailing slash, and symlinks resolved, spelled the same
+    /// for `/var/…` and `/private/var/…` even when the folder doesn't exist yet: the nearest folder
+    /// that exists is resolved, and the rest is appended. It checks only whether folders exist and
+    /// follows links; it never lists or opens one.
+    static func canonicalPath(_ url: URL) -> String {
+        var existing = url.standardizedFileURL
+        var missing: [String] = []
+        while existing.path != "/", (try? existing.checkResourceIsReachable()) != true {
+            missing.insert(existing.lastPathComponent, at: 0)
+            existing = existing.deletingLastPathComponent()
+        }
+        let resolved = missing.reduce(existing.resolvingSymlinksInPath()) {
+            $0.appendingPathComponent($1, isDirectory: true)
+        }
+        return resolved.path
     }
 }

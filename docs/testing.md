@@ -39,10 +39,12 @@ Permission-gated and system-level features are faked in automated tests, never g
 - Default locations are isolated under the unit-test host too, so a test that forgets to inject a store can't reach the owner's data (#191).
   - `UnitTestHost.isActive` is true only in a Debug build that XCTest loaded (`XCTestConfigurationFilePath` is set). Release builds, and so QA candidates, compile it as false, and a UI-test launch isn't a unit-test host.
   - Under that host, `ProductPaths.keybumps()` moves the owner's Application Support, Documents, and temporary folders into `UnitTestHost.dataDirectory`, a per-run temporary folder. So every default store stays in it: Dictation History, Clipboard History and its media, Shortcut Coach history, the Dictation recovery file, Dictation models, and translated audio.
-  - The UI-test sandbox (`ProductPaths.sandboxRoot`) still comes first, and a test's own rooted `FileManager` is kept.
-  - `ScreenshotLocationResolver.system` reads no screenshot preference and uses a Desktop in the same folder, and `AppModel`'s default Spotlight shortcut resolver uses inert symbolic-hotkey preferences.
-  - `UnitTestDataIsolationTests` fails if a default goes back to the owner's folders.
-  - Tests still inject their own stores wherever the data matters to the test. The Whisper timing benchmark takes its model folder only from `KEYBUMPS_WHISPER_BENCHMARK_MODEL`.
+  - The UI-test sandbox (`ProductPaths.sandboxRoot`) still comes first.
+  - A folder moves when it's the owner's folder or inside it, however it's spelled (a trailing slash, `/private/var`, a symlink). So a test's own rooted `FileManager` keeps only the folders it overrides with ones outside the owner's; its temporary folder, unless overridden, still moves.
+  - `ScreenshotLocationResolver.system` reads no screenshot preference and uses a Desktop in the same folder.
+  - `AppModel.defaultSymbolicHotKeyPreferences`, used by the Spotlight shortcut check and the Screenshot Tools takeover unless a composition injects preferences, is inert under that host, so no test can rewrite the owner's `com.apple.symbolichotkeys`.
+  - `UnitTestDataIsolationTests` fails if a default goes back to the owner's folders. It checks the resolved paths with `#require` before building any store, so a regression stops the test before anything opens the owner's folders.
+  - Tests still inject their own stores wherever the data matters to the test. The Whisper timing benchmark takes its model folder only from `KEYBUMPS_WHISPER_BENCHMARK_MODEL`. Pass it to the test host as `TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_MODEL=<folder>` on the `xcodebuild` command line (and `TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_AUDIO` for the WAV).
 
 ### UI test launch arguments
 
