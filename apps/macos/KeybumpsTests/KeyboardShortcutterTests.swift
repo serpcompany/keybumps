@@ -185,12 +185,30 @@ final class KeyboardShortcutterTests: XCTestCase {
         let detector = ManualActionDetector(monitor: StubPointerMonitor(), permissions: permissions)
         let preferences = AppPreferences(defaults: defaults)
         preferences.didCompleteOnboarding = true
+        // Starting the model starts Clipboard History, so give it a private pasteboard, a temporary
+        // folder, and the inert reader instead of the real pasteboard, history, and app in front.
+        let clipboardRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsPermissionSnapshots-\(UUID().uuidString)", isDirectory: true)
+        let clipboardPasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsPermissionSnapshots-\(UUID().uuidString)"))
+        let clipboard = ClipboardHistoryService(
+            fileManager: TemporaryRootFileManager(root: clipboardRoot),
+            storageURL: clipboardRoot.appendingPathComponent("clipboard-history.json"),
+            pasteboard: clipboardPasteboard,
+            mediaDirectoryURL: clipboardRoot.appendingPathComponent("clipboard-media", isDirectory: true),
+            sourceApps: .inert
+        )
+        defer {
+            clipboard.stop()
+            clipboardPasteboard.releaseGlobally()
+            try? FileManager.default.removeItem(at: clipboardRoot)
+        }
         let model = AppModel(
             releaseLane: .full,
             preferences: preferences,
             inbox: InboxStore(persistence: MemoryPersistence()),
             presenceController: StubPresenceController(),
             detector: detector,
+            clipboard: clipboard
         )
         model.start()
 

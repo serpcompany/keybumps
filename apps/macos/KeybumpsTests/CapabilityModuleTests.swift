@@ -197,7 +197,8 @@ private final class ModuleHarness {
         clipboard = TrackingClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
             pasteboard: pasteboard,
-            mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true)
+            mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true),
+            sourceApps: .inert
         )
         let screenshotHome = root.appendingPathComponent("home", isDirectory: true)
         model = AppModel(

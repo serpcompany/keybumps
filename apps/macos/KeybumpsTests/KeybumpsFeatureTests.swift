@@ -1886,7 +1886,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     func testClipboardKeepsFiftyAndCollapsesDuplicates() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
-        let service = ClipboardHistoryService(storageURL: url)
+        let service = ClipboardHistoryService(storageURL: url, sourceApps: .inert)
         XCTAssertEqual(ClipboardHistoryService.capacity, 50)
         for number in 0..<52 { service.ingestForTesting("item \(number)") }
         XCTAssertEqual(service.entries.count, 50)
@@ -1895,7 +1895,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertFalse(service.entries.contains { $0.text == "item 0" || $0.text == "item 1" })
         service.ingestForTesting("item 51")
         XCTAssertEqual(service.entries.count, 50)
-        XCTAssertEqual(ClipboardHistoryService(storageURL: url).entries.count, 50)
+        XCTAssertEqual(ClipboardHistoryService(storageURL: url, sourceApps: .inert).entries.count, 50)
     }
 
     func testClipboardEvictsOldestImageMediaAtCapacity() throws {
@@ -1905,7 +1905,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsEvictClipboard-\(UUID().uuidString)"))
         defer { try? FileManager.default.removeItem(at: root) }
         let png = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII="))
-        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL)
+        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL, sourceApps: .inert)
 
         pasteboard.clearContents()
         pasteboard.setData(png, forType: .png)
@@ -1929,7 +1929,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         }
         try JSONEncoder().encode(existing).write(to: storageURL)
 
-        let loaded = ClipboardHistoryService(storageURL: storageURL)
+        let loaded = ClipboardHistoryService(storageURL: storageURL, sourceApps: .inert)
         XCTAssertEqual(loaded.entries, existing)
         loaded.ingestForTesting("new copy")
         XCTAssertEqual(loaded.entries.count, 11)
@@ -1946,7 +1946,8 @@ final class KeybumpsFeatureTests: XCTestCase {
         let service = ClipboardHistoryService(
             storageURL: storageURL,
             pasteboard: pasteboard,
-            mediaDirectoryURL: mediaURL
+            mediaDirectoryURL: mediaURL,
+            sourceApps: .inert
         )
 
         pasteboard.clearContents()
@@ -1958,7 +1959,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(entry.displayText, "Image")
         XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(entry.imageURL).path))
         XCTAssertEqual(
-            ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL).entries.first,
+            ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL, sourceApps: .inert).entries.first,
             entry
         )
 
@@ -1983,7 +1984,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         let legacy = LegacyClipboardEntry(id: UUID(), text: "Legacy text", capturedAt: Date(timeIntervalSince1970: 1_700_000_000))
         try JSONEncoder().encode([legacy]).write(to: storageURL)
 
-        let loaded = ClipboardHistoryService(storageURL: storageURL)
+        let loaded = ClipboardHistoryService(storageURL: storageURL, sourceApps: .inert)
 
         XCTAssertEqual(loaded.entries.first?.id, legacy.id)
         XCTAssertEqual(loaded.entries.first?.text, "Legacy text")
@@ -1994,7 +1995,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-\(UUID().uuidString).json")
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsDictationSuppression-\(UUID().uuidString)"))
         defer { try? FileManager.default.removeItem(at: url) }
-        let service = ClipboardHistoryService(storageURL: url, pasteboard: pasteboard)
+        let service = ClipboardHistoryService(storageURL: url, pasteboard: pasteboard, sourceApps: .inert)
 
         pasteboard.clearContents()
         pasteboard.setString("automatic dictation", forType: .string)

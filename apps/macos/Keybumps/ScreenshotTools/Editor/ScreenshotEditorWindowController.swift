@@ -91,6 +91,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         }
         pasteboard.clearContents()
         let copied = pasteboard.setData(png, forType: .png)
+        if copied { pasteboard.markCopiedByKeybumps() }
         let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder)
         let savedURL: URL? = (try? png.write(to: destination, options: .withoutOverwriting)) == nil ? nil : destination
         if savedURL == nil {

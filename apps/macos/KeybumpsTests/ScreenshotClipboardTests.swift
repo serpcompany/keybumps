@@ -180,7 +180,8 @@ struct ScreenshotClipboardTests {
             clipboard = ClipboardHistoryService(
                 storageURL: root.appendingPathComponent("history.json"),
                 pasteboard: pasteboard,
-                mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true)
+                mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true),
+                sourceApps: .inert
             )
         }
 
