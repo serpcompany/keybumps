@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
-import { sensitiveUrlPaths } from './pages'
+import { isSensitiveUrlPath, sensitiveUrlPaths } from './pages'
 
 const srcDir = realpathSync.native(join(__dirname, '..'))
 const webDir = join(srcDir, '..')
@@ -100,15 +100,75 @@ function analyticsFiles(overrides: Record<string, string> = {}) {
     .sort()
 }
 
+function parse(file: string, source = readFileSync(file, 'utf8')) {
+  return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+}
+
+/** A URL string that starts with a sensitive-url page path, in any case or slash form. */
+const sensitivePrefix = new RegExp(
+  `^(?:${sensitiveUrlPaths.map(path => path.replace(/\/$/, '')).join('|')})(?:/|\\?|#|$)`,
+  'i'
+)
+
+/**
+ * Every place a source file builds a URL for a sensitive-url page that has, or may get, a query:
+ * a string with `?`, a template or `+` concatenation that starts with the page path, and a
+ * `{ pathname, query }` or `{ pathname, search }` object. GTM's click triggers push a clicked
+ * link's `href` as `gtm.elementUrl`, so no link may carry one.
+ */
+function sensitiveQueryLinks(sourceFile: ts.SourceFile) {
+  const found: string[] = []
+  const isPlus = (node: ts.Node): node is ts.BinaryExpression =>
+    ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  const staticText = (node: ts.Node | undefined) => {
+    let expression = node
+    while (expression && ts.isParenthesizedExpression(expression))
+      expression = expression.expression
+    if (!expression) return null
+    if (ts.isStringLiteralLike(expression)) return expression.text
+    if (ts.isTemplateExpression(expression)) return expression.head.text
+    return null
+  }
+  const propertyName = (property: ts.ObjectLiteralElementLike) =>
+    property.name ? property.name.getText().replace(/['"]/g, '') : null
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isStringLiteralLike(node) &&
+      node.text.includes('?') &&
+      sensitivePrefix.test(node.text)
+    ) {
+      found.push(node.getText())
+    } else if (ts.isTemplateExpression(node) && sensitivePrefix.test(node.head.text)) {
+      found.push(node.getText())
+    } else if (isPlus(node) && !isPlus(node.parent)) {
+      let left: ts.Expression = node
+      while (isPlus(left)) left = left.left
+      const first = staticText(left)
+      if (first !== null && sensitivePrefix.test(first)) found.push(node.getText())
+    } else if (ts.isObjectLiteralExpression(node)) {
+      const names = new Set(node.properties.map(propertyName))
+      const pathname = node.properties.find(
+        (property): property is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(property) && propertyName(property) === 'pathname'
+      )
+      const text = staticText(pathname?.initializer)
+      if (
+        text !== null &&
+        sensitivePrefix.test(text) &&
+        (names.has('query') || names.has('search'))
+      ) {
+        found.push(node.getText())
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return found
+}
+
 /** Every JSX element in a file, as [tag name, node]. Comments are not elements. */
 function jsxElements(file: string) {
-  const sourceFile = ts.createSourceFile(
-    file,
-    readFileSync(file, 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX
-  )
+  const sourceFile = parse(file)
   const elements: { tag: string; node: ts.JsxSelfClosingElement | ts.JsxElement }[] = []
   const visit = (node: ts.Node) => {
     if (ts.isJsxSelfClosingElement(node)) elements.push({ tag: node.tagName.getText(), node })
@@ -221,7 +281,7 @@ describe('analytics scope', () => {
     expect(headChildren.map(child => child.getText())).toEqual(['{head}'])
   })
 
-  it('reaches sensitive-url pages only by full page loads, never client-side', () => {
+  it('rewrites every RSC request for a sensitive-url page to a 404 (a full page load)', () => {
     // next.config.ts rewrites every RSC request for them to a 404 (sensitiveUrlRewrites), so a
     // <Link>, router.push(), or prefetch to them, with or without a query, becomes a document
     // request that the page redirects. src/lib/sensitive-url-routes.test.ts checks the matching.
@@ -240,6 +300,91 @@ describe('analytics scope', () => {
     }
     visit(config)
     expect(beforeFiles).toEqual(['sensitiveUrlRewrites()'])
+  })
+
+  it('never links to a sensitive-url page with a query, in any form', () => {
+    const found = sourceFiles().flatMap(file =>
+      sensitiveQueryLinks(parse(file)).map(text => `${relative(srcDir, file)}: ${text}`)
+    )
+    expect(found).toEqual([])
+  })
+
+  it('catches string, template, concatenation, and object forms of a link with a query', () => {
+    const original = readFileSync(footer, 'utf8')
+    const probe = (expression: string) =>
+      `${original}\nexport const probe = () => (${expression})\n`
+    const injections = [
+      '<Link href="/license/?ref=x">Key</Link>',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: source text for the parser.
+      '<Link href={`/license/?ref=${ref}`}>Key</Link>',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: source text for the parser.
+      '<Link href={`/thanks/${search}`}>Thanks</Link>',
+      "<Link href={'/license/' + '?ref=x'}>Key</Link>",
+      "<Link href={('/license/' + search)}>Key</Link>",
+      "<Link href={{ pathname: '/license/', query: { ref: 'x' } }}>Key</Link>",
+      "<Link href={{ pathname: '/thanks/', search }}>Thanks</Link>",
+      "router.push('/thanks?ref=x')",
+      "new URL('/LICENSE/?ref=x', location.href)"
+    ]
+    for (const injection of injections) {
+      expect(sensitiveQueryLinks(parse(footer, probe(injection))), injection).not.toEqual([])
+    }
+    for (const allowed of [
+      '<Link href="/license/" prefetch={false}>Key</Link>',
+      "<a href='/thanks/#activate'>Activate</a>",
+      "<Link href={{ pathname: '/pricing/', query: { ref: 'x' } }}>Pricing</Link>"
+    ]) {
+      expect(sensitiveQueryLinks(parse(footer, probe(allowed))), allowed).toEqual([])
+    }
+  })
+
+  it('never prefetches a sensitive-url page, whose RSC requests 404 by design', () => {
+    for (const file of sourceFiles().filter(file => file.endsWith('.tsx'))) {
+      for (const link of jsxElements(file).filter(element => element.tag === 'Link')) {
+        const props = attributes(link.node).properties.filter(ts.isJsxAttribute)
+        const prop = (name: string) => props.find(attribute => attribute.name.getText() === name)
+        const href = prop('href')?.initializer
+        const inner = href && ts.isJsxExpression(href) ? href.expression : href
+        const prefetch = prop('prefetch')?.initializer?.getText()
+        const where = `${relative(srcDir, file)}: ${link.node.getText().split('\n')[0]}`
+        if (inner && ts.isStringLiteralLike(inner)) {
+          if (isSensitiveUrlPath(inner.text.split(/[?#]/)[0]))
+            expect(prefetch, where).toBe('{false}')
+        } else {
+          // A computed href must decide explicitly, with linkPrefetch() from src/lib/pages.ts.
+          expect(prefetch, where).toMatch(/^\{linkPrefetch\(/)
+        }
+      }
+    }
+  })
+
+  it('keeps anything that could stream or cache the page above its redirect out of the group', () => {
+    // A loading.tsx (or a Suspense boundary above the page) makes the page stream, and redirect()
+    // then becomes a 200 with a meta refresh and the query in the RSC payload. Segment config
+    // (dynamic = 'force-static', revalidate, …) or generateStaticParams can serve the page without
+    // running it. So the group holds only its layout and its two pages.
+    const group = join(appDir, sensitiveGroup)
+    expect(
+      files(group)
+        .map(file => relative(group, file))
+        .sort()
+    ).toEqual(
+      [
+        'layout.tsx',
+        ...sensitiveUrlPaths.map(path => join(...path.split('/').filter(Boolean), 'page.tsx'))
+      ].sort()
+    )
+    const segmentConfig =
+      /export\s+(?:const|let|var|async\s+function|function)\s+(?:dynamic|dynamicParams|revalidate|fetchCache|runtime|preferredRegion|maxDuration|experimental_ppr|generateStaticParams|unstable_\w+)\b/
+    for (const file of [...files(group), siteDocument]) {
+      const source = readFileSync(file, 'utf8')
+      expect(source, relative(srcDir, file)).not.toMatch(/\bSuspense\b/)
+      expect(source, relative(srcDir, file)).not.toMatch(segmentConfig)
+    }
+    // Site-wide switches that change how every page renders and streams.
+    expect(readFileSync(join(webDir, 'next.config.ts'), 'utf8')).not.toMatch(
+      /\b(?:cacheComponents|ppr|dynamicIO)\b/
+    )
   })
 
   it('redirects every sensitive-url page to its bare URL before it renders', () => {

@@ -37,9 +37,10 @@ export const stripQueryScript = `(function () {
  * keep working. (The router's state also takes the tree and search from the server's payload,
  * which is why the pages redirect instead of relying on this alone.)
  *
- * It runs once per document. That is enough because (sensitive-url) pages are never reached
- * client-side: every RSC request for them is rewritten to a 404, which makes the router fall back
- * to a full page load (src/lib/sensitive-url-routes.ts).
+ * It runs once per document. That is enough because the App Router never renders (sensitive-url)
+ * pages client-side: every RSC request for them is rewritten to a 404, and Next.js 16.3 turns that
+ * into a full page load (src/lib/sensitive-url-routes.ts, which describes the two router paths
+ * and why `pnpm test:leak` must pass on every Next.js or OpenNext upgrade).
  */
 export function StripQuery() {
   // A constant script, not user input. Only an inline script runs before the parser reaches <body>.

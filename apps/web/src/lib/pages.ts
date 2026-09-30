@@ -90,3 +90,15 @@ export const legacyRedirects = [
 export const sensitiveUrlPaths = ['/thanks/', '/license/'] as const
 
 export type SensitiveUrlPath = (typeof sensitiveUrlPaths)[number]
+
+export function isSensitiveUrlPath(path: string): path is SensitiveUrlPath {
+  return (sensitiveUrlPaths as readonly string[]).includes(path)
+}
+
+/**
+ * The `prefetch` prop for a `<Link>` to `path`. The App Router's RSC requests for sensitive-url
+ * pages 404 by design (src/lib/sensitive-url-routes.ts), so links to them never prefetch.
+ */
+export function linkPrefetch(path: string): false | undefined {
+  return isSensitiveUrlPath(path) ? false : undefined
+}

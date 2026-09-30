@@ -32,7 +32,10 @@ export default async function ThanksPage({ searchParams }: PageProps<'/thanks'>)
       </ol>
       <p>
         No email? Check your spam folder, or{' '}
-        <Link href="/license/">find your key in the customer portal</Link>.
+        <Link href="/license/" prefetch={false}>
+          find your key in the customer portal
+        </Link>
+        .
       </p>
     </PageShell>
   )
