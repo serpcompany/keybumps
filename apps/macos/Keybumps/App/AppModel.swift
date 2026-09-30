@@ -304,7 +304,7 @@ final class AppModel {
         let wasLicensed = isLicensed
         licenseSnapshot = snapshot
         // Locked runs no capability, so there's nothing to set up.
-        if !snapshot.isEntitled { endPermissionWalkthrough() }
+        if !snapshot.isEntitled { endPermissionWalkthrough(); dismissDictationSetupCards() }
         guard wasLicensed != snapshot.isEntitled, isStarted, preferences.didCompleteOnboarding else { return }
         if !snapshot.isEntitled {
             // Locked: stop every capability's resources and shortcuts, and close the palette.
@@ -367,6 +367,7 @@ final class AppModel {
             capabilities.deactivate(capability, context: capabilityContext)
             // Setup for a capability that's now off would prompt for nothing.
             if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
+            if capability == .dictation { dismissDictationSetupCards() }
         }
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
@@ -536,6 +537,15 @@ final class AppModel {
         permissionWalkthroughMonitor = nil
     }
 
+    /// Takes down the cards only the Dictation shortcut shows (its setup card, and Open System
+    /// Settings… with Restart Keybumps) once Dictation can't run: their setup would end at once.
+    private func dismissDictationSetupCards() {
+        switch permissionDragAssistant.presentation {
+        case .dictationSetup, .systemSettingsFollowUp: permissionDragAssistant.dismiss()
+        default: break
+        }
+    }
+
     /// Re-reads Accessibility and Input Monitoring silently; neither ever prompts. Only tests call these.
     func requestAccessibilityPermission() { detector.requestAccessibilityPermission(); refreshPermissions() }
     func requestInputMonitoringPermission() { detector.requestInputMonitoringPermission(); refreshPermissions() }
@@ -667,7 +677,9 @@ final class AppModel {
         presentedWalkthroughPermission = next
         presentedWalkthroughAction = action
         Task { [weak self] in
-            await self?.recoverPermission(next, fromSetupCard: true)
+            // Setup may have ended before the step starts, for example on the monitor's last check.
+            guard let self, self.isPermissionWalkthroughActive else { return }
+            await self.recoverPermission(next, fromSetupCard: true)
         }
     }
     func refreshDetectorState() { detectorStatus = detector.status; isAccessibilityTrusted = detector.isAccessibilityTrusted; isInputMonitoringAuthorized = detector.isInputMonitoringAuthorized }

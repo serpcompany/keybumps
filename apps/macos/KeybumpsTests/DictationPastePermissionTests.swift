@@ -411,6 +411,34 @@ struct DictationPastePermissionTests {
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
     }
 
+    @Test("Turning Dictation off takes down its setup card and its two-button card, and leaves other cards alone")
+    func disablingDictationDismissesItsCards() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .dictationSetup([.accessibility, .microphone, .speechRecognition]))
+        harness.model.setCapability(.dictation, enabled: false)
+        #expect(harness.model.permissionAssistantPresentation == nil, "Set Up Dictation… would set up nothing")
+
+        // Setup opened System Settings and ended without the grant; the next press shows the two-button card.
+        harness.model.setCapability(.dictation, enabled: true)
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        harness.model.endPermissionWalkthrough()
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility))
+        harness.model.setCapability(.dictation, enabled: false)
+        #expect(harness.model.permissionAssistantPresentation == nil, "Open System Settings… would set up nothing")
+
+        // The Permissions page's drag card, for example for Window Manager, isn't Dictation's.
+        harness.model.setCapability(.dictation, enabled: true)
+        await harness.model.recoverPermission(.accessibility)
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+        harness.model.setCapability(.dictation, enabled: false)
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+    }
+
     @Test("Locking ends setup, and the step's delayed drag card doesn't appear afterwards")
     func lockingEndsSetup() async throws {
         let harness = try PromptHarness()
@@ -428,6 +456,52 @@ struct DictationPastePermissionTests {
         harness.grants.grant(.accessibility)
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+    }
+
+    @Test("Locking takes down Dictation's setup card and its two-button card, and leaves other cards alone")
+    func lockingDismissesDictationCards() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .dictationSetup([.accessibility, .microphone, .speechRecognition]))
+        await harness.model.deactivateLicense()
+        #expect(harness.model.permissionAssistantPresentation == nil, "Set Up Dictation… would set up nothing")
+
+        // During setup, after System Settings opened, the press shows the two-button card.
+        await harness.model.activateLicense(key: FixedLicenseController.sampleCheck.key)
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility))
+        await harness.model.deactivateLicense()
+        #expect(!harness.model.isPermissionWalkthroughActive)
+        #expect(harness.model.permissionAssistantPresentation == nil, "Open System Settings… would set up nothing")
+
+        // The Permissions page's drag card, for example for Window Manager, isn't Dictation's.
+        await harness.model.activateLicense(key: FixedLicenseController.sampleCheck.key)
+        await harness.model.recoverPermission(.accessibility)
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+        await harness.model.deactivateLicense()
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+    }
+
+    @Test("A step scheduled as setup ends never starts, as when the grant lands on the last re-check")
+    func stepScheduledAsSetupEndsNeverStarts() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        // In one turn, like the monitor's last check: the re-check sees the grant and schedules
+        // Microphone's step, then setup ends.
+        harness.grants.grant(.accessibility)
+        harness.model.refreshPermissions()
+        harness.model.endPermissionWalkthrough()
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)], "no Microphone prompt after setup ended")
+        #expect(harness.model.permissionAssistantPresentation == nil)
     }
 
     @Test("Setup stops re-checking after 600 checks, and leaves no drag card behind")
