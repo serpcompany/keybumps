@@ -1,6 +1,82 @@
 import Foundation
+import Testing
 import XCTest
 @testable import Keybumps
+
+/// The release scripts sit in the app folder (with the Xcode project and tests), while CHANGELOG.md
+/// and docs/releases/ stay at the repository root even when the app folder moves below it (#161).
+/// Each case copies scripts/ into a throwaway Git repository, at the root or in apps/macos, and
+/// stops the real orchestrator at its output-directory guard, before anything is built or signed.
+@Suite("Release scripts in an app folder")
+struct ReleaseScriptAppFolderTests {
+    /// The app folder of this checkout: the parent of KeybumpsTests.
+    private let checkoutAppFolder = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+
+    @Test("build-update-release.sh reads release notes from the repository root", arguments: [".", "apps/macos"])
+    func releaseNotesComeFromTheRepositoryRoot(appFolder: String) throws {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("app-folder-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let repository = work.appendingPathComponent("repository")
+        let scripts = repository.appendingPathComponent(appFolder).appendingPathComponent("scripts").standardized
+        try FileManager.default.createDirectory(at: scripts.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: checkoutAppFolder.appendingPathComponent("scripts"), to: scripts)
+        let releaseNotes = repository.appendingPathComponent("docs/releases")
+        try FileManager.default.createDirectory(at: releaseNotes, withIntermediateDirectories: true)
+        try "# Keybumps 0.0.1-fixture\n".write(to: releaseNotes.appendingPathComponent("v0.0.1-fixture.md"), atomically: true, encoding: .utf8)
+        let initialized = try runProcess(URL(fileURLWithPath: "/usr/bin/git"), ["init", "--quiet", repository.path], from: work)
+        try #require(initialized.status == 0, "\(initialized.output)")
+
+        // An existing output directory stops the orchestrator right after the release-notes check.
+        // It runs from this checkout, which has no notes for these versions, so notes found through
+        // the working directory instead of the script's repository would fail the first case.
+        let output = work.appendingPathComponent("output")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        func prepareRelease(_ version: String) throws -> (status: Int32, output: String) {
+            try runProcess(scripts.appendingPathComponent("build-update-release.sh"), [
+                version, "2", "1", "https://updates.keybumps.app/appcast.xml", "public-key", "account",
+                work.appendingPathComponent("tools").path, output.path
+            ], from: checkoutAppFolder)
+        }
+
+        let found = try prepareRelease("0.0.1-fixture")
+        #expect(found.status == 73, "\(found.output)")
+        #expect(found.output.contains("refusing to overwrite output directory"), "\(found.output)")
+
+        let missing = try prepareRelease("0.0.1-missing")
+        #expect(missing.status == 66, "\(missing.output)")
+        #expect(missing.output.contains("\(work.lastPathComponent)/repository/docs/releases/v0.0.1-missing.md"), "\(missing.output)")
+    }
+}
+
+/// Runs a script or tool from `directory` with this process's environment, minus the DYLD_ and
+/// XCTest variables of the test host, and returns its exit status and combined output.
+private func runProcess(
+    _ executable: URL,
+    _ arguments: [String],
+    from directory: URL,
+    environment: [String: String] = [:]
+) throws -> (status: Int32, output: String) {
+    let process = Process()
+    let pipe = Pipe()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.currentDirectoryURL = directory
+    process.environment = cleanChildEnvironment.merging(environment) { $1 }
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try process.run()
+    process.waitUntilExit()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+}
+
+private var cleanChildEnvironment: [String: String] {
+    ProcessInfo.processInfo.environment.filter {
+        !$0.key.hasPrefix("DYLD_") && !$0.key.hasPrefix("XCTest")
+    }
+}
 
 final class UpdateReleaseScriptTests: XCTestCase {
     private var repositoryRoot: URL {
@@ -377,23 +453,6 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     private func run(_ executable: URL, _ arguments: [String], environment: [String: String] = [:]) throws -> (status: Int32, output: String) {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.currentDirectoryURL = repositoryRoot
-        process.environment = cleanChildEnvironment.merging(environment) { $1 }
-        process.standardOutput = pipe
-        process.standardError = pipe
-        try process.run()
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
-    }
-
-    private var cleanChildEnvironment: [String: String] {
-        ProcessInfo.processInfo.environment.filter {
-            !$0.key.hasPrefix("DYLD_") && !$0.key.hasPrefix("XCTest")
-        }
+        try runProcess(executable, arguments, from: repositoryRoot, environment: environment)
     }
 }

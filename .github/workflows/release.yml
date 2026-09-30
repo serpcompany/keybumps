@@ -47,6 +47,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # The Mac app's folder (its Xcode project and scripts/), relative to the repository root.
+  # Steps run from the repository root, where CHANGELOG.md and docs/releases/ stay.
+  APP_DIR: .
   FEED_URL: https://updates.keybumps.app/appcast.xml
   # Public Sparkle EdDSA key embedded in every Keybumps build (matches the private key secret).
   UPDATE_PUBLIC_KEY: qier19/D8RhLykVkhe92L3gatkAU6i/Q22/VgmjkeKc=
@@ -124,7 +127,7 @@ jobs:
       - name: Write release notes from CHANGELOG.md
         env:
           VERSION: ${{ inputs.version }}
-        run: ./scripts/write-release-notes.sh CHANGELOG.md "$VERSION" "docs/releases/v${VERSION}.md"
+        run: ${{ env.APP_DIR }}/scripts/write-release-notes.sh CHANGELOG.md "$VERSION" "docs/releases/v${VERSION}.md"
 
       - name: Resolve version and build
         id: resolve
@@ -189,7 +192,7 @@ jobs:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
           ASC_BYPASS_KEYCHAIN: "1"
         run: |
-          ./scripts/build-update-release.sh "$RELEASE_VERSION" "$RELEASE_BUILD" "$PREVIOUS_BUILD" \
+          ${{ env.APP_DIR }}/scripts/build-update-release.sh "$RELEASE_VERSION" "$RELEASE_BUILD" "$PREVIOUS_BUILD" \
             "$FEED_URL" "$UPDATE_PUBLIC_KEY" "$SPARKLE_ACCOUNT" "$SPARKLE_TOOLS" "$RUNNER_TEMP/release"
 
       - name: Remove Sparkle key file
@@ -198,8 +201,8 @@ jobs:
 
       - name: Preview publication
         run: |
-          ./scripts/publish-release.sh "$RUNNER_TEMP/release" staging
-          ./scripts/publish-release.sh "$RUNNER_TEMP/release" production
+          ${{ env.APP_DIR }}/scripts/publish-release.sh "$RUNNER_TEMP/release" staging
+          ${{ env.APP_DIR }}/scripts/publish-release.sh "$RUNNER_TEMP/release" production
 
       - name: Keep release artifacts
         uses: actions/upload-artifact@v4
@@ -213,7 +216,7 @@ jobs:
         if: inputs.publish
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
-        run: ./scripts/publish-release.sh "$RUNNER_TEMP/release" staging --publish
+        run: ${{ env.APP_DIR }}/scripts/publish-release.sh "$RUNNER_TEMP/release" staging --publish
 
       - name: Remove signing keychain
         if: always()
@@ -243,4 +246,4 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: |
           npm install --global "wrangler@${WRANGLER_VERSION}"
-          ./scripts/publish-release.sh "$RUNNER_TEMP/release" production --publish
+          ${{ env.APP_DIR }}/scripts/publish-release.sh "$RUNNER_TEMP/release" production --publish

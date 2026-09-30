@@ -11,10 +11,10 @@ issue=$1
 install=1
 [[ "${2:-}" == "--no-install" ]] && install=0
 
-repository_root=${0:A:h:h}
+app_root=${0:A:h:h}
 installed_app=/Applications/Keybumps.app
 qa_root=${KEYBUMPS_QA_ROOT:-$HOME/Library/Developer/Keybumps-QA}
-cd "$repository_root"
+cd "$app_root"
 
 [[ -z "$(git status --porcelain)" ]] || { print -u2 "refusing to build: working tree has uncommitted changes"; exit 65; }
 branch=$(git rev-parse --abbrev-ref HEAD)
@@ -55,7 +55,7 @@ xcodebuild -quiet -project Keybumps.xcodeproj -scheme Keybumps-Release -configur
 xcodebuild -quiet -exportArchive \
   -archivePath "$output/Keybumps.xcarchive" \
   -exportPath "$output/export" \
-  -exportOptionsPlist "$repository_root/scripts/ExportOptions-DeveloperID.plist"
+  -exportOptionsPlist "$app_root/scripts/ExportOptions-DeveloperID.plist"
 candidate_app="$output/export/Keybumps.app"
 
 codesign --verify --deep --strict "$candidate_app"
