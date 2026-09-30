@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
-# trailing-slash and legacy redirects take one 308 hop; search-engine rules match the environment
-# (only production may be indexed); in production, GTM loads on / but never on /thanks/ or
-# /license/; and a workers.dev URL redirects to its branded domain.
+# trailing-slash and legacy redirects take one 308 hop; search-engine rules and analytics match the
+# environment (only production may be indexed or load GTM, and never on /thanks/ or /license/);
+# and the non-canonical hosts (www and workers.dev) redirect to the branded domain in one 308.
 # Requests carry the smoke-test header so a workers.dev URL serves the site instead of redirecting.
+#
+# Host checks depend on the base URL:
+# - a workers.dev URL (CI): the workers.dev redirect. www.keybumps.app can't be checked from here,
+#   because it isn't served by this URL and the zone's bot protection blocks CI runners.
+# - https://keybumps.app (after the domain cutover, from the owner's machine): the real www host.
+# - localhost (`pnpm preview`): both, by sending their Host header. Wrangler keeps that header only
+#   when the config it runs has no custom-domain routes, so use the top level, not `--env staging`.
 #
 # usage: scripts/smoke.sh <base-url> <staging|production>
 #   e.g. scripts/smoke.sh http://localhost:8787 staging
@@ -121,8 +128,12 @@ for path in /pricing/ /download/ /license/ /thanks/ /about/ /legal/privacy/ /sit
   fi
 done
 
+# Each body is captured before grep: piping curl into `grep -q` under pipefail can fail when grep
+# exits early, which would flip these results.
 robots="$(curl -s "${smoke[@]}" "$base/robots.txt")"
 robots_header="$(curl -sI "${smoke[@]}" "$base/" | tr -d '\r' | grep -i '^x-robots-tag:' || true)"
+home="$(curl -s "${smoke[@]}" "$base/" || true)"
+gtm='googletagmanager\.com/gtm\.js'
 
 if [ "$env" = production ]; then
   grep -q '^Allow: /$' <<<"$robots" && pass 'robots.txt allows crawling' ||
@@ -130,14 +141,16 @@ if [ "$env" = production ]; then
   grep -q '^Sitemap: https://keybumps.app/sitemap-index.xml$' <<<"$robots" &&
     pass 'robots.txt lists the sitemap index' || fail 'robots.txt is missing the sitemap index'
   [ -z "$robots_header" ] && pass 'no X-Robots-Tag' || fail "unexpected $robots_header"
+  if [ -n "$home" ] && ! grep -q '<meta name="robots" content="noindex' <<<"$home"; then
+    pass 'no robots noindex meta on /'
+  else
+    fail '/ is empty or has a robots noindex meta'
+  fi
   # GTM loads on ordinary pages, and never on pages whose URLs carry checkout, session, or
-  # license data. The query values are placeholders.
-  # Each body is captured before grep, as for robots.txt: piping curl into `grep -q` under
-  # pipefail can fail when grep exits early, which would flip these results.
-  gtm='googletagmanager\.com/gtm\.js'
-  home="$(curl -s "${smoke[@]}" "$base/" || true)"
+  # license data. The query values are placeholders. GTM needs NEXT_PUBLIC_GTM_ID in the build
+  # and SITE_ENV=production in the Worker's vars, because the layout renders on request.
   grep -q "$gtm" <<<"$home" && pass 'GTM loads on /' ||
-    fail 'GTM missing on / (is NEXT_PUBLIC_GTM_ID set in the build?)'
+    fail 'GTM missing on / (is NEXT_PUBLIC_GTM_ID set in the build and SITE_ENV in the Worker?)'
   for path in '/thanks/?checkout_id=x&customer_session_token=x' '/license/?customer_session_token=x'; do
     page="$(curl -s "${smoke[@]}" "$base$path" || true)"
     if [ -z "$page" ]; then
@@ -153,21 +166,64 @@ else
     fail 'robots.txt allows crawling'
   grep -qi 'noindex' <<<"$robots_header" && pass 'X-Robots-Tag noindex' ||
     fail 'missing X-Robots-Tag noindex'
-fi
-
-# Without the smoke-test header, a workers.dev URL redirects to the branded domain.
-if [[ "$base" == *.workers.dev ]]; then
-  # Retry: a new deploy can take a few seconds to replace the previous version at the edge.
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    got="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$base/legal/terms/" || true)"
-    [ "$got" = "308 $canonical/legal/terms/" ] && break
-    sleep 3
-  done
-  if [ "$got" = "308 $canonical/legal/terms/" ]; then
-    pass "workers.dev redirects to $canonical"
+  if [ -z "$home" ]; then
+    fail 'empty response for /'
+  elif grep -q "$gtm" <<<"$home"; then
+    fail 'GTM loads on / outside production'
   else
-    fail "workers.dev gave '$got' (want 308 -> $canonical/legal/terms/)"
+    pass 'no GTM on /'
   fi
 fi
+
+# Non-canonical hosts redirect to the canonical host in one 308, already in canonical form: a page
+# keeps its path, and a legacy URL goes straight to its page.
+# usage: expect_host_redirect <label> <canonical-origin> <url> [curl options...]
+# Retries, because a new deploy can take a few seconds to replace the previous version at the edge.
+expect_host_redirect() {
+  local label="$1" origin="$2" url="$3" path want got
+  shift 3
+  for path in /legal/terms/ /privacy; do
+    want="$origin$path"
+    [ "$path" = /privacy ] && want="$origin/legal/privacy/"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      got="$(curl -s "$@" -o /dev/null -w '%{http_code} %{redirect_url}' "$url$path" || true)"
+      [ "$got" = "308 $want" ] && break
+      sleep 3
+    done
+    if [ "$got" = "308 $want" ]; then
+      pass "$label 308 $path -> $want"
+    else
+      fail "$label $path gave '$got' (want 308 -> $want)"
+    fi
+  done
+}
+
+case "$base" in
+  *.workers.dev)
+    # Without the smoke-test header, a workers.dev URL redirects to its branded domain.
+    expect_host_redirect workers.dev "$canonical" "$base"
+    echo "skip www: www.keybumps.app isn't served through $base; check it against https://keybumps.app"
+    ;;
+  https://keybumps.app)
+    expect_host_redirect www https://keybumps.app https://www.keybumps.app
+    ;;
+  http://localhost:* | http://127.0.0.1:*)
+    # Send each host's Host header to the local Worker. www always redirects to the production
+    # apex; workers.dev redirects to this build's branded domain unless it has the smoke header.
+    expect_host_redirect www https://keybumps.app "$base" -H 'Host: www.keybumps.app'
+    workers_dev=(-H 'Host: keybumps-web.example.workers.dev')
+    expect_host_redirect workers.dev "$canonical" "$base" "${workers_dev[@]}"
+    got="$(curl -s "${smoke[@]}" "${workers_dev[@]}" -o /dev/null -w '%{http_code}' \
+      "$base/legal/terms/" || true)"
+    if [ "$got" = 200 ]; then
+      pass 'workers.dev with the smoke-test header serves the site'
+    else
+      fail "workers.dev with the smoke-test header gave $got (want 200)"
+    fi
+    ;;
+  *)
+    echo "skip host redirects: no www or workers.dev host to check through $base"
+    ;;
+esac
 
 exit "$failed"
