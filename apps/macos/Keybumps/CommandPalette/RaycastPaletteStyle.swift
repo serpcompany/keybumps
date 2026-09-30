@@ -162,6 +162,23 @@ extension CoachTipPresenting {
     func showCoach(_ presentation: NotchCoachPresentation) { showCoach(presentation, duration: 4) }
 }
 
+/// Shows the palette's notch notices; tests record them instead of drawing a panel.
+@MainActor
+protocol PaletteNoticePresenting: AnyObject {
+    /// A confirmation such as "Copied to Clipboard", or a warning in orange.
+    func showNotice(_ message: String, isWarning: Bool)
+}
+
+extension PaletteHUD: PaletteNoticePresenting {
+    func showNotice(_ message: String, isWarning: Bool) {
+        if isWarning {
+            show(message, systemImage: "exclamationmark.triangle.fill", tint: .orange)
+        } else {
+            show(message)
+        }
+    }
+}
+
 /// A brief notice such as "Copied to Clipboard" that grows out of the notch: the message sits
 /// left of the notch and an icon (or a shortcut's keycaps) right of it, on black that blends with
 /// the notch. Screens without a notch show the same black tab hanging from the top of the menu bar.

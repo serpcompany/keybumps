@@ -30,7 +30,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
         for section in ["search", "clipboard", "screenshotTools", "dictation",
-                        "windows", "keyboardShortcutter", "permissions", "general"] {
+                        "windows", "keyboardShortcutter", "snippets", "permissions", "general"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -65,6 +65,7 @@ final class SmokeUITests: XCTestCase {
             ("2", "Search clipboard history"),
             ("3", "Search screenshots"),
             ("4", "Search dictation history"),
+            ("5", "Search snippets"),
             ("1", "Search apps, files, and folders"),
         ]
         for (key, prompt) in prompts {
@@ -72,10 +73,39 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(paletteField(prompt).waitForExistence(timeout: 5), "⌘\(key)")
         }
 
-        // The Hotkeys tab (⌘5) is hidden by default.
+        // The Hotkeys tab (⌘6) is hidden by default.
         XCTAssertFalse(app.buttons["palette.tab.keyboardShortcutter"].exists)
-        app.typeKey("5", modifierFlags: .command)
-        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘5 is ignored")
+        app.typeKey("6", modifierFlags: .command)
+        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘6 is ignored")
+    }
+
+    func testSnippetsTabCreatesASnippetInSettings() {
+        // Settings is closed before the palette opens, so only ⌘N can bring it back.
+        launch(permissions: "granted", ["-KBOpenPalette", "snippets", "-KBCloseSettings", "YES"])
+        let field = paletteField("Search snippets")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["palette.snippets.new"].waitForExistence(timeout: 5), "The empty state offers New Snippet")
+
+        app.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("settings.detail.snippets").waitForExistence(timeout: 10), "Settings opens on the Snippets page")
+        let name = element("snippets.editor.name")
+        XCTAssertTrue(name.waitForExistence(timeout: 10), "The editor sheet opens")
+        let save = element("snippets.editor.save")
+        XCTAssertFalse(save.isEnabled, "Save waits for a name and text")
+
+        name.click()
+        name.typeText("Made-up greeting")
+        let text = element("snippets.editor.text")
+        text.click()
+        text.typeText("Hello from a test")
+        XCTAssertTrue(save.isEnabled)
+        save.click()
+
+        XCTAssertTrue(waitForNonExistence(of: name), "Save closes the editor")
+        XCTAssertTrue(element("settings.detail.snippets").exists)
+        XCTAssertTrue(element("snippets.list").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Made-up greeting"].waitForExistence(timeout: 5), "The list shows the new snippet")
     }
 
     func testCommandEOnClipboardImageOpensScreenshotEditor() {

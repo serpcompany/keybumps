@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 import Testing
 @testable import Keybumps
@@ -14,7 +15,7 @@ struct CapabilityModuleTests {
         defer { harness.tearDown() }
 
         let order: [Capability] = [
-            .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter
+            .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
         ]
         #expect(CapabilityCatalog.descriptors.map(\.capability) == order)
         #expect(harness.model.capabilities.modules.map(\.capability) == order)
@@ -64,14 +65,15 @@ struct CapabilityModuleTests {
     @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs
-        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5])
+        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6])
         #expect(Set(tabs.map(\.tab)).count == tabs.count)
-        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots"] {
+        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets"] {
             #expect(CommandPaletteTab(rawValue: rawValue).map(CommandPaletteTab.allCases.contains) == true)
         }
         #expect(CommandPaletteTab.search.owner == .quickSearch)
         #expect(CommandPaletteTab.keyboardShortcutter.owner == .keyboardShortcutter)
         #expect(CommandPaletteTab.screenshots.owner == .screenshotTools)
+        #expect(CommandPaletteTab.snippets.owner == .snippets)
         #expect(CapabilityCatalog.paletteTab(for: .screenshots).tab.dataSource == .clipboardHistory)
         #expect(CapabilityDescriptor.windowManagement.paletteTab == nil)
 
@@ -107,7 +109,8 @@ struct CapabilityModuleTests {
             .screenshotTools: [.unsavedWork],
             .dictation: [],
             .windowManagement: [.windowAction, .windowDrag],
-            .keyboardShortcutter: []
+            .keyboardShortcutter: [],
+            .snippets: []
         ])
     }
 
@@ -163,7 +166,7 @@ struct CapabilityModuleTests {
     @Test("Preference keys and the known-capabilities migration are unchanged")
     func preferenceKeysAndKnownCapabilitiesMigration() {
         #expect(Capability.allCases.map(\.rawValue) == [
-            "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools"
+            "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools", "snippets"
         ])
         #expect(Capability.originalCapabilities == [
             .quickSearch, .clipboardHistory, .dictation, .windowManagement, .keyboardShortcutter
@@ -171,16 +174,57 @@ struct CapabilityModuleTests {
 
         let defaults = InMemoryDefaults()
 
-        // An install from before per-capability tracking gets Screenshot Tools once.
+        // An install from before per-capability tracking gets Screenshot Tools and Snippets once.
         defaults.set(["dictation", "quickSearch"], forKey: "enabledCapabilities")
         let upgraded = AppPreferences(defaults: defaults)
-        #expect(upgraded.enabledCapabilities == [.dictation, .quickSearch, .screenshotTools])
-        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["dictation", "quickSearch", "screenshotTools"])
+        #expect(upgraded.enabledCapabilities == [.dictation, .quickSearch, .screenshotTools, .snippets])
+        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["dictation", "quickSearch", "screenshotTools", "snippets"])
         #expect(defaults.stringArray(forKey: "knownCapabilities") == Capability.allCases.map(\.rawValue).sorted())
 
         // Once known, the owner's choice is respected.
         upgraded.setCapability(.screenshotTools, enabled: false)
+        upgraded.setCapability(.snippets, enabled: false)
         #expect(AppPreferences(defaults: defaults).enabledCapabilities == [.dictation, .quickSearch])
+
+        // An install that already knew Screenshot Tools, but not Snippets, gets only Snippets.
+        let screenshotsKnown = InMemoryDefaults()
+        screenshotsKnown.set(["quickSearch"], forKey: "enabledCapabilities")
+        screenshotsKnown.set(
+            ["clipboardHistory", "dictation", "keyboardShortcutter", "quickSearch", "screenshotTools", "windowManagement"],
+            forKey: "knownCapabilities"
+        )
+        #expect(AppPreferences(defaults: screenshotsKnown).enabledCapabilities == [.quickSearch, .snippets])
+    }
+
+    @Test("Open Snippets starts unassigned, on new installs and upgrades, and registers once the owner sets it")
+    func openSnippetsShortcutStartsUnassigned() {
+        #expect(CapabilityShortcut.snippets.defaultBinding == nil)
+        #expect(CapabilityShortcut.snippets.capability == .snippets)
+        #expect(AppPreferences(defaults: InMemoryDefaults()).capabilityShortcut(for: .snippets) == nil)
+
+        let harness = ModuleHarness(assignsSnippetsShortcut: false)
+        defer { harness.tearDown() }
+        harness.model.start()
+        #expect(!harness.model.shortcuts.desiredOwners.contains(CapabilityShortcut.snippets.ownerID))
+
+        harness.model.finishCapabilityShortcutRecording(ModuleHarness.snippetsBinding, for: .snippets)
+        #expect(harness.model.shortcuts.activeOwners.contains(CapabilityShortcut.snippets.ownerID))
+        // With no default, restoring the default clears it.
+        harness.model.restoreDefaultCapabilityShortcut(.snippets)
+        #expect(!harness.model.shortcuts.desiredOwners.contains(CapabilityShortcut.snippets.ownerID))
+    }
+
+    @Test("Snippets requires no permission: missing Accessibility adds no attention or badge count")
+    func snippetsRequiresNoPermission() {
+        #expect(CapabilityDescriptor.snippets.requiredPermissions.isEmpty)
+        #expect(CapabilityDescriptor.snippets.dependencies.isEmpty)
+        let harness = ModuleHarness(accessibilityGranted: false)
+        defer { harness.tearDown() }
+        harness.model.preferences.enabledCapabilities = [.snippets]
+        harness.model.start()
+        #expect(harness.model.settingsAttentionCount(for: .snippets) == 0)
+        #expect(harness.model.missingPermissions(for: .snippets).isEmpty)
+        #expect(harness.model.missingPermissionCount == 0, "No Dock badge on installs that never granted Accessibility")
     }
 }
 
@@ -195,7 +239,19 @@ private final class ModuleHarness {
     private let root: URL
     private let pasteboard: NSPasteboard
 
-    init(licensing: (any LicenseControlling)? = nil) {
+    /// A binding for the Open Snippets shortcut, which starts unassigned, so its module has a
+    /// shortcut to register and release.
+    static let snippetsBinding = ShortcutBinding(
+        keyCode: UInt32(kVK_ANSI_S),
+        modifiers: UInt32(controlKey | optionKey | shiftKey),
+        displayName: "⌃⌥⇧S"
+    )
+
+    init(
+        licensing: (any LicenseControlling)? = nil,
+        assignsSnippetsShortcut: Bool = true,
+        accessibilityGranted: Bool = true
+    ) {
         let id = UUID().uuidString
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityModules-\(id)", isDirectory: true)
@@ -203,6 +259,9 @@ private final class ModuleHarness {
         pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityModules-\(id)"))
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.didCompleteOnboarding = true
+        if assignsSnippetsShortcut {
+            preferences.setCapabilityShortcut(Self.snippetsBinding, for: .snippets)
+        }
 
         clipboard = TrackingClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
@@ -218,7 +277,7 @@ private final class ModuleHarness {
             detector: ManualActionDetector(monitor: InertPointerMonitor(), permissions: GrantedDetectorPermissions()),
             shortcutCoordinator: GlobalShortcutCoordinator(backend: backend),
             permissionCoordinator: PermissionCoordinator(
-                accessibilityTrusted: { true },
+                accessibilityTrusted: { accessibilityGranted },
                 inputMonitoringAuthorized: { true },
                 microphoneAuthorizationStatus: { .authorized },
                 speechAuthorizationStatus: { .authorized },
@@ -269,6 +328,7 @@ private final class ModuleHarness {
         case .windowManagement: Set(WindowAction.allCases.filter { $0.defaultShortcut != nil }.map { "window.\($0.rawValue)" })
         case .screenshotTools: Set(CapabilityShortcut.allCases.filter { $0.capability == .screenshotTools }.map(\.ownerID))
         case .keyboardShortcutter: []
+        case .snippets: [CapabilityShortcut.snippets.ownerID]
         }
     }
 
@@ -281,7 +341,7 @@ private final class ModuleHarness {
     /// resource are judged by their shortcut alone.
     func resourcesRunning(for capability: Capability) -> Bool {
         switch capability {
-        case .quickSearch, .dictation:
+        case .quickSearch, .dictation, .snippets:
             model.shortcuts.activeOwners.isSuperset(of: Self.ownedShortcuts(for: capability))
         case .clipboardHistory: clipboard.isMonitoring
         case .windowManagement: windows.isDragSnapping

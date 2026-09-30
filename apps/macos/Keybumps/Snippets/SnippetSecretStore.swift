@@ -1,0 +1,128 @@
+import Foundation
+import Security
+
+/// Where a sensitive snippet's text lives, one item per snippet ID. The app keeps it in the
+/// Keychain; unit tests and the UI-test composition keep it in memory, so they never touch the
+/// owner's Keychain.
+protocol SnippetSecretStoring: AnyObject {
+    func text(for id: UUID) -> String?
+    func setText(_ text: String, for id: UUID) throws
+    /// Removes the item if there is one; removing one that doesn't exist succeeds.
+    func removeText(for id: UUID) throws
+}
+
+enum SnippetSecretError: Error, Equatable {
+    case keychain(OSStatus)
+}
+
+/// Keychain storage for sensitive snippets: a generic-password item per snippet in the login
+/// keychain, not synchronizable, with a generic label, so a snippet's name and keyword stay out of
+/// the Keychain. The login keychain protects it with the user's login password and the item's
+/// access list. It doesn't use the data protection keychain, which needs a keychain-access-groups
+/// entitlement and provisioning profile, so accessibility classes such as "when unlocked, this
+/// device only" don't apply: the login keychain is usually unlocked for the whole session, and its
+/// file moves with Migration Assistant and backups.
+///
+/// The service name follows the bundle identifier. A Debug build reads the installed app's
+/// `snippets.json` but its own Keychain items, so it can't read the installed app's sensitive
+/// text, and a sensitive snippet it deletes leaves the installed app's item behind. Nothing removes
+/// items by inference (`SnippetStore`), so that item stays until it's removed in Keychain Access.
+final class KeychainSnippetSecretStore: SnippetSecretStoring {
+    static let itemLabel = "Keybumps snippet"
+
+    let service: String
+
+    init(bundleIdentifier: String = Bundle.main.bundleIdentifier ?? ProductIdentity.bundleIdentifier) {
+        service = "\(bundleIdentifier).snippets"
+    }
+
+    /// Identifies one snippet's item.
+    func query(for id: UUID) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: id.uuidString,
+        ]
+    }
+
+    /// Everything a new item is added with.
+    func newItemAttributes(for id: UUID, data: Data) -> [String: Any] {
+        var attributes = query(for: id)
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrLabel as String] = Self.itemLabel
+        attributes[kSecAttrSynchronizable as String] = false
+        return attributes
+    }
+
+    func text(for id: UUID) -> String? {
+        var query = query(for: id)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func setText(_ text: String, for id: UUID) throws {
+        let data = Data(text.utf8)
+        var status = SecItemUpdate(query(for: id) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(newItemAttributes(for: id, data: data) as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { throw SnippetSecretError.keychain(status) }
+    }
+
+    func removeText(for id: UUID) throws {
+        let status = SecItemDelete(query(for: id) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw SnippetSecretError.keychain(status)
+        }
+    }
+
+}
+
+/// Sensitive snippet text held only in memory: for unit tests and UI tests.
+final class InMemorySnippetSecretStore: SnippetSecretStoring {
+    private(set) var texts: [UUID: String] = [:]
+    /// Makes the next `setText` fail, as a locked or unavailable Keychain would.
+    var failsNextWrite = false
+    /// Makes the next `removeText` fail.
+    var failsNextRemoval = false
+    /// How many items were ever removed, so tests can prove nothing was removed behind the user's back.
+    private(set) var removals = 0
+
+    init(_ texts: [UUID: String] = [:]) {
+        self.texts = texts
+    }
+
+    /// How many times a text was read, so tests can prove a save didn't need it.
+    private(set) var reads = 0
+
+    func text(for id: UUID) -> String? {
+        reads += 1
+        return texts[id]
+    }
+
+    func setText(_ text: String, for id: UUID) throws {
+        if failsNextWrite {
+            failsNextWrite = false
+            throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
+        }
+        texts[id] = text
+    }
+
+    func removeText(for id: UUID) throws {
+        if failsNextRemoval {
+            failsNextRemoval = false
+            throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
+        }
+        if texts[id] != nil { removals += 1 }
+        texts[id] = nil
+    }
+
+    /// Loses an item behind the store's back, as a Keychain the user edited would.
+    func removeTextForTesting(_ id: UUID) {
+        texts[id] = nil
+    }
+}

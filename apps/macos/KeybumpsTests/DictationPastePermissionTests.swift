@@ -86,20 +86,17 @@ struct DictationPastePermissionTests {
     func untrustedInsertionNeverPastes() async throws {
         let sandbox = try Sandbox()
         defer { sandbox.remove() }
-        var pastes = 0
+        let paster = RecordingTextPaster()
         var accessibilityChecks = 0
         let service = DictationService(
             language: "en-US",
             fileManager: sandbox.fileManager,
             history: sandbox.history,
+            paster: paster,
             allowsSystemAccess: true,
             accessibilityTrusted: {
                 accessibilityChecks += 1
                 return false
-            },
-            pasteStep: DictationPasteStep { _ in
-                pastes += 1
-                return .pasted
             }
         )
 
@@ -107,19 +104,21 @@ struct DictationPastePermissionTests {
             try await service.insert("transcript")
         }
         #expect(accessibilityChecks == 1)
-        #expect(pastes == 0)
+        #expect(paster.pastes == 0)
         #expect(DictationInsertionError.accessibilityRequired.localizedDescription
                 == "Dictation needs Accessibility access to paste. Your transcript was preserved.")
     }
 
-    @Test("The ⌘V poster itself refuses to post without Accessibility")
-    func pasteShortcutChecksAccessibilityItself() {
+    @Test("The shared ⌘V poster itself refuses to post without Accessibility")
+    func pasteShortcutChecksAccessibilityItself() throws {
         var sent = 0
-        #expect(DictationPasteShortcut.post(accessibilityTrusted: { false }, send: { _ in sent += 1 }) == .accessibilityRequired)
+        #expect(throws: TextPasteError.accessibilityRequired) {
+            try SystemTextPaster.postSystemCommandV(accessibilityTrusted: { false }, send: { _ in sent += 1 })
+        }
         #expect(sent == 0)
 
         var flags: [CGEventFlags] = []
-        #expect(DictationPasteShortcut.post(accessibilityTrusted: { true }, send: { flags.append($0.flags) }) == .pasted)
+        try SystemTextPaster.postSystemCommandV(accessibilityTrusted: { true }, send: { flags.append($0.flags) })
         #expect(flags.count == 2, "⌘V down and up, sent to the fake, never to macOS")
         #expect(flags.allSatisfy { $0.contains(.maskCommand) })
     }
@@ -139,8 +138,7 @@ struct DictationPastePermissionTests {
             }
         )
 
-        #expect(service.pasteStep.kind == .inert)
-        #expect(DictationPasteStep.current(didWritePasteboard: {}).kind == .inert)
+        #expect(service.paster is InertTextPaster)
         service.start()
         #expect(service.phase == .failed("Audio capture is unavailable in this session."))
         await #expect(throws: DictationInsertionError.unavailableInSession) {
@@ -150,19 +148,13 @@ struct DictationPastePermissionTests {
 
         let harness = try PromptHarness()
         defer { harness.tearDown() }
-        #expect(harness.model.dictation.pasteStep.kind == .inert, "AppModel's default paste step is inert too")
+        #expect(harness.model.dictation.paster is InertTextPaster, "AppModel's default paste step is inert too")
     }
 
     @Test("Dictation reads Accessibility through the permission coordinator")
     func appModelWiresAccessibilityIntoInsertion() async throws {
-        var pastes = 0
-        let harness = try PromptHarness(
-            allowsDictationSystemAccess: true,
-            pasteStep: DictationPasteStep { _ in
-                pastes += 1
-                return .pasted
-            }
-        )
+        let paster = RecordingTextPaster()
+        let harness = try PromptHarness(allowsDictationSystemAccess: true, textPaster: paster)
         defer { harness.tearDown() }
 
         await #expect(throws: DictationInsertionError.accessibilityRequired) {
@@ -173,7 +165,7 @@ struct DictationPastePermissionTests {
         await #expect(throws: DictationInsertionError.destinationUnavailable) {
             try await harness.model.dictation.insert("transcript")
         }
-        #expect(pastes == 0)
+        #expect(paster.pastes == 0)
         #expect(harness.prompts.calls.isEmpty)
     }
 
@@ -301,6 +293,44 @@ struct DictationPastePermissionTests {
         harness.model.applicationDidBecomeActive()
         #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
         #expect(harness.model.relaunchPromptPermission == nil)
+    }
+
+    @Test("Snippets' Set Up Paste… opens System Settings as a setup card: Keybumps becoming active without the grant claims no relaunch")
+    func snippetPasteSetupClaimsNoRelaunch() async throws {
+        let harness = try PromptHarness(enabled: [.snippets])
+        defer { harness.tearDown() }
+
+        // ⌘Return in the Snippets tab had to copy for lack of Accessibility.
+        harness.model.commandPalette.offerPasteSetup()
+        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        // Set Up Paste…: System Settings and the drag card.
+        await harness.model.setUpSnippetPaste()
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+
+        // The user comes back to Keybumps without turning it on.
+        harness.model.applicationDidBecomeActive()
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.model.relaunchPromptPermission == nil, "no Restart alert in the Settings window")
+        #expect(PermissionSettingsRowAction.resolve(
+            permission: .accessibility,
+            state: harness.model.permissionReadiness.state(for: .accessibility),
+            requiresRelaunch: harness.model.requiresPermissionRelaunch(.accessibility)
+        ) == .recoverInSystemSettings, "the Permissions row still offers Open System Settings…")
+    }
+
+    @Test("Snippets' setup card stays while Accessibility is missing and goes once it's granted")
+    func snippetPasteSetupCardGoesOnGrant() throws {
+        let harness = try PromptHarness(enabled: [.snippets])
+        defer { harness.tearDown() }
+
+        harness.model.commandPalette.offerPasteSetup()
+        harness.model.refreshPermissions()
+        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        harness.grants.grant(.accessibility)
+        harness.model.refreshPermissions()
+        #expect(harness.model.permissionAssistantPresentation == nil)
+        #expect(harness.prompts.calls.isEmpty, "showing the card asks macOS for nothing")
     }
 
     @Test("Opened from Keybumps' Settings window, a return without the grant still shows the Restart alert, and the shortcut's card offers System Settings beside Restart")
@@ -572,9 +602,9 @@ struct PermissionPromptSourceTests {
     ]
 
     /// The files allowed to post keyboard events. The poster must check Accessibility itself,
-    /// because macOS drops an untrusted post and shows its own alert. If the paste step moves to
-    /// a shared paster, list that file here in place of Dictation's.
-    private static let keyboardEventPosters = ["Dictation/DictationService.swift"]
+    /// because macOS drops an untrusted post and shows its own alert. Today that's the paste step
+    /// Dictation and Snippets share.
+    private static let keyboardEventPosters = ["Infrastructure/TextPaster.swift"]
 
     /// Test lines allowed to name the real prompts: this suite's own check that they're real.
     private static let allowedTestLines: Set<String> = ["#expect(PermissionPrompts" + ".system.kind == .system)"]
@@ -593,7 +623,7 @@ struct PermissionPromptSourceTests {
         let source = try String(contentsOf: Self.appDirectory.appendingPathComponent("App/UITestComposition.swift"), encoding: .utf8)
         for seam in ["requestMicrophone: PermissionPrompts.inert", "requestSpeechRecognition: PermissionPrompts.inert",
                      "requestScreenRecording: PermissionPrompts.inert", "openSystemSettings: PermissionPrompts.inert",
-                     "allowsDictationSystemAccess: false", "dictationPasteStep: .inert"] {
+                     "allowsDictationSystemAccess: false", "textPaster: InertTextPaster()"] {
             #expect(source.contains(seam), "missing \(seam)")
         }
     }
@@ -794,7 +824,18 @@ private final class FakeGrants {
     }
 }
 
-/// A Dictation-only `AppModel` whose permissions, prompts, and paste step are fakes.
+/// Counts pastes instead of writing a pasteboard or posting ⌘V.
+@MainActor
+private final class RecordingTextPaster: TextPasting {
+    private(set) var pastes = 0
+
+    func paste(_ text: String, concealed: Bool) throws {
+        pastes += 1
+    }
+}
+
+/// An `AppModel` with only Dictation on (or only `enabled`), whose permissions, prompts, and paste
+/// step are fakes.
 @MainActor
 private final class PromptHarness {
     let prompts: PromptRecorder
@@ -805,8 +846,9 @@ private final class PromptHarness {
     private let clipboard: ClipboardHistoryService
 
     init(
+        enabled: Set<Capability> = [.dictation],
         allowsDictationSystemAccess: Bool = false,
-        pasteStep: DictationPasteStep? = nil,
+        textPaster: (any TextPasting)? = nil,
         pollInterval: Duration = .milliseconds(10)
     ) throws {
         let prompts = PromptRecorder()
@@ -817,10 +859,9 @@ private final class PromptHarness {
         pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsPastePermission-\(UUID().uuidString)"))
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.didCompleteOnboarding = true
-        for capability in Capability.allCases where capability != .dictation {
-            preferences.setCapability(capability, enabled: false)
+        for capability in Capability.allCases {
+            preferences.setCapability(capability, enabled: enabled.contains(capability))
         }
-        preferences.setCapability(.dictation, enabled: true)
         clipboard = ClipboardHistoryService(
             fileManager: sandbox.fileManager,
             storageURL: sandbox.root.appendingPathComponent("clipboard-history.json"),
@@ -861,11 +902,11 @@ private final class PromptHarness {
             ),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
+            textPaster: textPaster,
             dictationHistory: sandbox.history,
             dictationIndicator: SilentIndicator(),
             dictationFileManager: sandbox.fileManager,
             allowsDictationSystemAccess: allowsDictationSystemAccess,
-            dictationPasteStep: pasteStep,
             permissionPollInterval: pollInterval
         )
     }

@@ -7,6 +7,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
     case windowManagement
     case keyboardShortcutter
     case screenshotTools
+    case snippets
 
     var id: String { rawValue }
 

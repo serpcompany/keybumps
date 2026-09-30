@@ -9,7 +9,7 @@ import Speech
 /// - Files & Folders, the first time Keybumps reads a protected folder: Dictation History in
 ///   Documents, or the screenshot folder (the Desktop by default).
 /// - The "would like to control this computer" alert, if keyboard events were posted without
-///   Accessibility. `DictationPasteShortcut.post` checks first, so this never happens.
+///   Accessibility. `SystemTextPaster.postSystemCommandV` checks first, so this never happens.
 ///
 /// Only `PermissionCoordinator` calls these, and only from explicit request paths:
 /// - Microphone and Speech Recognition, while macOS hasn't asked yet: Request Access… on the

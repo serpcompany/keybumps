@@ -9,6 +9,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case dictation
     case keyboardShortcutter
     case screenshots
+    case snippets
 
     var id: String { rawValue }
 
@@ -107,13 +108,20 @@ enum KeyboardShortcutterHistoryContent: Equatable {
 @Observable
 final class CommandPaletteState {
     private(set) var tab: CommandPaletteTab = .search
-    var historyQuery = ""
+    var historyQuery = "" {
+        // Snippets re-ranks as you type, so a new search starts on its top match, as Quick Search's
+        // does. The other history tabs only filter.
+        didSet { if tab == .snippets, historyQuery != oldValue { selection = 0 } }
+    }
     var selection = 0
+    /// The snippet whose Delete confirmation is showing.
+    var snippetPendingDeletion: Snippet?
 
     func select(_ tab: CommandPaletteTab) {
         self.tab = tab
         historyQuery = ""
         selection = 0
+        snippetPendingDeletion = nil
     }
 }
 
@@ -145,13 +153,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let dictationService: DictationService
     private let inbox: InboxStore
     private let preferences: AppPreferences
-    private let state = CommandPaletteState()
+    private let snippets: SnippetStore
+    /// The paste step Dictation also uses; the palette's copies write `pasteboard` directly.
+    private let paster: any TextPasting
+    private let pasteboard: NSPasteboard
+    /// Internal so tests can set the tab, search, and selection without showing the panel.
+    let state = CommandPaletteState()
     private var panel: NSPanel?
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
-    private let hud = PaletteHUD.shared
+    private let notices: any PaletteNoticePresenting
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
     /// Opens Settings on a page, or where it was left when nil. The app shell sets it to the status
@@ -159,6 +172,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     var openSettings: (SettingsSection?) -> Void = { _ in }
     /// Opens a Quick Search result's URL; tests replace it so they never open anything.
     var openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    /// Whether ⌘V can reach another app, which needs Accessibility. The shell re-reads it from
+    /// macOS on every paste; without it, pasting a snippet copies it instead.
+    var canPaste: () -> Bool = { false }
+    /// Offers to set up Accessibility after a paste had to copy instead. Set by the shell.
+    var offerPasteSetup: () -> Void = {}
+    /// The app in front right now; tests replace it.
+    var frontmostApp: () -> PasteTarget? = { PasteTarget.frontmost() }
+    /// How long a snippet paste waits after the palette closes, so the app in front has its
+    /// keyboard focus back before ⌘V.
+    var pasteDelay: Duration = .milliseconds(120)
+    /// The app that was in front when the palette opened: the only app ⌘Return pastes into.
+    private(set) var pasteTarget: PasteTarget?
+    /// The snippet paste waiting out `pasteDelay`; opening the palette again cancels it.
+    private var pendingPaste: UUID?
 
     init(
         clipboard: ClipboardHistoryService,
@@ -166,6 +193,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         dictationService: DictationService,
         inbox: InboxStore,
         preferences: AppPreferences,
+        snippets: SnippetStore,
+        paster: any TextPasting = InertTextPaster(),
+        pasteboard: NSPasteboard = .keybumps,
+        notices: (any PaletteNoticePresenting)? = nil,
         search: QuickSearchModel? = nil
     ) {
         self.search = search ?? QuickSearchModel()
@@ -174,6 +205,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         self.dictationService = dictationService
         self.inbox = inbox
         self.preferences = preferences
+        self.snippets = snippets
+        self.paster = paster
+        self.pasteboard = pasteboard
+        self.notices = notices ?? PaletteHUD.shared
     }
 
     func toggle(_ tab: CommandPaletteTab) {
@@ -188,8 +223,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         if panel == nil { makePanel() }
         guard let panel else { return }
 
-        state.select(tab)
-        search.query = ""
+        rememberPasteTarget()
+        selectOnOpening(tab)
         position(panel)
         installKeyMonitor()
         installOutsideMonitors()
@@ -198,6 +233,24 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.focusInput()
         }
+    }
+
+    /// Runs as the palette opens. The palette never activates Keybumps, so the app in front is the
+    /// one you were typing in, unless Keybumps already was (a Dock click, or Settings). Opening the
+    /// palette also cancels a paste still waiting to happen.
+    func rememberPasteTarget() {
+        pasteTarget = frontmostApp()
+        pendingPaste = nil
+    }
+
+    /// Runs as the palette opens on a tab, even while a snippet's Delete alert shows (a hot key or
+    /// a Dock click). Selecting drops the pending deletion, and SwiftUI can take the alert away
+    /// without calling its binding, so the palette takes its keys back here, as `ClearAllButton`
+    /// does when it disappears.
+    func selectOnOpening(_ tab: CommandPaletteTab) {
+        if state.snippetPendingDeletion != nil { isPresentingConfirmation = false }
+        state.select(tab)
+        search.query = ""
     }
 
     func dismiss() {
@@ -268,6 +321,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 dictationService: dictationService,
                 inbox: inbox,
                 preferences: preferences,
+                snippets: snippets,
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
@@ -280,6 +334,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 copyDictationText: { [weak self] text in
                     self?.copy(text, suppressClipboardHistory: true)
                 },
+                snippetActions: SnippetPaletteActions(
+                    copy: { [weak self] snippet in self?.copySnippet(snippet) },
+                    paste: { [weak self] snippet in self?.pasteSnippet(snippet) },
+                    edit: { [weak self] snippet in self?.openSnippetEditor(.edit(snippet.id)) },
+                    create: { [weak self] in self?.openSnippetEditor(.new) },
+                    openSettings: { [weak self] in self?.openSnippetsSettings() },
+                    requestDelete: { [weak self] snippet in self?.requestSnippetDeletion(snippet) },
+                    delete: { [weak self] snippet in self?.deleteSnippet(snippet) }
+                ),
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
                 },
@@ -329,50 +392,60 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func installKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
+            self?.handleKeyDown(event) ?? event
+        }
+    }
 
-            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
-                let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: self.preferences.showsHotkeysTab, selected: self.state.tab)
-                if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
-                    self.selectTab(tab)
-                    return nil
-                }
-                if let command = QuickSearchCommand.matchingCommandKey(event.charactersIgnoringModifiers) {
-                    self.run(command)
-                    return nil
-                }
-                if event.charactersIgnoringModifiers?.lowercased() == "e", self.state.tab == .clipboard || self.state.tab == .screenshots {
-                    self.editSelectedClipboardImage()
-                    return nil
-                }
-            }
+    /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
+    /// with synthesized events, so no real keystroke is posted.
+    func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+        // A confirmation alert handles its own keys: Return confirms, Escape cancels.
+        guard !isPresentingConfirmation else { return event }
 
-            switch event.keyCode {
-            case 53:
-                self.dismiss()
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+            let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab)
+            if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
+                selectTab(tab)
                 return nil
-            case 125:
-                self.moveSelection(self.state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
-                return nil
-            case 126:
-                self.moveSelection(self.state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
-                return nil
-            case 123, 124:
-                // Left and Right move through the screenshot grid; elsewhere they move the caret.
-                guard self.state.tab == .screenshots, self.activeQuery.isEmpty else { return event }
-                self.moveSelection(event.keyCode == 124 ? 1 : -1)
-                return nil
-            case 36:
-                self.activateSelection(reveal: event.modifierFlags.contains(.command))
-                return nil
-            case 51, 117:
-                // Delete removes the highlighted row once the search field is empty (or with Command).
-                guard self.activeQuery.isEmpty || event.modifierFlags.contains(.command),
-                      self.deleteSelection() else { return event }
-                return nil
-            default:
-                return event
             }
+            if let command = QuickSearchCommand.matchingCommandKey(event.charactersIgnoringModifiers) {
+                run(command)
+                return nil
+            }
+            if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots {
+                editSelectedClipboardImage()
+                return nil
+            }
+            if state.tab == .snippets, handleSnippetCommandKey(event.charactersIgnoringModifiers) {
+                return nil
+            }
+        }
+
+        switch event.keyCode {
+        case 53:
+            dismiss()
+            return nil
+        case 125:
+            moveSelection(state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
+            return nil
+        case 126:
+            moveSelection(state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
+            return nil
+        case 123, 124:
+            // Left and Right move through the screenshot grid; elsewhere they move the caret.
+            guard state.tab == .screenshots, activeQuery.isEmpty else { return event }
+            moveSelection(event.keyCode == 124 ? 1 : -1)
+            return nil
+        case 36:
+            activateSelection(reveal: event.modifierFlags.contains(.command))
+            return nil
+        case 51, 117:
+            // Delete removes the highlighted row once the search field is empty (or with Command).
+            guard activeQuery.isEmpty || event.modifierFlags.contains(.command),
+                  deleteSelection() else { return event }
+            return nil
+        default:
+            return event
         }
     }
 
@@ -430,6 +503,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             filteredKeyboardShortcutter.count
         case .screenshots:
             screenshotContent.entries.count
+        case .snippets:
+            snippetContent.entries.count
         }
     }
 
@@ -447,7 +522,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             search.recentItems.delete(search.displayedRecentItems[index])
         case .clipboard:
             guard filteredClipboard.indices.contains(index) else { return false }
-            clipboard.delete(filteredClipboard[index])
+            clipboard.removeFromClipboardTab(filteredClipboard[index])
         case .screenshots:
             let entries = screenshotContent.entries
             guard entries.indices.contains(index) else { return false }
@@ -455,6 +530,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .dictation:
             guard filteredDictations.indices.contains(index) else { return false }
             dictationHistory.delete(filteredDictations[index])
+        case .snippets:
+            // Snippets are things you wrote, not history, so Delete asks first.
+            let entries = snippetContent.entries
+            guard entries.indices.contains(index) else { return false }
+            requestSnippetDeletion(entries[index])
+            return true
         case .keyboardShortcutter:
             return false
         }
@@ -472,12 +553,21 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.matches(query) }
+        guard !query.isEmpty else { return clipboard.clipboardTabEntries }
+        return clipboard.clipboardTabEntries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
         DictationPaletteResults.filter(dictationHistory.entries, query: state.historyQuery)
+    }
+
+    private var snippetContent: SnippetPaletteContent {
+        SnippetPaletteContent.resolve(
+            snippets: snippets.snippets,
+            query: state.historyQuery,
+            isEnabled: preferences.enabledCapabilities.contains(.snippets),
+            libraryState: snippets.libraryState
+        )
     }
 
     private var filteredKeyboardShortcutter: [CoachingEvent] {
@@ -521,6 +611,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let entries = screenshotContent.entries
             guard entries.indices.contains(state.selection) else { return }
             chooseScreenshot(entries[state.selection], withCommand: reveal)
+        case .snippets:
+            // Return copies; Command-Return pastes into the app in front.
+            let entries = snippetContent.entries
+            guard entries.indices.contains(state.selection) else { return }
+            reveal ? pasteSnippet(entries[state.selection]) : copySnippet(entries[state.selection])
         }
     }
 
@@ -543,12 +638,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([result.url])
     }
 
-    private func copy(_ text: String, suppressClipboardHistory: Bool) {
-        let pasteboard = NSPasteboard.keybumps
-        pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string) else { return }
+    @discardableResult
+    private func copy(_ text: String, suppressClipboardHistory: Bool, concealed: Bool = false) -> Bool {
+        guard pasteboard.writeText(text, concealed: concealed) else { return false }
         if suppressClipboardHistory { clipboard.suppressCurrentChange() }
         confirmCopy()
+        return true
     }
 
     private func copyClipboardEntry(_ entry: ClipboardEntry) {
@@ -559,7 +654,133 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Closes the palette and confirms the copy at the notch.
     private func confirmCopy() {
         dismiss()
-        hud.show("Copied to Clipboard")
+        notices.showNotice("Copied to Clipboard", isWarning: false)
+    }
+
+    // MARK: Snippets
+
+    /// Return: copies the snippet, kept out of Clipboard History as the Dictation tab's copy is. A
+    /// sensitive snippet's copy carries the ConcealedType marker.
+    func copySnippet(_ snippet: Snippet) {
+        guard let text = snippetText(snippet),
+              copy(text, suppressClipboardHistory: true, concealed: snippet.isSensitive) else { return }
+        snippets.markUsed(snippet.id)
+    }
+
+    /// Command-Return: closes the palette and pastes the snippet into the app that was in front when
+    /// the palette opened (the non-activating palette never took it over). When it can't paste, it
+    /// copies instead and the notch notice says why (`SnippetPasteRoute`).
+    func pasteSnippet(_ snippet: Snippet) {
+        guard let text = snippetText(snippet) else { return }
+        let route = SnippetPasteRoute.beforeClosing(canPaste: canPaste(), target: pasteTarget)
+        guard route == .paste, let target = pasteTarget else {
+            dismiss()
+            copySnippetInstead(text, snippet: snippet, notice: route.notice)
+            if route == .copy(.needsAccessibility) { offerPasteSetup() }
+            return
+        }
+        dismiss()
+        snippets.markUsed(snippet.id)
+        let id = UUID()
+        pendingPaste = id
+        let paster = paster
+        let delay = pasteDelay
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self else { return }
+            let isStillWanted = self.pendingPaste == id
+            if isStillWanted { self.pendingPaste = nil }
+            // Paste only into the same app, still in front, with the palette closed.
+            guard SnippetPasteRoute.canPasteNow(
+                into: target,
+                frontmost: self.frontmostApp(),
+                paletteIsVisible: self.panel?.isVisible == true,
+                isStillWanted: isStillWanted
+            ) else {
+                self.copySnippetInstead(text, snippet: snippet, notice: SnippetPasteRoute.Reason.targetChanged.notice)
+                return
+            }
+            do {
+                try paster.paste(text, concealed: snippet.isSensitive)
+            } catch {
+                // The text still ends up on the clipboard, ready to paste by hand.
+                self.copySnippetInstead(text, snippet: snippet, notice: SnippetPasteRoute.Reason.pasteFailed.notice)
+            }
+        }
+    }
+
+    /// Puts the text on the clipboard, kept out of Clipboard History, and says why it didn't paste.
+    private func copySnippetInstead(_ text: String, snippet: Snippet, notice: String?) {
+        guard pasteboard.writeText(text, concealed: snippet.isSensitive) else { return }
+        clipboard.suppressCurrentChange()
+        if let notice { showWarning(notice) }
+        snippets.markUsed(snippet.id)
+    }
+
+    /// Closes the palette and opens the snippet editor in Settings. While the saved snippets can't
+    /// be read, it opens the Snippets page instead, which explains why nothing can be saved.
+    func openSnippetEditor(_ request: SnippetEditorRequest) {
+        guard snippets.libraryState != .readOnly else {
+            openSnippetsSettings()
+            return
+        }
+        dismiss()
+        snippets.editorRequest = request
+        openSettings(.snippets)
+    }
+
+    /// Closes the palette and opens Settings on the Snippets page.
+    func openSnippetsSettings() {
+        dismiss()
+        openSettings(.snippets)
+    }
+
+    /// Shows the Delete confirmation for a snippet.
+    func requestSnippetDeletion(_ snippet: Snippet) {
+        state.snippetPendingDeletion = snippet
+        isPresentingConfirmation = true
+    }
+
+    private func deleteSnippet(_ snippet: Snippet) {
+        do {
+            try snippets.delete(snippet.id)
+        } catch {
+            showWarning("Couldn’t delete the snippet")
+        }
+        state.selection = min(state.selection, max(0, itemCount - 1))
+    }
+
+    /// A sensitive snippet's text comes from the Keychain, which can refuse it.
+    private func snippetText(_ snippet: Snippet) -> String? {
+        guard let text = snippets.text(for: snippet) else {
+            showWarning("Couldn’t read this snippet from the Keychain")
+            return nil
+        }
+        return text
+    }
+
+    private func showWarning(_ message: String) {
+        notices.showNotice(message, isWarning: true)
+    }
+
+    /// ⌘N makes a new snippet and ⌘E edits the highlighted one, both in Settings. While Snippets is
+    /// off, they do nothing.
+    private func handleSnippetCommandKey(_ characters: String?) -> Bool {
+        guard ["n", "e"].contains(characters?.lowercased()) else { return false }
+        guard preferences.enabledCapabilities.contains(.snippets) else { return true }
+        switch characters?.lowercased() {
+        case "n":
+            openSnippetEditor(.new)
+            return true
+        case "e":
+            let entries = snippetContent.entries
+            if entries.indices.contains(state.selection) {
+                openSnippetEditor(.edit(entries[state.selection].id))
+            }
+            return true
+        default:
+            return false
+        }
     }
 
     /// Command-click edits an image; a plain click keeps restoring it.
@@ -603,6 +824,7 @@ private struct CommandPaletteView: View {
     @Bindable var dictationService: DictationService
     @Bindable var inbox: InboxStore
     @Bindable var preferences: AppPreferences
+    @Bindable var snippets: SnippetStore
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
@@ -617,6 +839,7 @@ private struct CommandPaletteView: View {
     let editClipboardEntry: (ClipboardEntry) -> Void
     let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
+    let snippetActions: SnippetPaletteActions
     let confirmationPresentationChanged: (Bool) -> Void
     let dismiss: () -> Void
 
@@ -692,8 +915,8 @@ private struct CommandPaletteView: View {
                 choose: chooseClipboardEntry,
                 copy: copyClipboardEntry,
                 edit: preferences.enabledCapabilities.contains(.screenshotTools) ? editClipboardEntry : nil,
-                delete: clipboard.delete,
-                clear: clipboard.clear,
+                delete: clipboard.removeFromClipboardTab,
+                clear: clipboard.clearClipboardTab,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
         case .dictation:
@@ -740,6 +963,19 @@ private struct CommandPaletteView: View {
                     confirmationPresentationChanged: confirmationPresentationChanged
                 )
             }
+        case .snippets:
+            SnippetPaletteResults(
+                content: SnippetPaletteContent.resolve(
+                    snippets: snippets.snippets,
+                    query: state.historyQuery,
+                    isEnabled: preferences.enabledCapabilities.contains(.snippets),
+                    libraryState: snippets.libraryState
+                ),
+                selection: state.selection,
+                actions: snippetActions,
+                pendingDeletion: $state.snippetPendingDeletion,
+                confirmationPresentationChanged: confirmationPresentationChanged
+            )
         }
     }
 
@@ -753,8 +989,8 @@ private struct CommandPaletteView: View {
 
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.matches(query) }
+        guard !query.isEmpty else { return clipboard.clipboardTabEntries }
+        return clipboard.clipboardTabEntries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -1110,7 +1346,7 @@ private struct ClipboardResultsView: View {
     let confirmationPresentationChanged: (Bool) -> Void
     var emptyTitle = "No clipboard items yet"
     var clearTitle = "Clear clipboard history?"
-    var clearMessage = "This permanently removes all clipboard items and image previews saved by Keybumps."
+    var clearMessage = "This clears the Clipboard tab. Screenshots stay in the Screenshots tab."
 
     var body: some View {
         PaletteResultsContainer {
@@ -1566,7 +1802,7 @@ private struct ScreenshotCard: View {
     }
 }
 
-private struct PaletteResultsContainer<Content: View>: View {
+struct PaletteResultsContainer<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -1575,7 +1811,7 @@ private struct PaletteResultsContainer<Content: View>: View {
     }
 }
 
-private struct PaletteEmptyState: View {
+struct PaletteEmptyState: View {
     let title: String
     let systemImage: String
 

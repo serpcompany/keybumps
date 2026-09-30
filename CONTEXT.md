@@ -84,12 +84,32 @@ Taking screenshots and marking them up.
 _Avoid_: Screen capture, screenshot app, CleanShot clone
 
 **Screenshots tab**:
-The Command Palette tab showing screenshot items from Clipboard History.
+The Command Palette tab showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
 _Avoid_: Screenshot library, gallery
 
 **Screenshot Editor**:
 The Screenshot Tools window for marking up a screenshot.
 _Avoid_: Image editor, annotation app, Markup
+
+**Snippets**:
+Saving text you reuse, then copying or pasting it from the Command Palette.
+_Avoid_: Clippings, text library, plugin
+
+**Snippet**:
+A named piece of text the user saved to reuse, kept locally.
+_Avoid_: Clipping, template, abbreviation
+
+**Keyword**:
+A short word, such as `;ship`, that finds a snippet in search. It's shown as a code-style chip.
+_Avoid_: Abbreviation, shortcut (a key combination), tag
+
+**Sensitive snippet**:
+A snippet whose text is hidden in the Command Palette and Settings, left out of search, and kept in the Keychain instead of the snippets file.
+_Avoid_: Secret, password snippet
+
+**Snippets tab**:
+The Command Palette tab (⌘5) that lists snippets. Return copies one and ⌘Return pastes it into the app in front.
+_Avoid_: Snippet library, snippet manager
 
 ### Licensing
 

@@ -264,6 +264,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case screenshotScreen
     case screenshotScreenAndEdit
     case screenshotArea
+    case snippets
 
     var id: String { rawValue }
     var ownerID: String { rawValue }
@@ -278,6 +279,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .clipboardHistory: .clipboardHistory
         case .dictation: .dictation
         case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea: .screenshotTools
+        case .snippets: .snippets
         }
     }
 
@@ -289,10 +291,12 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: "Screenshot Screen"
         case .screenshotScreenAndEdit: "Screenshot Screen and Edit"
         case .screenshotArea: "Screenshot Area"
+        case .snippets: "Open Snippets"
         }
     }
 
-    var defaultBinding: ShortcutBinding {
+    /// The binding a new install starts with; nil for a shortcut that starts unassigned.
+    var defaultBinding: ShortcutBinding? {
         switch self {
         case .quickSearch: DefaultShortcut.quickSearch
         case .clipboardHistory: DefaultShortcut.clipboard
@@ -300,6 +304,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea
+        case .snippets: nil
         }
     }
 }

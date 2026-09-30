@@ -98,6 +98,13 @@ extension AppModel {
             }()),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
+            // Sensitive snippets stay in memory, never in the Keychain.
+            snippets: SnippetStore(
+                storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(SnippetStore.fileName),
+                secrets: InMemorySnippetSecretStore()
+            ),
+            // Never writes the pasteboard or posts ⌘V, even if system access were allowed.
+            textPaster: InertTextPaster(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
                     preferredLocation: { sandbox.screenshots.path },
@@ -109,9 +116,7 @@ extension AppModel {
             ),
             allowsDictationSystemAccess: false,
             screenshotEditorFallbackFolder: { sandbox.screenshots },
-            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences(),
-            // Never writes the pasteboard or posts ⌘V, even if system access were allowed.
-            dictationPasteStep: .inert
+            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences()
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {
             model.clipboard.ingestImageFile(at: image, isScreenCapture: false)

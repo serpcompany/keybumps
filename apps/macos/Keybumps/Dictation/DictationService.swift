@@ -156,75 +156,6 @@ enum DictationInsertionError: Error, Equatable, LocalizedError {
     }
 }
 
-/// What Dictation's paste step did.
-enum DictationPasteResult: Equatable {
-    case pasted
-    /// Keybumps isn't trusted for Accessibility, so no ⌘V was posted.
-    case accessibilityRequired
-    case pasteboardWriteFailed
-    case keystrokeUnavailable
-    /// This session never pastes: the unit-test host's paste step.
-    case unavailable
-}
-
-/// Posts ⌘V to the app in front. macOS delivers synthesized key events to other apps only while
-/// Keybumps is trusted for Accessibility; an untrusted post is dropped, and macOS shows its own
-/// "would like to control this computer" alert. So the silent check lives here, and no caller can
-/// post without it.
-enum DictationPasteShortcut {
-    static func post(
-        accessibilityTrusted: () -> Bool = { AXIsProcessTrusted() },
-        send: (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
-    ) -> DictationPasteResult {
-        guard accessibilityTrusted() else { return .accessibilityRequired }
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
-            return .keystrokeUnavailable
-        }
-        down.flags = .maskCommand; up.flags = .maskCommand
-        send(down); send(up)
-        return .pasted
-    }
-}
-
-/// Dictation's paste step: write the transcript to the pasteboard, then post ⌘V.
-struct DictationPasteStep {
-    enum Kind: Equatable {
-        case system
-        case inert
-        case custom
-    }
-
-    let kind: Kind
-    let run: @MainActor (String) -> DictationPasteResult
-
-    init(kind: Kind = .custom, run: @escaping @MainActor (String) -> DictationPasteResult) {
-        self.kind = kind
-        self.run = run
-    }
-
-    /// `didWritePasteboard` runs right after the write, so Clipboard History skips exactly that change.
-    static func system(didWritePasteboard: @escaping () -> Void) -> DictationPasteStep {
-        DictationPasteStep(kind: .system) { text in
-            let pasteboard = NSPasteboard.keybumps
-            pasteboard.clearContents()
-            guard pasteboard.setString(text, forType: .string) else { return .pasteboardWriteFailed }
-            didWritePasteboard()
-            return DictationPasteShortcut.post()
-        }
-    }
-
-    /// Never touches the pasteboard or posts ⌘V.
-    static let inert = DictationPasteStep(kind: .inert) { _ in .unavailable }
-
-    /// The system step, except in the unit-test host, where no test can write the owner's
-    /// clipboard or press ⌘V, even one that enables Dictation's system access.
-    static func current(didWritePasteboard: @escaping () -> Void) -> DictationPasteStep {
-        UnitTestHost.isActive ? .inert : .system(didWritePasteboard: didWritePasteboard)
-    }
-}
-
 @MainActor
 @Observable
 final class DictationService {
@@ -248,29 +179,29 @@ final class DictationService {
     let recoveryURL: URL
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
+    /// The paste step Dictation shares with Snippets; read by the unit-test isolation guard.
+    let paster: any TextPasting
     private let allowsSystemAccess: Bool
     private let accessibilityTrusted: () -> Bool
-    let pasteStep: DictationPasteStep
     var durationLimit: DictationDurationLimit
 
     /// `allowsSystemAccess` gates the microphone, activating the destination app, and pasting.
     /// It's off in UI-test compositions and, unless a test opts in, in the unit-test host.
-    /// `accessibilityTrusted` is a silent check; it never prompts. `pasteStep` defaults to
-    /// `DictationPasteStep.current`, which is inert in the unit-test host.
+    /// `accessibilityTrusted` is a silent check; it never prompts. `paster` defaults to
+    /// `InertTextPaster`: only the app shell's paste step keeps the write out of Clipboard History,
+    /// so a service built without one never pastes.
     init(
         language: String,
         durationLimit: DictationDurationLimit = .fiveMinutes,
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
-        didWritePasteboard: @escaping () -> Void = {},
+        paster: any TextPasting = InertTextPaster(),
         allowsSystemAccess: Bool = !UnitTestHost.isActive,
-        accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
-        pasteStep: DictationPasteStep? = nil
+        accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }
     ) {
         self.allowsSystemAccess = allowsSystemAccess
         self.accessibilityTrusted = accessibilityTrusted
-        self.pasteStep = pasteStep ?? .current(didWritePasteboard: didWritePasteboard)
         selectedLanguage = language
         self.durationLimit = durationLimit
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
@@ -279,6 +210,7 @@ final class DictationService {
         self.recoveryURL = recoveryURL
         self.history = history ?? DictationHistoryService(fileManager: fileManager)
         self.transcriber = transcriber ?? AppleSpeechCompletedAudioTranscriber()
+        self.paster = paster
         recoveredTranscript = try? String(contentsOf: recoveryURL, encoding: .utf8)
     }
 
@@ -481,7 +413,7 @@ final class DictationService {
         )
     }
 
-    /// Pastes a saved transcript at the original cursor through `pasteStep`. Without Accessibility
+    /// Pastes a saved transcript at the original cursor through `paster`. Without Accessibility
     /// it stops before touching the destination, the pasteboard, or events; the ⌘V poster checks
     /// again right before posting.
     func insert(_ text: String) async throws {
@@ -495,12 +427,11 @@ final class DictationService {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier else {
             throw DictationInsertionError.destinationNotFocused
         }
-        switch pasteStep.run(text) {
-        case .pasted:
-            return
-        case .accessibilityRequired:
+        do {
+            try paster.paste(text, concealed: false)
+        } catch TextPasteError.accessibilityRequired {
             throw DictationInsertionError.accessibilityRequired
-        case .pasteboardWriteFailed, .keystrokeUnavailable, .unavailable:
+        } catch {
             throw DictationInsertionError.pasteFailed
         }
     }

@@ -35,6 +35,7 @@ final class AppModel {
     @ObservationIgnored private let notice = PaletteHUD.shared
     @ObservationIgnored private let coachTips: any CoachTipPresenting
     let clipboard: ClipboardHistoryService
+    let snippets: SnippetStore
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
@@ -138,6 +139,8 @@ final class AppModel {
         spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil,
         screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil,
         clipboard injectedClipboard: ClipboardHistoryService? = nil,
+        snippets injectedSnippets: SnippetStore? = nil,
+        textPaster injectedTextPaster: (any TextPasting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -149,7 +152,6 @@ final class AppModel {
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil,
-        dictationPasteStep: DictationPasteStep? = nil,
         permissionPollInterval: Duration = .seconds(1)
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
@@ -177,6 +179,12 @@ final class AppModel {
             ?? ClipboardHistoryService(sourceApps: UnitTestHost.isActive ? .inert : .system)
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
+        let snippets = injectedSnippets ?? SnippetStore.makeDefault()
+        self.snippets = snippets
+        // Dictation and Snippets share one paste step. Unit tests and the UI-test composition never
+        // synthesize ⌘V.
+        let textPaster = injectedTextPaster
+            ?? Self.makeTextPaster(clipboard: clipboard, allowsSystemAccess: allowsDictationSystemAccess)
         self.windows = injectedWindows ?? WindowManagementService()
         let screenshotDelivery = ScreenshotClipboardDelivery(
             clipboard: clipboard,
@@ -208,15 +216,13 @@ final class AppModel {
             fileManager: dictationFileManager,
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
-            didWritePasteboard: clipboard.suppressCurrentChange,
+            paster: textPaster,
             allowsSystemAccess: allowsDictationSystemAccess,
             // Re-read at paste time, through the same coordinator that drives setup and Settings.
             accessibilityTrusted: {
                 permissions.refresh()
                 return permissions.accessibilityGranted
-            },
-            // Nil takes `DictationPasteStep.current`, which is inert in the unit-test host.
-            pasteStep: dictationPasteStep
+            }
         )
         commandPalette = CommandPaletteController(
             clipboard: clipboard,
@@ -224,11 +230,19 @@ final class AppModel {
             dictationService: dictation,
             inbox: inbox,
             preferences: preferences,
+            snippets: snippets,
+            paster: textPaster,
             search: injectedQuickSearch
         )
         // The palette's Settings button, Command-comma, and Quick Search commands take the status
         // menu's route; a capability's command asks for its page.
         commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
+        // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste. It's
+        // optional for Snippets: without it ⌘Return copies and offers the usual permission setup.
+        commandPalette.canPaste = {
+            permissions.refresh()
+            return permissions.accessibilityGranted
+        }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
         let screenshotModule = ScreenshotToolsModule(
@@ -261,10 +275,12 @@ final class AppModel {
                 windows: windows,
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
-            KeyboardShortcutterModule(detector: detector)
+            KeyboardShortcutterModule(detector: detector),
+            SnippetsModule(palette: commandPalette, snippets: snippets)
         ])
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
+        commandPalette.offerPasteSetup = { [weak self] in self?.offerSnippetPasteSetup() }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
@@ -446,9 +462,22 @@ final class AppModel {
         return true
     }
 
+    /// After ⌘Return had to copy for lack of Accessibility: offers the usual Accessibility setup.
+    private func offerSnippetPasteSetup() {
+        permissionDragAssistant.showSnippetPasteSetup { [weak self] in
+            Task { await self?.setUpSnippetPaste() }
+        }
+    }
+
+    /// Snippets' Set Up Paste…. Like Dictation's card, it opens System Settings over another app,
+    /// so that opening stays out of the Settings window's relaunch check.
+    func setUpSnippetPaste() async {
+        await recoverPermission(.accessibility, fromSetupCard: true)
+    }
+
     /// `fromSetupCard`: started from a setup card over another app, as every setup walkthrough
-    /// step is. Its System Settings opening stays out of the Settings window's relaunch check, so
-    /// Keybumps becoming active later never claims a relaunch for it.
+    /// step and Snippets' Set Up Paste… are. Its System Settings opening stays out of the Settings
+    /// window's relaunch check, so Keybumps becoming active later never claims a relaunch for it.
     func recoverPermission(_ permission: MacPermission, fromSetupCard: Bool = false) async {
         let isSetupStep = isPermissionWalkthroughActive
         refreshPermissions()
