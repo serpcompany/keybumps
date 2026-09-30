@@ -1049,36 +1049,10 @@ private struct ClipboardResultsView: View {
                     List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         HStack(spacing: 10) {
                             Button { choose(entry) } label: {
-                                HStack(spacing: 14) {
-                                    ClipboardEntryPreview(entry: entry)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(entry.displayText)
-                                            .font(.system(size: 15))
-                                            .lineLimit(entry.kind == .image ? 1 : 2)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        // Only the source app's name and domain give way when space runs out.
-                                        HStack(spacing: 5) {
-                                            Text(entry.kindLabel).fixedSize()
-                                            if let sourceApp = entry.sourceApp {
-                                                Text("·")
-                                                ClipboardSourceAppLabel(app: sourceApp)
-                                            }
-                                            if let domain = entry.sourceDomain {
-                                                Text("·")
-                                                ClipboardSourceDomainLabel(domain: domain)
-                                            }
-                                            Text("·")
-                                            Text(entry.capturedAt, style: .relative).fixedSize()
-                                            if showsEditHint, entry.kind == .image {
-                                                Text("·")
-                                                Text("⌘E to edit").fixedSize()
-                                            }
-                                        }
-                                        .lineLimit(1)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.secondary)
-                                    }
-                                }
+                                ClipboardRow(
+                                    entry: entry,
+                                    showsEditHint: showsEditHint && index == selection && entry.kind == .image
+                                )
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
                                 .contentShape(Rectangle())
@@ -1101,6 +1075,98 @@ private struct ClipboardResultsView: View {
                 }
             }
         }
+    }
+}
+
+/// Raycast's row for a clipboard item. The preview (a thumbnail, or a text symbol) shows the item's
+/// kind, so no kind word is shown. The content fills the middle. Where it came from and its age sit
+/// right-aligned in gray, like Raycast's accessories, capped so they never squeeze the content.
+struct ClipboardRow: View {
+    /// Wide enough for a typical app name, domain, and age side by side; longer ones truncate.
+    static let accessoryMaxWidth: CGFloat = 360
+
+    let entry: ClipboardEntry
+    /// Only the selected image row shows ⌘E, since the footer doesn't list it.
+    let showsEditHint: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ClipboardEntryPreview(entry: entry)
+            ClipboardEntryTitle(entry: entry)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // Only the app name and domain give way when space runs out; the age never does.
+            HStack(spacing: 12) {
+                if showsEditHint {
+                    HStack(spacing: 6) {
+                        Text("Edit").fixedSize()
+                        HStack(spacing: 3) {
+                            PaletteKeycap("⌘")
+                            PaletteKeycap("E")
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Edit with Command-E")
+                }
+                if let sourceApp = entry.sourceApp {
+                    ClipboardSourceAppLabel(app: sourceApp)
+                }
+                if let domain = entry.sourceDomain {
+                    ClipboardSourceDomainLabel(domain: domain)
+                }
+                Text(entry.capturedAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                    .fixedSize()
+            }
+            .lineLimit(1)
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: Self.accessoryMaxWidth, alignment: .trailing)
+            .layoutPriority(1)
+        }
+    }
+}
+
+/// A clipboard item's content: its text (up to two lines), or an image's file name. An image copied
+/// from an app has no name, so it shows its pixel size instead of the word "Image".
+private struct ClipboardEntryTitle: View {
+    let entry: ClipboardEntry
+    @State private var pixelSize: String?
+
+    var body: some View {
+        Text(ClipboardRowPresentation.title(for: entry, pixelSize: pixelSize))
+            .font(.system(size: 15))
+            .lineLimit(entry.kind == .image ? 1 : 2)
+            .task(id: entry.mediaPath) {
+                guard entry.kind == .image, entry.sourceURL == nil, let imageURL = entry.imageURL else {
+                    pixelSize = nil
+                    return
+                }
+                pixelSize = await Task.detached(priority: .utility) {
+                    ClipboardRowPresentation.pixelSize(ofImageAt: imageURL)
+                }.value
+            }
+    }
+}
+
+/// What a Clipboard tab row shows, and says to VoiceOver, for an item.
+enum ClipboardRowPresentation {
+    /// The row's content: the text, a file's name, or an unnamed image's pixel size once known.
+    static func title(for entry: ClipboardEntry, pixelSize: String?) -> String {
+        guard entry.kind == .image, entry.sourceURL == nil, let pixelSize else { return entry.displayText }
+        return pixelSize
+    }
+
+    /// An image file's pixel size, such as "1280 × 720", read from its header without decoding it.
+    static func pixelSize(ofImageAt url: URL) -> String? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        return "\(width) × \(height)"
+    }
+
+    /// The item's kind for VoiceOver. The row shows it only as the preview.
+    static func accessibilityKind(of entry: ClipboardEntry) -> String {
+        entry.isScreenshot ? "Screenshot" : entry.kind == .image ? "Copied image" : "Copied text"
     }
 }
 
@@ -1162,6 +1228,9 @@ enum ClipboardSourceAppIcons {
 }
 
 private struct ClipboardEntryPreview: View {
+    /// A text item's preview: lines of text, not a document.
+    static let textSymbol = "text.alignleft"
+
     let entry: ClipboardEntry
     @State private var thumbnail: NSImage?
 
@@ -1172,7 +1241,7 @@ private struct ClipboardEntryPreview: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                Image(systemName: entry.kind == .image ? "photo" : "doc.text")
+                Image(systemName: entry.kind == .image ? "photo" : ClipboardEntryPreview.textSymbol)
                     .font(.system(size: 18))
                     .foregroundStyle(.secondary)
             }
@@ -1180,7 +1249,7 @@ private struct ClipboardEntryPreview: View {
         .frame(width: 52, height: 38)
         .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
         .clipShape(.rect(cornerRadius: 6))
-        .accessibilityLabel(entry.isScreenshot ? "Screenshot preview" : entry.kind == .image ? "Copied image preview" : "Copied text")
+        .accessibilityLabel(ClipboardRowPresentation.accessibilityKind(of: entry))
         .task(id: entry.mediaPath) {
             guard entry.kind == .image, let imageURL = entry.imageURL else {
                 thumbnail = nil
