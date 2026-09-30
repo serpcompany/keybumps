@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -74,7 +75,8 @@ final class ManualActionDetector {
     var onEvent: ((CoachingEvent) -> Void)?
     private let monitor: any PointerEventMonitoring
     private let permissions: any DetectorPermissionProviding
-    private let detection: DetectionPipeline
+    /// Not private so tests can reach the detectors' event delivery. Its work stays on its queue.
+    let detection: DetectionPipeline
     private var chromeClickDetector = ChromeClickDetector()
     private var generation = 0
     private var lastMenuSignature: String?
@@ -125,12 +127,21 @@ final class ManualActionDetector {
         }
 
         monitor.onSample = { [weak self] sample in self?.route(sample) }
+        // Queued behind the samples already on their way, so it also drops the gestures they start.
         monitor.onTapRecovered = { [weak self] in
-            self?.detection.cancelGestures()
-            DispatchQueue.main.async { _ = self?.chromeClickDetector.receive(.cancelled) }
+            self?.route(PointerSample(phase: .cancelled, location: .zero, modifiers: [],
+                                      timestamp: ProcessInfo.processInfo.systemUptime))
         }
-        detection.windowControlMonitor.onEvent = { [weak self] event in self?.onEvent?(event) }
-        detection.finderTrashMonitor.onEvent = { [weak self] event in self?.onEvent?(event) }
+        // An action verified on the detection queue just before `stop()` reaches the main thread after
+        // it. Drop it, as `route` drops late results: locking stops Shortcut Coach but leaves it turned
+        // on, so `AppModel` would still show it and record it.
+        let currentGeneration = generation
+        let deliver: (CoachingEvent) -> Void = { [weak self] event in
+            guard let self, self.generation == currentGeneration else { return }
+            self.onEvent?(event)
+        }
+        detection.windowControlMonitor.onEvent = deliver
+        detection.finderTrashMonitor.onEvent = deliver
         guard monitor.start() else {
             operationalStatus = .failed("macOS did not create the pointer event monitor")
             return
@@ -151,13 +162,20 @@ final class ManualActionDetector {
     private func route(_ sample: PointerSample) {
         let currentGeneration = generation
         let detection = detection
+        let clickThrough = sample.phase == .down || sample.phase == .up ? Self.clickThroughWindows() : []
         detection.queue.async { [weak self] in
-            let (snapshot, runtime) = detection.process(sample)
+            let (snapshot, runtime) = detection.process(sample, clickThrough: clickThrough)
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.generation == currentGeneration else { return }
                 self.receive(sample, snapshot: snapshot, runtime: runtime)
             }
         }
+    }
+
+    /// Keybumps' windows that let clicks through to the window below, such as its notch panels. AppKit
+    /// lists them only on the main thread.
+    private static func clickThroughWindows() -> Set<Int> {
+        Set(NSApplication.shared.windows.filter(\.ignoresMouseEvents).map(\.windowNumber))
     }
 
     private func receive(_ sample: PointerSample, snapshot: AccessibilitySnapshot?, runtime: ChromeRuntimeState?) {
@@ -222,7 +240,7 @@ final class ManualActionDetector {
 /// runs on the main thread, where a click in a slow app, or in an open panel Keybumps shows (whose
 /// service needs Keybumps' main thread to answer), used to freeze Keybumps (#212). The confinement is
 /// what makes it safe to hand between threads.
-private final class DetectionPipeline: @unchecked Sendable {
+final class DetectionPipeline: @unchecked Sendable {
     let queue = DispatchQueue(label: "com.serp.keybumps.shortcut-coach.detection", qos: .userInitiated)
     let windowControlMonitor: StandardWindowControlMonitor
     let finderTrashMonitor: FinderTrashMonitor
@@ -247,8 +265,8 @@ private final class DetectionPipeline: @unchecked Sendable {
 
     /// On `queue`: hands the sample and its hit to every detector, and describes the hit for the
     /// menu and Chrome checks on the main thread.
-    func process(_ sample: PointerSample) -> (snapshot: AccessibilitySnapshot?, runtime: ChromeRuntimeState?) {
-        let hit = sharedHit(for: sample)
+    func process(_ sample: PointerSample, clickThrough: Set<Int>) -> (snapshot: AccessibilitySnapshot?, runtime: ChromeRuntimeState?) {
+        let hit = sharedHit(for: sample, clickThrough: clickThrough)
         windowControlMonitor.handle(sample, hit: hit)
         finderTrashMonitor.handle(sample, hit: hit)
         let snapshot = hit.flatMap(snapshotter.snapshot(of:))
@@ -264,9 +282,10 @@ private final class DetectionPipeline: @unchecked Sendable {
 
     /// The one Accessibility hit-test of a press or release, shared by every detector. A click on
     /// Keybumps' own windows is never hit-tested, so it's never coached either.
-    private func sharedHit(for sample: PointerSample) -> AXUIElement? {
-        guard sample.phase == .down || sample.phase == .up,
-              case .application(let pid) = clickTargets.target(at: sample.location) else { return nil }
+    private func sharedHit(for sample: PointerSample, clickThrough: Set<Int>) -> AXUIElement? {
+        guard sample.phase == .down || sample.phase == .up else { return nil }
+        accessibility.beginPressOrRelease()
+        guard case .application(let pid) = clickTargets.target(at: sample.location, clickThrough: clickThrough) else { return nil }
         return accessibility.element(at: sample.location, in: pid)
     }
 }

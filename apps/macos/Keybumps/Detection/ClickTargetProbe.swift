@@ -16,7 +16,9 @@ enum ClickTarget: Equatable, Sendable {
 
 protocol ClickTargetProbing {
     /// Called on the detection queue for each press and release. Sends no Accessibility message.
-    func target(at point: CGPoint) -> ClickTarget
+    /// `clickThrough` numbers Keybumps' windows that let clicks through to the window below, such as
+    /// its notch panels; the window list can't tell them from windows that take clicks.
+    func target(at point: CGPoint, clickThrough: Set<Int>) -> ClickTarget
 }
 
 /// Finds the frontmost window under the point in the Window Server's window list. The list needs no
@@ -39,8 +41,8 @@ struct WindowListClickTargetProbe: ClickTargetProbing {
         NSWorkspace.shared.runningApplications.first(where: \.isActive)?.processIdentifier
     }
 
-    func target(at point: CGPoint) -> ClickTarget {
-        guard let window = windows().first(where: { Self.takesClick($0, at: point) }),
+    func target(at point: CGPoint, clickThrough: Set<Int>) -> ClickTarget {
+        guard let window = windows().first(where: { Self.takesClick($0, at: point, clickThrough: clickThrough) }),
               let owner = (window[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value else { return .nothing }
         if owner == ownProcess { return .keybumps }
         switch bundleIdentifier(owner) {
@@ -55,11 +57,14 @@ struct WindowListClickTargetProbe: ClickTargetProbing {
         }
     }
 
-    /// The cursor, drag images, and invisible windows never take the click.
-    private static func takesClick(_ window: [String: Any], at point: CGPoint) -> Bool {
+    /// The cursor, drag images, invisible windows, and Keybumps' click-through panels never take the
+    /// click.
+    private static func takesClick(_ window: [String: Any], at point: CGPoint, clickThrough: Set<Int>) -> Bool {
         let layer = (window[kCGWindowLayer as String] as? NSNumber)?.int32Value ?? 0
         let alpha = (window[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
+        let number = (window[kCGWindowNumber as String] as? NSNumber)?.intValue
         guard alpha > 0,
+              number.map(clickThrough.contains) != true,
               layer != CGWindowLevelForKey(.draggingWindow),
               layer < CGWindowLevelForKey(.cursorWindow),
               let bounds = window[kCGWindowBounds as String] as? NSDictionary,
