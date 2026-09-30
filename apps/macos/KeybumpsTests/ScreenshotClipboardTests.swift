@@ -168,7 +168,7 @@ struct ScreenshotClipboardTests {
     }
 
     @MainActor
-    private struct Fixture {
+    fileprivate struct Fixture {
         let root: URL
         let pasteboard: NSPasteboard
         let clipboard: ClipboardHistoryService
@@ -197,5 +197,207 @@ struct ScreenshotClipboardTests {
             pasteboard.releaseGlobally()
             try? FileManager.default.removeItem(at: root)
         }
+    }
+}
+
+@MainActor
+@Suite("Clearing the Clipboard tab keeps screenshots in the Screenshots tab")
+struct ClipboardTabClearTests {
+    private typealias Fixture = ScreenshotClipboardTests.Fixture
+
+    /// One item of each kind, newest first, and the original files two of them came from.
+    private struct History {
+        let text: ClipboardEntry
+        let copiedImage: ClipboardEntry
+        let copiedFile: ClipboardEntry
+        let screenshot: ClipboardEntry
+        let originals: [URL]
+    }
+
+    @Test("Clear All empties the Clipboard tab, deletes other items and their media, and keeps screenshots and their media")
+    func clearingTheClipboardTabKeepsScreenshots() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+
+        fixture.clipboard.clearClipboardTab()
+
+        #expect(fixture.clipboard.clipboardTabEntries.isEmpty)
+        #expect(fixture.clipboard.entries.map(\.id) == [history.screenshot.id])
+        #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [history.screenshot.id])
+        #expect(Self.exists(history.screenshot.imageURL), "the screenshot's media copy stays")
+        #expect(!Self.exists(history.copiedImage.imageURL))
+        #expect(!Self.exists(history.copiedFile.imageURL))
+    }
+
+    @Test("A cleared screenshot stays out of the Clipboard tab after a reload")
+    func hiddenScreenshotsStayHiddenAfterReload() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+        fixture.clipboard.clearClipboardTab()
+
+        let reloaded = Self.reload(fixture)
+        #expect(reloaded.clipboardTabEntries.isEmpty)
+        #expect(Self.screenshotsTab(reloaded).map(\.id) == [history.screenshot.id])
+    }
+
+    @Test("History saved before this change loads with every item in the Clipboard tab")
+    func olderHistoryDecodes() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let text = UUID()
+        let screenshot = UUID()
+        let saved = [
+            #"{"id":"\#(text.uuidString)","text":"copied","capturedAt":1,"kind":"text","fingerprint":"text:copied"}"#,
+            #"{"id":"\#(screenshot.uuidString)","text":"","capturedAt":0,"kind":"image","mediaPath":"/tmp/a.png","mediaPasteboardType":"public.png","sourcePath":"/d/Screenshot.png","isScreenCapture":true}"#
+        ]
+        try Data("[\(saved.joined(separator: ","))]".utf8).write(to: fixture.clipboard.storageURL)
+
+        let loaded = Self.reload(fixture)
+        #expect(loaded.clipboardTabEntries.map(\.id) == [text, screenshot])
+        #expect(Self.screenshotsTab(loaded).map(\.id) == [screenshot])
+    }
+
+    @Test("A screenshot taken after the clear shows in both tabs")
+    func newScreenshotShowsInBothTabs() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+        fixture.clipboard.clearClipboardTab()
+
+        #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot("Screenshot 2.png")))
+        let newShot = try #require(fixture.clipboard.entries.first)
+
+        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [newShot.id])
+        #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [newShot.id, history.screenshot.id])
+    }
+
+    @Test("Copying a cleared screenshot again, or taking one with the same pixels, puts it back in the Clipboard tab")
+    func copyingAgainShowsItInTheClipboardTab() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+        fixture.clipboard.clearClipboardTab()
+
+        // Copied from the Screenshots tab.
+        #expect(fixture.clipboard.restore(history.screenshot))
+        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [history.screenshot.id])
+
+        // A new file with the same pixels as the newest item adds nothing new.
+        fixture.clipboard.clearClipboardTab()
+        let samePixels = fixture.root.appendingPathComponent("Screenshot again.png")
+        try FileManager.default.copyItem(at: history.originals[0], to: samePixels)
+        #expect(!fixture.clipboard.ingestImageFile(at: samePixels))
+        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [history.screenshot.id])
+        #expect(Self.reload(fixture).clipboardTabEntries.map(\.id) == [history.screenshot.id], "and that's saved")
+    }
+
+    @Test("Delete in the Clipboard tab hides a screenshot there and deletes anything else")
+    func deleteInTheClipboardTab() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+
+        fixture.clipboard.removeFromClipboardTab(history.screenshot)
+        fixture.clipboard.removeFromClipboardTab(history.text)
+
+        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [history.copiedImage.id, history.copiedFile.id])
+        #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [history.screenshot.id])
+        #expect(Self.exists(history.screenshot.imageURL))
+        #expect(Self.reload(fixture).entries.map(\.id) == [history.copiedImage.id, history.copiedFile.id, history.screenshot.id])
+    }
+
+    @Test("The Screenshots tab's Clear All removes screenshots from both tabs, hidden or not, and keeps everything else")
+    func screenshotsClearRemovesThemEverywhere() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+        let others = [history.text.id, history.copiedImage.id, history.copiedFile.id]
+        fixture.clipboard.removeFromClipboardTab(history.screenshot)
+        #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot("Screenshot 2.png")))
+        let visibleShot = try #require(fixture.clipboard.entries.first)
+
+        fixture.clipboard.clearScreenshots()
+
+        #expect(fixture.clipboard.entries.map(\.id) == others)
+        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == others)
+        #expect(!Self.exists(history.screenshot.imageURL))
+        #expect(!Self.exists(visibleShot.imageURL))
+        #expect(Self.exists(history.copiedImage.imageURL))
+        #expect(Self.exists(history.copiedFile.imageURL))
+        #expect(Self.reload(fixture).entries.map(\.id) == others)
+    }
+
+    @Test("Neither Clear All touches the original files, only Keybumps' media copies")
+    func originalFilesAreNeverTouched() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+        let originalContents = try history.originals.map { try Data(contentsOf: $0) }
+
+        fixture.clipboard.clearClipboardTab()
+        #expect(try history.originals.map { try Data(contentsOf: $0) } == originalContents)
+        fixture.clipboard.clearScreenshots()
+        #expect(try history.originals.map { try Data(contentsOf: $0) } == originalContents)
+
+        #expect(fixture.clipboard.entries.isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.clipboard.mediaDirectoryURL.path).isEmpty)
+    }
+
+    @Test("Hidden screenshots still count toward the 50 items and age out like any other")
+    func hiddenScreenshotsCountTowardCapacity() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let history = try Self.seed(fixture)
+        fixture.clipboard.clearClipboardTab()
+
+        for index in 1...ClipboardHistoryService.capacity { fixture.clipboard.ingestForTesting("item \(index)") }
+
+        #expect(fixture.clipboard.entries.count == ClipboardHistoryService.capacity)
+        #expect(Self.screenshotsTab(fixture.clipboard).isEmpty)
+        #expect(!Self.exists(history.screenshot.imageURL))
+    }
+
+    /// Adds a screenshot, an image file copied in Finder, image data copied from an app, and text.
+    private static func seed(_ fixture: Fixture) throws -> History {
+        let screenshotFile = try fixture.screenshot()
+        let copiedFile = try fixture.screenshot("Mockup.png")
+        #expect(fixture.clipboard.ingestImageFile(at: screenshotFile))
+        #expect(fixture.clipboard.ingestImageFile(at: copiedFile, isScreenCapture: false))
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setData(try Data(contentsOf: copiedFile) + Data("from an app".utf8), forType: .png)
+        fixture.clipboard.pollForTesting()
+        fixture.clipboard.ingestForTesting("copied text")
+
+        let entries = fixture.clipboard.entries
+        try #require(entries.count == 4)
+        #expect(entries.map(\.isScreenshot) == [false, false, false, true])
+        #expect(entries.dropFirst().allSatisfy { exists($0.imageURL) }, "each image has its own media copy")
+        #expect(fixture.clipboard.clipboardTabEntries == entries)
+        return History(
+            text: entries[0],
+            copiedImage: entries[1],
+            copiedFile: entries[2],
+            screenshot: entries[3],
+            originals: [screenshotFile, copiedFile]
+        )
+    }
+
+    private static func screenshotsTab(_ clipboard: ClipboardHistoryService) -> [ClipboardEntry] {
+        ScreenshotPaletteContent.resolve(entries: clipboard.entries, query: "", isEnabled: true).entries
+    }
+
+    private static func reload(_ fixture: Fixture) -> ClipboardHistoryService {
+        ClipboardHistoryService(
+            storageURL: fixture.clipboard.storageURL,
+            pasteboard: fixture.pasteboard,
+            mediaDirectoryURL: fixture.clipboard.mediaDirectoryURL,
+            sourceApps: .inert
+        )
+    }
+
+    private static func exists(_ url: URL?) -> Bool {
+        url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
 }

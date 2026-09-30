@@ -84,7 +84,7 @@ Taking screenshots and marking them up.
 _Avoid_: Screen capture, screenshot app, CleanShot clone
 
 **Screenshots tab**:
-The Command Palette tab showing screenshot items from Clipboard History.
+The Command Palette tab showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
 _Avoid_: Screenshot library, gallery
 
 **Screenshot Editor**:

@@ -21,6 +21,10 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let sourceApp: ClipboardSourceApp?
     /// The website's domain (the page address's host only), when the browser said which page it was.
     let sourceDomain: String?
+    /// True for a screenshot cleared or deleted from the Clipboard tab. It stays, with its media, for
+    /// the Screenshots tab and still counts toward the capacity. Copying it again shows it in the
+    /// Clipboard tab again. History saved before this existed decodes it as false.
+    var isHiddenFromClipboardTab: Bool
 
     init(
         id: UUID,
@@ -33,7 +37,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         sourcePath: String? = nil,
         isScreenCapture: Bool = false,
         sourceApp: ClipboardSourceApp? = nil,
-        sourceDomain: String? = nil
+        sourceDomain: String? = nil,
+        isHiddenFromClipboardTab: Bool = false
     ) {
         self.id = id
         self.text = text
@@ -46,6 +51,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         self.isScreenCapture = isScreenCapture
         self.sourceApp = sourceApp
         self.sourceDomain = sourceDomain
+        self.isHiddenFromClipboardTab = isHiddenFromClipboardTab
     }
 
     var isScreenshot: Bool { kind == .image && isScreenCapture }
@@ -72,6 +78,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint, sourcePath, isScreenCapture, sourceApp, sourceDomain
+        case isHiddenFromClipboardTab
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +95,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         isScreenCapture = try container.decodeIfPresent(Bool.self, forKey: .isScreenCapture) ?? (sourcePath != nil)
         sourceApp = try container.decodeIfPresent(ClipboardSourceApp.self, forKey: .sourceApp)
         sourceDomain = try container.decodeIfPresent(String.self, forKey: .sourceDomain)
+        isHiddenFromClipboardTab = try container.decodeIfPresent(Bool.self, forKey: .isHiddenFromClipboardTab) ?? false
     }
 }
 
@@ -97,6 +105,7 @@ class ClipboardHistoryService {
     nonisolated static let capacity = 50
     nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 
+    /// Every item, newest first, including screenshots hidden from the Clipboard tab.
     private(set) var entries: [ClipboardEntry] = []
     private var timer: Timer?
     private var lastChangeCount: Int
@@ -145,19 +154,39 @@ class ClipboardHistoryService {
 
     func stop() { timer?.invalidate(); timer = nil }
 
+    /// What the Clipboard tab lists: every item except screenshots cleared or deleted there.
+    var clipboardTabEntries: [ClipboardEntry] { entries.filter { !$0.isHiddenFromClipboardTab } }
+
+    /// Removes an item from both tabs, with its media copy.
     func delete(_ entry: ClipboardEntry) {
         removeMedia(for: entry)
         entries.removeAll { $0.id == entry.id }
         persist()
     }
 
-    func clear() {
-        entries.forEach(removeMedia)
-        entries.removeAll()
+    /// The Clipboard tab's Delete: hides a screenshot there, keeping it for the Screenshots tab,
+    /// and deletes anything else.
+    func removeFromClipboardTab(_ entry: ClipboardEntry) {
+        guard entry.isScreenshot else {
+            delete(entry)
+            return
+        }
+        guard let index = entries.firstIndex(where: { $0.id == entry.id }) else { return }
+        entries[index].isHiddenFromClipboardTab = true
         persist()
     }
 
-    /// Removes screen-capture items and their media copies; original files are never touched.
+    /// The Clipboard tab's Clear All: deletes every item that isn't a screenshot, with its media
+    /// copy, and hides screenshots there, keeping them and their media for the Screenshots tab.
+    func clearClipboardTab() {
+        entries.filter { !$0.isScreenshot }.forEach(removeMedia)
+        entries.removeAll { !$0.isScreenshot }
+        for index in entries.indices { entries[index].isHiddenFromClipboardTab = true }
+        persist()
+    }
+
+    /// The Screenshots tab's Clear All: removes screen-capture items from both tabs, with their
+    /// media copies. Original files are never touched.
     func clearScreenshots() {
         entries.filter(\.isScreenshot).forEach(removeMedia)
         entries.removeAll(where: \.isScreenshot)
@@ -182,7 +211,11 @@ class ClipboardHistoryService {
         }
         guard restored else { return false }
         lastChangeCount = pasteboard.changeCount
-        if countsAsCopy { lastChangeSeenAt = Date() }
+        if countsAsCopy {
+            lastChangeSeenAt = Date()
+            // Copying a screenshot from the Screenshots tab puts it back in the Clipboard tab.
+            showInClipboardTab(entry.id)
+        }
         suppressedChangeCount = nil
         return true
     }
@@ -272,7 +305,7 @@ class ClipboardHistoryService {
         let fingerprint = "image:" + SHA256.hash(data: payload.data)
             .map { String(format: "%02x", $0) }
             .joined()
-        guard entries.first?.contentKey != fingerprint else { return false }
+        guard !repeatsNewest(fingerprint) else { return false }
 
         let id = UUID()
         let mediaURL = mediaDirectoryURL.appendingPathComponent("\(id.uuidString).\(payload.fileExtension)")
@@ -299,7 +332,7 @@ class ClipboardHistoryService {
     }
 
     private func insert(_ entry: ClipboardEntry) {
-        guard entries.first?.contentKey != entry.contentKey else { return }
+        guard !repeatsNewest(entry.contentKey) else { return }
         let duplicates = entries.filter { $0.contentKey == entry.contentKey }
         duplicates.forEach(removeMedia)
         entries.removeAll { $0.contentKey == entry.contentKey }
@@ -308,6 +341,20 @@ class ClipboardHistoryService {
             entries.suffix(from: Self.capacity).forEach(removeMedia)
             entries.removeLast(entries.count - Self.capacity)
         }
+        persist()
+    }
+
+    /// Whether this content repeats the newest item. That adds nothing, but a screenshot hidden
+    /// from the Clipboard tab shows there again.
+    private func repeatsNewest(_ contentKey: String) -> Bool {
+        guard let newest = entries.first, newest.contentKey == contentKey else { return false }
+        showInClipboardTab(newest.id)
+        return true
+    }
+
+    private func showInClipboardTab(_ id: UUID) {
+        guard let index = entries.firstIndex(where: { $0.id == id }), entries[index].isHiddenFromClipboardTab else { return }
+        entries[index].isHiddenFromClipboardTab = false
         persist()
     }
 

@@ -509,7 +509,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             search.recentItems.delete(search.displayedRecentItems[index])
         case .clipboard:
             guard filteredClipboard.indices.contains(index) else { return false }
-            clipboard.delete(filteredClipboard[index])
+            clipboard.removeFromClipboardTab(filteredClipboard[index])
         case .screenshots:
             let entries = screenshotContent.entries
             guard entries.indices.contains(index) else { return false }
@@ -540,8 +540,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.matches(query) }
+        guard !query.isEmpty else { return clipboard.clipboardTabEntries }
+        return clipboard.clipboardTabEntries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -902,8 +902,8 @@ private struct CommandPaletteView: View {
                 choose: chooseClipboardEntry,
                 copy: copyClipboardEntry,
                 edit: preferences.enabledCapabilities.contains(.screenshotTools) ? editClipboardEntry : nil,
-                delete: clipboard.delete,
-                clear: clipboard.clear,
+                delete: clipboard.removeFromClipboardTab,
+                clear: clipboard.clearClipboardTab,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
         case .dictation:
@@ -976,8 +976,8 @@ private struct CommandPaletteView: View {
 
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.matches(query) }
+        guard !query.isEmpty else { return clipboard.clipboardTabEntries }
+        return clipboard.clipboardTabEntries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -1333,7 +1333,7 @@ private struct ClipboardResultsView: View {
     let confirmationPresentationChanged: (Bool) -> Void
     var emptyTitle = "No clipboard items yet"
     var clearTitle = "Clear clipboard history?"
-    var clearMessage = "This permanently removes all clipboard items and image previews saved by Keybumps."
+    var clearMessage = "This clears the Clipboard tab. Screenshots stay in the Screenshots tab."
 
     var body: some View {
         PaletteResultsContainer {
