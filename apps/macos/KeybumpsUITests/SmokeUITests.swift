@@ -88,14 +88,15 @@ final class SmokeUITests: XCTestCase {
 
         app.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
-        let name = app.textFields["snippets.editor.name"]
-        XCTAssertTrue(name.waitForExistence(timeout: 10), "Settings opens the editor on the Snippets page")
+        XCTAssertTrue(element("settings.detail.snippets").waitForExistence(timeout: 10), "Settings opens on the Snippets page")
+        let name = element("snippets.editor.name")
+        XCTAssertTrue(name.waitForExistence(timeout: 10), "The editor sheet opens")
         let save = element("snippets.editor.save")
         XCTAssertFalse(save.isEnabled, "Save waits for a name and text")
 
         name.click()
         name.typeText("Made-up greeting")
-        let text = app.textViews["snippets.editor.text"]
+        let text = element("snippets.editor.text")
         text.click()
         text.typeText("Hello from a test")
         XCTAssertTrue(save.isEnabled)

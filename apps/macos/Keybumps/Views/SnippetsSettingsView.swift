@@ -131,6 +131,7 @@ struct SnippetsSettingsView: View {
         } primaryAction: { ids in
             if let id = ids.first { model.snippets.editorRequest = .edit(id) }
         }
+        .onDeleteCommand { pendingDeletion = selectedSnippet }
         .frame(height: Self.tableHeight(rows: snippets.count))
         .accessibilityIdentifier("snippets.list")
     }
@@ -250,7 +251,6 @@ struct SnippetEditorSheet: View {
         .frame(width: 540)
         .background(SettingsTheme.pageBackground)
         .font(.system(size: SettingsTheme.titleSize))
-        .accessibilityIdentifier("snippets.editor")
         .onAppear(perform: load)
         .alert("Delete this snippet?", isPresented: $confirmsDeletion) {
             Button("Delete", role: .destructive, action: delete)
