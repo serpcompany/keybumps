@@ -61,7 +61,7 @@ enum ScreenshotPaletteContent: Equatable {
     }
 }
 
-/// What choosing a screenshot does. As in the Clipboard tab, Return or a click copies it, and
+/// What choosing a screenshot does. Return or a click copies it, as in the Clipboard tab.
 /// Command-Return or Command-click opens it in the Screenshot Editor.
 enum ScreenshotPaletteAction: Equatable {
     case copy
