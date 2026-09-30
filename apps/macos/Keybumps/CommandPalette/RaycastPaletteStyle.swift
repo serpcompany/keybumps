@@ -11,6 +11,8 @@ enum PaletteTheme {
     static let pill = SettingsTheme.card
     static let cornerRadius: CGFloat = 16
     static let rowRadius: CGFloat = 8
+    /// The height of the footer's floating pill and its round Settings button.
+    static let footerHeight: CGFloat = 38
 }
 
 /// A small gray group title above results, like Raycast's "Suggestions".
@@ -83,6 +85,13 @@ struct PaletteChipButtonStyle: ButtonStyle {
 }
 
 extension View {
+    /// Raycast's floating footer surface, shared by the action pill and the round Settings button.
+    func paletteFloatingSurface(_ shape: some InsettableShape) -> some View {
+        background(PaletteTheme.pill, in: shape)
+            .overlay(shape.strokeBorder(PaletteTheme.border, lineWidth: 1))
+            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+    }
+
     /// Raycast's selected result: a rounded neutral highlight inset from the list edges.
     func paletteRowBackground(isSelected: Bool) -> some View {
         listRowBackground(

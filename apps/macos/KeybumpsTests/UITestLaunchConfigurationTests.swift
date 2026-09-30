@@ -11,13 +11,15 @@ struct UITestLaunchConfigurationTests {
         #expect(configuration.permissions == nil)
         #expect(configuration.openPalette == nil)
         #expect(configuration.openSettings == nil)
+        #expect(!configuration.closesSettings)
         #expect(!configuration.disablesHotKeys)
         #expect(!configuration.seedsClipboardImage)
     }
 
     @Test func otherFlagsAreIgnoredWithoutThePermissionsFlag() {
         let configuration = UITestLaunchConfiguration(arguments: [
-            executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBDisableHotKeys",
+            executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBCloseSettings", "YES",
+            "-KBDisableHotKeys",
         ])
         #expect(configuration == UITestLaunchConfiguration(arguments: [executable]))
     }
@@ -79,6 +81,14 @@ struct UITestLaunchConfigurationTests {
             arguments: [executable, "-KBUITestPermissions", "granted"] + extra
         )
         #expect(configuration.disablesHotKeys == expected)
+    }
+
+    @Test(arguments: [(["-KBCloseSettings", "YES"], true), (["-KBCloseSettings", "NO"], false), ([], false)])
+    func parsesCloseSettings(extra: [String], expected: Bool) {
+        let configuration = UITestLaunchConfiguration(
+            arguments: [executable, "-KBUITestPermissions", "granted", "-KBOpenPalette", "search"] + extra
+        )
+        #expect(configuration.closesSettings == expected)
     }
 
     @Test func parsesClipboardImageSeed() {

@@ -198,6 +198,8 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences
         )
+        // The palette's Settings button, Command-comma, and Keybumps Settings result take the status menu's route.
+        commandPalette.openSettings = { MainWindowRouter.shared.open() }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences
             ?? (UnitTestHost.isActive ? InertSymbolicHotKeyPreferences() : SystemSymbolicHotKeyPreferences())

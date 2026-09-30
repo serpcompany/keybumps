@@ -25,7 +25,18 @@ extension AppModel {
               let tab = configuration.openPalette else { return }
         Self.didPerformUITestLaunchActions = true
         NSApplication.shared.activate(ignoringOtherApps: true)
-        showCommandPalette(tab)
+        guard configuration.closesSettings else {
+            showCommandPalette(tab)
+            return
+        }
+        // Settings opens at launch, so close it first; a test can then show that an action
+        // reopens it. The next turn lets the window finish appearing before it closes.
+        DispatchQueue.main.async { [weak self] in
+            for window in NSApplication.shared.windows where window.isVisible && window.canBecomeMain {
+                window.close()
+            }
+            self?.showCommandPalette(tab)
+        }
     }
 }
 
