@@ -3,30 +3,38 @@ import Testing
 import XCTest
 @testable import Keybumps
 
-/// The release scripts sit in the app folder (with the Xcode project and tests), while CHANGELOG.md
-/// and docs/releases/ stay at the repository root even when the app folder moves below it (#161).
-/// Each case copies scripts/ into a throwaway Git repository, at the root or in apps/macos, and
-/// stops the real orchestrator at its output-directory guard, before anything is built or signed.
+/// The app folder (apps/macos: the Xcode project, tests, and scripts/) sits below the repository
+/// root, where CHANGELOG.md, docs/, and the rest of the repository stay (#161, docs/adr/0003).
+/// Each case copies scripts/ into a throwaway Git repository, with the app folder at the root or in
+/// apps/macos, and runs a real script there. The orchestrator is always stopped at its
+/// output-directory guard, before anything is built or signed.
 @Suite("Release scripts in an app folder")
 struct ReleaseScriptAppFolderTests {
     /// The app folder of this checkout: the parent of KeybumpsTests.
     private let checkoutAppFolder = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
+    private let git = URL(fileURLWithPath: "/usr/bin/git")
+
+    /// A throwaway Git repository under `work` with a copy of scripts/ in `appFolder`.
+    private func makeRepository(appFolder: String) throws -> (work: URL, repository: URL, app: URL) {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("app-folder-\(UUID().uuidString)")
+        let repository = work.appendingPathComponent("repository")
+        let app = repository.appendingPathComponent(appFolder).standardized
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: checkoutAppFolder.appendingPathComponent("scripts"), to: app.appendingPathComponent("scripts"))
+        let initialized = try runProcess(git, ["init", "--quiet", repository.path], from: work)
+        try #require(initialized.status == 0, "\(initialized.output)")
+        return (work, repository, app)
+    }
 
     @Test("build-update-release.sh reads release notes from the repository root", arguments: [".", "apps/macos"])
     func releaseNotesComeFromTheRepositoryRoot(appFolder: String) throws {
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("app-folder-\(UUID().uuidString)")
+        let (work, repository, app) = try makeRepository(appFolder: appFolder)
         defer { try? FileManager.default.removeItem(at: work) }
-        let repository = work.appendingPathComponent("repository")
-        let scripts = repository.appendingPathComponent(appFolder).appendingPathComponent("scripts").standardized
-        try FileManager.default.createDirectory(at: scripts.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: checkoutAppFolder.appendingPathComponent("scripts"), to: scripts)
         let releaseNotes = repository.appendingPathComponent("docs/releases")
         try FileManager.default.createDirectory(at: releaseNotes, withIntermediateDirectories: true)
         try "# Keybumps 0.0.1-fixture\n".write(to: releaseNotes.appendingPathComponent("v0.0.1-fixture.md"), atomically: true, encoding: .utf8)
-        let initialized = try runProcess(URL(fileURLWithPath: "/usr/bin/git"), ["init", "--quiet", repository.path], from: work)
-        try #require(initialized.status == 0, "\(initialized.output)")
 
         // An existing output directory stops the orchestrator right after the release-notes check.
         // It runs from this checkout, which has no notes for these versions, so notes found through
@@ -34,7 +42,7 @@ struct ReleaseScriptAppFolderTests {
         let output = work.appendingPathComponent("output")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         func prepareRelease(_ version: String) throws -> (status: Int32, output: String) {
-            try runProcess(scripts.appendingPathComponent("build-update-release.sh"), [
+            try runProcess(app.appendingPathComponent("scripts/build-update-release.sh"), [
                 version, "2", "1", "https://updates.keybumps.app/appcast.xml", "public-key", "account",
                 work.appendingPathComponent("tools").path, output.path
             ], from: checkoutAppFolder)
@@ -47,6 +55,33 @@ struct ReleaseScriptAppFolderTests {
         let missing = try prepareRelease("0.0.1-missing")
         #expect(missing.status == 66, "\(missing.output)")
         #expect(missing.output.contains("\(work.lastPathComponent)/repository/docs/releases/v0.0.1-missing.md"), "\(missing.output)")
+    }
+
+    @Test("check-legacy-branding.sh scans the whole repository and allows app files by app folder", arguments: [".", "apps/macos"])
+    func brandingCheckScansTheWholeRepository(appFolder: String) throws {
+        let (work, repository, app) = try makeRepository(appFolder: appFolder)
+        defer { try? FileManager.default.removeItem(at: work) }
+        // Legacy terms are joined at run time, so this file passes the real check.
+        let (legacyVariable, legacyName) = ("SUPER" + "MAC_", "Key" + " Bumps")
+        // The copied check-legacy-branding.sh and this project.yml contain legacy terms. Both are
+        // on the allowlist relative to the app folder, so they pass only if its prefix matches.
+        try "# Release builds refuse \(legacyVariable)* variables.\n".write(to: app.appendingPathComponent("project.yml"), atomically: true, encoding: .utf8)
+        func check() throws -> (status: Int32, output: String) {
+            let staged = try runProcess(git, ["-C", repository.path, "add", "--all"], from: work)
+            try #require(staged.status == 0, "\(staged.output)")
+            return try runProcess(app.appendingPathComponent("scripts/check-legacy-branding.sh"), [], from: checkoutAppFolder)
+        }
+
+        let allowed = try check()
+        #expect(allowed.status == 0, "\(allowed.output)")
+        #expect(allowed.output.contains("Legacy branding allowlist check passed."), "\(allowed.output)")
+
+        // A file at the repository root, outside apps/macos, must still be scanned.
+        try FileManager.default.createDirectory(at: repository.appendingPathComponent("docs"), withIntermediateDirectories: true)
+        try "Formerly \(legacyName).\n".write(to: repository.appendingPathComponent("docs/notes.md"), atomically: true, encoding: .utf8)
+        let flagged = try check()
+        #expect(flagged.status == 1, "\(flagged.output)")
+        #expect(flagged.output.contains("  docs/notes.md"), "\(flagged.output)")
     }
 }
 
@@ -79,15 +114,15 @@ private var cleanChildEnvironment: [String: String] {
 }
 
 final class UpdateReleaseScriptTests: XCTestCase {
-    private var repositoryRoot: URL {
+    private var appFolder: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
     }
 
     func testPublicationDryRunAndFailClosedInputs() throws {
-        let fixture = repositoryRoot.appendingPathComponent("KeybumpsTests/Fixtures/Updates")
-        let verifier = repositoryRoot.appendingPathComponent("scripts/verify-update-publication.sh")
+        let fixture = appFolder.appendingPathComponent("KeybumpsTests/Fixtures/Updates")
+        let verifier = appFolder.appendingPathComponent("scripts/verify-update-publication.sh")
         let success = try run(verifier, [
             fixture.appendingPathComponent("appcast.xml").path,
             fixture.appendingPathComponent("fixture.zip").path,
@@ -110,9 +145,9 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     func testFixtureServerAndLiveByteVerification() async throws {
-        let fixture = repositoryRoot.appendingPathComponent("KeybumpsTests/Fixtures/Updates")
+        let fixture = appFolder.appendingPathComponent("KeybumpsTests/Fixtures/Updates")
         let server = Process()
-        server.executableURL = repositoryRoot.appendingPathComponent("scripts/serve-update-fixture.sh")
+        server.executableURL = appFolder.appendingPathComponent("scripts/serve-update-fixture.sh")
         server.arguments = [fixture.path, "18765"]
         server.environment = cleanChildEnvironment
         server.standardOutput = Pipe()
@@ -162,7 +197,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertTrue(XMLParser(data: servedFeed).parse(), "The served fixture must be parseable XML")
 
-        let verifier = repositoryRoot.appendingPathComponent("scripts/verify-update-publication.sh")
+        let verifier = appFolder.appendingPathComponent("scripts/verify-update-publication.sh")
         let verified = try run(verifier, [
             fixture.appendingPathComponent("appcast.xml").path,
             fixture.appendingPathComponent("fixture.zip").path,
@@ -184,7 +219,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     func testReleaseValidationAndOrchestrationFailClosedBeforeArtifacts() throws {
-        let validator = repositoryRoot.appendingPathComponent("scripts/validate-update-release.sh")
+        let validator = appFolder.appendingPathComponent("scripts/validate-update-release.sh")
         let common = ["/tmp/missing.app", "/tmp/missing.zip", "/tmp/missing.xml", "/tmp/missing.md"]
         for maliciousFixtureURL in [
             "https://example.com/appcast.xml",
@@ -206,7 +241,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertNotEqual(reusedBuild.status, 0)
         XCTAssertTrue(reusedBuild.output.contains("greater than"))
 
-        let orchestrator = repositoryRoot.appendingPathComponent("scripts/build-update-release.sh")
+        let orchestrator = appFolder.appendingPathComponent("scripts/build-update-release.sh")
         let invalidBuild = try run(orchestrator, [
             "0.0.2", "2", "2", "https://updates.example.com/appcast.xml", "public", "key", "/tmp/tools", "/tmp/output"
         ])
@@ -233,7 +268,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
             XCTAssertTrue(result.output.contains("credential-free"))
         }
 
-        let urlHelper = repositoryRoot.appendingPathComponent("scripts/lib/update_url_validation.py")
+        let urlHelper = appFolder.appendingPathComponent("scripts/lib/update_url_validation.py")
         let normalizedParent = try run(
             URL(fileURLWithPath: "/usr/bin/python3"),
             [urlHelper.path, "parent", "https://updates.example.com/beta/nested/appcast.xml"]
@@ -243,7 +278,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     func testLatestReleasePointerFollowsTheAppcastAndFailsClosed() throws {
-        let pointer = repositoryRoot.appendingPathComponent("scripts/write-latest-release-pointer.sh")
+        let pointer = appFolder.appendingPathComponent("scripts/write-latest-release-pointer.sh")
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("latest-pointer-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
@@ -302,7 +337,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     func testPublishReleaseUploadsAssetsBeforePointersAndNeverOverwrites() throws {
-        let publisher = repositoryRoot.appendingPathComponent("scripts/publish-release.sh")
+        let publisher = appFolder.appendingPathComponent("scripts/publish-release.sh")
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("publish-\(UUID().uuidString)")
         let output = work.appendingPathComponent("release")
         let assets = output.appendingPathComponent("publication/assets")
@@ -407,7 +442,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     func testReleaseNotesComeFromTheChangelogWithoutLinks() throws {
-        let writer = repositoryRoot.appendingPathComponent("scripts/write-release-notes.sh")
+        let writer = appFolder.appendingPathComponent("scripts/write-release-notes.sh")
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("notes-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
@@ -453,6 +488,6 @@ final class UpdateReleaseScriptTests: XCTestCase {
     }
 
     private func run(_ executable: URL, _ arguments: [String], environment: [String: String] = [:]) throws -> (status: Int32, output: String) {
-        try runProcess(executable, arguments, from: repositoryRoot, environment: environment)
+        try runProcess(executable, arguments, from: appFolder, environment: environment)
     }
 }

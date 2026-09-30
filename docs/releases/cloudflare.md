@@ -7,7 +7,7 @@ Keybumps's public web presence runs on the **SERP** Cloudflare account (`cec5f04
 | Zone `keybumps.app` (`e641400d1648da94e95380533b25d227`) | DNS, TLS, and Email Routing for `keybumps.app`, `www.keybumps.app`, `staging.keybumps.app`, and `updates.keybumps.app` (all proxied through Cloudflare) | Cloudflare dashboard |
 | Worker `keybumps-web-production` | Serves `keybumps.app` and `www.keybumps.app` (custom domains). `/download/` redirects to the current DMG. | This repository: `apps/web/wrangler.jsonc`, deployed only by `.github/workflows/web-deploy.yml` |
 | Worker `keybumps-web-staging` | Serves `staging.keybumps.app` (custom domain, not indexed) | This repository: `apps/web/wrangler.jsonc`, deployed only by `.github/workflows/web-deploy.yml` |
-| R2 bucket `keybumps-updates` (APAC, Standard storage) | Release origin behind the `updates.keybumps.app` custom domain (TLS 1.2+). Public `r2.dev` access is disabled. No CORS rules. Lifecycle: abort incomplete multipart uploads after 7 days. | This repository: `scripts/publish-release.sh` |
+| R2 bucket `keybumps-updates` (APAC, Standard storage) | Release origin behind the `updates.keybumps.app` custom domain (TLS 1.2+). Public `r2.dev` access is disabled. No CORS rules. Lifecycle: abort incomplete multipart uploads after 7 days. | This repository: `apps/macos/scripts/publish-release.sh` |
 
 ## Release origin layout (`updates.keybumps.app`)
 
@@ -26,5 +26,5 @@ Found at inventory time: releases 4006 (`0.0.3-beta.2`) and 4007 (`0.0.3-beta.3`
 
 ## Access
 
-- Publishing uses `wrangler r2 object put` with `CLOUDFLARE_API_TOKEN` set to an API token scoped to **Workers R2 Storage: Edit** on the `keybumps-updates` bucket only. The same token reads objects back (`wrangler r2 object get`): every Release Keybumps run reads the live `appcast.xml` for the build number, and publishing verifies each upload byte for byte. Reads go to R2 directly because Cloudflare Bot Fight Mode returns 403 to GitHub-hosted runners on `updates.keybumps.app`; check the public host with `scripts/verify-update-publication.sh` from a normal network. It lives in the `CLOUDFLARE_R2_TOKEN` repository secret for the Release Keybumps workflow; anywhere else, provide it through the environment. Never put it in the repository, shell history, or chat.
+- Publishing uses `wrangler r2 object put` with `CLOUDFLARE_API_TOKEN` set to an API token scoped to **Workers R2 Storage: Edit** on the `keybumps-updates` bucket only. The same token reads objects back (`wrangler r2 object get`): every Release Keybumps run reads the live `appcast.xml` for the build number, and publishing verifies each upload byte for byte. Reads go to R2 directly because Cloudflare Bot Fight Mode returns 403 to GitHub-hosted runners on `updates.keybumps.app`; check the public host with `apps/macos/scripts/verify-update-publication.sh` from a normal network. It lives in the `CLOUDFLARE_R2_TOKEN` repository secret for the Release Keybumps workflow; anywhere else, provide it through the environment. Never put it in the repository, shell history, or chat.
 - Publishing, DNS, and bucket changes require fresh owner authorization (see `AGENTS.md`).

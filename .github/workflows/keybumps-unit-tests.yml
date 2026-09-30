@@ -5,12 +5,9 @@ name: Keybumps unit tests
 on:
   pull_request:
     branches: [main]
-    # Filters can't use APP_DIR; keep them in step with it.
+    # Filters can't use APP_DIR; keep them in step with it. The tests read nothing outside it.
     paths:
-      - Keybumps/**
-      - KeybumpsTests/**
-      - scripts/**
-      - project.yml
+      - apps/macos/**
       - .github/workflows/keybumps-unit-tests.yml
   workflow_call:
   workflow_dispatch:
@@ -26,8 +23,8 @@ env:
   XCODE_APP: /Applications/Xcode_26.6.app
   # The Mac app's folder, relative to the repository root. Run steps work in it. Action inputs
   # (the cache, hashFiles, and upload paths) are relative to the repository root, so they add
-  # the folder, and while it is "." they keep their bare paths, so the cache key and version hold.
-  APP_DIR: .
+  # the folder (and use bare paths if it is ".", the repository root). See docs/adr/0003.
+  APP_DIR: apps/macos
 
 jobs:
   unit:

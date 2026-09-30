@@ -8,7 +8,7 @@ Decisions for how Keybumps is tested, researched against current sources on 2026
 | --- | --- | --- | --- |
 | Deterministic tests | Domain logic, state, adapter contracts, wiring snapshots, release scripts | Swift Testing (new) and XCTest (existing) in `KeybumpsTests` | Every PR that touches app code; locally before every hand-off; as the first gate of every release build |
 | UI smoke tests | App launches; Settings, palette tabs, and editor open and respond | XCUITest in a `KeybumpsUITests` target, driven by launch arguments with faked permissions | Every PR that touches app code; as a gate of every release build; on demand |
-| Signed runtime and installed artifact | Global hot keys, real permissions, cross-app paste/insertion, window movement, real screenshots | `scripts/build-qa-candidate.sh` plus a short manual checklist | Owner's Mac (agent first pass headless; screen only when handed over) |
+| Signed runtime and installed artifact | Global hot keys, real permissions, cross-app paste/insertion, window movement, real screenshots | `apps/macos/scripts/build-qa-candidate.sh` plus a short manual checklist | Owner's Mac (agent first pass headless; screen only when handed over) |
 | Owner acceptance | The scoped workflow works for the owner | Issue hit list | Owner's Mac |
 
 No automated level substitutes for a higher one.
@@ -22,7 +22,7 @@ No automated level substitutes for a higher one.
 
 ## Wiring and characterization snapshots
 
-- Structured snapshots, such as the capability wiring captured before the #53 refactor, are **hand-rolled Codable JSON fixtures** under `KeybumpsTests/Fixtures`: `JSONEncoder` with `.sortedKeys` and `.prettyPrinted`, compared as text, with the actual output attached (or printed as a diff) on mismatch.
+- Structured snapshots, such as the capability wiring captured before the #53 refactor, are **hand-rolled Codable JSON fixtures** under `apps/macos/KeybumpsTests/Fixtures`: `JSONEncoder` with `.sortedKeys` and `.prettyPrinted`, compared as text, with the actual output attached (or printed as a diff) on mismatch.
 - Re-recording happens only when `KEYBUMPS_RECORD_SNAPSHOTS=1` is set, and a re-record is a reviewed change in the PR.
 - No snapshot dependency for now. If image snapshots are ever needed, `pointfreeco/swift-snapshot-testing` (actively maintained, Swift Testing support) is the preferred library; adopting it is a separate decision.
 
@@ -39,7 +39,7 @@ Permission-gated and system-level features are faked in automated tests, never g
 
 ### UI test launch arguments
 
-`UITestLaunchConfiguration` parses these; `AppModel.forLaunch()` in `Keybumps/App/UITestComposition.swift` builds the UI test composition. UI test mode exists only in Debug builds and starts only with `-KBUITestPermissions`; Release builds ignore every flag and compile none of the fakes. The other flags are ignored without it, so a production launch is unchanged (covered by `UITestLaunchConfigurationTests`).
+`UITestLaunchConfiguration` parses these; `AppModel.forLaunch()` in `apps/macos/Keybumps/App/UITestComposition.swift` builds the UI test composition. UI test mode exists only in Debug builds and starts only with `-KBUITestPermissions`; Release builds ignore every flag and compile none of the fakes. The other flags are ignored without it, so a production launch is unchanged (covered by `UITestLaunchConfigurationTests`).
 
 | Argument | Effect |
 | --- | --- |
@@ -58,6 +58,7 @@ Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `s
 
 - **Runner:** GitHub-hosted `macos-26` (arm64), pinning Xcode with `xcode-select`. Evaluate the `xcode-27` image labels separately before moving. macOS minutes cost about 10× Linux, so jobs set `timeout-minutes`.
 - **When CI runs tests (owner decision, 2026-09-28):** on every pull request that touches app code (about 2 minutes of wall-clock time; the org's Enterprise plan includes 50,000 Actions minutes a month, and macOS counts 10×), and before every release build. No nightly schedule.
+  - **App code** is `apps/macos/**`. Both workflows' `paths:` filters name that folder and the workflow file itself, and their steps run in it (`APP_DIR` in each workflow; `release.yml` has its own). The tests read nothing outside it.
   - **Release gate:** `release.yml` (Release Keybumps, from release-please or run manually) calls `keybumps-unit-tests.yml` and `keybumps-ui-tests.yml` first. The build, notarization, and publish jobs need both to pass.
   - **On demand:** either workflow can also be run from Actions (`workflow_dispatch`).
   - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure.

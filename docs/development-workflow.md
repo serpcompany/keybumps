@@ -6,9 +6,9 @@ This is the general Keybumps development cycle for feature work, bug fixes, loca
 
 1. Implement one issue on its branch; commit a clean tree.
 2. Agent first pass without taking over the owner's screen (section 3a).
-3. `scripts/build-qa-candidate.sh <issue>` builds, backs up, installs, and launches the candidate.
+3. `apps/macos/scripts/build-qa-candidate.sh <issue>` builds, backs up, installs, and launches the candidate.
 4. Agent posts the scoped hit list and evidence table to the issue (section 4).
-5. Owner tests the installed candidate and replies **accept**, **fail** (with findings), or runs `scripts/restore-previous-keybumps.sh` to roll back.
+5. Owner tests the installed candidate and replies **accept**, **fail** (with findings), or runs `apps/macos/scripts/restore-previous-keybumps.sh` to roll back.
 6. Failures are fixed on the same branch and rebuilt; the script increments the candidate build (`.n+1`). Acceptance leads to promotion (section 5).
 
 ## 1. Establish the base
@@ -35,18 +35,18 @@ Report evidence at the level actually established:
 
 A lower level never proves a higher one. In particular, a build does not prove global shortcuts, permissions, window movement, paste, microphone capture, or installed-update replacement.
 
-Tooling, frameworks, and CI placement for each level are decided in [`testing.md`](testing.md). Keep durable test inputs under `KeybumpsTests/Fixtures`. Keep generated builds, result bundles, screenshots, recordings, and logs out of Git. Record concise, privacy-safe evidence and remaining gates in the owning GitHub issue; never commit user content.
+Tooling, frameworks, and CI placement for each level are decided in [`testing.md`](testing.md). Keep durable test inputs under `apps/macos/KeybumpsTests/Fixtures`. Keep generated builds, result bundles, screenshots, recordings, and logs out of Git. Record concise, privacy-safe evidence and remaining gates in the owning GitHub issue; never commit user content.
 
 ## 3. Prepare a local manual-QA build
 
 - Build from the exact issue-branch state intended for review.
 - Use a development-only label that identifies the issue or branch; do not reuse public release names for local candidates.
 - Record the branch and full commit SHA in the QA handoff.
-- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful. Only Release and QA candidates carry it; Debug builds (test hosts, `scripts/build-and-run.sh`) are `com.serp.keybumps.debug`: they need their own permission grants if run by hand and never register Launch at Login. A Debug app still uses the same local data folders as the installed app, so `build-and-run.sh` quits both before launching it; unit-test hosts never touch that data.
+- Keep the stable `com.serp.keybumps` bundle identity and signing identity so permission-sensitive testing remains meaningful. Only Release and QA candidates carry it; Debug builds (test hosts, `apps/macos/scripts/build-and-run.sh`) are `com.serp.keybumps.debug`: they need their own permission grants if run by hand and never register Launch at Login. A Debug app still uses the same local data folders as the installed app, so `build-and-run.sh` quits both before launching it; unit-test hosts never touch that data.
 - Sign installed manual-QA candidates with `Developer ID Application` using the same designated requirement as the accepted baseline. An Apple Development-signed Debug/test host is a different TCC identity and must never be installed as a permission-continuity candidate.
 - Keybumps registers its own Launch at Login item only after fresh onboarding.
 - Replace the installed app with the intended candidate, launch it from `/Applications`, and verify that the running artifact is the candidate just built.
-- `scripts/build-qa-candidate.sh <issue>` performs this step from a clean tree: it archives and Developer ID-exports the current commit as `<release>-dev.issue<N>` with build `<release build>.<issue>.<n>` (ordered above the installed release and below the next public build for Sparkle), refuses if the designated requirement differs from the installed baseline, backs up the installed app under `~/Library/Developer/Keybumps-QA/backups`, installs and launches the candidate, and verifies the running artifact. It never notarizes or publishes. `scripts/restore-previous-keybumps.sh` reinstalls the most recent backup.
+- `apps/macos/scripts/build-qa-candidate.sh <issue>` performs this step from a clean tree: it archives and Developer ID-exports the current commit as `<release>-dev.issue<N>` with build `<release build>.<issue>.<n>` (ordered above the installed release and below the next public build for Sparkle), refuses if the designated requirement differs from the installed baseline, backs up the installed app under `~/Library/Developer/Keybumps-QA/backups`, installs and launches the candidate, and verifies the running artifact. It never notarizes or publishes. `apps/macos/scripts/restore-previous-keybumps.sh` reinstalls the most recent backup. The old `scripts/build-qa-candidate.sh` and `scripts/restore-previous-keybumps.sh` forward to these until #161's cleanup removes them.
 
 ## 3a. Agent first pass
 
@@ -65,7 +65,7 @@ Computer-use or other screen control drives the owner's real mouse, keyboard, an
 - Explicitly list related work that is not included yet.
 - Record pass, failure, skipped, blocked, and follow-up findings in the owning GitHub issue.
 - Post the hit list on the issue with the candidate version and build, branch, full commit SHA, an evidence table using the levels above, and the rollback command.
-- The owner's result is one of: **accept**, **fail** with findings (fix on the branch and produce the next candidate), or **roll back** with `scripts/restore-previous-keybumps.sh` when the candidate blocks everyday use.
+- The owner's result is one of: **accept**, **fail** with findings (fix on the branch and produce the next candidate), or **roll back** with `apps/macos/scripts/restore-previous-keybumps.sh` when the candidate blocks everyday use.
 
 ## 5. Promote accepted work
 
