@@ -31,7 +31,8 @@ scripts/smoke.sh http://localhost:8787 staging  # in another
 `pnpm preview` without `SITE_ENV` builds the non-production site, so smoke it as `staging`. To check the production rules, set `SITE_ENV` for both the build and the local Worker, then smoke it as `production`:
 
 ```sh
-SITE_ENV=production pnpm preview --var SITE_ENV:production
+# Any placeholder GTM ID works locally; the smoke test checks where GTM loads.
+SITE_ENV=production NEXT_PUBLIC_GTM_ID=GTM-TEST123 pnpm preview --var SITE_ENV:production
 scripts/smoke.sh http://localhost:8787 production
 ```
 
@@ -67,7 +68,7 @@ Configuration is explicit per environment and falls back to the safe behavior: a
 | --- | --- | --- | --- |
 | `SITE_ENV` | build time **and** runtime | The deploy build command, and the Worker's `vars` (#144) | `isProductionSite()` in `src/lib/site.ts`. `next.config.ts` (the `X-Robots-Tag` header and the `workers.dev` redirect target) reads the build-time value. OpenNext renders `robots.txt` and pages on the Worker at request time, so they, and the analytics in the layout, read the runtime value. Both must match, or production ships a `robots.txt` that disallows crawling. |
 | `NEXT_PUBLIC_GTM_ID` | build time | The production deploy build (#144, from the GitHub `production` environment's variables) | `src/components/analytics.tsx` |
-| `NEXT_PUBLIC_CF_BEACON_TOKEN` | build time | Not set. Setting it turns on Cloudflare Web Analytics, which needs a privacy policy update in the same change. | `src/components/analytics.tsx` |
+| `NEXT_PUBLIC_CF_BEACON_TOKEN` | build time | **Must not be set** until the privacy policy covers Cloudflare Web Analytics. The owner chose Google Tag Manager only; setting this token would turn on the beacon without the policy describing it. | `src/components/analytics.tsx` |
 | Secrets | runtime | None today. Use `wrangler secret put --env <env>`, never `wrangler.jsonc` or the repository. | none |
 | `.dev.vars`, `.env*` | local only | Uncommitted (`.gitignore`) | local runs |
 
@@ -82,7 +83,14 @@ Configuration is explicit per environment and falls back to the safe behavior: a
 
 ## Analytics and privacy
 
-`src/components/analytics.tsx` renders nothing unless `SITE_ENV=production`, then loads Google Tag Manager when `NEXT_PUBLIC_GTM_ID` is set and the Cloudflare Web Analytics beacon when `NEXT_PUBLIC_CF_BEACON_TOKEN` is set. The privacy policy (`/legal/privacy/`) describes what they collect. Any change to analytics tools or tags updates that page in the same pull request.
+The site uses Google Tag Manager only. `src/components/analytics.tsx` renders nothing unless `SITE_ENV=production`, then loads GTM when `NEXT_PUBLIC_GTM_ID` is set. The privacy policy (`/legal/privacy/`) describes GTM. It also supports the Cloudflare Web Analytics beacon, but `NEXT_PUBLIC_CF_BEACON_TOKEN` must not be set until the privacy policy covers Cloudflare Web Analytics. Any change to analytics tools or tags updates that page in the same pull request.
+
+Analytics never run on pages whose URLs carry checkout, session, or license data. Polar sends buyers to `/thanks/` with a customer-session token in the query string, and GTM tags read the full page URL, so stripping the query string in the container isn't enough. Structurally:
+
+- Only the `src/app/(analytics)/` route group layout renders `<Analytics />`. The root layout doesn't.
+- `/thanks/` and `/license/` (`noAnalyticsPaths` in `src/lib/pages.ts`) live outside that group. New pages go inside it unless their URLs can carry such data, in which case they join `noAnalyticsPaths`.
+- `src/lib/analytics-scope.test.ts` fails if another file renders `<Analytics />`, if a `noAnalyticsPaths` page moves into the group, or if any other page sits outside it.
+- `scripts/smoke.sh <url> production` asserts that `/` loads GTM and that `/thanks/?customer_session_token=x` and `/license/?…` don't. The `/` check needs `NEXT_PUBLIC_GTM_ID` set in the build.
 
 ## Styling
 

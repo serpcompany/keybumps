@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@/components/analytics'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
 import { site } from '@/lib/site'
@@ -19,6 +18,7 @@ export const metadata: Metadata = {
   openGraph: { siteName: site.name, type: 'website', locale: 'en_US' }
 }
 
+// Analytics load only in the (analytics) route group, never here: see src/app/(analytics)/layout.tsx.
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     // The site has one dark theme; `dark` turns on the dark variants of shadcn components.
@@ -27,7 +27,6 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         <SiteHeader />
         {children}
         <SiteFooter />
-        <Analytics />
       </body>
     </html>
   )

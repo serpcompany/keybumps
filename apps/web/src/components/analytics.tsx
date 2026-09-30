@@ -3,8 +3,13 @@ import Script from 'next/script'
 import { isProductionSite } from '@/lib/site'
 
 /**
- * Production-only analytics. Each tool stays off until its ID is set at build time. Adding or
- * changing a tool means updating the privacy policy (/legal/privacy/) in the same change.
+ * Production-only analytics, rendered only by the src/app/(analytics)/ route group layout, so
+ * never on pages whose URLs carry checkout, session, or license data (/thanks/, /license/).
+ * Each tool stays off until its ID is set at build time. Adding or changing a tool means updating
+ * the privacy policy (/legal/privacy/) in the same change.
+ *
+ * The owner chose Google Tag Manager only. NEXT_PUBLIC_CF_BEACON_TOKEN must not be set until the
+ * privacy policy covers Cloudflare Web Analytics.
  */
 export function Analytics() {
   if (!isProductionSite()) return null

@@ -71,10 +71,34 @@ describe('site redirects', () => {
     expect(resolve(production, { path: '/sitemap.xml' })).toBe('/sitemap-index.xml')
   })
 
-  it('never redirects a same-host URL to itself', () => {
-    for (const redirect of production.filter(r => !r.has)) {
-      const destination = resolve(production, { path: redirect.destination })
-      expect(destination, redirect.source).not.toBe(redirect.destination)
+  it('lands every non-canonical URL on a directly served URL in one hop', () => {
+    for (const path of [
+      '/pricing',
+      '/download',
+      '/license',
+      '/thanks',
+      '/about',
+      '/legal',
+      '/legal/dmca',
+      '/legal/affiliate-disclosure',
+      '/privacy',
+      '/privacy/',
+      '/terms',
+      '/terms/',
+      '/refunds',
+      '/refunds/',
+      '/sitemap.xml',
+      '/robots.txt/',
+      '/sitemap-index.xml/',
+      '/sitemaps/pages.xml/'
+    ]) {
+      const destination = resolve(production, { path })
+      expect(destination, path).not.toBeNull()
+      expect(destination, path).not.toBe(path)
+      expect(
+        resolve(production, { path: destination ?? '' }),
+        `${path} -> ${destination}`
+      ).toBeNull()
     }
   })
 
@@ -86,6 +110,16 @@ describe('site redirects', () => {
     expect(www('/privacy')).toBe('https://keybumps.app/legal/privacy/')
     expect(www('/robots.txt')).toBe('https://keybumps.app/robots.txt')
     expect(www('/sitemaps/pages.xml/')).toBe('https://keybumps.app/sitemaps/pages.xml')
+  })
+
+  it('matches only the exact www and workers.dev hosts', () => {
+    for (const host of [
+      'xwww.keybumps.app',
+      'www.keybumps.app.example.com',
+      'x.workers.dev.example.com'
+    ]) {
+      expect(resolve(production, { host, path: '/legal/terms/' }), host).toBeNull()
+    }
   })
 
   it('moves workers.dev to the environment domain unless the smoke-test header is sent', () => {

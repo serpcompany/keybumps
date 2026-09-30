@@ -20,7 +20,7 @@ const QUESTIONS = [
   },
   {
     q: 'I lost my license key.',
-    a: 'It’s in your Polar receipt email, and in the Polar customer portal. See keybumps.app/license.'
+    a: 'It’s in your Polar receipt email, and in the Polar customer portal. See keybumps.app/license/.'
   },
   {
     q: 'Who handles payment?',

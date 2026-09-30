@@ -80,3 +80,10 @@ export const legacyRedirects = [
   { from: '/terms', to: '/legal/terms/' },
   { from: '/refunds', to: '/legal/refunds/' }
 ] as const satisfies readonly { from: string; to: SitePagePath }[]
+
+/**
+ * Pages whose URLs can carry checkout, session, or license data. Analytics must never load on
+ * them, so they live outside the src/app/(analytics)/ route group. Polar sends buyers to /thanks/
+ * with a customer-session token in the query string, and /license/ is where they find their key.
+ */
+export const noAnalyticsPaths = ['/thanks/', '/license/'] as const

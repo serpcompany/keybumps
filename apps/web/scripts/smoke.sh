@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
 # trailing-slash and legacy redirects take one 308 hop; search-engine rules match the environment
-# (only production may be indexed); and a workers.dev URL redirects to its branded domain.
+# (only production may be indexed); in production, GTM loads on / but never on /thanks/ or
+# /license/; and a workers.dev URL redirects to its branded domain.
 # Requests carry the smoke-test header so a workers.dev URL serves the site instead of redirecting.
 #
 # usage: scripts/smoke.sh <base-url> <staging|production>
@@ -93,6 +94,15 @@ if [ "$env" = production ]; then
   grep -q '^Sitemap: https://keybumps.app/sitemap-index.xml$' <<<"$robots" &&
     pass 'robots.txt lists the sitemap index' || fail 'robots.txt is missing the sitemap index'
   [ -z "$robots_header" ] && pass 'no X-Robots-Tag' || fail "unexpected $robots_header"
+  # GTM loads on ordinary pages, and never on pages whose URLs carry checkout, session, or
+  # license data. The query values are placeholders.
+  gtm='googletagmanager\.com/gtm\.js'
+  curl -s "${smoke[@]}" "$base/" | grep -q "$gtm" && pass 'GTM loads on /' ||
+    fail 'GTM missing on / (is NEXT_PUBLIC_GTM_ID set in the build?)'
+  for path in '/thanks/?checkout_id=x&customer_session_token=x' '/license/?customer_session_token=x'; do
+    curl -s "${smoke[@]}" "$base$path" | grep -q "$gtm" && fail "GTM loads on $path" ||
+      pass "no GTM on $path"
+  done
 else
   grep -q '^Disallow: /$' <<<"$robots" && pass 'robots.txt disallows crawling' ||
     fail 'robots.txt allows crawling'

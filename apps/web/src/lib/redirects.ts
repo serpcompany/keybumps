@@ -13,8 +13,10 @@ export const smokeTestHeader = 'x-keybumps-smoke-test'
 
 type RouteCondition = NonNullable<Redirect['has']>[number]
 
-const wwwHost = { type: 'host', value: 'www.keybumps.app' } as const
-const workersDevHost = { type: 'host', value: '(?<worker>.+)\\.workers\\.dev' } as const
+// Host values are regexes. Next.js anchors them but OpenNext tests them unanchored, so anchor and
+// escape them here to match exactly these hosts on both.
+const wwwHost = { type: 'host', value: '^www\\.keybumps\\.app$' } as const
+const workersDevHost = { type: 'host', value: '^(?<worker>.+)\\.workers\\.dev$' } as const
 const smokeTest = { type: 'header', key: smokeTestHeader } as const
 
 // Next.js lets every custom redirect source match with or without a trailing slash, so a page
