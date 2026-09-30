@@ -19,16 +19,31 @@ enum PermissionAssistantCopy {
     static func switchInstruction(for permission: MacPermission) -> String {
         "Turn on the \(permission.title) switch in the list above."
     }
+
+    /// Keybumps can't tell whether the user turned the permission on, so the card asks.
+    static func systemSettingsFollowUp(for permission: MacPermission) -> String {
+        "Turned on \(permission.title) for Keybumps? Restart to finish."
+    }
 }
 
 @MainActor
 final class PermissionDragAssistantController {
+    /// The card on screen, if any.
+    enum Presentation: Equatable {
+        case applicationDrag(MacPermission)
+        case enableSwitch(MacPermission)
+        case dictationSetup([MacPermission])
+        /// Snippets' offer to set up Accessibility after ⌘Return had to copy.
+        case snippetPasteSetup
+        case systemSettingsFollowUp(MacPermission)
+    }
+
     private var panel: NSPanel?
-    private var activePermission: MacPermission?
+    private(set) var presentation: Presentation?
 
     func show(for permission: MacPermission) {
         guard permission.usesApplicationDragAssistant else { return }
-        activePermission = permission
+        presentation = .applicationDrag(permission)
         if panel == nil { makePanel() }
         updateDragContent()
         positionPanel()
@@ -38,9 +53,37 @@ final class PermissionDragAssistantController {
 
     func showEnableSwitch(for permission: MacPermission) {
         guard !permission.usesApplicationDragAssistant else { return }
-        activePermission = permission
+        presentation = .enableSwitch(permission)
         if panel == nil { makePanel() }
         updateSwitchContent(for: permission)
+        positionPanel()
+        panel?.hideDuringUnitTests()
+        panel?.orderFrontRegardless()
+    }
+
+    /// After System Settings was opened for `permission` and it's still missing: offers both Open
+    /// System Settings… and Restart Keybumps, since macOS sometimes applies a new grant only after
+    /// a relaunch and Keybumps can't tell. The panel doesn't activate Keybumps, so this shows while
+    /// the Settings window is closed.
+    func showSystemSettingsFollowUp(
+        for permission: MacPermission,
+        openSystemSettings: @escaping () -> Void,
+        restart: @escaping () -> Void
+    ) {
+        presentation = .systemSettingsFollowUp(permission)
+        if panel == nil { makePanel() }
+        panel?.contentViewController = NSHostingController(
+            rootView: PermissionFollowUpAssistantView(
+                permission: permission,
+                openSystemSettings: { [weak self] in
+                    self?.dismiss()
+                    openSystemSettings()
+                },
+                restart: restart,
+                dismiss: { [weak self] in self?.dismiss() }
+            )
+            .frame(width: 560, height: 92)
+        )
         positionPanel()
         panel?.hideDuringUnitTests()
         panel?.orderFrontRegardless()
@@ -50,7 +93,7 @@ final class PermissionDragAssistantController {
         missingPermissions: [MacPermission],
         onContinue: @escaping () -> Void
     ) {
-        let names = missingPermissions.map(\.title).joined(separator: " and ")
+        let names = MacPermission.names(missingPermissions)
         showSetup(
             CapabilitySetupOffer(
                 capability: "Dictation",
@@ -58,6 +101,7 @@ final class PermissionDragAssistantController {
                 instruction: "Set up \(names) to use Dictation.",
                 buttonTitle: "Set Up Dictation…"
             ),
+            as: .dictationSetup(missingPermissions),
             onContinue: onContinue
         )
     }
@@ -71,12 +115,17 @@ final class PermissionDragAssistantController {
                 instruction: "Set up Accessibility so ⌘Return pastes snippets into the app you’re using.",
                 buttonTitle: "Set Up Paste…"
             ),
+            as: .snippetPasteSetup,
             onContinue: onContinue
         )
     }
 
-    private func showSetup(_ offer: CapabilitySetupOffer, onContinue: @escaping () -> Void) {
-        activePermission = nil
+    private func showSetup(
+        _ offer: CapabilitySetupOffer,
+        as presentation: Presentation,
+        onContinue: @escaping () -> Void
+    ) {
+        self.presentation = presentation
         if panel == nil { makePanel() }
         panel?.contentViewController = NSHostingController(
             rootView: CapabilitySetupAssistantView(
@@ -96,12 +145,17 @@ final class PermissionDragAssistantController {
 
     func dismiss() {
         panel?.orderOut(nil)
-        activePermission = nil
+        presentation = nil
     }
 
+    /// Dismisses a card about one permission once macOS reports it granted.
     func dismissIfGranted(using coordinator: PermissionCoordinator) {
-        guard let activePermission,
-              coordinator.state(for: activePermission).isGranted else { return }
+        let permission: MacPermission? = switch presentation {
+        case .applicationDrag(let permission), .enableSwitch(let permission), .systemSettingsFollowUp(let permission): permission
+        case .snippetPasteSetup: .accessibility
+        case .dictationSetup, nil: nil
+        }
+        guard let permission, coordinator.state(for: permission).isGranted else { return }
         dismiss()
     }
 
@@ -242,6 +296,50 @@ private struct PermissionSwitchAssistantView: View {
         .padding(6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Enable \(permission.title) for Keybumps in System Settings")
+    }
+}
+
+struct PermissionFollowUpAssistantView: View {
+    let permission: MacPermission
+    let openSystemSettings: () -> Void
+    let restart: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            HStack(spacing: 12) {
+                PermissionAssistantAppIcon()
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(PermissionAssistantCopy.title)
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(PermissionAssistantCopy.systemSettingsFollowUp(for: permission))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Button("Open System Settings…", action: openSystemSettings)
+                Button("Restart Keybumps", action: restart)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.trailing, 28)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .modifier(PermissionAssistantCardStyle())
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 20, height: 20)
+                    .background(.black.opacity(0.16), in: Circle())
+            }
+            .buttonStyle(.borderless)
+            .padding(10)
+            .accessibilityLabel("Close permission follow-up")
+        }
+        .padding(6)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(PermissionAssistantCopy.systemSettingsFollowUp(for: permission))
     }
 }
 

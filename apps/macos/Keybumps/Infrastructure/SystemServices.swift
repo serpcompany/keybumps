@@ -36,19 +36,52 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var settingsURL: URL {
-        let anchor = switch self {
+    var settingsURL: URL { SystemSettingsPage.privacy(self).url }
+
+    var usesApplicationDragAssistant: Bool {
+        self == .accessibility || self == .inputMonitoring
+    }
+
+    /// The permissions' titles as one phrase: "Accessibility", "Microphone and Speech Recognition",
+    /// or "Accessibility, Microphone, and Speech Recognition".
+    static func names(_ permissions: [MacPermission]) -> String {
+        let titles = permissions.map(\.title)
+        guard let last = titles.last else { return "" }
+        switch titles.count {
+        case 1: return last
+        case 2: return "\(titles[0]) and \(last)"
+        default: return titles.dropLast().joined(separator: ", ") + ", and " + last
+        }
+    }
+}
+
+/// Every System Settings page Keybumps opens. They open only through `PermissionCoordinator`,
+/// whose opener is `PermissionPrompts.current` and inert in the unit-test host.
+enum SystemSettingsPage: Equatable {
+    case privacy(MacPermission)
+    case filesAndFolders
+    case keyboardShortcuts
+
+    var url: URL {
+        let address = switch self {
+        case .privacy(let permission):
+            "x-apple.systempreferences:com.apple.preference.security?\(Self.privacyAnchor(for: permission))"
+        case .filesAndFolders:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
+        case .keyboardShortcuts:
+            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"
+        }
+        return URL(string: address)!
+    }
+
+    private static func privacyAnchor(for permission: MacPermission) -> String {
+        switch permission {
         case .accessibility: "Privacy_Accessibility"
         case .inputMonitoring: "Privacy_ListenEvent"
         case .microphone: "Privacy_Microphone"
         case .speechRecognition: "Privacy_SpeechRecognition"
         case .screenRecording: "Privacy_ScreenCapture"
         }
-        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")!
-    }
-
-    var usesApplicationDragAssistant: Bool {
-        self == .accessibility || self == .inputMonitoring
     }
 }
 
@@ -99,8 +132,26 @@ enum PermissionRecoveryPresentation: Equatable {
 
 struct PermissionRelaunchAdvisor {
     private var permissionsAwaitingReturn: [MacPermission] = []
+    /// Opened from a setup card, over another app. Kept out of `didBecomeActive`, so Keybumps
+    /// becoming active later never turns it into a relaunch; only a grant clears it.
+    private var permissionsOpenedFromCard: Set<MacPermission> = []
     private(set) var permissionsRequiringRelaunch: [MacPermission] = []
 
+    /// Whether System Settings was opened for `permission` and it isn't usable yet. That's no
+    /// evidence it was turned on, so it never counts as needing a relaunch by itself.
+    func hasOpenedSystemSettings(for permission: MacPermission) -> Bool {
+        permissionsOpenedFromCard.contains(permission)
+            || permissionsAwaitingReturn.contains(permission)
+            || permissionsRequiringRelaunch.contains(permission)
+    }
+
+    /// A setup card opened System Settings. Only `hasOpenedSystemSettings` reads this.
+    mutating func didOpenSystemSettingsFromCard(for permission: MacPermission) {
+        guard permission.usesApplicationDragAssistant else { return }
+        permissionsOpenedFromCard.insert(permission)
+    }
+
+    /// Keybumps' own Settings window opened System Settings; Keybumps becoming active checks it.
     mutating func didOpenSystemSettings(for permission: MacPermission) {
         guard permission.usesApplicationDragAssistant else { return }
         if !permissionsAwaitingReturn.contains(where: { $0 == permission }) {
@@ -123,6 +174,7 @@ struct PermissionRelaunchAdvisor {
     }
 
     mutating func permissionDidBecomeUsable(_ permission: MacPermission) {
+        permissionsOpenedFromCard.remove(permission)
         permissionsAwaitingReturn.removeAll(where: { $0 == permission })
         permissionsRequiringRelaunch.removeAll(where: { $0 == permission })
     }
@@ -276,8 +328,11 @@ final class PermissionCoordinator {
     private let microphoneAuthorizationStatus: () -> AVAuthorizationStatus
     private let speechAuthorizationStatus: () -> SFSpeechRecognizerAuthorizationStatus
     private let screenRecordingAuthorized: () -> Bool
+    private let requestMicrophone: () async -> Void
+    private let requestSpeechRecognition: () async -> Void
     private let requestScreenRecording: () -> Void
     private let openSettingsAction: (MacPermission) -> Void
+    private let openSystemSettingsAction: (SystemSettingsPage) -> Void
 
     var accessibilityGranted: Bool { accessibilityState.isGranted }
     var inputMonitoringGranted: Bool { inputMonitoringState.isGranted }
@@ -285,9 +340,13 @@ final class PermissionCoordinator {
     var speechGranted: Bool { speechState.isGranted }
     var screenRecordingGranted: Bool { screenRecordingState.isGranted }
 
-    /// Asks macOS for Screen Recording, which can open System Settings.
+    /// Asks macOS for Screen Recording, which can open System Settings. Only the first screenshot
+    /// hotkey without access calls this directly; recovery calls it through `performRecovery`.
     func requestScreenRecordingAccess() { requestScreenRecording() }
 
+    /// The state readers are silent preflights. The request and open closures are the only way
+    /// Keybumps shows a macOS permission prompt or opens System Settings; they default to
+    /// `PermissionPrompts.current`, which is inert in the unit-test host.
     init(
         accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
         inputMonitoringAuthorized: @escaping () -> Bool = { CGPreflightListenEventAccess() },
@@ -298,18 +357,22 @@ final class PermissionCoordinator {
             SFSpeechRecognizer.authorizationStatus()
         },
         screenRecordingAuthorized: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
-        requestScreenRecording: @escaping () -> Void = { _ = CGRequestScreenCaptureAccess() },
-        openSettings: @escaping (MacPermission) -> Void = { permission in
-            _ = NSWorkspace.shared.open(permission.settingsURL)
-        }
+        requestMicrophone: @escaping () async -> Void = PermissionPrompts.current.requestMicrophone,
+        requestSpeechRecognition: @escaping () async -> Void = PermissionPrompts.current.requestSpeechRecognition,
+        requestScreenRecording: @escaping () -> Void = PermissionPrompts.current.requestScreenRecording,
+        openSettings: @escaping (MacPermission) -> Void = { PermissionPrompts.current.openSystemSettings(.privacy($0)) },
+        openSystemSettings: @escaping (SystemSettingsPage) -> Void = PermissionPrompts.current.openSystemSettings
     ) {
         self.accessibilityTrusted = accessibilityTrusted
         self.inputMonitoringAuthorized = inputMonitoringAuthorized
         self.microphoneAuthorizationStatus = microphoneAuthorizationStatus
         self.speechAuthorizationStatus = speechAuthorizationStatus
         self.screenRecordingAuthorized = screenRecordingAuthorized
+        self.requestMicrophone = requestMicrophone
+        self.requestSpeechRecognition = requestSpeechRecognition
         self.requestScreenRecording = requestScreenRecording
         self.openSettingsAction = openSettings
+        self.openSystemSettingsAction = openSystemSettings
         refresh()
     }
 
@@ -358,13 +421,12 @@ final class PermissionCoordinator {
             if permission == .screenRecording { requestScreenRecording() }
             openSettings(permission)
         case .request:
+            // Only an undecided Microphone or Speech Recognition gets a native prompt.
             switch permission {
             case .microphone:
-                _ = await AVCaptureDevice.requestAccess(for: .audio)
+                await requestMicrophone()
             case .speechRecognition:
-                await withCheckedContinuation { continuation in
-                    SFSpeechRecognizer.requestAuthorization { _ in continuation.resume() }
-                }
+                await requestSpeechRecognition()
             case .accessibility, .inputMonitoring, .screenRecording:
                 break
             }
@@ -374,6 +436,11 @@ final class PermissionCoordinator {
 
     func openSettings(_ permission: MacPermission) {
         openSettingsAction(permission)
+    }
+
+    /// Opens a System Settings page that isn't a permission's, such as Keyboard Shortcuts.
+    func openSystemSettings(_ page: SystemSettingsPage) {
+        openSystemSettingsAction(page)
     }
 
     private static func state(for status: AVAuthorizationStatus) -> PermissionAuthorizationState {

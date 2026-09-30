@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import AVFoundation
 import Foundation
 import Observation
@@ -135,6 +136,26 @@ struct DictationInsertionTarget: Equatable {
     }
 }
 
+/// Why Dictation couldn't put a finished transcript at the original cursor. Each one happens after
+/// the transcript is saved to Dictation History and the recovery file, so none of them loses it.
+enum DictationInsertionError: Error, Equatable, LocalizedError {
+    case unavailableInSession
+    case accessibilityRequired
+    case destinationUnavailable
+    case destinationNotFocused
+    case pasteFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailableInSession: "Insertion is unavailable in this session. Your transcript was preserved."
+        case .accessibilityRequired: "Dictation needs Accessibility access to paste. Your transcript was preserved."
+        case .destinationUnavailable: "The destination app is no longer available. Your transcript was preserved."
+        case .destinationNotFocused: "The destination app could not be focused. Your transcript was preserved."
+        case .pasteFailed: "The transcript was preserved but could not be pasted."
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class DictationService {
@@ -158,23 +179,29 @@ final class DictationService {
     let recoveryURL: URL
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
-    /// The paste step Dictation shares with Snippets.
-    private let paster: any TextPasting
+    /// The paste step Dictation shares with Snippets; read by the unit-test isolation guard.
+    let paster: any TextPasting
     private let allowsSystemAccess: Bool
+    private let accessibilityTrusted: () -> Bool
     var durationLimit: DictationDurationLimit
 
+    /// `allowsSystemAccess` gates the microphone, activating the destination app, and pasting.
+    /// It's off in UI-test compositions and, unless a test opts in, in the unit-test host.
+    /// `accessibilityTrusted` is a silent check; it never prompts. `paster` defaults to
+    /// `InertTextPaster`: only the app shell's paste step keeps the write out of Clipboard History,
+    /// so a service built without one never pastes.
     init(
         language: String,
         durationLimit: DictationDurationLimit = .fiveMinutes,
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
-        // Only the app shell's paste step keeps the write out of Clipboard History, so a service
-        // built without one never pastes.
         paster: any TextPasting = InertTextPaster(),
-        allowsSystemAccess: Bool = true
+        allowsSystemAccess: Bool = !UnitTestHost.isActive,
+        accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }
     ) {
         self.allowsSystemAccess = allowsSystemAccess
+        self.accessibilityTrusted = accessibilityTrusted
         selectedLanguage = language
         self.durationLimit = durationLimit
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
@@ -200,12 +227,6 @@ final class DictationService {
 
     var microphoneGranted: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
     var speechGranted: Bool { SFSpeechRecognizer.authorizationStatus() == .authorized }
-    func requestMicrophone() async { _ = await AVCaptureDevice.requestAccess(for: .audio) }
-    func requestSpeech() async {
-        await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { _ in continuation.resume() }
-        }
-    }
 
     func toggle() {
         switch phase {
@@ -356,7 +377,7 @@ final class DictationService {
             activeRecording = nil
             recordingStartedAt = nil
             setPhase(.inserting)
-            try await paste(transcript)
+            try await insert(transcript)
             cleanup()
             setPhase(.idle)
         } catch is CancellationError {
@@ -392,19 +413,26 @@ final class DictationService {
         )
     }
 
-    private func paste(_ text: String) async throws {
+    /// Pastes a saved transcript at the original cursor through `paster`. Without Accessibility
+    /// it stops before touching the destination, the pasteboard, or events; the ⌘V poster checks
+    /// again right before posting.
+    func insert(_ text: String) async throws {
         // UI test compositions never activate another app or synthesize Command-V.
-        guard allowsSystemAccess else { throw NSError(domain: "Keybumps.Dictation", code: 5, userInfo: [NSLocalizedDescriptionKey: "Insertion is unavailable in this session. Your transcript was preserved."]) }
-        guard let destination = destination?.runningApplication() else { throw NSError(domain: "Keybumps.Dictation", code: 2, userInfo: [NSLocalizedDescriptionKey: "The destination app is no longer available. Your transcript was preserved."]) }
+        guard allowsSystemAccess else { throw DictationInsertionError.unavailableInSession }
+        // Checked silently first: macOS drops ⌘V posted without Accessibility and shows its own alert.
+        guard accessibilityTrusted() else { throw DictationInsertionError.accessibilityRequired }
+        guard let destination = destination?.runningApplication() else { throw DictationInsertionError.destinationUnavailable }
         destination.activate(options: [])
         try await Task.sleep(for: .milliseconds(160))
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier else {
-            throw NSError(domain: "Keybumps.Dictation", code: 4, userInfo: [NSLocalizedDescriptionKey: "The destination app could not be focused. Your transcript was preserved."])
+            throw DictationInsertionError.destinationNotFocused
         }
         do {
             try paster.paste(text, concealed: false)
+        } catch TextPasteError.accessibilityRequired {
+            throw DictationInsertionError.accessibilityRequired
         } catch {
-            throw NSError(domain: "Keybumps.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])
+            throw DictationInsertionError.pasteFailed
         }
     }
 

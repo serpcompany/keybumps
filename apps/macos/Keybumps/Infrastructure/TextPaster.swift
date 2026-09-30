@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 
 extension NSPasteboard.PasteboardType {
@@ -30,14 +31,16 @@ extension NSPasteboard {
 enum TextPasteError: Error, Equatable {
     /// This session never synthesizes ⌘V (UI tests and unit tests).
     case unavailable
+    /// Keybumps isn't trusted for Accessibility, so no ⌘V was posted.
+    case accessibilityRequired
     case pasteboardWriteFailed
     case keystrokeUnavailable
 }
 
 /// The one paste step Dictation and Snippets share: put the text on the pasteboard, keep that
 /// write out of Clipboard History, and press ⌘V in the app in front. Posting ⌘V into another app
-/// needs Accessibility; without it macOS drops the keystroke without an error, so callers check
-/// Accessibility first.
+/// needs Accessibility; without it macOS drops the keystroke and shows its own "would like to
+/// control this computer" alert. So callers check Accessibility first, and the poster checks again.
 protocol TextPasting {
     @MainActor func paste(_ text: String, concealed: Bool) throws
 }
@@ -46,8 +49,9 @@ struct SystemTextPaster: TextPasting {
     var pasteboard: @MainActor () -> NSPasteboard = { .keybumps }
     /// Called right after the pasteboard write, so Clipboard History can skip exactly that change.
     var didWritePasteboard: @MainActor () -> Void = {}
-    /// Presses ⌘V in the app in front. Tests replace it, so they never post a real keystroke.
-    var postCommandV: @MainActor () throws -> Void = SystemTextPaster.postSystemCommandV
+    /// Presses ⌘V in the app in front, or refuses without Accessibility. Tests replace it, so they
+    /// never post a real keystroke.
+    var postCommandV: @MainActor () throws -> Void = { try SystemTextPaster.postSystemCommandV() }
 
     @MainActor
     func paste(_ text: String, concealed: Bool) throws {
@@ -56,8 +60,15 @@ struct SystemTextPaster: TextPasting {
         try postCommandV()
     }
 
+    /// The only keyboard-event poster in Keybumps. macOS delivers synthesized key events to other
+    /// apps only while Keybumps is trusted for Accessibility, so the silent check lives here and no
+    /// caller can post untrusted. Tests pass a fake trust check and sender, never macOS.
     @MainActor
-    static func postSystemCommandV() throws {
+    static func postSystemCommandV(
+        accessibilityTrusted: () -> Bool = { AXIsProcessTrusted() },
+        send: (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
+    ) throws {
+        guard accessibilityTrusted() else { throw TextPasteError.accessibilityRequired }
         guard let source = CGEventSource(stateID: .combinedSessionState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
@@ -65,8 +76,8 @@ struct SystemTextPaster: TextPasting {
         }
         down.flags = .maskCommand
         up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+        send(down)
+        send(up)
     }
 }
 

@@ -4,19 +4,23 @@ import Observation
 
 enum DictationShortcutAction: Equatable {
     case showPermissionSetup
+    /// Setup is already running: continue it rather than show a second setup card.
+    case continuePermissionSetup
     case toggleDictation
 }
 
 enum DictationShortcutRouting {
     static func action(
         phase: DictationPhase,
-        missingPermissions: [MacPermission]
+        missingPermissions: [MacPermission],
+        isPermissionSetupRunning: Bool = false
     ) -> DictationShortcutAction {
         switch phase {
         case .idle, .failed:
-            missingPermissions.isEmpty ? .toggleDictation : .showPermissionSetup
+            if missingPermissions.isEmpty { return .toggleDictation }
+            return isPermissionSetupRunning ? .continuePermissionSetup : .showPermissionSetup
         case .recording, .transcribing, .inserting:
-            .toggleDictation
+            return .toggleDictation
         }
     }
 }
@@ -51,8 +55,18 @@ final class AppModel {
     let capabilities: CapabilityRegistry
     private let transcriptionCoordinator: DictationTranscriptionCoordinator
     private let permissionDragAssistant = PermissionDragAssistantController()
+    /// The permission card on screen, if any.
+    var permissionAssistantPresentation: PermissionDragAssistantController.Presentation? {
+        permissionDragAssistant.presentation
+    }
     @ObservationIgnored private var permissionWalkthroughPermissions: [MacPermission] = []
     @ObservationIgnored private var presentedWalkthroughPermission: MacPermission?
+    /// How the current walkthrough step was presented, so a declined native prompt ends setup.
+    @ObservationIgnored private var presentedWalkthroughAction: PermissionRecoveryAction?
+    @ObservationIgnored private var permissionWalkthroughMonitor: Task<Void, Never>?
+    /// The capability a walkthrough sets up, or nil for every enabled capability.
+    @ObservationIgnored private var permissionWalkthroughCapability: Capability?
+    private let permissionPollInterval: Duration
     @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
     private(set) var detectorStatus: ManualActionDetector.Status = .stopped
     private(set) var isAccessibilityTrusted = false
@@ -134,14 +148,17 @@ final class AppModel {
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
         coachTips: (any CoachTipPresenting)? = nil,
         dictationFileManager: FileManager = .default,
-        allowsDictationSystemAccess: Bool = true,
+        allowsDictationSystemAccess: Bool = !UnitTestHost.isActive,
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
-        symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil
+        symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil,
+        permissionPollInterval: Duration = .seconds(1)
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
+        self.permissionPollInterval = permissionPollInterval
         self.coachTips = coachTips ?? PaletteHUD.shared
-        self.permissions = permissionCoordinator ?? PermissionCoordinator()
+        let permissions = permissionCoordinator ?? PermissionCoordinator()
+        self.permissions = permissions
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
             ?? SpotlightShortcutConflictResolver(preferences: Self.defaultSymbolicHotKeyPreferences)
@@ -200,7 +217,12 @@ final class AppModel {
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
             paster: textPaster,
-            allowsSystemAccess: allowsDictationSystemAccess
+            allowsSystemAccess: allowsDictationSystemAccess,
+            // Re-read at paste time, through the same coordinator that drives setup and Settings.
+            accessibilityTrusted: {
+                permissions.refresh()
+                return permissions.accessibilityGranted
+            }
         )
         commandPalette = CommandPaletteController(
             clipboard: clipboard,
@@ -217,7 +239,6 @@ final class AppModel {
         commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
         // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste. It's
         // optional for Snippets: without it ⌘Return copies and offers the usual permission setup.
-        let permissions = self.permissions
         commandPalette.canPaste = {
             permissions.refresh()
             return permissions.accessibilityGranted
@@ -298,6 +319,8 @@ final class AppModel {
     private func licenseDidChange(_ snapshot: LicenseSnapshot) {
         let wasLicensed = isLicensed
         licenseSnapshot = snapshot
+        // Locked runs no capability, so there's nothing to set up.
+        if !snapshot.isEntitled { endPermissionWalkthrough(); dismissDictationSetupCards() }
         guard wasLicensed != snapshot.isEntitled, isStarted, preferences.didCompleteOnboarding else { return }
         if !snapshot.isEntitled {
             // Locked: stop every capability's resources and shortcuts, and close the palette.
@@ -352,14 +375,16 @@ final class AppModel {
     }
 
     func openKeyboardShortcutSettings() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"
-        ) else { return }
-        NSWorkspace.shared.open(url)
+        permissions.openSystemSettings(.keyboardShortcuts)
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
-        if !enabled { capabilities.deactivate(capability, context: capabilityContext) }
+        if !enabled {
+            capabilities.deactivate(capability, context: capabilityContext)
+            // Setup for a capability that's now off would prompt for nothing.
+            if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
+            if capability == .dictation { dismissDictationSetupCards() }
+        }
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
     }
@@ -383,28 +408,78 @@ final class AppModel {
 
     private func handleDictationShortcut() {
         refreshPermissions()
+        let missing = missingPermissions(for: .dictation)
         switch DictationShortcutRouting.action(
             phase: dictation.phase,
-            missingPermissions: missingPermissions(for: .dictation)
+            missingPermissions: missing,
+            isPermissionSetupRunning: isPermissionWalkthroughActive
         ) {
         case .showPermissionSetup:
-            let missing = missingPermissions(for: .dictation)
+            if showSystemSettingsFollowUpIfNeeded(for: missing) { return }
             permissionDragAssistant.showDictationSetup(missingPermissions: missing) { [weak self] in
                 self?.beginPermissionWalkthrough(for: .dictation)
             }
+        case .continuePermissionSetup:
+            continuePermissionWalkthrough()
         case .toggleDictation:
             dictation.toggle()
         }
     }
 
-    /// After ⌘Return had to copy for lack of Accessibility: offers the usual Accessibility setup.
-    private func offerSnippetPasteSetup() {
-        permissionDragAssistant.showSnippetPasteSetup { [weak self] in
-            Task { await self?.recoverPermission(.accessibility) }
+    /// The Dictation shortcut while setup is running. It never shows a second setup card; the
+    /// time limit restarts, and the current step decides what the press shows.
+    private func continuePermissionWalkthrough() {
+        startPermissionWalkthroughMonitor()
+        guard let current = presentedWalkthroughPermission else { return }
+        switch permissions.recoveryAction(for: current) {
+        case .openSystemSettings:
+            if showSystemSettingsFollowUpIfNeeded(for: [current]) { return }
+            Task { [weak self] in await self?.recoverPermission(current, fromSetupCard: true) }
+        case .request:
+            // While its request is outstanding, the prompt is on screen: leave it alone. Without
+            // one, the prompt never appeared, so ask again; macOS shows it only while undecided.
+            guard permissions.activeRequest == nil else { return }
+            Task { [weak self] in await self?.recoverPermission(current, fromSetupCard: true) }
+        case .none:
+            break
         }
     }
 
-    func recoverPermission(_ permission: MacPermission) async {
+    /// After System Settings was opened for a step that's still missing, Keybumps can't tell
+    /// whether the user turned it on and macOS wants a relaunch (rare), or didn't turn it on.
+    /// So instead of guessing, one card offers both: Open System Settings… and Restart Keybumps.
+    /// It never records a relaunch as needed.
+    @discardableResult
+    private func showSystemSettingsFollowUpIfNeeded(for permissions: [MacPermission]) -> Bool {
+        guard let permission = permissions.first(where: { permissionRelaunchAdvisor.hasOpenedSystemSettings(for: $0) }) else {
+            return false
+        }
+        permissionDragAssistant.showSystemSettingsFollowUp(
+            for: permission,
+            openSystemSettings: { [weak self] in self?.beginPermissionWalkthrough(for: .dictation) },
+            restart: { [weak self] in self?.restartForPermissionRelaunch() }
+        )
+        return true
+    }
+
+    /// After ⌘Return had to copy for lack of Accessibility: offers the usual Accessibility setup.
+    private func offerSnippetPasteSetup() {
+        permissionDragAssistant.showSnippetPasteSetup { [weak self] in
+            Task { await self?.setUpSnippetPaste() }
+        }
+    }
+
+    /// Snippets' Set Up Paste…. Like Dictation's card, it opens System Settings over another app,
+    /// so that opening stays out of the Settings window's relaunch check.
+    func setUpSnippetPaste() async {
+        await recoverPermission(.accessibility, fromSetupCard: true)
+    }
+
+    /// `fromSetupCard`: started from a setup card over another app, as every setup walkthrough
+    /// step and Snippets' Set Up Paste… are. Its System Settings opening stays out of the Settings
+    /// window's relaunch check, so Keybumps becoming active later never claims a relaunch for it.
+    func recoverPermission(_ permission: MacPermission, fromSetupCard: Bool = false) async {
+        let isSetupStep = isPermissionWalkthroughActive
         refreshPermissions()
         guard !permissions.state(for: permission).isGranted else { return }
         let presentation = PermissionRecoveryPresentation.resolve(
@@ -415,7 +490,11 @@ final class AppModel {
             permissionDragAssistant.showEnableSwitch(for: permission)
         }
         if presentation == .applicationDrag {
-            permissionRelaunchAdvisor.didOpenSystemSettings(for: permission)
+            if fromSetupCard {
+                permissionRelaunchAdvisor.didOpenSystemSettingsFromCard(for: permission)
+            } else {
+                permissionRelaunchAdvisor.didOpenSystemSettings(for: permission)
+            }
         }
         await permissions.performRecovery(for: permission)
         refreshPermissions()
@@ -423,6 +502,11 @@ final class AppModel {
         switch presentation {
         case .applicationDrag:
             try? await Task.sleep(for: .milliseconds(450))
+            // Setup ended meanwhile: nothing would re-check the grant to take the card down.
+            guard !isSetupStep || isPermissionWalkthroughActive else { return }
+            // Granted while System Settings opened: no card to drag.
+            permissions.refresh()
+            guard !permissions.state(for: permission).isGranted else { return }
             permissionDragAssistant.show(for: permission)
         case .enableSwitch:
             break
@@ -437,11 +521,61 @@ final class AppModel {
         permissionWalkthroughPermissions = PermissionSetupPlan.requiredPermissions(
             for: capability.map { Set([$0]) } ?? preferences.enabledCapabilities
         )
+        permissionWalkthroughCapability = capability
         presentedWalkthroughPermission = nil
+        presentedWalkthroughAction = nil
         isPermissionWalkthroughActive = true
+        startPermissionWalkthroughMonitor()
         advancePermissionWalkthroughIfNeeded()
     }
 
+    /// How many permission re-checks a setup walkthrough gets (10 minutes at one per second) before
+    /// it stops waiting; the next Dictation shortcut then offers setup again.
+    static let permissionWalkthroughMaximumChecks = 600
+
+    /// Re-reads permissions while setup runs. The setup cards don't activate Keybumps, so without
+    /// this nothing would notice access granted in System Settings until Keybumps became active.
+    private func startPermissionWalkthroughMonitor() {
+        permissionWalkthroughMonitor?.cancel()
+        let interval = permissionPollInterval
+        permissionWalkthroughMonitor = Task { [weak self] in
+            for _ in 0..<AppModel.permissionWalkthroughMaximumChecks {
+                do { try await Task.sleep(for: interval) } catch { return }
+                guard let self, self.isPermissionWalkthroughActive else { return }
+                self.refreshPermissions()
+            }
+            // A shortcut press may have started a new monitor since the last check.
+            guard !Task.isCancelled else { return }
+            self?.endPermissionWalkthrough()
+        }
+    }
+
+    /// Stops setup and its re-checks, and takes down the current step's card: nothing re-checks
+    /// its grant any more, and the next Dictation shortcut offers System Settings again.
+    func endPermissionWalkthrough() {
+        if let step = presentedWalkthroughPermission,
+           [.applicationDrag(step), .enableSwitch(step)].contains(permissionDragAssistant.presentation) {
+            permissionDragAssistant.dismiss()
+        }
+        isPermissionWalkthroughActive = false
+        permissionWalkthroughPermissions = []
+        permissionWalkthroughCapability = nil
+        presentedWalkthroughPermission = nil
+        presentedWalkthroughAction = nil
+        permissionWalkthroughMonitor?.cancel()
+        permissionWalkthroughMonitor = nil
+    }
+
+    /// Takes down the cards only the Dictation shortcut shows (its setup card, and Open System
+    /// Settings… with Restart Keybumps) once Dictation can't run: their setup would end at once.
+    private func dismissDictationSetupCards() {
+        switch permissionDragAssistant.presentation {
+        case .dictationSetup, .systemSettingsFollowUp: permissionDragAssistant.dismiss()
+        default: break
+        }
+    }
+
+    /// Re-reads Accessibility and Input Monitoring silently; neither ever prompts. Only tests call these.
     func requestAccessibilityPermission() { detector.requestAccessibilityPermission(); refreshPermissions() }
     func requestInputMonitoringPermission() { detector.requestInputMonitoringPermission(); refreshPermissions() }
     func retryDetection() { if preferences.enabledCapabilities.contains(.keyboardShortcutter) { detector.start() }; refreshDetectorState() }
@@ -541,18 +675,40 @@ final class AppModel {
 
     private func advancePermissionWalkthroughIfNeeded() {
         guard isPermissionWalkthroughActive else { return }
-        guard let next = permissionWalkthroughPermissions.first(where: {
-            !permissions.state(for: $0).isGranted
-        }) else {
-            isPermissionWalkthroughActive = false
-            permissionWalkthroughPermissions = []
-            presentedWalkthroughPermission = nil
+        // Setup only for capabilities that can run: turning its capability off, or the app
+        // locking, ends it.
+        let running = capabilityContext.enabledCapabilities
+        if let capability = permissionWalkthroughCapability, !running.contains(capability) {
+            endPermissionWalkthrough()
             return
         }
-        guard next != presentedWalkthroughPermission else { return }
+        // A native prompt is on screen. Its own completion advances setup; moving on now would
+        // start the next request while this one holds the coordinator, which then skips it.
+        guard permissions.activeRequest == nil else { return }
+        let needed = Set(PermissionSetupPlan.requiredPermissions(
+            for: permissionWalkthroughCapability.map { [$0] } ?? running
+        ))
+        guard let next = permissionWalkthroughPermissions.first(where: {
+            needed.contains($0) && !permissions.state(for: $0).isGranted
+        }) else {
+            endPermissionWalkthrough()
+            return
+        }
+        let action = permissions.recoveryAction(for: next)
+        guard next != presentedWalkthroughPermission else {
+            // The user answered a native prompt with Don't Allow. Setup stops rather than open
+            // System Settings unasked; the next Dictation shortcut offers System Settings recovery.
+            if presentedWalkthroughAction == .request, action == .openSystemSettings {
+                endPermissionWalkthrough()
+            }
+            return
+        }
         presentedWalkthroughPermission = next
+        presentedWalkthroughAction = action
         Task { [weak self] in
-            await self?.recoverPermission(next)
+            // Setup may have ended before the step starts, for example on the monitor's last check.
+            guard let self, self.isPermissionWalkthroughActive else { return }
+            await self.recoverPermission(next, fromSetupCard: true)
         }
     }
     func refreshDetectorState() { detectorStatus = detector.status; isAccessibilityTrusted = detector.isAccessibilityTrusted; isInputMonitoringAuthorized = detector.isInputMonitoringAuthorized }
