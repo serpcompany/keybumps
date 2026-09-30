@@ -823,21 +823,8 @@ struct KeyboardShortcutterSettingsView: View {
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
-                Button("Send Test Suggestion") { model.deliverSample() }
+                Button("Send Test Suggestion") { model.showSampleTip() }
                     .disabled(!isEnabled || !readiness.isReady)
-            }
-            SettingsGroup("Presentation") {
-                HStack(spacing: 10) {
-                    Text("Show tips in the notch")
-                    Spacer(minLength: 12)
-                    Button("Preview") { model.previewCoachTip() }
-                    Toggle("Show tips in the notch", isOn: Binding(
-                        get: { model.preferences.showsCoachTips },
-                        set: { model.preferences.showsCoachTips = $0 }
-                    ))
-                    .settingsCompactSwitch()
-                    .labelsHidden()
-                }
             }
             SettingsGroup("Keyboard symbols") {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)

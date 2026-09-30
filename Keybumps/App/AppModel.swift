@@ -584,9 +584,8 @@ final class AppModel {
     func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
     func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
-    func deliverSample() { deliver(.sample) }
     /// Shows the sample tip in the notch without adding it to history.
-    func previewCoachTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
+    func showSampleTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
     func openPermissionSettings(_ permission: MacPermission) {
         permissions.openSettings(permission)
     }
@@ -594,11 +593,11 @@ final class AppModel {
     func markRead(_ id: UUID) { inbox.markRead(id) }
     func markAllRead() { inbox.markAllRead() }
     func clearHistory() { inbox.clear() }
-    /// Records a detected action in history, then shows its tip in the notch when that is on.
-    private func deliver(_ event: CoachingEvent) {
+    /// Records a detected action in history, then shows its tip in the notch.
+    func deliver(_ event: CoachingEvent) {
         guard preferences.enabledCapabilities.contains(.keyboardShortcutter),
               (try? inbox.append(event)) != nil else { return }
-        if preferences.showsCoachTips { coachTips.showCoach(NotchCoachPresentation(event: event)) }
+        coachTips.showCoach(NotchCoachPresentation(event: event))
     }
 
     private func updateMissingPermissionBadge() {

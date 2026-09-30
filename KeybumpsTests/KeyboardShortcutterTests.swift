@@ -114,22 +114,42 @@ final class KeyboardShortcutterTests: XCTestCase {
         let tips = SpyCoachTips()
         let model = makeModel(persistence: persistence, tips: tips)
 
-        model.deliverSample()
+        model.deliver(.sample)
 
         XCTAssertEqual(persistence.stored, [.sample])
         XCTAssertEqual(tips.shown.map(\.action), [CoachingEvent.sample.actionTitle])
     }
 
-    func testTurningNotchTipsOffStillRecordsHistory() {
+    func testTurningShortcutCoachOffStopsTipsAndHistory() {
         let persistence = MemoryPersistence()
         let tips = SpyCoachTips()
         let model = makeModel(persistence: persistence, tips: tips)
-        model.preferences.showsCoachTips = false
+        model.preferences.setCapability(.keyboardShortcutter, enabled: false)
 
-        model.deliverSample()
+        model.deliver(.sample)
 
-        XCTAssertEqual(persistence.stored, [.sample])
+        XCTAssertTrue(persistence.stored.isEmpty)
         XCTAssertTrue(tips.shown.isEmpty)
+    }
+
+    func testSampleTipShowsWithoutRecordingHistory() {
+        let persistence = MemoryPersistence()
+        let tips = SpyCoachTips()
+        let model = makeModel(persistence: persistence, tips: tips)
+
+        model.showSampleTip()
+
+        XCTAssertTrue(persistence.stored.isEmpty)
+        XCTAssertEqual(tips.shown.count, 1)
+    }
+
+    func testRetiredChannelPreferenceIsRemovedOnLoad() {
+        let defaults = InMemoryDefaults()
+        defaults.set(["notch", "sound"], forKey: "selectedNotificationChannels")
+
+        _ = AppPreferences(defaults: defaults)
+
+        XCTAssertNil(defaults.object(forKey: "selectedNotificationChannels"))
     }
 
     func testAHistoryWriteFailureShowsNoTip() {
@@ -142,21 +162,9 @@ final class KeyboardShortcutterTests: XCTestCase {
             coachTips: tips
         )
 
-        model.deliverSample()
+        model.deliver(.sample)
 
         XCTAssertTrue(tips.shown.isEmpty)
-    }
-
-    func testPreviewShowsTheTipWithoutRecordingHistory() {
-        let persistence = MemoryPersistence()
-        let tips = SpyCoachTips()
-        let model = makeModel(persistence: persistence, tips: tips)
-        model.preferences.showsCoachTips = false
-
-        model.previewCoachTip()
-
-        XCTAssertTrue(persistence.stored.isEmpty)
-        XCTAssertEqual(tips.shown.count, 1)
     }
 
     private func makeModel(persistence: MemoryPersistence, tips: SpyCoachTips) -> AppModel {
@@ -399,42 +407,16 @@ final class KeyboardShortcutterTests: XCTestCase {
         XCTAssertTrue(persistence.stored.isEmpty)
     }
 
-    func testPreferencesDefaultToVisiblePresenceAndNotchTips() {
+    func testPreferencesDefaultToVisiblePresence() {
         let defaults = InMemoryDefaults()
 
         let preferences = AppPreferences(defaults: defaults)
         XCTAssertTrue(preferences.showInDockAndSwitcher)
-        XCTAssertTrue(preferences.showsCoachTips)
 
-        preferences.showsCoachTips = false
         preferences.showInDockAndSwitcher = false
 
         let restored = AppPreferences(defaults: defaults)
         XCTAssertFalse(restored.showInDockAndSwitcher)
-        XCTAssertFalse(restored.showsCoachTips)
-        XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], [])
-    }
-
-    func testSavedChannelListsBecomeTheNotchTipSetting() {
-        let cases: [(saved: [String], showsTips: Bool, persisted: [String])] = [
-            (["notch"], true, ["notch"]),
-            (["notch", "sound"], true, ["notch"]),
-            (["sound"], false, []),
-            ([], false, []),
-            (["nativeBanner"], true, ["notch"]),
-            (["topRightToast", "sound"], true, ["notch"]),
-            (["topCenterShelf"], true, ["notch"]),
-            (["statusFeedback", "decisionBanner", "dockBadge", "dockBounce", "cursorHalo", "pointerCard", "sound"], false, [])
-        ]
-        for (saved, showsTips, persisted) in cases {
-            let defaults = InMemoryDefaults()
-            defaults.set(saved, forKey: "selectedNotificationChannels")
-
-            let preferences = AppPreferences(defaults: defaults)
-
-            XCTAssertEqual(preferences.showsCoachTips, showsTips, "\(saved)")
-            XCTAssertEqual(defaults.array(forKey: "selectedNotificationChannels") as? [String], persisted, "\(saved)")
-        }
     }
 
     func testPreferencesMigrateFromEitherPreviousBundleIdentity() {
@@ -443,14 +425,11 @@ final class KeyboardShortcutterTests: XCTestCase {
             let oldest = InMemoryDefaults()
             let recent = InMemoryDefaults()
             let source = [recent, oldest][sourceIndex]
-            source.set(["sound"], forKey: "selectedNotificationChannels")
             source.set(false, forKey: "showInDockAndSwitcher")
 
             let migrated = AppPreferences(defaults: current, legacyDefaults: [recent, oldest])
 
-            XCTAssertFalse(migrated.showsCoachTips)
             XCTAssertFalse(migrated.showInDockAndSwitcher)
-            XCTAssertEqual(current.array(forKey: "selectedNotificationChannels") as? [String], [])
             XCTAssertEqual(current.bool(forKey: "showInDockAndSwitcher"), false)
         }
     }
