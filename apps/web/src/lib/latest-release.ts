@@ -1,3 +1,5 @@
+import { cache } from 'react'
+
 export const LATEST_RELEASE_URL = 'https://updates.keybumps.app/latest.json'
 
 export type LatestRelease = {
@@ -7,12 +9,15 @@ export type LatestRelease = {
   sha256: string
 }
 
-/** Shown until latest.json is published, or whenever it can't be read or validated. */
+/**
+ * Used whenever latest.json can't be read or validated in time. Keep it on a recent release with
+ * in-app licensing: a buyer who gets it installs this build.
+ */
 export const FALLBACK_RELEASE: LatestRelease = {
-  version: '0.0.3-beta.3',
-  build: 4007,
-  dmgURL: 'https://updates.keybumps.app/releases/4007/Keybumps-0.0.3-beta.3.dmg',
-  sha256: 'fab25c2e3bbc0c31c413797e87e86d631d41d4419b54265c70f93e87ebe16dd5'
+  version: '0.0.3-beta.8',
+  build: 4013,
+  dmgURL: 'https://updates.keybumps.app/releases/4013/Keybumps-0.0.3-beta.8.dmg',
+  sha256: '762e359dd7d3eaa03ff9ed9ab6e822497c174e738312ee24bc642dbb920eb91a'
 }
 
 /** Accepts only a well-formed pointer whose DMG lives on the release origin. */
@@ -35,11 +40,22 @@ export function parseLatestRelease(value: unknown): LatestRelease | null {
   return { version, build, dmgURL, sha256 }
 }
 
+/**
+ * Every page's header and footer read the pointer on request, so a slow release origin must not
+ * stall the site: after this long, the lookup gives up and uses FALLBACK_RELEASE.
+ */
+export const LATEST_RELEASE_TIMEOUT_MS = 2000
+
 /** Reads the pointer written by the Keybumps release tooling; never throws. */
-export async function getLatestRelease(fetcher: typeof fetch = fetch): Promise<LatestRelease> {
+export async function getLatestRelease(
+  fetcher: typeof fetch = fetch,
+  timeoutMs = LATEST_RELEASE_TIMEOUT_MS
+): Promise<LatestRelease> {
   try {
+    // The signal also bounds reading the body.
     const response = await fetcher(LATEST_RELEASE_URL, {
-      next: { revalidate: 300 }
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(timeoutMs)
     } as RequestInit)
     if (!response.ok) return FALLBACK_RELEASE
     return parseLatestRelease(await response.json()) ?? FALLBACK_RELEASE
@@ -47,6 +63,13 @@ export async function getLatestRelease(fetcher: typeof fetch = fetch): Promise<L
     return FALLBACK_RELEASE
   }
 }
+
+/**
+ * The release for this request, looked up once however many Download links a page renders.
+ * Next.js doesn't deduplicate a fetch that has a signal, so without `cache` the header, footer,
+ * and page would each fetch latest.json.
+ */
+export const getCurrentRelease = cache(() => getLatestRelease())
 
 /**
  * /download/ answers with this status. It must be temporary (302 or 307), never 308: the target

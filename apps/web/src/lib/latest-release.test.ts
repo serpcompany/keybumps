@@ -5,6 +5,7 @@ import {
   downloadRedirect,
   FALLBACK_RELEASE,
   getLatestRelease,
+  LATEST_RELEASE_TIMEOUT_MS,
   parseLatestRelease
 } from './latest-release'
 
@@ -53,6 +54,28 @@ test('serves the published release and falls back on any failure', async () => {
     throw new Error('offline')
   }) as unknown as typeof fetch
   expect(await getLatestRelease(offline)).toEqual(FALLBACK_RELEASE)
+})
+
+test('falls back when latest.json is too slow, instead of stalling the page', async () => {
+  // Like fetch, this never answers on its own and rejects when its signal aborts.
+  const hanging = ((_url: string, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+    })) as unknown as typeof fetch
+  const started = Date.now()
+  expect(await getLatestRelease(hanging, 50)).toEqual(FALLBACK_RELEASE)
+  expect(Date.now() - started).toBeLessThan(1000)
+})
+
+test('bounds every lookup with a timeout signal by default', async () => {
+  let signal: AbortSignal | null | undefined
+  const spy = (async (_url: string, init?: RequestInit) => {
+    signal = init?.signal
+    return new Response(JSON.stringify(valid))
+  }) as unknown as typeof fetch
+  expect(await getLatestRelease(spy)).toEqual(valid)
+  expect(signal).toBeInstanceOf(AbortSignal)
+  expect(LATEST_RELEASE_TIMEOUT_MS).toBeLessThanOrEqual(2000)
 })
 
 test('the fallback itself is a valid pointer', () => {

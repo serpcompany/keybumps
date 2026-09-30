@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import { PricingCard } from '@/components/pricing-card'
-import { getLatestRelease } from '@/lib/latest-release'
+import { getCurrentRelease } from '@/lib/latest-release'
 import { PaletteDemo } from './palette-demo'
 
 export const metadata: Metadata = {
@@ -64,7 +64,7 @@ const FAQ = [
 ]
 
 export default async function Home() {
-  const release = await getLatestRelease()
+  const release = await getCurrentRelease()
 
   return (
     <main>

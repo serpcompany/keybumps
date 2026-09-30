@@ -181,8 +181,9 @@ links_to_dmg() {
     return 1
   fi
 }
-eventually 'download buttons on / link to the /download/ DMG' links_to_dmg / 3
-eventually 'download links on /thanks/ link to the /download/ DMG' links_to_dmg /thanks/ 2
+eventually 'download buttons on / link to the current DMG (the 302 target)' links_to_dmg / 3
+eventually 'download buttons on /thanks/ link to the current DMG (the 302 target)' \
+  links_to_dmg /thanks/ 2
 
 # Sitemaps list only canonical URLs: child sitemaps are unslashed files, pages end in a slash.
 # sitemap_is_canonical <path> <loc regex>

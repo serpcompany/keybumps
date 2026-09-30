@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { getLatestRelease } from '@/lib/latest-release'
+import { getCurrentRelease } from '@/lib/latest-release'
 
 /**
  * A link that starts the download of the current Keybumps DMG, as named by latest.json (with its
@@ -13,7 +13,7 @@ export async function DownloadLink({
   className?: string
   children: ReactNode
 }) {
-  const release = await getLatestRelease()
+  const release = await getCurrentRelease()
   return (
     <a href={release.dmgURL} className={className}>
       {children}
