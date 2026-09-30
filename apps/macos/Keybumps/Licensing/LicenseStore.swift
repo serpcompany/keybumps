@@ -10,8 +10,11 @@ protocol LicenseStoring: AnyObject {
     func clear()
 }
 
-/// Keychain storage, readable only on this Mac after first unlock. The service name follows the
-/// bundle identifier, so Debug builds never touch the installed app's license.
+/// Keychain storage: a generic-password item in the login keychain, protected by the user's login
+/// password and the item's access list. It doesn't use the data protection keychain (that needs a
+/// keychain-access-groups entitlement and provisioning profile), so the accessibility class set
+/// below has no effect on macOS today. The service name follows the bundle identifier, so Debug
+/// builds never touch the installed app's license.
 final class KeychainLicenseStore: LicenseStoring {
     private let service: String
     private let account = "license-check"
