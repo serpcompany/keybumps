@@ -13,6 +13,7 @@ struct SnippetsSettingsView: View {
     var body: some View {
         @Bindable var store = model.snippets
         let results = SnippetSearch.settingsResults(store.snippets, query: query)
+        let isWritable = store.libraryState.isWritable
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
             // Accessibility is optional: without it, ⌘Return copies instead of pasting.
@@ -49,11 +50,16 @@ struct SnippetsSettingsView: View {
                     SettingsSearchField(text: $query, prompt: "Search snippets…", identifier: "snippets.search")
                         .frame(maxWidth: 300)
                     Spacer()
-                    Text(SnippetPresentation.count(store.snippets.count))
-                        .font(.system(size: SettingsTheme.subtitleSize))
-                        .foregroundStyle(.secondary)
+                    if isWritable {
+                        Text(SnippetPresentation.count(store.snippets.count))
+                            .font(.system(size: SettingsTheme.subtitleSize))
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                if store.snippets.isEmpty {
+                if !isWritable {
+                    // The group above says why. A library that can't be read isn't an empty one.
+                    SettingsNote("Your snippets show here once Keybumps can read them.")
+                } else if store.snippets.isEmpty {
                     SettingsRowLabel(
                         title: "No snippets yet",
                         subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘Return pastes it."
@@ -67,17 +73,18 @@ struct SnippetsSettingsView: View {
                     SettingsIconButton(systemImage: "plus", help: "New Snippet") {
                         store.editorRequest = .new
                     }
+                    .disabled(!isWritable)
                     .accessibilityIdentifier("snippets.add")
                     SettingsIconButton(systemImage: "minus", help: "Delete Snippet") {
                         pendingDeletion = selectedSnippet
                     }
-                    .disabled(selectedSnippet == nil)
+                    .disabled(selectedSnippet == nil || !isWritable)
                     .accessibilityIdentifier("snippets.remove")
                     Spacer()
                     Button("Edit…") {
                         if let selection { store.editorRequest = .edit(selection) }
                     }
-                    .disabled(selectedSnippet == nil)
+                    .disabled(selectedSnippet == nil || !isWritable)
                     .accessibilityIdentifier("snippets.edit")
                 }
             }

@@ -111,6 +111,22 @@ struct SnippetStorageTests {
         #expect(store.snippets.map(\.id) == [kept.id])
     }
 
+    @Test("While the saved snippets can't be read, Settings offers no way to add or change one")
+    func settingsOffersChangesOnlyWhileWritable() throws {
+        #expect(SnippetLibraryState.ready.isWritable)
+        #expect(SnippetLibraryState.recovered(copyName: "snippets.unreadable-made-up.json").isWritable)
+        #expect(!SnippetLibraryState.readOnly.isWritable)
+
+        // Settings turns off +, −, and Edit… exactly when the store would refuse the save.
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        try folder.makeStore().add(SnippetDraft(name: "Made-up", text: "text"))
+        try folder.setPermissions(0o000, of: folder.storageURL)
+        let store = folder.makeStore()
+        #expect(!store.libraryState.isWritable)
+        #expect(throws: SnippetStoreError.readOnly) { try store.add(SnippetDraft(name: "New", text: "text")) }
+    }
+
     @Test("Start Over renames an unreadable file aside, unread, and keeps its sensitive text across launches")
     func startOverKeepsTheUnreadableFile() throws {
         let folder = TemporaryFolder()
@@ -349,7 +365,7 @@ struct SensitiveSnippetTests {
     }
 }
 
-// MARK: - Keychain cleanup
+// MARK: - No sensitive text outlives its snippet
 
 @MainActor
 @Suite("Snippets: no sensitive text outlives its snippet")
@@ -887,6 +903,8 @@ struct SnippetPaletteKeyTests {
     static let returnKey = key(kVK_Return, "\r")
     static let commandReturn = key(kVK_Return, "\r", command: true)
     static let deleteKey = key(kVK_Delete, "\u{7f}")
+    static let escapeKey = key(kVK_Escape, "\u{1b}")
+    static let downKey = key(kVK_DownArrow)
 
     @Test("Return copies the selected snippet and ⌘Return pastes it")
     func returnAndCommandReturn() async throws {
@@ -951,6 +969,49 @@ struct SnippetPaletteKeyTests {
         let passedOn = fixture.palette.handleKeyDown(Self.returnKey)
         #expect(passedOn != nil, "Return goes to the alert")
         #expect(fixture.pasteboard.string(forType: .string) == nil, "Nothing was copied")
+    }
+
+    @Test("Opening the palette while the Delete alert shows gives the palette its keys back")
+    func openingThePaletteEndsTheDeleteAlert() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
+        fixture.palette.state.select(.snippets)
+        #expect(fixture.palette.handleKeyDown(Self.deleteKey) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.escapeKey) != nil, "Escape goes to the alert")
+
+        // A hot key or a Dock click opens another tab: what `show(_:)` runs, with no panel on screen.
+        fixture.palette.selectOnOpening(.clipboard)
+        #expect(fixture.palette.state.snippetPendingDeletion == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_5, "5", command: true)) == nil)
+        #expect(fixture.palette.state.tab == .snippets)
+
+        // Opening the same tab again drops the alert too.
+        #expect(fixture.palette.handleKeyDown(Self.deleteKey) == nil)
+        fixture.palette.selectOnOpening(.snippets)
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.returnKey) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.snippets.snippets.count == 1, "Nothing was deleted")
+    }
+
+    @Test("A new search starts on its top match, so Return copies that, not the row highlighted before")
+    func searchStartsOnTheTopMatch() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        try fixture.snippets.add(SnippetDraft(name: "Made-up reply", keyword: ";ship", text: "made-up reply"))
+        try fixture.snippets.add(SnippetDraft(name: "Mentions it", text: "we ship on Mondays"))
+        try fixture.snippets.add(SnippetDraft(name: "Shipping delay", text: "made-up delay"))
+        fixture.palette.state.select(.snippets)
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.state.selection == 2, "Shipping delay, by name")
+
+        // "ship" ranks the keyword match first and the text match last, where the old row now points.
+        fixture.palette.state.historyQuery = "ship"
+        #expect(fixture.palette.state.selection == 0)
+        #expect(fixture.palette.handleKeyDown(Self.returnKey) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up reply")
     }
 
     @Test("While the library can't be read, ⌘N and New Snippet open the Snippets page instead of the editor")

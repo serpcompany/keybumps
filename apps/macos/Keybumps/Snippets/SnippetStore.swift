@@ -32,6 +32,10 @@ enum SnippetLibraryState: Equatable {
     /// The file exists but couldn't be read, or a copy of an undecodable file couldn't be kept.
     /// Nothing is saved until it can be read (`reload()`) or the user sets it aside (`startOver()`).
     case readOnly
+
+    /// Whether changes can be saved. While they can't, Settings › Snippets turns off +, −, and
+    /// Edit…, and doesn't call the library empty.
+    var isWritable: Bool { self != .readOnly }
 }
 
 /// The user's snippets: one JSON array in `snippets.json` in Keybumps' Application Support folder,
@@ -259,7 +263,7 @@ final class SnippetStore {
     // MARK: Storage
 
     private func requireWritable() throws {
-        if libraryState == .readOnly { throw SnippetStoreError.readOnly }
+        guard libraryState.isWritable else { throw SnippetStoreError.readOnly }
     }
 
     private func commit(_ next: [Snippet]) throws {

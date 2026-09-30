@@ -108,7 +108,11 @@ enum KeyboardShortcutterHistoryContent: Equatable {
 @Observable
 final class CommandPaletteState {
     private(set) var tab: CommandPaletteTab = .search
-    var historyQuery = ""
+    var historyQuery = "" {
+        // Snippets re-ranks as you type, so a new search starts on its top match, as Quick Search's
+        // does. The other history tabs only filter.
+        didSet { if tab == .snippets, historyQuery != oldValue { selection = 0 } }
+    }
     var selection = 0
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
@@ -220,8 +224,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard let panel else { return }
 
         rememberPasteTarget()
-        state.select(tab)
-        search.query = ""
+        selectOnOpening(tab)
         position(panel)
         installKeyMonitor()
         installOutsideMonitors()
@@ -238,6 +241,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     func rememberPasteTarget() {
         pasteTarget = frontmostApp()
         pendingPaste = nil
+    }
+
+    /// Runs as the palette opens on a tab, even while a snippet's Delete alert shows (a hot key or
+    /// a Dock click). Selecting drops the pending deletion, and SwiftUI can take the alert away
+    /// without calling its binding, so the palette takes its keys back here, as `ClearAllButton`
+    /// does when it disappears.
+    func selectOnOpening(_ tab: CommandPaletteTab) {
+        if state.snippetPendingDeletion != nil { isPresentingConfirmation = false }
+        state.select(tab)
+        search.query = ""
     }
 
     func dismiss() {
