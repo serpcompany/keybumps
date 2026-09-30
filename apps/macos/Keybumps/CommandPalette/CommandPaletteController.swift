@@ -906,6 +906,7 @@ private struct SearchResultsView: View {
                         title: "Start typing to search your Mac",
                         systemImage: "magnifyingglass"
                     )
+                    .accessibilityIdentifier("quickSearch.noRecentItems")
                 } else {
                     VStack(spacing: 0) {
                         HStack {

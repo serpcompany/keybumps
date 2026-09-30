@@ -280,6 +280,10 @@ struct QuickSearchCommandTests {
 
         #expect(search.recentItems.items.count == 3, "Older entries stay stored")
         #expect(search.displayedRecentItems.map(\.result) == [preview])
+        // As in the UI test, entries saved earlier are hidden once loaded from disk.
+        let reloaded = QuickSearchModel.forTests(in: root)
+        #expect(reloaded.recentItems.items.count == 3)
+        #expect(reloaded.displayedRecentItems.map(\.result) == [preview])
     }
 
     /// A minimal app bundle in a temporary folder: enough for `Bundle(url:)` to read its identifier.

@@ -179,10 +179,15 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 20))
         let settings = element("settings.detail.permissions")
         XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
-        let emptyRecents = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "Start typing to search your Mac"))
+        // macOS static texts carry their string as the value, so match the identifier or the text.
+        let emptyText = "Start typing to search your Mac"
+        let emptyByText = app.staticTexts
+            .matching(NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", emptyText, emptyText))
             .firstMatch
-        XCTAssertTrue(emptyRecents.waitForExistence(timeout: 5), "Its only Recent Item, Keybumps, is hidden")
+        XCTAssertTrue(
+            element("quickSearch.noRecentItems").waitForExistence(timeout: 5) || emptyByText.exists,
+            "Its only Recent Item, Keybumps, is hidden"
+        )
         XCTAssertFalse(app.buttons["Clear All"].exists)
 
         // Typing its name offers Keybumps Settings, which opens Settings once.
