@@ -441,7 +441,7 @@ struct LocalDictationTranslationView: View {
                 .frame(maxWidth: 220)
                 .disabled(supportedTargets.isEmpty || isTranslating)
 
-                // Only the Command Palette's Dictation tab shows this view, so it uses the palette's pills.
+                // Shown in the Command Palette's Dictation tab (and the unused DictationHistoryView), so it uses the palette's pills.
                 Button(isTranslating ? "Translating…" : "Translate") {
                     triggerTranslation()
                 }

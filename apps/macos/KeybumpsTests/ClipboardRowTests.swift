@@ -17,7 +17,7 @@ struct ClipboardRowTests {
     static let screenshot = ClipboardEntry(
         id: UUID(), text: "", capturedAt: Date(), kind: .image,
         mediaPath: "/tmp/made-up-shot.png", mediaPasteboardType: "public.png", fingerprint: "image:made-up-shot",
-        sourcePath: "/tmp/Screenshot made-up.png", isScreenCapture: true
+        sourcePath: "/tmp/made-up capture.png", isScreenCapture: true
     )
     static let imageFile = ClipboardEntry(
         id: UUID(), text: "", capturedAt: Date(), kind: .image,
@@ -33,8 +33,9 @@ struct ClipboardRowTests {
         #expect(ClipboardRowPresentation.accessibilityKind(of: Self.screenshot) == "Screenshot")
     }
 
-    @Test("Searching a kind word still finds images and screenshots")
+    @Test("Searching a kind word still finds images and screenshots, though no name contains it")
     func searchStillMatchesKinds() {
+        // The file and screenshot fixtures' names contain neither word, so only the kind word can match them.
         #expect(Self.copiedImage.matches("image"))
         #expect(Self.imageFile.matches("image"))
         #expect(Self.screenshot.matches("screenshot"))
@@ -44,7 +45,7 @@ struct ClipboardRowTests {
     @Test("A row's title is the text, a file's name, or an unnamed image's pixel size")
     func titles() {
         #expect(ClipboardRowPresentation.title(for: Self.text, pixelSize: nil) == "made-up text")
-        #expect(ClipboardRowPresentation.title(for: Self.screenshot, pixelSize: "8 × 6") == "Screenshot made-up")
+        #expect(ClipboardRowPresentation.title(for: Self.screenshot, pixelSize: "8 × 6") == "made-up capture")
         #expect(ClipboardRowPresentation.title(for: Self.imageFile, pixelSize: "8 × 6") == "made-up diagram")
         #expect(ClipboardRowPresentation.title(for: Self.copiedImage, pixelSize: "8 × 6") == "8 × 6")
         #expect(ClipboardRowPresentation.title(for: Self.copiedImage, pixelSize: nil) == "Image", "Until the size is read")

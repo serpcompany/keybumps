@@ -242,7 +242,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 activateSearchResult: open,
                 revealSearchResult: reveal,
                 runCommand: { [weak self] command in self?.run(command) },
-                copyClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
+                chooseClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
+                copyClipboardEntry: { [weak self] entry in self?.copyClipboardEntry(entry) },
                 editClipboardEntry: { [weak self] entry in _ = self?.editClipboardImage(entry) },
                 chooseScreenshot: { [weak self] entry in self?.chooseScreenshot(entry) },
                 copyDictationText: { [weak self] text in
@@ -405,7 +406,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         state.tab == .search ? search.query : state.historyQuery
     }
 
-    /// Deletes the highlighted row in tabs with a per-row trash button.
+    /// Deletes the highlighted row in the tabs where Delete removes items.
     private func deleteSelection() -> Bool {
         let index = state.selection
         switch state.tab {
@@ -567,6 +568,9 @@ private struct CommandPaletteView: View {
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
     let runCommand: (QuickSearchCommand) -> Void
+    /// A click: Command-click edits an image, anything else copies.
+    let chooseClipboardEntry: (ClipboardEntry) -> Void
+    /// Always copies, whatever keys are held (the context menu's Copy).
     let copyClipboardEntry: (ClipboardEntry) -> Void
     let editClipboardEntry: (ClipboardEntry) -> Void
     let chooseScreenshot: (ClipboardEntry) -> Void
@@ -641,7 +645,8 @@ private struct CommandPaletteView: View {
             ClipboardResultsView(
                 entries: filteredClipboard,
                 selection: state.selection,
-                choose: copyClipboardEntry,
+                choose: chooseClipboardEntry,
+                copy: copyClipboardEntry,
                 edit: preferences.enabledCapabilities.contains(.screenshotTools) ? editClipboardEntry : nil,
                 delete: clipboard.delete,
                 clear: clipboard.clear,
@@ -1018,6 +1023,7 @@ private struct ClipboardResultsView: View {
     let entries: [ClipboardEntry]
     let selection: Int
     let choose: (ClipboardEntry) -> Void
+    let copy: (ClipboardEntry) -> Void
     /// Opens an image in the Screenshot Editor; nil while Screenshot Tools is off.
     let edit: ((ClipboardEntry) -> Void)?
     let delete: (ClipboardEntry) -> Void
@@ -1063,7 +1069,7 @@ private struct ClipboardResultsView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            Button("Copy") { choose(entry) }
+                            Button("Copy") { copy(entry) }
                             if let edit, entry.kind == .image {
                                 Button("Edit") { edit(entry) }
                             }
@@ -1084,8 +1090,8 @@ private struct ClipboardResultsView: View {
 }
 
 /// Raycast's row for a clipboard item. The preview (a thumbnail, or a text symbol) shows the item's
-/// kind, so no kind word is shown. The content fills the middle, with its age in small gray text
-/// under it. Where it came from sits right-aligned in gray, like Raycast's accessories, capped so it
+/// kind, so no kind word is shown. The content fills the middle, with when it was copied in small
+/// gray text under it. Where it came from sits right-aligned in gray, like Raycast's accessories, capped so it
 /// never squeezes the content.
 struct ClipboardRow: View {
     /// Wide enough for a typical app name and domain side by side; longer ones truncate.
@@ -1103,6 +1109,8 @@ struct ClipboardRow: View {
                 Text(ClipboardRowPresentation.timestamp(entry.capturedAt))
                     .font(.system(size: 12))
                     .monospacedDigit()
+                    // The fixed month-first text would read as another date to day-first listeners.
+                    .accessibilityLabel(ClipboardRowPresentation.spokenTimestamp(entry.capturedAt))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -1213,6 +1221,11 @@ enum ClipboardRowPresentation {
     /// text, not a live counter.
     static func timestamp(_ date: Date) -> String {
         timestampFormatter.string(from: date)
+    }
+
+    /// The same moment for VoiceOver, in the user's own date and time format.
+    static func spokenTimestamp(_ date: Date) -> String {
+        date.formatted(date: .long, time: .shortened)
     }
 
     /// One shared formatter, not one per row. It reads the 12/24-hour preference when first used.
