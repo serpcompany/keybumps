@@ -16,6 +16,7 @@ struct UITestLaunchConfiguration: Equatable {
     static let closeSettingsArgument = "-KBCloseSettings"
     static let disableHotKeysArgument = "-KBDisableHotKeys"
     static let seedClipboardImageArgument = "-KBUITestSeedClipboardImage"
+    static let seedRecentKeybumpsArgument = "-KBUITestSeedRecentKeybumps"
     static let licenseStateArgument = "-KBLicenseState"
 
     /// The fixed license state a UI test starts in (`active` unless `-KBLicenseState` says otherwise).
@@ -42,6 +43,9 @@ struct UITestLaunchConfiguration: Equatable {
     private(set) var closesSettings = false
     private(set) var disablesHotKeys = false
     private(set) var seedsClipboardImage = false
+    /// Adds the running app itself as the one Recent Item, which Quick Search must hide; the app
+    /// under test isn't in `/Applications` for Quick Search to find.
+    private(set) var seedsRecentKeybumps = false
     private(set) var licenseState: LicenseStateMode = .active
 
     var isUITesting: Bool { permissions != nil }
@@ -57,6 +61,7 @@ struct UITestLaunchConfiguration: Equatable {
         closesSettings = Self.flag(Self.closeSettingsArgument, in: arguments)
         disablesHotKeys = Self.flag(Self.disableHotKeysArgument, in: arguments)
         seedsClipboardImage = Self.flag(Self.seedClipboardImageArgument, in: arguments)
+        seedsRecentKeybumps = Self.flag(Self.seedRecentKeybumpsArgument, in: arguments)
         licenseState = Self.value(after: Self.licenseStateArgument, in: arguments)
             .flatMap(LicenseStateMode.init(rawValue:)) ?? .active
     }

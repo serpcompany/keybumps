@@ -63,8 +63,6 @@ final class SnippetStore {
     private(set) var snippets: [Snippet] = []
     /// The editor Settings shows, if any. The palette sets it to open the editor in Settings.
     var editorRequest: SnippetEditorRequest?
-    /// Set by the palette to open Settings on the Snippets page; Settings clears it once it's there.
-    var settingsVisitRequested = false
     private(set) var libraryState: SnippetLibraryState = .ready
 
     @ObservationIgnored private let storageURL: URL?

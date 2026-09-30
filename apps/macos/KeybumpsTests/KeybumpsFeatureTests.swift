@@ -2365,12 +2365,19 @@ final class KeybumpsFeatureTests: XCTestCase {
         let storageURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("quick-search-items-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: storageURL) }
+        let usageURL = storageURL.deletingPathExtension().appendingPathExtension("usage.json")
+        defer { try? FileManager.default.removeItem(at: usageURL) }
         let store = RecentItemStore(storageURL: storageURL)
         let result = QuickSearchResult(
             url: URL(fileURLWithPath: "/Applications/Finder.app"),
             kind: .application
         )
-        let model = QuickSearchModel(recentItems: store, applications: [result])
+        let model = QuickSearchModel(
+            recentItems: store,
+            applicationUsage: ApplicationUsageStore(storageURL: usageURL),
+            applications: [result],
+            searchesFiles: false
+        )
 
         model.query = "Finder"
         XCTAssertTrue(store.items.isEmpty, "Typing or highlighting must not record history")
@@ -2398,12 +2405,13 @@ final class KeybumpsFeatureTests: XCTestCase {
             url: URL(fileURLWithPath: "/Applications/Activity Monitor.app"),
             kind: .application
         )
+        let itemsURL = storageURL.deletingPathExtension().appendingPathExtension("items.json")
+        defer { try? FileManager.default.removeItem(at: itemsURL) }
         let model = QuickSearchModel(
-            recentItems: RecentItemStore(
-                storageURL: storageURL.deletingPathExtension().appendingPathExtension("items.json")
-            ),
+            recentItems: RecentItemStore(storageURL: itemsURL),
             applicationUsage: usage,
-            applications: [activityMonitor, iTerm, terminal]
+            applications: [activityMonitor, iTerm, terminal],
+            searchesFiles: false
         )
 
         model.query = "t"
@@ -2434,7 +2442,14 @@ final class KeybumpsFeatureTests: XCTestCase {
             url: URL(fileURLWithPath: "/tmp/term.txt"),
             kind: .file
         )
-        let model = QuickSearchModel(applicationUsage: usage, applications: [app])
+        let itemsURL = storageURL.deletingPathExtension().appendingPathExtension("items.json")
+        defer { try? FileManager.default.removeItem(at: itemsURL) }
+        let model = QuickSearchModel(
+            recentItems: RecentItemStore(storageURL: itemsURL),
+            applicationUsage: usage,
+            applications: [app],
+            searchesFiles: false
+        )
 
         model.query = "term"
         model.recordOpenResult(app, succeeded: false)

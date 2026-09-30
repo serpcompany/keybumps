@@ -128,6 +128,7 @@ final class AppModel {
         snippets injectedSnippets: SnippetStore? = nil,
         textPaster injectedTextPaster: (any TextPasting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
+        quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
@@ -208,10 +209,12 @@ final class AppModel {
             inbox: inbox,
             preferences: preferences,
             snippets: snippets,
-            paster: textPaster
+            paster: textPaster,
+            search: injectedQuickSearch
         )
-        // The palette's Settings button, Command-comma, and Keybumps Settings result take the status menu's route.
-        commandPalette.openSettings = { MainWindowRouter.shared.open() }
+        // The palette's Settings button, Command-comma, and Quick Search commands take the status
+        // menu's route; a capability's command asks for its page.
+        commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
         // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste. It's
         // optional for Snippets: without it ⌘Return copies and offers the usual permission setup.
         let permissions = self.permissions

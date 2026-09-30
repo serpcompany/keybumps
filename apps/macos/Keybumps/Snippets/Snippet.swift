@@ -119,8 +119,8 @@ struct SnippetDraft: Equatable {
     }
 }
 
-/// What the Settings page's editor sheet is open for. The palette's New Snippet and Edit set it too,
-/// so Settings opens on the Snippets page with the editor showing.
+/// What the Settings page's editor sheet is open for. The palette's New Snippet and Edit set it,
+/// then open Settings on the Snippets page, which shows the editor.
 enum SnippetEditorRequest: Identifiable, Hashable {
     case new
     case edit(Snippet.ID)

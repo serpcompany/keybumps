@@ -198,16 +198,17 @@ struct SettingsRootView: View {
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
-        // The palette's New Snippet and Edit open the editor, which lives on the Snippets page.
-        .onChange(of: model.snippets.editorRequest, initial: true) { _, request in
-            if request != nil { navigation.navigate(to: .snippets) }
-        }
-        .onChange(of: model.snippets.settingsVisitRequested, initial: true) { _, requested in
-            guard requested else { return }
-            navigation.navigate(to: .snippets)
-            model.snippets.settingsVisitRequested = false
+        // A Quick Search command can ask for a capability's page, whether or not this window exists yet.
+        .onAppear(perform: showRequestedSection)
+        .onReceive(NotificationCenter.default.publisher(for: .settingsSectionRequested, object: MainWindowRouter.shared)) { _ in
+            showRequestedSection()
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
+    }
+
+    private func showRequestedSection() {
+        guard let section = MainWindowRouter.shared.consumeRequestedSection() else { return }
+        navigation.navigate(to: section)
     }
 }
 

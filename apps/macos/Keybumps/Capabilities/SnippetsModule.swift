@@ -26,7 +26,8 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off closes the Snippets tab and releases its global shortcut. Your snippets stay saved on this Mac.",
             content: { AnyView(SnippetsSettingsView()) }
         ),
-        criticalOperations: []
+        criticalOperations: [],
+        searchKeywords: ["snippet", "snip"]
     )
 }
 

@@ -712,7 +712,7 @@ struct SnippetPaletteTests {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         var settingsOpened = 0
-        fixture.palette.openSettings = { settingsOpened += 1 }
+        fixture.palette.openSettings = { section in #expect(section == .snippets); settingsOpened += 1 }
         let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "text"))
 
         fixture.palette.openSnippetEditor(.new)
@@ -826,6 +826,18 @@ struct SnippetPaletteTests {
         #expect(AppModel.makeTextPaster(clipboard: fixture.clipboard, allowsSystemAccess: false, isUnitTestHost: false) is InertTextPaster)
     }
 
+    @Test("Quick Search finds the Snippets command by name or keyword, and it goes to the tab or, while off, Settings")
+    func capabilityCommand() {
+        let command = QuickSearchCommand.capability(.snippets)
+        #expect(command.title == "Snippets")
+        #expect(command.match("snippets") == QuickSearchCommand.Match.name)
+        #expect(command.match("snippet") == QuickSearchCommand.Match.keyword)
+        #expect(command.match("snip") == QuickSearchCommand.Match.keyword)
+        #expect(command.match("sni") == QuickSearchCommand.Match.prefix)
+        #expect(command.destination(enabledCapabilities: [.snippets]) == .paletteTab(.snippets))
+        #expect(command.destination(enabledCapabilities: []) == .settings(.snippets))
+    }
+
     @Test("A text write can carry nspasteboard.org's concealed marker")
     func writeTextMarksConcealed() {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsSnippetWrite-\(UUID().uuidString)"))
@@ -898,7 +910,7 @@ struct SnippetPaletteKeyTests {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         var settingsOpened = 0
-        fixture.palette.openSettings = { settingsOpened += 1 }
+        fixture.palette.openSettings = { section in #expect(section == .snippets); settingsOpened += 1 }
         let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "text"))
         fixture.palette.state.select(.snippets)
 
@@ -914,7 +926,7 @@ struct SnippetPaletteKeyTests {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         var settingsOpened = 0
-        fixture.palette.openSettings = { settingsOpened += 1 }
+        fixture.palette.openSettings = { section in #expect(section == .snippets); settingsOpened += 1 }
         try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "text"))
         fixture.preferences.setCapability(.snippets, enabled: false)
         fixture.palette.state.select(.snippets)
@@ -946,13 +958,12 @@ struct SnippetPaletteKeyTests {
         let fixture = PaletteFixture(unreadableLibrary: true)
         defer { fixture.tearDown() }
         var settingsOpened = 0
-        fixture.palette.openSettings = { settingsOpened += 1 }
+        fixture.palette.openSettings = { section in #expect(section == .snippets); settingsOpened += 1 }
         #expect(fixture.snippets.libraryState == .readOnly)
         fixture.palette.state.select(.snippets)
 
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_N, "n", command: true)) == nil)
         #expect(fixture.snippets.editorRequest == nil)
-        #expect(fixture.snippets.settingsVisitRequested)
         #expect(settingsOpened == 1)
     }
 
