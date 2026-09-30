@@ -7,9 +7,9 @@ name: Web deploy
 # Smoke tests use each Worker's workers.dev URL from the deploy log, with the smoke-test header,
 # because the zone's bot protection blocks CI runners on the branded domains.
 #
-# CLOUDFLARE_API_TOKEN is account-wide (Cloudflare can't scope it to one Worker). Use it only for
-# keybumps-web-staging and keybumps-web-production. If a deploy fails with an authorization
-# error, ask the owner; don't widen the token.
+# CLOUDFLARE_API_TOKEN is account-wide (Cloudflare can't scope it to one Worker), so only the two
+# Deploy steps get it. Use it only for keybumps-web-staging and keybumps-web-production. If a
+# deploy fails with an authorization error, ask the owner; don't widen the token.
 on:
   push:
     branches: [main]
@@ -41,6 +41,8 @@ jobs:
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -66,12 +68,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -88,16 +89,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Builds with SITE_ENV=staging and deploys --env staging, whose vars set it at runtime.
+      # Builds with SITE_ENV=staging and deploys --env staging, whose vars set it at runtime. The
+      # placeholder GTM ID makes the smoke test's "no GTM on /" check the SITE_ENV gate itself.
       # GitHub runs bash with pipefail, so a failed deploy fails this step through tee.
       - name: Deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          NEXT_PUBLIC_GTM_ID: GTM-STAGING0
         run: pnpm deploy:staging 2>&1 | tee deploy.log
 
       - name: Smoke test
         run: |
-          url="$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1 || true)"
+          url="$(grep -oE 'https://keybumps-web-staging\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1 || true)"
           if [ -z "$url" ]; then
-            echo "::error::No workers.dev URL in the deploy log"
+            echo "::error::No keybumps-web-staging workers.dev URL in the deploy log"
             exit 1
           fi
           ./scripts/smoke.sh "$url" staging
@@ -109,12 +115,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
-    env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -146,14 +151,16 @@ jobs:
       # the privacy policy covers Cloudflare Web Analytics.
       - name: Deploy
         env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           NEXT_PUBLIC_GTM_ID: ${{ vars.NEXT_PUBLIC_GTM_ID }}
         run: pnpm deploy:production 2>&1 | tee deploy.log
 
       - name: Smoke test
         run: |
-          url="$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1 || true)"
+          url="$(grep -oE 'https://keybumps-web-production\.[a-z0-9-]+\.workers\.dev' deploy.log | head -1 || true)"
           if [ -z "$url" ]; then
-            echo "::error::No workers.dev URL in the deploy log"
+            echo "::error::No keybumps-web-production workers.dev URL in the deploy log"
             exit 1
           fi
           ./scripts/smoke.sh "$url" production
