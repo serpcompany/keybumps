@@ -1,7 +1,8 @@
 name: Website checks
 
-# Checks the keybumps.app website in apps/web: Biome, TypeScript, node --test, and an OpenNext
-# build. Runs on pull requests to main that touch the site and manually from Actions. It never deploys.
+# Checks the keybumps.app website in apps/web with `pnpm check`: Biome, TypeScript, Vitest, and an
+# OpenNext build. Runs on pull requests to main that touch the site and manually from Actions. It
+# never deploys; web-deploy.yml deploys after merge.
 on:
   pull_request:
     branches: [main]
