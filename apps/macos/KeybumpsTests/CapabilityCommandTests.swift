@@ -266,6 +266,25 @@ struct CapabilityCommandTests {
         #expect(rows("hotkeys", usage: usage) == [.command(coach)])
     }
 
+    /// Usage is per item, so picks from any query (even "dictation", where it's first anyway) lift a
+    /// command for every keyword and every prefix of one. An app whose name only starts with the
+    /// query scores 6,000, so three picks within a day pass it (900 or 800 + 3 × 1,500 + 1,000);
+    /// with older picks it takes four.
+    @Test("Three recent picks lift a keyword or prefix command above apps whose names only start with the query")
+    func historyLiftsKeywordAndPrefixCommandsPastPrefixApps() {
+        let url = Self.temporaryUsageURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let usage = Self.usageStore(at: url)
+
+        usage.record(dictation)
+        usage.record(dictation)
+        #expect(rows("voice", usage: usage) == [.result(voiceMemos), .result(voiceOverUtility), .command(dictation)])
+        #expect(rows("vo", usage: usage) == [.result(voiceMemos), .result(voiceOverUtility), .command(dictation)])
+        usage.record(dictation)
+        #expect(rows("voice", usage: usage) == [.command(dictation), .result(voiceMemos), .result(voiceOverUtility)], "Keyword")
+        #expect(rows("vo", usage: usage) == [.command(dictation), .result(voiceMemos), .result(voiceOverUtility)], "Prefix of a keyword")
+    }
+
     @Test("History is kept per item, not per query, as for apps")
     func historyIsPerItem() {
         let url = Self.temporaryUsageURL()

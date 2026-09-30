@@ -12,7 +12,8 @@ struct ApplicationUsageRecord: Codable, Equatable {
 @MainActor
 final class ApplicationUsageStore {
     private var records: [String: ApplicationUsageRecord] = [:]
-    private let storageURL: URL
+    /// Where the counts are kept; read by the test-isolation guard.
+    let storageURL: URL
     private let fileManager: FileManager
     private let now: () -> Date
 

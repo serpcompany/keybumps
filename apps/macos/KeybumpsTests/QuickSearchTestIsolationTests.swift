@@ -29,14 +29,42 @@ struct QuickSearchTestIsolationTests {
             .appendingPathComponent("Keybumps", isDirectory: true).path
     }
 
-    @Test("Under the unit-test host, Quick Search's stores default to this run's own temporary folder")
+    /// Checks stores built with their default location, including the ones a default
+    /// `QuickSearchModel()` makes, which every `AppModel` composition without `quickSearch:` gets. So
+    /// reverting either store's default, or the path helper, to the installed app's folder fails here.
+    @Test("Under the unit-test host, stores built with their default location use this run's own temporary folder")
     func defaultStoresStayOutOfTheInstalledApp() {
         #expect(UnitTestHost.isActive)
         let temporary = FileManager.default.temporaryDirectory.path
-        for url in [RecentItemStore.defaultStorageURL(), ApplicationUsageStore.defaultStorageURL()] {
+        let model = QuickSearchModel()
+        let defaults = [
+            RecentItemStore().storageURL, model.recentItems.storageURL, RecentItemStore.defaultStorageURL(),
+            ApplicationUsageStore().storageURL, model.applicationUsage.storageURL, ApplicationUsageStore.defaultStorageURL(),
+        ]
+        for url in defaults {
             #expect(!url.path.hasPrefix(installedAppSupport), "\(url.lastPathComponent) would be the installed app's")
-            #expect(url.path.hasPrefix(UnitTestHost.dataDirectory.path))
+            #expect(url.path.hasPrefix(UnitTestHost.dataDirectory.path), "\(url.path)")
             #expect(url.path.hasPrefix(temporary))
+        }
+    }
+
+    @Test("Recording through default stores writes files only in this run's own folder")
+    func defaultStoresWriteOnlyToTheRunsFolder() {
+        let app = QuickSearchResult(url: URL(fileURLWithPath: "/System/Applications/Dictionary.app"), kind: .application)
+        let recentItems = RecentItemStore()
+        let usage = ApplicationUsageStore()
+        defer {
+            try? FileManager.default.removeItem(at: recentItems.storageURL)
+            try? FileManager.default.removeItem(at: usage.storageURL)
+        }
+
+        recentItems.record(app)
+        usage.record(app)
+        usage.record(QuickSearchCommand.keybumpsSettings)
+
+        for url in [recentItems.storageURL, usage.storageURL] {
+            #expect(FileManager.default.fileExists(atPath: url.path), "\(url.lastPathComponent) was written")
+            #expect(url.deletingLastPathComponent().standardizedFileURL == UnitTestHost.dataDirectory.standardizedFileURL)
         }
     }
 

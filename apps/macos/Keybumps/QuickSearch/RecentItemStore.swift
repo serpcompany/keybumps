@@ -13,7 +13,8 @@ struct RecentItem: Codable, Equatable, Identifiable {
 final class RecentItemStore {
     private(set) var items: [RecentItem] = []
 
-    private let storageURL: URL
+    /// Where the list is kept; read by the test-isolation guard.
+    let storageURL: URL
     private let limit: Int
     private let fileManager: FileManager
     private let now: () -> Date

@@ -17,7 +17,9 @@ enum QuickSearchCommand: Hashable, Identifiable {
             .filter { $0.searchKeywords != nil }
             .map { .capability($0.capability) }
 
-    /// A stable token for accessibility identifiers: `keybumpsSettings`, or the capability's ID.
+    /// A stable token: `keybumpsSettings`, or the capability's ID. It names the row's accessibility
+    /// identifier and is the key for its learned usage (`command:<id>` in `application-usage.json`),
+    /// so renaming it silently resets what Quick Search has learned about the command.
     var id: String {
         switch self {
         case .keybumpsSettings: "keybumpsSettings"

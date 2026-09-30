@@ -45,7 +45,7 @@ The apps, files, and folders the user recently opened from Quick Search, listed 
 _Avoid_: History, recents
 
 **Learned usage**:
-How often and how recently the user picked each app or Quick Search command from Quick Search, kept locally and used only to rank results, so whichever the user picks more comes first. It is never listed, and no query is kept.
+How often and how recently the user picked each app or Quick Search command from Quick Search, kept locally per item and used only to rank results: what the user picks more rises, weighed against how well each result matches the query. It is never listed, and no query is kept.
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
