@@ -276,13 +276,14 @@
         "dictation"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -341,13 +342,14 @@
         "dictation"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -406,13 +408,14 @@
         "dictation"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -473,13 +476,14 @@
         "dictation"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -819,13 +823,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 2, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -890,13 +895,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 2, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -961,13 +967,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -1034,13 +1041,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -5389,13 +5397,14 @@
         "screenshotTools"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 2, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -5458,13 +5467,14 @@
         "screenshotTools"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1]; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 2, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: false), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -5527,13 +5537,14 @@
         "screenshotTools"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -5598,13 +5609,14 @@
         "screenshotTools"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Screenshot Tools: 1, Permissions: 1]; missing [screenRecording]",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: true, clipboardHistoryEnabled: true), dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition",
         "screenRecording"
@@ -8095,13 +8107,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -8162,13 +8175,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.stop, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: false), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -8229,13 +8243,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],
@@ -8298,13 +8313,14 @@
         "snippets"
       ],
       "permissionsMissing" : {
-        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
+        "accessibility" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [accessibility]",
         "inputMonitoring" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "microphone" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [microphone]",
         "screenRecording" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention []; missing []",
         "speechRecognition" : "start [clipboardMonitor.start, screenshotWatcher.apply(enabled: false, clipboardHistoryEnabled: true), screenshotWatcher.stop, dragToSnap.stop, detector.eventTap.stop]; detector stopped; attention [Permissions: 1]; missing [speechRecognition]"
       },
       "requiredPermissions" : [
+        "accessibility",
         "microphone",
         "speechRecognition"
       ],

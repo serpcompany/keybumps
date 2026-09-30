@@ -53,10 +53,6 @@ class WindowManagementService {
         updateDragActivity(false)
     }
 
-    func requestAccessibility() {
-        _ = AXIsProcessTrusted()
-    }
-
     func perform(_ action: WindowAction) {
         guard isAccessibilityGranted else { lastError = "Accessibility permission is required."; return }
         guard let target = focusedWindow(), let current = frame(of: target.window) else { lastError = "No resizable focused window was found."; return }

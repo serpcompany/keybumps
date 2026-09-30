@@ -83,8 +83,11 @@ extension AppModel {
                 microphoneAuthorizationStatus: { granted ? .authorized : .denied },
                 speechAuthorizationStatus: { granted ? .authorized : .denied },
                 screenRecordingAuthorized: { granted },
-                requestScreenRecording: {},
-                openSettings: { _ in }
+                requestMicrophone: PermissionPrompts.inert.requestMicrophone,
+                requestSpeechRecognition: PermissionPrompts.inert.requestSpeechRecognition,
+                requestScreenRecording: PermissionPrompts.inert.requestScreenRecording,
+                openSettings: { _ in },
+                openSystemSettings: PermissionPrompts.inert.openSystemSettings
             ),
             licensing: FixedLicenseController(state: {
                 switch configuration.licenseState {
@@ -100,6 +103,7 @@ extension AppModel {
                 storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(SnippetStore.fileName),
                 secrets: InMemorySnippetSecretStore()
             ),
+            // Never writes the pasteboard or posts ⌘V, even if system access were allowed.
             textPaster: InertTextPaster(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
