@@ -85,6 +85,9 @@ final class SmokeUITests: XCTestCase {
         app.typeKey("e", modifierFlags: .command)
         let editor = app.windows["screenshotEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        XCTAssertTrue(editor.buttons["Save"].exists)
+        XCTAssertFalse(editor.buttons["Done"].exists)
+        XCTAssertTrue(editor.buttons["Blur"].exists)
 
         editor.buttons["Cancel"].click()
         XCTAssertTrue(waitForNonExistence(of: editor))

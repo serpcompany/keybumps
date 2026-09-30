@@ -20,6 +20,7 @@ final class AppPreferences {
         static let windowShortcuts = "windowShortcuts"
         static let showsHotkeysTab = "showsHotkeysTab"
         static let didRequestScreenRecording = "didRequestScreenRecording"
+        static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
     }
 
     private let defaults: UserDefaults
@@ -72,6 +73,11 @@ final class AppPreferences {
         didSet { defaults.set(didRequestScreenRecording, forKey: Key.didRequestScreenRecording) }
     }
 
+    /// Whether each new screenshot also goes on the clipboard, ready to paste. On by default.
+    var copiesScreenshotsToClipboard: Bool {
+        didSet { defaults.set(copiesScreenshotsToClipboard, forKey: Key.copiesScreenshotsToClipboard) }
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
@@ -99,6 +105,8 @@ final class AppPreferences {
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
         showsHotkeysTab = defaults.bool(forKey: Key.showsHotkeysTab)
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
+        copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
+            || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

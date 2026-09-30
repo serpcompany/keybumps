@@ -43,7 +43,9 @@ final class ScreenshotEditorTests: XCTestCase {
 
     func testToolShortcutsAndColorUse() {
         XCTAssertEqual(ScreenshotEditorTool.allCases, [.pixelate, .redact, .arrow, .draw, .text])
-        XCTAssertEqual(ScreenshotEditorTool.matching(key: "P"), .pixelate)
+        XCTAssertEqual(ScreenshotEditorTool.pixelate.title, "Blur")
+        XCTAssertEqual(ScreenshotEditorTool.matching(key: "B"), .pixelate)
+        XCTAssertNil(ScreenshotEditorTool.matching(key: "p"), "the letter follows the Blur label")
         XCTAssertEqual(ScreenshotEditorTool.matching(key: "t"), .text)
         XCTAssertNil(ScreenshotEditorTool.matching(key: "c"), "crop is deferred")
         XCTAssertEqual(ScreenshotEditorTool.allCases.map(\.number), ["1", "2", "3", "4", "5"])

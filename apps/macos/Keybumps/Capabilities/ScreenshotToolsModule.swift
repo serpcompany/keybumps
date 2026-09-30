@@ -43,6 +43,7 @@ final class ScreenshotToolsModule: CapabilityModule {
     private let editor: ScreenshotEditorPresenter
     private let palette: CommandPaletteController
     private let clipboard: ClipboardHistoryService
+    private let delivery: ScreenshotClipboardDelivery
     private let capturer: ScreenshotCapturer
     private let systemShortcuts: SystemScreenshotShortcutTakeover
     private let permissions: PermissionCoordinator
@@ -53,6 +54,7 @@ final class ScreenshotToolsModule: CapabilityModule {
         service: ScreenshotToolsService,
         palette: CommandPaletteController,
         clipboard: ClipboardHistoryService,
+        delivery: ScreenshotClipboardDelivery,
         capturer: ScreenshotCapturer,
         systemShortcuts: SystemScreenshotShortcutTakeover,
         permissions: PermissionCoordinator,
@@ -62,6 +64,7 @@ final class ScreenshotToolsModule: CapabilityModule {
         self.service = service
         self.palette = palette
         self.clipboard = clipboard
+        self.delivery = delivery
         self.capturer = capturer
         self.systemShortcuts = systemShortcuts
         self.permissions = permissions
@@ -115,7 +118,7 @@ final class ScreenshotToolsModule: CapabilityModule {
         }
         capturer.capture(mode) { [weak self] files in
             guard opensEditor, let self, let file = files.first else { return }
-            _ = clipboard.ingestImageFile(at: file, isScreenCapture: true)
+            delivery.add(file)
             if let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) {
                 _ = editor.edit(entry)
             }

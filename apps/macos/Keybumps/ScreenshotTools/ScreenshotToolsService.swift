@@ -103,6 +103,28 @@ enum ScreenshotFileFilter {
     }
 }
 
+/// Adds new screenshot files to Clipboard History and, while "Copy new screenshots to the
+/// clipboard" is on, puts each one on the pasteboard too. Restoring the item marks that
+/// pasteboard write as seen, so Clipboard History doesn't add it a second time.
+@MainActor
+struct ScreenshotClipboardDelivery {
+    let clipboard: ClipboardHistoryService
+    let copiesToClipboard: () -> Bool
+
+    /// True when the file became a new Clipboard History item. The Screen and Edit hotkey adds
+    /// its file before the watcher sees it, so a file already in Clipboard History (or matching
+    /// the newest item) is neither added nor copied again.
+    @discardableResult
+    func add(_ url: URL) -> Bool {
+        guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }),
+              clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
+        if copiesToClipboard(), let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
+            clipboard.restore(entry)
+        }
+        return true
+    }
+}
+
 enum ScreenshotToolsStatus: Equatable {
     case stopped
     case requiresClipboardHistory

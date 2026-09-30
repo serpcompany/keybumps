@@ -8,7 +8,7 @@ enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .pixelate: "Pixelate"
+        case .pixelate: "Blur"
         case .redact: "Redact"
         case .arrow: "Arrow"
         case .draw: "Draw"
@@ -29,7 +29,7 @@ enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
     /// Single-key shortcut shown in tooltips and handled by the canvas.
     var key: String {
         switch self {
-        case .pixelate: "p"
+        case .pixelate: "b"
         case .redact: "r"
         case .arrow: "a"
         case .draw: "d"
@@ -37,10 +37,10 @@ enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Number key in toolbar order: 1 Pixelate … 5 Text.
+    /// Number key in toolbar order: 1 Blur … 5 Text.
     var number: String { String((Self.allCases.firstIndex(of: self) ?? 0) + 1) }
 
-    /// Matches a number (1–5) or letter (P/R/A/D/T) shortcut.
+    /// Matches a number (1–5) or letter (B/R/A/D/T) shortcut.
     static func matching(key: String) -> ScreenshotEditorTool? {
         let key = key.lowercased()
         return allCases.first { $0.number == key || $0.key == key }

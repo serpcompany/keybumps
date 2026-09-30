@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where Done saves the edited copy. Originals are never overwritten.
+/// Where Save writes the edited copy. Originals are never overwritten.
 enum ScreenshotEditorOutput {
     static func destination(
         sourceURL: URL?,

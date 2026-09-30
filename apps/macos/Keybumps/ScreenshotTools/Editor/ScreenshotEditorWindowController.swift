@@ -16,7 +16,7 @@ final class ScreenshotEditorModel {
     func redo() { history.redo() }
 }
 
-/// Hosts the canvas and toolbar for one image. Done flattens, copies, and saves an
+/// Hosts the canvas and toolbar for one image. Save flattens, copies, and saves an
 /// `(edited)` copy; Cancel discards. Never logs image content, text, or filenames.
 @MainActor
 final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelegate {
@@ -62,7 +62,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             model: model,
             canvas: canvas,
             cancel: { [weak self] in self?.cancel() },
-            done: { [weak self] in self?.done() }
+            save: { [weak self] in self?.save() }
         ).uiTestAnimationsDisabled())
         window.contentView = root
         model.onChange = { [weak self] in self?.canvas.needsDisplay = true }
@@ -82,7 +82,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
 
     // MARK: Actions
 
-    func done() {
+    func save() {
         canvas.commitTextEditing()
         guard let flattened = renderer.export(source: source, annotations: model.history.annotations),
               let png = ScreenshotAnnotationRenderer.pngData(flattened, density: source.density) else {
@@ -129,7 +129,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             switch (flags, key) {
             case (.command, "z"): self.model.undo(); return nil
             case ([.command, .shift], "z"): self.model.redo(); return nil
-            case (.command, "\r"), ([], "\r"): self.done(); return nil
+            case (.command, "\r"), ([], "\r"): self.save(); return nil
             case ([], _):
                 if let tool = Self.tool(forKey: key, modifiers: event.modifierFlags) { self.model.tool = tool; return nil }
                 return event
@@ -144,7 +144,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         modifiers.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
     }
 
-    /// Unmodified 1–5 or P/R/A/D/T select a tool; anything with Command, Option, or Control does not.
+    /// Unmodified 1–5 or B/R/A/D/T select a tool; anything with Command, Option, or Control does not.
     static func tool(forKey key: String, modifiers: NSEvent.ModifierFlags) -> ScreenshotEditorTool? {
         guard shortcutFlags(modifiers).isEmpty else { return nil }
         return ScreenshotEditorTool.matching(key: key)
@@ -155,7 +155,8 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         keyMonitor = nil
     }
 
-    static let minimumWidth: CGFloat = 760
+    /// Fits the whole toolbar, including the Cancel and Save key hints, without truncating.
+    static let minimumWidth: CGFloat = 840
     static let toolbarHeight: CGFloat = 64
 
     private static func initialFrame(for imageSize: CGSize) -> NSRect {
@@ -172,11 +173,11 @@ private struct ScreenshotEditorRootView: View {
     @Bindable var model: ScreenshotEditorModel
     let canvas: ScreenshotEditorCanvasView
     let cancel: () -> Void
-    let done: () -> Void
+    let save: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenshotEditorToolbar(model: model, cancel: cancel, done: done)
+            ScreenshotEditorToolbar(model: model, cancel: cancel, save: save)
             CanvasHost(canvas: canvas)
         }
     }
@@ -191,7 +192,7 @@ private struct CanvasHost: NSViewRepresentable {
 private struct ScreenshotEditorToolbar: View {
     @Bindable var model: ScreenshotEditorModel
     let cancel: () -> Void
-    let done: () -> Void
+    let save: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -231,16 +232,40 @@ private struct ScreenshotEditorToolbar: View {
                 .disabled(!model.history.canRedo)
                 .help("Redo (⇧⌘Z)")
                 .accessibilityLabel("Redo")
-            Button("Cancel", action: cancel)
-            Button("Done", action: done)
+            Button(action: cancel) { ActionLabel(title: "Cancel", key: "esc") }
+                .help("Discard changes (Esc)")
+                .accessibilityLabel("Cancel")
+            Button(action: save) { ActionLabel(title: "Save", key: "↵") }
                 .buttonStyle(.borderedProminent)
                 .help("Copy to clipboard and save an edited copy (Return)")
+                .accessibilityLabel("Save")
         }
         .controlSize(.large)
         .padding(.horizontal, 12)
         .frame(height: ScreenshotEditorWindowController.toolbarHeight)
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+/// A toolbar action with the key that also triggers it. The keycap takes the button's own
+/// text color, so it stays readable on the prominent Save button and in inactive windows.
+private struct ActionLabel: View {
+    let title: String
+    let key: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Text(key)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 18, minHeight: 18)
+                .padding(.horizontal, 3)
+                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(.tertiary, lineWidth: 0.75))
+                .accessibilityHidden(true)
+        }
+        .fixedSize()
     }
 }
 

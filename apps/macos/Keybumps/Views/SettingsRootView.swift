@@ -472,6 +472,10 @@ struct ScreenshotToolsSettingsView: View {
                     }
                 }
                 status
+                Toggle("Copy new screenshots to the clipboard", isOn: Binding(
+                    get: { model.preferences.copiesScreenshotsToClipboard },
+                    set: { model.preferences.copiesScreenshotsToClipboard = $0 }
+                ))
                 SettingsNote("Screenshots from these hotkeys, and ones you take with macOS's own ⇧⌘5, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. While Screenshot Tools is on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS's own; turning it off gives them back.")
             }
         }.navigationTitle("Screenshot Tools")
