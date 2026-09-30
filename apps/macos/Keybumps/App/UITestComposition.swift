@@ -62,6 +62,10 @@ extension AppModel {
         defaults.set(true, forKey: "didCompleteOnboarding")
 
         let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard, sourceApps: .inert)
+        if configuration.seedsRecentKeybumps {
+            // Into the sandbox's Recent Items, before the palette's Quick Search loads them.
+            RecentItemStore().record(QuickSearchResult(url: Bundle.main.bundleURL, kind: .application))
+        }
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(),

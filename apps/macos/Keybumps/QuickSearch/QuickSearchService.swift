@@ -23,19 +23,32 @@ final class QuickSearchModel {
     let applicationUsage: ApplicationUsageStore
 
     private let applications: [QuickSearchResult]
+    /// Whether a query also runs the Spotlight search of the home folder for files and folders.
+    /// Always false under the unit-test host.
+    let searchesFiles: Bool
     private var metadataQuery: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
 
+    /// Tests supply their own applications and their own `recentItems` and `applicationUsage` stores
+    /// in a temporary folder. Under the unit-test host, the defaults are isolated anyway: no app
+    /// folder is listed, Spotlight never runs, and the stores use `UnitTestHost.dataDirectory`, so a
+    /// test never reads the owner's folders or the installed app's Quick Search files.
     init(
         fileManager: FileManager = .default,
         recentItems: RecentItemStore? = nil,
         applicationUsage: ApplicationUsageStore? = nil,
-        applications suppliedApplications: [QuickSearchResult]? = nil
+        applications suppliedApplications: [QuickSearchResult]? = nil,
+        searchesFiles: Bool = true
     ) {
         self.recentItems = recentItems ?? RecentItemStore(fileManager: fileManager)
         self.applicationUsage = applicationUsage ?? ApplicationUsageStore(fileManager: fileManager)
+        self.searchesFiles = searchesFiles && !UnitTestHost.isActive
         if let suppliedApplications {
-            applications = suppliedApplications
+            applications = suppliedApplications.filter { !Self.isKeybumps($0) }
+            return
+        }
+        guard !UnitTestHost.isActive else {
+            applications = []
             return
         }
         let roots = [URL(fileURLWithPath: "/Applications"), URL(fileURLWithPath: "/System/Applications"), URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications"), fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]
@@ -50,7 +63,22 @@ final class QuickSearchModel {
                 apps.append(QuickSearchResult(url: url, kind: .application))
             }
         }
-        applications = apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        applications = apps
+            .filter { !Self.isKeybumps($0) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Recent Items as the palette lists them: never Keybumps itself, even an entry saved before
+    /// Quick Search hid it. Keybumps Settings covers it.
+    var displayedRecentItems: [RecentItem] {
+        recentItems.items.filter { !Self.isKeybumps($0.result) }
+    }
+
+    /// Whether a result is a copy of Keybumps (`QuickSearchCommand.standIn(for:)`), which Quick
+    /// Search never lists as an app: opening it would only reopen Keybumps, and Keybumps Settings is
+    /// listed instead. Its old learned usage is then never looked up.
+    nonisolated static func isKeybumps(_ result: QuickSearchResult) -> Bool {
+        QuickSearchCommand.standIn(for: result) != nil
     }
 
     func refresh() {
@@ -67,7 +95,10 @@ final class QuickSearchModel {
             from: applications,
             usage: applicationUsage
         )
-        items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: [])
+        items = QuickSearchRanking.items(
+            matching: term, applications: Array(appMatches.prefix(12)), files: [], usage: applicationUsage
+        )
+        guard searchesFiles else { return }
 
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUserHomeScope]
@@ -90,6 +121,12 @@ final class QuickSearchModel {
         applicationUsage.record(result)
     }
 
+    /// Learns a command the user ran from the results, so it ranks like an app opened as often.
+    /// Commands never become Recent Items.
+    func recordRunCommand(_ command: QuickSearchCommand) {
+        applicationUsage.record(command)
+    }
+
     private func consume(query: NSMetadataQuery, term: String, appMatches: [QuickSearchResult]) {
         query.disableUpdates()
         defer { query.enableUpdates() }
@@ -104,7 +141,9 @@ final class QuickSearchModel {
             files.append(QuickSearchResult(url: url, kind: isDirectory.boolValue ? .folder : .file))
             if files.count == 30 { break }
         }
-        items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: files)
+        items = QuickSearchRanking.items(
+            matching: term, applications: Array(appMatches.prefix(12)), files: files, usage: applicationUsage
+        )
     }
 
     private func clearObservers() {

@@ -131,6 +131,74 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")
     }
 
+    func testQuickSearchNavigatesToCapabilities() {
+        launch(permissions: "granted", ["-KBOpenPalette", "search", "-KBCloseSettings", "YES"])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        // A whole word lists the capability's command first, and Return shows its tab in place.
+        app.typeText("dictate")
+        XCTAssertTrue(element("quickSearch.command.dictation").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(paletteField("Search dictation history").waitForExistence(timeout: 5), "Return shows the Dictation tab")
+
+        // Window Manager has no tab, so Return closes the palette and opens its Settings page.
+        app.typeKey("1", modifierFlags: .command)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.typeText("window manager")
+        XCTAssertTrue(element("quickSearch.command.windowManagement").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "Settings opens on Window Manager")
+    }
+
+    func testCapabilityCommandMovesOpenSettingsToItsPage() {
+        // Settings stays open on General, so the page arrives through the open window, not a new one.
+        launch(permissions: "granted", ["-KBOpenSettings", "general", "-KBOpenPalette", "search"])
+        let general = element("settings.detail.general")
+        XCTAssertTrue(general.waitForExistence(timeout: 20))
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        app.typeText("window manager")
+        XCTAssertTrue(element("quickSearch.command.windowManagement").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "The open Settings window moves to Window Manager")
+        XCTAssertFalse(general.exists)
+    }
+
+    func testKeybumpsItselfIsNeverListedAndItsSettingsOpenOnce() {
+        // Owner QA of 4015.182.3: opening the Keybumps app from Quick Search opened Settings, then
+        // Quick Search came back on top. Quick Search now never lists Keybumps itself. The app under
+        // test isn't in /Applications, so it's seeded as the one Recent Item, which must stay hidden.
+        launch(permissions: "granted", [
+            "-KBOpenPalette", "search", "-KBCloseSettings", "YES", "-KBUITestSeedRecentKeybumps", "YES",
+        ])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        let settings = element("settings.detail.permissions")
+        XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
+        // macOS static texts carry their string as the value, so match the identifier or the text.
+        let emptyText = "Start typing to search your Mac"
+        let emptyByText = app.staticTexts
+            .matching(NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", emptyText, emptyText))
+            .firstMatch
+        XCTAssertTrue(
+            element("quickSearch.noRecentItems").waitForExistence(timeout: 5) || emptyByText.exists,
+            "Its only Recent Item, Keybumps, is hidden"
+        )
+        XCTAssertFalse(app.buttons["Clear All"].exists)
+
+        // Typing its name offers Keybumps Settings, which opens Settings once.
+        app.typeText("keybumps")
+        XCTAssertTrue(element("quickSearch.command.keybumpsSettings").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")
+        XCTAssertFalse(field.waitForExistence(timeout: 3), "Quick Search doesn't come back on top")
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {

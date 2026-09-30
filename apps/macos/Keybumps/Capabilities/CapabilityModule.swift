@@ -20,6 +20,11 @@ struct CapabilityDescriptor: Identifiable {
     let settingsPage: CapabilitySettingsPage?
     /// Named app-owned operations the module reports to `UpdateInstallationSafetyPolicy`.
     let criticalOperations: Set<ApplicationCriticalOperation>
+    /// Whether Quick Search offers a capability command for it, and the words besides its title that
+    /// find it, such as its tab's name and what people call what it does ("dictate", "paste"). Nil
+    /// means no capability command; an empty list means one found by its title alone. A keyword
+    /// ranks the command after the apps, so it never hides an app with that name.
+    let searchKeywords: [String]?
 
     var id: Capability { capability }
 }

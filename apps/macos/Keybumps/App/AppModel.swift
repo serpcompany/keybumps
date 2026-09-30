@@ -125,6 +125,7 @@ final class AppModel {
         screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil,
         clipboard injectedClipboard: ClipboardHistoryService? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
+        quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
@@ -197,10 +198,12 @@ final class AppModel {
             dictationHistory: dictationHistory,
             dictationService: dictation,
             inbox: inbox,
-            preferences: preferences
+            preferences: preferences,
+            search: injectedQuickSearch
         )
-        // The palette's Settings button, Command-comma, and Keybumps Settings result take the status menu's route.
-        commandPalette.openSettings = { MainWindowRouter.shared.open() }
+        // The palette's Settings button, Command-comma, and Quick Search commands take the status
+        // menu's route; a capability's command asks for its page.
+        commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
         let screenshotModule = ScreenshotToolsModule(

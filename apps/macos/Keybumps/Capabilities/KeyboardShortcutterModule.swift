@@ -24,7 +24,8 @@ extension CapabilityDescriptor {
             disableExplanation: nil,
             content: { AnyView(KeyboardShortcutterSettingsView()) }
         ),
-        criticalOperations: []
+        criticalOperations: [],
+        searchKeywords: ["hotkeys", "hotkey", "shortcuts", "keyboard", "history"]
     )
 }
 
