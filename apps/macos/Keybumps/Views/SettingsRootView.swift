@@ -495,11 +495,7 @@ struct ScreenshotToolsSettingsView: View {
             Label("Keybumps can’t read \(FileManager.default.displayName(atPath: folder.path))", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             SettingsNote("Allow access in System Settings › Privacy & Security › Files & Folders, then return to Keybumps.")
-            Button("Open Privacy & Security") {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
+            Button("Open Privacy & Security") { model.permissions.openSystemSettings(.filesAndFolders) }
         case .folderUnavailable(let folder):
             Label("\(FileManager.default.displayName(atPath: folder.path)) is unavailable", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)

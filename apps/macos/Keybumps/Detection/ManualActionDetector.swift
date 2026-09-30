@@ -5,7 +5,10 @@ import Foundation
 protocol DetectorPermissionProviding {
     var isAccessibilityTrusted: Bool { get }
     var isInputMonitoringAuthorized: Bool { get }
+    /// Despite the name, only re-reads the state silently; it never prompts. Accessibility and
+    /// Input Monitoring recover through System Settings and the drag card.
     func requestAccessibility()
+    /// Despite the name, only re-reads the state silently; it never prompts.
     func requestInputMonitoring()
 }
 

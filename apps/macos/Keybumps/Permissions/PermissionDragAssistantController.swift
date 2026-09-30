@@ -19,16 +19,28 @@ enum PermissionAssistantCopy {
     static func switchInstruction(for permission: MacPermission) -> String {
         "Turn on the \(permission.title) switch in the list above."
     }
+
+    static func relaunchInstruction(for permission: MacPermission) -> String {
+        "Restart Keybumps to finish \(permission.title) setup."
+    }
 }
 
 @MainActor
 final class PermissionDragAssistantController {
+    /// The card on screen, if any.
+    enum Presentation: Equatable {
+        case applicationDrag(MacPermission)
+        case enableSwitch(MacPermission)
+        case dictationSetup([MacPermission])
+        case relaunch(MacPermission)
+    }
+
     private var panel: NSPanel?
-    private var activePermission: MacPermission?
+    private(set) var presentation: Presentation?
 
     func show(for permission: MacPermission) {
         guard permission.usesApplicationDragAssistant else { return }
-        activePermission = permission
+        presentation = .applicationDrag(permission)
         if panel == nil { makePanel() }
         updateDragContent()
         positionPanel()
@@ -38,9 +50,27 @@ final class PermissionDragAssistantController {
 
     func showEnableSwitch(for permission: MacPermission) {
         guard !permission.usesApplicationDragAssistant else { return }
-        activePermission = permission
+        presentation = .enableSwitch(permission)
         if panel == nil { makePanel() }
         updateSwitchContent(for: permission)
+        positionPanel()
+        panel?.hideDuringUnitTests()
+        panel?.orderFrontRegardless()
+    }
+
+    /// Offers Restart when macOS applies a permission only after Keybumps relaunches. The panel
+    /// doesn't activate Keybumps, so this shows while the Settings window is closed.
+    func showRelaunch(for permission: MacPermission, restart: @escaping () -> Void) {
+        presentation = .relaunch(permission)
+        if panel == nil { makePanel() }
+        panel?.contentViewController = NSHostingController(
+            rootView: PermissionRelaunchAssistantView(
+                permission: permission,
+                restart: restart,
+                dismiss: { [weak self] in self?.dismiss() }
+            )
+            .frame(width: 560, height: 92)
+        )
         positionPanel()
         panel?.hideDuringUnitTests()
         panel?.orderFrontRegardless()
@@ -50,7 +80,7 @@ final class PermissionDragAssistantController {
         missingPermissions: [MacPermission],
         onContinue: @escaping () -> Void
     ) {
-        activePermission = nil
+        presentation = .dictationSetup(missingPermissions)
         if panel == nil { makePanel() }
         panel?.contentViewController = NSHostingController(
             rootView: DictationSetupAssistantView(
@@ -70,12 +100,16 @@ final class PermissionDragAssistantController {
 
     func dismiss() {
         panel?.orderOut(nil)
-        activePermission = nil
+        presentation = nil
     }
 
+    /// Dismisses a card about one permission once macOS reports it granted.
     func dismissIfGranted(using coordinator: PermissionCoordinator) {
-        guard let activePermission,
-              coordinator.state(for: activePermission).isGranted else { return }
+        let permission: MacPermission? = switch presentation {
+        case .applicationDrag(let permission), .enableSwitch(let permission), .relaunch(let permission): permission
+        case .dictationSetup, nil: nil
+        }
+        guard let permission, coordinator.state(for: permission).isGranted else { return }
         dismiss()
     }
 
@@ -212,6 +246,47 @@ private struct PermissionSwitchAssistantView: View {
         .padding(6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Enable \(permission.title) for Keybumps in System Settings")
+    }
+}
+
+private struct PermissionRelaunchAssistantView: View {
+    let permission: MacPermission
+    let restart: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            HStack(spacing: 12) {
+                PermissionAssistantAppIcon()
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(PermissionAssistantCopy.title)
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(PermissionAssistantCopy.relaunchInstruction(for: permission))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Restart Keybumps", action: restart)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.trailing, 28)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .modifier(PermissionAssistantCardStyle())
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 20, height: 20)
+                    .background(.black.opacity(0.16), in: Circle())
+            }
+            .buttonStyle(.borderless)
+            .padding(10)
+            .accessibilityLabel("Close restart reminder")
+        }
+        .padding(6)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(PermissionAssistantCopy.relaunchInstruction(for: permission))
     }
 }
 

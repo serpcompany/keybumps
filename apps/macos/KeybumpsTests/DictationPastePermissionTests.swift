@@ -6,8 +6,9 @@ import Testing
 @testable import Keybumps
 
 /// Dictation pastes by posting ⌘V, which macOS allows only with Accessibility (#192). These tests
-/// lock that Dictation declares it, that setup asks for it once through System Settings, that
-/// nothing outside the explicit request paths prompts, and that an untrusted paste never posts.
+/// lock that Dictation declares it, that setup asks for it once through System Settings and keeps
+/// going on its own, that nothing outside the explicit request paths prompts, and that an
+/// untrusted paste never posts.
 @MainActor
 @Suite("Dictation paste permission")
 struct DictationPastePermissionTests {
@@ -58,6 +59,17 @@ struct DictationPastePermissionTests {
         #expect(PermissionSettingsRowAction.resolve(permission: .accessibility, state: .required, requiresRelaunch: false) == .recoverInSystemSettings)
     }
 
+    @Test("While setup runs, the Dictation shortcut continues it instead of showing another card")
+    func runningSetupRoutesToContinue() {
+        #expect(DictationShortcutRouting.action(phase: .idle, missingPermissions: [.accessibility], isPermissionSetupRunning: true)
+                == .continuePermissionSetup)
+        #expect(DictationShortcutRouting.action(phase: .failed("x"), missingPermissions: [.microphone], isPermissionSetupRunning: true)
+                == .continuePermissionSetup)
+        #expect(DictationShortcutRouting.action(phase: .idle, missingPermissions: [], isPermissionSetupRunning: true) == .toggleDictation)
+        #expect(DictationShortcutRouting.action(phase: .recording, missingPermissions: [.accessibility], isPermissionSetupRunning: true)
+                == .toggleDictation)
+    }
+
     @Test("Setup names every missing permission")
     func setupCopyNamesMissingPermissions() {
         #expect(MacPermission.names([]) == "")
@@ -66,28 +78,27 @@ struct DictationPastePermissionTests {
         #expect(MacPermission.names([.accessibility, .microphone, .speechRecognition]) == "Accessibility, Microphone, and Speech Recognition")
         #expect(DictationSetupCopy.settingsNote(missing: [.accessibility])
                 == "Dictation needs Accessibility access before its shortcut can record and paste.")
+        #expect(PermissionAssistantCopy.relaunchInstruction(for: .accessibility) == "Restart Keybumps to finish Accessibility setup.")
     }
 
-    @Test("An insertion without Accessibility never writes the pasteboard or posts ⌘V")
-    func untrustedInsertionNeverPosts() async throws {
+    @Test("An insertion without Accessibility never runs the paste step")
+    func untrustedInsertionNeverPastes() async throws {
         let sandbox = try Sandbox()
         defer { sandbox.remove() }
-        var posts = 0
-        var pasteboardWrites = 0
+        var pastes = 0
         var accessibilityChecks = 0
         let service = DictationService(
             language: "en-US",
             fileManager: sandbox.fileManager,
             history: sandbox.history,
-            didWritePasteboard: { pasteboardWrites += 1 },
             allowsSystemAccess: true,
             accessibilityTrusted: {
                 accessibilityChecks += 1
                 return false
             },
-            postPasteShortcut: {
-                posts += 1
-                return true
+            pasteStep: DictationPasteStep { _ in
+                pastes += 1
+                return .pasted
             }
         )
 
@@ -95,18 +106,28 @@ struct DictationPastePermissionTests {
             try await service.insert("transcript")
         }
         #expect(accessibilityChecks == 1)
-        #expect(posts == 0)
-        #expect(pasteboardWrites == 0)
+        #expect(pastes == 0)
         #expect(DictationInsertionError.accessibilityRequired.localizedDescription
                 == "Dictation needs Accessibility access to paste. Your transcript was preserved.")
     }
 
-    @Test("In the unit-test host, Dictation has no system access unless a test opts in")
+    @Test("The ⌘V poster itself refuses to post without Accessibility")
+    func pasteShortcutChecksAccessibilityItself() {
+        var sent = 0
+        #expect(DictationPasteShortcut.post(accessibilityTrusted: { false }, send: { _ in sent += 1 }) == .accessibilityRequired)
+        #expect(sent == 0)
+
+        var flags: [CGEventFlags] = []
+        #expect(DictationPasteShortcut.post(accessibilityTrusted: { true }, send: { flags.append($0.flags) }) == .pasted)
+        #expect(flags.count == 2, "⌘V down and up, sent to the fake, never to macOS")
+        #expect(flags.allSatisfy { $0.contains(.maskCommand) })
+    }
+
+    @Test("In the unit-test host, Dictation has no system access and an inert paste step unless a test opts in")
     func unitTestHostDictationHasNoSystemAccess() async throws {
         let sandbox = try Sandbox()
         defer { sandbox.remove() }
         var accessibilityChecks = 0
-        var posts = 0
         let service = DictationService(
             language: "en-US",
             fileManager: sandbox.fileManager,
@@ -114,35 +135,44 @@ struct DictationPastePermissionTests {
             accessibilityTrusted: {
                 accessibilityChecks += 1
                 return true
-            },
-            postPasteShortcut: {
-                posts += 1
-                return true
             }
         )
 
+        #expect(service.pasteStep.kind == .inert)
+        #expect(DictationPasteStep.current(didWritePasteboard: {}).kind == .inert)
         service.start()
         #expect(service.phase == .failed("Audio capture is unavailable in this session."))
         await #expect(throws: DictationInsertionError.unavailableInSession) {
             try await service.insert("transcript")
         }
         #expect(accessibilityChecks == 0)
-        #expect(posts == 0)
+
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+        #expect(harness.model.dictation.pasteStep.kind == .inert, "AppModel's default paste step is inert too")
     }
 
     @Test("Dictation reads Accessibility through the permission coordinator")
     func appModelWiresAccessibilityIntoInsertion() async throws {
-        let harness = try PromptHarness(allowsDictationSystemAccess: true)
+        var pastes = 0
+        let harness = try PromptHarness(
+            allowsDictationSystemAccess: true,
+            pasteStep: DictationPasteStep { _ in
+                pastes += 1
+                return .pasted
+            }
+        )
         defer { harness.tearDown() }
 
         await #expect(throws: DictationInsertionError.accessibilityRequired) {
             try await harness.model.dictation.insert("transcript")
         }
-        harness.grants.insert(.accessibility)
+        harness.grants.grant(.accessibility)
         // Trusted, the gate passes; with no recorded destination it stops before activating anything.
         await #expect(throws: DictationInsertionError.destinationUnavailable) {
             try await harness.model.dictation.insert("transcript")
         }
+        #expect(pastes == 0)
         #expect(harness.prompts.calls.isEmpty)
     }
 
@@ -154,44 +184,153 @@ struct DictationPastePermissionTests {
         for _ in 0..<5 {
             harness.model.refreshPermissions()
             harness.model.applicationDidBecomeActive()
+            harness.activations.activate("com.example.Editor")
         }
         #expect(harness.model.missingPermissions(for: .dictation) == [.accessibility, .microphone, .speechRecognition])
         #expect(harness.model.missingPermissionCount == 3)
-        let dictation = try #require(harness.model.capabilities.module(for: .dictation) as? DictationModule)
-        dictation.onShortcut?()
-        dictation.onShortcut?()
+        harness.pressDictationShortcut()
+        harness.pressDictationShortcut()
 
         #expect(harness.prompts.calls.isEmpty)
+        #expect(harness.model.permissionAssistantPresentation == .dictationSetup([.accessibility, .microphone, .speechRecognition]))
         #expect(harness.model.dictation.phase == .idle, "the shortcut shows setup instead of recording")
     }
 
-    @Test("Dictation setup asks for each permission once: Accessibility through System Settings, then the native prompts")
-    func walkthroughAsksOnce() async throws {
+    @Test("Setup keeps going by itself: Accessibility through System Settings, then each native prompt once")
+    func walkthroughAdvancesWithoutActivation() async throws {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
         harness.model.beginPermissionWalkthrough(for: .dictation)
         try await harness.waitUntil { harness.prompts.calls == [.openSettings(.accessibility)] }
-        // Let the drag card's delayed presentation finish before macOS reports the grant.
-        try await Task.sleep(for: .milliseconds(600))
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
         for _ in 0..<5 { harness.model.refreshPermissions() }
         #expect(harness.prompts.calls == [.openSettings(.accessibility)], "re-reading state never asks again")
 
-        harness.grants.insert(.accessibility)
-        harness.model.refreshPermissions()
+        // Only the fake macOS changes from here: nothing calls refreshPermissions or activates Keybumps.
+        harness.grants.grant(.accessibility)
         try await harness.waitUntil { harness.prompts.calls.count == 2 }
-        for _ in 0..<5 { harness.model.refreshPermissions() }
         #expect(harness.prompts.calls == [.openSettings(.accessibility), .requestMicrophone])
+        #expect(harness.model.permissionAssistantPresentation == nil, "the drag card goes once Accessibility is on")
 
-        harness.grants.insert(.microphone)
-        harness.model.refreshPermissions()
+        harness.grants.grant(.microphone)
         try await harness.waitUntil { harness.prompts.calls.count == 3 }
-        harness.grants.insert(.speechRecognition)
-        harness.model.refreshPermissions()
+        harness.grants.grant(.speechRecognition)
+        try await harness.waitUntil { !harness.model.isPermissionWalkthroughActive }
 
         #expect(harness.prompts.calls == [.openSettings(.accessibility), .requestMicrophone, .requestSpeechRecognition])
-        #expect(!harness.model.isPermissionWalkthroughActive)
         #expect(harness.model.missingPermissions(for: .dictation).isEmpty)
+    }
+
+    @Test("The shortcut during setup brings back the System Settings step, never a second card or prompt")
+    func shortcutDuringSetupContinuesIt() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .dictationSetup([.accessibility, .microphone, .speechRecognition]))
+        harness.model.beginPermissionWalkthrough(for: .dictation) // what the card's Set Up Dictation… does
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+
+        harness.pressDictationShortcut()
+        try await harness.waitUntil { harness.prompts.calls.count == 2 }
+        #expect(harness.prompts.calls == [.openSettings(.accessibility), .openSettings(.accessibility)])
+        try await Task.sleep(for: .milliseconds(500)) // the step's drag card comes back after System Settings opens
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+
+        harness.grants.grant(.accessibility)
+        try await harness.waitUntil { harness.prompts.calls.count == 3 }
+        // Microphone's prompt is on screen now; the shortcut leaves it alone.
+        harness.pressDictationShortcut()
+        harness.pressDictationShortcut()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(harness.prompts.calls == [.openSettings(.accessibility), .openSettings(.accessibility), .requestMicrophone])
+        #expect(harness.model.permissionAssistantPresentation == nil)
+    }
+
+    @Test("Answering Don't Allow to a native prompt ends setup instead of opening System Settings unasked")
+    func declinedPromptEndsSetup() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+        harness.grants.grant(.accessibility)
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.prompts.calls == [.requestMicrophone] }
+        harness.grants.deny(.microphone)
+        try await harness.waitUntil { !harness.model.isPermissionWalkthroughActive }
+        #expect(harness.prompts.calls == [.requestMicrophone])
+
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .dictationSetup([.microphone, .speechRecognition]),
+                "the next press offers setup again, which recovers a denial through System Settings")
+    }
+
+    @Test("Setup stops re-checking after its time limit")
+    func walkthroughMonitorIsBounded() async throws {
+        let harness = try PromptHarness(pollInterval: .zero)
+        defer { harness.tearDown() }
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { !harness.model.isPermissionWalkthroughActive }
+        #expect(harness.model.missingPermissions(for: .dictation) == [.accessibility, .microphone, .speechRecognition])
+        #expect(AppModel.permissionWalkthroughMaximumChecks == 600, "10 minutes at one check a second")
+    }
+
+    @Test("Leaving System Settings for another app shows Restart when macOS needs a relaunch, without activating Keybumps")
+    func relaunchCardWithoutActivation() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        harness.activations.activate(SystemSettingsPage.applicationBundleIdentifier)
+        harness.activations.activate(Bundle.main.bundleIdentifier)
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty, "System Settings and Keybumps itself don't count as leaving")
+
+        // Keybumps was switched on in System Settings, but macOS still reports it untrusted.
+        harness.activations.activate("com.example.Editor")
+        #expect(harness.model.permissionsRequiringRelaunch == [.accessibility])
+        #expect(harness.model.permissionAssistantPresentation == .relaunch(.accessibility))
+
+        // The shortcut offers Restart rather than sending the user back to System Settings.
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .relaunch(.accessibility))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+    }
+
+    @Test("The workspace observer reports only the activated app's bundle identifier")
+    func workspaceObserverReportsBundleIdentifier() async throws {
+        let center = NotificationCenter()
+        let observer = WorkspaceActivationObserver(center: center)
+        var reported: [String?] = []
+        observer.onActivate = { reported.append($0) }
+
+        // The test host itself, so no test reads which of the owner's apps is in front.
+        center.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: NSRunningApplication.current]
+        )
+        for _ in 0..<100 where reported.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(reported == [Bundle.main.bundleIdentifier])
+    }
+
+    @Test("Other System Settings pages open through the coordinator")
+    func systemSettingsPagesOpenThroughTheCoordinator() throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.model.openKeyboardShortcutSettings()
+        harness.model.permissions.openSystemSettings(.filesAndFolders)
+
+        #expect(harness.prompts.calls == [.openSystemSettings(.keyboardShortcuts), .openSystemSettings(.filesAndFolders)])
+        #expect(MacPermission.microphone.settingsURL == SystemSettingsPage.privacy(.microphone).url)
+        #expect(SystemSettingsPage.filesAndFolders.url.absoluteString.hasSuffix("Privacy_FilesAndFolders"))
+        #expect(SystemSettingsPage.keyboardShortcuts.url.absoluteString.hasSuffix("Keyboard-Settings.extension?Shortcuts"))
     }
 }
 
@@ -200,6 +339,30 @@ struct DictationPastePermissionTests {
 struct PermissionPromptSourceTests {
     private static let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     private static let appDirectory = testsDirectory.deletingLastPathComponent().appendingPathComponent("Keybumps", isDirectory: true)
+
+    /// macOS prompt APIs, matched by method name so the receiver's spelling doesn't matter.
+    /// They may appear only in `PermissionPrompts.swift`.
+    private static let promptPatterns = [
+        #"\bCGRequestScreenCaptureAccess\b"#,
+        #"\brequestAccess\s*\("#,                    // AVCaptureDevice, CNContactStore, EKEventStore
+        #"\brequest\w*Authorization\b"#,             // SFSpeechRecognizer, UNUserNotificationCenter, CLLocationManager, PHPhotoLibrary
+        #"\brequestRecordPermission\b"#,             // AVAudioApplication, AVAudioSession
+        #"\bAVAudioApplication\b"#,
+        #"\brequest(Full|WriteOnly)Access"#          // EventKit
+    ]
+
+    /// Prompts for Accessibility, Input Monitoring, or event posting. Nothing may call these.
+    private static let forbiddenPatterns = [
+        #"\bAXIsProcessTrustedWithOptions\b"#,
+        #"\bkAXTrustedCheckOptionPrompt\b"#,
+        #"\bCGRequest(?!ScreenCaptureAccess)\w*Access\b"#, // CGRequestListenEventAccess, CGRequestPostEventAccess
+        #"\bIOHIDRequestAccess\b"#
+    ]
+
+    /// The files allowed to post keyboard events. The poster must check Accessibility itself,
+    /// because macOS drops an untrusted post and shows its own alert. If the paste step moves to
+    /// a shared paster, list that file here in place of Dictation's.
+    private static let keyboardEventPosters = ["Dictation/DictationService.swift"]
 
     @Test("The unit-test host's default prompts are inert")
     func unitTestHostPromptsAreInert() {
@@ -220,54 +383,53 @@ struct PermissionPromptSourceTests {
             requestMicrophone: { calls.append("microphone") },
             requestSpeechRecognition: { calls.append("speech") },
             requestScreenRecording: { calls.append("screenRecording") },
-            openSettings: { calls.append("settings.\($0.rawValue)") }
+            openSettings: { calls.append("settings.\($0.rawValue)") },
+            openSystemSettings: { _ in calls.append("settings.page") }
         )
 
         await coordinator.performRecovery(for: .microphone)
         await coordinator.performRecovery(for: .speechRecognition)
         await coordinator.performRecovery(for: .accessibility)
         await coordinator.performRecovery(for: .inputMonitoring)
+        await coordinator.performRecovery(for: .screenRecording)
 
-        #expect(calls == ["microphone", "speech", "settings.accessibility", "settings.inputMonitoring"])
+        #expect(calls == [
+            "microphone", "speech", "settings.accessibility", "settings.inputMonitoring",
+            "screenRecording", "settings.screenRecording"
+        ])
     }
 
     @Test("Only PermissionPrompts calls a prompt API, and nothing prompts for Accessibility, Input Monitoring, or event posting")
     func promptAPIsLiveOnlyInPermissionPrompts() throws {
         let allowedFile = "Permissions/PermissionPrompts.swift"
-        let promptAPIs = ["AVCaptureDevice.requestAccess", "SFSpeechRecognizer.requestAuthorization", "CGRequestScreenCaptureAccess"]
-        let forbiddenAPIs = [
-            "AXIsProcessTrustedWithOptions", "kAXTrustedCheckOptionPrompt",
-            "CGRequestListenEventAccess", "CGRequestPostEventAccess", "IOHIDRequestAccess"
-        ]
         let sources = try Self.appSources()
         #expect(sources.keys.contains(allowedFile))
+        #expect(Self.matches(Self.promptPatterns, in: sources[allowedFile] ?? "").count >= 3, "the patterns still find the real calls")
 
         for (path, text) in sources {
-            for api in forbiddenAPIs {
-                #expect(!text.contains(api), "\(path) asks macOS to prompt with \(api)")
-            }
+            #expect(Self.matches(Self.forbiddenPatterns, in: text).isEmpty, "\(path) asks macOS to prompt for Accessibility, Input Monitoring, or event posting")
             guard path != allowedFile else { continue }
-            for api in promptAPIs {
-                #expect(!text.contains(api), "\(path) prompts with \(api); go through PermissionPrompts")
-            }
+            #expect(Self.matches(Self.promptPatterns, in: text).isEmpty, "\(path) prompts outside PermissionPrompts")
         }
     }
 
-    /// The files allowed to post keyboard events. Every caller must check Accessibility first,
-    /// because macOS drops an untrusted post and shows its own alert. If the paste step moves to
-    /// a shared paster, list that file here in place of Dictation's.
-    private static let keyboardEventPosters = ["Dictation/DictationService.swift"]
-
-    @Test("Only the Accessibility-gated paste step posts keyboard events")
+    @Test("Only the Accessibility-gated ⌘V poster posts keyboard events")
     func eventPostingLivesOnlyInThePasteStep() throws {
-        let postingAPIs = [".post(tap:", "CGEventPost", "postToPid", "CGEvent.post("]
+        let postingPatterns = [#"\.post\s*\(\s*tap:"#, #"\bCGEventPost"#, #"\bpostToPid\b"#, #"\bpostToPSN\b"#]
         let sources = try Self.appSources()
-        let posters = sources.filter { _, text in postingAPIs.contains(where: text.contains) }.keys.sorted()
+        let posters = sources.filter { _, text in !Self.matches(postingPatterns, in: text).isEmpty }.keys.sorted()
         #expect(posters == Self.keyboardEventPosters)
     }
 
-    @Test("No test uses the real system prompts")
-    func testsNeverUseSystemPrompts() throws {
+    @Test("Only SystemSettingsPage names a System Settings address")
+    func systemSettingsAddressesLiveInOnePlace() throws {
+        let sources = try Self.appSources()
+        let openers = sources.filter { _, text in text.contains("x-apple.systempreferences") }.keys.sorted()
+        #expect(openers == ["Infrastructure/SystemServices.swift"])
+    }
+
+    @Test("No test calls a prompt API or uses the real system prompts")
+    func testsNeverPrompt() throws {
         let token = "PermissionPrompts" + ".system"
         let sources = try FileManager.default.contentsOfDirectory(at: Self.testsDirectory, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" && $0.lastPathComponent != "DictationPastePermissionTests.swift" }
@@ -275,6 +437,14 @@ struct PermissionPromptSourceTests {
         for source in sources {
             let text = try String(contentsOf: source, encoding: .utf8)
             #expect(!text.contains(token), "\(source.lastPathComponent) uses the real permission prompts")
+            #expect(Self.matches(Self.promptPatterns + Self.forbiddenPatterns, in: text).isEmpty,
+                    "\(source.lastPathComponent) calls a macOS prompt API")
+        }
+    }
+
+    private static func matches(_ patterns: [String], in text: String) -> [String] {
+        patterns.filter { pattern in
+            text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
         }
     }
 
@@ -322,6 +492,7 @@ private final class PromptRecorder {
         case requestSpeechRecognition
         case requestScreenRecording
         case openSettings(MacPermission)
+        case openSystemSettings(SystemSettingsPage)
     }
 
     private(set) var calls: [Call] = []
@@ -329,25 +500,47 @@ private final class PromptRecorder {
     func record(_ call: Call) { calls.append(call) }
 }
 
-/// What the fake macOS reports as granted; everything else is undecided or missing.
+/// What the fake macOS reports. Everything starts undecided (Microphone, Speech Recognition) or missing.
 private final class FakeGrants {
     private var granted: Set<MacPermission> = []
+    private var denied: Set<MacPermission> = []
 
-    func insert(_ permission: MacPermission) { granted.insert(permission) }
+    func grant(_ permission: MacPermission) { granted.insert(permission) }
+    func deny(_ permission: MacPermission) { denied.insert(permission) }
     func contains(_ permission: MacPermission) -> Bool { granted.contains(permission) }
+
+    func microphoneStatus() -> AVAuthorizationStatus {
+        granted.contains(.microphone) ? .authorized : denied.contains(.microphone) ? .denied : .notDetermined
+    }
+
+    func speechStatus() -> SFSpeechRecognizerAuthorizationStatus {
+        granted.contains(.speechRecognition) ? .authorized : denied.contains(.speechRecognition) ? .denied : .notDetermined
+    }
 }
 
-/// A Dictation-only `AppModel` whose permissions are fakes that start undecided or missing.
+/// Reports app activations the test chooses, in place of the workspace.
+@MainActor
+private final class FakeActivations: ApplicationActivationObserving {
+    var onActivate: ((String?) -> Void)?
+    func activate(_ bundleIdentifier: String?) { onActivate?(bundleIdentifier) }
+}
+
+/// A Dictation-only `AppModel` whose permissions, prompts, activations, and paste step are fakes.
 @MainActor
 private final class PromptHarness {
     let prompts: PromptRecorder
     let grants: FakeGrants
+    let activations = FakeActivations()
     let model: AppModel
     private let sandbox: Sandbox
     private let pasteboard: NSPasteboard
     private let clipboard: ClipboardHistoryService
 
-    init(allowsDictationSystemAccess: Bool = false) throws {
+    init(
+        allowsDictationSystemAccess: Bool = false,
+        pasteStep: DictationPasteStep? = nil,
+        pollInterval: Duration = .milliseconds(10)
+    ) throws {
         let prompts = PromptRecorder()
         let grants = FakeGrants()
         self.prompts = prompts
@@ -368,23 +561,26 @@ private final class PromptHarness {
             sourceApps: .inert
         )
 
-        let isGranted: (MacPermission) -> Bool = { grants.contains($0) }
         let permissions = PermissionCoordinator(
             accessibilityTrusted: { grants.contains(.accessibility) },
             inputMonitoringAuthorized: { grants.contains(.inputMonitoring) },
-            microphoneAuthorizationStatus: { grants.contains(.microphone) ? .authorized : .notDetermined },
-            speechAuthorizationStatus: { grants.contains(.speechRecognition) ? .authorized : .notDetermined },
+            microphoneAuthorizationStatus: { grants.microphoneStatus() },
+            speechAuthorizationStatus: { grants.speechStatus() },
             screenRecordingAuthorized: { grants.contains(.screenRecording) },
             requestMicrophone: { prompts.record(.requestMicrophone) },
             requestSpeechRecognition: { prompts.record(.requestSpeechRecognition) },
             requestScreenRecording: { prompts.record(.requestScreenRecording) },
-            openSettings: { prompts.record(.openSettings($0)) }
+            openSettings: { prompts.record(.openSettings($0)) },
+            openSystemSettings: { prompts.record(.openSystemSettings($0)) }
         )
         model = AppModel(
             preferences: preferences,
             inbox: InboxStore(persistence: DiscardingPersistence()),
             presenceController: InertPresence(),
-            detector: ManualActionDetector(monitor: IdlePointerMonitor(), permissions: FakeDetectorPermissions(isGranted: isGranted)),
+            detector: ManualActionDetector(
+                monitor: IdlePointerMonitor(),
+                permissions: FakeDetectorPermissions(isGranted: { grants.contains($0) })
+            ),
             shortcutCoordinator: GlobalShortcutCoordinator(backend: IdleHotKeyBackend()),
             permissionCoordinator: permissions,
             updater: DisabledUpdateController(reason: "Dictation paste permission tests"),
@@ -397,18 +593,26 @@ private final class PromptHarness {
             dictationHistory: sandbox.history,
             dictationIndicator: SilentIndicator(),
             dictationFileManager: sandbox.fileManager,
-            allowsDictationSystemAccess: allowsDictationSystemAccess
+            allowsDictationSystemAccess: allowsDictationSystemAccess,
+            dictationPasteStep: pasteStep,
+            permissionPollInterval: pollInterval,
+            applicationActivations: activations
         )
     }
 
+    func pressDictationShortcut() {
+        (model.capabilities.module(for: .dictation) as? DictationModule)?.onShortcut?()
+    }
+
     func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<200 where !condition() {
+        for _ in 0..<300 where !condition() {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(condition(), "timed out waiting for the permission walkthrough")
     }
 
     func tearDown() {
+        model.endPermissionWalkthrough()
         clipboard.stop()
         pasteboard.releaseGlobally()
         sandbox.remove()

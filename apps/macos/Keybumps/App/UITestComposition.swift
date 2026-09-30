@@ -82,7 +82,8 @@ extension AppModel {
                 requestMicrophone: PermissionPrompts.inert.requestMicrophone,
                 requestSpeechRecognition: PermissionPrompts.inert.requestSpeechRecognition,
                 requestScreenRecording: PermissionPrompts.inert.requestScreenRecording,
-                openSettings: PermissionPrompts.inert.openSettings
+                openSettings: { _ in },
+                openSystemSettings: PermissionPrompts.inert.openSystemSettings
             ),
             licensing: FixedLicenseController(state: {
                 switch configuration.licenseState {

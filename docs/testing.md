@@ -30,7 +30,17 @@ No automated level substitutes for a higher one.
 
 Permission-gated and system-level features are faked in automated tests, never granted.
 
-- **Permissions:** CI runners have SIP enabled, so Accessibility and Input Monitoring grants live in a system TCC database that can't be written. Ad-hoc builds change signature every build, and an un-granted Microphone or Files & Folders request raises a blocking system dialog. So every permission check, audio capture, event tap, and folder access goes through an injectable seam. UI tests pass `-KBUITestPermissions granted|denied` to select fakes. In the unit-test host, `PermissionCoordinator`'s default prompts (`PermissionPrompts.current`) are inert, and `DictationService` and `AppModel` default to no Dictation system access (no microphone, app activation, or ⌘V) unless a test opts in. So a test that forgets a fake still can't raise a prompt or open System Settings. `PermissionPromptSourceTests` fails if a prompt API or keyboard-event posting appears outside its one allowed place, or if a test uses the real `PermissionPrompts.system`.
+- **Permissions:** CI runners have SIP enabled, so Accessibility and Input Monitoring grants live in a system TCC database that can't be written. Ad-hoc builds change signature every build, and an un-granted Microphone or Files & Folders request raises a blocking system dialog. So every permission check, audio capture, event tap, and folder access goes through an injectable seam. UI tests pass `-KBUITestPermissions granted|denied` to select fakes. A test that forgets a fake still can't reach macOS, because in the unit-test host these defaults are inert:
+  - `PermissionCoordinator`'s prompts and System Settings opener (`PermissionPrompts.current`);
+  - Dictation's paste step (`DictationPasteStep.current`), which never writes the pasteboard or posts ⌘V;
+  - `AppModel`'s app-activation observer;
+  - Dictation system access in `DictationService` and `AppModel` (no microphone, app activation, or ⌘V), unless a test opts in.
+- **Permission guard tests:** `PermissionPromptSourceTests` fails in any of these cases:
+  - a prompt API (matched by method name, whatever the receiver), keyboard-event posting, or a System Settings address appears outside its one allowed place;
+  - a test calls a prompt API;
+  - a test uses the real `PermissionPrompts.system`.
+
+  The setup walkthrough's re-check interval is injectable (`AppModel(permissionPollInterval:)`), so tests drive it without calling `refreshPermissions()` by hand.
 - **Entry points:** UI tests reach surfaces through launch arguments rather than global hot keys, e.g. `-KBOpenPalette <tab>`, `-KBOpenSettings <section>`, `-KBDisableHotKeys`, plus in-memory stores and a fresh defaults domain. Global hot-key routing is covered by unit tests (`GlobalShortcutCoordinator`) and the owner checklist.
 - Every interactive control that tests touch gets an accessibility identifier. Animations are disabled under the test flag. The non-activating palette panel already returns `canBecomeKey = true`, which `typeText` needs.
 - Tests never touch real user folders or the real pasteboard: inject readers, named pasteboards, and temporary directories, as the existing Screenshot Tools and Clipboard tests do. Release a named pasteboard (`releaseGlobally()`) when the test is done, because it otherwise stays in the pasteboard server until logout.
