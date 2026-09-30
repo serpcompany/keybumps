@@ -23,7 +23,7 @@ app_root=${0:A:h:h}
 update_url_is_production_https "$feed_url" || { print -u2 "release feed must be credential-free, fragment-free public HTTPS with a host"; exit 65; }
 update_url_is_keybumps_feed "$feed_url" || { print -u2 "release feed must use updates.keybumps.app"; exit 65; }
 [[ -n "$public_key" && -n "$sparkle_key_account" ]] || { print -u2 "signing/notary configuration is incomplete"; exit 65; }
-repository_root=$(git -C "$app_root" rev-parse --show-toplevel) || { print -u2 "cannot find the repository root from $app_root"; exit 66; }
+repository_root=$(git -C "$app_root" rev-parse --show-toplevel) || { print -u2 "cannot find the repository root from $app_root: run from a Git checkout, not an export"; exit 66; }
 release_notes="$repository_root/docs/releases/v$release_version.md"
 [[ -f "$release_notes" ]] || { print -u2 "missing release notes: $release_notes"; exit 66; }
 [[ ! -e "$output_directory" ]] || { print -u2 "refusing to overwrite output directory: $output_directory"; exit 73; }
