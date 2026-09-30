@@ -11,6 +11,12 @@ enum UnitTestHost {
         false
         #endif
     }()
+
+    /// This test run's own folder in the temporary directory. Stores whose default location is the
+    /// installed app's (Quick Search's Recent Items and learned usage) use it under the unit-test
+    /// host, so a test that forgets its own store never reads or writes the owner's data.
+    static let dataDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("KeybumpsUnitTestHost-\(UUID().uuidString)", isDirectory: true)
 }
 
 extension NSWindow {

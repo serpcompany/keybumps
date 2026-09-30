@@ -27,10 +27,16 @@ final class RecentItemStore {
         self.fileManager = fileManager
         self.limit = max(1, limit)
         self.now = now
-        self.storageURL = storageURL
-            ?? ProductPaths.keybumps(fileManager: fileManager).applicationSupport
-                .appendingPathComponent("recent-items.json", isDirectory: false)
+        self.storageURL = storageURL ?? Self.defaultStorageURL(fileManager: fileManager)
         load()
+    }
+
+    /// The app's Application Support folder, or under the unit-test host that run's own folder.
+    nonisolated static func defaultStorageURL(fileManager: FileManager = .default) -> URL {
+        let folder = UnitTestHost.isActive
+            ? UnitTestHost.dataDirectory
+            : ProductPaths.keybumps(fileManager: fileManager).applicationSupport
+        return folder.appendingPathComponent("recent-items.json", isDirectory: false)
     }
 
     func record(_ result: QuickSearchResult) {

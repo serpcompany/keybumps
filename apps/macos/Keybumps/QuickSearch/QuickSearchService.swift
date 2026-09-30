@@ -24,11 +24,15 @@ final class QuickSearchModel {
 
     private let applications: [QuickSearchResult]
     /// Whether a query also runs the Spotlight search of the home folder for files and folders.
-    private let searchesFiles: Bool
+    /// Always false under the unit-test host.
+    let searchesFiles: Bool
     private var metadataQuery: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
 
-    /// Tests pass `searchesFiles: false` with supplied applications, so they never read real folders.
+    /// Tests supply their own applications and their own `recentItems` and `applicationUsage` stores
+    /// in a temporary folder. Under the unit-test host, the defaults are isolated anyway: no app
+    /// folder is listed, Spotlight never runs, and the stores use `UnitTestHost.dataDirectory`, so a
+    /// test never reads the owner's folders or the installed app's Quick Search files.
     init(
         fileManager: FileManager = .default,
         recentItems: RecentItemStore? = nil,
@@ -38,9 +42,13 @@ final class QuickSearchModel {
     ) {
         self.recentItems = recentItems ?? RecentItemStore(fileManager: fileManager)
         self.applicationUsage = applicationUsage ?? ApplicationUsageStore(fileManager: fileManager)
-        self.searchesFiles = searchesFiles
+        self.searchesFiles = searchesFiles && !UnitTestHost.isActive
         if let suppliedApplications {
             applications = suppliedApplications
+            return
+        }
+        guard !UnitTestHost.isActive else {
+            applications = []
             return
         }
         let roots = [URL(fileURLWithPath: "/Applications"), URL(fileURLWithPath: "/System/Applications"), URL(fileURLWithPath: "/System/Cryptexes/App/System/Applications"), fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications")]

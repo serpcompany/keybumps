@@ -338,37 +338,40 @@ struct CapabilityCommandTests {
         #expect(!QuickSearchCommand.keybumpsSettings.isTurnedOff(enabledCapabilities: []))
     }
 
-    /// Goes through the real `QuickSearchModel` and the palette's own preferences, with no file search.
-    @Test("Every command is listed whether its capability is on or off; only its row and destination change")
-    func listedWhetherOnOrOff() throws {
+    /// By design, listing never looks at which capabilities are on: `QuickSearchModel` has no
+    /// preferences, and the palette shows its items unfiltered, so a turned-off capability's command
+    /// is always listed. Only its row and Return change, computed from the enabled set where the
+    /// row is built (`turnedOffRows`).
+    @Test("Every command is listed for its name through the real model; listing ignores on and off by design")
+    func listedForItsName() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityCommandListing-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root)
-        let preferences = harness.model.preferences
-        let search = QuickSearchModel(
-            recentItems: RecentItemStore(storageURL: root.appendingPathComponent("recent-items.json")),
-            applicationUsage: ApplicationUsageStore(storageURL: root.appendingPathComponent("application-usage.json")),
-            applications: [],
-            searchesFiles: false
-        )
+        let search = QuickSearchModel.forTests(in: root)
+        for command in QuickSearchCommand.allCases {
+            search.query = command.title
+            #expect(search.items == [.command(command)], "\(command.id)")
+        }
+    }
+
+    /// What `SearchResultsView` computes for each command row from the palette's enabled set.
+    @Test("A row says Turned off, shows no keycaps, and opens Settings exactly while its capability is off")
+    func turnedOffRows() {
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search)
         let states = [allCapabilities, []] + Capability.allCases.map { allCapabilities.subtracting([$0]) }
         for enabled in states {
-            preferences.enabledCapabilities = enabled
             for command in QuickSearchCommand.allCases {
                 guard case .capability(let capability) = command else { continue }
-                search.query = command.title
-                #expect(search.items == [.command(command)], "\(command.id) with \(enabled.map(\.rawValue).sorted())")
-                let isOn = preferences.enabledCapabilities.contains(capability)
-                #expect(command.isTurnedOff(enabledCapabilities: preferences.enabledCapabilities) == !isOn)
-                let expected: QuickSearchCommand.Destination
-                if isOn, let tab = capability.descriptor.paletteTab?.tab {
-                    expected = .paletteTab(tab)
-                } else {
-                    expected = .settings(capability.descriptor.settingsPage?.section)
-                }
-                #expect(command.destination(enabledCapabilities: preferences.enabledCapabilities) == expected)
+                let isOn = enabled.contains(capability)
+                let tab = isOn ? capability.descriptor.paletteTab?.tab : nil
+                let state = "\(command.id) with \(enabled.map(\.rawValue).sorted())"
+                #expect(command.isTurnedOff(enabledCapabilities: enabled) == !isOn, "\(state)")
+                #expect(
+                    command.destination(enabledCapabilities: enabled)
+                        == (tab.map { .paletteTab($0) } ?? .settings(capability.descriptor.settingsPage?.section)),
+                    "\(state)"
+                )
+                #expect(command.rowShortcut(enabledCapabilities: enabled, visibleTabs: tabs) == tab?.shortcutLabel, "\(state)")
             }
         }
     }
@@ -418,27 +421,20 @@ struct CapabilityCommandTests {
         #expect(palette.selectedTab == .clipboard)
     }
 
-    /// A palette over the harness's services with its own Quick Search stores in a temporary folder.
+    /// The harness's own palette, with the Quick Search model the test hands it.
     @Test("Picking any command from the results, on or off, learns its own usage but adds no Recent Item")
     func commandsStayOutOfRecentItems() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityCommandRecents-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root)
-        let model = harness.model
-        let recentItems = RecentItemStore(storageURL: root.appendingPathComponent("recent-items.json"))
+        let search = QuickSearchModel.forTests(in: root)
+        let recentItems = search.recentItems
+        let usage = search.applicationUsage
         let usageURL = root.appendingPathComponent("application-usage.json")
-        let usage = ApplicationUsageStore(storageURL: usageURL)
-        let search = QuickSearchModel(recentItems: recentItems, applicationUsage: usage, applications: [], searchesFiles: false)
-        let palette = CommandPaletteController(
-            clipboard: model.clipboard,
-            dictationHistory: model.dictationHistory,
-            dictationService: model.dictation,
-            inbox: model.inbox,
-            preferences: model.preferences,
-            search: search
-        )
+        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root, quickSearch: search)
+        let model = harness.model
+        let palette = model.commandPalette
         palette.openSettings = { _ in }
 
         for enabled in [allCapabilities, []] {
@@ -472,23 +468,10 @@ struct CapabilityCommandTests {
             .appendingPathComponent("KeybumpsCapabilityCommandLearning-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root)
-        let model = harness.model
         let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
-        let search = QuickSearchModel(
-            recentItems: RecentItemStore(storageURL: root.appendingPathComponent("recent-items.json")),
-            applicationUsage: ApplicationUsageStore(storageURL: root.appendingPathComponent("application-usage.json"), now: { now }),
-            applications: [screenshotApp],
-            searchesFiles: false
-        )
-        let palette = CommandPaletteController(
-            clipboard: model.clipboard,
-            dictationHistory: model.dictationHistory,
-            dictationService: model.dictation,
-            inbox: model.inbox,
-            preferences: model.preferences,
-            search: search
-        )
+        let search = QuickSearchModel.forTests(in: root, applications: [screenshotApp], now: { now })
+        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root, quickSearch: search)
+        let palette = harness.model.commandPalette
         palette.openSettings = { _ in }
         func firstRow() -> QuickSearchItem? {
             search.query = "screenshot"
