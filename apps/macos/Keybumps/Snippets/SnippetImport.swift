@@ -100,6 +100,9 @@ enum AlfredSnippetImport {
             return SnippetImportAlert(title: summary.title, message: summary.message)
         } catch let failure as Failure {
             return .failed(failure.message)
+        } catch SnippetStoreError.keychain {
+            // Import only asks the Keychain which items exist (`SnippetStore.importSnippets`).
+            return .failed("Keybumps couldn’t check the Keychain for snippets you’ve marked Sensitive, so nothing was imported.")
         } catch let error as SnippetStoreError {
             return .failed("\(error.message) Nothing was imported.")
         } catch {

@@ -198,7 +198,9 @@ struct SnippetImportTests {
         try FileManager.default.removeItem(at: folder.storageURL)
         let unsure = folder.makeStore(secrets: secrets)
         secrets.failsNextListing = true
-        #expect(AlfredSnippetImport.importFile(at: export, into: unsure) == .failed("\(SnippetStoreError.keychain.message) Nothing was imported."))
+        #expect(AlfredSnippetImport.importFile(at: export, into: unsure) == .failed(
+            "Keybumps couldn’t check the Keychain for snippets you’ve marked Sensitive, so nothing was imported."
+        ))
         #expect(unsure.snippets.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: folder.storageURL.path))
     }
@@ -211,6 +213,37 @@ struct SnippetImportTests {
         #expect(query[kSecMatchLimit as String] as? String == kSecMatchLimitAll as String)
         #expect(query[kSecReturnAttributes as String] as? Bool == true)
         #expect(query[kSecReturnData as String] == nil)
+    }
+
+    @Test("The Keychain's listing is read as IDs, and one that can't be read throws instead of reading as no items")
+    func keychainListingIsReadOrRefused() throws {
+        let first = try #require(UUID(uuidString: Uid.greeting))
+        let second = try #require(UUID(uuidString: Uid.signOff))
+        // Made-up attribute dictionaries, shaped as the listing returns them. `setText` writes the
+        // account as the ID's (uppercase) `uuidString`.
+        func item(account: Any) -> [String: Any] {
+            [
+                kSecAttrAccount as String: account,
+                kSecAttrService as String: "com.example.made-up.snippets",
+                kSecAttrLabel as String: KeychainSnippetSecretStore.itemLabel,
+            ]
+        }
+        // An account that isn't a UUID can't be a snippet's, so it's skipped.
+        let listing = [item(account: first.uuidString), item(account: second.uuidString), item(account: "made-up-account")]
+        #expect(try KeychainSnippetSecretStore.itemIDs(inListing: listing) == [first, second])
+        #expect(try KeychainSnippetSecretStore.itemIDs(inListing: listing as NSArray) == [first, second])
+        #expect(try KeychainSnippetSecretStore.itemIDs(inListing: [[String: Any]]()).isEmpty)
+
+        let unreadable: [Any?] = [
+            nil,
+            item(account: first.uuidString), // One item, not an array of them.
+            [first.uuidString],
+            [[kSecAttrLabel as String: KeychainSnippetSecretStore.itemLabel]], // No account.
+            [item(account: Data(first.uuidString.utf8))], // An account that isn't text.
+        ]
+        for result in unreadable {
+            #expect(throws: SnippetSecretError.unreadableListing) { try KeychainSnippetSecretStore.itemIDs(inListing: result) }
+        }
     }
 
     @Test("A uid that isn't a UUID gets the same derived ID every time")

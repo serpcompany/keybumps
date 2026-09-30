@@ -15,6 +15,8 @@ protocol SnippetSecretStoring: AnyObject {
 
 enum SnippetSecretError: Error, Equatable {
     case keychain(OSStatus)
+    /// The Keychain listed its items in a shape `KeychainSnippetSecretStore.itemIDs(inListing:)` can't read.
+    case unreadableListing
 }
 
 /// Keychain storage for sensitive snippets: a generic-password item per snippet in the login
@@ -97,8 +99,21 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         let status = SecItemCopyMatching(itemListQuery as CFDictionary, &result)
         if status == errSecItemNotFound { return [] }
         guard status == errSecSuccess else { throw SnippetSecretError.keychain(status) }
-        let items = result as? [[String: Any]] ?? []
-        return Set(items.compactMap { ($0[kSecAttrAccount as String] as? String).flatMap(UUID.init(uuidString:)) })
+        return try Self.itemIDs(inListing: result)
+    }
+
+    /// Reads `itemListQuery`'s result: an array of attribute dictionaries, each with the account
+    /// `query(for:)` writes. Any other shape, or an item without a text account, throws, so an
+    /// import can't go ahead without knowing (`SnippetStore.importSnippets`). An account that isn't
+    /// a UUID is skipped: Keybumps never writes one, and it can't match a snippet's ID.
+    static func itemIDs(inListing result: Any?) throws -> Set<UUID> {
+        guard let items = result as? [[String: Any]] else { throw SnippetSecretError.unreadableListing }
+        return try Set(items.compactMap { item in
+            guard let account = item[kSecAttrAccount as String] as? String else {
+                throw SnippetSecretError.unreadableListing
+            }
+            return UUID(uuidString: account)
+        })
     }
 }
 
