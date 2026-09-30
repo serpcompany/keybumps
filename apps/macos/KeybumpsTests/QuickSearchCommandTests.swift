@@ -118,18 +118,21 @@ struct QuickSearchCommandTests {
         }
     }
 
-    @Test("Running it from the palette opens Settings once, with the palette closed")
+    /// This never shows the palette: even invisible, a shown panel becomes the key window and would
+    /// take keyboard focus from whatever the owner is using. The UI tests cover the palette closing
+    /// and the real Settings route.
+    @Test("Running it from the palette calls the Settings route once")
     func runOpensSettings() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsQuickSearchCommand-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let harness = WiringHarness(enabled: [], missing: nil, root: root)
         let palette = harness.model.commandPalette
-        var paletteWasOpen: [Bool] = []
-        palette.openSettings = { [weak palette] in paletteWasOpen.append(palette?.isDisplaying(.search) ?? false) }
+        var openCount = 0
+        palette.openSettings = { openCount += 1 }
 
         palette.run(.keybumpsSettings)
 
-        #expect(paletteWasOpen == [false])
+        #expect(openCount == 1)
     }
 }

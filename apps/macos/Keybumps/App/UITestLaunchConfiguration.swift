@@ -13,6 +13,7 @@ struct UITestLaunchConfiguration: Equatable {
     static let permissionsArgument = "-KBUITestPermissions"
     static let openPaletteArgument = "-KBOpenPalette"
     static let openSettingsArgument = "-KBOpenSettings"
+    static let closeSettingsArgument = "-KBCloseSettings"
     static let disableHotKeysArgument = "-KBDisableHotKeys"
     static let seedClipboardImageArgument = "-KBUITestSeedClipboardImage"
     static let licenseStateArgument = "-KBLicenseState"
@@ -36,6 +37,9 @@ struct UITestLaunchConfiguration: Equatable {
     private(set) var permissions: PermissionMode?
     private(set) var openPalette: CommandPaletteTab?
     private(set) var openSettings: SettingsSection?
+    /// With `openPalette`, closes Settings before the palette opens, so a test can show that an
+    /// action opens it.
+    private(set) var closesSettings = false
     private(set) var disablesHotKeys = false
     private(set) var seedsClipboardImage = false
     private(set) var licenseState: LicenseStateMode = .active
@@ -50,6 +54,7 @@ struct UITestLaunchConfiguration: Equatable {
             .flatMap(CommandPaletteTab.init(rawValue:))
         openSettings = Self.value(after: Self.openSettingsArgument, in: arguments)
             .flatMap(SettingsSection.init(launchToken:))
+        closesSettings = Self.flag(Self.closeSettingsArgument, in: arguments)
         disablesHotKeys = Self.flag(Self.disableHotKeysArgument, in: arguments)
         seedsClipboardImage = Self.flag(Self.seedClipboardImageArgument, in: arguments)
         licenseState = Self.value(after: Self.licenseStateArgument, in: arguments)

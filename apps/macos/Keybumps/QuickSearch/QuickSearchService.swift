@@ -19,7 +19,6 @@ final class QuickSearchModel {
     private(set) var items: [QuickSearchItem] = []
     /// The apps, files, and folders among `items`.
     var results: [QuickSearchResult] { items.compactMap(\.result) }
-    var selection = 0
     let recentItems: RecentItemStore
     let applicationUsage: ApplicationUsageStore
 
@@ -60,7 +59,6 @@ final class QuickSearchModel {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else {
             items = []
-            selection = 0
             return
         }
 
@@ -70,7 +68,6 @@ final class QuickSearchModel {
             usage: applicationUsage
         )
         items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: [])
-        selection = 0
 
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUserHomeScope]
@@ -85,15 +82,6 @@ final class QuickSearchModel {
         }
         metadataQuery = query
         query.start()
-    }
-
-    func moveSelection(_ delta: Int) {
-        guard !results.isEmpty else { return }
-        selection = (selection + delta + results.count) % results.count
-    }
-
-    var selectedResult: QuickSearchResult? {
-        results.indices.contains(selection) ? results[selection] : nil
     }
 
     func recordOpenResult(_ result: QuickSearchResult, succeeded: Bool) {
@@ -117,7 +105,6 @@ final class QuickSearchModel {
             if files.count == 30 { break }
         }
         items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: files)
-        if selection >= items.count { selection = max(0, items.count - 1) }
     }
 
     private func clearObservers() {
