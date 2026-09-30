@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The Snippets page: its command, then every snippet in a searchable table with + and − and
-/// Edit…, which open the editor sheet. Everything here is saved on this Mac only.
+/// Edit…, which open the editor sheet, and Import from Alfred… (`AlfredSnippetImport`).
+/// Everything here is saved on this Mac only.
 struct SnippetsSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
@@ -9,6 +10,8 @@ struct SnippetsSettingsView: View {
     @State private var pendingDeletion: Snippet?
     @State private var errorMessage: String?
     @State private var confirmsStartOver = false
+    @State private var choosesAlfredExport = false
+    @State private var importAlert: SnippetImportAlert?
 
     var body: some View {
         @Bindable var store = model.snippets
@@ -81,6 +84,10 @@ struct SnippetsSettingsView: View {
                     .disabled(selectedSnippet == nil || !isWritable)
                     .accessibilityIdentifier("snippets.remove")
                     Spacer()
+                    Button("Import from Alfred…") { choosesAlfredExport = true }
+                        .disabled(!isWritable)
+                        .help("Add the snippets from an Alfred snippets export (.alfredsnippets)")
+                        .accessibilityIdentifier("snippets.importAlfred")
                     Button("Edit…") {
                         if let selection { store.editorRequest = .edit(selection) }
                     }
@@ -122,6 +129,23 @@ struct SnippetsSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: { snippet in
             Text("“\(snippet.name)” will be removed from this Mac.")
+        }
+        .fileImporter(isPresented: $choosesAlfredExport, allowedContentTypes: [AlfredSnippetImport.contentType]) { result in
+            switch result {
+            case .success(let url): importAlert = AlfredSnippetImport.importFile(at: url, into: store)
+            case .failure: importAlert = .failed(AlfredSnippetImport.Failure.unreadable.message)
+            }
+        }
+        .fileDialogMessage("Choose a snippet collection exported from Alfred.")
+        .fileDialogConfirmationLabel("Import")
+        .alert(
+            importAlert?.title ?? "",
+            isPresented: Binding(get: { importAlert != nil }, set: { if !$0 { importAlert = nil } }),
+            presenting: importAlert
+        ) { _ in
+            Button("OK") {}
+        } message: { alert in
+            Text(alert.message)
         }
     }
 
