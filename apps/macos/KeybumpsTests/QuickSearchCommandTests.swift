@@ -182,4 +182,65 @@ struct QuickSearchCommandTests {
 
         #expect(opened == [nil], "Settings opens where it was left")
     }
+
+    // MARK: Keybumps's own app (owner QA of 4015.182.3)
+
+    @Test("A copy of Keybumps stands in for Keybumps Settings: this app, or any build found by its bundle identifier")
+    func keybumpsAppStandsInForSettings() {
+        let running = URL(fileURLWithPath: "/tmp/fixture/Build/Products/Debug/Keybumps.app")
+        let identifiers = [
+            "/Applications/Keybumps.app": "com.serp.keybumps",
+            "/Applications/Keybumps Debug.app": "com.serp.keybumps.debug",
+            "/Applications/KeybumpsTests.app": "com.serp.keybumps.tests",
+            "/Applications/Safari.app": "com.apple.Safari",
+        ]
+        func standIn(_ path: String, kind: QuickSearchResult.Kind = .application) -> QuickSearchCommand? {
+            QuickSearchCommand.standIn(
+                for: QuickSearchResult(url: URL(fileURLWithPath: path), kind: kind),
+                runningAppURL: running,
+                bundleIdentifier: { identifiers[$0.path] }
+            )
+        }
+
+        #expect(standIn(running.path) == settings, "This app, whatever its identifier")
+        #expect(standIn("/Applications/Keybumps.app") == settings, "The installed release or QA copy")
+        #expect(standIn("/Applications/Keybumps Debug.app") == settings, "A Debug build")
+        #expect(standIn("/Applications/KeybumpsTests.app") == nil)
+        #expect(standIn("/Applications/Safari.app") == nil)
+        #expect(standIn("/Applications/Unreadable.app") == nil, "No bundle identifier")
+        #expect(standIn("/Applications/Keybumps.app", kind: .folder) == nil, "Only apps")
+        // The unit-test host is Keybumps itself.
+        #expect(QuickSearchCommand.standIn(for: QuickSearchResult(url: Bundle.main.bundleURL, kind: .application)) == settings)
+    }
+
+    /// Before, the palette asked macOS to open Keybumps's own bundle. macOS reopened the running app,
+    /// the reopen showed Quick Search again (as a Dock click does), and Settings opened under it.
+    @Test("Opening Keybumps from Quick Search runs Keybumps Settings: Settings once, no open, no Recent Item")
+    func openingKeybumpsRunsSettings() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsOwnApp-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let search = QuickSearchModel.forTests(in: root)
+        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root, quickSearch: search)
+        let palette = harness.model.commandPalette
+        var opened: [SettingsSection?] = []
+        palette.openSettings = { opened.append($0) }
+        var openedURLs: [URL] = []
+        palette.openURL = { openedURLs.append($0); return true }
+        let keybumps = QuickSearchResult(url: Bundle.main.bundleURL, kind: .application)
+
+        palette.open(keybumps)
+
+        #expect(opened == [nil], "Settings opens once, where it was left")
+        #expect(openedURLs.isEmpty, "macOS is never asked to open Keybumps, which would reopen it")
+        #expect(search.recentItems.items.isEmpty, "Keybumps never becomes a Recent Item")
+        #expect(search.applicationUsage.record(for: settings)?.launchCount == 1, "Learned as Keybumps Settings")
+        #expect(search.applicationUsage.record(for: keybumps.url) == nil)
+
+        // Any other app still opens through the workspace and becomes a Recent Item.
+        palette.open(preview)
+        #expect(openedURLs == [preview.url])
+        #expect(search.recentItems.items.map(\.result) == [preview])
+        #expect(opened == [nil])
+    }
 }

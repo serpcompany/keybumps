@@ -167,6 +167,30 @@ extension QuickSearchCommand {
     }
 }
 
+// MARK: - Keybumps's own app
+
+extension QuickSearchCommand {
+    /// Bundle identifiers of every copy of Keybumps: the release and QA builds, and Debug builds.
+    static let keybumpsBundleIdentifiers: Set<String> = [
+        ProductIdentity.bundleIdentifier, ProductIdentity.bundleIdentifier + ".debug",
+    ]
+
+    /// The command to run instead of opening `result`, when `result` is a copy of Keybumps itself:
+    /// this app, or another copy (the installed release, a QA or Debug build), matched by bundle
+    /// identifier. Opening the running app's own bundle makes macOS reopen it, which shows Quick
+    /// Search again on top of Settings, so Quick Search runs Keybumps Settings instead.
+    static func standIn(
+        for result: QuickSearchResult,
+        runningAppURL: URL = Bundle.main.bundleURL,
+        bundleIdentifier: (URL) -> String? = { Bundle(url: $0)?.bundleIdentifier }
+    ) -> QuickSearchCommand? {
+        guard result.kind == .application else { return nil }
+        if result.url.standardizedFileURL == runningAppURL.standardizedFileURL { return .keybumpsSettings }
+        guard let identifier = bundleIdentifier(result.url) else { return nil }
+        return keybumpsBundleIdentifiers.contains(identifier) ? .keybumpsSettings : nil
+    }
+}
+
 // MARK: - Quick Search rows
 
 /// One Quick Search result row: a Keybumps command, or an app, file, or folder.

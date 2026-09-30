@@ -168,6 +168,26 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(general.exists)
     }
 
+    func testOpeningKeybumpsItselfOpensSettingsOnce() {
+        // Owner QA of 4015.182.3: opening the Keybumps app from Quick Search opened Settings, then
+        // Quick Search came back on top. The app under test isn't in /Applications, so it's seeded
+        // as the one Recent Item, which opens through the same path as a search result.
+        launch(permissions: "granted", [
+            "-KBOpenPalette", "search", "-KBCloseSettings", "YES", "-KBUITestSeedRecentKeybumps", "YES",
+        ])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        let settings = element("settings.detail.permissions")
+        XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
+        XCTAssertTrue(app.buttons["Clear All"].waitForExistence(timeout: 5), "Keybumps is listed in Recent Items")
+
+        // The empty search selects the first Recent Item, and Return opens it.
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")
+        XCTAssertFalse(field.waitForExistence(timeout: 3), "Quick Search doesn't come back on top")
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {

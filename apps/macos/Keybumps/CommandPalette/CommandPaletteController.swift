@@ -146,6 +146,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Opens Settings on a page, or where it was left when nil. The app shell sets it to the status
     /// menu's route.
     var openSettings: (SettingsSection?) -> Void = { _ in }
+    /// Opens a Quick Search result's URL; tests replace it so they never open anything.
+    var openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
 
     init(
         clipboard: ClipboardHistoryService,
@@ -515,8 +517,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func open(_ result: QuickSearchResult) {
-        let didOpen = NSWorkspace.shared.open(result.url)
+    /// Opens an app, file, or folder from Quick Search's results or Recent Items. A copy of Keybumps
+    /// itself runs Keybumps Settings instead, as its command would (learned as that command, never a
+    /// Recent Item): asking macOS to open the running app would reopen it, which shows Quick Search
+    /// again, and Settings too.
+    func open(_ result: QuickSearchResult) {
+        if let command = QuickSearchCommand.standIn(for: result) {
+            choose(command)
+            return
+        }
+        let didOpen = openURL(result.url)
         search.recordOpenResult(result, succeeded: didOpen)
         if didOpen { dismiss() }
     }
