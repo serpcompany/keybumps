@@ -412,7 +412,7 @@ private final class SpyClipboardHistoryService: ClipboardHistoryService {
 
     init(log: LifecycleLog, storageURL: URL, pasteboard: NSPasteboard, mediaDirectoryURL: URL) {
         self.log = log
-        super.init(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaDirectoryURL)
+        super.init(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaDirectoryURL, sourceApps: .inert)
     }
 
     override func start() { log.append("clipboardMonitor.start") }

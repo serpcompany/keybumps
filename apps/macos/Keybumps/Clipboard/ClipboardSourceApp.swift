@@ -38,11 +38,15 @@ extension NSPasteboard.PasteboardType {
     static let webArchive = NSPasteboard.PasteboardType("com.apple.webarchive")
 }
 
-/// The website a copy came from, kept as its domain (the URL's host) only. The page's full address,
-/// path, query, and fragment are never kept, persisted, or logged.
+/// The website a copy came from, kept as its domain (the address's host) only. The page's full
+/// address, path, query, and fragment are never kept, persisted, or logged.
 enum ClipboardSourceDomain {
-    /// The domain of the page a copy came from, when the browser put the page's address on the
-    /// pasteboard: Chromium's source URL, or the main resource of Safari's web archive.
+    /// A rich copy's web archive carries the selection's images too. Decoding a bigger one on the main
+    /// actor for one address isn't worth it, so that item just gets no domain.
+    static let maximumWebArchiveBytes = 8 * 1_024 * 1_024
+
+    /// The domain of the page a copy came from, when the app put the page's address on the
+    /// pasteboard: Chromium's source URL, or the main resource of a WebKit web archive.
     static func read(from pasteboard: NSPasteboard) -> String? {
         let types = pasteboard.types ?? []
         // Reading more of another device's data would only fetch it over the network.
@@ -56,19 +60,76 @@ enum ClipboardSourceDomain {
         return nil
     }
 
-    /// The lowercased host of an http or https address; nil for any other scheme or no host.
+    /// The website domain of an http or https address: its host in ASCII, so an international or
+    /// lookalike domain keeps its punycode `xn--` form (as browsers show it), lowercased and without
+    /// a trailing dot. Nil for other schemes and for anything that isn't a website's domain name.
     static func host(ofPageAddress address: String?) -> String? {
+        // `URLComponents.host` decodes punycode and percent escapes; `encodedHost` doesn't.
         guard let address, let components = URLComponents(string: address),
               let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https",
-              let host = components.host?.lowercased(), !host.isEmpty else { return nil }
-        return host
+              var host = components.encodedHost?.lowercased() else { return nil }
+        if host.hasSuffix(".") { host.removeLast() }
+        return isWebsiteDomain(host) ? host : nil
     }
+
+    /// A dotted name of letters, digits, and hyphens. That leaves out escapes, control characters,
+    /// and IPv6 literals; IPv4 addresses (a numeric last label); and `localhost` and other
+    /// single-label local names, which aren't websites.
+    static func isWebsiteDomain(_ host: String) -> Bool {
+        guard host.count <= 253, host.unicodeScalars.allSatisfy(hostCharacters.contains) else { return false }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty && $0.count <= 63 }),
+              let last = labels.last, last != "localhost", !last.allSatisfy(\.isNumber) else { return false }
+        return true
+    }
+
+    private static let hostCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
 
     /// WebKit's web archive is a property list whose main resource carries the page's address.
     static func mainResourceAddress(ofWebArchive data: Data) -> String? {
-        guard let archive = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+        guard data.count <= maximumWebArchiveBytes,
+              let archive = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let mainResource = archive["WebMainResource"] as? [String: Any] else { return nil }
         return mainResource["WebResourceURL"] as? String
+    }
+}
+
+/// Prefix matching for the source app and domain in Clipboard tab search, so a short query such as
+/// `com` or `www` doesn't match every item copied from the web.
+enum ClipboardSourceSearch {
+    /// True when `query` matches `name` from the start of a word: the start of the name, after a space
+    /// or punctuation, at a capital after a lowercase letter (`Edit` in `TextEdit`), or at a letter
+    /// after a digit (`Writer` in `9Writer`).
+    static func matchesWordStart(_ query: String, in name: String) -> Bool {
+        guard !query.isEmpty else { return false }
+        var previous: Character?
+        for index in name.indices {
+            let character = name[index]
+            let isWordCharacter = character.isLetter || character.isNumber
+            let startsWord = isWordCharacter && previous.map {
+                !($0.isLetter || $0.isNumber)
+                    || ($0.isLowercase && character.isUppercase)
+                    || ($0.isNumber && character.isLetter)
+            } ?? isWordCharacter
+            if startsWord, name[index...].range(of: query, options: [.caseInsensitive, .anchored], locale: .current) != nil {
+                return true
+            }
+            previous = character
+        }
+        return false
+    }
+
+    /// True when `query` matches `domain` from the start of a label other than the last one (the
+    /// top-level domain), or from a `www` label only when the query goes past `www.`.
+    static func matchesLabelStart(_ query: String, in domain: String) -> Bool {
+        let query = query.lowercased()
+        let labels = domain.split(separator: ".")
+        guard !query.isEmpty, labels.count >= 2 else { return false }
+        for start in 0..<(labels.count - 1) where labels[start...].joined(separator: ".").hasPrefix(query) {
+            if labels[start] == "www", query.count <= 4 { continue }
+            return true
+        }
+        return false
     }
 }
 
@@ -88,10 +149,29 @@ struct ClipboardSourceAppReader {
     var uptime: @MainActor () -> TimeInterval
 
     static let system = ClipboardSourceAppReader(
-        frontmost: { NSWorkspace.shared.frontmostApplication.flatMap { ClipboardSourceApp($0) } },
+        frontmost: {
+            ClipboardSourceAppReader.appInFront(
+                keybumpsHasKeyWindow: NSApplication.shared.keyWindow != nil,
+                keybumps: ClipboardSourceApp(.current),
+                frontmost: NSWorkspace.shared.frontmostApplication.flatMap { ClipboardSourceApp($0) }
+            )
+        },
         application: { ClipboardSourceApp.installed(bundleIdentifier: $0) },
         uptime: { ProcessInfo.processInfo.systemUptime }
     )
+
+    /// For tests and the UI-test composition: never reads the Mac's real apps.
+    static let inert = ClipboardSourceAppReader(frontmost: { nil }, application: { _ in nil }, uptime: { 0 })
+
+    /// A copy made in one of Keybumps' own windows is Keybumps', including the non-activating Command
+    /// Palette, which takes key focus without making Keybumps the frontmost app.
+    static func appInFront(
+        keybumpsHasKeyWindow: Bool,
+        keybumps: ClipboardSourceApp?,
+        frontmost: ClipboardSourceApp?
+    ) -> ClipboardSourceApp? {
+        keybumpsHasKeyWindow ? keybumps ?? frontmost : frontmost
+    }
 }
 
 /// Works out the source app of a pasteboard change Clipboard History's poll noticed.

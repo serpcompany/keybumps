@@ -134,7 +134,7 @@ final class ScreenshotToolsTests: XCTestCase {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsScreenshotClipboard-\(UUID().uuidString)"))
         let shot = root.appendingPathComponent("Screenshot 2026-09-28 at 9.41.00 AM.png")
         try png.write(to: shot)
-        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL)
+        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL, sourceApps: .inert)
         let changeCountBefore = pasteboard.changeCount
 
         XCTAssertTrue(service.ingestImageFile(at: shot))
@@ -146,7 +146,7 @@ final class ScreenshotToolsTests: XCTestCase {
         XCTAssertEqual(entry.sourceURL, shot)
         XCTAssertNotEqual(entry.imageURL, shot, "Clipboard History keeps its own media copy")
 
-        let reloaded = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL)
+        let reloaded = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL, sourceApps: .inert)
         XCTAssertEqual(reloaded.entries.first, entry)
 
         XCTAssertTrue(service.restore(entry))
@@ -160,7 +160,8 @@ final class ScreenshotToolsTests: XCTestCase {
         let service = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("history.json"),
             pasteboard: NSPasteboard(name: NSPasteboard.Name("KeybumpsScreenshotReject-\(UUID().uuidString)")),
-            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true)
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true),
+            sourceApps: .inert
         )
         let pdf = root.appendingPathComponent("capture.pdf")
         let empty = root.appendingPathComponent("empty.png")
@@ -176,7 +177,8 @@ final class ScreenshotToolsTests: XCTestCase {
         let service = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("history.json"),
             pasteboard: pasteboard,
-            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true)
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true),
+            sourceApps: .inert
         )
         let file = root.appendingPathComponent("Design mock.png")
         try png.write(to: file)
@@ -202,7 +204,8 @@ final class ScreenshotToolsTests: XCTestCase {
         let service = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("history.json"),
             pasteboard: pasteboard,
-            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true)
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true),
+            sourceApps: .inert
         )
         let file = root.appendingPathComponent("notes.pdf")
         try Data("pdf".utf8).write(to: file)
@@ -218,7 +221,7 @@ final class ScreenshotToolsTests: XCTestCase {
         let json = #"[{"id":"\#(UUID().uuidString)","text":"","capturedAt":0,"kind":"image","mediaPath":"/tmp/a.png","mediaPasteboardType":"public.png","sourcePath":"/Users/x/Desktop/Screenshot.png"}]"#
         let storageURL = root.appendingPathComponent("legacy.json")
         try Data(json.utf8).write(to: storageURL)
-        let entry = try XCTUnwrap(ClipboardHistoryService(storageURL: storageURL, mediaDirectoryURL: root.appendingPathComponent("m", isDirectory: true)).entries.first)
+        let entry = try XCTUnwrap(ClipboardHistoryService(storageURL: storageURL, mediaDirectoryURL: root.appendingPathComponent("m", isDirectory: true), sourceApps: .inert).entries.first)
         XCTAssertTrue(entry.isScreenshot)
     }
 
@@ -240,7 +243,7 @@ final class ScreenshotToolsTests: XCTestCase {
     func testClearScreenshotsKeepsOtherItemsAndOriginalFiles() throws {
         let storageURL = root.appendingPathComponent("history.json")
         let mediaURL = root.appendingPathComponent("media", isDirectory: true)
-        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: NSPasteboard(name: NSPasteboard.Name("KeybumpsClearShots-\(UUID().uuidString)")), mediaDirectoryURL: mediaURL)
+        let service = ClipboardHistoryService(storageURL: storageURL, pasteboard: NSPasteboard(name: NSPasteboard.Name("KeybumpsClearShots-\(UUID().uuidString)")), mediaDirectoryURL: mediaURL, sourceApps: .inert)
         let shot = root.appendingPathComponent("Screenshot.png")
         try png.write(to: shot)
         XCTAssertTrue(service.ingestImageFile(at: shot, isScreenCapture: true))
@@ -251,7 +254,7 @@ final class ScreenshotToolsTests: XCTestCase {
         XCTAssertEqual(service.entries.map(\.text), ["keep me"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: screenshotMedia.path), "the media copy is removed")
         XCTAssertTrue(FileManager.default.fileExists(atPath: shot.path), "the original screenshot file stays")
-        XCTAssertEqual(ClipboardHistoryService(storageURL: storageURL, mediaDirectoryURL: mediaURL).entries.map(\.text), ["keep me"])
+        XCTAssertEqual(ClipboardHistoryService(storageURL: storageURL, mediaDirectoryURL: mediaURL, sourceApps: .inert).entries.map(\.text), ["keep me"])
     }
 
     func testCopiedImagesKeepTheirExistingLabels() {

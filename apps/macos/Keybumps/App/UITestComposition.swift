@@ -50,7 +50,7 @@ extension AppModel {
         defaults.removePersistentDomain(forName: uiTestDefaultsSuite)
         defaults.set(true, forKey: "didCompleteOnboarding")
 
-        let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard)
+        let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard, sourceApps: .inert)
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(),

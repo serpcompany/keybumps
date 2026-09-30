@@ -56,9 +56,15 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         case .image: sourceURL?.deletingPathExtension().lastPathComponent ?? "Image"
         }
     }
-    var searchableText: String {
-        let content = kind == .image ? "\(kindLabel) \(displayText) \(mediaPasteboardType ?? "")" : text
-        return ([content, sourceApp?.name, sourceDomain] as [String?]).compactMap { $0 }.joined(separator: "\n")
+    var searchableText: String { kind == .image ? "\(kindLabel) \(displayText) \(mediaPasteboardType ?? "")" : text }
+
+    /// Whether a Clipboard tab search matches this item: its content anywhere, its source app's name
+    /// from the start of a word, or its source domain from the start of a label other than the last
+    /// one or `www`. So `com` or `www` doesn't match everything copied from the web.
+    func matches(_ query: String) -> Bool {
+        searchableText.localizedCaseInsensitiveContains(query)
+            || sourceApp.map { ClipboardSourceSearch.matchesWordStart(query, in: $0.name) } == true
+            || sourceDomain.map { ClipboardSourceSearch.matchesLabelStart(query, in: $0) } == true
     }
     var sourceURL: URL? { sourcePath.map { URL(fileURLWithPath: $0) } }
     var imageURL: URL? { mediaPath.map { URL(fileURLWithPath: $0) } }

@@ -183,11 +183,44 @@ struct ClipboardSourceAppTests {
             ("https://", nil),
             ("not an address", nil),
             ("", nil),
-            (nil, nil)
+            (nil, nil),
+            // A lookalike or international domain keeps its punycode form, as browsers show it.
+            ("https://xn--xample-2of.com/", "xn--xample-2of.com"),
+            ("https://\u{0435}xample.com/", "xn--xample-2of.com"),
+            // Escapes and control characters aren't hostname characters, so nothing is kept.
+            ("https://exa%0Ample.com/", nil),
+            ("https://exa%2Fmple.com/", nil),
+            ("https://exa\nmple.com/", nil),
+            ("https://my_site.example.com/", nil),
+            // A trailing dot is dropped; an empty label isn't a hostname.
+            ("https://example.com./", "example.com"),
+            ("https://example..com/", nil),
+            // IP addresses and local names aren't websites.
+            ("https://192.168.1.10/", nil),
+            ("http://10.0.0.1:8080/", nil),
+            ("https://[::1]:8080/", nil),
+            ("https://[2001:db8::1]/", nil),
+            ("https://localhost:3000/", nil),
+            ("https://app.localhost/", nil),
+            ("http://intranet/", nil)
         ]
         for (address, host) in cases {
-            #expect(ClipboardSourceDomain.host(ofPageAddress: address) == host, "\(address ?? "nil")")
+            #expect(ClipboardSourceDomain.host(ofPageAddress: address) == host, "\((address ?? "nil").debugDescription)")
         }
+    }
+
+    @Test("URLComponents decodes a host, while its encoded host stays ASCII, so only the encoded host is used")
+    func foundationHostBehavior() {
+        let lookalike = URLComponents(string: "https://xn--xample-2of.com/")
+        #expect(lookalike?.host == "\u{0435}xample.com")
+        #expect(lookalike?.encodedHost == "xn--xample-2of.com")
+        let escaped = URLComponents(string: "https://exa%0Ample.com/")
+        #expect(escaped?.host == "exa\nmple.com")
+        #expect(escaped?.encodedHost == "exa%0Ample.com")
+        #expect(URLComponents(string: "https://\u{0435}xample.com/")?.encodedHost == "xn--xample-2of.com")
+        #expect(URLComponents(string: "https://example.com./")?.encodedHost == "example.com.")
+        #expect(URLComponents(string: "https://[::1]:8080/")?.encodedHost == "[::1]")
+        #expect(URLComponents(string: "https://exa\nmple.com/") == nil)
     }
 
     @Test("A non-http page records the source app but no domain")
@@ -220,9 +253,29 @@ struct ClipboardSourceAppTests {
         #expect(harness.service.entries.prefix(2).map(\.sourceDomain) == [nil, nil])
     }
 
-    /// The shape of WebKit's `com.apple.webarchive` data, with a made-up page.
-    static func webArchive(mainResourceAddress: String) throws -> Data {
-        try PropertyListSerialization.data(fromPropertyList: [
+    @Test("A web archive over the size cap isn't decoded, so that item gets no domain")
+    func largeWebArchive() throws {
+        let cap = ClipboardSourceDomain.maximumWebArchiveBytes
+        let justUnder = try Self.webArchive(mainResourceAddress: "https://example.com/", imageBytes: cap - 4_096)
+        let over = try Self.webArchive(mainResourceAddress: "https://example.com/", imageBytes: cap)
+        #expect(justUnder.count <= cap)
+        #expect(over.count > cap)
+        #expect(ClipboardSourceDomain.mainResourceAddress(ofWebArchive: justUnder) == "https://example.com/")
+        #expect(ClipboardSourceDomain.mainResourceAddress(ofWebArchive: over) == nil)
+
+        let harness = Harness()
+        defer { harness.cleanUp() }
+        harness.apps.frontmost = Self.browser
+        harness.copy("made-up text", webArchive: over)
+        harness.service.pollForTesting()
+        #expect(harness.service.entries.first?.sourceApp == Self.browser)
+        #expect(harness.service.entries.first?.sourceDomain == nil)
+    }
+
+    /// The shape of WebKit's `com.apple.webarchive` data, with a made-up page and, optionally, a
+    /// made-up image subresource of the given size.
+    static func webArchive(mainResourceAddress: String, imageBytes: Int = 0) throws -> Data {
+        var archive: [String: Any] = [
             "WebMainResource": [
                 "WebResourceURL": mainResourceAddress,
                 "WebResourceMIMEType": "text/html",
@@ -230,7 +283,15 @@ struct ClipboardSourceAppTests {
                 "WebResourceFrameName": "",
                 "WebResourceData": Data("<p>made-up</p>".utf8)
             ] as [String: Any]
-        ], format: .binary, options: 0)
+        ]
+        if imageBytes > 0 {
+            archive["WebSubresources"] = [[
+                "WebResourceURL": "https://example.com/made-up.png",
+                "WebResourceMIMEType": "image/png",
+                "WebResourceData": Data(count: imageBytes)
+            ] as [String: Any]]
+        }
+        return try PropertyListSerialization.data(fromPropertyList: archive, format: .binary, options: 0)
     }
 
     @Test("Screenshots from Screenshot Tools have no source app")
@@ -263,20 +324,61 @@ struct ClipboardSourceAppTests {
         #expect(harness.service.entries.first?.sourceApp == Self.notes)
     }
 
-    @Test("Search finds items by their source app's name and domain")
-    func searchBySourceApp() {
-        let fromNotes = ClipboardEntry(id: UUID(), text: "made-up text", capturedAt: Date(), sourceApp: Self.notes)
-        let fromPage = ClipboardEntry(
-            id: UUID(), text: "made-up text", capturedAt: Date(), sourceApp: Self.browser, sourceDomain: "docs.example.com"
+    @Test("Search matches content anywhere, the source app from a word's start, and the domain from a label's start")
+    func searchBySource() {
+        let entry = ClipboardEntry(
+            id: UUID(),
+            text: "made-up text",
+            capturedAt: Date(),
+            sourceApp: ClipboardSourceApp(bundleIdentifier: "com.example.writer", name: "Example TextWriter"),
+            sourceDomain: "www.docs.example.com"
         )
-        let unknown = ClipboardEntry(id: UUID(), text: "made-up text", capturedAt: Date())
+        for query in ["made-up", "de-up t", "example", "EXAMPLE TEXT", "writer", "docs", "docs.ex", "example.com", "www.docs"] {
+            #expect(entry.matches(query), "\(query)")
+        }
+        for query in ["com", ".com", "www", "www.", "ample", "riter", "ocs", "e.com", "org"] {
+            #expect(!entry.matches(query), "\(query)")
+        }
 
-        #expect(fromNotes.searchableText.localizedCaseInsensitiveContains("example notes"))
-        #expect(fromNotes.searchableText.localizedCaseInsensitiveContains("made-up"))
-        #expect(fromPage.searchableText.localizedCaseInsensitiveContains("example.com"))
-        #expect(fromPage.searchableText.localizedCaseInsensitiveContains("example browser"))
-        #expect(!unknown.searchableText.localizedCaseInsensitiveContains("example notes"))
-        #expect(unknown.searchableText == "made-up text")
+        #expect(ClipboardSourceSearch.matchesWordStart("writer", in: "9Writer"))
+        #expect(ClipboardSourceSearch.matchesWordStart("edit", in: "Example TextEdit"))
+        #expect(!ClipboardSourceSearch.matchesWordStart("", in: "Example TextEdit"))
+
+        let unknown = ClipboardEntry(id: UUID(), text: "made-up text", capturedAt: Date())
+        #expect(unknown.matches("made-up"))
+        #expect(!unknown.matches("example"))
+        #expect(unknown.searchableText == "made-up text", "The source isn't part of the content")
+    }
+
+    @Test("A copy made while a Keybumps window is key, such as the Command Palette, is credited to Keybumps")
+    func keybumpsWindowIsKey() {
+        let keybumps = ClipboardSourceApp(bundleIdentifier: "com.example.keybumps", name: "Keybumps")
+        #expect(ClipboardSourceAppReader.appInFront(keybumpsHasKeyWindow: true, keybumps: keybumps, frontmost: Self.browser) == keybumps)
+        #expect(ClipboardSourceAppReader.appInFront(keybumpsHasKeyWindow: false, keybumps: keybumps, frontmost: Self.browser) == Self.browser)
+        #expect(ClipboardSourceAppReader.appInFront(keybumpsHasKeyWindow: true, keybumps: nil, frontmost: Self.browser) == Self.browser)
+    }
+
+    @Test("The inert reader used by tests and UI tests never names an app")
+    func inertReader() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsClipboardInert-\(UUID().uuidString)")
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsClipboardInert-\(UUID().uuidString)"))
+        defer {
+            pasteboard.releaseGlobally()
+            try? FileManager.default.removeItem(at: root)
+        }
+        let service = ClipboardHistoryService(
+            fileManager: TemporaryRootFileManager(root: root),
+            storageURL: root.appendingPathComponent("history.json"),
+            pasteboard: pasteboard,
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true),
+            sourceApps: .inert
+        )
+        pasteboard.clearContents()
+        pasteboard.setString("made-up text", forType: .string)
+        pasteboard.setString("com.example.writer", forType: .nspasteboardSource)
+        service.pollForTesting()
+        #expect(service.entries.first?.text == "made-up text")
+        #expect(service.entries.first?.sourceApp == nil)
     }
 
     @Test("Keybumps marks its own recorded copies, so they aren't credited to the app in front")

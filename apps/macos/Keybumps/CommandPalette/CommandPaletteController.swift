@@ -424,7 +424,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.searchableText.localizedCaseInsensitiveContains(query) }
+        return clipboard.entries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -679,7 +679,7 @@ private struct CommandPaletteView: View {
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return clipboard.entries }
-        return clipboard.entries.filter { $0.searchableText.localizedCaseInsensitiveContains(query) }
+        return clipboard.entries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {

@@ -37,7 +37,7 @@ The app a Clipboard History item was copied from, as far as macOS lets Keybumps 
 _Avoid_: Origin, source (alone; a screenshot's original file is its source file)
 
 **Source domain**:
-The website a Clipboard History item was copied from, kept as its domain only, when the browser says which page it was.
+The website a Clipboard History item was copied from, kept as its domain name only, when the app it came from (a browser, or an app built on one) says which page it was. IP addresses and local names such as `localhost` aren't websites and have none.
 _Avoid_: Source URL, page address (the full address is never kept)
 
 **Dictation**:
