@@ -192,6 +192,7 @@ struct QuickSearchCommandTests {
             "/Applications/Keybumps.app": "com.serp.keybumps",
             "/Applications/Keybumps Debug.app": "com.serp.keybumps.debug",
             "/Applications/KeybumpsTests.app": "com.serp.keybumps.tests",
+            "/Applications/Utilities/Keybumps.app": "com.example.keybumps",
             "/Applications/Safari.app": "com.apple.Safari",
         ]
         func standIn(_ path: String, kind: QuickSearchResult.Kind = .application) -> QuickSearchCommand? {
@@ -206,11 +207,19 @@ struct QuickSearchCommandTests {
         #expect(standIn("/Applications/Keybumps.app") == settings, "The installed release or QA copy")
         #expect(standIn("/Applications/Keybumps Debug.app") == settings, "A Debug build")
         #expect(standIn("/Applications/KeybumpsTests.app") == nil)
+        #expect(standIn("/Applications/Utilities/Keybumps.app") == nil, "The name isn't read; another app named Keybumps opens normally")
         #expect(standIn("/Applications/Safari.app") == nil)
         #expect(standIn("/Applications/Unreadable.app") == nil, "No bundle identifier")
         #expect(standIn("/Applications/Keybumps.app", kind: .folder) == nil, "Only apps")
         // The unit-test host is Keybumps itself.
         #expect(QuickSearchCommand.standIn(for: QuickSearchResult(url: Bundle.main.bundleURL, kind: .application)) == settings)
+        // The real reader on the test host, a Debug build, as if it were another copy: pins the Debug
+        // identifier in `keybumpsBundleIdentifiers` to the one `project.yml` gives the build.
+        #expect(Bundle.main.bundleIdentifier.map(QuickSearchCommand.keybumpsBundleIdentifiers.contains) == true)
+        #expect(QuickSearchCommand.standIn(
+            for: QuickSearchResult(url: Bundle.main.bundleURL, kind: .application),
+            runningAppURL: URL(fileURLWithPath: "/tmp/fixture/Other/Keybumps.app")
+        ) == settings)
     }
 
     /// Before, the palette asked macOS to open Keybumps's own bundle. macOS reopened the running app,
