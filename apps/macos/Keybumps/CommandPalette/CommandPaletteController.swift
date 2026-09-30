@@ -992,19 +992,25 @@ private struct ClipboardResultsView: View {
                                             .font(.system(size: 15))
                                             .lineLimit(entry.kind == .image ? 1 : 2)
                                             .frame(maxWidth: .infinity, alignment: .leading)
+                                        // Only the source app's name and domain give way when space runs out.
                                         HStack(spacing: 5) {
-                                            Text(entry.kindLabel)
+                                            Text(entry.kindLabel).fixedSize()
                                             if let sourceApp = entry.sourceApp {
                                                 Text("·")
                                                 ClipboardSourceAppLabel(app: sourceApp)
                                             }
+                                            if let domain = entry.sourceDomain {
+                                                Text("·")
+                                                ClipboardSourceDomainLabel(domain: domain)
+                                            }
                                             Text("·")
-                                            Text(entry.capturedAt, style: .relative)
+                                            Text(entry.capturedAt, style: .relative).fixedSize()
                                             if showsEditHint, entry.kind == .image {
                                                 Text("·")
-                                                Text("⌘E to edit")
+                                                Text("⌘E to edit").fixedSize()
                                             }
                                         }
+                                        .lineLimit(1)
                                         .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
                                     }
@@ -1053,6 +1059,26 @@ struct ClipboardSourceAppLabel: View {
         .help("Copied from \(app.name)")
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Copied from \(app.name)")
+    }
+}
+
+/// The website a clipboard item was copied from, as its domain. A long domain loses its start, so
+/// the registrable end (for example `example.com`) stays visible.
+struct ClipboardSourceDomainLabel: View {
+    let domain: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "globe")
+                .font(.system(size: 10))
+                .accessibilityHidden(true)
+            Text(domain)
+                .lineLimit(1)
+                .truncationMode(.head)
+        }
+        .help("Copied from a page on \(domain)")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Website \(domain)")
     }
 }
 

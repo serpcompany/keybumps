@@ -32,6 +32,44 @@ extension NSPasteboard.PasteboardType {
     static let nspasteboardSource = NSPasteboard.PasteboardType("org.nspasteboard.source")
     /// Present on items that arrived from another device through Universal Clipboard.
     static let universalClipboard = NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")
+    /// Chromium browsers: the URL of the page a copy came from.
+    static let chromiumSourceURL = NSPasteboard.PasteboardType("org.chromium.source-url")
+    /// Safari and other WebKit views: a web archive of the copied selection.
+    static let webArchive = NSPasteboard.PasteboardType("com.apple.webarchive")
+}
+
+/// The website a copy came from, kept as its domain (the URL's host) only. The page's full address,
+/// path, query, and fragment are never kept, persisted, or logged.
+enum ClipboardSourceDomain {
+    /// The domain of the page a copy came from, when the browser put the page's address on the
+    /// pasteboard: Chromium's source URL, or the main resource of Safari's web archive.
+    static func read(from pasteboard: NSPasteboard) -> String? {
+        let types = pasteboard.types ?? []
+        // Reading more of another device's data would only fetch it over the network.
+        if types.contains(.universalClipboard) { return nil }
+        if types.contains(.chromiumSourceURL) {
+            return host(ofPageAddress: pasteboard.string(forType: .chromiumSourceURL))
+        }
+        if types.contains(.webArchive), let archive = pasteboard.data(forType: .webArchive) {
+            return host(ofPageAddress: mainResourceAddress(ofWebArchive: archive))
+        }
+        return nil
+    }
+
+    /// The lowercased host of an http or https address; nil for any other scheme or no host.
+    static func host(ofPageAddress address: String?) -> String? {
+        guard let address, let components = URLComponents(string: address),
+              let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = components.host?.lowercased(), !host.isEmpty else { return nil }
+        return host
+    }
+
+    /// WebKit's web archive is a property list whose main resource carries the page's address.
+    static func mainResourceAddress(ofWebArchive data: Data) -> String? {
+        guard let archive = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let mainResource = archive["WebMainResource"] as? [String: Any] else { return nil }
+        return mainResource["WebResourceURL"] as? String
+    }
 }
 
 extension NSPasteboard {

@@ -36,6 +36,10 @@ _Avoid_: Permanent clipboard archive, Dictation History duplicate
 The app a Clipboard History item was copied from, as far as macOS lets Keybumps tell. Screenshots and items from other devices have none.
 _Avoid_: Origin, source (alone; a screenshot's original file is its source file)
 
+**Source domain**:
+The website a Clipboard History item was copied from, kept as its domain only, when the browser says which page it was.
+_Avoid_: Source URL, page address (the full address is never kept)
+
 **Dictation**:
 A session that records speech, transcribes it locally, and inserts the text at the original cursor.
 _Avoid_: Voice guide, assistant

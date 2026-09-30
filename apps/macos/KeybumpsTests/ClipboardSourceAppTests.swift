@@ -23,6 +23,7 @@ struct ClipboardSourceAppTests {
         harness.service.pollForTesting()
 
         #expect(harness.service.entries.first?.sourceApp == Self.notes)
+        #expect(harness.service.entries.first?.sourceDomain == nil, "No page address on the pasteboard, no domain")
         #expect(harness.reloaded().entries.first?.sourceApp == Self.notes)
     }
 
@@ -44,11 +45,14 @@ struct ClipboardSourceAppTests {
         #expect(entry.text == "saved before")
         #expect(entry.kind == .text)
         #expect(entry.sourceApp == nil)
+        #expect(entry.sourceDomain == nil)
 
-        harness.apps.frontmost = Self.notes
-        harness.copy("made-up text")
+        harness.apps.frontmost = Self.browser
+        harness.copy("made-up text", pageAddress: "https://example.com/made-up")
         loaded.pollForTesting()
-        #expect(harness.reloaded().entries.map(\.sourceApp) == [Self.notes, nil])
+        let reloaded = harness.reloaded()
+        #expect(reloaded.entries.map(\.sourceApp) == [Self.browser, nil])
+        #expect(reloaded.entries.map(\.sourceDomain) == ["example.com", nil])
     }
 
     @Test("An app switch just before the poll credits the app that was in front at the previous poll")
@@ -135,11 +139,98 @@ struct ClipboardSourceAppTests {
         defer { harness.cleanUp() }
         harness.apps.frontmost = Self.notes
 
-        harness.copy("made-up text", fromAnotherDevice: true)
+        harness.copy("made-up text", fromAnotherDevice: true, pageAddress: "https://example.com/")
         harness.service.pollForTesting()
 
         #expect(harness.service.entries.first?.text == "made-up text")
         #expect(harness.service.entries.first?.sourceApp == nil)
+        #expect(harness.service.entries.first?.sourceDomain == nil)
+    }
+
+    // MARK: Source domain
+
+    @Test("A Chromium copy keeps only the page's domain, never its full address")
+    func chromiumDomain() throws {
+        let harness = Harness()
+        defer { harness.cleanUp() }
+        harness.apps.frontmost = Self.browser
+
+        harness.copy("made-up text", pageAddress: "https://Docs.Example.com:8443/private/page?token=made-up-secret#section")
+        harness.service.pollForTesting()
+
+        #expect(harness.service.entries.first?.sourceDomain == "docs.example.com")
+        let saved = try String(contentsOf: harness.storageURL, encoding: .utf8)
+        #expect(saved.contains("docs.example.com"))
+        for part in ["https", "private", "page?", "token", "made-up-secret", "section"] {
+            #expect(!saved.contains(part), "The saved history must not keep \(part)")
+        }
+        #expect(harness.reloaded().entries.first?.sourceDomain == "docs.example.com")
+    }
+
+    @Test("Only http and https addresses give a domain, and only their host")
+    func hostRules() {
+        let cases: [(address: String?, host: String?)] = [
+            ("https://www.example.com/a/b?c=d#e", "www.example.com"),
+            ("http://example.org", "example.org"),
+            ("HTTPS://EXAMPLE.NET/Path", "example.net"),
+            ("https://someone:made-up@example.com/", "example.com"),
+            ("https://example.com:8080/", "example.com"),
+            ("chrome://settings", nil),
+            ("file:///Users/example/page.html", nil),
+            ("chrome-extension://abcdef/page.html", nil),
+            ("about:blank", nil),
+            ("data:text/html,made-up", nil),
+            ("https://", nil),
+            ("not an address", nil),
+            ("", nil),
+            (nil, nil)
+        ]
+        for (address, host) in cases {
+            #expect(ClipboardSourceDomain.host(ofPageAddress: address) == host, "\(address ?? "nil")")
+        }
+    }
+
+    @Test("A non-http page records the source app but no domain")
+    func nonWebPage() {
+        let harness = Harness()
+        defer { harness.cleanUp() }
+        harness.apps.frontmost = Self.browser
+
+        harness.copy("made-up text", pageAddress: "chrome://settings/")
+        harness.service.pollForTesting()
+
+        #expect(harness.service.entries.first?.sourceApp == Self.browser)
+        #expect(harness.service.entries.first?.sourceDomain == nil)
+    }
+
+    @Test("A Safari copy's web archive gives the page's domain")
+    func safariWebArchive() throws {
+        let harness = Harness()
+        defer { harness.cleanUp() }
+        harness.apps.frontmost = Self.browser
+
+        harness.copy("made-up text", webArchive: try Self.webArchive(mainResourceAddress: "https://news.example.org/story?id=made-up"))
+        harness.service.pollForTesting()
+        #expect(harness.service.entries.first?.sourceDomain == "news.example.org")
+
+        harness.copy("second made-up text", webArchive: try Self.webArchive(mainResourceAddress: "about:blank"))
+        harness.service.pollForTesting()
+        harness.copy("third made-up text", webArchive: Data("not a property list".utf8))
+        harness.service.pollForTesting()
+        #expect(harness.service.entries.prefix(2).map(\.sourceDomain) == [nil, nil])
+    }
+
+    /// The shape of WebKit's `com.apple.webarchive` data, with a made-up page.
+    static func webArchive(mainResourceAddress: String) throws -> Data {
+        try PropertyListSerialization.data(fromPropertyList: [
+            "WebMainResource": [
+                "WebResourceURL": mainResourceAddress,
+                "WebResourceMIMEType": "text/html",
+                "WebResourceTextEncodingName": "UTF-8",
+                "WebResourceFrameName": "",
+                "WebResourceData": Data("<p>made-up</p>".utf8)
+            ] as [String: Any]
+        ], format: .binary, options: 0)
     }
 
     @Test("Screenshots from Screenshot Tools have no source app")
@@ -172,13 +263,18 @@ struct ClipboardSourceAppTests {
         #expect(harness.service.entries.first?.sourceApp == Self.notes)
     }
 
-    @Test("Search finds items by their source app's name")
+    @Test("Search finds items by their source app's name and domain")
     func searchBySourceApp() {
         let fromNotes = ClipboardEntry(id: UUID(), text: "made-up text", capturedAt: Date(), sourceApp: Self.notes)
+        let fromPage = ClipboardEntry(
+            id: UUID(), text: "made-up text", capturedAt: Date(), sourceApp: Self.browser, sourceDomain: "docs.example.com"
+        )
         let unknown = ClipboardEntry(id: UUID(), text: "made-up text", capturedAt: Date())
 
         #expect(fromNotes.searchableText.localizedCaseInsensitiveContains("example notes"))
         #expect(fromNotes.searchableText.localizedCaseInsensitiveContains("made-up"))
+        #expect(fromPage.searchableText.localizedCaseInsensitiveContains("example.com"))
+        #expect(fromPage.searchableText.localizedCaseInsensitiveContains("example browser"))
         #expect(!unknown.searchableText.localizedCaseInsensitiveContains("example notes"))
         #expect(unknown.searchableText == "made-up text")
     }
@@ -239,11 +335,19 @@ private struct Harness {
         Self.makeService(root: root, pasteboard: pasteboard, apps: apps)
     }
 
-    func copy(_ text: String, marker: String? = nil, fromAnotherDevice: Bool = false) {
+    func copy(
+        _ text: String,
+        marker: String? = nil,
+        fromAnotherDevice: Bool = false,
+        pageAddress: String? = nil,
+        webArchive: Data? = nil
+    ) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         if let marker { pasteboard.setString(marker, forType: .nspasteboardSource) }
         if fromAnotherDevice { pasteboard.setData(Data([0x31]), forType: .universalClipboard) }
+        if let pageAddress { pasteboard.setString(pageAddress, forType: .chromiumSourceURL) }
+        if let webArchive { pasteboard.setData(webArchive, forType: .webArchive) }
     }
 
     func cleanUp() {
