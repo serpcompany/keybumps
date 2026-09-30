@@ -17,6 +17,7 @@
 // Options: --base <url>, --port <n> (default 8793), and CHROME_PATH to use a specific Chrome
 // (otherwise the installed Google Chrome channel).
 import { spawn } from 'node:child_process'
+import { createServer } from 'node:net'
 import { parseArgs } from 'node:util'
 import { chromium } from 'playwright-core'
 
@@ -39,24 +40,66 @@ function run(command, args, env) {
     )
   })
 }
+/** Resolves if nothing listens on `port` on either loopback address, and rejects otherwise. */
+async function assertPortFree(port) {
+  for (const host of ['127.0.0.1', '::1']) {
+    await new Promise((resolve, reject) => {
+      const probe = createServer()
+      probe.once('error', error => {
+        // No IPv6 loopback on this machine: nothing can be listening there.
+        if (error.code === 'EADDRNOTAVAIL' || error.code === 'EAFNOSUPPORT') resolve()
+        else reject(new Error(`port ${port} is already in use on ${host} (${error.code})`))
+      })
+      probe.listen({ port: Number(port), host, exclusive: true }, () => probe.close(resolve))
+    })
+  }
+}
+
 async function startPreview(port) {
+  // A server already on the port would answer the readiness check, and the test would run
+  // against it instead of this build, so refuse to start. Checked before the build (fail fast)
+  // and again right before the preview starts.
+  const busy = error => {
+    throw new Error(
+      `${error.message}. Stop whatever is running there, or pass --port <free port>, or ` +
+        '--base <url> to test a production-mode preview you started yourself.'
+    )
+  }
+  await assertPortFree(port).catch(busy)
   const env = { SITE_ENV: 'production', NEXT_PUBLIC_GTM_ID: GTM_ID }
   console.log('Building a production-mode site…')
   await run('pnpm', ['exec', 'opennextjs-cloudflare', 'build'], env)
+  await assertPortFree(port).catch(busy)
   console.log(`Starting the preview on port ${port}…`)
+  const output = []
+  const keep = chunk => {
+    output.push(...chunk.toString().split('\n'))
+    output.splice(0, Math.max(0, output.length - 200))
+  }
   server = spawn(
     'pnpm',
     ['exec', 'opennextjs-cloudflare', 'preview', '--port', port, '--var', 'SITE_ENV:production'],
-    { env: { ...process.env, ...env }, stdio: 'ignore', detached: true }
+    { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true }
   )
+  server.stdout.on('data', keep)
+  server.stderr.on('data', keep)
+  const exited = new Promise(resolve => server.once('exit', code => resolve(code)))
+  const failed = reason => {
+    console.error(`The preview's output (last ${output.length} lines):\n${output.join('\n')}`)
+    return new Error(`the preview did not start: ${reason}`)
+  }
   const base = `http://localhost:${port}`
   for (let i = 0; i < 120; i++) {
+    const code = await Promise.race([
+      exited,
+      new Promise(r => setTimeout(() => r('running'), 1000))
+    ])
+    if (code !== 'running') throw failed(`it exited with code ${code}`)
     try {
       if ((await fetch(`${base}/`)).ok) return base
     } catch {}
-    await new Promise(resolve => setTimeout(resolve, 1000))
   }
-  throw new Error('the preview did not start')
+  throw failed('no 200 from / within 120 s')
 }
 function stopPreview() {
   if (server) {
