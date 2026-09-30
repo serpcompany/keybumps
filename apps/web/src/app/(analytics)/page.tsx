@@ -25,7 +25,7 @@ const FEATURES = [
   {
     title: 'Screenshot Tools',
     keys: '⇧⌘4',
-    body: 'Capture an area or every screen, then pixelate, redact, draw, and annotate before you paste.'
+    body: 'Capture an area or every screen, then blur, redact, draw, and annotate before you paste.'
   },
   {
     title: 'On-device Dictation',
@@ -132,7 +132,7 @@ export default async function Home() {
             <ul className="checks">
               <li>Speech-to-text runs locally with Whisper</li>
               <li>No cloud sync — nothing to breach</li>
-              <li>Redact and pixelate screenshots before you share</li>
+              <li>Redact and blur screenshots before you share</li>
               <li>Developer ID–signed, auto-updating releases</li>
             </ul>
           </div>
