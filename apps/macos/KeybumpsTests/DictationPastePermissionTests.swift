@@ -253,12 +253,17 @@ struct PermissionPromptSourceTests {
         }
     }
 
-    @Test("Only Dictation's Accessibility-gated paste posts keyboard events")
-    func eventPostingLivesOnlyInDictationPaste() throws {
+    /// The files allowed to post keyboard events. Every caller must check Accessibility first,
+    /// because macOS drops an untrusted post and shows its own alert. If the paste step moves to
+    /// a shared paster, list that file here in place of Dictation's.
+    private static let keyboardEventPosters = ["Dictation/DictationService.swift"]
+
+    @Test("Only the Accessibility-gated paste step posts keyboard events")
+    func eventPostingLivesOnlyInThePasteStep() throws {
         let postingAPIs = [".post(tap:", "CGEventPost", "postToPid", "CGEvent.post("]
         let sources = try Self.appSources()
         let posters = sources.filter { _, text in postingAPIs.contains(where: text.contains) }.keys.sorted()
-        #expect(posters == ["Dictation/DictationService.swift"])
+        #expect(posters == Self.keyboardEventPosters)
     }
 
     @Test("No test uses the real system prompts")
