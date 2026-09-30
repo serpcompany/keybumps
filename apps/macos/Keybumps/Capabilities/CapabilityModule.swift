@@ -59,7 +59,7 @@ enum CapabilityCatalog {
     /// Registry order. It is the Settings sidebar order and the order modules apply in; a module
     /// follows every module it depends on, so a dependency is settled before its dependents read it.
     static let descriptors: [CapabilityDescriptor] = [
-        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter
+        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
     ]
 
     private static let byCapability = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.capability, $0) })

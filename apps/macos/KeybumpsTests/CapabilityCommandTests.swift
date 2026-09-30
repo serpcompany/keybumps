@@ -12,13 +12,14 @@ struct CapabilityCommandTests {
     private let dictation = QuickSearchCommand.capability(.dictation)
     private let windows = QuickSearchCommand.capability(.windowManagement)
     private let coach = QuickSearchCommand.capability(.keyboardShortcutter)
+    private let snippets = QuickSearchCommand.capability(.snippets)
     private let allCapabilities = Set(Capability.allCases)
 
     // MARK: Names
 
     @Test("Keybumps Settings comes first, then one command per capability except Quick Search, in registry order")
     func commands() {
-        #expect(QuickSearchCommand.allCases == [.keybumpsSettings, clipboard, screenshots, dictation, windows, coach])
+        #expect(QuickSearchCommand.allCases == [.keybumpsSettings, clipboard, screenshots, dictation, windows, coach, snippets])
     }
 
     @Test("A capability has a command exactly when its descriptor declares search keywords")
@@ -34,10 +35,12 @@ struct CapabilityCommandTests {
     func names() {
         #expect(QuickSearchCommand.allCases.map(\.title) == [
             "Keybumps Settings", "Clipboard History", "Screenshot Tools", "Dictation", "Window Manager", "Shortcut Coach",
+            "Snippets",
         ])
         #expect(QuickSearchCommand.allCases.allSatisfy { $0.kindLabel == "Command" })
         #expect(QuickSearchCommand.allCases.map(\.id) == [
             "keybumpsSettings", "clipboardHistory", "screenshotTools", "dictation", "windowManagement", "keyboardShortcutter",
+            "snippets",
         ])
     }
 
@@ -402,8 +405,9 @@ struct CapabilityCommandTests {
         #expect(clipboard.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘2")
         #expect(screenshots.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘3")
         #expect(dictation.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘4")
-        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil, "The Hotkeys tab is hidden, so ⌘5 does nothing")
-        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabsWithHotkeys) == "⌘5")
+        #expect(snippets.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘5")
+        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil, "The Hotkeys tab is hidden, so ⌘6 does nothing")
+        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabsWithHotkeys) == "⌘6")
         #expect(windows.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil)
         #expect(dictation.rowShortcut(enabledCapabilities: [], visibleTabs: tabs) == nil, "Off, it opens Settings instead")
     }

@@ -112,7 +112,7 @@ struct UITestLaunchConfigurationTests {
         #expect(Set(tokens).count == tokens.count)
         #expect(tokens == [
             "search", "clipboard", "screenshotTools", "dictation",
-            "windows", "keyboardShortcutter", "permissions", "general", "account",
+            "windows", "keyboardShortcutter", "snippets", "permissions", "general", "account",
         ])
     }
 

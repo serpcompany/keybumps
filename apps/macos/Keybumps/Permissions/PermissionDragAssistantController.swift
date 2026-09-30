@@ -50,11 +50,37 @@ final class PermissionDragAssistantController {
         missingPermissions: [MacPermission],
         onContinue: @escaping () -> Void
     ) {
+        let names = missingPermissions.map(\.title).joined(separator: " and ")
+        showSetup(
+            CapabilitySetupOffer(
+                capability: "Dictation",
+                permissionNames: names,
+                instruction: "Set up \(names) to use Dictation.",
+                buttonTitle: "Set Up Dictation…"
+            ),
+            onContinue: onContinue
+        )
+    }
+
+    /// After ⌘Return in the Snippets tab copied because Keybumps lacks Accessibility.
+    func showSnippetPasteSetup(onContinue: @escaping () -> Void) {
+        showSetup(
+            CapabilitySetupOffer(
+                capability: "Snippets",
+                permissionNames: MacPermission.accessibility.title,
+                instruction: "Set up Accessibility so ⌘Return pastes snippets into the app you’re using.",
+                buttonTitle: "Set Up Paste…"
+            ),
+            onContinue: onContinue
+        )
+    }
+
+    private func showSetup(_ offer: CapabilitySetupOffer, onContinue: @escaping () -> Void) {
         activePermission = nil
         if panel == nil { makePanel() }
         panel?.contentViewController = NSHostingController(
-            rootView: DictationSetupAssistantView(
-                missingPermissions: missingPermissions,
+            rootView: CapabilitySetupAssistantView(
+                offer: offer,
                 continueSetup: { [weak self] in
                     self?.dismiss()
                     onContinue()
@@ -130,8 +156,16 @@ final class PermissionDragAssistantController {
     }
 }
 
-private struct DictationSetupAssistantView: View {
-    let missingPermissions: [MacPermission]
+/// What a capability's setup offer says: its name, the permissions it needs, and its button.
+struct CapabilitySetupOffer: Equatable {
+    let capability: String
+    let permissionNames: String
+    let instruction: String
+    let buttonTitle: String
+}
+
+private struct CapabilitySetupAssistantView: View {
+    let offer: CapabilitySetupOffer
     let continueSetup: () -> Void
     let dismiss: () -> Void
 
@@ -142,12 +176,12 @@ private struct DictationSetupAssistantView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(PermissionAssistantCopy.title)
                         .font(.system(size: 15, weight: .semibold))
-                    Text("Set up \(permissionNames) to use Dictation.")
+                    Text(offer.instruction)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Set Up Dictation…", action: continueSetup)
+                Button(offer.buttonTitle, action: continueSetup)
                     .buttonStyle(.borderedProminent)
                     .padding(.trailing, 28)
             }
@@ -163,15 +197,11 @@ private struct DictationSetupAssistantView: View {
             }
             .buttonStyle(.borderless)
             .padding(10)
-            .accessibilityLabel("Close Dictation setup")
+            .accessibilityLabel("Close \(offer.capability) setup")
         }
         .padding(6)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Dictation needs \(permissionNames)")
-    }
-
-    private var permissionNames: String {
-        missingPermissions.map(\.title).joined(separator: " and ")
+        .accessibilityLabel("\(offer.capability) needs \(offer.permissionNames)")
     }
 }
 

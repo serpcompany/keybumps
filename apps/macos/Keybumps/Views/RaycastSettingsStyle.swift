@@ -193,8 +193,10 @@ struct SettingsRowLabeledContentStyle: LabeledContentStyle {
     }
 }
 
-/// Raycast's compact rounded-rectangle buttons with a dark fill.
+/// Raycast's compact rounded-rectangle buttons with a dark fill. A prominent button (a sheet's
+/// default action, such as Save) is filled with the accent color instead.
 struct SettingsButtonStyle: ButtonStyle {
+    var isProminent = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -203,12 +205,17 @@ struct SettingsButtonStyle: ButtonStyle {
             .padding(.horizontal, 12)
             .frame(minHeight: 26)
             .background(
-                SettingsTheme.control.opacity(configuration.isPressed ? 0.7 : 1),
+                (isProminent ? Color.accentColor : SettingsTheme.control).opacity(configuration.isPressed ? 0.7 : 1),
                 in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
             )
-            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
+            .foregroundStyle(foreground(configuration))
             .opacity(isEnabled ? 1 : 0.45)
             .contentShape(Rectangle())
+    }
+
+    private func foreground(_ configuration: Configuration) -> AnyShapeStyle {
+        if isProminent { return AnyShapeStyle(.white) }
+        return configuration.role == .destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary)
     }
 }
 
@@ -311,11 +318,12 @@ struct SettingsHotkeyField: View {
     }
 }
 
-/// A square icon button beside a hotkey field, like Raycast's reset button.
+/// A square icon button beside a hotkey field, like Raycast's reset button, or a list's + and −.
 struct SettingsIconButton: View {
     let systemImage: String
     let help: String
     let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
@@ -323,6 +331,7 @@ struct SettingsIconButton: View {
                 .font(.system(size: 11, weight: .semibold))
                 .frame(width: 26, height: 26)
                 .background(SettingsTheme.control, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
+                .opacity(isEnabled ? 1 : 0.45)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

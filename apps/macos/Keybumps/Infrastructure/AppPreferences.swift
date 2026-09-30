@@ -114,15 +114,16 @@ final class AppPreferences {
             // are already taken; the owner's later choices (including clearing it) are kept.
             let known = (defaults.array(forKey: Key.knownCapabilityShortcuts) as? [String])
                 .map { Set($0.compactMap(CapabilityShortcut.init(rawValue:))) } ?? CapabilityShortcut.originalShortcuts
-            for shortcut in CapabilityShortcut.allCases where !known.contains(shortcut)
-                && !decoded.values.contains(where: { $0.usesSameKeys(as: shortcut.defaultBinding) }) {
-                decoded[shortcut.rawValue] = shortcut.defaultBinding
+            for shortcut in CapabilityShortcut.allCases where !known.contains(shortcut) {
+                guard let binding = shortcut.defaultBinding,
+                      !decoded.values.contains(where: { $0.usesSameKeys(as: binding) }) else { continue }
+                decoded[shortcut.rawValue] = binding
                 introducedShortcuts = true
             }
             capabilityShortcuts = decoded
         } else {
-            capabilityShortcuts = Dictionary(uniqueKeysWithValues: CapabilityShortcut.allCases.map {
-                ($0.rawValue, $0.defaultBinding)
+            capabilityShortcuts = Dictionary(uniqueKeysWithValues: CapabilityShortcut.allCases.compactMap { shortcut in
+                shortcut.defaultBinding.map { (shortcut.rawValue, $0) }
             })
         }
         defaults.set(CapabilityShortcut.allCases.map(\.rawValue).sorted(), forKey: Key.knownCapabilityShortcuts)
