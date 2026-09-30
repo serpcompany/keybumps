@@ -171,7 +171,7 @@ private struct DictationSetupAssistantView: View {
     }
 
     private var permissionNames: String {
-        missingPermissions.map(\.title).joined(separator: " and ")
+        MacPermission.names(missingPermissions)
     }
 }
 

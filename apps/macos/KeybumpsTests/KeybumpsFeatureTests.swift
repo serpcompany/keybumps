@@ -1706,7 +1706,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertTrue(windowsOnly.isComplete)
         XCTAssertEqual(
             PermissionSetupPlan.requiredPermissions(for: [.dictation]),
-            [.microphone, .speechRecognition]
+            [.accessibility, .microphone, .speechRecognition]
         )
         XCTAssertEqual(
             PermissionSetupPlan.requiredPermissions(for: [.keyboardShortcutter]),

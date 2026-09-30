@@ -79,8 +79,10 @@ extension AppModel {
                 microphoneAuthorizationStatus: { granted ? .authorized : .denied },
                 speechAuthorizationStatus: { granted ? .authorized : .denied },
                 screenRecordingAuthorized: { granted },
-                requestScreenRecording: {},
-                openSettings: { _ in }
+                requestMicrophone: PermissionPrompts.inert.requestMicrophone,
+                requestSpeechRecognition: PermissionPrompts.inert.requestSpeechRecognition,
+                requestScreenRecording: PermissionPrompts.inert.requestScreenRecording,
+                openSettings: PermissionPrompts.inert.openSettings
             ),
             licensing: FixedLicenseController(state: {
                 switch configuration.licenseState {

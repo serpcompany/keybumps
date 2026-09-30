@@ -129,14 +129,15 @@ final class AppModel {
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
         coachTips: (any CoachTipPresenting)? = nil,
         dictationFileManager: FileManager = .default,
-        allowsDictationSystemAccess: Bool = true,
+        allowsDictationSystemAccess: Bool = !UnitTestHost.isActive,
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
         self.coachTips = coachTips ?? PaletteHUD.shared
-        self.permissions = permissionCoordinator ?? PermissionCoordinator()
+        let permissions = permissionCoordinator ?? PermissionCoordinator()
+        self.permissions = permissions
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
             ?? SpotlightShortcutConflictResolver(preferences: SystemSymbolicHotKeyPreferences())
@@ -189,7 +190,12 @@ final class AppModel {
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
             didWritePasteboard: clipboard.suppressCurrentChange,
-            allowsSystemAccess: allowsDictationSystemAccess
+            allowsSystemAccess: allowsDictationSystemAccess,
+            // Re-read at paste time, through the same coordinator that drives setup and Settings.
+            accessibilityTrusted: {
+                permissions.refresh()
+                return permissions.accessibilityGranted
+            }
         )
         commandPalette = CommandPaletteController(
             clipboard: clipboard,

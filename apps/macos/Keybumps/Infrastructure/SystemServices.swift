@@ -50,6 +50,18 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
     var usesApplicationDragAssistant: Bool {
         self == .accessibility || self == .inputMonitoring
     }
+
+    /// The permissions' titles as one phrase: "Accessibility", "Microphone and Speech Recognition",
+    /// or "Accessibility, Microphone, and Speech Recognition".
+    static func names(_ permissions: [MacPermission]) -> String {
+        let titles = permissions.map(\.title)
+        guard let last = titles.last else { return "" }
+        switch titles.count {
+        case 1: return last
+        case 2: return "\(titles[0]) and \(last)"
+        default: return titles.dropLast().joined(separator: ", ") + ", and " + last
+        }
+    }
 }
 
 enum PermissionAuthorizationState: String, Equatable {
@@ -276,6 +288,8 @@ final class PermissionCoordinator {
     private let microphoneAuthorizationStatus: () -> AVAuthorizationStatus
     private let speechAuthorizationStatus: () -> SFSpeechRecognizerAuthorizationStatus
     private let screenRecordingAuthorized: () -> Bool
+    private let requestMicrophone: () async -> Void
+    private let requestSpeechRecognition: () async -> Void
     private let requestScreenRecording: () -> Void
     private let openSettingsAction: (MacPermission) -> Void
 
@@ -288,6 +302,9 @@ final class PermissionCoordinator {
     /// Asks macOS for Screen Recording, which can open System Settings.
     func requestScreenRecordingAccess() { requestScreenRecording() }
 
+    /// The state readers are silent preflights. The request closures are the only way Keybumps
+    /// shows a macOS permission prompt; they default to `PermissionPrompts.current`, which is inert
+    /// in the unit-test host.
     init(
         accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
         inputMonitoringAuthorized: @escaping () -> Bool = { CGPreflightListenEventAccess() },
@@ -298,16 +315,18 @@ final class PermissionCoordinator {
             SFSpeechRecognizer.authorizationStatus()
         },
         screenRecordingAuthorized: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
-        requestScreenRecording: @escaping () -> Void = { _ = CGRequestScreenCaptureAccess() },
-        openSettings: @escaping (MacPermission) -> Void = { permission in
-            _ = NSWorkspace.shared.open(permission.settingsURL)
-        }
+        requestMicrophone: @escaping () async -> Void = PermissionPrompts.current.requestMicrophone,
+        requestSpeechRecognition: @escaping () async -> Void = PermissionPrompts.current.requestSpeechRecognition,
+        requestScreenRecording: @escaping () -> Void = PermissionPrompts.current.requestScreenRecording,
+        openSettings: @escaping (MacPermission) -> Void = PermissionPrompts.current.openSettings
     ) {
         self.accessibilityTrusted = accessibilityTrusted
         self.inputMonitoringAuthorized = inputMonitoringAuthorized
         self.microphoneAuthorizationStatus = microphoneAuthorizationStatus
         self.speechAuthorizationStatus = speechAuthorizationStatus
         self.screenRecordingAuthorized = screenRecordingAuthorized
+        self.requestMicrophone = requestMicrophone
+        self.requestSpeechRecognition = requestSpeechRecognition
         self.requestScreenRecording = requestScreenRecording
         self.openSettingsAction = openSettings
         refresh()
@@ -358,13 +377,12 @@ final class PermissionCoordinator {
             if permission == .screenRecording { requestScreenRecording() }
             openSettings(permission)
         case .request:
+            // Only an undecided Microphone or Speech Recognition gets a native prompt.
             switch permission {
             case .microphone:
-                _ = await AVCaptureDevice.requestAccess(for: .audio)
+                await requestMicrophone()
             case .speechRecognition:
-                await withCheckedContinuation { continuation in
-                    SFSpeechRecognizer.requestAuthorization { _ in continuation.resume() }
-                }
+                await requestSpeechRecognition()
             case .accessibility, .inputMonitoring, .screenRecording:
                 break
             }

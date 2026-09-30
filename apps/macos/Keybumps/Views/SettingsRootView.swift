@@ -513,10 +513,10 @@ struct DictationSettingsView: View {
     var body: some View {
         SettingsPage {
             CapabilityControl(capability: .dictation, shortcuts: [.dictation])
-            if model.preferences.enabledCapabilities.contains(.dictation),
-               !model.missingPermissions(for: .dictation).isEmpty {
+            let missingPermissions = model.missingPermissions(for: .dictation)
+            if model.preferences.enabledCapabilities.contains(.dictation), !missingPermissions.isEmpty {
                 SettingsGroup("Setup required") {
-                    Text("Dictation needs Microphone and Speech Recognition access before its shortcut can record.")
+                    Text(DictationSetupCopy.settingsNote(missing: missingPermissions))
                         .foregroundStyle(.secondary)
                     OpenPermissionsButton()
                 }

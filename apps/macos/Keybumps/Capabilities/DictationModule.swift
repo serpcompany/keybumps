@@ -6,7 +6,8 @@ extension CapabilityDescriptor {
         title: "Dictation",
         systemImage: "waveform",
         iconTint: .blue,
-        requiredPermissions: [.microphone, .speechRecognition],
+        // Accessibility lets Dictation post ⌘V to paste the transcript at the original cursor.
+        requiredPermissions: [.accessibility, .microphone, .speechRecognition],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(
             tab: .dictation,
@@ -26,6 +27,13 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: []
     )
+}
+
+enum DictationSetupCopy {
+    /// The Dictation page's "Setup required" note, naming only the missing permissions.
+    static func settingsNote(missing: [MacPermission]) -> String {
+        "Dictation needs \(MacPermission.names(missing)) access before its shortcut can record and paste."
+    }
 }
 
 enum DictationEscapeRegistration {
