@@ -58,7 +58,42 @@ struct PaletteKeycaps: View {
     }
 }
 
-/// A small outlined chip for secondary actions such as Clear All.
+/// Clear All in the palette's tab headers: a quiet chip shaped like the palette's keycaps (same
+/// fill, hairline border, radius, and height), with a trash icon and gray text. It turns red only
+/// while hovered or pressed, so it reads as destructive without being the loudest thing on screen.
+/// The destructive confirmation still follows.
+struct PaletteClearAllButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PaletteClearAllChip(configuration: configuration)
+    }
+}
+
+private struct PaletteClearAllChip: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        let isEmphasized = isEnabled && (isHovering || configuration.isPressed)
+        configuration.label
+            .labelStyle(.titleAndIcon)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(isEmphasized ? AnyShapeStyle(.red.opacity(0.9)) : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 8)
+            .frame(minHeight: 22)
+            .background(PaletteTheme.keycapFill.opacity(configuration.isPressed ? 2 : 1), in: shape)
+            .overlay(shape.strokeBorder(
+                isEmphasized ? AnyShapeStyle(.red.opacity(0.35)) : AnyShapeStyle(PaletteTheme.keycapBorder),
+                lineWidth: 1
+            ))
+            .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(shape)
+            .onHover { isHovering = $0 }
+    }
+}
+
+/// A small outlined chip for secondary actions, such as the Dictation detail's.
 struct PaletteChipButtonStyle: ButtonStyle {
     /// Shows the label's icon too, for action rows such as the Dictation detail's.
     var showsIcon = false

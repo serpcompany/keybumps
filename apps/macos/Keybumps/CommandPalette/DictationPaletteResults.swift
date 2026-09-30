@@ -65,7 +65,7 @@ struct DictationPaletteResults: View {
                     audioPlayer.stop()
                     clear()
                 }
-                .buttonStyle(PaletteChipButtonStyle())
+                .buttonStyle(PaletteClearAllButtonStyle())
             }
             .padding(.horizontal, 18)
             .padding(.top, 10)

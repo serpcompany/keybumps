@@ -243,6 +243,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 revealSearchResult: reveal,
                 runCommand: { [weak self] command in self?.run(command) },
                 copyClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
+                editClipboardEntry: { [weak self] entry in _ = self?.editClipboardImage(entry) },
                 chooseScreenshot: { [weak self] entry in self?.chooseScreenshot(entry) },
                 copyDictationText: { [weak self] text in
                     self?.copy(text, suppressClipboardHistory: true)
@@ -567,6 +568,7 @@ private struct CommandPaletteView: View {
     let revealSearchResult: (QuickSearchResult) -> Void
     let runCommand: (QuickSearchCommand) -> Void
     let copyClipboardEntry: (ClipboardEntry) -> Void
+    let editClipboardEntry: (ClipboardEntry) -> Void
     let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -640,7 +642,7 @@ private struct CommandPaletteView: View {
                 entries: filteredClipboard,
                 selection: state.selection,
                 choose: copyClipboardEntry,
-                showsEditHint: preferences.enabledCapabilities.contains(.screenshotTools),
+                edit: preferences.enabledCapabilities.contains(.screenshotTools) ? editClipboardEntry : nil,
                 delete: clipboard.delete,
                 clear: clipboard.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -789,7 +791,7 @@ private struct KeyboardShortcutterResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
-                        .buttonStyle(PaletteChipButtonStyle())
+                        .buttonStyle(PaletteClearAllButtonStyle())
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 10)
@@ -875,7 +877,7 @@ private struct SearchResultsView: View {
                                 confirmationPresentationChanged: confirmationPresentationChanged,
                                 clear: clearRecentItems
                             )
-                            .buttonStyle(PaletteChipButtonStyle())
+                            .buttonStyle(PaletteClearAllButtonStyle())
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 10)
@@ -1016,7 +1018,8 @@ private struct ClipboardResultsView: View {
     let entries: [ClipboardEntry]
     let selection: Int
     let choose: (ClipboardEntry) -> Void
-    let showsEditHint: Bool
+    /// Opens an image in the Screenshot Editor; nil while Screenshot Tools is off.
+    let edit: ((ClipboardEntry) -> Void)?
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -1040,32 +1043,34 @@ private struct ClipboardResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
-                        .buttonStyle(PaletteChipButtonStyle())
+                        .buttonStyle(PaletteClearAllButtonStyle())
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 10)
                     .padding(.bottom, 6)
 
+                    // No per-row trash button: Delete (or ⌘⌫ while typing) removes the selected row,
+                    // and the context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
                     List(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        HStack(spacing: 10) {
-                            Button { choose(entry) } label: {
-                                ClipboardRow(
-                                    entry: entry,
-                                    showsEditHint: showsEditHint && index == selection && entry.kind == .image
-                                )
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            Button(role: .destructive) { delete(entry) } label: {
-                                Image(systemName: "trash")
-                                    .frame(width: 24, height: 24)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Delete (⌫)")
-                            .accessibilityLabel("Delete history item \(index + 1)")
+                        Button { choose(entry) } label: {
+                            ClipboardRow(
+                                entry: entry,
+                                showsEditHint: edit != nil && index == selection && entry.kind == .image
+                            )
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Copy") { choose(entry) }
+                            if let edit, entry.kind == .image {
+                                Button("Edit") { edit(entry) }
+                            }
+                            Divider()
+                            Button("Delete", role: .destructive) { delete(entry) }
+                        }
+                        .accessibilityAction(named: "Delete") { delete(entry) }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
                         .paletteRowBackground(isSelected: index == selection)
@@ -1079,10 +1084,11 @@ private struct ClipboardResultsView: View {
 }
 
 /// Raycast's row for a clipboard item. The preview (a thumbnail, or a text symbol) shows the item's
-/// kind, so no kind word is shown. The content fills the middle. Where it came from and its age sit
-/// right-aligned in gray, like Raycast's accessories, capped so they never squeeze the content.
+/// kind, so no kind word is shown. The content fills the middle, with its age in small gray text
+/// under it. Where it came from sits right-aligned in gray, like Raycast's accessories, capped so it
+/// never squeezes the content.
 struct ClipboardRow: View {
-    /// Wide enough for a typical app name, domain, and age side by side; longer ones truncate.
+    /// Wide enough for a typical app name and domain side by side; longer ones truncate.
     static let accessoryMaxWidth: CGFloat = 360
 
     let entry: ClipboardEntry
@@ -1092,10 +1098,16 @@ struct ClipboardRow: View {
     var body: some View {
         HStack(spacing: 14) {
             ClipboardEntryPreview(entry: entry)
-            ClipboardEntryTitle(entry: entry)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            // Only the app name and domain give way when space runs out; the age never does.
-            HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                ClipboardEntryTitle(entry: entry)
+                Text(entry.capturedAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Only the app name and domain give way when space runs out.
+            HStack(spacing: 14) {
                 if showsEditHint {
                     HStack(spacing: 6) {
                         Text("Edit").fixedSize()
@@ -1113,11 +1125,10 @@ struct ClipboardRow: View {
                 if let domain = entry.sourceDomain {
                     ClipboardSourceDomainLabel(domain: domain)
                 }
-                Text(entry.capturedAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
-                    .fixedSize()
             }
             .lineLimit(1)
-            .font(.system(size: 13))
+            // The palette's right-aligned accessory size, as in Quick Search's rows.
+            .font(.system(size: 14))
             .foregroundStyle(.secondary)
             .frame(maxWidth: Self.accessoryMaxWidth, alignment: .trailing)
             .layoutPriority(1)
@@ -1175,11 +1186,11 @@ struct ClipboardSourceAppLabel: View {
     let app: ClipboardSourceApp
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             if let icon = ClipboardSourceAppIcons.icon(for: app) {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: 14, height: 14)
+                    .frame(width: 16, height: 16)
                     .accessibilityHidden(true)
             }
             Text(app.name)
@@ -1198,9 +1209,9 @@ struct ClipboardSourceDomainLabel: View {
     let domain: String
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             Image(systemName: "globe")
-                .font(.system(size: 10))
+                .font(.system(size: 12))
                 .accessibilityHidden(true)
             Text(domain)
                 .lineLimit(1)
@@ -1305,7 +1316,7 @@ private struct ScreenshotGrid: View {
                         confirmationPresentationChanged: confirmationPresentationChanged,
                         clear: clear
                     )
-                    .buttonStyle(PaletteChipButtonStyle())
+                    .buttonStyle(PaletteClearAllButtonStyle())
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
