@@ -128,7 +128,7 @@ enum CommandPaletteDismissalPolicy {
 
 @MainActor
 final class CommandPaletteController: NSObject, NSWindowDelegate {
-    private let search = QuickSearchModel()
+    private let search: QuickSearchModel
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
     private let dictationService: DictationService
@@ -152,8 +152,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         dictationHistory: DictationHistoryService,
         dictationService: DictationService,
         inbox: InboxStore,
-        preferences: AppPreferences
+        preferences: AppPreferences,
+        search: QuickSearchModel? = nil
     ) {
+        self.search = search ?? QuickSearchModel()
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService

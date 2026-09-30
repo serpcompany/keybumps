@@ -3,7 +3,7 @@ import Testing
 @testable import Keybumps
 
 /// Navigating by searching (#182): each capability's Quick Search command, the words that find it,
-/// where it ranks, and where it goes while the capability is on or off.
+/// where it ranks against real app names, and where it goes while the capability is on or off.
 @MainActor
 @Suite("Capability commands")
 struct CapabilityCommandTests {
@@ -19,6 +19,15 @@ struct CapabilityCommandTests {
     @Test("Keybumps Settings comes first, then one command per capability except Quick Search, in registry order")
     func commands() {
         #expect(QuickSearchCommand.allCases == [.keybumpsSettings, clipboard, screenshots, dictation, windows, coach])
+    }
+
+    @Test("A capability has a command exactly when its descriptor declares search keywords")
+    func commandsComeFromDescriptors() {
+        let declared = CapabilityCatalog.descriptors
+            .filter { $0.searchKeywords != nil }
+            .map { QuickSearchCommand.capability($0.capability) }
+        #expect(Array(QuickSearchCommand.allCases.dropFirst()) == declared)
+        #expect(CapabilityDescriptor.quickSearch.searchKeywords == nil, "Quick Search's tab lists the commands")
     }
 
     @Test("Each command carries its capability's name, not its tab label, and the Command kind")
@@ -46,32 +55,48 @@ struct CapabilityCommandTests {
     // MARK: Matching
 
     @Test(
-        "Its name, its tab's name, and what people call it match exactly",
+        "Whole words of its name match by name",
         arguments: [
             ("clipboard", QuickSearchCommand.capability(.clipboardHistory)),
             ("Clipboard History", .capability(.clipboardHistory)),
-            ("copy", .capability(.clipboardHistory)),
+            ("history", .capability(.clipboardHistory)),
+            ("screenshot", .capability(.screenshotTools)),
+            ("screenshot tools", .capability(.screenshotTools)),
+            ("DICTATION", .capability(.dictation)),
+            ("window manager", .capability(.windowManagement)),
+            ("window", .capability(.windowManagement)),
+            ("shortcut coach", .capability(.keyboardShortcutter)),
+            ("shortcut", .capability(.keyboardShortcutter)),
+        ]
+    )
+    func nameMatches(query: String, command: QuickSearchCommand) {
+        #expect(command.match(query) == .name)
+    }
+
+    @Test(
+        "Its tab's name and what people call it match by keyword",
+        arguments: [
+            ("copy", QuickSearchCommand.capability(.clipboardHistory)),
             ("paste", .capability(.clipboardHistory)),
             ("screenshots", .capability(.screenshotTools)),
-            ("screenshot", .capability(.screenshotTools)),
+            ("screen", .capability(.screenshotTools)),
             ("capture", .capability(.screenshotTools)),
-            ("screenshot tools", .capability(.screenshotTools)),
             ("dictate", .capability(.dictation)),
-            ("DICTATION", .capability(.dictation)),
             ("voice", .capability(.dictation)),
             ("transcribe", .capability(.dictation)),
             ("recordings", .capability(.dictation)),
+            ("history", .capability(.dictation)),
             ("dictation history", .capability(.dictation)),
-            ("window manager", .capability(.windowManagement)),
             ("windows", .capability(.windowManagement)),
             ("snap", .capability(.windowManagement)),
             ("hotkeys", .capability(.keyboardShortcutter)),
-            ("shortcut coach", .capability(.keyboardShortcutter)),
             ("shortcuts", .capability(.keyboardShortcutter)),
+            ("keyboard", .capability(.keyboardShortcutter)),
+            ("history", .capability(.keyboardShortcutter)),
         ]
     )
-    func exactMatches(query: String, command: QuickSearchCommand) {
-        #expect(command.match(query) == .exact)
+    func keywordMatches(query: String, command: QuickSearchCommand) {
+        #expect(command.match(query) == .keyword)
     }
 
     @Test(
@@ -98,23 +123,99 @@ struct CapabilityCommandTests {
 
     // MARK: Ranking
 
-    private let dictionaryApp = QuickSearchResult(url: URL(fileURLWithPath: "/System/Applications/Dictionary.app"), kind: .application)
-    private let systemSettings = QuickSearchResult(
-        url: URL(fileURLWithPath: "/System/Applications/System Settings.app"),
-        kind: .application
-    )
     private let file = QuickSearchResult(url: URL(fileURLWithPath: "/tmp/fixture/notes.txt"), kind: .file)
 
-    @Test("A whole word puts the command first, above apps and files")
-    func exactQueryRanksFirst() {
+    /// Stock macOS apps, plus common third-party ones, whose names share a word with a command.
+    private let shortcutsApp = app("/System/Applications/Shortcuts.app")
+    private let screenshotApp = app("/System/Applications/Utilities/Screenshot.app")
+    private let screenSharing = app("/System/Applications/Utilities/Screen Sharing.app")
+    private let imageCapture = app("/System/Applications/Image Capture.app")
+    private let voiceMemos = app("/System/Applications/VoiceMemos.app")
+    private let voiceOverUtility = app("/System/Applications/Utilities/VoiceOver Utility.app")
+    private let keyboardMaestro = app("/Applications/Keyboard Maestro.app")
+    private let pasteApp = app("/Applications/Paste.app")
+    private let windowsApp = app("/Applications/Windows App.app")
+    private let dictionaryApp = app("/System/Applications/Dictionary.app")
+    private let systemSettings = app("/System/Applications/System Settings.app")
+
+    /// Quick Search's rows for a query over those apps, with the real app ranking and no files.
+    private func rows(_ query: String) -> [QuickSearchItem] {
+        let usage = ApplicationUsageStore(
+            storageURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("capability-command-usage-\(UUID().uuidString).json")
+        )
+        let applications = [
+            shortcutsApp, screenshotApp, screenSharing, imageCapture, voiceMemos, voiceOverUtility,
+            keyboardMaestro, pasteApp, windowsApp, dictionaryApp, systemSettings,
+        ]
+        return QuickSearchRanking.items(
+            matching: query,
+            applications: QuickSearchRanking.sortedApplications(matching: query, from: applications, usage: usage),
+            files: []
+        )
+    }
+
+    @Test(
+        "A keyword never hides an app of that name: the app stays first and the command follows the apps",
+        arguments: [
+            ("shortcuts", QuickSearchCommand.capability(.keyboardShortcutter)),
+            ("screen", .capability(.screenshotTools)),
+            ("capture", .capability(.screenshotTools)),
+            ("voice", .capability(.dictation)),
+            ("keyboard", .capability(.keyboardShortcutter)),
+            ("paste", .capability(.clipboardHistory)),
+            ("windows", .capability(.windowManagement)),
+        ]
+    )
+    func keywordFollowsApps(query: String, command: QuickSearchCommand) throws {
+        let rows = rows(query)
+        let commandIndex = try #require(rows.firstIndex(of: .command(command)), "\(command.id) is still listed")
+        let appIndices = rows.indices.filter { rows[$0].result?.kind == .application }
+        #expect(!appIndices.isEmpty, "\(query) names a real app")
+        #expect(appIndices.allSatisfy { $0 < commandIndex }, "Return on \(query) opens the app")
+    }
+
+    @Test("The apps named by a keyword query come first in their own order")
+    func keywordQueriesKeepAppsFirst() {
+        #expect(rows("shortcuts") == [.result(shortcutsApp), .command(coach)])
+        #expect(rows("capture") == [.result(imageCapture), .command(screenshots)])
+        #expect(rows("keyboard") == [.result(keyboardMaestro), .command(coach)])
+        #expect(rows("paste") == [.result(pasteApp), .command(clipboard)])
+        #expect(rows("windows") == [.result(windowsApp), .command(windows)])
+        #expect(rows("voice").last == .command(dictation))
+        #expect(rows("voice").dropLast().allSatisfy { $0.result != nil })
+    }
+
+    @Test(
+        "A query of its name puts the command first, above apps",
+        arguments: [
+            ("dictation", QuickSearchCommand.capability(.dictation)),
+            ("clipboard", .capability(.clipboardHistory)),
+            ("window manager", .capability(.windowManagement)),
+            ("shortcut coach", .capability(.keyboardShortcutter)),
+            ("screenshot tools", .capability(.screenshotTools)),
+            ("settings", .keybumpsSettings),
+        ]
+    )
+    func nameQueryRanksFirst(query: String, command: QuickSearchCommand) {
+        #expect(rows(query).first == .command(command))
+    }
+
+    /// Owner decision on #186: a word of a command's name outranks an app that shares it. The
+    /// alternative is that apps always win such ties.
+    @Test("A name word shared with an app lists the command first: screenshot, shortcut")
+    func nameWordSharedWithAnApp() {
+        #expect(rows("screenshot") == [.command(screenshots), .result(screenshotApp)])
+        #expect(rows("shortcut") == [.command(coach), .result(shortcutsApp)])
+    }
+
+    @Test("A keyword with no app of that name still lists the command first, before files")
+    func keywordWithoutAnApp() {
         #expect(
             QuickSearchRanking.items(matching: "dictate", applications: [], files: [file])
                 == [.command(dictation), .result(file)]
         )
-        #expect(
-            QuickSearchRanking.items(matching: "clipboard", applications: [], files: [file])
-                == [.command(clipboard), .result(file)]
-        )
+        #expect(rows("hotkeys") == [.command(coach)])
     }
 
     @Test("A partial word lists the command after the apps and before files")
@@ -127,17 +228,19 @@ struct CapabilityCommandTests {
 
     @Test("\"settings\" still puts Keybumps Settings first, and no capability command")
     func settingsStaysFirst() {
-        #expect(
-            QuickSearchRanking.items(matching: "settings", applications: [systemSettings], files: [])
-                == [.command(.keybumpsSettings), .result(systemSettings)]
-        )
+        #expect(rows("settings") == [.command(.keybumpsSettings), .result(systemSettings)])
     }
 
-    @Test("Equally good matches keep registry order")
+    @Test("A name match comes before keyword matches, which keep registry order")
     func ties() {
         #expect(
-            QuickSearchRanking.items(matching: "history", applications: [], files: [])
-                == [.command(clipboard), .command(dictation), .command(coach)]
+            QuickSearchRanking.items(matching: "history", applications: [], files: [file])
+                == [.command(clipboard), .command(dictation), .command(coach), .result(file)]
+        )
+        let historyApp = app("/Applications/History Book.app")
+        #expect(
+            QuickSearchRanking.items(matching: "history", applications: [historyApp], files: [])
+                == [.command(clipboard), .result(historyApp), .command(dictation), .command(coach)]
         )
     }
 
@@ -153,7 +256,7 @@ struct CapabilityCommandTests {
         #expect(QuickSearchCommand.keybumpsSettings.destination(enabledCapabilities: allCapabilities) == .settings(nil))
     }
 
-    @Test("While off, a command still appears and opens its capability's Settings page, where it can be turned on")
+    @Test("While off, a command opens its capability's Settings page, where it can be turned on")
     func destinationsWhileOff() {
         for command in QuickSearchCommand.allCases {
             guard case .capability(let capability) = command else { continue }
@@ -163,8 +266,41 @@ struct CapabilityCommandTests {
             #expect(!command.isTurnedOff(enabledCapabilities: allCapabilities))
         }
         #expect(!QuickSearchCommand.keybumpsSettings.isTurnedOff(enabledCapabilities: []))
-        // Every capability command appears whether or not its capability is on.
-        #expect(QuickSearchRanking.items(matching: "dictate", applications: [], files: []) == [.command(dictation)])
+    }
+
+    /// Goes through the real `QuickSearchModel` and the palette's own preferences, with no file search.
+    @Test("Every command is listed whether its capability is on or off; only its row and destination change")
+    func listedWhetherOnOrOff() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsCapabilityCommandListing-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root)
+        let preferences = harness.model.preferences
+        let search = QuickSearchModel(
+            recentItems: RecentItemStore(storageURL: root.appendingPathComponent("recent-items.json")),
+            applicationUsage: ApplicationUsageStore(storageURL: root.appendingPathComponent("application-usage.json")),
+            applications: [],
+            searchesFiles: false
+        )
+        let states = [allCapabilities, []] + Capability.allCases.map { allCapabilities.subtracting([$0]) }
+        for enabled in states {
+            preferences.enabledCapabilities = enabled
+            for command in QuickSearchCommand.allCases {
+                guard case .capability(let capability) = command else { continue }
+                search.query = command.title
+                #expect(search.items == [.command(command)], "\(command.id) with \(enabled.map(\.rawValue).sorted())")
+                let isOn = preferences.enabledCapabilities.contains(capability)
+                #expect(command.isTurnedOff(enabledCapabilities: preferences.enabledCapabilities) == !isOn)
+                let expected: QuickSearchCommand.Destination
+                if isOn, let tab = capability.descriptor.paletteTab?.tab {
+                    expected = .paletteTab(tab)
+                } else {
+                    expected = .settings(capability.descriptor.settingsPage?.section)
+                }
+                #expect(command.destination(enabledCapabilities: preferences.enabledCapabilities) == expected)
+            }
+        }
     }
 
     @Test("Rows show the tab's Command-number only when Return goes to a tab in the tab bar")
@@ -212,6 +348,46 @@ struct CapabilityCommandTests {
         #expect(palette.selectedTab == .clipboard)
     }
 
+    /// A palette over the harness's services with its own Quick Search stores in a temporary folder.
+    @Test("Running any command, on or off, adds no Recent Item or learned app usage")
+    func commandsStayOutOfRecentItems() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsCapabilityCommandRecents-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root)
+        let model = harness.model
+        let recentItems = RecentItemStore(storageURL: root.appendingPathComponent("recent-items.json"))
+        let usageURL = root.appendingPathComponent("application-usage.json")
+        let usage = ApplicationUsageStore(storageURL: usageURL)
+        let search = QuickSearchModel(recentItems: recentItems, applicationUsage: usage, applications: [], searchesFiles: false)
+        let palette = CommandPaletteController(
+            clipboard: model.clipboard,
+            dictationHistory: model.dictationHistory,
+            dictationService: model.dictation,
+            inbox: model.inbox,
+            preferences: model.preferences,
+            search: search
+        )
+        palette.openSettings = { _ in }
+
+        for enabled in [allCapabilities, []] {
+            model.preferences.enabledCapabilities = enabled
+            for command in QuickSearchCommand.allCases {
+                search.query = command.title
+                #expect(search.items.first == .command(command))
+                palette.run(command)
+            }
+        }
+        #expect(recentItems.items.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: usageURL.path), "No app usage was learned")
+
+        // The same stores do record an opened app, so the checks above can fail.
+        search.recordOpenResult(dictionaryApp, succeeded: true)
+        #expect(recentItems.items.map(\.result) == [dictionaryApp])
+        #expect(usage.record(for: dictionaryApp.url)?.launchCount == 1)
+    }
+
     // MARK: Settings route
 
     @Test("A requested Settings page is handed over once, and only a page request notifies an open window")
@@ -239,6 +415,10 @@ struct CapabilityCommandTests {
         #expect(notifications.value == 2)
         #expect(router.consumeRequestedSection() == nil, "Opening Settings plainly drops an unshown request")
     }
+}
+
+private func app(_ path: String) -> QuickSearchResult {
+    QuickSearchResult(url: URL(fileURLWithPath: path), kind: .application)
 }
 
 /// Counts notifications delivered synchronously on the posting thread.

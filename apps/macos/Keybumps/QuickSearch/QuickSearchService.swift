@@ -23,17 +23,22 @@ final class QuickSearchModel {
     let applicationUsage: ApplicationUsageStore
 
     private let applications: [QuickSearchResult]
+    /// Whether a query also runs the Spotlight search of the home folder for files and folders.
+    private let searchesFiles: Bool
     private var metadataQuery: NSMetadataQuery?
     private var observers: [NSObjectProtocol] = []
 
+    /// Tests pass `searchesFiles: false` with supplied applications, so they never read real folders.
     init(
         fileManager: FileManager = .default,
         recentItems: RecentItemStore? = nil,
         applicationUsage: ApplicationUsageStore? = nil,
-        applications suppliedApplications: [QuickSearchResult]? = nil
+        applications suppliedApplications: [QuickSearchResult]? = nil,
+        searchesFiles: Bool = true
     ) {
         self.recentItems = recentItems ?? RecentItemStore(fileManager: fileManager)
         self.applicationUsage = applicationUsage ?? ApplicationUsageStore(fileManager: fileManager)
+        self.searchesFiles = searchesFiles
         if let suppliedApplications {
             applications = suppliedApplications
             return
@@ -68,6 +73,7 @@ final class QuickSearchModel {
             usage: applicationUsage
         )
         items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: [])
+        guard searchesFiles else { return }
 
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUserHomeScope]

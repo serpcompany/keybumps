@@ -25,8 +25,8 @@ extension CapabilityDescriptor {
             content: { AnyView(QuickSearchSettingsView()) }
         ),
         criticalOperations: [],
-        // Quick Search lists the commands, so it has none of its own.
-        searchKeywords: []
+        // No capability command: Quick Search's own tab is where commands are listed.
+        searchKeywords: nil
     )
 }
 

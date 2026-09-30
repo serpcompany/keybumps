@@ -10,10 +10,11 @@ enum QuickSearchCommand: Hashable, Identifiable {
     case capability(Capability)
 
     /// Every command, in the order equally good matches are listed: Keybumps Settings, then the
-    /// capabilities in registry order. Quick Search itself has none, since its tab lists the commands.
+    /// capabilities in registry order whose descriptors declare `searchKeywords` (all but Quick
+    /// Search, whose tab lists the commands).
     static let allCases: [QuickSearchCommand] = [.keybumpsSettings]
         + CapabilityCatalog.descriptors
-            .filter { $0.capability != .quickSearch }
+            .filter { $0.searchKeywords != nil }
             .map { .capability($0.capability) }
 
     /// A stable token for accessibility identifiers: `keybumpsSettings`, or the capability's ID.
@@ -56,15 +57,20 @@ enum QuickSearchCommand: Hashable, Identifiable {
     var keywords: [String] {
         switch self {
         case .keybumpsSettings: ["preferences", "prefs"]
-        case .capability(let capability): capability.descriptor.searchKeywords
+        case .capability(let capability): capability.descriptor.searchKeywords ?? []
         }
     }
 
-    /// How well a query names a command.
+    /// How well a query names a command, best first.
     enum Match: Equatable {
-        /// Every query word is a whole word of the title or keywords, as in "settings" or "prefs".
-        case exact
-        /// Every query word starts one, as in "sett" or "keybumps pref".
+        /// Every query word is a whole word of its name, as in "settings" or "dictation". Listed
+        /// above the apps.
+        case name
+        /// Every query word is a whole word of its name or keywords, but some only of a keyword, as
+        /// in "prefs" or "dictate". Listed after the apps, since a keyword can be an app's name
+        /// ("shortcuts", "voice").
+        case keyword
+        /// Every query word starts one, as in "sett" or "keybumps pref". Listed after the apps.
         case prefix
     }
 
@@ -73,9 +79,11 @@ enum QuickSearchCommand: Hashable, Identifiable {
     func match(_ query: String) -> Match? {
         let queryWords = Self.words(in: query)
         guard !queryWords.isEmpty else { return nil }
-        let vocabulary = Set(([title] + keywords).flatMap(Self.words))
+        let nameWords = Set(Self.words(in: title))
+        let vocabulary = nameWords.union(keywords.flatMap(Self.words))
         guard queryWords.allSatisfy({ word in vocabulary.contains { $0.hasPrefix(word) } }) else { return nil }
-        return queryWords.allSatisfy { vocabulary.contains($0) } ? .exact : .prefix
+        if queryWords.allSatisfy(nameWords.contains) { return .name }
+        return queryWords.allSatisfy(vocabulary.contains) ? .keyword : .prefix
     }
 
     /// The command a Command-key press runs, if any.
@@ -159,21 +167,25 @@ enum QuickSearchItem: Identifiable, Hashable {
 }
 
 extension QuickSearchRanking {
-    /// Quick Search's rows for a query. Commands the query names exactly come first, as Alfred puts
-    /// its preferences first; ones the query only starts come after the applications, so a few
-    /// letters still find apps first. Files and folders come last. Equally good commands keep
-    /// `QuickSearchCommand.allCases` order.
+    /// Quick Search's rows for a query. Commands the query names by whole words of their names come
+    /// first, as Alfred puts its preferences first. Commands matched only through a keyword, then
+    /// ones the query only starts, come after the applications, so an app named by the query (such
+    /// as Shortcuts for "shortcuts") stays first and a few letters still find apps first. Files and
+    /// folders come last. Equally good commands keep `QuickSearchCommand.allCases` order.
     static func items(
         matching term: String,
         applications: [QuickSearchResult],
         files: [QuickSearchResult],
         commands: [QuickSearchCommand] = QuickSearchCommand.allCases
     ) -> [QuickSearchItem] {
-        let exact = commands.filter { $0.match(term) == .exact }
-        let prefix = commands.filter { $0.match(term) == .prefix }
-        return exact.map(QuickSearchItem.command)
+        let matches = commands.map { (command: $0, match: $0.match(term)) }
+        func listed(_ match: QuickSearchCommand.Match) -> [QuickSearchItem] {
+            matches.filter { $0.match == match }.map { .command($0.command) }
+        }
+        return listed(.name)
             + applications.map(QuickSearchItem.result)
-            + prefix.map(QuickSearchItem.command)
+            + listed(.keyword)
+            + listed(.prefix)
             + files.map(QuickSearchItem.result)
     }
 }

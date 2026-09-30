@@ -18,14 +18,22 @@ struct QuickSearchCommandTests {
     }
 
     @Test(
-        "Whole words of its name or keywords match exactly",
+        "Whole words of its name match by name",
         arguments: [
             "settings", "Settings", "  SETTINGS  ", "SÉTTINGS", "keybumps", "Keybumps Settings",
-            "settings keybumps", "keybumps-settings", "preferences", "prefs", "Keybumps Prefs",
+            "settings keybumps", "keybumps-settings",
         ]
     )
-    func exactMatches(query: String) {
-        #expect(settings.match(query) == .exact)
+    func nameMatches(query: String) {
+        #expect(settings.match(query) == .name)
+    }
+
+    /// Since #182, a keyword ranks a command after the apps, like any capability command's keyword.
+    /// No stock app is named Preferences on macOS 14.2 and later (System Preferences became System
+    /// Settings), so in practice these still list it first.
+    @Test("Its keywords, alone or with its name, match by keyword", arguments: ["preferences", "prefs", "Keybumps Prefs"])
+    func keywordMatches(query: String) {
+        #expect(settings.match(query) == .keyword)
     }
 
     @Test(
@@ -55,7 +63,7 @@ struct QuickSearchCommandTests {
     private let safari = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Safari.app"), kind: .application)
     private let file = QuickSearchResult(url: URL(fileURLWithPath: "/tmp/fixture/settings.txt"), kind: .file)
 
-    @Test("An exact query puts it first, above apps and files")
+    @Test("A word of its name puts it first, above apps and files; a keyword lists it after apps")
     func exactQueryRanksFirst() {
         #expect(
             QuickSearchRanking.items(matching: "settings", applications: [systemSettings], files: [file])
@@ -64,6 +72,11 @@ struct QuickSearchCommandTests {
         #expect(
             QuickSearchRanking.items(matching: "prefs", applications: [], files: [file])
                 == [.command(settings), .result(file)]
+        )
+        let preferencesApp = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Preferences Helper.app"), kind: .application)
+        #expect(
+            QuickSearchRanking.items(matching: "preferences", applications: [preferencesApp], files: [file])
+                == [.result(preferencesApp), .command(settings), .result(file)]
         )
     }
 

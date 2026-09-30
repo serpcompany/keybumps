@@ -152,6 +152,22 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "Settings opens on Window Manager")
     }
 
+    func testCapabilityCommandMovesOpenSettingsToItsPage() {
+        // Settings stays open on General, so the page arrives through the open window, not a new one.
+        launch(permissions: "granted", ["-KBOpenSettings", "general", "-KBOpenPalette", "search"])
+        let general = element("settings.detail.general")
+        XCTAssertTrue(general.waitForExistence(timeout: 20))
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        app.typeText("window manager")
+        XCTAssertTrue(element("quickSearch.command.windowManagement").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "The open Settings window moves to Window Manager")
+        XCTAssertFalse(general.exists)
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {
