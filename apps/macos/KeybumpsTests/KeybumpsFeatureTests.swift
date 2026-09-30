@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import Carbon.HIToolbox
 import Security
+import Testing
 import XCTest
 @testable import Keybumps
 
@@ -2556,5 +2557,118 @@ final class KeybumpsFeatureTests: XCTestCase {
             channel.initialize(repeating: 0, count: Int(buffer.frameLength))
         }
         try file.write(from: buffer)
+    }
+}
+
+@MainActor
+private final class PartialThenFailingTranscriber: CompletedAudioTranscribing {
+    let partialTranscript: String
+    private let failure: String
+    private(set) var callCount = 0
+
+    init(partialTranscript: String, failure: String) {
+        self.partialTranscript = partialTranscript
+        self.failure = failure
+    }
+
+    func transcribe(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> String {
+        callCount += 1
+        throw NSError(domain: "KeybumpsTests", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
+    }
+
+    func cancel() {}
+}
+
+@MainActor
+@Suite("Transcribing a failed Dictation recording again")
+struct DictationRetryTranscriptionTests {
+    @Test("The transcription coordinator keeps a failed run's recognized text for the caller")
+    func coordinatorKeepsPartialTranscriptAfterFailure() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsRetryCoordinator-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let apple = PartialThenFailingTranscriber(partialTranscript: "Merge", failure: "Recognition stopped early.")
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .appleSpeech },
+            modelManager: DictationModelManager(
+                modelsRoot: root,
+                downloader: StubDictationModelDownloader { _, _, _ in root }
+            ),
+            appleTranscriber: apple
+        )
+
+        await #expect(throws: NSError.self) {
+            try await coordinator.transcribe(
+                audioURL: root.appendingPathComponent("output.wav"),
+                language: "en-US",
+                recordedDuration: 1
+            )
+        }
+
+        #expect(apple.callCount == 1)
+        #expect(coordinator.partialTranscript == "Merge")
+    }
+
+    @Test("Transcribe keeps recognized text, records why it failed, and keeps the recording in place")
+    func retryRecordsOutcomeInPlace() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsRetryHistory-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = DictationHistoryService(
+            recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
+        )
+        let failedRecording = try history.prepareRecording(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            language: "en-US"
+        )
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: failedRecording.audioURL)
+        let failed = try history.completeRecording(
+            failedRecording,
+            text: "",
+            language: "en-US",
+            duration: 1,
+            transcriptionError: "No speech was detected."
+        )
+        let newer = try history.record(
+            "Merge it.",
+            language: "en-US",
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_007),
+            duration: 2,
+            audioSourceURL: failedRecording.audioURL
+        )
+        #expect(failed.canTranscribe)
+        #expect(failed.failureReason == "No speech was detected.")
+        #expect(newer.failureReason == nil)
+
+        let apple = PartialThenFailingTranscriber(partialTranscript: "Merge", failure: "Recognition stopped early.")
+        let coordinator = DictationTranscriptionCoordinator(
+            selectedEngine: { .appleSpeech },
+            modelManager: DictationModelManager(
+                modelsRoot: root.appendingPathComponent("models", isDirectory: true),
+                downloader: StubDictationModelDownloader { _, _, _ in root }
+            ),
+            appleTranscriber: apple
+        )
+        let service = DictationService(
+            language: "en-US",
+            fileManager: .default,
+            history: history,
+            transcriber: coordinator
+        )
+
+        await service.transcribe(failed)
+
+        #expect(apple.callCount == 1)
+        #expect(service.retryingEntryID == nil)
+        #expect(history.entries.map(\.id) == [newer.id, failed.id])
+        let retried = try #require(history.entries.last)
+        #expect(retried.state == .failed)
+        #expect(retried.text == "Merge")
+        #expect(retried.failureReason == "Recognition stopped early.")
+        #expect(retried.canTranscribe)
     }
 }

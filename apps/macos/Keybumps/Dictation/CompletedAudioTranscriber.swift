@@ -179,8 +179,10 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     )?
     private var unloadingWhisper: (token: UUID, task: Task<Void, Never>)?
     private var idleCancellation: (any DictationRuntimeIdleCancellation)?
+    private var finishedPartialTranscript = ""
 
-    var partialTranscript: String { activeTranscriber?.partialTranscript ?? "" }
+    /// Text recognized so far, kept after a failed run so the caller can still save it.
+    var partialTranscript: String { activeTranscriber?.partialTranscript ?? finishedPartialTranscript }
 
     init(
         selectedEngine: @escaping () -> DictationTranscriptionEngine,
@@ -203,6 +205,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
+        finishedPartialTranscript = ""
         let engine = selectedEngine()
         let transcriber: any CompletedAudioTranscribing
 
@@ -238,7 +241,10 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
             idleCancellation = nil
         }
         activeTranscriber = transcriber
-        defer { activeTranscriber = nil }
+        defer {
+            finishedPartialTranscript = transcriber.partialTranscript
+            activeTranscriber = nil
+        }
         do {
             let transcript = try await transcriber.transcribe(
                 audioURL: audioURL,

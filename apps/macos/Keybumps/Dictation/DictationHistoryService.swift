@@ -52,6 +52,13 @@ struct DictationHistoryEntry: Identifiable, Equatable {
     var canTranscribe: Bool {
         audioURL != nil && (state == .failed || state == .interrupted)
     }
+    /// Why the last transcription of this recording failed, when it did.
+    var failureReason: String? {
+        guard state == .failed || state == .interrupted,
+              let reason = metadata.transcriptionError?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reason.isEmpty else { return nil }
+        return reason
+    }
 }
 
 @MainActor
@@ -188,14 +195,7 @@ final class DictationHistoryService {
         try persist(metadata, in: recording.directoryURL)
         activeRecordingIDs.remove(recording.id)
 
-        let entry = DictationHistoryEntry(
-            metadata: metadata,
-            directoryURL: recording.directoryURL,
-            audioURL: recording.audioURL
-        )
-        entries.removeAll { $0.id == entry.id }
-        entries.insert(entry, at: 0)
-        return entry
+        return replaceEntry(metadata: metadata, directoryURL: recording.directoryURL, audioURL: recording.audioURL)
     }
 
     @discardableResult
@@ -360,7 +360,9 @@ final class DictationHistoryService {
         )
     }
 
-    private func replaceEntry(metadata: DictationRecordingMetadata, directoryURL: URL, audioURL: URL?) {
+    /// Keeps entries newest first, so a retried recording stays where it was listed.
+    @discardableResult
+    private func replaceEntry(metadata: DictationRecordingMetadata, directoryURL: URL, audioURL: URL?) -> DictationHistoryEntry {
         let entry = DictationHistoryEntry(metadata: metadata, directoryURL: directoryURL, audioURL: audioURL)
         entries.removeAll { $0.id == entry.id }
         entries.append(entry)
@@ -368,5 +370,6 @@ final class DictationHistoryService {
             if left.capturedAt == right.capturedAt { return left.id > right.id }
             return left.capturedAt > right.capturedAt
         }
+        return entry
     }
 }

@@ -248,6 +248,9 @@ private struct DictationPaletteDetail: View {
             row("Duration", DictationHistoryCard.durationFormatter.string(from: entry.duration) ?? "0:00")
             row("Language", Locale.current.localizedString(forIdentifier: entry.language) ?? entry.language)
             row("Status", status)
+            if !isTranscribing, let reason = entry.failureReason {
+                row("Reason", reason)
+            }
         }
     }
 
@@ -268,7 +271,9 @@ private struct DictationPaletteDetail: View {
             HStack {
                 Text(title).foregroundStyle(.secondary)
                 Spacer()
-                Text(value).foregroundStyle(.primary)
+                Text(value)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.trailing)
             }
             .font(.system(size: 13))
             .padding(.vertical, 8)
