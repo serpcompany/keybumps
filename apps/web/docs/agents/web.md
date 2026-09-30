@@ -49,11 +49,11 @@ Against `localhost`, the smoke test also checks the host redirects by sending `H
 | --- | --- | --- | --- | --- | --- | --- |
 | Local (`pnpm dev`, `pnpm preview`) | none (top level, `keybumps-web`) | `http://localhost:3000`, `http://localhost:8787` | none | unset | `noindex` | off |
 | Staging | `keybumps-web-staging` (`--env staging`) | `https://staging.keybumps.app` (custom domain) | its `workers.dev` URL | `staging` | `noindex` | off |
-| Production | `keybumps-web-production` (`--env production`) | `https://keybumps.app`, after the [domain cutover](#domain-cutover) | its `workers.dev` URL; `www.keybumps.app` after the cutover | `production` | allowed | GTM (`NEXT_PUBLIC_GTM_ID`) |
+| Production | `keybumps-web-production` (`--env production`) | `https://keybumps.app` (custom domain) | its `workers.dev` URL; `www.keybumps.app` (custom domain) | `production` | allowed | GTM (`NEXT_PUBLIC_GTM_ID`) |
 
 Both deployed environments keep `workers_dev: true`, because CI smoke-tests the `workers.dev` URL (the zone's bot protection blocks CI runners on the branded domains). The URL is `https://<worker>.<account subdomain>.workers.dev`, and the deploy log prints it. Without the `x-keybumps-smoke-test` header, it redirects to the environment's canonical URL.
 
-TODO(#144): until the [domain cutover](#domain-cutover), `env.production` has no `routes`. `keybumps.app` and `www.keybumps.app` are still Custom Domains of the old Worker, `keybumps-website`, which deploys from `serpcompany/keybumps.app` through Workers Builds, so production is reachable only at its `workers.dev` URL.
+`keybumps.app` and `www.keybumps.app` are Custom Domains of `keybumps-web-production` since the [domain cutover](#domain-cutover). Before it, they belonged to the old Worker, `keybumps-website`, which deployed from `serpcompany/keybumps.app` through Workers Builds.
 
 ## Deploys
 
@@ -73,7 +73,7 @@ Before the production domains move over (#144), `dmca@keybumps.app`, the contact
 
 ### Domain cutover
 
-TODO(#144): the owner runs this once, watching each step. Nothing here runs by itself, and an agent must not do it. Record the date and the run links on #144.
+Done once, for #144, with the owner's authorization; the date and run links are on #144. Kept as the record of how the domains moved and as the rollback procedure while `keybumps-website` exists.
 
 **Approach: CI takes the domains over.** The first production deploys leave out the production routes. At cutover, a pull request adds them, and that merge's `Web deploy` run moves `keybumps.app` and `www.keybumps.app` from `keybumps-website` to `keybumps-web-production` in one API call. This works because Wrangler (4.135, `publishCustomDomains` in its deploy step) sends `override_existing_origin: true` and `override_existing_dns_record: true` whenever its output isn't a terminal, as in CI (`| tee`). It moves a Custom Domain that another Worker holds without asking. The same behavior is why the routes stay out until Workers Builds is disconnected: otherwise the old deploy path could take the domains back.
 
