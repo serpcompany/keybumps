@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.8](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.7...v0.0.3-beta.8) (2026-09-30)
+
+
+### Improvements
+
+* remove extra Shortcut Coach presentation channels ([#137](https://github.com/serpcompany/keybumps/issues/137)) ([f163bf0](https://github.com/serpcompany/keybumps/commit/f163bf016a062710b6d8f3232db5b44211cf347c))
+
 ## [0.0.3-beta.7](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.6...v0.0.3-beta.7) (2026-09-29)
 
 
