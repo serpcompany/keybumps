@@ -20,6 +20,9 @@ struct CapabilityDescriptor: Identifiable {
     let settingsPage: CapabilitySettingsPage?
     /// Named app-owned operations the module reports to `UpdateInstallationSafetyPolicy`.
     let criticalOperations: Set<ApplicationCriticalOperation>
+    /// Words besides its title that Quick Search finds its Quick Search command by, such as its tab's
+    /// name and what people call what it does ("dictate", "paste").
+    let searchKeywords: [String]
 
     var id: Capability { capability }
 }

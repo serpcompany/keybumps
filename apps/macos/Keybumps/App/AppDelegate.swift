@@ -3,6 +3,8 @@ import UserNotifications
 
 extension Notification.Name {
     static let openMainWindow = Notification.Name("Keybumps.openMainWindow")
+    /// `MainWindowRouter.open(_:)` has a Settings page for an open window to show.
+    static let settingsSectionRequested = Notification.Name("Keybumps.settingsSectionRequested")
 }
 
 @MainActor

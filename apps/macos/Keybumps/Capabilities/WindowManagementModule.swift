@@ -15,7 +15,8 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off stops drag-to-snap and releases all window shortcuts.",
             content: { AnyView(WindowSettingsView()) }
         ),
-        criticalOperations: [.windowAction, .windowDrag]
+        criticalOperations: [.windowAction, .windowDrag],
+        searchKeywords: ["windows", "snap", "resize", "tile", "tiling"]
     )
 }
 

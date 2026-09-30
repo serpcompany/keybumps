@@ -24,7 +24,8 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off stops the screenshot hotkeys and adding new screenshots to Clipboard History, and gives ⇧⌘3 and ⇧⌘4 back to macOS. Screenshots already there stay until removed.",
             content: { AnyView(ScreenshotToolsSettingsView()) }
         ),
-        criticalOperations: [.unsavedWork]
+        criticalOperations: [.unsavedWork],
+        searchKeywords: ["screenshots", "screenshot", "screen", "capture", "annotate"]
     )
 }
 

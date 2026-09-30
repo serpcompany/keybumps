@@ -143,8 +143,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let hud = PaletteHUD.shared
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
-    /// Opens Settings. The app shell sets it to the status menu's route.
-    var openSettings: () -> Void = {}
+    /// Opens Settings on a page, or where it was left when nil. The app shell sets it to the status
+    /// menu's route.
+    var openSettings: (SettingsSection?) -> Void = { _ in }
 
     init(
         clipboard: ClipboardHistoryService,
@@ -200,12 +201,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         panel?.isVisible == true && state.tab == tab
     }
 
+    /// The tab the palette is on, or was last on.
+    var selectedTab: CommandPaletteTab { state.tab }
+
     /// Runs a Keybumps command from its Quick Search row, the footer's Settings button, or its
-    /// Command-key shortcut in any tab. The palette closes first.
+    /// Command-key shortcut in any tab. A capability's tab opens in place; for Settings the palette
+    /// closes first. Commands never become Recent Items.
     func run(_ command: QuickSearchCommand) {
-        dismiss()
-        switch command {
-        case .keybumpsSettings: openSettings()
+        switch command.destination(enabledCapabilities: preferences.enabledCapabilities) {
+        case .paletteTab(let tab):
+            selectTab(tab)
+        case .settings(let section):
+            dismiss()
+            openSettings(section)
         }
     }
 
@@ -633,6 +641,8 @@ private struct CommandPaletteView: View {
                 items: search.items,
                 selection: state.selection,
                 query: search.query,
+                enabledCapabilities: preferences.enabledCapabilities,
+                visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab),
                 recentItems: search.recentItems.items,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
@@ -854,6 +864,9 @@ private struct SearchResultsView: View {
     let items: [QuickSearchItem]
     let selection: Int
     let query: String
+    /// Where each command goes, and what its row shows, depend on these.
+    let enabledCapabilities: Set<Capability>
+    let visibleTabs: [CommandPaletteTab]
     let recentItems: [RecentItem]
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
@@ -924,16 +937,26 @@ private struct SearchResultsView: View {
                         Group {
                             switch item {
                             case .command(let command):
+                                let hint = command.destination(enabledCapabilities: enabledCapabilities).hint
                                 Button {
                                     run(command)
                                 } label: {
-                                    QuickSearchCommandRow(command: command)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .contentShape(Rectangle())
+                                    QuickSearchCommandRow(
+                                        command: command,
+                                        shortcut: command.rowShortcut(
+                                            enabledCapabilities: enabledCapabilities,
+                                            visibleTabs: visibleTabs
+                                        ),
+                                        isTurnedOff: command.isTurnedOff(enabledCapabilities: enabledCapabilities)
+                                    )
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityIdentifier("quickSearch.command.\(command.rawValue)")
+                                .help(hint)
+                                .accessibilityHint(hint)
+                                .accessibilityIdentifier("quickSearch.command.\(command.id)")
                             case .result(let result):
                                 Button {
                                     open(result)
@@ -996,25 +1019,46 @@ private struct SearchResultRow: View {
     }
 }
 
-/// A Keybumps command in Raycast's row: the Keybumps icon, the name, then its shortcut and kind on
-/// the right.
+/// A Keybumps command in Raycast's row: its icon (the Keybumps icon, or the capability's Settings
+/// tile), the name, Turned off for a capability that's off, then its shortcut and kind on the right.
 private struct QuickSearchCommandRow: View {
     let command: QuickSearchCommand
+    let shortcut: String?
+    let isTurnedOff: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                .resizable()
+            icon
                 .frame(width: 28, height: 28)
             Text(command.title)
                 .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
                 .layoutPriority(1)
+            if isTurnedOff {
+                Text("Turned off")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 12)
-            PaletteKeycaps(shortcut: command.shortcut)
+            if let shortcut {
+                PaletteKeycaps(shortcut: shortcut)
+            }
             Text(command.kindLabel)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch command {
+        case .keybumpsSettings:
+            Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                .resizable()
+        case .capability(let capability):
+            SettingsIconTile(systemImage: capability.systemImage, tint: capability.descriptor.iconTint, size: 24)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -1563,7 +1607,7 @@ private struct PaletteSettingsButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .help("\(command.title) (\(command.shortcut))")
+        .help(command.shortcut.map { "\(command.title) (\($0))" } ?? command.title)
         .accessibilityLabel(command.title)
         .accessibilityIdentifier("palette.settings")
     }

@@ -14,6 +14,7 @@ final class MainWindowRouter {
     private let activate: () -> Void
     private let openWithoutWindow: ((MainWindowRouter) -> Void)?
     private var opensWindowOnNextReopen = false
+    private var requestedSection: SettingsSection?
 
     init(activate: (() -> Void)? = nil, openWithoutWindow: ((MainWindowRouter) -> Void)? = nil) {
         self.activate = activate ?? {
@@ -36,6 +37,25 @@ final class MainWindowRouter {
         opener()
         activate()
         return true
+    }
+
+    /// Opens Settings on `section`, or where it was left when nil. An open window takes the page at
+    /// once (`settingsSectionRequested`); a window created for it takes it when it appears. Either
+    /// way it comes from `consumeRequestedSection()`, so it is shown once.
+    @discardableResult
+    func open(_ section: SettingsSection?) -> Bool {
+        requestedSection = section
+        let opened = open()
+        if section != nil {
+            NotificationCenter.default.post(name: .settingsSectionRequested, object: self)
+        }
+        return opened
+    }
+
+    /// The page Settings was asked to show and hasn't shown yet. Reading it clears it.
+    func consumeRequestedSection() -> SettingsSection? {
+        defer { requestedSection = nil }
+        return requestedSection
     }
 
     /// Whether the next app reopen should let SwiftUI create the main window instead of routing

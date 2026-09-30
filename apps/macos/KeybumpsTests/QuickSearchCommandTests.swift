@@ -10,10 +10,11 @@ struct QuickSearchCommandTests {
     private let settings = QuickSearchCommand.keybumpsSettings
 
     @Test("Keybumps Settings is named for the product and shows Command-comma")
-    func presentation() {
+    func presentation() throws {
         #expect(settings.title == "Keybumps Settings")
         #expect(settings.kindLabel == "Command")
-        #expect(ShortcutKeycapPresentation(shortcut: settings.shortcut).keys == ["⌘", ","])
+        #expect(ShortcutKeycapPresentation(shortcut: try #require(settings.shortcut)).keys == ["⌘", ","])
+        #expect(settings.rowShortcut(enabledCapabilities: [], visibleTabs: []) == "⌘,")
     }
 
     @Test(
@@ -101,7 +102,12 @@ struct QuickSearchCommandTests {
         #expect(items("keybumps") == [.command(settings), .result(keybumpsApp)], "Opening Keybumps from its own palette only reopens it")
         #expect(items("preferences") == [.command(settings)])
         #expect(items("pre") == [.result(preview), .command(settings)])
-        #expect(items("s") == [.result(safari), .result(systemSettings), .result(keybumpsApp), .command(settings)])
+        // Capability commands whose names or keywords start with "s" follow too (#182).
+        #expect(items("s") == [
+            .result(safari), .result(systemSettings), .result(keybumpsApp),
+            .command(settings), .command(.capability(.screenshotTools)), .command(.capability(.dictation)),
+            .command(.capability(.windowManagement)), .command(.capability(.keyboardShortcutter)),
+        ])
     }
 
     // MARK: Command Palette entry points
@@ -114,7 +120,7 @@ struct QuickSearchCommandTests {
         for command in QuickSearchCommand.allCases {
             #expect(CommandPaletteTab.matchingCommandKey(command.commandKey) == nil, "\(command) shares a tab's key")
             // Command-E edits a clipboard image or screenshot.
-            #expect(command.commandKey.lowercased() != "e")
+            #expect(command.commandKey?.lowercased() != "e")
         }
     }
 
@@ -128,11 +134,11 @@ struct QuickSearchCommandTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let harness = WiringHarness(enabled: [], missing: nil, root: root)
         let palette = harness.model.commandPalette
-        var openCount = 0
-        palette.openSettings = { openCount += 1 }
+        var opened: [SettingsSection?] = []
+        palette.openSettings = { opened.append($0) }
 
         palette.run(.keybumpsSettings)
 
-        #expect(openCount == 1)
+        #expect(opened == [nil], "Settings opens where it was left")
     }
 }

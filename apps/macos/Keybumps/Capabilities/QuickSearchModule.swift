@@ -24,7 +24,9 @@ extension CapabilityDescriptor {
             disableExplanation: "Turning this off closes Quick Search and releases its global shortcut.",
             content: { AnyView(QuickSearchSettingsView()) }
         ),
-        criticalOperations: []
+        criticalOperations: [],
+        // Quick Search lists the commands, so it has none of its own.
+        searchKeywords: []
     )
 }
 

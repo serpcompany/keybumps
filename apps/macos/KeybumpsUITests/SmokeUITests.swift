@@ -131,6 +131,27 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")
     }
 
+    func testQuickSearchNavigatesToCapabilities() {
+        launch(permissions: "granted", ["-KBOpenPalette", "search", "-KBCloseSettings", "YES"])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        // A whole word lists the capability's command first, and Return shows its tab in place.
+        app.typeText("dictate")
+        XCTAssertTrue(element("quickSearch.command.dictation").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(paletteField("Search dictation history").waitForExistence(timeout: 5), "Return shows the Dictation tab")
+
+        // Window Manager has no tab, so Return closes the palette and opens its Settings page.
+        app.typeKey("1", modifierFlags: .command)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        app.typeText("window manager")
+        XCTAssertTrue(element("quickSearch.command.windowManagement").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "Settings opens on Window Manager")
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {
