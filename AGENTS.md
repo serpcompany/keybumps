@@ -1,15 +1,15 @@
 # Agent instructions
 
-Use `CONTEXT.md` terminology, preserve the module boundaries documented in `docs/architecture.md`, and follow the decisions recorded in `docs/adr/`.
+Across the repo, including the website, use `CONTEXT.md` terminology, preserve the module boundaries documented in `docs/architecture.md`, and follow the decisions recorded in `docs/adr/`.
 
 ## Repo-wide
 
-- Never take over the owner's screen (computer use or browser control) without an explicit handoff.
-- Do not log or commit searches, filenames, clipboard values, transcripts, recordings, window/document titles, URLs, or coaching content. Logs and fixtures hold only structural state, timing, stage, error category, and recovery.
+- Never take over the owner's screen (computer use, browser control, or other screen control) without an explicit handoff.
+- Do not log or commit user content: searches, filenames, clipboard values, transcripts, recordings, window/document titles, URLs, or coaching content. Logs and fixtures hold only structural state, timing, stage, error category, and recovery.
 - Preserve `LICENSE.rectangle`, `LICENSE.shotnix`, and the provenance ledger for donor-derived behavior.
 - Do not publish, create a remote, configure commerce, notarize, or distribute without fresh owner authorization.
 
-## Mac app (everything outside `apps/web/`)
+## Mac app (its code, tests, scripts, and release tooling)
 
 - [`docs/development-workflow.md`](docs/development-workflow.md): Follow this branch, local-build, installed-artifact, manual-QA, and promotion cycle for all product work.
   Hand the owner work through `scripts/build-qa-candidate.sh <issue>` after your own first pass.
@@ -20,6 +20,6 @@ Use `CONTEXT.md` terminology, preserve the module boundaries documented in `docs
   own settings and local data. It does not import or manage another app's data.
 - A build is not proof of OS integration. Report build, deterministic tests, UI, signed runtime, installed artifact, and owner acceptance separately.
 
-## Website (`apps/web/`)
+## Website (`apps/web/` and website CI such as `.github/workflows/web*.yml`)
 
-- [`apps/web/AGENTS.md`](apps/web/AGENTS.md): The keybumps.app website. It sets the site's workflow, tests, and evidence; the repo-wide rules above also apply.
+- [`apps/web/AGENTS.md`](apps/web/AGENTS.md): The keybumps.app website. It sets the site's workflow, tests, and evidence; the repo-wide rules above also apply. Website CI files at the root follow these Website rules, not the Mac app rules.
