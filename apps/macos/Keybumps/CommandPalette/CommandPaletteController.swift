@@ -791,7 +791,7 @@ private struct KeyboardShortcutterResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
-                        .buttonStyle(PaletteClearAllButtonStyle())
+                        .buttonStyle(PalettePillButtonStyle())
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 10)
@@ -877,7 +877,7 @@ private struct SearchResultsView: View {
                                 confirmationPresentationChanged: confirmationPresentationChanged,
                                 clear: clearRecentItems
                             )
-                            .buttonStyle(PaletteClearAllButtonStyle())
+                            .buttonStyle(PalettePillButtonStyle())
                         }
                         .padding(.horizontal, 18)
                         .padding(.top, 10)
@@ -1043,7 +1043,7 @@ private struct ClipboardResultsView: View {
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear
                         )
-                        .buttonStyle(PaletteClearAllButtonStyle())
+                        .buttonStyle(PalettePillButtonStyle())
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 10)
@@ -1100,8 +1100,9 @@ struct ClipboardRow: View {
             ClipboardEntryPreview(entry: entry)
             VStack(alignment: .leading, spacing: 3) {
                 ClipboardEntryTitle(entry: entry)
-                Text(entry.capturedAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                Text(ClipboardRowPresentation.timestamp(entry.capturedAt))
                     .font(.system(size: 12))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -1163,8 +1164,9 @@ struct ClipboardSourceAppIcon: View {
     }
 }
 
-/// A clipboard item's content: its text (up to two lines), or an image's file name. An image copied
-/// from an app has no name, so it shows its pixel size instead of the word "Image".
+/// A clipboard item's content on one line, so every row is the same height: its text, or an image's
+/// file name. An image copied from an app has no name, so it shows its pixel size instead of the
+/// word "Image".
 private struct ClipboardEntryTitle: View {
     let entry: ClipboardEntry
     @State private var pixelSize: String?
@@ -1172,7 +1174,8 @@ private struct ClipboardEntryTitle: View {
     var body: some View {
         Text(ClipboardRowPresentation.title(for: entry, pixelSize: pixelSize))
             .font(.system(size: 15))
-            .lineLimit(entry.kind == .image ? 1 : 2)
+            .lineLimit(1)
+            .truncationMode(.tail)
             .task(id: entry.mediaPath) {
                 guard entry.kind == .image, entry.sourceURL == nil, let imageURL = entry.imageURL else {
                     pixelSize = nil
@@ -1187,10 +1190,50 @@ private struct ClipboardEntryTitle: View {
 
 /// What a Clipboard tab row shows, and says to VoiceOver, for an item.
 enum ClipboardRowPresentation {
-    /// The row's content: the text, a file's name, or an unnamed image's pixel size once known.
+    /// The row's content: the text on one line, a file's name, or an unnamed image's pixel size once known.
     static func title(for entry: ClipboardEntry, pixelSize: String?) -> String {
-        guard entry.kind == .image, entry.sourceURL == nil, let pixelSize else { return entry.displayText }
-        return pixelSize
+        switch entry.kind {
+        case .text:
+            return singleLine(entry.text)
+        case .image:
+            guard entry.sourceURL == nil, let pixelSize else { return entry.displayText }
+            return pixelSize
+        }
+    }
+
+    /// Text for a one-line row: runs of spaces, tabs, and newlines become single spaces, so a
+    /// multi-line copy reads as one line instead of showing only its first line. Only the start is
+    /// read, since one line shows little of a long copy.
+    static func singleLine(_ text: String) -> String {
+        text.prefix(500).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// When an item was copied, always the same width so timestamps line up down the column:
+    /// "09/03/2026 @ 03:37", or "09/03/2026 @ 03:37 PM" when the user's clock is 12-hour. It's fixed
+    /// text, not a live counter.
+    static func timestamp(_ date: Date) -> String {
+        timestampFormatter.string(from: date)
+    }
+
+    /// One shared formatter, not one per row. It reads the 12/24-hour preference when first used.
+    private static let timestampFormatter = makeTimestampFormatter()
+
+    /// A 2-digit month and day, a 4-digit year, " @ ", and a 2-digit hour and minute, with a
+    /// fixed-width AM/PM on a 12-hour clock. `en_US_POSIX` keeps every part the same in any locale.
+    static func makeTimestampFormatter(
+        usesTwentyFourHourClock: Bool = usesTwentyFourHourClock(),
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = usesTwentyFourHourClock ? "MM/dd/yyyy '@' HH:mm" : "MM/dd/yyyy '@' hh:mm a"
+        return formatter
+    }
+
+    /// Whether the user's clock is 24-hour: the locale's preferred hour pattern has no AM/PM.
+    static func usesTwentyFourHourClock(locale: Locale = .current) -> Bool {
+        !(DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: locale) ?? "").contains("a")
     }
 
     /// An image file's pixel size, such as "1280 × 720", read from its header without decoding it.
@@ -1335,7 +1378,7 @@ private struct ScreenshotGrid: View {
                         confirmationPresentationChanged: confirmationPresentationChanged,
                         clear: clear
                     )
-                    .buttonStyle(PaletteClearAllButtonStyle())
+                    .buttonStyle(PalettePillButtonStyle())
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
@@ -1402,16 +1445,11 @@ private struct ScreenshotCard: View {
             .buttonStyle(.plain)
             .overlay(alignment: .topTrailing) {
                 if isHovering || isSelected {
-                    Button(role: .destructive, action: delete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .medium))
-                            .frame(width: 26, height: 26)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(8)
-                    .help("Delete (⌫)")
-                    .accessibilityLabel("Delete screenshot \(entry.displayText)")
+                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+                        .buttonStyle(PalettePillButtonStyle(isCircular: true))
+                        .padding(8)
+                        .help("Delete (⌫)")
+                        .accessibilityLabel("Delete screenshot \(entry.displayText)")
                 }
             }
 

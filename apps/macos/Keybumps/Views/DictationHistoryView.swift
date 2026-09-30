@@ -441,14 +441,16 @@ struct LocalDictationTranslationView: View {
                 .frame(maxWidth: 220)
                 .disabled(supportedTargets.isEmpty || isTranslating)
 
+                // Only the Command Palette's Dictation tab shows this view, so it uses the palette's pills.
                 Button(isTranslating ? "Translating…" : "Translate") {
                     triggerTranslation()
                 }
+                .buttonStyle(PalettePillButtonStyle())
                 .disabled(targetIdentifier.isEmpty || isTranslating)
 
                 Spacer()
-                Button(action: close) { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless)
+                Button("Close translation", systemImage: "xmark", action: close)
+                    .buttonStyle(PalettePillButtonStyle(isCircular: true))
                     .help("Close translation")
                     .accessibilityLabel("Close translation")
             }
@@ -498,7 +500,7 @@ struct LocalDictationTranslationView: View {
                         Button("Copy Translation", systemImage: "doc.on.doc") {
                             DictationHistoryClipboard.copy(translatedText)
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(PalettePillButtonStyle(showsIcon: true))
                     }
                 }
             }

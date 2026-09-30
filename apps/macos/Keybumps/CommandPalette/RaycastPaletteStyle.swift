@@ -58,64 +58,74 @@ struct PaletteKeycaps: View {
     }
 }
 
-/// Clear All in the palette's tab headers: a quiet chip shaped like the palette's keycaps (same
-/// fill, hairline border, radius, and height), with a trash icon and gray text. It turns red only
-/// while hovered or pressed, so it reads as destructive without being the loudest thing on screen.
-/// The destructive confirmation still follows.
-struct PaletteClearAllButtonStyle: ButtonStyle {
+/// The Command Palette's one button style, from the same family as the floating footer pill and
+/// the round Settings button: their surface (`paletteFloatingSurface`), a capsule (or a circle for
+/// an icon-only button), and the pill's medium-weight label in gray. Hover or press brings the label
+/// to full strength. A destructive button turns red only then, so it reads as destructive without
+/// being the loudest thing on screen. Every palette button that isn't a row, tab, or playback
+/// control uses it.
+struct PalettePillButtonStyle: ButtonStyle {
+    enum Size {
+        /// The footer pill's own size.
+        case regular
+        /// A proportionally smaller pill for section headers and action rows.
+        case compact
+
+        var height: CGFloat { self == .regular ? PaletteTheme.footerHeight : 30 }
+        var fontSize: CGFloat { self == .regular ? 14 : 13 }
+        var horizontalPadding: CGFloat { self == .regular ? 16 : 13 }
+    }
+
+    var size: Size = .compact
+    /// Shows the label's icon beside its title, as in the Dictation detail's actions.
+    var showsIcon = false
+    /// An icon-only round button, like the Settings gear.
+    var isCircular = false
+
     func makeBody(configuration: Configuration) -> some View {
-        PaletteClearAllChip(configuration: configuration)
+        PalettePill(configuration: configuration, style: self)
     }
 }
 
-private struct PaletteClearAllChip: View {
+private struct PalettePill: View {
     let configuration: ButtonStyleConfiguration
+    let style: PalettePillButtonStyle
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
         let isEmphasized = isEnabled && (isHovering || configuration.isPressed)
-        configuration.label
-            .labelStyle(.titleAndIcon)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(isEmphasized ? AnyShapeStyle(.red.opacity(0.9)) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, 8)
-            .frame(minHeight: 22)
-            .background(PaletteTheme.keycapFill.opacity(configuration.isPressed ? 2 : 1), in: shape)
-            .overlay(shape.strokeBorder(
-                isEmphasized ? AnyShapeStyle(.red.opacity(0.35)) : AnyShapeStyle(PaletteTheme.keycapBorder),
-                lineWidth: 1
-            ))
-            .opacity(isEnabled ? 1 : 0.45)
-            .contentShape(shape)
-            .onHover { isHovering = $0 }
-    }
-}
-
-/// A small outlined chip for secondary actions, such as the Dictation detail's.
-struct PaletteChipButtonStyle: ButtonStyle {
-    /// Shows the label's icon too, for action rows such as the Dictation detail's.
-    var showsIcon = false
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let color: AnyShapeStyle = !isEmphasized
+            ? AnyShapeStyle(.secondary)
+            : configuration.role == .destructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary)
         Group {
-            if showsIcon {
-                configuration.label.labelStyle(.titleAndIcon)
+            if style.isCircular {
+                label
+                    .frame(width: style.size.height, height: style.size.height)
+                    .paletteFloatingSurface(Circle())
+                    .contentShape(Circle())
             } else {
-                configuration.label.labelStyle(.titleOnly)
+                label
+                    .padding(.horizontal, style.size.horizontalPadding)
+                    .frame(height: style.size.height)
+                    .paletteFloatingSurface(Capsule())
+                    .contentShape(Capsule())
             }
         }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(configuration.role == .destructive ? AnyShapeStyle(.red.opacity(0.85)) : AnyShapeStyle(.secondary))
-            .padding(.horizontal, showsIcon ? 10 : 8)
-            .frame(minHeight: showsIcon ? 26 : 22)
-            .background(PaletteTheme.keycapFill.opacity(configuration.isPressed ? 2 : 1), in: shape)
-            .overlay(shape.strokeBorder(PaletteTheme.keycapBorder, lineWidth: 1))
-            .opacity(isEnabled ? 1 : 0.45)
-            .contentShape(shape)
+        .font(.system(size: style.size.fontSize, weight: .medium))
+        .foregroundStyle(color)
+        .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+        .onHover { isHovering = $0 }
+    }
+
+    @ViewBuilder private var label: some View {
+        if style.isCircular {
+            configuration.label.labelStyle(.iconOnly)
+        } else if style.showsIcon {
+            configuration.label.labelStyle(.titleAndIcon)
+        } else {
+            configuration.label.labelStyle(.titleOnly)
+        }
     }
 }
 

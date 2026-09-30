@@ -65,7 +65,7 @@ struct DictationPaletteResults: View {
                     audioPlayer.stop()
                     clear()
                 }
-                .buttonStyle(PaletteClearAllButtonStyle())
+                .buttonStyle(PalettePillButtonStyle())
             }
             .padding(.horizontal, 18)
             .padding(.top, 10)
@@ -237,7 +237,7 @@ private struct DictationPaletteDetail: View {
             Button("Delete", systemImage: "trash", role: .destructive, action: delete)
                 .help("Delete (⌫)")
         }
-        .buttonStyle(PaletteChipButtonStyle(showsIcon: true))
+        .buttonStyle(PalettePillButtonStyle(showsIcon: true))
     }
 
     private var information: some View {
