@@ -112,13 +112,15 @@ struct ScreenshotClipboardDelivery {
     let copiesToClipboard: () -> Bool
 
     /// True when the file became a new Clipboard History item. The Screen and Edit hotkey adds
-    /// its file before the watcher sees it, so a file already in Clipboard History (or matching
-    /// the newest item) is neither added nor copied again.
+    /// its files before the watcher sees them, so a file already in Clipboard History (or matching
+    /// the newest item) is neither added nor copied again. `copying: false` never copies.
     @discardableResult
-    func add(_ url: URL) -> Bool {
-        guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }),
-              clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
-        if copiesToClipboard(), let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
+    func add(_ url: URL, copying: Bool = true) -> Bool {
+        guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }) else { return false }
+        let copies = copying && copiesToClipboard()
+        if copies { clipboard.recordPendingChange() }
+        guard clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
+        if copies, let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
             clipboard.restore(entry)
         }
         return true

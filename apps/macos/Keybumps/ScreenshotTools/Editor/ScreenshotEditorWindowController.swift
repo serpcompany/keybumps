@@ -126,10 +126,10 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
             if event.keyCode == 53 { self.cancel(); return nil }
             if self.model.isEditingText { return event }
+            if Self.isSaveKey(key, modifiers: event.modifierFlags) { self.save(); return nil }
             switch (flags, key) {
             case (.command, "z"): self.model.undo(); return nil
             case ([.command, .shift], "z"): self.model.redo(); return nil
-            case (.command, "\r"), ([], "\r"): self.save(); return nil
             case ([], _):
                 if let tool = Self.tool(forKey: key, modifiers: event.modifierFlags) { self.model.tool = tool; return nil }
                 return event
@@ -142,6 +142,12 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     /// Keypad digits carry .numericPad (and arrows .function); treat them like the main keys.
     static func shortcutFlags(_ modifiers: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
         modifiers.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function])
+    }
+
+    /// Return or ⌘Return, including the keypad's Enter (also fn-Return), saves.
+    static func isSaveKey(_ key: String, modifiers: NSEvent.ModifierFlags) -> Bool {
+        let flags = shortcutFlags(modifiers)
+        return (key == "\r" || key == "\u{3}") && (flags.isEmpty || flags == .command)
     }
 
     /// Unmodified 1–5 or B/R/A/D/T select a tool; anything with Command, Option, or Control does not.

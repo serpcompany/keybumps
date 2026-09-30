@@ -16,24 +16,45 @@ struct ScreenshotClipboardTests {
         let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
 
         #expect(delivery.add(shot))
-        #expect(fixture.pasteboard.data(forType: .png) == Self.png)
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: shot)))
+        // A newer item keeps the newest-item duplicate check from hiding a second add.
+        fixture.clipboard.ingestForTesting("newer")
         fixture.clipboard.pollForTesting()
-        #expect(fixture.clipboard.entries.count == 1)
-        #expect(fixture.clipboard.entries.first?.isScreenshot == true)
-        #expect(fixture.clipboard.entries.first?.sourceURL == shot)
+        #expect(fixture.clipboard.entries.map(\.kind) == [.text, .image])
+        #expect(fixture.clipboard.entries.last?.isScreenshot == true)
+        #expect(fixture.clipboard.entries.last?.sourceURL == shot)
     }
 
-    @Test("With the setting off, screenshots reach Clipboard History but leave the clipboard alone")
-    func leavesClipboardAloneWhenOff() throws {
+    @Test("Something copied since the last poll reaches Clipboard History before the screenshot replaces it")
+    func recordsPendingCopyFirst() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
         let shot = try fixture.screenshot()
-        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { false })
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        fixture.clipboard.start()
+        defer { fixture.clipboard.stop() }
+
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("copied just now", forType: .string)
+        #expect(delivery.add(shot))
+
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: shot)))
+        #expect(fixture.clipboard.entries.map(\.kind) == [.image, .text])
+        #expect(fixture.clipboard.entries.last?.text == "copied just now")
+    }
+
+    @Test("With the setting off, or for the Screen and Edit hotkey, screenshots reach Clipboard History but leave the clipboard alone")
+    func leavesClipboardAloneWhenNotCopying() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let off = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { false })
+        let on = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
         let changeCount = fixture.pasteboard.changeCount
 
-        #expect(delivery.add(shot))
+        #expect(off.add(try fixture.screenshot("Screenshot 1.png")))
+        #expect(on.add(try fixture.screenshot("Screenshot 2.png"), copying: false))
         #expect(fixture.pasteboard.changeCount == changeCount)
-        #expect(fixture.clipboard.entries.first?.isScreenshot == true)
+        #expect(fixture.clipboard.entries.map(\.isScreenshot) == [true, true])
     }
 
     @Test("A screenshot file is added and copied once, so a later copy (like an edit's Save) stays on the clipboard")
@@ -80,9 +101,10 @@ struct ScreenshotClipboardTests {
             )
         }
 
-        func screenshot() throws -> URL {
-            let url = root.appendingPathComponent("Screenshot 2026-09-30 at 10.00.00.png")
-            try ScreenshotClipboardTests.png.write(to: url)
+        /// Each file gets its own pixels, so Clipboard History never treats two as the same item.
+        func screenshot(_ name: String = "Screenshot 2026-09-30 at 10.00.00.png") throws -> URL {
+            let url = root.appendingPathComponent(name)
+            try (ScreenshotClipboardTests.png + Data(name.utf8)).write(to: url)
             return url
         }
 

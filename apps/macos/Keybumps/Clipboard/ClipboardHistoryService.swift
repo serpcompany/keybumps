@@ -163,6 +163,13 @@ class ClipboardHistoryService {
         return ingestImage(payload, sourcePath: url.path, isScreenCapture: isScreenCapture)
     }
 
+    /// Records a copy the next poll would have caught, so writing the pasteboard now can't lose
+    /// it. Does nothing while Clipboard History is stopped.
+    func recordPendingChange() {
+        guard timer != nil else { return }
+        poll()
+    }
+
     func ingestForTesting(_ text: String) { ingestText(text) }
     func pollForTesting() { poll() }
     func suppressCurrentChange() { suppressedChangeCount = pasteboard.changeCount }
