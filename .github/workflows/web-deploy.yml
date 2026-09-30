@@ -69,6 +69,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # CLOUDFLARE_API_TOKEN lives on the staging and production environments, which accept only main.
+    environment: staging
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
