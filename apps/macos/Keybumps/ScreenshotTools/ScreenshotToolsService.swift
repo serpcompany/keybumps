@@ -118,12 +118,12 @@ struct ScreenshotClipboardDelivery {
     func add(_ url: URL, copying: Bool = true) -> Bool {
         guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }) else { return false }
         // The watcher sees a file up to a second after it lands, so never replace something
-        // copied since the screenshot was taken; it stays on the clipboard, ready to paste.
+        // copied since the file was created; it stays on the clipboard, ready to paste.
         let takenAt = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
         let copies = copying && copiesToClipboard() && !clipboard.pasteboardChanged(since: takenAt)
         guard clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
         if copies, let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
-            clipboard.restore(entry)
+            clipboard.restore(entry, countsAsCopy: false)
         }
         return true
     }

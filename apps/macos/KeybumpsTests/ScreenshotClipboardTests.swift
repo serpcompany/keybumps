@@ -60,6 +60,46 @@ struct ScreenshotClipboardTests {
         #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: shot)))
     }
 
+    @Test("Each new screenshot replaces the previous screenshot's copy")
+    func newerScreenshotReplacesOlderCopy() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        fixture.clipboard.start()
+        defer { fixture.clipboard.stop() }
+        // Both files exist before either is delivered, like two displays or two quick shots.
+        let first = try fixture.screenshot("Screenshot 1.png")
+        let second = try fixture.screenshot("Screenshot 2.png")
+
+        #expect(delivery.add(first))
+        #expect(delivery.add(second))
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: second)))
+    }
+
+    @Test("Dictation's pasteboard write and a palette copy each count as newer copies")
+    func suppressedWritesAndRestoresCountAsCopies() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        fixture.clipboard.start()
+        defer { fixture.clipboard.stop() }
+
+        let beforeDictation = try fixture.screenshot("Screenshot 1.png")
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("transcript", forType: .string)
+        fixture.clipboard.suppressCurrentChange()
+        #expect(delivery.add(beforeDictation))
+        #expect(fixture.pasteboard.string(forType: .string) == "transcript")
+        #expect(fixture.clipboard.entries.map(\.kind) == [.image], "Dictation's write is never recorded")
+
+        fixture.clipboard.ingestForTesting("earlier item")
+        let beforeRestore = try fixture.screenshot("Screenshot 2.png")
+        let earlier = try #require(fixture.clipboard.entries.first)
+        #expect(fixture.clipboard.restore(earlier))
+        #expect(delivery.add(beforeRestore))
+        #expect(fixture.pasteboard.string(forType: .string) == "earlier item")
+    }
+
     @Test("While Clipboard History is stopped, adding a screenshot never records the pasteboard")
     func neverReadsThePasteboardWhileStopped() throws {
         let fixture = try Fixture()

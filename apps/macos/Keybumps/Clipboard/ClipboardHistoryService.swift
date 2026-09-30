@@ -139,8 +139,11 @@ class ClipboardHistoryService {
         persist()
     }
 
+    /// Puts `entry` back on the pasteboard. A restore the user asked for counts as a copy for
+    /// `pasteboardChanged(since:)`; Screenshot Tools' automatic copy passes `countsAsCopy: false`,
+    /// so one screenshot's copy never stops a newer screenshot from being copied.
     @discardableResult
-    func restore(_ entry: ClipboardEntry) -> Bool {
+    func restore(_ entry: ClipboardEntry, countsAsCopy: Bool = true) -> Bool {
         pasteboard.clearContents()
         let restored: Bool
         switch entry.kind {
@@ -154,7 +157,7 @@ class ClipboardHistoryService {
         }
         guard restored else { return false }
         lastChangeCount = pasteboard.changeCount
-        lastChangeSeenAt = Date()
+        if countsAsCopy { lastChangeSeenAt = Date() }
         suppressedChangeCount = nil
         return true
     }
