@@ -25,8 +25,8 @@ struct ScreenshotClipboardTests {
         #expect(fixture.clipboard.entries.last?.sourceURL == shot)
     }
 
-    @Test("Something copied since the last poll reaches Clipboard History before the screenshot replaces it")
-    func recordsPendingCopyFirst() throws {
+    @Test("Something copied after the screenshot was taken stays on the clipboard and reaches Clipboard History")
+    func neverReplacesANewerCopy() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
         let shot = try fixture.screenshot()
@@ -34,13 +34,56 @@ struct ScreenshotClipboardTests {
         fixture.clipboard.start()
         defer { fixture.clipboard.stop() }
 
+        // Copied after the file landed but before the watcher delivered it, and not yet polled.
         fixture.pasteboard.clearContents()
-        fixture.pasteboard.setString("copied just now", forType: .string)
+        fixture.pasteboard.setString("copied since", forType: .string)
         #expect(delivery.add(shot))
 
-        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: shot)))
+        #expect(fixture.pasteboard.string(forType: .string) == "copied since")
         #expect(fixture.clipboard.entries.map(\.kind) == [.image, .text])
-        #expect(fixture.clipboard.entries.last?.text == "copied just now")
+        #expect(fixture.clipboard.entries.last?.text == "copied since")
+    }
+
+    @Test("Something copied before the screenshot was taken doesn't stop it being copied")
+    func copiesOverAnOlderCopy() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        fixture.clipboard.start()
+        defer { fixture.clipboard.stop() }
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("copied before", forType: .string)
+        fixture.clipboard.pollForTesting()
+
+        let shot = try fixture.screenshot(createdAt: Date().addingTimeInterval(1))
+        #expect(delivery.add(shot))
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: shot)))
+    }
+
+    @Test("While Clipboard History is stopped, adding a screenshot never records the pasteboard")
+    func neverReadsThePasteboardWhileStopped() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("not for history", forType: .string)
+
+        #expect(delivery.add(try fixture.screenshot()))
+        #expect(fixture.clipboard.entries.map(\.kind) == [.image])
+    }
+
+    @Test("Screen and Edit adds every display's shot without copying, the main display's newest")
+    func addsEditCaptureWithoutCopying() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        let main = try fixture.screenshot("Screenshot 1.png")
+        let second = try fixture.screenshot("Screenshot 1 (2).png")
+        let changeCount = fixture.pasteboard.changeCount
+
+        #expect(delivery.addForEditing([main, second]) == main)
+        #expect(fixture.pasteboard.changeCount == changeCount)
+        #expect(fixture.clipboard.entries.map(\.sourceURL) == [main, second])
     }
 
     @Test("With the setting off, or for the Screen and Edit hotkey, screenshots reach Clipboard History but leave the clipboard alone")
@@ -102,9 +145,10 @@ struct ScreenshotClipboardTests {
         }
 
         /// Each file gets its own pixels, so Clipboard History never treats two as the same item.
-        func screenshot(_ name: String = "Screenshot 2026-09-30 at 10.00.00.png") throws -> URL {
+        func screenshot(_ name: String = "Screenshot 2026-09-30 at 10.00.00.png", createdAt: Date? = nil) throws -> URL {
             let url = root.appendingPathComponent(name)
             try (ScreenshotClipboardTests.png + Data(name.utf8)).write(to: url)
+            if let createdAt { try FileManager.default.setAttributes([.creationDate: createdAt], ofItemAtPath: url.path) }
             return url
         }
 

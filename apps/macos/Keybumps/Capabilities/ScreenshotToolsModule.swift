@@ -117,11 +117,7 @@ final class ScreenshotToolsModule: CapabilityModule {
             return
         }
         capturer.capture(mode) { [weak self] files in
-            guard opensEditor, let self, let file = files.first else { return }
-            // Add every display's file now, the main display's last so it's the newest item; the
-            // watcher then skips them. Nothing is copied: Save copies the edited image, so an
-            // unredacted screenshot never reaches the clipboard from here.
-            for written in files.reversed() { delivery.add(written, copying: false) }
+            guard opensEditor, let self, let file = delivery.addForEditing(files) else { return }
             if let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) {
                 _ = editor.edit(entry)
             }

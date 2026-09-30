@@ -81,6 +81,8 @@ class ClipboardHistoryService {
     private(set) var entries: [ClipboardEntry] = []
     private var timer: Timer?
     private var lastChangeCount: Int
+    /// When a pasteboard change was last seen, including suppressed changes and restores.
+    private var lastChangeSeenAt: Date?
     private var suppressedChangeCount: Int?
     private let storageURL: URL
     private let pasteboard: NSPasteboard
@@ -152,6 +154,7 @@ class ClipboardHistoryService {
         }
         guard restored else { return false }
         lastChangeCount = pasteboard.changeCount
+        lastChangeSeenAt = Date()
         suppressedChangeCount = nil
         return true
     }
@@ -163,11 +166,12 @@ class ClipboardHistoryService {
         return ingestImage(payload, sourcePath: url.path, isScreenCapture: isScreenCapture)
     }
 
-    /// Records a copy the next poll would have caught, so writing the pasteboard now can't lose
-    /// it. Does nothing while Clipboard History is stopped.
-    func recordPendingChange() {
-        guard timer != nil else { return }
-        poll()
+    /// Whether the pasteboard changed at or after `date`, counting a copy the next poll would
+    /// have caught (which this records first, so it isn't lost). While Clipboard History is
+    /// stopped it never reads the pasteboard and reports only changes it saw while running.
+    func pasteboardChanged(since date: Date) -> Bool {
+        if timer != nil { poll() }
+        return lastChangeSeenAt.map { $0 >= date } ?? false
     }
 
     func ingestForTesting(_ text: String) { ingestText(text) }
@@ -178,6 +182,7 @@ class ClipboardHistoryService {
         let changeCount = pasteboard.changeCount
         guard changeCount != lastChangeCount else { return }
         lastChangeCount = changeCount
+        lastChangeSeenAt = Date()
         if suppressedChangeCount == changeCount {
             suppressedChangeCount = nil
             return

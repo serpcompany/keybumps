@@ -117,13 +117,23 @@ struct ScreenshotClipboardDelivery {
     @discardableResult
     func add(_ url: URL, copying: Bool = true) -> Bool {
         guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }) else { return false }
-        let copies = copying && copiesToClipboard()
-        if copies { clipboard.recordPendingChange() }
+        // The watcher sees a file up to a second after it lands, so never replace something
+        // copied since the screenshot was taken; it stays on the clipboard, ready to paste.
+        let takenAt = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+        let copies = copying && copiesToClipboard() && !clipboard.pasteboardChanged(since: takenAt)
         guard clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
         if copies, let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
             clipboard.restore(entry)
         }
         return true
+    }
+
+    /// Adds a Screen and Edit capture without copying (Save copies the edited image, so an
+    /// unredacted screenshot never reaches the clipboard from here). Every display's file is
+    /// added, the main display's last so it's the newest item. Returns the file to edit.
+    func addForEditing(_ files: [URL]) -> URL? {
+        for file in files.reversed() { add(file, copying: false) }
+        return files.first
     }
 }
 
