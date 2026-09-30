@@ -1,52 +1,63 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { replaceUrlKeepingRouterState, strippedUrl } from './strip-query'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { describe, expect, it } from 'vitest'
+import { StripQuery, stripQueryScript } from './strip-query'
 
 type Call = { data: unknown; url: string }
 
-/** A stand-in for the browser's History, whose replaceState lives on the prototype. */
-class FakeHistory {
-  state: unknown = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ['tree'] }
-  calls: Call[] = []
-  replaceState(data: unknown, _unused: string, url: string) {
-    this.calls.push({ data, url })
-    this.state = data
+/** Runs the inline script against a fake window. The query values are obvious placeholders. */
+function run(href: string, options: { replaceStateThrows?: boolean } = {}) {
+  const url = new URL(href)
+  const calls: Call[] = []
+  const replaced: string[] = []
+  let stopped = false
+  const state = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ['tree'] }
+  const window = {
+    location: {
+      search: url.search,
+      pathname: url.pathname,
+      hash: url.hash,
+      replace: (to: string) => replaced.push(to)
+    },
+    history: {
+      state,
+      replaceState(data: unknown, _unused: string, to: string) {
+        if (options.replaceStateThrows) throw new Error('SecurityError')
+        calls.push({ data, url: to })
+      }
+    },
+    stop: () => {
+      stopped = true
+    }
   }
+  new Function('window', stripQueryScript)(window)
+  return { calls, replaced, stopped, state }
 }
 
-const globals = globalThis as { History?: unknown }
-const originalHistory = globals.History
-
-afterEach(() => {
-  globals.History = originalHistory
-})
-
 describe('StripQuery', () => {
-  it('keeps the path and hash and drops the query', () => {
-    expect(strippedUrl({ pathname: '/thanks/', hash: '' })).toBe('/thanks/')
-    expect(strippedUrl({ pathname: '/license/', hash: '#portal' })).toBe('/license/#portal')
+  it('replaces the URL with its path and hash, passing the history state through', () => {
+    const result = run('https://keybumps.app/thanks/?checkout_id=fake&customer_session_token=FAKE')
+    expect(result.calls).toEqual([{ data: result.state, url: '/thanks/' }])
+    expect(run('https://keybumps.app/license/?x=FAKE#portal').calls).toEqual([
+      { data: result.state, url: '/license/#portal' }
+    ])
   })
 
-  it('passes the router state through when the App Router has not patched history yet', () => {
-    globals.History = FakeHistory
-    const history = new FakeHistory()
-    const routerState = history.state
-    replaceUrlKeepingRouterState(history as unknown as History, '/thanks/')
-    expect(history.calls).toEqual([{ data: routerState, url: '/thanks/' }])
-    expect(history.state).not.toBeNull()
+  it('leaves a URL without a query alone', () => {
+    const result = run('https://keybumps.app/thanks/#top')
+    expect(result.calls).toEqual([])
+    expect(result.replaced).toEqual([])
   })
 
-  it('lets the patched replaceState copy the router state once the App Router has patched it', () => {
-    globals.History = FakeHistory
-    const history = new FakeHistory()
-    const routerState = history.state
-    const received: unknown[] = []
-    // Next.js assigns its patch as an own property of window.history.
-    history.replaceState = (data, _unused, url) => {
-      received.push(data)
-      FakeHistory.prototype.replaceState.call(history, data ?? routerState, _unused, url)
-    }
-    replaceUrlKeepingRouterState(history as unknown as History, '/thanks/')
-    expect(received).toEqual([null])
-    expect(history.state).toEqual(routerState)
+  it('fails closed: stops parsing and reloads without the query if it cannot replace the URL', () => {
+    const result = run('https://keybumps.app/thanks/?customer_session_token=FAKE', {
+      replaceStateThrows: true
+    })
+    expect(result.stopped).toBe(true)
+    expect(result.replaced).toEqual(['/thanks/'])
+  })
+
+  it('renders the script inline, so it runs before the parser continues', () => {
+    const html = renderToStaticMarkup(StripQuery())
+    expect(html).toBe(`<script>${stripQueryScript}</script>`)
   })
 })

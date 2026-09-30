@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageShell } from '@/components/page-shell'
+import { redirectWithoutQuery } from '@/lib/sensitive-url'
 
 export const metadata: Metadata = {
   title: { absolute: 'Thanks for buying Keybumps' },
@@ -10,10 +11,11 @@ export const metadata: Metadata = {
   referrer: 'no-referrer'
 }
 
-// Polar appends checkout and customer-session parameters to this URL. The page never reads
-// or echoes them, and the (no-analytics) layout's StripQuery removes them from the address bar and
-// history once the page renders.
-export default function ThanksPage() {
+// Polar appends checkout and customer-session parameters to this URL. The page redirects to
+// /thanks/ without them before rendering anything, so no page, router state, or analytics ever
+// holds them (see src/lib/sensitive-url.ts).
+export default async function ThanksPage({ searchParams }: PageProps<'/thanks'>) {
+  await redirectWithoutQuery('/thanks/', searchParams)
   return (
     <PageShell title="Thanks for buying Keybumps">
       <p>
@@ -30,7 +32,10 @@ export default function ThanksPage() {
       </ol>
       <p>
         No email? Check your spam folder, or{' '}
-        <Link href="/license/">find your key in the customer portal</Link>.
+        <Link href="/license/" prefetch={false}>
+          find your key in the customer portal
+        </Link>
+        .
       </p>
     </PageShell>
   )

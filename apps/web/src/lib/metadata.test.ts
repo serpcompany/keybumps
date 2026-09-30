@@ -2,15 +2,15 @@ import type { Metadata } from 'next'
 import { describe, expect, it } from 'vitest'
 import { metadata as downloadMetadata } from '@/app/(analytics)/download/page'
 import { metadata as homeMetadata } from '@/app/(analytics)/page'
-import { metadata as thanksMetadata } from '@/app/(no-analytics)/thanks/page'
+import { metadata as thanksMetadata } from '@/app/(sensitive-url)/thanks/page'
 import {
   defaultOpenGraph,
-  noAnalyticsLayoutMetadata,
   notFoundMetadata,
   openGraphImage,
   openGraphWithoutImage,
   pageMetadata,
-  rootLayoutMetadata
+  rootLayoutMetadata,
+  sensitiveUrlLayoutMetadata
 } from './metadata'
 import { sitePages } from './pages'
 
@@ -42,11 +42,11 @@ describe('page metadata', () => {
   it('keeps them on the pages with their own metadata: /, /download/, and /thanks/', () => {
     expectSharedOpenGraph(homeMetadata, rootLayoutMetadata, '/')
     expectSharedOpenGraph(downloadMetadata, rootLayoutMetadata, '/download/')
-    expectSharedOpenGraph(thanksMetadata, noAnalyticsLayoutMetadata, '/thanks/')
+    expectSharedOpenGraph(thanksMetadata, sensitiveUrlLayoutMetadata, '/thanks/')
   })
 
-  it('keeps the no-analytics layout on the shared metadata, with no referrer', () => {
-    expect(noAnalyticsLayoutMetadata).toMatchObject({
+  it('keeps the sensitive-url layout on the shared metadata, with no referrer', () => {
+    expect(sensitiveUrlLayoutMetadata).toMatchObject({
       ...rootLayoutMetadata,
       referrer: 'no-referrer'
     })

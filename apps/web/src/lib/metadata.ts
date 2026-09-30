@@ -47,8 +47,8 @@ export const siteMetadata: Metadata = {
 /** Root layout metadata: the shared metadata plus the Open Graph defaults. */
 export const rootLayoutMetadata: Metadata = { ...siteMetadata, openGraph: defaultOpenGraph }
 
-/** The (no-analytics) root layout: its URLs can carry checkout, session, or license data. */
-export const noAnalyticsLayoutMetadata: Metadata = {
+/** The (sensitive-url) root layout: its URLs can carry checkout, session, or license data. */
+export const sensitiveUrlLayoutMetadata: Metadata = {
   ...rootLayoutMetadata,
   // Never send those URLs on as a Referer.
   referrer: 'no-referrer'

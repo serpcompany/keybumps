@@ -1,6 +1,7 @@
 import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
 import type { NextConfig } from 'next'
 import { siteRedirects } from './src/lib/redirects'
+import { sensitiveUrlRewrites } from './src/lib/sensitive-url-routes'
 import { isProductionSite } from './src/lib/site'
 
 const nextConfig: NextConfig = {
@@ -11,7 +12,7 @@ const nextConfig: NextConfig = {
   // reach their page in one hop. See src/lib/redirects.ts.
   skipTrailingSlashRedirect: true,
   experimental: {
-    // The site has two root layouts (src/app/(analytics), src/app/(no-analytics)) and no shared
+    // The site has two root layouts (src/app/(analytics), src/app/(sensitive-url)) and no shared
     // one, so unmatched URLs render src/app/global-not-found.tsx.
     globalNotFound: true
   },
@@ -21,6 +22,10 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return siteRedirects({ production: isProductionSite() })
+  },
+  async rewrites() {
+    // /thanks/ and /license/ are reachable only by full page loads. See sensitiveUrlRewrites().
+    return { beforeFiles: sensitiveUrlRewrites(), afterFiles: [], fallback: [] }
   },
   async headers() {
     if (isProductionSite()) return []

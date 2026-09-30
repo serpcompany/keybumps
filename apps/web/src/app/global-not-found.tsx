@@ -10,8 +10,7 @@ export const metadata = notFoundMetadata
 
 export default function GlobalNotFound() {
   return (
-    <SiteDocument>
-      <StripQuery />
+    <SiteDocument head={<StripQuery />}>
       <PageShell title="404">
         <p>This page could not be found.</p>
       </PageShell>

@@ -3,8 +3,10 @@
 # shellcheck disable=SC2329
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
 # trailing-slash and legacy redirects take one 308 hop; search-engine rules and analytics match the
-# environment (only production may be indexed or load GTM, and never on /thanks/ or /license/);
-# and the non-canonical hosts (www and workers.dev) redirect to the branded domain in one 308.
+# environment (only production may be indexed or load GTM, which it does on /, /thanks/, and
+# /license/); /thanks/ and /license/ redirect a query away before rendering and are never served to
+# client-side navigation; and the non-canonical hosts (www and workers.dev) redirect to the branded
+# domain in one 308.
 # Requests carry the smoke-test header so a workers.dev URL serves the site instead of redirecting.
 #
 # Every check retries for a short time: right after a deploy, some requests can still reach the
@@ -181,6 +183,21 @@ not_found_page() {
 }
 eventually '404 page for unknown paths (noindex, no-referrer, no GTM)' not_found_page
 
+# /thanks/ and /license/ never render with a query: Polar's checkout and customer-session
+# parameters are redirected away before the page renders (src/lib/sensitive-url.ts), so neither
+# the page nor analytics ever holds them. The query values are placeholders. The 404, which can't
+# redirect, strips its query in <head> (src/components/strip-query.tsx).
+for path in /thanks/ /license/; do
+  eventually "307 $path?customer_session_token=… -> $path" \
+    status_is "$base$path?checkout_id=x&customer_session_token=x" "307 $base$path" "${smoke[@]}"
+  # Client-side navigation can't reach them: RSC requests 404, and the router then does a full
+  # page load (src/lib/sensitive-url-routes.ts).
+  eventually "RSC request for $path gets 404 (full page loads only)" \
+    status_is "$base$path" 404 "${smoke[@]}" -H 'rsc: 1'
+done
+eventually '404 page strips its query in <head>' \
+  body_matches "$missing" 'window\.history\.replaceState\(window\.history\.state'
+
 # The pages name src/app/opengraph-image.jpg with a hand-copied cache key (src/lib/metadata.ts).
 # The 404 gets the key Next.js generates, so the two must match, or the copy went stale.
 og_image() { grep -oE '<meta property="og:image" content="[^"]*"' <<<"$1" | head -1 || true; }
@@ -215,13 +232,13 @@ if [ "$env" = production ]; then
     body_matches /robots.txt '^Sitemap: https://keybumps\.app/sitemap-index\.xml$'
   eventually 'no X-Robots-Tag' robots_header_is none
   eventually 'no robots noindex meta on /' body_lacks / '<meta name="robots" content="noindex'
-  # GTM loads on ordinary pages, and never on pages whose URLs carry checkout, session, or
-  # license data. The query values are placeholders. GTM needs NEXT_PUBLIC_GTM_ID in the build
-  # and SITE_ENV=production in the Worker's vars, because the layout renders on request.
+  # GTM loads on ordinary pages, and on /thanks/ and /license/ too: those never render with a
+  # query (the 307 checks above). GTM needs NEXT_PUBLIC_GTM_ID in the build and SITE_ENV=production
+  # in the Worker's vars, because the layout renders on request.
   eventually 'GTM loads on / (needs NEXT_PUBLIC_GTM_ID in the build and SITE_ENV in the Worker)' \
     body_matches / "$gtm"
-  for path in '/thanks/?checkout_id=x&customer_session_token=x' '/license/?customer_session_token=x'; do
-    eventually "no GTM on $path" body_lacks "$path" "$gtm"
+  for path in /thanks/ /license/; do
+    eventually "GTM loads on $path" body_matches "$path" "$gtm"
   done
 else
   eventually 'robots.txt disallows crawling' body_matches /robots.txt '^Disallow: /$'

@@ -20,7 +20,7 @@ export default function SupportPage() {
       <ul>
         <li>
           Lost your license key?{' '}
-          <Link href="/license/" className={link}>
+          <Link href="/license/" prefetch={false} className={link}>
             Find it in your receipt or the Polar customer portal
           </Link>
           .

@@ -15,7 +15,9 @@ export function SiteFooter() {
           <Link href="/legal/privacy/">Privacy</Link>
           <Link href="/legal/refunds/">Refunds</Link>
           <Link href="/legal/">Legal</Link>
-          <Link href="/license/">Lost your key?</Link>
+          <Link href="/license/" prefetch={false}>
+            Lost your key?
+          </Link>
           <Link href="/sitemap/">Sitemap</Link>
         </nav>
       </div>
