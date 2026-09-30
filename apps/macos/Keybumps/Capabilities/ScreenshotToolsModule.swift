@@ -14,8 +14,8 @@ extension CapabilityDescriptor {
             commandKey: 3,
             systemImage: "camera.viewfinder",
             prompt: "Search screenshots",
-            primaryActionTitle: "Edit",
-            secondaryActionTitle: "Copy",
+            primaryActionTitle: "Copy",
+            secondaryActionTitle: "Edit",
             dataSource: .clipboardHistory
         ),
         settingsPage: CapabilitySettingsPage(
