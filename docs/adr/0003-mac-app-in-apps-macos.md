@@ -4,7 +4,7 @@ Status: Accepted (2026-09-30). Reverses "The Mac app stays at the repo root" in 
 
 ## Context
 
-#141 moved the website into `apps/web/` and left the Mac app at the repository root on purpose. #161 then inventoried every path the move touches and recommended waiting for a concrete second reason. The owner decided to proceed anyway (2026-09-30), accepting the risk, given the assessment that the app itself doesn't change: the XcodeGen project regenerates byte-identical, and the Release build settings, bundle ID, team, Info.plist, and entitlements are the same. Two apps side by side under `apps/` make the repository's layout match its contents.
+#141 moved the website into `apps/web/` and left the Mac app at the repository root on purpose. #161 then inventoried every path the move touches and recommended waiting for a concrete second reason. The owner decided to move it now (2026-09-30), against that recommendation, accepting the risk because the app itself doesn't change: the XcodeGen project regenerates byte-identical, and the Release build settings, bundle ID, team, Info.plist, and entitlements are the same. The result is one layout for both apps, each in its own folder under `apps/`.
 
 ## Decisions
 
@@ -18,7 +18,7 @@ Status: Accepted (2026-09-30). Reverses "The Mac app stays at the repo root" in 
 ## Consequences
 
 - Commands for the app run from `apps/macos/` or name it: `apps/macos/scripts/build-qa-candidate.sh <issue>`, and `cd apps/macos && xcodegen generate`.
-- Git history follows the move. `git log --follow` works for every moved file except the two shimmed scripts: their old paths still exist as the shims, so Git sees a new file. Use `git log --follow -B -M` for those.
+- Git history follows the move: `git log --follow` works for every moved file. A plain diff shows the two shimmed scripts as new files, because their old paths now hold the shims, but `--follow` still finds their history.
 - Caches start fresh: the package cache path changes to `apps/macos/.spm`, so the first CI runs after the move resolve packages again. A local `.derived/` at the root is orphaned; `build-and-run.sh` now builds into `apps/macos/.derived/`.
 - The installed app's identity and permissions don't change: the designated requirement is the bundle ID and team, with no path.
 - Only a real release run proves the whole release path in the new layout. So a Release Keybumps dry run (`publish=false`, `notarize=false`) from the branch, diffed against beta.8's artifact, is required before this merges.
