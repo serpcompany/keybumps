@@ -35,12 +35,25 @@ enum SnippetLibraryState: Equatable {
 }
 
 /// The user's snippets: one JSON array in `snippets.json` in Keybumps' Application Support folder,
-/// readable only by the user (0600), never synced. A sensitive snippet's text is kept in the
-/// Keychain (`SnippetSecretStoring`) instead of the file. Names, keywords, and text are never logged.
+/// written by `PrivateFile` (0600), never in `~/Documents`, iCloud, or telemetry. Names, keywords,
+/// and text are never logged. Entries decode with only the ID and name required.
 ///
-/// A Keychain item is removed only for a snippet the user deleted or turned Sensitive off for, never
-/// because the file doesn't mention it: the file can be a kept copy's replacement, or another
-/// build's older list, and the item may hold the only copy of a secret.
+/// - **Reading:** only a missing file is an empty library. A file that can't be read makes the
+///   store read-only until `reload()` reads it or `startOver()` renames it aside, unread; one that
+///   can't be decoded in full is copied first (`SnippetLibraryState`). While read-only, the palette
+///   says so and points to Settings, and `SnippetsModule` reports attention.
+/// - **Sensitive text** lives in the Keychain (`SnippetSecretStoring`), never in the file or in
+///   memory. It's read to copy or paste, to show it in the editor, and, when an edit changes or
+///   un-hides it or the snippet is deleted, to put it back if the file can't be written. A save
+///   that only renames a sensitive snippet, or leaves its text as it was, doesn't touch the Keychain.
+/// - **Removing Keychain items:** only for a snippet the user deleted (sensitive or not) or turned
+///   Sensitive off for, or a new item when adding or changing that snippet fails; if the Keychain
+///   refuses, nothing changes, and the Keychain is put back if the file can't be written. Nothing is
+///   ever removed because the file doesn't mention it: the file can be a Start Over or recovered
+///   library that replaced a kept copy, or another build's older list, and the item may hold the
+///   only copy of a secret.
+/// - **Tests:** `makeDefault()` keeps everything in memory under unit tests, and the UI-test
+///   composition uses `InMemorySnippetSecretStore`.
 @MainActor
 @Observable
 final class SnippetStore {

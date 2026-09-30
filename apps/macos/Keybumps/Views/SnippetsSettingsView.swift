@@ -185,7 +185,11 @@ struct SnippetsSettingsView: View {
     }
 }
 
-/// The editor sheet for a new or existing snippet: Name, Keyword, the text, and Sensitive.
+/// The editor sheet for a new or existing snippet: Name, Keyword, the text, and Sensitive. It's the
+/// only place snippets are created or changed; the palette's New Snippet and Edit open it through
+/// `SnippetStore.editorRequest`. A sensitive snippet's text is masked until Show and read from the
+/// Keychain only then; saving without showing it, or without changing it, keeps the saved text.
+/// The Snippet and Keyword fields are `PlainTextInput`, so text is saved exactly as typed.
 struct SnippetEditorSheet: View {
     @Environment(AppModel.self) private var model
     let request: SnippetEditorRequest

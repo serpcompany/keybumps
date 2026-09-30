@@ -18,7 +18,11 @@ struct PasteTarget: Equatable {
 }
 
 /// Whether ⌘Return pastes a snippet, or copies it and says why. It pastes only into the app that
-/// was in front when the palette opened, and only while that app is still in front.
+/// was in front when the palette opened (`CommandPaletteController.pasteTarget`; the non-activating
+/// palette never takes it over), and only while that app is still in front after the palette closes
+/// and a short wait, with the palette not reopened. Posting ⌘V into another app needs
+/// Accessibility, which is optional for Snippets: without it ⌘Return copies, and the permission
+/// assistant offers the usual setup. The paste itself is `TextPasting`, the step Dictation shares.
 enum SnippetPasteRoute: Equatable {
     enum Reason: Equatable {
         /// Posting ⌘V into another app needs Accessibility.
