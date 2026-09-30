@@ -69,7 +69,7 @@ CI authenticates with `CLOUDFLARE_API_TOKEN` (`github-actions-keybumps-web`), a 
 
 `pnpm deploy:staging` and `pnpm deploy:production` exist for human emergency use only, with fresh owner authorization. Never run them, `wrangler deploy`, `wrangler versions upload`, or `wrangler rollback` by hand otherwise. To check the deploy configuration without deploying, build and then run `wrangler deploy --dry-run --env <env> --outdir <dir>`: a dry run compiles the Worker and prints its bindings, without authenticating or uploading anything.
 
-Before the production domains move over (#144), `dmca@keybumps.app`, the contact address on `/legal/dmca/` (from the SERP DMCA page template), must forward to `dmca@serp.co` through Cloudflare Email Routing, and delivery must be verified. Check `support@keybumps.app` the same way. Until then, don't claim the addresses work.
+`dmca@keybumps.app` (the contact address on `/legal/dmca/`, from the SERP DMCA page template) forwards to `dmca+keybumps@serp.co`, and `support@keybumps.app` to `support+keybumps@serp.co`, through Cloudflare Email Routing. Delivery to both was verified on 2026-09-30 (#143). If either rule changes, verify delivery again before relying on the address.
 
 ### Domain cutover
 
@@ -86,7 +86,7 @@ npx wrangler deployments list --name keybumps-web-production   # find the versio
 npx wrangler rollback [version-id] --name keybumps-web-production -m "<reason>"
 ```
 
-Without a version ID, `wrangler rollback` goes back to the previous version. A version includes its code, `vars`, and bindings; routes and Custom Domains aren't versioned and don't change. Then confirm with the production smoke test against the Worker's `workers.dev` URL from the last deploy log (`scripts/smoke.sh https://keybumps-web-production.<account subdomain>.workers.dev production`), and, after the cutover, against `https://keybumps.app` from the owner's machine. Revert the bad commit on `main` too, or the next deploy ships it again. Staging rolls back the same way with `--name keybumps-web-staging`.
+Without a version ID, `wrangler rollback` goes back to the previous version. A version includes its code, `vars`, and bindings; routes and Custom Domains aren't versioned and don't change. Then confirm with the production smoke test against the Worker's `workers.dev` URL from the last deploy log (`scripts/smoke.sh https://keybumps-web-production.<account subdomain>.workers.dev production`), and against `https://keybumps.app` from the owner's machine. Revert the bad commit on `main` too, or the next deploy ships it again. Staging rolls back the same way with `--name keybumps-web-staging`.
 
 ## Environment configuration
 

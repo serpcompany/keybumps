@@ -4,7 +4,7 @@ Keybumps's public web presence runs on the **SERP** Cloudflare account (`cec5f04
 
 | Resource | Purpose | Owned and configured by |
 | --- | --- | --- |
-| Zone `keybumps.app` (`e641400d1648da94e95380533b25d227`) | DNS and TLS for `keybumps.app`, `www.keybumps.app`, and `updates.keybumps.app` (all proxied through Cloudflare) | Cloudflare dashboard |
+| Zone `keybumps.app` (`e641400d1648da94e95380533b25d227`) | DNS, TLS, and Email Routing for `keybumps.app`, `www.keybumps.app`, `staging.keybumps.app`, and `updates.keybumps.app` (all proxied through Cloudflare) | Cloudflare dashboard |
 | Worker `keybumps-web-production` | Serves `keybumps.app` and `www.keybumps.app` (custom domains). `/download/` redirects to the current DMG. | This repository: `apps/web/wrangler.jsonc`, deployed only by `.github/workflows/web-deploy.yml` |
 | Worker `keybumps-web-staging` | Serves `staging.keybumps.app` (custom domain, not indexed) | This repository: `apps/web/wrangler.jsonc`, deployed only by `.github/workflows/web-deploy.yml` |
 | R2 bucket `keybumps-updates` (APAC, Standard storage) | Release origin behind the `updates.keybumps.app` custom domain (TLS 1.2+). Public `r2.dev` access is disabled. No CORS rules. Lifecycle: abort incomplete multipart uploads after 7 days. | This repository: `scripts/publish-release.sh` |
@@ -18,7 +18,7 @@ Keybumps's public web presence runs on the **SERP** Cloudflare account (`cec5f04
 | `releases/<build>/Keybumps-<version>.md` | `text/markdown; charset=utf-8` | immutable | Linked release notes |
 | `appcast.xml` | `application/xml; charset=utf-8` | `public, max-age=60, must-revalidate` | Production Sparkle feed (pointer) |
 | `staging/appcast.xml` | same as above | same | Staging Sparkle feed (pointer) |
-| `latest.json` | `application/json; charset=utf-8` | `public, max-age=60, must-revalidate` | Download-page pointer (`version`, `build`, `dmgURL`, `sha256`) |
+| `latest.json` | `application/json; charset=utf-8` | `public, max-age=60, must-revalidate` | Latest-release pointer for the website's Download buttons and `/download/` redirect (`version`, `build`, `dmgURL`, `sha256`) |
 
 Production and staging feeds share the same immutable `releases/<build>/` assets. Assets are never overwritten; pointers are published last.
 
