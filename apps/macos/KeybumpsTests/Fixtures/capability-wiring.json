@@ -5143,9 +5143,9 @@
       "commandKey" : "⌘3",
       "label" : "Screenshots",
       "matchedByCommandKey" : "screenshots",
-      "primaryAction" : "Edit",
+      "primaryAction" : "Copy",
       "prompt" : "Search screenshots",
-      "secondaryAction" : "Copy",
+      "secondaryAction" : "Edit",
       "systemImage" : "camera.viewfinder",
       "tab" : "screenshots"
     },

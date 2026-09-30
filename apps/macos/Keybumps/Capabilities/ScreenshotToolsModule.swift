@@ -14,8 +14,8 @@ extension CapabilityDescriptor {
             commandKey: 3,
             systemImage: "camera.viewfinder",
             prompt: "Search screenshots",
-            primaryActionTitle: "Edit",
-            secondaryActionTitle: "Copy",
+            primaryActionTitle: "Copy",
+            secondaryActionTitle: "Edit",
             dataSource: .clipboardHistory
         ),
         settingsPage: CapabilitySettingsPage(
@@ -45,7 +45,8 @@ final class ScreenshotToolsModule: CapabilityModule {
     private let clipboard: ClipboardHistoryService
     private let delivery: ScreenshotClipboardDelivery
     private let capturer: ScreenshotCapturer
-    private let systemShortcuts: SystemScreenshotShortcutTakeover
+    /// Read by the unit-test isolation guard.
+    let systemShortcuts: SystemScreenshotShortcutTakeover
     private let permissions: PermissionCoordinator
     /// Set by the shell: asks for Screen Recording when a hotkey is pressed without it.
     var onNeedsScreenRecording: (() -> Void)?

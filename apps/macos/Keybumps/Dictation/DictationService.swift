@@ -244,7 +244,8 @@ final class DictationService {
     private var activeRecording: PendingDictationRecording?
     private var recordingStartedAt: Date?
     @ObservationIgnored private var durationTimer: Timer?
-    private let recoveryURL: URL
+    /// The last transcript kept for recovery; read by the unit-test isolation guard.
+    let recoveryURL: URL
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
     private let allowsSystemAccess: Bool

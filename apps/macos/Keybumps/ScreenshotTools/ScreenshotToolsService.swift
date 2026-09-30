@@ -25,16 +25,25 @@ struct ScreenshotLocationResolver {
         return isDirectory(candidate) ? candidate : desktop
     }
 
-    static let system = ScreenshotLocationResolver(
-        preferredLocation: {
-            CFPreferencesCopyAppValue("location" as CFString, "com.apple.screencapture" as CFString) as? String
-        },
-        homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-        isDirectory: { url in
-            var isDirectory: ObjCBool = false
-            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
-        }
-    )
+    /// The macOS screenshot location. Under the unit-test host it reads no preference and its
+    /// Desktop is in this run's own folder (`UnitTestHost.dataDirectory`), so a default watcher,
+    /// capturer, or Screenshot Editor never reaches the owner's Desktop or screenshot folder.
+    static let system = UnitTestHost.isActive
+        ? ScreenshotLocationResolver(
+            preferredLocation: { nil },
+            homeDirectory: UnitTestHost.dataDirectory.appendingPathComponent("Home", isDirectory: true),
+            isDirectory: { _ in false }
+        )
+        : ScreenshotLocationResolver(
+            preferredLocation: {
+                CFPreferencesCopyAppValue("location" as CFString, "com.apple.screencapture" as CFString) as? String
+            },
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
+            isDirectory: { url in
+                var isDirectory: ObjCBool = false
+                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+            }
+        )
 }
 
 struct ScreenshotDirectoryEntry: Equatable {

@@ -61,6 +61,17 @@ enum ScreenshotPaletteContent: Equatable {
     }
 }
 
+/// What choosing a screenshot does. Return or a click copies it, as in the Clipboard tab.
+/// Command-Return or Command-click opens it in the Screenshot Editor.
+enum ScreenshotPaletteAction: Equatable {
+    case copy
+    case edit
+
+    init(withCommand: Bool) {
+        self = withCommand ? .edit : .copy
+    }
+}
+
 struct CommandPaletteTabLabel: Equatable {
     let shortcut: String
     let name: String
@@ -489,11 +500,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .screenshots:
             let entries = screenshotContent.entries
             guard entries.indices.contains(state.selection) else { return }
-            if reveal {
-                copyClipboardEntry(entries[state.selection])
-            } else {
-                editClipboardImage(entries[state.selection])
-            }
+            chooseScreenshot(entries[state.selection], withCommand: reveal)
         }
     }
 
@@ -539,12 +546,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         editClipboardImage(entries[state.selection])
     }
 
-    /// In the Screenshots tab a click edits; Command-click copies.
+    /// A click on a screenshot copies it; Command-click edits it.
     private func chooseScreenshot(_ entry: ClipboardEntry) {
-        if NSEvent.modifierFlags.contains(.command) {
-            copyClipboardEntry(entry)
-        } else {
-            editClipboardImage(entry)
+        chooseScreenshot(entry, withCommand: NSEvent.modifierFlags.contains(.command))
+    }
+
+    /// Return and a click copy a screenshot; with Command held they open it in the Screenshot Editor.
+    private func chooseScreenshot(_ entry: ClipboardEntry, withCommand: Bool) {
+        switch ScreenshotPaletteAction(withCommand: withCommand) {
+        case .copy: copyClipboardEntry(entry)
+        case .edit: editClipboardImage(entry)
         }
     }
 
@@ -1529,7 +1540,7 @@ private struct PaletteFooter: View {
             .padding(.leading, 16)
             .padding(.trailing, 7)
             .frame(height: PaletteTheme.footerHeight)
-            .paletteFloatingSurface(Capsule())
+            .paletteFloatingSurface()
             .allowsHitTesting(false)
         }
         .padding(10)
@@ -1558,7 +1569,7 @@ private struct PaletteSettingsButton: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(isHovering ? .primary : .secondary)
                 .frame(width: PaletteTheme.footerHeight, height: PaletteTheme.footerHeight)
-                .paletteFloatingSurface(Circle())
+                .paletteFloatingSurface()
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
