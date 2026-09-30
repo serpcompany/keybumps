@@ -22,7 +22,8 @@ protocol DictationModelDownloading {
 final class DictationModelManager {
     private(set) var states: [DictationTranscriptionEngine: DictationModelInstallationState] = [:]
 
-    private let modelsRoot: URL
+    /// Where models are installed; read by the unit-test isolation guard.
+    let modelsRoot: URL
     private let fileManager: FileManager
     private let downloader: any DictationModelDownloading
 
