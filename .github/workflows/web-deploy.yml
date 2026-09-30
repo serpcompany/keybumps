@@ -21,7 +21,8 @@ on:
 permissions:
   contents: read
 
-# Deploys queue in order and never cancel one another halfway.
+# A running deploy is never cancelled. At most one newer run waits, and it replaces any older
+# waiting run, which is safe because it deploys the newer main.
 concurrency:
   group: web-deploy
   cancel-in-progress: false
