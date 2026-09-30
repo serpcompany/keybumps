@@ -33,8 +33,20 @@ Finding and opening local applications, files, and folders, and running Quick Se
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:
-A Keybumps action that Quick Search offers beside applications, files, and folders, such as Keybumps Settings.
+A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, or a capability command.
 _Avoid_: Workflow, extension command
+
+**Capability command**:
+The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
+_Avoid_: Plugin, extension, navigation command
+
+**Recent Items**:
+The apps, files, and folders the user recently opened from Quick Search, listed while its search is empty. Quick Search commands never become Recent Items, and Keybumps itself is never listed.
+_Avoid_: History, recents
+
+**Learned usage**:
+How often and how recently the user picked each app or Quick Search command from Quick Search, kept locally per item and used only to rank results: what the user picks more rises, weighed against how well each result matches the query. It is never listed, and no query is kept.
+_Avoid_: Search history, frecency
 
 **Clipboard History**:
 The recent text and image items the user copied, kept locally.
@@ -65,7 +77,7 @@ Recognition of actions the user did by hand that have a keyboard shortcut, with 
 _Avoid_: Keyboard Shortcutter (former name; code types still use it), Shortcut Coaching, Keylume app
 
 **Hotkeys**:
-The Command Palette tab label for Shortcut Coach history; everywhere else it is called Shortcut Coach.
+The Command Palette tab label for Shortcut Coach history; everywhere else, including its capability command, it is called Shortcut Coach.
 
 **Screenshot Tools**:
 Taking screenshots and marking them up.

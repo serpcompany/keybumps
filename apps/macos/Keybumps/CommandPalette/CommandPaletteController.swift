@@ -139,7 +139,7 @@ enum CommandPaletteDismissalPolicy {
 
 @MainActor
 final class CommandPaletteController: NSObject, NSWindowDelegate {
-    private let search = QuickSearchModel()
+    private let search: QuickSearchModel
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
     private let dictationService: DictationService
@@ -154,16 +154,21 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let hud = PaletteHUD.shared
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
-    /// Opens Settings. The app shell sets it to the status menu's route.
-    var openSettings: () -> Void = {}
+    /// Opens Settings on a page, or where it was left when nil. The app shell sets it to the status
+    /// menu's route.
+    var openSettings: (SettingsSection?) -> Void = { _ in }
+    /// Opens a Quick Search result's URL; tests replace it so they never open anything.
+    var openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
 
     init(
         clipboard: ClipboardHistoryService,
         dictationHistory: DictationHistoryService,
         dictationService: DictationService,
         inbox: InboxStore,
-        preferences: AppPreferences
+        preferences: AppPreferences,
+        search: QuickSearchModel? = nil
     ) {
+        self.search = search ?? QuickSearchModel()
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService
@@ -211,12 +216,26 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         panel?.isVisible == true && state.tab == tab
     }
 
-    /// Runs a Keybumps command from its Quick Search row, the footer's Settings button, or its
-    /// Command-key shortcut in any tab. The palette closes first.
+    /// The tab the palette is on, or was last on.
+    var selectedTab: CommandPaletteTab { state.tab }
+
+    /// Runs a command the user picked from Quick Search's results (a click, or Return on its row):
+    /// learns it for ranking, as opening an app does, then runs it. It never becomes a Recent Item.
+    func choose(_ command: QuickSearchCommand) {
+        search.recordRunCommand(command)
+        run(command)
+    }
+
+    /// Runs a Keybumps command: from `choose(_:)`, the footer's Settings button, or its Command-key
+    /// shortcut in any tab. Only `choose(_:)` teaches the ranking. A capability's tab opens in place;
+    /// for Settings the palette closes first.
     func run(_ command: QuickSearchCommand) {
-        dismiss()
-        switch command {
-        case .keybumpsSettings: openSettings()
+        switch command.destination(enabledCapabilities: preferences.enabledCapabilities) {
+        case .paletteTab(let tab):
+            selectTab(tab)
+        case .settings(let section):
+            dismiss()
+            openSettings(section)
         }
     }
 
@@ -253,6 +272,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 activateSearchResult: open,
                 revealSearchResult: reveal,
                 runCommand: { [weak self] command in self?.run(command) },
+                chooseCommand: { [weak self] command in self?.choose(command) },
                 chooseClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
                 copyClipboardEntry: { [weak self] entry in self?.copyClipboardEntry(entry) },
                 editClipboardEntry: { [weak self] entry in _ = self?.editClipboardImage(entry) },
@@ -400,7 +420,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? search.recentItems.items.count
+                ? search.displayedRecentItems.count
                 : search.items.count
         case .clipboard:
             filteredClipboard.count
@@ -423,8 +443,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  search.recentItems.items.indices.contains(index) else { return false }
-            search.recentItems.delete(search.recentItems.items[index])
+                  search.displayedRecentItems.indices.contains(index) else { return false }
+            search.recentItems.delete(search.displayedRecentItems[index])
         case .clipboard:
             guard filteredClipboard.indices.contains(index) else { return false }
             clipboard.delete(filteredClipboard[index])
@@ -476,14 +496,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                guard search.recentItems.items.indices.contains(state.selection) else { return }
-                open(search.recentItems.items[state.selection].result)
+                guard search.displayedRecentItems.indices.contains(state.selection) else { return }
+                open(search.displayedRecentItems[state.selection].result)
                 return
             }
             guard search.items.indices.contains(state.selection) else { return }
             switch search.items[state.selection] {
             case .command(let command):
-                run(command)
+                choose(command)
             case .result(let result):
                 reveal ? self.reveal(result) : open(result)
             }
@@ -504,8 +524,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func open(_ result: QuickSearchResult) {
-        let didOpen = NSWorkspace.shared.open(result.url)
+    /// Opens an app, file, or folder from Quick Search's results or Recent Items. A copy of Keybumps
+    /// itself runs Keybumps Settings instead, as its command would (learned as that command, never a
+    /// Recent Item): asking macOS to open the running app would reopen it, which shows Quick Search
+    /// again, and Settings too.
+    func open(_ result: QuickSearchResult) {
+        if let command = QuickSearchCommand.standIn(for: result) {
+            choose(command)
+            return
+        }
+        let didOpen = openURL(result.url)
         search.recordOpenResult(result, succeeded: didOpen)
         if didOpen { dismiss() }
     }
@@ -578,7 +606,10 @@ private struct CommandPaletteView: View {
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
+    /// Runs a command without teaching the ranking (the footer's Settings button).
     let runCommand: (QuickSearchCommand) -> Void
+    /// Runs a command picked from Quick Search's results, which teaches the ranking.
+    let chooseCommand: (QuickSearchCommand) -> Void
     /// A click: Command-click edits an image, anything else copies.
     let chooseClipboardEntry: (ClipboardEntry) -> Void
     /// Always copies, whatever keys are held (the context menu's Copy).
@@ -626,11 +657,11 @@ private struct CommandPaletteView: View {
         .onChange(of: search.query) {
             state.selection = 0
         }
-        .onChange(of: search.recentItems.items.map(\.id)) {
+        .onChange(of: search.displayedRecentItems.map(\.id)) {
             guard state.tab == .search,
                   search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  state.selection >= search.recentItems.items.count else { return }
-            state.selection = max(0, search.recentItems.items.count - 1)
+                  state.selection >= search.displayedRecentItems.count else { return }
+            state.selection = max(0, search.displayedRecentItems.count - 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Keybumps command palette")
@@ -644,10 +675,12 @@ private struct CommandPaletteView: View {
                 items: search.items,
                 selection: state.selection,
                 query: search.query,
-                recentItems: search.recentItems.items,
+                enabledCapabilities: preferences.enabledCapabilities,
+                visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab),
+                recentItems: search.displayedRecentItems,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
-                run: runCommand,
+                run: chooseCommand,
                 deleteRecentItem: search.recentItems.delete,
                 clearRecentItems: search.recentItems.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -865,6 +898,9 @@ private struct SearchResultsView: View {
     let items: [QuickSearchItem]
     let selection: Int
     let query: String
+    /// Where each command goes, and what its row shows, depend on these.
+    let enabledCapabilities: Set<Capability>
+    let visibleTabs: [CommandPaletteTab]
     let recentItems: [RecentItem]
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
@@ -881,6 +917,7 @@ private struct SearchResultsView: View {
                         title: "Start typing to search your Mac",
                         systemImage: "magnifyingglass"
                     )
+                    .accessibilityIdentifier("quickSearch.noRecentItems")
                 } else {
                     VStack(spacing: 0) {
                         HStack {
@@ -935,16 +972,26 @@ private struct SearchResultsView: View {
                         Group {
                             switch item {
                             case .command(let command):
+                                let hint = command.destination(enabledCapabilities: enabledCapabilities).hint
                                 Button {
                                     run(command)
                                 } label: {
-                                    QuickSearchCommandRow(command: command)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .contentShape(Rectangle())
+                                    QuickSearchCommandRow(
+                                        command: command,
+                                        shortcut: command.rowShortcut(
+                                            enabledCapabilities: enabledCapabilities,
+                                            visibleTabs: visibleTabs
+                                        ),
+                                        isTurnedOff: command.isTurnedOff(enabledCapabilities: enabledCapabilities)
+                                    )
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityIdentifier("quickSearch.command.\(command.rawValue)")
+                                .help(hint)
+                                .accessibilityHint(hint)
+                                .accessibilityIdentifier("quickSearch.command.\(command.id)")
                             case .result(let result):
                                 Button {
                                     open(result)
@@ -1007,25 +1054,46 @@ private struct SearchResultRow: View {
     }
 }
 
-/// A Keybumps command in Raycast's row: the Keybumps icon, the name, then its shortcut and kind on
-/// the right.
+/// A Keybumps command in Raycast's row: its icon (the Keybumps icon, or the capability's Settings
+/// tile), the name, Turned off for a capability that's off, then its shortcut and kind on the right.
 private struct QuickSearchCommandRow: View {
     let command: QuickSearchCommand
+    let shortcut: String?
+    let isTurnedOff: Bool
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                .resizable()
+            icon
                 .frame(width: 28, height: 28)
             Text(command.title)
                 .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
                 .layoutPriority(1)
+            if isTurnedOff {
+                Text("Turned off")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 12)
-            PaletteKeycaps(shortcut: command.shortcut)
+            if let shortcut {
+                PaletteKeycaps(shortcut: shortcut)
+            }
             Text(command.kindLabel)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch command {
+        case .keybumpsSettings:
+            Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                .resizable()
+        case .capability(let capability):
+            SettingsIconTile(systemImage: capability.systemImage, tint: capability.descriptor.iconTint, size: 24)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -1574,7 +1642,7 @@ private struct PaletteSettingsButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .help("\(command.title) (\(command.shortcut))")
+        .help(command.shortcut.map { "\(command.title) (\($0))" } ?? command.title)
         .accessibilityLabel(command.title)
         .accessibilityIdentifier("palette.settings")
     }

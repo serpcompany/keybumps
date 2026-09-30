@@ -229,7 +229,14 @@ final class WiringHarness {
     private let pasteboard: NSPasteboard
     private var lastShortcuts: [String: String] = [:]
 
-    init(enabled: Set<Capability>, missing: MacPermission?, root: URL, didCompleteOnboarding: Bool = true) {
+    /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder.
+    init(
+        enabled: Set<Capability>,
+        missing: MacPermission?,
+        root: URL,
+        didCompleteOnboarding: Bool = true,
+        quickSearch: QuickSearchModel? = nil
+    ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -287,6 +294,7 @@ final class WiringHarness {
             dictationHistory: DictationHistoryService(
                 recordingsDirectoryURL: directory.appendingPathComponent("recordings", isDirectory: true)
             ),
+            quickSearch: quickSearch ?? .forTests(in: directory),
             windows: SpyWindowManagementService(log: log),
             screenshotTools: screenshotTools,
             dictationIndicator: SilentDictationIndicator(),
