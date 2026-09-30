@@ -9,10 +9,14 @@ protocol SnippetSecretStoring: AnyObject {
     func setText(_ text: String, for id: UUID) throws
     /// Removes the item if there is one; removing one that doesn't exist succeeds.
     func removeText(for id: UUID) throws
+    /// The IDs that have an item, listed without reading any text.
+    func itemIDs() throws -> Set<UUID>
 }
 
 enum SnippetSecretError: Error, Equatable {
     case keychain(OSStatus)
+    /// The Keychain listed its items in a shape `KeychainSnippetSecretStore.itemIDs(inListing:)` can't read.
+    case unreadableListing
 }
 
 /// Keychain storage for sensitive snippets: a generic-password item per snippet in the login
@@ -80,6 +84,37 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         }
     }
 
+    /// Lists every item's attributes, never its data.
+    var itemListQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+    }
+
+    func itemIDs() throws -> Set<UUID> {
+        var result: AnyObject?
+        let status = SecItemCopyMatching(itemListQuery as CFDictionary, &result)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess else { throw SnippetSecretError.keychain(status) }
+        return try Self.itemIDs(inListing: result)
+    }
+
+    /// Reads `itemListQuery`'s result: an array of attribute dictionaries, each with the account
+    /// `query(for:)` writes. Any other shape, or an item without a text account, throws, so an
+    /// import can't go ahead without knowing (`SnippetStore.importSnippets`). An account that isn't
+    /// a UUID is skipped: Keybumps never writes one, and it can't match a snippet's ID.
+    static func itemIDs(inListing result: Any?) throws -> Set<UUID> {
+        guard let items = result as? [[String: Any]] else { throw SnippetSecretError.unreadableListing }
+        return try Set(items.compactMap { item in
+            guard let account = item[kSecAttrAccount as String] as? String else {
+                throw SnippetSecretError.unreadableListing
+            }
+            return UUID(uuidString: account)
+        })
+    }
 }
 
 /// Sensitive snippet text held only in memory: for unit tests and UI tests.
@@ -89,6 +124,8 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     var failsNextWrite = false
     /// Makes the next `removeText` fail.
     var failsNextRemoval = false
+    /// Makes the next `itemIDs` fail.
+    var failsNextListing = false
     /// How many items were ever removed, so tests can prove nothing was removed behind the user's back.
     private(set) var removals = 0
 
@@ -119,6 +156,14 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
         }
         if texts[id] != nil { removals += 1 }
         texts[id] = nil
+    }
+
+    func itemIDs() throws -> Set<UUID> {
+        if failsNextListing {
+            failsNextListing = false
+            throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
+        }
+        return Set(texts.keys)
     }
 
     /// Loses an item behind the store's back, as a Keychain the user edited would.

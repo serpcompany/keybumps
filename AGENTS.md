@@ -16,8 +16,6 @@ Across the repo, including the website, use `CONTEXT.md` terminology, preserve t
 - [`docs/testing.md`](docs/testing.md): Test frameworks, snapshot fixtures, testability seams, and CI runner decisions. New tests use Swift Testing.
 - User content and processing stay local: no accounts, sync, analytics, cloud transcription, or hosted history.
 - Non-goals: App Store distribution, Intel or pre-macOS-14.2 support, third-party extensions, AI rewriting, meeting/system-audio capture, web search, workflows, and text expansion.
-- Keybumps uses the clean-break `com.serp.keybumps` identity and starts with its
-  own settings and local data. It does not import or manage another app's data.
 - A build is not proof of OS integration. Report build, deterministic tests, UI, signed runtime, installed artifact, and owner acceptance separately.
 
 ## Website (`apps/web/` and website CI such as `.github/workflows/web*.yml`)

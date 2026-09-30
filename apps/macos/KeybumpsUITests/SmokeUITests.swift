@@ -106,6 +106,9 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.snippets").exists)
         XCTAssertTrue(element("snippets.list").waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Made-up greeting"].waitForExistence(timeout: 5), "The list shows the new snippet")
+        let importAlfred = element("snippets.importAlfred")
+        XCTAssertTrue(importAlfred.exists)
+        XCTAssertTrue(importAlfred.isEnabled, "Import from Alfred… is offered while snippets can be saved")
     }
 
     func testCommandEOnClipboardImageOpensScreenshotEditor() {
