@@ -1276,8 +1276,8 @@ final class KeybumpsFeatureTests: XCTestCase {
         let coordinator = GlobalShortcutCoordinator(backend: backend)
         let model = AppModel(
             preferences: preferences,
-            inbox: InboxStore(),
-            presenceController: AppPresenceController(),
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
             shortcutCoordinator: coordinator
         )
@@ -2295,8 +2295,8 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .keyboardShortcutter).last, .keyboardShortcutter)
         XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search), CommandPaletteTab.allCases)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("6"))
-        XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Edit")
-        XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActionTitle, "Copy")
+        XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Copy")
+        XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActionTitle, "Edit")
         XCTAssertNil(CommandPaletteTab.clipboard.secondaryActionTitle)
         XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search screenshots")
         XCTAssertNil(CommandPaletteTab.keyboardShortcutter.primaryActionTitle)

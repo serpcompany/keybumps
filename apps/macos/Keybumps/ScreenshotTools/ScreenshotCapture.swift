@@ -105,7 +105,8 @@ final class SystemScreenshotShortcutTakeover {
         ("30", [52, kVK_ANSI_4, 1_179_648])
     ]
 
-    private let preferences: any SymbolicHotKeyPreferences
+    /// Read by the unit-test isolation guard.
+    let preferences: any SymbolicHotKeyPreferences
     private let takenOver: () -> Set<String>
     private let setTakenOver: (Set<String>) -> Void
 
