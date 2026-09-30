@@ -994,6 +994,10 @@ private struct ClipboardResultsView: View {
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                         HStack(spacing: 5) {
                                             Text(entry.kindLabel)
+                                            if let sourceApp = entry.sourceApp {
+                                                Text("·")
+                                                ClipboardSourceAppLabel(app: sourceApp)
+                                            }
                                             Text("·")
                                             Text(entry.capturedAt, style: .relative)
                                             if showsEditHint, entry.kind == .image {
@@ -1027,6 +1031,43 @@ private struct ClipboardResultsView: View {
                 }
             }
         }
+    }
+}
+
+/// The app a clipboard item was copied from: its icon, when this Mac has the app, and its name.
+struct ClipboardSourceAppLabel: View {
+    let app: ClipboardSourceApp
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let icon = ClipboardSourceAppIcons.icon(for: app) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 14, height: 14)
+                    .accessibilityHidden(true)
+            }
+            Text(app.name)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .help("Copied from \(app.name)")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Copied from \(app.name)")
+    }
+}
+
+/// App icons for source apps, looked up once per bundle identifier (including misses).
+@MainActor
+enum ClipboardSourceAppIcons {
+    private static var cache: [String: NSImage?] = [:]
+
+    static func icon(for app: ClipboardSourceApp) -> NSImage? {
+        guard let bundleIdentifier = app.bundleIdentifier else { return nil }
+        if let cached = cache[bundleIdentifier] { return cached }
+        let icon = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+            .map { NSWorkspace.shared.icon(forFile: $0.path) }
+        cache[bundleIdentifier] = icon
+        return icon
     }
 }
 

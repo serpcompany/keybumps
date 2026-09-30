@@ -17,6 +17,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let sourcePath: String?
     /// True only for files macOS marked as screen captures (ingested by Screenshot Tools).
     let isScreenCapture: Bool
+    /// The app it was copied from; nil for screenshots, other devices, and items saved before this existed.
+    let sourceApp: ClipboardSourceApp?
 
     init(
         id: UUID,
@@ -27,7 +29,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         mediaPasteboardType: String? = nil,
         fingerprint: String? = nil,
         sourcePath: String? = nil,
-        isScreenCapture: Bool = false
+        isScreenCapture: Bool = false,
+        sourceApp: ClipboardSourceApp? = nil
     ) {
         self.id = id
         self.text = text
@@ -38,6 +41,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         self.fingerprint = fingerprint
         self.sourcePath = sourcePath
         self.isScreenCapture = isScreenCapture
+        self.sourceApp = sourceApp
     }
 
     var isScreenshot: Bool { kind == .image && isScreenCapture }
@@ -48,13 +52,16 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         case .image: sourceURL?.deletingPathExtension().lastPathComponent ?? "Image"
         }
     }
-    var searchableText: String { kind == .image ? "\(kindLabel) \(displayText) \(mediaPasteboardType ?? "")" : text }
+    var searchableText: String {
+        let content = kind == .image ? "\(kindLabel) \(displayText) \(mediaPasteboardType ?? "")" : text
+        return sourceApp.map { "\(content)\n\($0.name)" } ?? content
+    }
     var sourceURL: URL? { sourcePath.map { URL(fileURLWithPath: $0) } }
     var imageURL: URL? { mediaPath.map { URL(fileURLWithPath: $0) } }
     var contentKey: String { fingerprint ?? "text:\(text)" }
 
     private enum CodingKeys: String, CodingKey {
-        case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint, sourcePath, isScreenCapture
+        case id, text, capturedAt, kind, mediaPath, mediaPasteboardType, fingerprint, sourcePath, isScreenCapture, sourceApp
     }
 
     init(from decoder: Decoder) throws {
@@ -69,6 +76,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
         sourcePath = try container.decodeIfPresent(String.self, forKey: .sourcePath)
         // Items written before copied files were supported only had a source when they were screenshots.
         isScreenCapture = try container.decodeIfPresent(Bool.self, forKey: .isScreenCapture) ?? (sourcePath != nil)
+        sourceApp = try container.decodeIfPresent(ClipboardSourceApp.self, forKey: .sourceApp)
     }
 }
 
@@ -88,16 +96,19 @@ class ClipboardHistoryService {
     private let pasteboard: NSPasteboard
     private let mediaDirectoryURL: URL
     private let fileManager: FileManager
+    private let sourceTracker: ClipboardSourceTracker
 
     init(
         fileManager: FileManager = .default,
         storageURL: URL? = nil,
         pasteboard: NSPasteboard = .keybumps,
-        mediaDirectoryURL: URL? = nil
+        mediaDirectoryURL: URL? = nil,
+        sourceApps: ClipboardSourceAppReader = .system
     ) {
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         self.fileManager = fileManager
+        sourceTracker = ClipboardSourceTracker(reader: sourceApps)
         self.storageURL = storageURL ?? directory.appendingPathComponent("clipboard-history.json")
         self.mediaDirectoryURL = mediaDirectoryURL ?? directory.appendingPathComponent("clipboard-media", isDirectory: true)
         self.pasteboard = pasteboard
@@ -113,6 +124,7 @@ class ClipboardHistoryService {
         guard timer == nil else { return }
         lastChangeCount = pasteboard.changeCount
         suppressedChangeCount = nil
+        sourceTracker.reset()
         timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.poll() }
         }
@@ -164,9 +176,9 @@ class ClipboardHistoryService {
 
     /// Adds a screenshot file as an image item without touching the pasteboard.
     @discardableResult
-    func ingestImageFile(at url: URL, isScreenCapture: Bool = true) -> Bool {
+    func ingestImageFile(at url: URL, isScreenCapture: Bool = true, sourceApp: ClipboardSourceApp? = nil) -> Bool {
         guard let payload = ClipboardImagePayload.read(fileAt: url) else { return false }
-        return ingestImage(payload, sourcePath: url.path, isScreenCapture: isScreenCapture)
+        return ingestImage(payload, sourcePath: url.path, isScreenCapture: isScreenCapture, sourceApp: sourceApp)
     }
 
     /// Whether the pasteboard changed at or after `date`, counting a copy the next poll would
@@ -182,6 +194,7 @@ class ClipboardHistoryService {
     func suppressCurrentChange() { suppressedChangeCount = pasteboard.changeCount }
 
     private func poll() {
+        sourceTracker.sample()
         let changeCount = pasteboard.changeCount
         guard changeCount != lastChangeCount else { return }
         lastChangeCount = changeCount
@@ -191,36 +204,43 @@ class ClipboardHistoryService {
             return
         }
         suppressedChangeCount = nil
+        let sourceApp = sourceTracker.sourceApp(of: pasteboard)
 
         // Finder file copies also carry a TIFF of the file's icon; never store that.
         // Keep the first copied image file's real contents and ignore other files.
         let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         if !fileURLs.isEmpty {
             if let imageFile = fileURLs.first(where: ClipboardImagePayload.isSupportedImageFile) {
-                ingestImageFile(at: imageFile, isScreenCapture: false)
+                ingestImageFile(at: imageFile, isScreenCapture: false, sourceApp: sourceApp)
             }
             return
         }
 
         if let image = ClipboardImagePayload.read(from: pasteboard) {
-            ingestImage(image)
+            ingestImage(image, sourceApp: sourceApp)
             return
         }
         guard let text = pasteboard.string(forType: .string), !text.isEmpty else { return }
-        ingestText(text)
+        ingestText(text, sourceApp: sourceApp)
     }
 
-    private func ingestText(_ text: String) {
+    private func ingestText(_ text: String, sourceApp: ClipboardSourceApp? = nil) {
         insert(ClipboardEntry(
             id: UUID(),
             text: text,
             capturedAt: Date(),
-            fingerprint: "text:\(text)"
+            fingerprint: "text:\(text)",
+            sourceApp: sourceApp
         ))
     }
 
     @discardableResult
-    private func ingestImage(_ payload: ClipboardImagePayload, sourcePath: String? = nil, isScreenCapture: Bool = false) -> Bool {
+    private func ingestImage(
+        _ payload: ClipboardImagePayload,
+        sourcePath: String? = nil,
+        isScreenCapture: Bool = false,
+        sourceApp: ClipboardSourceApp? = nil
+    ) -> Bool {
         guard payload.data.count <= Self.maximumImageBytes else { return false }
         let fingerprint = "image:" + SHA256.hash(data: payload.data)
             .map { String(format: "%02x", $0) }
@@ -240,7 +260,8 @@ class ClipboardHistoryService {
                 mediaPasteboardType: payload.type.rawValue,
                 fingerprint: fingerprint,
                 sourcePath: sourcePath,
-                isScreenCapture: isScreenCapture
+                isScreenCapture: isScreenCapture,
+                sourceApp: sourceApp
             ))
             return true
         } catch {

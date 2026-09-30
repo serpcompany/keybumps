@@ -129,7 +129,9 @@ enum DictationHistoryClipboard {
     @discardableResult
     static func copy(_ text: String, to pasteboard: NSPasteboard = .keybumps) -> Bool {
         pasteboard.clearContents()
-        return pasteboard.setString(text, forType: .string)
+        guard pasteboard.setString(text, forType: .string) else { return false }
+        pasteboard.markCopiedByKeybumps()
+        return true
     }
 }
 
