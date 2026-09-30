@@ -34,4 +34,4 @@ The site deploys to Cloudflare Workers through OpenNext. App releases and signed
 
 Deploys run only through CI: each push to `main` that touches `apps/web/` deploys `staging.keybumps.app` (Worker `keybumps-web-staging`), smoke-tests it, then deploys and smoke-tests production (Worker `keybumps-web-production`). See [Deploys](docs/agents/web.md#deploys).
 
-Until the [domain cutover](docs/agents/web.md#domain-cutover) in serpcompany/keybumps#144, `keybumps.app` is still served by the old Worker, `keybumps-website`, which deploys from `serpcompany/keybumps.app` through Workers Builds. Production deploys from here reach only its `workers.dev` URL until then. Don't edit the site in both places.
+`keybumps.app` and `www.keybumps.app` are served by `keybumps-web-production` since the [domain cutover](docs/agents/web.md#domain-cutover) on 2026-09-30 (serpcompany/keybumps#144). The old repository, `serpcompany/keybumps.app`, is archived, and its Worker is deleted.

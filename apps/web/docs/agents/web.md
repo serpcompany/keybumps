@@ -69,52 +69,13 @@ CI authenticates with `CLOUDFLARE_API_TOKEN` (`github-actions-keybumps-web`), a 
 
 `pnpm deploy:staging` and `pnpm deploy:production` exist for human emergency use only, with fresh owner authorization. Never run them, `wrangler deploy`, `wrangler versions upload`, or `wrangler rollback` by hand otherwise. To check the deploy configuration without deploying, build and then run `wrangler deploy --dry-run --env <env> --outdir <dir>`: a dry run compiles the Worker and prints its bindings, without authenticating or uploading anything.
 
-Before the production domains move over (#144), `dmca@keybumps.app`, the contact address on `/legal/dmca/` (from the SERP DMCA page template), must forward to `dmca@serp.co` through Cloudflare Email Routing, and delivery must be verified. Check `support@keybumps.app` the same way. Until then, don't claim the addresses work.
+`dmca@keybumps.app` (the contact address on `/legal/dmca/`, from the SERP DMCA page template) forwards to `dmca+keybumps@serp.co`, and `support@keybumps.app` to `support+keybumps@serp.co`, through Cloudflare Email Routing. Delivery to both was verified on 2026-09-30 (#143). If either rule changes, verify delivery again before relying on the address.
 
 ### Domain cutover
 
-Done once, for #144, with the owner's authorization; the date and run links are on #144. Kept as the record of how the domains moved and as the rollback procedure while `keybumps-website` exists.
+Done on 2026-09-30 for #144, with the owner's authorization; the run links and smoke results are on #144. A pull request (#157) added the production `routes`, and that merge's `Web deploy` run moved `keybumps.app` and `www.keybumps.app` from the old Worker, `keybumps-website`, to `keybumps-web-production`. Wrangler overrides an existing Custom Domain when it isn't running in a terminal, as in CI, so the move was a single API call with no planned outage. The old Worker's Workers Builds connection was disconnected first, and the owner has since deleted the Worker, so there is no cutover rollback. For a bad deploy, use [Rollback](#rollback).
 
-**Approach: CI takes the domains over.** The first production deploys leave out the production routes. At cutover, a pull request adds them, and that merge's `Web deploy` run moves `keybumps.app` and `www.keybumps.app` from `keybumps-website` to `keybumps-web-production` in one API call. This works because Wrangler (4.135, `publishCustomDomains` in its deploy step) sends `override_existing_origin: true` and `override_existing_dns_record: true` whenever its output isn't a terminal, as in CI (`| tee`). It moves a Custom Domain that another Worker holds without asking. The same behavior is why the routes stay out until Workers Builds is disconnected: otherwise the old deploy path could take the domains back.
-
-**Expected outage: none planned, but not guaranteed.** `keybumps-website` keeps serving until the production deploy step reassigns the domains. That step runs after staging passes and after the new version is uploaded to `keybumps-web-production`. The hostnames' DNS records and certificates already exist; Cloudflare issued an Advanced Certificate for each hostname when it became a Custom Domain, and deleting or moving a Custom Domain doesn't delete that certificate. So the move changes only which Worker the records point to. Cloudflare doesn't document how long that takes to reach every edge location. Expect seconds to a few minutes in which a request reaches either Worker; both serve the same site. If a new certificate were needed after all, HTTPS on the affected hostname would fail until it is issued, usually within minutes. The slower alternative is to detach the domains in the dashboard first. That leaves the site down until the routes pull request is merged and its whole run (check, staging, production) finishes, so it isn't used.
-
-Before starting:
-
-- `Web deploy` has passed on `main`, including the production smoke test on `workers.dev`, and `https://staging.keybumps.app/robots.txt` disallows crawling.
-- The email routing gate above is verified (#143).
-- The routes pull request is open, approved, and green (step 2), so merging it is the only step left.
-
-Steps:
-
-1. **Disconnect Workers Builds** from `keybumps-website` (dashboard: Workers & Pages → `keybumps-website` → Settings → Build → Disconnect). The old Worker keeps serving its last deployed version but can no longer redeploy from `serpcompany/keybumps.app` and take the domains back. The site stays up.
-2. **Merge the routes pull request.** In `wrangler.jsonc`, it replaces the TODO in `env.production` with the block below, and it updates this guide (the environments table and this section's TODOs):
-
-   ```jsonc
-   "routes": [
-     { "pattern": "keybumps.app", "custom_domain": true },
-     { "pattern": "www.keybumps.app", "custom_domain": true }
-   ],
-   ```
-
-   The merge's `Web deploy` run deploys staging, then production. The production deploy moves both domains to `keybumps-web-production`, and its log lists them under custom domains. If staging fails, production doesn't run and the domains stay on `keybumps-website`; fix the problem, then re-run. If the production deploy fails with an authorization error on the custom domains, the domains stay where they are. Stop and ask the owner; don't widen the token.
-3. **Smoke-test the real domains** from the owner's machine, because bot protection blocks CI runners on them:
-   - `scripts/smoke.sh https://keybumps.app production`. Against this URL, the script also checks that `www.keybumps.app` redirects to the apex in one 308. If every request returns 403, bot protection challenged the request; check the pages in a browser instead.
-   - `scripts/smoke.sh https://staging.keybumps.app staging`.
-   - Check the dashboard: `keybumps.app` and `www.keybumps.app` are listed under `keybumps-web-production` → Settings → Domains & Routes, and not under `keybumps-website`.
-   - Send a test message to `dmca@keybumps.app` and `support@keybumps.app` and confirm both still deliver. The deploy was allowed to override DNS records for the two hostnames. That shouldn't touch MX records, but check.
-4. **Delete `keybumps-website`** (owner only, in the dashboard, never with the CI token), once the site has run on `keybumps-web-production` long enough to trust it, and after checking the old Worker has no domains or routes left. Until then, it is the cutover's rollback target.
-5. **Check that one deploy path remains:** `keybumps-website` is gone, no Worker in the account builds from `serpcompany/keybumps.app`, and `keybumps-web-staging` and `keybumps-web-production` have no Workers Builds connection. Then #145 archives `serpcompany/keybumps.app`.
-
-**Cutover rollback** (only while `keybumps-website` exists). If the problem is the new code rather than the domain move, prefer the [Rollback](#rollback) below: it keeps the domains where they are. To move the domains back, go in this order, because every `Web deploy` run from a `main` that lists the production routes takes the domains again:
-
-1. **Stop CI from taking them back.** Don't skip this step. Reverting the routes alone isn't enough, because merging the revert starts a run, and any run from before the revert still checks out a commit that lists the routes.
-   1. Disable the workflow (Actions → `Web deploy` → Disable workflow, or `gh workflow disable web-deploy.yml`), so nothing new starts.
-   2. Disabling doesn't stop runs that already exist. List them with `gh run list --workflow web-deploy.yml --limit 20`, and cancel every run that is `in_progress`, `queued`, or `waiting` with `gh run cancel <run-id>`.
-   3. Repeat the list until none of those remain. Don't go on to step 3 while one exists: a production `Deploy` step that finishes afterwards takes the domains again.
-2. **Revert the routes commit** on `main` through a pull request. While the workflow is disabled, the merge deploys nothing. Removing the routes also doesn't detach anything: Wrangler calls the Custom Domains API only when `routes` lists at least one custom domain, so a deploy without routes leaves existing domains where they are.
-3. **Move the domains back:** in the dashboard, remove `keybumps.app` and `www.keybumps.app` from `keybumps-web-production` (Settings → Domains & Routes), then add both to `keybumps-website` as Custom Domains. The site is down between the removal and the add, usually a minute or two. `keybumps-website` serves its last deployed version, because Workers Builds stays disconnected. Don't reconnect it unless it becomes the deploy path again.
-4. **Re-enable `Web deploy`** once `main` has no production routes. From then on, new runs update only `keybumps-web-staging` and the production Worker's `workers.dev` URL, and never touch the domains. **Never re-run a `Web deploy` run from before the revert** (Re-run jobs in Actions, or `gh run rerun`): a re-run checks out its original commit, which lists the routes, so it would move the domains back to `keybumps-web-production`. To deploy again, push to `main` or start a new run. Re-run the cutover when the problem is fixed.
+Because a CI deploy takes over a Custom Domain from any other Worker without asking, never list `keybumps.app`, `www.keybumps.app`, or `staging.keybumps.app` on another Worker.
 
 ## Rollback
 
@@ -125,7 +86,7 @@ npx wrangler deployments list --name keybumps-web-production   # find the versio
 npx wrangler rollback [version-id] --name keybumps-web-production -m "<reason>"
 ```
 
-Without a version ID, `wrangler rollback` goes back to the previous version. A version includes its code, `vars`, and bindings; routes and Custom Domains aren't versioned and don't change. Then confirm with the production smoke test against the Worker's `workers.dev` URL from the last deploy log (`scripts/smoke.sh https://keybumps-web-production.<account subdomain>.workers.dev production`), and, after the cutover, against `https://keybumps.app` from the owner's machine. Revert the bad commit on `main` too, or the next deploy ships it again. Staging rolls back the same way with `--name keybumps-web-staging`.
+Without a version ID, `wrangler rollback` goes back to the previous version. A version includes its code, `vars`, and bindings; routes and Custom Domains aren't versioned and don't change. Then confirm with the production smoke test against the Worker's `workers.dev` URL from the last deploy log (`scripts/smoke.sh https://keybumps-web-production.<account subdomain>.workers.dev production`), and against `https://keybumps.app` from the owner's machine. Revert the bad commit on `main` too, or the next deploy ships it again. Staging rolls back the same way with `--name keybumps-web-staging`.
 
 ## Environment configuration
 
