@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Write latest.json for the keybumps.app download page from a validated appcast.
+# Write latest.json (the latest-release pointer read by the keybumps.app Download buttons and /download/ redirect) from a validated appcast.
 # The DMG sits beside the appcast's archive enclosure, so the pointer always matches
 # wherever this release's files are published. Publish it with the appcast, last.
 #
