@@ -81,6 +81,8 @@ class ClipboardHistoryService {
     private(set) var entries: [ClipboardEntry] = []
     private var timer: Timer?
     private var lastChangeCount: Int
+    /// When a pasteboard change was last seen, including suppressed changes and restores.
+    private var lastChangeSeenAt: Date?
     private var suppressedChangeCount: Int?
     private let storageURL: URL
     private let pasteboard: NSPasteboard
@@ -137,8 +139,11 @@ class ClipboardHistoryService {
         persist()
     }
 
+    /// Puts `entry` back on the pasteboard. A restore the user asked for counts as a copy for
+    /// `pasteboardChanged(since:)`; Screenshot Tools' automatic copy passes `countsAsCopy: false`,
+    /// so one screenshot's copy never stops a newer screenshot from being copied.
     @discardableResult
-    func restore(_ entry: ClipboardEntry) -> Bool {
+    func restore(_ entry: ClipboardEntry, countsAsCopy: Bool = true) -> Bool {
         pasteboard.clearContents()
         let restored: Bool
         switch entry.kind {
@@ -152,6 +157,7 @@ class ClipboardHistoryService {
         }
         guard restored else { return false }
         lastChangeCount = pasteboard.changeCount
+        if countsAsCopy { lastChangeSeenAt = Date() }
         suppressedChangeCount = nil
         return true
     }
@@ -163,6 +169,14 @@ class ClipboardHistoryService {
         return ingestImage(payload, sourcePath: url.path, isScreenCapture: isScreenCapture)
     }
 
+    /// Whether the pasteboard changed at or after `date`, counting a copy the next poll would
+    /// have caught (which this records first, so it isn't lost). While Clipboard History is
+    /// stopped it never reads the pasteboard and reports only changes it saw while running.
+    func pasteboardChanged(since date: Date) -> Bool {
+        if timer != nil { poll() }
+        return lastChangeSeenAt.map { $0 >= date } ?? false
+    }
+
     func ingestForTesting(_ text: String) { ingestText(text) }
     func pollForTesting() { poll() }
     func suppressCurrentChange() { suppressedChangeCount = pasteboard.changeCount }
@@ -171,6 +185,7 @@ class ClipboardHistoryService {
         let changeCount = pasteboard.changeCount
         guard changeCount != lastChangeCount else { return }
         lastChangeCount = changeCount
+        lastChangeSeenAt = Date()
         if suppressedChangeCount == changeCount {
             suppressedChangeCount = nil
             return

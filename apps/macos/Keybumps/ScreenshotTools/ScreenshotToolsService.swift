@@ -103,6 +103,40 @@ enum ScreenshotFileFilter {
     }
 }
 
+/// Adds new screenshot files to Clipboard History and, while "Copy new screenshots to the
+/// clipboard" is on, puts each one on the pasteboard too. Restoring the item marks that
+/// pasteboard write as seen, so Clipboard History doesn't add it a second time.
+@MainActor
+struct ScreenshotClipboardDelivery {
+    let clipboard: ClipboardHistoryService
+    let copiesToClipboard: () -> Bool
+
+    /// True when the file became a new Clipboard History item. The Screen and Edit hotkey adds
+    /// its files before the watcher sees them, so a file already in Clipboard History (or matching
+    /// the newest item) is neither added nor copied again. `copying: false` never copies.
+    @discardableResult
+    func add(_ url: URL, copying: Bool = true) -> Bool {
+        guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }) else { return false }
+        // The watcher sees a file up to a second after it lands, so never replace something
+        // copied since the file was created; it stays on the clipboard, ready to paste.
+        let takenAt = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+        let copies = copying && copiesToClipboard() && !clipboard.pasteboardChanged(since: takenAt)
+        guard clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
+        if copies, let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
+            clipboard.restore(entry, countsAsCopy: false)
+        }
+        return true
+    }
+
+    /// Adds a Screen and Edit capture without copying (Save copies the edited image, so an
+    /// unredacted screenshot never reaches the clipboard from here). Every display's file is
+    /// added, the main display's last so it's the newest item. Returns the file to edit.
+    func addForEditing(_ files: [URL]) -> URL? {
+        for file in files.reversed() { add(file, copying: false) }
+        return files.first
+    }
+}
+
 enum ScreenshotToolsStatus: Equatable {
     case stopped
     case requiresClipboardHistory

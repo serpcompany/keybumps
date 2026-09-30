@@ -43,7 +43,9 @@ final class ScreenshotEditorTests: XCTestCase {
 
     func testToolShortcutsAndColorUse() {
         XCTAssertEqual(ScreenshotEditorTool.allCases, [.pixelate, .redact, .arrow, .draw, .text])
-        XCTAssertEqual(ScreenshotEditorTool.matching(key: "P"), .pixelate)
+        XCTAssertEqual(ScreenshotEditorTool.pixelate.title, "Blur")
+        XCTAssertEqual(ScreenshotEditorTool.matching(key: "B"), .pixelate)
+        XCTAssertNil(ScreenshotEditorTool.matching(key: "p"), "the letter follows the Blur label")
         XCTAssertEqual(ScreenshotEditorTool.matching(key: "t"), .text)
         XCTAssertNil(ScreenshotEditorTool.matching(key: "c"), "crop is deferred")
         XCTAssertEqual(ScreenshotEditorTool.allCases.map(\.number), ["1", "2", "3", "4", "5"])
@@ -54,6 +56,12 @@ final class ScreenshotEditorTests: XCTestCase {
         XCTAssertEqual(ScreenshotEditorWindowController.tool(forKey: "2", modifiers: [.numericPad]), .redact, "keypad digits work")
         XCTAssertNil(ScreenshotEditorWindowController.tool(forKey: "1", modifiers: [.command]), "⌘1 is not a tool shortcut")
         XCTAssertNil(ScreenshotEditorWindowController.tool(forKey: "4", modifiers: [.option]))
+        XCTAssertTrue(ScreenshotEditorWindowController.isSaveKey("\r", modifiers: []))
+        XCTAssertTrue(ScreenshotEditorWindowController.isSaveKey("\r", modifiers: [.command]))
+        XCTAssertTrue(ScreenshotEditorWindowController.isSaveKey("\u{3}", modifiers: [.numericPad]), "keypad Enter saves")
+        XCTAssertTrue(ScreenshotEditorWindowController.isSaveKey("\u{3}", modifiers: [.function]), "fn-Return saves")
+        XCTAssertFalse(ScreenshotEditorWindowController.isSaveKey("\r", modifiers: [.option]))
+        XCTAssertFalse(ScreenshotEditorWindowController.isSaveKey("\r", modifiers: [.shift]))
         XCTAssertFalse(ScreenshotEditorTool.pixelate.usesColor)
         XCTAssertFalse(ScreenshotEditorTool.redact.usesColor)
         XCTAssertTrue(ScreenshotEditorTool.arrow.usesColor)

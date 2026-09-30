@@ -81,6 +81,7 @@
 		9B257E66334EE5FE93531EAE /* chrome-153-settings-failing-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A1892ED7941254B63C36A71 /* chrome-153-settings-failing-trace.json */; };
 		9F11C1F5817C7DE04228CEF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C144E78DC41A2DF2C4FCA0C /* Assets.xcassets */; };
 		A16D2BF906A9A5E577CCD9DA /* ScreenshotCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B518401410853A3A68180C2 /* ScreenshotCaptureTests.swift */; };
+		AABBFA0F893683A6FD3FD8B3 /* ScreenshotClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C530DAE49C425F656DAF0256 /* ScreenshotClipboardTests.swift */; };
 		ABD55C5FE6CE7B1634E4A14B /* DictationNotchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D92B135B7669762A245EC5 /* DictationNotchTests.swift */; };
 		AC51777E49844030C638FFDB /* ScreenshotAnnotationRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEED3BE59B403C1032BD4A4E /* ScreenshotAnnotationRenderer.swift */; };
 		AF01C1FEA6DFAC71142B7305 /* ProductPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF48890AB96ECDC791B1116 /* ProductPaths.swift */; };
@@ -238,6 +239,7 @@
 		C13C5DD5F845097BB1BA796D /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		C2407E9D69CA5264F1B99A89 /* Keybumps-AppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Keybumps-AppStore.entitlements"; sourceTree = "<group>"; };
 		C31EA5B36802F222489865B5 /* WindowManagementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementService.swift; sourceTree = "<group>"; };
+		C530DAE49C425F656DAF0256 /* ScreenshotClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotClipboardTests.swift; sourceTree = "<group>"; };
 		C58C75BA38A2AB150043D3EA /* PublicModelDownloadIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicModelDownloadIntegrationTests.swift; sourceTree = "<group>"; };
 		C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
 		C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
@@ -421,6 +423,7 @@
 				C58C75BA38A2AB150043D3EA /* PublicModelDownloadIntegrationTests.swift */,
 				523C2D07125B9545845933E3 /* QuitConfirmationTests.swift */,
 				6B518401410853A3A68180C2 /* ScreenshotCaptureTests.swift */,
+				C530DAE49C425F656DAF0256 /* ScreenshotClipboardTests.swift */,
 				97EC39D6B2BEB686F101C4A9 /* ScreenshotEditorTests.swift */,
 				C0E7B7D46F1D67D729594D6F /* ScreenshotToolsTests.swift */,
 				52EFF247943688DF74FDFBFD /* SettingsSidebarTests.swift */,
@@ -870,6 +873,7 @@
 				ED773D1D56F424D545A9379E /* PublicModelDownloadIntegrationTests.swift in Sources */,
 				58DF94D7D131F11A8D5D15F0 /* QuitConfirmationTests.swift in Sources */,
 				A16D2BF906A9A5E577CCD9DA /* ScreenshotCaptureTests.swift in Sources */,
+				AABBFA0F893683A6FD3FD8B3 /* ScreenshotClipboardTests.swift in Sources */,
 				4484A3EEE07C1E235F2E433F /* ScreenshotEditorTests.swift in Sources */,
 				08CD04A3227F0212590B40CA /* ScreenshotToolsTests.swift in Sources */,
 				07A73572B424F72C67920D5E /* SettingsSidebarTests.swift in Sources */,

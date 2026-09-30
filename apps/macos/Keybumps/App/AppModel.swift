@@ -157,10 +157,14 @@ final class AppModel {
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
         self.windows = injectedWindows ?? WindowManagementService()
+        let screenshotDelivery = ScreenshotClipboardDelivery(
+            clipboard: clipboard,
+            copiesToClipboard: { preferences.copiesScreenshotsToClipboard }
+        )
         // Only the production composition reads the real screenshot folder; injected models stay inert.
         screenshotTools = injectedScreenshotTools ?? ScreenshotToolsService(
             reader: screenshotDirectoryReader ?? UnavailableScreenshotDirectoryReader(),
-            ingest: { clipboard.ingestImageFile(at: $0, isScreenCapture: true) }
+            ingest: { screenshotDelivery.add($0) }
         )
         self.dictationHistory = dictationHistory
         let dictationModelManager = injectedDictationModelManager ?? DictationModelManager(
@@ -200,6 +204,7 @@ final class AppModel {
             service: screenshotTools,
             palette: commandPalette,
             clipboard: clipboard,
+            delivery: screenshotDelivery,
             capturer: screenshotCapturer ?? ScreenshotCapturer(),
             systemShortcuts: SystemScreenshotShortcutTakeover(
                 preferences: symbolicHotKeys,
