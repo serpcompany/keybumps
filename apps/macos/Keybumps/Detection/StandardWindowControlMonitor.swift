@@ -184,24 +184,28 @@ final class StandardWindowControlMonitor {
     }
 
     var onEvent: ((CoachingEvent) -> Void)?
-    // Keep AX access serialized with the snapshotter. AppKit can service a
-    // hit-test against our own SwiftUI hierarchy in-process.
-    private let queue = DispatchQueue.main
+    /// `ManualActionDetector`'s detection queue. The session, its verification, and every
+    /// Accessibility read stay on it.
+    private let queue: DispatchQueue
+    private let accessibility: DetectionAccessibility
     private let detector = WindowControlActionDetector()
     private var session: Session?
 
-    func receive(_ sample: PointerSample) {
-        queue.async { [weak self] in self?.handle(sample) }
+    init(queue: DispatchQueue, accessibility: DetectionAccessibility) {
+        self.queue = queue
+        self.accessibility = accessibility
     }
 
     func cancel() {
         queue.async { [weak self] in self?.session = nil }
     }
 
-    private func handle(_ sample: PointerSample) {
+    /// Called on the detection queue with every pointer sample, in order. `hit` is the element under
+    /// a press or release, from the one hit-test every detector shares.
+    func handle(_ sample: PointerSample, hit: AXUIElement?) {
         switch sample.phase {
         case .down:
-            begin(sample)
+            begin(sample, hit: hit)
         case .dragged:
             guard let session else { return }
             session.modifiersPresent = session.modifiersPresent || WindowControlActionDetector.hasDisallowedModifiers(sample.modifiers)
@@ -216,10 +220,10 @@ final class StandardWindowControlMonitor {
         }
     }
 
-    private func begin(_ sample: PointerSample) {
+    private func begin(_ sample: PointerSample, hit: AXUIElement?) {
         session = nil
         guard !WindowControlActionDetector.hasDisallowedModifiers(sample.modifiers),
-              let hit = element(at: sample.location),
+              let hit,
               let kind = controlKind(hit),
               let window = containingWindow(for: hit),
               let frame = frame(of: hit),
@@ -229,11 +233,13 @@ final class StandardWindowControlMonitor {
               ) else { return }
 
         var pid: pid_t = 0
+        // `NSRunningApplication`, unlike `NSWorkspace.frontmostApplication`, is documented safe off
+        // the main thread.
         guard AXUIElementGetPid(hit, &pid) == .success,
               let running = NSRunningApplication(processIdentifier: pid),
               let bundle = running.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier,
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+              running.isActive else { return }
 
         let application = AXUIElementCreateApplication(pid)
         let pre = state(of: window, in: application)
@@ -258,7 +264,7 @@ final class StandardWindowControlMonitor {
         guard let current = session else { return }
         guard !current.modifiersPresent,
               !WindowControlActionDetector.hasDisallowedModifiers(sample.modifiers),
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == current.processIdentifier,
+              NSRunningApplication(processIdentifier: current.processIdentifier)?.isActive == true,
               sample.timestamp - current.downTimestamp <= 1.5,
               current.maximumTravel <= 4,
               current.buttonFrame.insetBy(dx: -2, dy: -2).contains(sample.location) else {
@@ -360,7 +366,7 @@ final class StandardWindowControlMonitor {
                let title: String = attribute(kAXTitleAttribute, from: element),
                menuTitle(title, matches: kind, state: state) {
                 if let shortcut = LiveShortcutObservation(
-                    evidence: AXShortcutEvidenceReader.read(from: element)
+                    evidence: AXShortcutEvidenceReader.read(from: element, using: accessibility)
                 ) {
                     matches.append(shortcut)
                 }
@@ -382,12 +388,6 @@ final class StandardWindowControlMonitor {
         }
     }
 
-    private func element(at point: CGPoint) -> AXUIElement? {
-        var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &element) == .success else { return nil }
-        return element
-    }
-
     private func containingWindow(for element: AXUIElement) -> AXUIElement? {
         if let window: AXUIElement = attribute(kAXWindowAttribute, from: element) { return window }
         var cursor = element
@@ -404,9 +404,7 @@ final class StandardWindowControlMonitor {
     }
 
     private func actions(of element: AXUIElement) -> [String] {
-        var names: CFArray?
-        guard AXUIElementCopyActionNames(element, &names) == .success else { return [] }
-        return names as? [String] ?? []
+        accessibility.actionNames(of: element)
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {
@@ -416,9 +414,7 @@ final class StandardWindowControlMonitor {
     }
 
     private func copyAttribute(_ name: String, from element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value
+        accessibility.copyAttribute(name, from: element)
     }
 
     private func attribute<T>(_ name: String, from element: AXUIElement) -> T? {

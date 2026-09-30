@@ -62,6 +62,7 @@
 		5F92BF267D5EC598B24938B6 /* ScreenshotEditorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3296278ACCFD1FEA1A0A40E8 /* ScreenshotEditorWindowController.swift */; };
 		5F96C75796624830BBC5D74B /* CapabilityModuleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4CF4C25AF5BB1C66FD04278 /* CapabilityModuleTests.swift */; };
 		5FE963A695D02FA354BB3D5E /* UITestLaunchConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D393A41EEB1085BE3348CE /* UITestLaunchConfigurationTests.swift */; };
+		60BD77AFC6B27EFE357D36BA /* ClickTargetProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30DE951EC0090D0062C95E4D /* ClickTargetProbe.swift */; };
 		62111562E18F7D38CFC148E7 /* LicenseController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEED38478247ABD30D3AF5FC /* LicenseController.swift */; };
 		66D4AA5C1B1F31493509DD84 /* PointerEventMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96B2E873B85F38F428D7E33E /* PointerEventMonitor.swift */; };
 		6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5341E18161C5048290122F /* CoachingEvent.swift */; };
@@ -96,6 +97,7 @@
 		9B257E66334EE5FE93531EAE /* chrome-153-settings-failing-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A1892ED7941254B63C36A71 /* chrome-153-settings-failing-trace.json */; };
 		9F11C1F5817C7DE04228CEF8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C144E78DC41A2DF2C4FCA0C /* Assets.xcassets */; };
 		A16D2BF906A9A5E577CCD9DA /* ScreenshotCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B518401410853A3A68180C2 /* ScreenshotCaptureTests.swift */; };
+		A56B77F4681B7E49B9909FA1 /* DetectionAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = D08ACA2A4D6A27464FA118FC /* DetectionAccessibility.swift */; };
 		A7F5863A183B70EDC3C54725 /* QuickSearchCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6CDB0E47E43E83CA21714BF /* QuickSearchCommand.swift */; };
 		AABBFA0F893683A6FD3FD8B3 /* ScreenshotClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C530DAE49C425F656DAF0256 /* ScreenshotClipboardTests.swift */; };
 		ABD55C5FE6CE7B1634E4A14B /* DictationNotchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54D92B135B7669762A245EC5 /* DictationNotchTests.swift */; };
@@ -196,6 +198,7 @@
 		2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D3F2FAE3A7C9B0141825814 /* Keybumps.icon */ = {isa = PBXFileReference; path = Keybumps.icon; sourceTree = "<group>"; };
 		30C6EF77E18990B57ED296BA /* SnippetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetStore.swift; sourceTree = "<group>"; };
+		30DE951EC0090D0062C95E4D /* ClickTargetProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickTargetProbe.swift; sourceTree = "<group>"; };
 		323E102DD6374B05A2E71420 /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
 		3296278ACCFD1FEA1A0A40E8 /* ScreenshotEditorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorWindowController.swift; sourceTree = "<group>"; };
 		33DCD9E725F517DA4D5BEE2E /* InMemoryDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryDefaultsTests.swift; sourceTree = "<group>"; };
@@ -287,6 +290,7 @@
 		C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybumpsFeatureTests.swift; sourceTree = "<group>"; };
 		CD492B963F2E1C378C206508 /* DictationWarmRuntimeBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationWarmRuntimeBenchmarkTests.swift; sourceTree = "<group>"; };
 		CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
+		D08ACA2A4D6A27464FA118FC /* DetectionAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionAccessibility.swift; sourceTree = "<group>"; };
 		D46E853B6F0195DE8D0C0031 /* WhisperKitCompletedAudioTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitCompletedAudioTranscriber.swift; sourceTree = "<group>"; };
 		D547C96CB0A8C34AE6C8D05C /* ShortcutCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCatalog.swift; sourceTree = "<group>"; };
 		D5A7837F25296045EA5F5984 /* SmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
@@ -345,6 +349,8 @@
 				1125D0B1418C5EBF60FFBEBD /* ActionCorrelator.swift */,
 				57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */,
 				AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */,
+				30DE951EC0090D0062C95E4D /* ClickTargetProbe.swift */,
+				D08ACA2A4D6A27464FA118FC /* DetectionAccessibility.swift */,
 				B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */,
 				C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */,
 				96B2E873B85F38F428D7E33E /* PointerEventMonitor.swift */,
@@ -863,12 +869,14 @@
 				DC5D1578C1100C5D5B0471DC /* Capability.swift in Sources */,
 				21132F8335F6C4863D5A56D4 /* CapabilityModule.swift in Sources */,
 				B8AD9EB09F7831E8226756F2 /* ChromeActionAdapter.swift in Sources */,
+				60BD77AFC6B27EFE357D36BA /* ClickTargetProbe.swift in Sources */,
 				056730D3FDC7666D9EDAAB12 /* ClipboardHistoryModule.swift in Sources */,
 				EC784D4AB4204072FEBCC20F /* ClipboardHistoryService.swift in Sources */,
 				915369B9277C294F9BCBD14A /* ClipboardSourceApp.swift in Sources */,
 				6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */,
 				081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */,
 				36234F90E23764E2A39CAF58 /* CompletedAudioTranscriber.swift in Sources */,
+				A56B77F4681B7E49B9909FA1 /* DetectionAccessibility.swift in Sources */,
 				098879181087D6A890F705C8 /* DictationAudioPlayer.swift in Sources */,
 				780135D18A3D6C288C8DC1DD /* DictationHistoryService.swift in Sources */,
 				CC9C3B70B132461EB151193B /* DictationHistoryView.swift in Sources */,

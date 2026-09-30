@@ -83,26 +83,19 @@ struct AccessibilitySnapshot: Codable, Equatable, Sendable {
 }
 
 protocol AccessibilitySnapshotting {
-    func snapshot(at point: CGPoint, completion: @escaping (AccessibilitySnapshot?) -> Void)
+    /// Describes the element a press or release hit-tested, and its ancestors. Called on
+    /// `ManualActionDetector`'s detection queue.
+    func snapshot(of hit: AXUIElement) -> AccessibilitySnapshot?
 }
 
 final class AccessibilitySnapshotter: AccessibilitySnapshotting {
-    // AppKit's in-process accessibility implementation is main-thread-bound.
-    // A global click can land on Keybumps itself, so all AX hit-testing
-    // must share the main queue rather than racing from detector worker queues.
-    private let queue = DispatchQueue.main
+    private let accessibility: DetectionAccessibility
 
-    func snapshot(at point: CGPoint, completion: @escaping (AccessibilitySnapshot?) -> Void) {
-        queue.async {
-            let result = self.makeSnapshot(at: point)
-            completion(result)
-        }
+    init(accessibility: DetectionAccessibility = .system) {
+        self.accessibility = accessibility
     }
 
-    private func makeSnapshot(at point: CGPoint) -> AccessibilitySnapshot? {
-        var rawHit: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &rawHit) == .success,
-              let hit = rawHit else { return nil }
+    func snapshot(of hit: AXUIElement) -> AccessibilitySnapshot? {
         var pid: pid_t = 0
         guard AXUIElementGetPid(hit, &pid) == .success else { return nil }
         let app = NSRunningApplication(processIdentifier: pid)
@@ -134,9 +127,8 @@ final class AccessibilitySnapshotter: AccessibilitySnapshotting {
         if let string = rawValue as? String { valueString = string }
         else if let number = rawValue as? NSNumber { valueString = number.stringValue }
         else { valueString = nil }
-        var actionNames: CFArray?
-        let actions = AXUIElementCopyActionNames(element, &actionNames) == .success ? (actionNames as? [String] ?? []) : []
-        let shortcutEvidence = AXShortcutEvidenceReader.read(from: element)
+        let actions = accessibility.actionNames(of: element)
+        let shortcutEvidence = AXShortcutEvidenceReader.read(from: element, using: accessibility)
         return AXNodeSnapshot(
             token: token(for: element), role: attribute(kAXRoleAttribute, from: element),
             subrole: attribute(kAXSubroleAttribute, from: element), title: attribute(kAXTitleAttribute, from: element),
@@ -151,9 +143,7 @@ final class AccessibilitySnapshotter: AccessibilitySnapshotting {
 
     private func token(for element: AXUIElement) -> String { String(CFHash(element), radix: 16) }
     private func copyAttribute(_ name: String, from element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value
+        accessibility.copyAttribute(name, from: element)
     }
     private func attribute<T>(_ name: String, from element: AXUIElement) -> T? { copyAttribute(name, from: element) as? T }
     private func pointAttribute(_ name: String, from element: AXUIElement) -> CGPoint? {
