@@ -467,6 +467,13 @@ struct DictationPastePermissionTests {
         #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
         harness.model.setCapability(.dictation, enabled: false)
         #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+
+        // Nor is Snippets' Set Up Paste… card.
+        harness.model.setCapability(.dictation, enabled: true)
+        harness.model.commandPalette.offerPasteSetup()
+        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        harness.model.setCapability(.dictation, enabled: false)
+        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
     }
 
     @Test("Locking ends setup, and the step's delayed drag card doesn't appear afterwards")
@@ -514,6 +521,13 @@ struct DictationPastePermissionTests {
         #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
         await harness.model.deactivateLicense()
         #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+
+        // Nor is Snippets' Set Up Paste… card.
+        await harness.model.activateLicense(key: FixedLicenseController.sampleCheck.key)
+        harness.model.commandPalette.offerPasteSetup()
+        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        await harness.model.deactivateLicense()
+        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
     }
 
     @Test("A step scheduled as setup ends never starts, as when the grant lands on the last re-check")
