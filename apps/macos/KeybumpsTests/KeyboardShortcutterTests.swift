@@ -83,8 +83,8 @@ private final class StubAccessibilitySnapshotter: AccessibilitySnapshotting {
         self.snapshots = snapshots
     }
 
-    func snapshot(at point: CGPoint, completion: @escaping (AccessibilitySnapshot?) -> Void) {
-        completion(snapshots.isEmpty ? nil : snapshots.removeFirst())
+    func snapshot(of hit: AXUIElement) -> AccessibilitySnapshot? {
+        snapshots.isEmpty ? nil : snapshots.removeFirst()
     }
 }
 
@@ -995,7 +995,9 @@ final class KeyboardShortcutterTests: XCTestCase {
             monitor: monitor,
             snapshotter: StubAccessibilitySnapshotter([preSnapshot, preSnapshot]),
             permissions: StubDetectorPermissions(accessibility: true, inputMonitoring: true),
-            chromeRuntimeReader: runtimeReader
+            chromeRuntimeReader: runtimeReader,
+            clickTargets: ScriptedClickTargets([.application(FakeProcess.app)]),
+            accessibility: .recording(AccessibilityLog()) { _ in AXUIElementCreateApplication(FakeProcess.app) }
         )
         let persistence = MemoryPersistence()
         let inbox = InboxStore(persistence: persistence)

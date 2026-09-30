@@ -51,6 +51,7 @@
 		4E0C07CC5A00DAA92244BFA4 /* Keybumps.icon in Resources */ = {isa = PBXBuildFile; fileRef = 2D3F2FAE3A7C9B0141825814 /* Keybumps.icon */; };
 		4F3E2FE9F33B1CF0F9DA36F1 /* RaycastSettingsStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D3540EC3F3F99A6E3B6274 /* RaycastSettingsStyle.swift */; };
 		5008231D6CAE07EE7F478A25 /* QuickSearchTestIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B4EE6BAF61588E4C4FAB26 /* QuickSearchTestIsolationTests.swift */; };
+		5078335D97D88A0675A7F6B8 /* ShortcutCoachClickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */; };
 		511D2E223129B6595A9E909D /* SnippetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C6EF77E18990B57ED296BA /* SnippetStore.swift */; };
 		54671A719E03B771792B4CAB /* QuickSearchCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */; };
 		55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */; };
@@ -191,6 +192,7 @@
 		1FD52164D0E4BEB3C625179B /* Keybumps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Keybumps.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		25A41CB8D7FC4C900A758D77 /* CapabilityWiringSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityWiringSnapshotTests.swift; sourceTree = "<group>"; };
+		2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCoachClickTests.swift; sourceTree = "<group>"; };
 		2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D3F2FAE3A7C9B0141825814 /* Keybumps.icon */ = {isa = PBXFileReference; path = Keybumps.icon; sourceTree = "<group>"; };
 		30C6EF77E18990B57ED296BA /* SnippetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetStore.swift; sourceTree = "<group>"; };
@@ -481,6 +483,7 @@
 				97EC39D6B2BEB686F101C4A9 /* ScreenshotEditorTests.swift */,
 				C0E7B7D46F1D67D729594D6F /* ScreenshotToolsTests.swift */,
 				52EFF247943688DF74FDFBFD /* SettingsSidebarTests.swift */,
+				2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */,
 				D79624FBD3E3BEA3C4AB778B /* SnippetTests.swift */,
 				6496418091377710D1C553EB /* StandardWindowControlTests.swift */,
 				93D393A41EEB1085BE3348CE /* UITestLaunchConfigurationTests.swift */,
@@ -971,6 +974,7 @@
 				4484A3EEE07C1E235F2E433F /* ScreenshotEditorTests.swift in Sources */,
 				08CD04A3227F0212590B40CA /* ScreenshotToolsTests.swift in Sources */,
 				07A73572B424F72C67920D5E /* SettingsSidebarTests.swift in Sources */,
+				5078335D97D88A0675A7F6B8 /* ShortcutCoachClickTests.swift in Sources */,
 				DB997FBA3D0CD7910E51103E /* SnippetTests.swift in Sources */,
 				0A2691072FFA6F40A5F31531 /* StandardWindowControlTests.swift in Sources */,
 				5FE963A695D02FA354BB3D5E /* UITestLaunchConfigurationTests.swift in Sources */,
