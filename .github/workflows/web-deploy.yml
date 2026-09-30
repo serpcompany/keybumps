@@ -69,6 +69,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The website has its own GitHub environments, separate from the Mac release's `production`.
+    # CLOUDFLARE_API_TOKEN lives on website-staging and website-production, which accept only main.
+    environment: website-staging
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
@@ -115,7 +118,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production
+    environment: website-production
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
@@ -143,7 +146,7 @@ jobs:
           NEXT_PUBLIC_GTM_ID: ${{ vars.NEXT_PUBLIC_GTM_ID }}
         run: |
           if [ -z "$NEXT_PUBLIC_GTM_ID" ]; then
-            echo "::error::Set NEXT_PUBLIC_GTM_ID on the production environment"
+            echo "::error::Set NEXT_PUBLIC_GTM_ID on the website-production environment"
             exit 1
           fi
 
