@@ -1540,7 +1540,7 @@ private struct PaletteFooter: View {
             .padding(.leading, 16)
             .padding(.trailing, 7)
             .frame(height: PaletteTheme.footerHeight)
-            .paletteFloatingSurface(Capsule())
+            .paletteFloatingSurface()
             .allowsHitTesting(false)
         }
         .padding(10)
@@ -1569,7 +1569,7 @@ private struct PaletteSettingsButton: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(isHovering ? .primary : .secondary)
                 .frame(width: PaletteTheme.footerHeight, height: PaletteTheme.footerHeight)
-                .paletteFloatingSurface(Circle())
+                .paletteFloatingSurface()
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
