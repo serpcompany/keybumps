@@ -43,6 +43,7 @@ describe('site redirects', () => {
   it('serves every canonical page, file, and framework asset directly', () => {
     for (const path of [
       ...sitePages.map(page => page.path),
+      // Its route handler answers with a temporary redirect to the current DMG, not a config one.
       '/download/',
       '/thanks/',
       '/robots.txt',
@@ -59,6 +60,8 @@ describe('site redirects', () => {
   it('adds the trailing slash to pages and removes it from files, in one hop', () => {
     expect(resolve(production, { path: '/pricing' })).toBe('/pricing/')
     expect(resolve(production, { path: '/legal/dmca' })).toBe('/legal/dmca/')
+    // Old /download links take this one hop, then src/app/download/route.ts sends the DMG.
+    expect(resolve(production, { path: '/download' })).toBe('/download/')
     expect(resolve(production, { path: '/robots.txt/' })).toBe('/robots.txt')
     expect(resolve(production, { path: '/sitemaps/pages.xml/' })).toBe('/sitemaps/pages.xml')
   })

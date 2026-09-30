@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { PageShell } from '@/components/page-shell'
 import { pageMetadata } from '@/lib/metadata'
 import { site } from '@/lib/site'
@@ -33,11 +34,7 @@ export default function SupportPage() {
           .
         </li>
         <li>
-          Need the latest version?{' '}
-          <Link href="/download/" className={link}>
-            Download Keybumps
-          </Link>
-          .
+          Need the latest version? <DownloadLink className={link}>Download Keybumps</DownloadLink>.
         </li>
       </ul>
     </PageShell>

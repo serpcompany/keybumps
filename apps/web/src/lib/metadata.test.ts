@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { describe, expect, it } from 'vitest'
-import { metadata as downloadMetadata } from '@/app/(analytics)/download/page'
 import { metadata as homeMetadata } from '@/app/(analytics)/page'
 import { metadata as thanksMetadata } from '@/app/(sensitive-url)/thanks/page'
 import {
@@ -39,9 +38,8 @@ describe('page metadata', () => {
     }
   })
 
-  it('keeps them on the pages with their own metadata: /, /download/, and /thanks/', () => {
+  it('keeps them on the pages with their own metadata: / and /thanks/', () => {
     expectSharedOpenGraph(homeMetadata, rootLayoutMetadata, '/')
-    expectSharedOpenGraph(downloadMetadata, rootLayoutMetadata, '/download/')
     expectSharedOpenGraph(thanksMetadata, sensitiveUrlLayoutMetadata, '/thanks/')
   })
 
