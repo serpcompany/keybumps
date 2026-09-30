@@ -26,6 +26,8 @@ Historical SuperMac Pages artifacts belong to a different bundle identity and tr
 
 The normal entry point is `scripts/build-update-release.sh`. It refuses a reused build or existing output directory, archives and exports with Developer ID, submits through the authenticated `asc notarization` API, staples, packages ZIP and DMG artifacts, generates and validates the signed appcast, and creates separate `publication/assets` and `publication/publish-last` directories. It does not upload anything.
 
+Run it from a Git checkout. It reads `docs/releases/v<version>.md` from the repository root (`git rev-parse --show-toplevel`), so from a `git archive` export or a tarball it stops with exit 66 before building.
+
 1. Increase `CFBundleVersion` above every previously published build and set the customer-facing semantic `MARKETING_VERSION`.
 2. Archive arm64 Keybumps with the stable `com.serp.keybumps` bundle ID, the production feed URL, and the matching public key.
 3. Export with Developer ID, notarize, staple, and package the stapled app as the Sparkle update archive and DMG.

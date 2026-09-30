@@ -1,7 +1,11 @@
 #!/bin/zsh
 set -euo pipefail
 
-repository_root=${0:A:h:h}
+# Scan the whole repository, even when the app folder that holds this script is below its root.
+# App files in the allowlist are relative to the app folder: app_prefix is "" at the root.
+app_root=${0:A:h:h}
+repository_root=$(git -C "$app_root" rev-parse --show-toplevel)
+app_prefix=$(git -C "$app_root" rev-parse --show-prefix)
 cd "$repository_root"
 
 legacy_pattern='SuperMac|supermac|SUPERMAC|Key Bump|Key Bumps|key bump|key bumps|key-bump|key-bumps|KeyBump|KeyBumps|keyBump|keyBumps|ShortcutCoach|shortcutCoaching'
@@ -9,7 +13,10 @@ violations=()
 
 while IFS= read -r tracked_file; do
   case "$tracked_file" in
-    AGENTS.md|project.yml|Keybumps.xcodeproj/project.pbxproj|scripts/check-legacy-branding.sh|docs/development-workflow.md|KeybumpsTests/KeyboardShortcutterTests.swift|docs/releases/sparkle-update-operations.md)
+    AGENTS.md|docs/development-workflow.md|docs/releases/sparkle-update-operations.md)
+      continue
+      ;;
+    "${app_prefix}project.yml"|"${app_prefix}Keybumps.xcodeproj/project.pbxproj"|"${app_prefix}scripts/check-legacy-branding.sh"|"${app_prefix}KeybumpsTests/KeyboardShortcutterTests.swift")
       continue
       ;;
     docs/provenance/*|public/*)

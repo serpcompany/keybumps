@@ -5,6 +5,7 @@ name: Keybumps unit tests
 on:
   pull_request:
     branches: [main]
+    # Filters can't use APP_DIR; keep them in step with it.
     paths:
       - Keybumps/**
       - KeybumpsTests/**
@@ -23,12 +24,19 @@ concurrency:
 
 env:
   XCODE_APP: /Applications/Xcode_26.6.app
+  # The Mac app's folder, relative to the repository root. Run steps work in it. Action inputs
+  # (the cache, hashFiles, and upload paths) are relative to the repository root, so they add
+  # the folder, and while it is "." they keep their bare paths, so the cache key and version hold.
+  APP_DIR: .
 
 jobs:
   unit:
     name: Unit tests (KeybumpsTests)
     runs-on: macos-26
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
     steps:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
@@ -47,8 +55,8 @@ jobs:
       - name: Cache Swift packages
         uses: actions/cache@v4
         with:
-          path: .spm
-          key: spm-${{ runner.os }}-${{ hashFiles('Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          path: ${{ env.APP_DIR == '.' && '.spm' || format('{0}/.spm', env.APP_DIR) }}
+          key: spm-${{ runner.os }}-${{ hashFiles(env.APP_DIR == '.' && 'Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved' || format('{0}/Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', env.APP_DIR)) }}
 
       - name: Build for testing
         run: |
@@ -76,5 +84,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: KeybumpsTests-xcresult
-          path: KeybumpsTests.xcresult
+          path: ${{ env.APP_DIR == '.' && 'KeybumpsTests.xcresult' || format('{0}/KeybumpsTests.xcresult', env.APP_DIR) }}
           retention-days: 7

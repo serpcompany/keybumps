@@ -481,11 +481,12 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(bundle.object(forInfoDictionaryKey: "SUVerifyUpdateBeforeExtraction") as? Bool, true)
         for resource in [
             "LICENSE.rectangle",
+            "LICENSE.shotnix",
             "LICENSE.argmax-oss-swift",
             "NOTICES.argmax-oss-swift",
             "LICENSE.openai-whisper"
         ] {
-            XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil))
+            XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil), resource)
         }
         XCTAssertTrue(FileManager.default.isExecutableFile(
             atPath: appURL.appendingPathComponent("Contents/MacOS/Keybumps").path
