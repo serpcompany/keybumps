@@ -295,6 +295,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                     paste: { [weak self] snippet in self?.pasteSnippet(snippet) },
                     edit: { [weak self] snippet in self?.openSnippetEditor(.edit(snippet.id)) },
                     create: { [weak self] in self?.openSnippetEditor(.new) },
+                    openSettings: { [weak self] in self?.openSnippetsSettings() },
                     requestDelete: { [weak self] snippet in self?.requestSnippetDeletion(snippet) },
                     delete: { [weak self] snippet in self?.deleteSnippet(snippet) }
                 ),
@@ -520,7 +521,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         SnippetPaletteContent.resolve(
             snippets: snippets.snippets,
             query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.snippets)
+            isEnabled: preferences.enabledCapabilities.contains(.snippets),
+            libraryState: snippets.libraryState
         )
     }
 
@@ -667,10 +669,22 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         snippets.markUsed(snippet.id)
     }
 
-    /// Closes the palette and opens the snippet editor in Settings.
+    /// Closes the palette and opens the snippet editor in Settings. While the saved snippets can't
+    /// be read, it opens the Snippets page instead, which explains why nothing can be saved.
     func openSnippetEditor(_ request: SnippetEditorRequest) {
+        guard snippets.libraryState != .readOnly else {
+            openSnippetsSettings()
+            return
+        }
         dismiss()
         snippets.editorRequest = request
+        openSettings()
+    }
+
+    /// Closes the palette and opens Settings on the Snippets page.
+    func openSnippetsSettings() {
+        dismiss()
+        snippets.settingsVisitRequested = true
         openSettings()
     }
 
@@ -898,7 +912,8 @@ private struct CommandPaletteView: View {
                 content: SnippetPaletteContent.resolve(
                     snippets: snippets.snippets,
                     query: state.historyQuery,
-                    isEnabled: preferences.enabledCapabilities.contains(.snippets)
+                    isEnabled: preferences.enabledCapabilities.contains(.snippets),
+                    libraryState: snippets.libraryState
                 ),
                 selection: state.selection,
                 actions: snippetActions,

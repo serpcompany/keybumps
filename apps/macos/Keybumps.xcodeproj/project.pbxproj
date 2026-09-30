@@ -28,6 +28,7 @@
 		1B97ED234F1E2A347068FC1F /* finder-trash-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = F3872107ED622E1702DAE730 /* finder-trash-captured-sanitized-trace.json */; };
 		1C16C591081A70B947AD1444 /* OnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F766FFB10FBF4B3FBE6504B /* OnboardingFlowTests.swift */; };
 		1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */; };
+		206DA8D31D5B76FFA73479B1 /* PlainTextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */; };
 		21132F8335F6C4863D5A56D4 /* CapabilityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E1CD87EB93B65F4E866246 /* CapabilityModule.swift */; };
 		27809D43FBCF8B6211FD5C6B /* DictationPaletteResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200EDB123819788E9D6CE81 /* DictationPaletteResults.swift */; };
 		29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */; };
@@ -257,6 +258,7 @@
 		ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionDetectionTests.swift; sourceTree = "<group>"; };
 		AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionAdapter.swift; sourceTree = "<group>"; };
 		AF3482EA5975104D852E8A6E /* LicenseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseModels.swift; sourceTree = "<group>"; };
+		AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainTextInput.swift; sourceTree = "<group>"; };
 		B19CB2A313982E002E9097B7 /* SnippetsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsModule.swift; sourceTree = "<group>"; };
 		B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
 		B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarLicenseProvider.swift; sourceTree = "<group>"; };
@@ -587,6 +589,7 @@
 			isa = PBXGroup;
 			children = (
 				E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */,
+				AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */,
 				A4D3540EC3F3F99A6E3B6274 /* RaycastSettingsStyle.swift */,
 				CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */,
 				059D55AF379C93A1EABF75A1 /* SharedViews.swift */,
@@ -866,6 +869,7 @@
 				C7BA0E484216B7DE0A03D3BC /* ManualActionDetector.swift in Sources */,
 				55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */,
 				29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */,
+				206DA8D31D5B76FFA73479B1 /* PlainTextInput.swift in Sources */,
 				66D4AA5C1B1F31493509DD84 /* PointerEventMonitor.swift in Sources */,
 				12F31F615607750DD9191EC4 /* PolarLicenseProvider.swift in Sources */,
 				80EBAD50A5F6E554E63A4CC4 /* ProductIdentity.swift in Sources */,

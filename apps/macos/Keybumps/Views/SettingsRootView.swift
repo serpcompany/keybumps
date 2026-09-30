@@ -202,6 +202,11 @@ struct SettingsRootView: View {
         .onChange(of: model.snippets.editorRequest, initial: true) { _, request in
             if request != nil { navigation.navigate(to: .snippets) }
         }
+        .onChange(of: model.snippets.settingsVisitRequested, initial: true) { _, requested in
+            guard requested else { return }
+            navigation.navigate(to: .snippets)
+            model.snippets.settingsVisitRequested = false
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
     }
 }

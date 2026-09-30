@@ -31,14 +31,17 @@ extension CapabilityDescriptor {
 }
 
 /// Owns the optional Open Snippets shortcut and the Snippets tab. The snippets themselves live in
-/// the shell's `SnippetStore`; nothing runs in the background.
+/// the shell's `SnippetStore`; nothing runs in the background. Its Settings attention is a library
+/// that can't be read, never a permission.
 @MainActor
 final class SnippetsModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.snippets
     private let palette: CommandPaletteController
+    private let snippets: SnippetStore
 
-    init(palette: CommandPaletteController) {
+    init(palette: CommandPaletteController, snippets: SnippetStore) {
         self.palette = palette
+        self.snippets = snippets
     }
 
     func apply(_ context: CapabilityContext) {
@@ -53,5 +56,9 @@ final class SnippetsModule: CapabilityModule {
 
     func deactivate(_ context: CapabilityContext) {
         palette.dismiss(ifDisplaying: .snippets)
+    }
+
+    func attentionCount(_ context: CapabilityContext) -> Int {
+        context.isEnabled(capability) && snippets.libraryState == .readOnly ? 1 : 0
     }
 }

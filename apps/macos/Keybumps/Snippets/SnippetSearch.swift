@@ -111,14 +111,22 @@ enum SnippetPresentation {
 /// What the Snippets tab shows.
 enum SnippetPaletteContent: Equatable {
     case disabled
+    /// The saved snippets can't be read (`SnippetLibraryState.readOnly`), so the tab mustn't look empty.
+    case unreadable
     /// There are no snippets yet.
     case empty
     /// There are snippets, but none match the search.
     case noMatches
     case entries([Snippet])
 
-    static func resolve(snippets: [Snippet], query: String, isEnabled: Bool) -> SnippetPaletteContent {
+    static func resolve(
+        snippets: [Snippet],
+        query: String,
+        isEnabled: Bool,
+        libraryState: SnippetLibraryState = .ready
+    ) -> SnippetPaletteContent {
         guard isEnabled else { return .disabled }
+        guard libraryState != .readOnly else { return .unreadable }
         guard !snippets.isEmpty else { return .empty }
         let results = SnippetSearch.results(snippets, query: query)
         return results.isEmpty ? .noMatches : .entries(results)

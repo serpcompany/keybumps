@@ -14,14 +14,16 @@ extension NSPasteboard {
         concealed ? .currentHostOnly : []
     }
 
-    /// Replaces the contents with plain text. A concealed write stays on this Mac and carries the
-    /// ConcealedType marker, so clipboard managers that follow nspasteboard.org's convention skip it.
+    /// Replaces the contents with plain text. A concealed write stays on this Mac and is one item
+    /// carrying both the text and the ConcealedType marker, written at once, so a clipboard manager
+    /// that follows nspasteboard.org's convention never sees the text without the marker.
     @discardableResult
     func writeText(_ text: String, concealed: Bool = false) -> Bool {
         prepareForNewContents(with: Self.contentsOptions(concealed: concealed))
-        guard setString(text, forType: .string) else { return false }
-        if concealed { setData(Data(), forType: .concealed) }
-        return true
+        guard concealed else { return setString(text, forType: .string) }
+        let item = NSPasteboardItem()
+        guard item.setString(text, forType: .string), item.setData(Data(), forType: .concealed) else { return false }
+        return writeObjects([item])
     }
 }
 

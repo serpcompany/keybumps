@@ -37,6 +37,10 @@ enum SnippetLibraryState: Equatable {
 /// The user's snippets: one JSON array in `snippets.json` in Keybumps' Application Support folder,
 /// readable only by the user (0600), never synced. A sensitive snippet's text is kept in the
 /// Keychain (`SnippetSecretStoring`) instead of the file. Names, keywords, and text are never logged.
+///
+/// A Keychain item is removed only for a snippet the user deleted or turned Sensitive off for, never
+/// because the file doesn't mention it: the file can be a kept copy's replacement, or another
+/// build's older list, and the item may hold the only copy of a secret.
 @MainActor
 @Observable
 final class SnippetStore {
@@ -46,6 +50,8 @@ final class SnippetStore {
     private(set) var snippets: [Snippet] = []
     /// The editor Settings shows, if any. The palette sets it to open the editor in Settings.
     var editorRequest: SnippetEditorRequest?
+    /// Set by the palette to open Settings on the Snippets page; Settings clears it once it's there.
+    var settingsVisitRequested = false
     private(set) var libraryState: SnippetLibraryState = .ready
 
     @ObservationIgnored private let storageURL: URL?
@@ -132,12 +138,26 @@ final class SnippetStore {
     }
 
     /// Saves the editor's fields over a snippet. With `keepsText`, a sensitive snippet keeps the
-    /// text already in the Keychain, which the editor never showed.
+    /// text already in the Keychain (the user didn't show it, or didn't change it): the Keychain
+    /// isn't read or written at all when the snippet stays sensitive.
     func update(_ id: Snippet.ID, with draft: SnippetDraft, keepsText: Bool = false) throws {
         try requireWritable()
         guard let index = snippets.firstIndex(where: { $0.id == id }) else { throw SnippetStoreError.notFound }
         if let problem = problem(with: draft, editing: id, keepsText: keepsText) { throw SnippetStoreError.invalid(problem) }
         let original = snippets[index]
+        if keepsText, original.isSensitive, draft.isSensitive {
+            // Name, keyword, or nothing changed: the text stays where it is, unread.
+            var updated = original
+            updated.name = draft.trimmedName
+            updated.keyword = draft.normalizedKeyword
+            updated.updatedAt = now()
+            var next = snippets
+            next[index] = updated
+            try commit(next)
+            return
+        }
+        // The text changes, or moves into the file: read the saved text to put it back if the file
+        // can't be written (and to move it, when Sensitive is turned off without showing it).
         let originalSecret = original.isSensitive ? secrets.text(for: id) : nil
         if original.isSensitive, originalSecret == nil, keepsText || !draft.isSensitive {
             // The saved text is needed and the Keychain won't give it back.
@@ -176,7 +196,8 @@ final class SnippetStore {
     }
 
     /// Deletes a snippet and its Keychain item, whether or not it's sensitive now, so no text outlives
-    /// it. If the item can't be removed, nothing is deleted.
+    /// it. A sensitive snippet's text is read first, only to put it back if the file can't be
+    /// written. If the item can't be removed, nothing is deleted.
     func delete(_ id: Snippet.ID) throws {
         try requireWritable()
         guard let snippet = snippet(withID: id) else { throw SnippetStoreError.notFound }
@@ -207,14 +228,19 @@ final class SnippetStore {
     }
 
     /// Moves a file that can't be read aside, unread, as `snippets.unreadable-<date>.json`, and
-    /// starts an empty library that saves normally.
+    /// starts an empty library that saves normally. Keychain items are left alone: the kept file
+    /// may name sensitive snippets whose text only the Keychain holds.
     func startOver() throws {
         guard libraryState == .readOnly, let storageURL else { return }
+        guard fileManager.fileExists(atPath: storageURL.path) else {
+            // Nothing is left to set aside (it was removed or fixed outside Keybumps).
+            snippets = []
+            libraryState = .ready
+            return
+        }
         let name = Self.unreadableCopyName(at: now())
         let copy = storageURL.deletingLastPathComponent().appendingPathComponent(name)
-        if fileManager.fileExists(atPath: storageURL.path) {
-            guard rename(storageURL.path, copy.path) == 0 else { throw SnippetStoreError.storage }
-        }
+        guard rename(storageURL.path, copy.path) == 0 else { throw SnippetStoreError.storage }
         snippets = []
         libraryState = .recovered(copyName: name)
     }
@@ -245,7 +271,7 @@ final class SnippetStore {
         do {
             data = try Data(contentsOf: storageURL)
         } catch where Self.isMissingFile(error) {
-            // No file yet: an empty library. Keychain items are left alone until a file is read.
+            // No file yet: an empty library.
             return
         } catch {
             // It exists but can't be read. Treating it as empty would let the next save replace it.
@@ -265,17 +291,6 @@ final class SnippetStore {
             return
         }
         snippets = readable
-        removeUnusedSecrets()
-    }
-
-    /// Removes Keychain items that no sensitive snippet uses: text left by a snippet deleted in
-    /// another build, or by a removal that failed. Runs only when the whole file was read.
-    private func removeUnusedSecrets() {
-        guard storageURL != nil, libraryState == .ready, let stored = secrets.storedIDs() else { return }
-        let inUse = Set(snippets.filter(\.isSensitive).map(\.id))
-        for id in stored.subtracting(inUse) {
-            try? secrets.removeText(for: id)
-        }
     }
 
     /// Writes `data` beside the file as `snippets.unreadable-<date>.json`, readable only by the user,

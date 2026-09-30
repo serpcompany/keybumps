@@ -111,26 +111,48 @@ struct SnippetStorageTests {
         #expect(store.snippets.map(\.id) == [kept.id])
     }
 
-    @Test("Start Over renames an unreadable file aside, unread, and starts a library that saves")
+    @Test("Start Over renames an unreadable file aside, unread, and keeps its sensitive text across launches")
     func startOverKeepsTheUnreadableFile() throws {
         let folder = TemporaryFolder()
         defer { folder.remove() }
-        try folder.makeStore().add(SnippetDraft(name: "Made-up", text: "text"))
+        // One Keychain across every launch, as on a real Mac.
+        let secrets = InMemorySnippetSecretStore()
+        let sensitive = try folder.makeStore(secrets: secrets)
+            .add(SnippetDraft(name: "Made-up key", text: "made-up-secret", isSensitive: true))
         let original = try Data(contentsOf: folder.storageURL)
         try folder.setPermissions(0o000, of: folder.storageURL)
 
-        let store = folder.makeStore()
+        let store = folder.makeStore(secrets: secrets)
         try store.startOver()
         guard case .recovered(let copyName) = store.libraryState else {
             Issue.record("Expected the file to be set aside, got \(store.libraryState)")
             return
         }
         try store.add(SnippetDraft(name: "New", text: "text"))
-        #expect(folder.makeStore().snippets.map(\.name) == ["New"])
+        let relaunched = folder.makeStore(secrets: secrets)
+        #expect(relaunched.snippets.map(\.name) == ["New"])
+        #expect(secrets.texts[sensitive.id] == "made-up-secret", "The kept file's secret survives the new library")
+        #expect(secrets.removals == 0)
 
         let copyURL = folder.url.appendingPathComponent(copyName)
         try folder.setPermissions(0o600, of: copyURL)
         #expect(try Data(contentsOf: copyURL) == original)
+    }
+
+    @Test("Start Over with nothing left to set aside mentions no kept copy")
+    func startOverWithoutAFile() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        try folder.makeStore().add(SnippetDraft(name: "Made-up", text: "text"))
+        try folder.setPermissions(0o000, of: folder.storageURL)
+        let store = folder.makeStore()
+        #expect(store.libraryState == .readOnly)
+        try folder.setPermissions(0o600, of: folder.storageURL)
+        try FileManager.default.removeItem(at: folder.storageURL)
+
+        try store.startOver()
+        #expect(store.libraryState == .ready)
+        #expect(folder.unreadableCopies().isEmpty)
     }
 
     @Test("If the copy of an undecodable file can't be written, nothing is saved over it")
@@ -394,8 +416,8 @@ struct SnippetKeychainCleanupTests {
         #expect(store.snippet(withID: snippet.id)?.isSensitive == true)
     }
 
-    @Test("Saving without showing the text keeps a sensitive snippet's saved text")
-    func keepsSavedText() throws {
+    @Test("A rename-only save of a sensitive snippet never reads or needs its text")
+    func renameOnlySaveLeavesTheKeychainAlone() throws {
         let folder = TemporaryFolder()
         defer { folder.remove() }
         let secrets = InMemorySnippetSecretStore()
@@ -406,52 +428,98 @@ struct SnippetKeychainCleanupTests {
 
         var renamed = hidden
         renamed.name = "Renamed"
+        renamed.keyword = ";new"
+        let readsBefore = secrets.reads
         try store.update(snippet.id, with: renamed, keepsText: true)
+        #expect(secrets.reads == readsBefore, "The Keychain wasn't read")
         #expect(store.snippet(withID: snippet.id)?.name == "Renamed")
         #expect(secrets.texts[snippet.id] == Self.secret)
 
+        // Even with the text gone from the Keychain, a rename still saves and blanks nothing.
         secrets.removeTextForTesting(snippet.id)
-        #expect(throws: SnippetStoreError.keychain) { try store.update(snippet.id, with: renamed, keepsText: true) }
+        renamed.name = "Renamed again"
+        try store.update(snippet.id, with: renamed, keepsText: true)
+        #expect(folder.makeStore(secrets: secrets).snippet(withID: snippet.id)?.name == "Renamed again")
+        #expect(secrets.removals == 0)
     }
 
-    @Test("Reading the whole file removes Keychain items no sensitive snippet uses")
-    func unusedItemsAreRemovedAtLoad() throws {
+    @Test("Turning Sensitive off without showing the text needs it, and fails cleanly without it")
+    func sensitiveOffNeedsTheText() throws {
         let folder = TemporaryFolder()
         defer { folder.remove() }
         let secrets = InMemorySnippetSecretStore()
         let store = folder.makeStore(secrets: secrets)
-        let sensitive = try store.add(SnippetDraft(name: "Kept", text: Self.secret, isSensitive: true))
-        let plain = try store.add(SnippetDraft(name: "Plain", text: "text"))
-        let orphan = UUID()
-        try secrets.setText("left by another build", for: orphan)
-        try secrets.setText("left by a failed removal", for: plain.id)
-
-        _ = folder.makeStore(secrets: secrets)
-        #expect(Set(secrets.texts.keys) == [sensitive.id])
+        let snippet = try store.add(SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: true))
+        secrets.removeTextForTesting(snippet.id)
+        #expect(throws: SnippetStoreError.keychain) {
+            try store.update(snippet.id, with: SnippetDraft(name: "Made-up", isSensitive: false), keepsText: true)
+        }
+        #expect(store.snippet(withID: snippet.id)?.isSensitive == true)
     }
 
-    @Test("Nothing is removed from the Keychain when the file wasn't read in full or items can't be listed")
-    func cleanupNeedsTheWholeFile() throws {
+    @Test("If adding a sensitive snippet can't write the file, its new Keychain item is removed")
+    func addRollsBackTheKeychain() throws {
         let folder = TemporaryFolder()
         defer { folder.remove() }
-        let orphan = UUID()
-        let secrets = InMemorySnippetSecretStore([orphan: "made-up"])
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        try folder.setPermissions(0o500, of: folder.url)
+        defer { try? folder.setPermissions(0o700, of: folder.url) }
 
-        _ = folder.makeStore(secrets: secrets)
-        #expect(secrets.texts[orphan] != nil, "No file yet")
+        #expect(throws: SnippetStoreError.storage) {
+            try store.add(SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: true))
+        }
+        #expect(secrets.texts.isEmpty)
+        #expect(store.snippets.isEmpty)
+    }
 
-        try Data("not json".utf8).write(to: folder.storageURL)
-        _ = folder.makeStore(secrets: secrets)
-        #expect(secrets.texts[orphan] != nil, "The file wasn't read")
+    @Test("No secret is ever deleted because the file doesn't mention it, across launches")
+    func noSecretIsDeletedByInference() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        // One Keychain across every launch and both "builds", as on a real Mac.
+        let secrets = InMemorySnippetSecretStore()
 
-        try Data("[]".utf8).write(to: folder.storageURL)
-        secrets.failsListing = true
+        // A corrupt file, recovered, then saved over: the kept copy's secret survives.
+        let first = try folder.makeStore(secrets: secrets)
+            .add(SnippetDraft(name: "In the corrupt file", text: "made-up-secret-1", isSensitive: true))
+        var corrupt = try Data(contentsOf: folder.storageURL)
+        corrupt.append(Data("}".utf8))
+        try corrupt.write(to: folder.storageURL)
+        let recovered = folder.makeStore(secrets: secrets)
+        if case .recovered = recovered.libraryState {} else { Issue.record("Expected a kept copy") }
+        try recovered.add(SnippetDraft(name: "After recovery", text: "text"))
         _ = folder.makeStore(secrets: secrets)
-        #expect(secrets.texts[orphan] != nil, "Items couldn't be listed")
+        _ = folder.makeStore(secrets: secrets)
+        #expect(secrets.texts[first.id] == "made-up-secret-1")
 
-        secrets.failsListing = false
+        // Last writer wins: one build adds a sensitive snippet, another saves its older list.
+        let installed = folder.makeStore(secrets: secrets)
+        let debug = folder.makeStore(secrets: secrets)
+        let added = try installed.add(SnippetDraft(name: "Added by one build", text: "made-up-secret-2", isSensitive: true))
+        try debug.add(SnippetDraft(name: "Saved by the other", text: "text"))
+        let relaunched = folder.makeStore(secrets: secrets)
+        #expect(relaunched.snippet(withID: added.id) == nil, "The older list won")
+        #expect(secrets.texts[added.id] == "made-up-secret-2", "…but its secret wasn't deleted")
+
+        #expect(secrets.removals == 0, "Nothing was removed without the user deleting it")
+    }
+
+    @Test("Only deleting or turning Sensitive off removes an item")
+    func onlyExplicitActionsRemoveItems() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let deleted = try store.add(SnippetDraft(name: "Deleted", text: "made-up-1", isSensitive: true))
+        let unhidden = try store.add(SnippetDraft(name: "Unhidden", text: "made-up-2", isSensitive: true))
+        let kept = try store.add(SnippetDraft(name: "Kept", text: "made-up-3", isSensitive: true))
+
+        try store.delete(deleted.id)
+        try store.update(unhidden.id, with: SnippetDraft(name: "Unhidden", text: "made-up-2", isSensitive: false))
         _ = folder.makeStore(secrets: secrets)
-        #expect(secrets.texts[orphan] == nil)
+        #expect(Set(secrets.texts.keys) == [kept.id])
+        #expect(secrets.removals == 2)
     }
 }
 
@@ -549,6 +617,9 @@ struct SnippetSearchTests {
         #expect(SnippetPaletteContent.resolve(snippets: [], query: "", isEnabled: true) == .empty)
         #expect(SnippetPaletteContent.resolve(snippets: snippets, query: "zzz", isEnabled: true) == .noMatches)
         #expect(SnippetPaletteContent.resolve(snippets: snippets, query: "made", isEnabled: true).entries == snippets)
+        // An unreadable library never looks empty.
+        #expect(SnippetPaletteContent.resolve(snippets: [], query: "", isEnabled: true, libraryState: .readOnly) == .unreadable)
+        #expect(SnippetPaletteContent.resolve(snippets: [], query: "", isEnabled: false, libraryState: .readOnly) == .disabled)
     }
 }
 
@@ -762,8 +833,14 @@ struct SnippetPaletteTests {
         #expect(pasteboard.writeText("made-up", concealed: true))
         #expect(pasteboard.string(forType: .string) == "made-up")
         #expect(pasteboard.types?.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")) == true)
+        // One item carries both, so the text never appears without the marker.
+        let items = pasteboard.pasteboardItems ?? []
+        #expect(items.count == 1)
+        #expect(items.first?.types.contains(.string) == true)
+        #expect(items.first?.types.contains(.concealed) == true)
         #expect(pasteboard.writeText("plain"))
         #expect(pasteboard.data(forType: .concealed) == nil)
+        #expect(pasteboard.pasteboardItems?.count == 1)
         // A concealed write stays on this Mac, so Universal Clipboard doesn't send it to other devices.
         #expect(NSPasteboard.contentsOptions(concealed: true) == .currentHostOnly)
         #expect(NSPasteboard.contentsOptions(concealed: false) == [])
@@ -864,6 +941,33 @@ struct SnippetPaletteKeyTests {
         #expect(fixture.pasteboard.string(forType: .string) == nil, "Nothing was copied")
     }
 
+    @Test("While the library can't be read, ⌘N and New Snippet open the Snippets page instead of the editor")
+    func unreadableLibraryOpensSettings() throws {
+        let fixture = PaletteFixture(unreadableLibrary: true)
+        defer { fixture.tearDown() }
+        var settingsOpened = 0
+        fixture.palette.openSettings = { settingsOpened += 1 }
+        #expect(fixture.snippets.libraryState == .readOnly)
+        fixture.palette.state.select(.snippets)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_N, "n", command: true)) == nil)
+        #expect(fixture.snippets.editorRequest == nil)
+        #expect(fixture.snippets.settingsVisitRequested)
+        #expect(settingsOpened == 1)
+    }
+
+    @Test("Snippets flags an unreadable library in Settings, and nothing else")
+    func attentionForAnUnreadableLibrary() throws {
+        let readable = PaletteFixture()
+        defer { readable.tearDown() }
+        let unreadable = PaletteFixture(unreadableLibrary: true)
+        defer { unreadable.tearDown() }
+        #expect(SnippetsModule(palette: readable.palette, snippets: readable.snippets).attentionCount(readable.context(enabled: [.snippets])) == 0)
+        let module = SnippetsModule(palette: unreadable.palette, snippets: unreadable.snippets)
+        #expect(module.attentionCount(unreadable.context(enabled: [.snippets])) == 1)
+        #expect(module.attentionCount(unreadable.context(enabled: [])) == 0)
+    }
+
     @Test("⌘5 selects Snippets; ⌘6 does nothing while the Hotkeys tab is hidden")
     func tabKeys() {
         let fixture = PaletteFixture()
@@ -873,6 +977,44 @@ struct SnippetPaletteKeyTests {
         #expect(fixture.palette.state.tab == .snippets)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_6, "6", command: true)) != nil)
         #expect(fixture.palette.state.tab == .snippets)
+    }
+}
+
+// MARK: - Plain text entry
+
+@MainActor
+@Suite("Snippets: text is saved exactly as typed")
+struct SnippetPlainTextTests {
+    @Test("The Snippet field has smart quotes, dashes, replacement, and correction off")
+    func editorSubstitutionIsOff() {
+        let textView = PlainTextEditor.makeTextView()
+        #expect(!textView.isRichText)
+        #expect(!textView.isAutomaticQuoteSubstitutionEnabled)
+        #expect(!textView.isAutomaticDashSubstitutionEnabled)
+        #expect(!textView.isAutomaticTextReplacementEnabled)
+        #expect(!textView.isAutomaticSpellingCorrectionEnabled)
+        #expect(!textView.isAutomaticTextCompletionEnabled)
+        #expect(!textView.isAutomaticLinkDetectionEnabled)
+        #expect(!textView.isAutomaticDataDetectionEnabled)
+        #expect(!textView.smartInsertDeleteEnabled)
+
+        // Typed quotes and dashes stay as typed.
+        textView.insertText("git commit -m \"x\" --amend", replacementRange: NSRange(location: 0, length: 0))
+        #expect(textView.string == "git commit -m \"x\" --amend")
+    }
+
+    @Test("The Keyword field's shared field editor is put back exactly as it was")
+    func fieldEditorIsRestored() {
+        let editor = NSTextView()
+        editor.isAutomaticQuoteSubstitutionEnabled = true
+        editor.isAutomaticDashSubstitutionEnabled = true
+        editor.isContinuousSpellCheckingEnabled = true
+        let before = PlainTextInput.Settings(of: editor)
+        PlainTextInput.configure(editor)
+        #expect(!editor.isAutomaticQuoteSubstitutionEnabled)
+        #expect(!editor.isAutomaticDashSubstitutionEnabled)
+        before.restore(to: editor)
+        #expect(PlainTextInput.Settings(of: editor) == before)
     }
 }
 
@@ -940,8 +1082,12 @@ private final class PaletteFixture {
     /// Another app, in front when the palette opened and still in front.
     static let otherApp = PasteTarget(processIdentifier: 4242, isKeybumps: false)
 
-    init() {
+    init(unreadableLibrary: Bool = false) {
         let root = folder.url
+        if unreadableLibrary {
+            try? Data("[]".utf8).write(to: folder.storageURL)
+            try? folder.setPermissions(0o000, of: folder.storageURL)
+        }
         clipboard = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
             pasteboard: pasteboard,
@@ -972,6 +1118,28 @@ private final class PaletteFixture {
         palette.rememberPasteTarget()
     }
 
+    /// What the shell hands a module, with fakes that grant every permission.
+    func context(enabled: Set<Capability>) -> CapabilityContext {
+        let permissions = PermissionCoordinator(
+            accessibilityTrusted: { true },
+            inputMonitoringAuthorized: { true },
+            microphoneAuthorizationStatus: { .authorized },
+            speechAuthorizationStatus: { .authorized },
+            screenRecordingAuthorized: { true },
+            requestScreenRecording: {},
+            openSettings: { _ in }
+        )
+        return CapabilityContext(
+            enabledCapabilities: enabled,
+            preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: NoHotKeys()),
+            permissions: permissions,
+            permissionReadiness: { capabilities in
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
+            }
+        )
+    }
+
     func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<200 where !condition() {
             try await Task.sleep(for: .milliseconds(10))
@@ -994,6 +1162,15 @@ private final class RecordingPaster: TextPasting {
         if fails { throw TextPasteError.keystrokeUnavailable }
         pasted.append((text, concealed))
     }
+}
+
+/// Registers no global hot keys.
+@MainActor
+private final class NoHotKeys: GlobalHotKeyRegistering {
+    let registrationScope = GlobalHotKeyRegistrationScope.systemWide
+    func installHandler(_ handler: @escaping (UInt32) -> Void) {}
+    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { true }
+    func unregister(identifier: UInt32) {}
 }
 
 /// Records notch notices instead of drawing them.

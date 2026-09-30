@@ -198,6 +198,8 @@ struct SnippetEditorSheet: View {
     /// A sensitive snippet's saved text stays in the Keychain, unread, until Show (or turning
     /// Sensitive off) needs it. Saving without it keeps the saved text.
     @State private var keepsSavedText = false
+    /// The saved text Show read, to tell whether the user changed it.
+    @State private var revealedText: String?
 
     private var editingID: Snippet.ID? {
         if case .edit(let id) = request { return id }
@@ -241,9 +243,9 @@ struct SnippetEditorSheet: View {
                         if draft.isSensitive, !showsSensitiveText {
                             maskedText
                         } else {
-                            TextEditor(text: $draft.text)
-                                .font(.system(size: 13))
-                                .scrollContentBackground(.hidden)
+                            // Plain text with no smart quotes, dashes, or replacements, so commands
+                            // and secrets are saved exactly as typed.
+                            PlainTextEditor(text: $draft.text, accessibilityLabel: "Snippet", identifier: "snippets.editor.text")
                                 .padding(6)
                                 .frame(height: 180)
                                 .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
@@ -251,8 +253,6 @@ struct SnippetEditorSheet: View {
                                     RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
                                         .strokeBorder(Color.primary.opacity(0.1))
                                 )
-                                .accessibilityLabel("Snippet")
-                                .accessibilityIdentifier("snippets.editor.text")
                         }
                         if draft.isSensitive {
                             Button(showsSensitiveText ? "Hide" : "Show") { toggleSensitiveText() }
@@ -346,8 +346,18 @@ struct SnippetEditorSheet: View {
             return false
         }
         draft.text = text
+        revealedText = text
         keepsSavedText = false
         return true
+    }
+
+    /// Whether saving leaves a sensitive snippet's saved text alone: it was never shown, or it was
+    /// shown but not changed. Then the Keychain isn't touched.
+    private var savesWithoutText: Bool {
+        guard let editingID, model.snippets.snippet(withID: editingID)?.isSensitive == true, draft.isSensitive else {
+            return false
+        }
+        return keepsSavedText || draft.text == revealedText
     }
 
     private func row(
@@ -381,7 +391,7 @@ struct SnippetEditorSheet: View {
     private func save() {
         do {
             if let editingID {
-                try model.snippets.update(editingID, with: draft, keepsText: keepsSavedText)
+                try model.snippets.update(editingID, with: draft, keepsText: savesWithoutText)
             } else {
                 try model.snippets.add(draft)
             }
@@ -417,15 +427,16 @@ private struct SnippetKeywordField: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
-        TextField("Keyword", text: $keyword, prompt: Text(";ship"))
-            .textFieldStyle(.plain)
-            .font(.system(size: 13, weight: .medium, design: .monospaced))
-            .autocorrectionDisabled()
-            .padding(.horizontal, 8)
-            .frame(width: 220, height: 26)
-            .background(PaletteTheme.keycapFill, in: shape)
-            .overlay(shape.strokeBorder(PaletteTheme.keycapBorder, lineWidth: 1))
-            .labelsHidden()
-            .accessibilityIdentifier("snippets.editor.keyword")
+        PlainTextField(
+            text: $keyword,
+            placeholder: ";ship",
+            font: .monospacedSystemFont(ofSize: 13, weight: .medium),
+            accessibilityLabel: "Keyword",
+            identifier: "snippets.editor.keyword"
+        )
+        .padding(.horizontal, 8)
+        .frame(width: 220, height: 26)
+        .background(PaletteTheme.keycapFill, in: shape)
+        .overlay(shape.strokeBorder(PaletteTheme.keycapBorder, lineWidth: 1))
     }
 }

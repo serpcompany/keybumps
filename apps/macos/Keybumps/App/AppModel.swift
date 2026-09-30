@@ -252,7 +252,7 @@ final class AppModel {
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
             KeyboardShortcutterModule(detector: detector),
-            SnippetsModule(palette: commandPalette)
+            SnippetsModule(palette: commandPalette, snippets: snippets)
         ])
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }

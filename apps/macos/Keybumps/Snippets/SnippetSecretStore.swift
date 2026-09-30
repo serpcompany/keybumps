@@ -9,8 +9,6 @@ protocol SnippetSecretStoring: AnyObject {
     func setText(_ text: String, for id: UUID) throws
     /// Removes the item if there is one; removing one that doesn't exist succeeds.
     func removeText(for id: UUID) throws
-    /// The snippet IDs that have an item, or nil if they can't be listed.
-    func storedIDs() -> Set<UUID>?
 }
 
 enum SnippetSecretError: Error, Equatable {
@@ -27,8 +25,8 @@ enum SnippetSecretError: Error, Equatable {
 ///
 /// The service name follows the bundle identifier. A Debug build reads the installed app's
 /// `snippets.json` but its own Keychain items, so it can't read the installed app's sensitive
-/// text, and snippets it deletes leave the installed app's item until that app next opens and
-/// removes items no snippet uses (`SnippetStore`).
+/// text, and a sensitive snippet it deletes leaves the installed app's item behind. Nothing removes
+/// items by inference (`SnippetStore`), so that item stays until it's removed in Keychain Access.
 final class KeychainSnippetSecretStore: SnippetSecretStoring {
     static let itemLabel = "Keybumps snippet"
 
@@ -38,19 +36,13 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         service = "\(bundleIdentifier).snippets"
     }
 
-    /// Every item for this service.
-    var serviceQuery: [String: Any] {
+    /// Identifies one snippet's item.
+    func query(for id: UUID) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
+            kSecAttrAccount as String: id.uuidString,
         ]
-    }
-
-    /// Identifies one snippet's item.
-    func query(for id: UUID) -> [String: Any] {
-        var query = serviceQuery
-        query[kSecAttrAccount as String] = id.uuidString
-        return query
     }
 
     /// Everything a new item is added with.
@@ -88,17 +80,6 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         }
     }
 
-    /// Lists accounts only; no item's text is read.
-    func storedIDs() -> Set<UUID>? {
-        var query = serviceQuery
-        query[kSecReturnAttributes as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitAll
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return [] }
-        guard status == errSecSuccess, let items = result as? [[String: Any]] else { return nil }
-        return Set(items.compactMap { ($0[kSecAttrAccount as String] as? String).flatMap(UUID.init(uuidString:)) })
-    }
 }
 
 /// Sensitive snippet text held only in memory: for unit tests and UI tests.
@@ -108,14 +89,20 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     var failsNextWrite = false
     /// Makes the next `removeText` fail.
     var failsNextRemoval = false
-    /// Makes `storedIDs` fail, as a Keychain that can't be listed would.
-    var failsListing = false
+    /// How many items were ever removed, so tests can prove nothing was removed behind the user's back.
+    private(set) var removals = 0
 
     init(_ texts: [UUID: String] = [:]) {
         self.texts = texts
     }
 
-    func text(for id: UUID) -> String? { texts[id] }
+    /// How many times a text was read, so tests can prove a save didn't need it.
+    private(set) var reads = 0
+
+    func text(for id: UUID) -> String? {
+        reads += 1
+        return texts[id]
+    }
 
     func setText(_ text: String, for id: UUID) throws {
         if failsNextWrite {
@@ -130,11 +117,8 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
             failsNextRemoval = false
             throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
         }
+        if texts[id] != nil { removals += 1 }
         texts[id] = nil
-    }
-
-    func storedIDs() -> Set<UUID>? {
-        failsListing ? nil : Set(texts.keys)
     }
 
     /// Loses an item behind the store's back, as a Keychain the user edited would.

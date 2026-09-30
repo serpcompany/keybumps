@@ -6,6 +6,8 @@ struct SnippetPaletteActions {
     let paste: (Snippet) -> Void
     let edit: (Snippet) -> Void
     let create: () -> Void
+    /// Opens Settings on the Snippets page, where an unreadable library can be tried again.
+    let openSettings: () -> Void
     /// Asks before deleting: snippets are things you wrote, not history.
     let requestDelete: (Snippet) -> Void
     let delete: (Snippet) -> Void
@@ -27,6 +29,8 @@ struct SnippetPaletteResults: View {
             switch content {
             case .disabled:
                 PaletteEmptyState(title: "Snippets is turned off", systemImage: Self.symbol)
+            case .unreadable:
+                unreadableState
             case .empty:
                 emptyState
             case .noMatches:
@@ -91,6 +95,20 @@ struct SnippetPaletteResults: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The library couldn't be read: say so rather than looking empty, and point to Settings.
+    private var unreadableState: some View {
+        ContentUnavailableView {
+            Label("Saved snippets can’t be read", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Keybumps won’t change them until it can read them. Settings › Snippets can try again.")
+        } actions: {
+            Button("Open Snippets Settings", systemImage: "gearshape", action: actions.openSettings)
+                .buttonStyle(PalettePillButtonStyle(size: .regular, showsIcon: true))
+                .accessibilityIdentifier("palette.snippets.openSettings")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
