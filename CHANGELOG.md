@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.3-beta.11](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.10...v0.0.3-beta.11) (2026-09-30)
+
+
+### Features
+
+* copy new screenshots to the clipboard and clarify the Screenshot Editor's actions ([#173](https://github.com/serpcompany/keybumps/issues/173)) ([1d11171](https://github.com/serpcompany/keybumps/commit/1d11171ec75c2ec111e3640914da1c2684e47fe5))
+* open Keybumps Settings from the Command Palette and Quick Search ([#179](https://github.com/serpcompany/keybumps/issues/179)) ([d5ddf39](https://github.com/serpcompany/keybumps/commit/d5ddf3900a2d6256778898c6686f93a11a8f2845))
+* show where each Clipboard History item was copied from ([#180](https://github.com/serpcompany/keybumps/issues/180)) ([2404b4d](https://github.com/serpcompany/keybumps/commit/2404b4d3081677087d0b6048f79f4ee97148d1aa))
+
 ## [0.0.3-beta.10](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.9...v0.0.3-beta.10) (2026-09-30)
 
 
