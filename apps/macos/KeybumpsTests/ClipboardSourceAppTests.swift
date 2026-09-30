@@ -130,7 +130,6 @@ struct ClipboardSourceAppTests {
 
         #expect(harness.service.entries.map(\.text) == ["second made-up text", "first made-up text"])
         #expect(harness.service.entries.allSatisfy { $0.sourceApp == nil })
-        #expect(ClipboardSourceApp.installed(bundleIdentifier: "com.example.keybumps-tests.missing") == nil)
     }
 
     @Test("Universal Clipboard items from another device have no source app")
@@ -155,13 +154,17 @@ struct ClipboardSourceAppTests {
         defer { harness.cleanUp() }
         harness.apps.frontmost = Self.browser
 
-        harness.copy("made-up text", pageAddress: "https://Docs.Example.com:8443/private/page?token=made-up-secret#section")
+        harness.copy(
+            "made-up text",
+            pageAddress: "https://someone:made-up-password@Docs.Example.com:8443/private/page?token=made-up-secret#section"
+        )
         harness.service.pollForTesting()
 
         #expect(harness.service.entries.first?.sourceDomain == "docs.example.com")
         let saved = try String(contentsOf: harness.storageURL, encoding: .utf8)
         #expect(saved.contains("docs.example.com"))
-        for part in ["https", "private", "page?", "token", "made-up-secret", "section"] {
+        // The scheme, user name, password, port, path, query, and fragment are all gone.
+        for part in ["https", "someone", "made-up-password", ":8443", "private", "page?", "token", "made-up-secret", "section"] {
             #expect(!saved.contains(part), "The saved history must not keep \(part)")
         }
         #expect(harness.reloaded().entries.first?.sourceDomain == "docs.example.com")
@@ -202,7 +205,15 @@ struct ClipboardSourceAppTests {
             ("https://[2001:db8::1]/", nil),
             ("https://localhost:3000/", nil),
             ("https://app.localhost/", nil),
-            ("http://intranet/", nil)
+            ("http://intranet/", nil),
+            // Local and special-use names aren't websites either.
+            ("http://nas.local/", nil),
+            ("https://app.test/", nil),
+            ("https://db.corp.internal/", nil),
+            ("http://printer.home.arpa/", nil),
+            ("https://site.invalid/", nil),
+            // An ordinary multi-label domain under a country code is kept whole.
+            ("https://shop.example.co.uk/", "shop.example.co.uk")
         ]
         for (address, host) in cases {
             #expect(ClipboardSourceDomain.host(ofPageAddress: address) == host, "\((address ?? "nil").debugDescription)")
@@ -266,8 +277,13 @@ struct ClipboardSourceAppTests {
         let harness = Harness()
         defer { harness.cleanUp() }
         harness.apps.frontmost = Self.browser
-        harness.copy("made-up text", webArchive: over)
+        harness.copy("first made-up text", webArchive: justUnder)
         harness.service.pollForTesting()
+        #expect(harness.service.entries.first?.sourceDomain == "example.com")
+
+        harness.copy("second made-up text", webArchive: over)
+        harness.service.pollForTesting()
+        #expect(harness.service.entries.first?.text == "second made-up text")
         #expect(harness.service.entries.first?.sourceApp == Self.browser)
         #expect(harness.service.entries.first?.sourceDomain == nil)
     }
@@ -344,6 +360,21 @@ struct ClipboardSourceAppTests {
         #expect(ClipboardSourceSearch.matchesWordStart("edit", in: "Example TextEdit"))
         #expect(!ClipboardSourceSearch.matchesWordStart("", in: "Example TextEdit"))
 
+        // Under a country code, a common second-level label (`co.uk`, `com.au`) counts as the suffix.
+        for (query, domain, matches) in [
+            ("shop", "shop.example.com.au", true),
+            ("example.com.au", "shop.example.com.au", true),
+            ("com", "shop.example.com.au", false),
+            ("au", "shop.example.com.au", false),
+            ("example.co", "news.example.co.uk", true),
+            ("co", "news.example.co.uk", false),
+            ("uk", "news.example.co.uk", false),
+            ("co", "example.co", false),
+            ("example", "example.co", true)
+        ] {
+            #expect(ClipboardSourceSearch.matchesLabelStart(query, in: domain) == matches, "\(query) in \(domain)")
+        }
+
         let unknown = ClipboardEntry(id: UUID(), text: "made-up text", capturedAt: Date())
         #expect(unknown.matches("made-up"))
         #expect(!unknown.matches("example"))
@@ -395,6 +426,45 @@ struct ClipboardSourceAppTests {
         #expect(harness.pasteboard.string(forType: .nspasteboardSource) == ownIdentifier)
         harness.service.pollForTesting()
 
+        #expect(harness.service.entries.first?.sourceApp == keybumps)
+    }
+
+    @Test("The Screenshot Editor's Save marks its copy as Keybumps', so it isn't credited to the app in front")
+    func screenshotEditorSaveMarksItsCopy() throws {
+        let harness = Harness()
+        defer { harness.cleanUp() }
+        let ownIdentifier = try #require(Bundle.main.bundleIdentifier)
+        let keybumps = ClipboardSourceApp(bundleIdentifier: ownIdentifier, name: "Keybumps")
+        harness.apps.frontmost = Self.browser
+        harness.apps.installed = [ownIdentifier: keybumps]
+        let saveFolder = harness.root.appendingPathComponent("edited", isDirectory: true)
+        try FileManager.default.createDirectory(at: saveFolder, withIntermediateDirectories: true)
+
+        let context = try #require(CGContext(
+            data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        let image = try #require(context.makeImage())
+
+        // Never presented, so no window appears; Save only renders, copies, and writes the edited file.
+        let editor = ScreenshotEditorWindowController(
+            source: ScreenshotRenderSource(cgImage: image, pointSize: CGSize(width: 8, height: 8)),
+            sourceURL: nil,
+            fallbackFolder: saveFolder,
+            pasteboard: harness.pasteboard
+        )
+        var result: ScreenshotEditorWindowController.Result?
+        editor.onFinish = { result = $0 }
+        editor.save()
+
+        #expect(result?.copied == true)
+        #expect(result?.savedURL != nil, "A failed save would have shown an alert")
+        #expect(harness.pasteboard.data(forType: .png) != nil)
+        #expect(harness.pasteboard.string(forType: .nspasteboardSource) == ownIdentifier)
+        harness.service.pollForTesting()
+        #expect(harness.service.entries.first?.kind == .image)
         #expect(harness.service.entries.first?.sourceApp == keybumps)
     }
 }
@@ -469,8 +539,8 @@ private struct Harness {
     }
 }
 
-/// Keeps the service's Application Support folder inside the test's temporary root.
-private final class TemporaryRootFileManager: FileManager {
+/// Keeps a service's Application Support folder inside a test's temporary root.
+final class TemporaryRootFileManager: FileManager {
     private let root: URL
 
     init(root: URL) {

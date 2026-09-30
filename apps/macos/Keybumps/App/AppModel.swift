@@ -153,7 +153,8 @@ final class AppModel {
         #endif
         self.licensing = licensing
         self.licenseSnapshot = licensing.snapshot
-        let clipboard = injectedClipboard ?? ClipboardHistoryService()
+        let clipboard = injectedClipboard
+            ?? ClipboardHistoryService(sourceApps: UnitTestHost.isActive ? .inert : .system)
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
         self.windows = injectedWindows ?? WindowManagementService()

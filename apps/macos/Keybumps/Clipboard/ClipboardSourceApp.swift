@@ -60,9 +60,13 @@ enum ClipboardSourceDomain {
         return nil
     }
 
-    /// The website domain of an http or https address: its host in ASCII, so an international or
-    /// lookalike domain keeps its punycode `xn--` form (as browsers show it), lowercased and without
-    /// a trailing dot. Nil for other schemes and for anything that isn't a website's domain name.
+    /// The website domain of an http or https address: its host in ASCII, lowercased and without a
+    /// trailing dot. Nil for other schemes and for anything that isn't a website's domain name.
+    ///
+    /// Every international domain is kept in its punycode `xn--` form. Browsers show lookalike
+    /// (mixed-script) domains that way but ordinary international domains in Unicode, so those
+    /// appear as `xn--…` here and a search in Unicode won't find them. That's the trade-off for never
+    /// showing a lookalike as the domain it imitates.
     static func host(ofPageAddress address: String?) -> String? {
         // `URLComponents.host` decodes punycode and percent escapes; `encodedHost` doesn't.
         guard let address, let components = URLComponents(string: address),
@@ -73,17 +77,20 @@ enum ClipboardSourceDomain {
     }
 
     /// A dotted name of letters, digits, and hyphens. That leaves out escapes, control characters,
-    /// and IPv6 literals; IPv4 addresses (a numeric last label); and `localhost` and other
-    /// single-label local names, which aren't websites.
+    /// and IPv6 literals; IPv4 addresses (a numeric last label); single-label names; and local and
+    /// special-use names (`localhost`, `.local`, `.test`, `.invalid`, `.internal`, and `.arpa`, which
+    /// includes `home.arpa`), which aren't websites.
     static func isWebsiteDomain(_ host: String) -> Bool {
         guard host.count <= 253, host.unicodeScalars.allSatisfy(hostCharacters.contains) else { return false }
         let labels = host.split(separator: ".", omittingEmptySubsequences: false)
         guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty && $0.count <= 63 }),
-              let last = labels.last, last != "localhost", !last.allSatisfy(\.isNumber) else { return false }
+              let last = labels.last, !last.allSatisfy(\.isNumber),
+              !localTopLevelLabels.contains(String(last)) else { return false }
         return true
     }
 
     private static let hostCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
+    private static let localTopLevelLabels: Set<String> = ["localhost", "local", "test", "invalid", "internal", "arpa"]
 
     /// WebKit's web archive is a property list whose main resource carries the page's address.
     static func mainResourceAddress(ofWebArchive data: Data) -> String? {
@@ -119,18 +126,28 @@ enum ClipboardSourceSearch {
         return false
     }
 
-    /// True when `query` matches `domain` from the start of a label other than the last one (the
-    /// top-level domain), or from a `www` label only when the query goes past `www.`.
+    /// True when `query` matches `domain` from the start of a label other than its public suffix (the
+    /// top-level domain, plus a common second-level label under a country code, as in `co.uk` or
+    /// `com.au`), or from a `www` label only when the query goes past `www.`. Other multi-label
+    /// public suffixes aren't known here, so a search can still match from their first label.
     static func matchesLabelStart(_ query: String, in domain: String) -> Bool {
         let query = query.lowercased()
         let labels = domain.split(separator: ".")
         guard !query.isEmpty, labels.count >= 2 else { return false }
-        for start in 0..<(labels.count - 1) where labels[start...].joined(separator: ".").hasPrefix(query) {
+        var suffixLength = 1
+        if labels.count >= 3, labels[labels.count - 1].count == 2,
+           countrySecondLevelLabels.contains(String(labels[labels.count - 2])) {
+            suffixLength = 2
+        }
+        for start in 0..<(labels.count - suffixLength) where labels[start...].joined(separator: ".").hasPrefix(query) {
             if labels[start] == "www", query.count <= 4 { continue }
             return true
         }
         return false
     }
+
+    /// Second-level labels commonly registered under two-letter country codes (`co.uk`, `com.au`).
+    private static let countrySecondLevelLabels: Set<String> = ["co", "com", "net", "org", "gov", "edu", "ac", "ne", "or", "go"]
 }
 
 extension NSPasteboard {
