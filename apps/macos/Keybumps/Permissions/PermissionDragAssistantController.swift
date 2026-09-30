@@ -20,8 +20,9 @@ enum PermissionAssistantCopy {
         "Turn on the \(permission.title) switch in the list above."
     }
 
-    static func relaunchInstruction(for permission: MacPermission) -> String {
-        "Restart Keybumps to finish \(permission.title) setup."
+    /// Keybumps can't tell whether the user turned the permission on, so the card asks.
+    static func systemSettingsFollowUp(for permission: MacPermission) -> String {
+        "Turned on \(permission.title) for Keybumps? Restart to finish."
     }
 }
 
@@ -32,7 +33,7 @@ final class PermissionDragAssistantController {
         case applicationDrag(MacPermission)
         case enableSwitch(MacPermission)
         case dictationSetup([MacPermission])
-        case relaunch(MacPermission)
+        case systemSettingsFollowUp(MacPermission)
     }
 
     private var panel: NSPanel?
@@ -58,14 +59,24 @@ final class PermissionDragAssistantController {
         panel?.orderFrontRegardless()
     }
 
-    /// Offers Restart when macOS applies a permission only after Keybumps relaunches. The panel
-    /// doesn't activate Keybumps, so this shows while the Settings window is closed.
-    func showRelaunch(for permission: MacPermission, restart: @escaping () -> Void) {
-        presentation = .relaunch(permission)
+    /// After System Settings was opened for `permission` and it's still missing: offers both Open
+    /// System Settings… and Restart Keybumps, since macOS sometimes applies a new grant only after
+    /// a relaunch and Keybumps can't tell. The panel doesn't activate Keybumps, so this shows while
+    /// the Settings window is closed.
+    func showSystemSettingsFollowUp(
+        for permission: MacPermission,
+        openSystemSettings: @escaping () -> Void,
+        restart: @escaping () -> Void
+    ) {
+        presentation = .systemSettingsFollowUp(permission)
         if panel == nil { makePanel() }
         panel?.contentViewController = NSHostingController(
-            rootView: PermissionRelaunchAssistantView(
+            rootView: PermissionFollowUpAssistantView(
                 permission: permission,
+                openSystemSettings: { [weak self] in
+                    self?.dismiss()
+                    openSystemSettings()
+                },
                 restart: restart,
                 dismiss: { [weak self] in self?.dismiss() }
             )
@@ -106,7 +117,7 @@ final class PermissionDragAssistantController {
     /// Dismisses a card about one permission once macOS reports it granted.
     func dismissIfGranted(using coordinator: PermissionCoordinator) {
         let permission: MacPermission? = switch presentation {
-        case .applicationDrag(let permission), .enableSwitch(let permission), .relaunch(let permission): permission
+        case .applicationDrag(let permission), .enableSwitch(let permission), .systemSettingsFollowUp(let permission): permission
         case .dictationSetup, nil: nil
         }
         guard let permission, coordinator.state(for: permission).isGranted else { return }
@@ -249,8 +260,9 @@ private struct PermissionSwitchAssistantView: View {
     }
 }
 
-private struct PermissionRelaunchAssistantView: View {
+struct PermissionFollowUpAssistantView: View {
     let permission: MacPermission
+    let openSystemSettings: () -> Void
     let restart: () -> Void
     let dismiss: () -> Void
 
@@ -261,11 +273,13 @@ private struct PermissionRelaunchAssistantView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(PermissionAssistantCopy.title)
                         .font(.system(size: 15, weight: .semibold))
-                    Text(PermissionAssistantCopy.relaunchInstruction(for: permission))
+                    Text(PermissionAssistantCopy.systemSettingsFollowUp(for: permission))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
+                Spacer(minLength: 8)
+                Button("Open System Settings…", action: openSystemSettings)
                 Button("Restart Keybumps", action: restart)
                     .buttonStyle(.borderedProminent)
                     .padding(.trailing, 28)
@@ -282,11 +296,11 @@ private struct PermissionRelaunchAssistantView: View {
             }
             .buttonStyle(.borderless)
             .padding(10)
-            .accessibilityLabel("Close restart reminder")
+            .accessibilityLabel("Close permission follow-up")
         }
         .padding(6)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(PermissionAssistantCopy.relaunchInstruction(for: permission))
+        .accessibilityLabel(PermissionAssistantCopy.systemSettingsFollowUp(for: permission))
     }
 }
 

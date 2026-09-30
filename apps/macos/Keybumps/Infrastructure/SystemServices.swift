@@ -83,46 +83,6 @@ enum SystemSettingsPage: Equatable {
         case .screenRecording: "Privacy_ScreenCapture"
         }
     }
-
-    /// System Settings' bundle identifier, unchanged since it was System Preferences.
-    static let applicationBundleIdentifier = "com.apple.systempreferences"
-}
-
-/// Reports which app comes to the front, by bundle identifier only. The shell compares it with
-/// System Settings and Keybumps; nothing is kept or logged.
-@MainActor
-protocol ApplicationActivationObserving: AnyObject {
-    var onActivate: ((String?) -> Void)? { get set }
-}
-
-@MainActor
-final class WorkspaceActivationObserver: ApplicationActivationObserving {
-    var onActivate: ((String?) -> Void)?
-    private let center: NotificationCenter
-    private var observer: NSObjectProtocol?
-
-    init(center: NotificationCenter = NSWorkspace.shared.notificationCenter) {
-        self.center = center
-        observer = center.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            let bundleIdentifier = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?
-                .bundleIdentifier
-            MainActor.assumeIsolated { self?.onActivate?(bundleIdentifier) }
-        }
-    }
-
-    deinit {
-        if let observer { center.removeObserver(observer) }
-    }
-}
-
-/// Never reports an activation: the unit-test host, so tests never read which app is in front.
-@MainActor
-final class InertActivationObserver: ApplicationActivationObserving {
-    var onActivate: ((String?) -> Void)?
 }
 
 enum PermissionAuthorizationState: String, Equatable {
@@ -174,8 +134,11 @@ struct PermissionRelaunchAdvisor {
     private var permissionsAwaitingReturn: [MacPermission] = []
     private(set) var permissionsRequiringRelaunch: [MacPermission] = []
 
-    /// Whether System Settings was opened for a permission the user hasn't come back from.
-    var isAwaitingReturn: Bool { !permissionsAwaitingReturn.isEmpty }
+    /// Whether System Settings was opened for `permission` and it isn't usable yet. That's no
+    /// evidence it was turned on, so it never counts as needing a relaunch by itself.
+    func hasOpenedSystemSettings(for permission: MacPermission) -> Bool {
+        permissionsAwaitingReturn.contains(permission) || permissionsRequiringRelaunch.contains(permission)
+    }
 
     mutating func didOpenSystemSettings(for permission: MacPermission) {
         guard permission.usesApplicationDragAssistant else { return }

@@ -63,8 +63,9 @@ final class AppModel {
     /// How the current walkthrough step was presented, so a declined native prompt ends setup.
     @ObservationIgnored private var presentedWalkthroughAction: PermissionRecoveryAction?
     @ObservationIgnored private var permissionWalkthroughMonitor: Task<Void, Never>?
+    /// The capability a walkthrough sets up, or nil for every enabled capability.
+    @ObservationIgnored private var permissionWalkthroughCapability: Capability?
     private let permissionPollInterval: Duration
-    private let applicationActivations: any ApplicationActivationObserving
     @ObservationIgnored private var permissionRelaunchAdvisor = PermissionRelaunchAdvisor()
     private(set) var detectorStatus: ManualActionDetector.Status = .stopped
     private(set) var isAccessibilityTrusted = false
@@ -148,14 +149,10 @@ final class AppModel {
         screenshotCapturer: ScreenshotCapturer? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil,
         dictationPasteStep: DictationPasteStep? = nil,
-        permissionPollInterval: Duration = .seconds(1),
-        applicationActivations injectedApplicationActivations: (any ApplicationActivationObserving)? = nil
+        permissionPollInterval: Duration = .seconds(1)
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
         self.permissionPollInterval = permissionPollInterval
-        // Unit tests never read which app is in front.
-        applicationActivations = injectedApplicationActivations
-            ?? (UnitTestHost.isActive ? InertActivationObserver() : WorkspaceActivationObserver())
         self.coachTips = coachTips ?? PaletteHUD.shared
         let permissions = permissionCoordinator ?? PermissionCoordinator()
         self.permissions = permissions
@@ -268,9 +265,6 @@ final class AppModel {
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
-        applicationActivations.onActivate = { [weak self] bundleIdentifier in
-            self?.applicationDidActivate(bundleIdentifier: bundleIdentifier)
-        }
         refreshDetectorState()
     }
 
@@ -306,6 +300,8 @@ final class AppModel {
     private func licenseDidChange(_ snapshot: LicenseSnapshot) {
         let wasLicensed = isLicensed
         licenseSnapshot = snapshot
+        // Locked runs no capability, so there's nothing to set up.
+        if !snapshot.isEntitled { endPermissionWalkthrough() }
         guard wasLicensed != snapshot.isEntitled, isStarted, preferences.didCompleteOnboarding else { return }
         if !snapshot.isEntitled {
             // Locked: stop every capability's resources and shortcuts, and close the palette.
@@ -364,7 +360,11 @@ final class AppModel {
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
-        if !enabled { capabilities.deactivate(capability, context: capabilityContext) }
+        if !enabled {
+            capabilities.deactivate(capability, context: capabilityContext)
+            // Setup for a capability that's now off would prompt for nothing.
+            if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
+        }
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
     }
@@ -395,9 +395,7 @@ final class AppModel {
             isPermissionSetupRunning: isPermissionWalkthroughActive
         ) {
         case .showPermissionSetup:
-            // Access granted in System Settings that macOS applies only after a relaunch: sending
-            // the user back to System Settings wouldn't help.
-            if showRelaunchCardIfNeeded(for: missing) { return }
+            if showSystemSettingsFollowUpIfNeeded(for: missing) { return }
             permissionDragAssistant.showDictationSetup(missingPermissions: missing) { [weak self] in
                 self?.beginPermissionWalkthrough(for: .dictation)
             }
@@ -408,27 +406,39 @@ final class AppModel {
         }
     }
 
-    /// The Dictation shortcut while setup is running. There's no second card: the time limit
-    /// restarts, and a System Settings step comes back. A native prompt already on screen is
-    /// left alone.
+    /// The Dictation shortcut while setup is running. It never shows a second setup card; the
+    /// time limit restarts, and the current step decides what the press shows.
     private func continuePermissionWalkthrough() {
         startPermissionWalkthroughMonitor()
-        if showRelaunchCardIfNeeded(for: permissionWalkthroughPermissions) { return }
-        guard let current = presentedWalkthroughPermission,
-              permissions.recoveryAction(for: current) == .openSystemSettings else { return }
-        Task { [weak self] in
-            await self?.recoverPermission(current)
+        guard let current = presentedWalkthroughPermission else { return }
+        switch permissions.recoveryAction(for: current) {
+        case .openSystemSettings:
+            if showSystemSettingsFollowUpIfNeeded(for: [current]) { return }
+            Task { [weak self] in await self?.recoverPermission(current) }
+        case .request:
+            // While its request is outstanding, the prompt is on screen: leave it alone. Without
+            // one, the prompt never appeared, so ask again; macOS shows it only while undecided.
+            guard permissions.activeRequest == nil else { return }
+            Task { [weak self] in await self?.recoverPermission(current) }
+        case .none:
+            break
         }
     }
 
-    /// Shows Restart on a setup card when one of `permissions` needs Keybumps to relaunch. The card
-    /// doesn't activate Keybumps, so it works while the Settings window, and its alert, is closed.
+    /// After System Settings was opened for a step that's still missing, Keybumps can't tell
+    /// whether the user turned it on and macOS wants a relaunch (rare), or didn't turn it on.
+    /// So instead of guessing, one card offers both: Open System Settings… and Restart Keybumps.
+    /// It never records a relaunch as needed.
     @discardableResult
-    private func showRelaunchCardIfNeeded(for permissions: [MacPermission]) -> Bool {
-        guard let permission = permissionsRequiringRelaunch.first(where: permissions.contains) else { return false }
-        permissionDragAssistant.showRelaunch(for: permission) { [weak self] in
-            self?.restartForPermissionRelaunch()
+    private func showSystemSettingsFollowUpIfNeeded(for permissions: [MacPermission]) -> Bool {
+        guard let permission = permissions.first(where: { permissionRelaunchAdvisor.hasOpenedSystemSettings(for: $0) }) else {
+            return false
         }
+        permissionDragAssistant.showSystemSettingsFollowUp(
+            for: permission,
+            openSystemSettings: { [weak self] in self?.beginPermissionWalkthrough(for: .dictation) },
+            restart: { [weak self] in self?.restartForPermissionRelaunch() }
+        )
         return true
     }
 
@@ -468,6 +478,7 @@ final class AppModel {
         permissionWalkthroughPermissions = PermissionSetupPlan.requiredPermissions(
             for: capability.map { Set([$0]) } ?? preferences.enabledCapabilities
         )
+        permissionWalkthroughCapability = capability
         presentedWalkthroughPermission = nil
         presentedWalkthroughAction = nil
         isPermissionWalkthroughActive = true
@@ -490,6 +501,8 @@ final class AppModel {
                 guard let self, self.isPermissionWalkthroughActive else { return }
                 self.refreshPermissions()
             }
+            // A shortcut press may have started a new monitor since the last check.
+            guard !Task.isCancelled else { return }
             self?.endPermissionWalkthrough()
         }
     }
@@ -498,6 +511,7 @@ final class AppModel {
     func endPermissionWalkthrough() {
         isPermissionWalkthroughActive = false
         permissionWalkthroughPermissions = []
+        permissionWalkthroughCapability = nil
         presentedWalkthroughPermission = nil
         presentedWalkthroughAction = nil
         permissionWalkthroughMonitor?.cancel()
@@ -509,30 +523,14 @@ final class AppModel {
     func requestInputMonitoringPermission() { detector.requestInputMonitoringPermission(); refreshPermissions() }
     func retryDetection() { if preferences.enabledCapabilities.contains(.keyboardShortcutter) { detector.start() }; refreshDetectorState() }
     func applicationDidBecomeActive() {
-        checkPermissionsAfterReturn()
-        if relaunchPromptPermission == nil {
-            relaunchPromptPermission = permissionsRequiringRelaunch.first
-        }
-    }
-
-    /// Another app came to the front. Leaving System Settings for another app counts as returning
-    /// from a permission step, since the setup cards never make Keybumps active. If macOS applies
-    /// the access only after a relaunch, Restart appears on a card. Keybumps' own activation takes
-    /// `applicationDidBecomeActive`. The bundle identifier is only compared, never kept.
-    func applicationDidActivate(bundleIdentifier: String?) {
-        guard permissionRelaunchAdvisor.isAwaitingReturn,
-              bundleIdentifier != SystemSettingsPage.applicationBundleIdentifier,
-              bundleIdentifier != Bundle.main.bundleIdentifier else { return }
-        checkPermissionsAfterReturn()
-        showRelaunchCardIfNeeded(for: MacPermission.allCases)
-    }
-
-    private func checkPermissionsAfterReturn() {
         refreshPermissions()
         permissionRelaunchAdvisor.didBecomeActive { [permissions] permission in
             permissions.state(for: permission)
         }
         permissionsRequiringRelaunch = permissionRelaunchAdvisor.permissionsRequiringRelaunch
+        if relaunchPromptPermission == nil {
+            relaunchPromptPermission = permissionsRequiringRelaunch.first
+        }
     }
 
     func applicationDidResignActive() {
@@ -620,8 +618,21 @@ final class AppModel {
 
     private func advancePermissionWalkthroughIfNeeded() {
         guard isPermissionWalkthroughActive else { return }
+        // Setup only for capabilities that can run: turning its capability off, or the app
+        // locking, ends it.
+        let running = capabilityContext.enabledCapabilities
+        if let capability = permissionWalkthroughCapability, !running.contains(capability) {
+            endPermissionWalkthrough()
+            return
+        }
+        // A native prompt is on screen. Its own completion advances setup; moving on now would
+        // start the next request while this one holds the coordinator, which then skips it.
+        guard permissions.activeRequest == nil else { return }
+        let needed = Set(PermissionSetupPlan.requiredPermissions(
+            for: permissionWalkthroughCapability.map { [$0] } ?? running
+        ))
         guard let next = permissionWalkthroughPermissions.first(where: {
-            !permissions.state(for: $0).isGranted
+            needed.contains($0) && !permissions.state(for: $0).isGranted
         }) else {
             endPermissionWalkthrough()
             return

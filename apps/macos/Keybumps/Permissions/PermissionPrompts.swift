@@ -3,7 +3,13 @@ import AVFoundation
 import CoreGraphics
 import Speech
 
-/// Every macOS permission prompt Keybumps can show, plus opening System Settings.
+/// Every macOS permission prompt Keybumps asks for, plus opening System Settings.
+///
+/// macOS also prompts on its own, outside this type:
+/// - Files & Folders, the first time Keybumps reads a protected folder: Dictation History in
+///   Documents, or the screenshot folder (the Desktop by default).
+/// - The "would like to control this computer" alert, if keyboard events were posted without
+///   Accessibility. `DictationPasteShortcut.post` checks first, so this never happens.
 ///
 /// Only `PermissionCoordinator` calls these, and only from explicit request paths:
 /// - Microphone and Speech Recognition, while macOS hasn't asked yet: Request Access… on the

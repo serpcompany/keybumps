@@ -105,7 +105,9 @@ extension AppModel {
             ),
             allowsDictationSystemAccess: false,
             screenshotEditorFallbackFolder: { sandbox.screenshots },
-            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences()
+            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences(),
+            // Never writes the pasteboard or posts ⌘V, even if system access were allowed.
+            dictationPasteStep: .inert
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {
             model.clipboard.ingestImageFile(at: image, isScreenCapture: false)

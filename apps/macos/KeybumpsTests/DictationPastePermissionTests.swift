@@ -59,7 +59,7 @@ struct DictationPastePermissionTests {
         #expect(PermissionSettingsRowAction.resolve(permission: .accessibility, state: .required, requiresRelaunch: false) == .recoverInSystemSettings)
     }
 
-    @Test("While setup runs, the Dictation shortcut continues it instead of showing another card")
+    @Test("While setup runs, the Dictation shortcut continues it instead of showing another setup card")
     func runningSetupRoutesToContinue() {
         #expect(DictationShortcutRouting.action(phase: .idle, missingPermissions: [.accessibility], isPermissionSetupRunning: true)
                 == .continuePermissionSetup)
@@ -78,7 +78,8 @@ struct DictationPastePermissionTests {
         #expect(MacPermission.names([.accessibility, .microphone, .speechRecognition]) == "Accessibility, Microphone, and Speech Recognition")
         #expect(DictationSetupCopy.settingsNote(missing: [.accessibility])
                 == "Dictation needs Accessibility access before its shortcut can record and paste.")
-        #expect(PermissionAssistantCopy.relaunchInstruction(for: .accessibility) == "Restart Keybumps to finish Accessibility setup.")
+        #expect(PermissionAssistantCopy.systemSettingsFollowUp(for: .accessibility)
+                == "Turned on Accessibility for Keybumps? Restart to finish.")
     }
 
     @Test("An insertion without Accessibility never runs the paste step")
@@ -184,7 +185,6 @@ struct DictationPastePermissionTests {
         for _ in 0..<5 {
             harness.model.refreshPermissions()
             harness.model.applicationDidBecomeActive()
-            harness.activations.activate("com.example.Editor")
         }
         #expect(harness.model.missingPermissions(for: .dictation) == [.accessibility, .microphone, .speechRecognition])
         #expect(harness.model.missingPermissionCount == 3)
@@ -222,30 +222,103 @@ struct DictationPastePermissionTests {
         #expect(harness.model.missingPermissions(for: .dictation).isEmpty)
     }
 
-    @Test("The shortcut during setup brings back the System Settings step, never a second card or prompt")
-    func shortcutDuringSetupContinuesIt() async throws {
+    @Test("Leaving System Settings without turning Keybumps on never claims a relaunch; the shortcut offers System Settings again")
+    func leavingWithoutGrantingKeepsSystemSettingsReachable() async throws {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
-        harness.pressDictationShortcut()
-        #expect(harness.model.permissionAssistantPresentation == .dictationSetup([.accessibility, .microphone, .speechRecognition]))
-        harness.model.beginPermissionWalkthrough(for: .dictation) // what the card's Set Up Dictation… does
+        harness.model.beginPermissionWalkthrough(for: .dictation)
         try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        // The user goes back to another app without turning Keybumps on; re-checks keep running.
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.model.relaunchPromptPermission == nil)
+        #expect(!harness.model.requiresPermissionRelaunch(.accessibility), "the Permissions row keeps Open System Settings…")
 
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility),
+                "one card with Open System Settings… and Restart Keybumps, not a second setup card")
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty, "offering Restart records nothing")
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+
+        // Open System Settings… on that card restarts the step, and its drag card comes back.
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        #expect(harness.model.permissionAssistantPresentation == nil)
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        #expect(harness.prompts.calls == [.openSettings(.accessibility), .openSettings(.accessibility)])
+    }
+
+    @Test("When macOS reports no grant after Keybumps comes back, Restart is offered beside System Settings, never alone")
+    func realRelaunchOffersRestartBesideSystemSettings() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
+        // Keybumps was switched on, but macOS reports it untrusted until a relaunch; the user returns to Keybumps.
+        harness.model.applicationDidBecomeActive()
+        #expect(harness.model.permissionsRequiringRelaunch == [.accessibility])
+        #expect(harness.model.relaunchPromptPermission == .accessibility, "the Settings window's Restart alert, as before")
+
+        harness.model.endPermissionWalkthrough()
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility))
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+
+        // Once macOS reports the grant, the relaunch state and the card go.
+        harness.grants.grant(.accessibility)
+        harness.model.refreshPermissions()
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.model.permissionAssistantPresentation == nil)
+    }
+
+    @Test("The shortcut during setup leaves a prompt on screen alone, and asks again only if it never appeared")
+    func shortcutDuringSetupRespectsPrompts() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+        harness.grants.grant(.accessibility)
+        let gate = Gate()
+        harness.prompts.microphoneRequest = { await gate.wait() }
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.prompts.calls == [.requestMicrophone] }
+        // Microphone's prompt is on screen (its request is outstanding).
+        harness.pressDictationShortcut()
+        harness.pressDictationShortcut()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(harness.prompts.calls == [.requestMicrophone])
+        #expect(harness.model.permissionAssistantPresentation == nil, "no second setup card")
+
+        // The user closes the prompt without deciding (it never showed); the next press asks again.
+        harness.prompts.microphoneRequest = nil
+        gate.release()
+        try await Task.sleep(for: .milliseconds(50))
         harness.pressDictationShortcut()
         try await harness.waitUntil { harness.prompts.calls.count == 2 }
-        #expect(harness.prompts.calls == [.openSettings(.accessibility), .openSettings(.accessibility)])
-        try await Task.sleep(for: .milliseconds(500)) // the step's drag card comes back after System Settings opens
-        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+        #expect(harness.prompts.calls == [.requestMicrophone, .requestMicrophone])
+    }
 
+    @Test("A re-check while a prompt is outstanding doesn't skip the next prompt")
+    func recheckDuringPromptKeepsTheNextStep() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
         harness.grants.grant(.accessibility)
-        try await harness.waitUntil { harness.prompts.calls.count == 3 }
-        // Microphone's prompt is on screen now; the shortcut leaves it alone.
-        harness.pressDictationShortcut()
-        harness.pressDictationShortcut()
+        let gate = Gate()
+        let grants = harness.grants
+        // macOS reports the grant before the request returns, and re-checks run in between.
+        harness.prompts.microphoneRequest = {
+            grants.grant(.microphone)
+            await gate.wait()
+        }
+
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.prompts.calls == [.requestMicrophone] }
         try await Task.sleep(for: .milliseconds(100))
-        #expect(harness.prompts.calls == [.openSettings(.accessibility), .openSettings(.accessibility), .requestMicrophone])
-        #expect(harness.model.permissionAssistantPresentation == nil)
+        #expect(harness.prompts.calls == [.requestMicrophone], "no step starts while Microphone's request is outstanding")
+
+        gate.release()
+        try await harness.waitUntil { harness.prompts.calls.count == 2 }
+        #expect(harness.prompts.calls == [.requestMicrophone, .requestSpeechRecognition])
     }
 
     @Test("Answering Don't Allow to a native prompt ends setup instead of opening System Settings unasked")
@@ -265,58 +338,54 @@ struct DictationPastePermissionTests {
                 "the next press offers setup again, which recovers a denial through System Settings")
     }
 
-    @Test("Setup stops re-checking after its time limit")
-    func walkthroughMonitorIsBounded() async throws {
-        let harness = try PromptHarness(pollInterval: .zero)
-        defer { harness.tearDown() }
-
-        harness.model.beginPermissionWalkthrough(for: .dictation)
-        try await harness.waitUntil { !harness.model.isPermissionWalkthroughActive }
-        #expect(harness.model.missingPermissions(for: .dictation) == [.accessibility, .microphone, .speechRecognition])
-        #expect(AppModel.permissionWalkthroughMaximumChecks == 600, "10 minutes at one check a second")
-    }
-
-    @Test("Leaving System Settings for another app shows Restart when macOS needs a relaunch, without activating Keybumps")
-    func relaunchCardWithoutActivation() async throws {
+    @Test("Turning Dictation off ends its setup, so no prompt follows for a capability that's off")
+    func disablingDictationEndsSetup() async throws {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
         harness.model.beginPermissionWalkthrough(for: .dictation)
-        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
-        harness.activations.activate(SystemSettingsPage.applicationBundleIdentifier)
-        harness.activations.activate(Bundle.main.bundleIdentifier)
-        #expect(harness.model.permissionsRequiringRelaunch.isEmpty, "System Settings and Keybumps itself don't count as leaving")
+        try await harness.waitUntil { harness.prompts.calls == [.openSettings(.accessibility)] }
+        harness.model.setCapability(.dictation, enabled: false)
+        #expect(!harness.model.isPermissionWalkthroughActive)
 
-        // Keybumps was switched on in System Settings, but macOS still reports it untrusted.
-        harness.activations.activate("com.example.Editor")
-        #expect(harness.model.permissionsRequiringRelaunch == [.accessibility])
-        #expect(harness.model.permissionAssistantPresentation == .relaunch(.accessibility))
-
-        // The shortcut offers Restart rather than sending the user back to System Settings.
-        harness.pressDictationShortcut()
-        #expect(harness.model.permissionAssistantPresentation == .relaunch(.accessibility))
+        harness.grants.grant(.accessibility) // for example, for Window Manager
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
     }
 
-    @Test("The workspace observer reports only the activated app's bundle identifier")
-    func workspaceObserverReportsBundleIdentifier() async throws {
-        let center = NotificationCenter()
-        let observer = WorkspaceActivationObserver(center: center)
-        var reported: [String?] = []
-        observer.onActivate = { reported.append($0) }
+    @Test("Locking ends setup")
+    func lockingEndsSetup() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
 
-        // The test host itself, so no test reads which of the owner's apps is in front.
-        center.post(
-            name: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            userInfo: [NSWorkspace.applicationUserInfoKey: NSRunningApplication.current]
-        )
-        for _ in 0..<100 where reported.isEmpty {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { harness.prompts.calls == [.openSettings(.accessibility)] }
+        await harness.model.deactivateLicense()
+        #expect(!harness.model.isLicensed)
+        #expect(!harness.model.isPermissionWalkthroughActive)
 
-        #expect(reported == [Bundle.main.bundleIdentifier])
+        harness.grants.grant(.accessibility)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+    }
+
+    @Test("Setup stops re-checking after 600 checks")
+    func walkthroughMonitorIsBounded() async throws {
+        let harness = try PromptHarness(pollInterval: .zero)
+        defer { harness.tearDown() }
+
+        let before = harness.grants.accessibilityReads
+        harness.model.beginPermissionWalkthrough(for: .dictation)
+        try await harness.waitUntil { !harness.model.isPermissionWalkthroughActive }
+        try await Task.sleep(for: .milliseconds(600)) // the step's delayed drag card re-checks once more
+        let reads = harness.grants.accessibilityReads - before
+
+        // One read per re-check, plus the few the first step makes itself.
+        #expect((AppModel.permissionWalkthroughMaximumChecks...(AppModel.permissionWalkthroughMaximumChecks + 8)).contains(reads),
+                "\(reads) reads")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(harness.grants.accessibilityReads - before == reads, "no re-checks after the limit")
+        #expect(AppModel.permissionWalkthroughMaximumChecks == 600, "10 minutes at one check a second")
     }
 
     @Test("Other System Settings pages open through the coordinator")
@@ -344,19 +413,26 @@ struct PermissionPromptSourceTests {
     /// They may appear only in `PermissionPrompts.swift`.
     private static let promptPatterns = [
         #"\bCGRequestScreenCaptureAccess\b"#,
-        #"\brequestAccess\s*\("#,                    // AVCaptureDevice, CNContactStore, EKEventStore
-        #"\brequest\w*Authorization\b"#,             // SFSpeechRecognizer, UNUserNotificationCenter, CLLocationManager, PHPhotoLibrary
-        #"\brequestRecordPermission\b"#,             // AVAudioApplication, AVAudioSession
+        #"\brequestAccess\s*\("#,            // capture devices, contacts, calendars
+        #"\brequest\w*Authorization\b"#,     // speech, notifications, location, photos
+        #"\brequestRecordPermission\b"#,     // the audio application and session
         #"\bAVAudioApplication\b"#,
-        #"\brequest(Full|WriteOnly)Access"#          // EventKit
+        #"\brequest(Full|WriteOnly)Access"#  // calendars and reminders
     ]
 
     /// Prompts for Accessibility, Input Monitoring, or event posting. Nothing may call these.
     private static let forbiddenPatterns = [
         #"\bAXIsProcessTrustedWithOptions\b"#,
         #"\bkAXTrustedCheckOptionPrompt\b"#,
-        #"\bCGRequest(?!ScreenCaptureAccess)\w*Access\b"#, // CGRequestListenEventAccess, CGRequestPostEventAccess
+        #"\bCGRequest(?!ScreenCaptureAccess)\w*Access\b"#, // the listen- and post-event requests
         #"\bIOHIDRequestAccess\b"#
+    ]
+
+    /// Ways to post keyboard events or drive another app's keyboard.
+    private static let postingPatterns = [
+        #"\.post\s*\(\s*tap:"#, #"\bCGEventPost"#, #"\bpostToPid\b"#, #"\bpostToPSN\b"#,
+        #"\btapPostEvent\b"#, #"\bCGEventTapPostEvent\b"#, #"\bAXUIElementPostKeyboardEvent\b"#,
+        #"\bNSAppleScript\b"#, #"\bOSAScript\b"#, #"\bkeystroke\s+""#, #"\bkey\s+code\s+\d"#
     ]
 
     /// The files allowed to post keyboard events. The poster must check Accessibility itself,
@@ -364,11 +440,26 @@ struct PermissionPromptSourceTests {
     /// a shared paster, list that file here in place of Dictation's.
     private static let keyboardEventPosters = ["Dictation/DictationService.swift"]
 
+    /// Test lines allowed to name the real prompts: this suite's own check that they're real.
+    private static let allowedTestLines: Set<String> = ["#expect(PermissionPrompts" + ".system.kind == .system)"]
+
     @Test("The unit-test host's default prompts are inert")
     func unitTestHostPromptsAreInert() {
         #expect(UnitTestHost.isActive)
         #expect(PermissionPrompts.current.kind == .inert)
         #expect(PermissionPrompts.system.kind == .system)
+    }
+
+    @Test("The UI-test composition passes inert prompts and an inert paste step")
+    func uiTestCompositionIsInert() throws {
+        // `makeForUITesting` wipes the UI-test sandbox and creates a real preferences suite, so the
+        // unit tests check its source instead of building it.
+        let source = try String(contentsOf: Self.appDirectory.appendingPathComponent("App/UITestComposition.swift"), encoding: .utf8)
+        for seam in ["requestMicrophone: PermissionPrompts.inert", "requestSpeechRecognition: PermissionPrompts.inert",
+                     "requestScreenRecording: PermissionPrompts.inert", "openSystemSettings: PermissionPrompts.inert",
+                     "allowsDictationSystemAccess: false", "dictationPasteStep: .inert"] {
+            #expect(source.contains(seam), "missing \(seam)")
+        }
     }
 
     @Test("Undecided Microphone and Speech Recognition prompt only through the injected requests")
@@ -415,9 +506,8 @@ struct PermissionPromptSourceTests {
 
     @Test("Only the Accessibility-gated ⌘V poster posts keyboard events")
     func eventPostingLivesOnlyInThePasteStep() throws {
-        let postingPatterns = [#"\.post\s*\(\s*tap:"#, #"\bCGEventPost"#, #"\bpostToPid\b"#, #"\bpostToPSN\b"#]
         let sources = try Self.appSources()
-        let posters = sources.filter { _, text in !Self.matches(postingPatterns, in: text).isEmpty }.keys.sorted()
+        let posters = sources.filter { _, text in !Self.matches(Self.postingPatterns, in: text).isEmpty }.keys.sorted()
         #expect(posters == Self.keyboardEventPosters)
     }
 
@@ -428,18 +518,41 @@ struct PermissionPromptSourceTests {
         #expect(openers == ["Infrastructure/SystemServices.swift"])
     }
 
-    @Test("No test calls a prompt API or uses the real system prompts")
+    @Test("No test calls a prompt API, posts keyboard events, or uses the real system prompts")
     func testsNeverPrompt() throws {
         let token = "PermissionPrompts" + ".system"
         let sources = try FileManager.default.contentsOfDirectory(at: Self.testsDirectory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "swift" && $0.lastPathComponent != "DictationPastePermissionTests.swift" }
-        #expect(!sources.isEmpty)
+            .filter { $0.pathExtension == "swift" }
+        #expect(sources.contains { $0.lastPathComponent == "DictationPastePermissionTests.swift" }, "this file is scanned too")
         for source in sources {
-            let text = try String(contentsOf: source, encoding: .utf8)
+            let text = try Self.scannableTestSource(String(contentsOf: source, encoding: .utf8))
             #expect(!text.contains(token), "\(source.lastPathComponent) uses the real permission prompts")
-            #expect(Self.matches(Self.promptPatterns + Self.forbiddenPatterns, in: text).isEmpty,
-                    "\(source.lastPathComponent) calls a macOS prompt API")
+            #expect(Self.matches(Self.promptPatterns + Self.forbiddenPatterns + Self.postingPatterns, in: text).isEmpty,
+                    "\(source.lastPathComponent) calls a macOS prompt or posting API")
         }
+    }
+
+    @Test("The test scan still sees code once pattern literals and allowed lines are removed")
+    func testScanStripsOnlyLiteralsAndAllowedLines() {
+        // Built by concatenation, so this file's own scan doesn't see these spellings.
+        let audioApplication = "AVAudio" + "Application"
+        let realPrompts = "PermissionPrompts" + ".system"
+        let scanned = Self.scannableTestSource([
+            "let pattern = #\"\\b\(audioApplication)\\b\"#",
+            "    #expect(\(realPrompts).kind == .system)",
+            "_ = AVCaptureDevice." + "request" + "Access(for: .audio)"
+        ].joined(separator: "\n"))
+        #expect(!scanned.contains(audioApplication))
+        #expect(!scanned.contains(realPrompts))
+        #expect(!Self.matches(Self.promptPatterns, in: scanned).isEmpty, "a real call is still caught")
+    }
+
+    /// A test source without raw-string literals (the pattern lists) and without allowed lines.
+    private static func scannableTestSource(_ text: String) -> String {
+        text.components(separatedBy: "\n")
+            .filter { !allowedTestLines.contains($0.trimmingCharacters(in: .whitespaces)) }
+            .joined(separator: "\n")
+            .replacingOccurrences(of: ##"#"[^"\n]*"#"##, with: "", options: .regularExpression)
     }
 
     private static func matches(_ patterns: [String], in text: String) -> [String] {
@@ -485,6 +598,24 @@ private struct Sandbox {
     }
 }
 
+/// Holds a fake request open until the test releases it, like a prompt waiting for the user.
+@MainActor
+private final class Gate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 /// Records every prompt and System Settings request a coordinator makes.
 private final class PromptRecorder {
     enum Call: Equatable {
@@ -496,6 +627,8 @@ private final class PromptRecorder {
     }
 
     private(set) var calls: [Call] = []
+    /// Runs inside the fake Microphone request, before it returns.
+    var microphoneRequest: (() async -> Void)?
 
     func record(_ call: Call) { calls.append(call) }
 }
@@ -504,10 +637,17 @@ private final class PromptRecorder {
 private final class FakeGrants {
     private var granted: Set<MacPermission> = []
     private var denied: Set<MacPermission> = []
+    /// How often the permission coordinator has read Accessibility.
+    private(set) var accessibilityReads = 0
 
     func grant(_ permission: MacPermission) { granted.insert(permission) }
     func deny(_ permission: MacPermission) { denied.insert(permission) }
     func contains(_ permission: MacPermission) -> Bool { granted.contains(permission) }
+
+    func readAccessibility() -> Bool {
+        accessibilityReads += 1
+        return granted.contains(.accessibility)
+    }
 
     func microphoneStatus() -> AVAuthorizationStatus {
         granted.contains(.microphone) ? .authorized : denied.contains(.microphone) ? .denied : .notDetermined
@@ -518,19 +658,11 @@ private final class FakeGrants {
     }
 }
 
-/// Reports app activations the test chooses, in place of the workspace.
-@MainActor
-private final class FakeActivations: ApplicationActivationObserving {
-    var onActivate: ((String?) -> Void)?
-    func activate(_ bundleIdentifier: String?) { onActivate?(bundleIdentifier) }
-}
-
-/// A Dictation-only `AppModel` whose permissions, prompts, activations, and paste step are fakes.
+/// A Dictation-only `AppModel` whose permissions, prompts, and paste step are fakes.
 @MainActor
 private final class PromptHarness {
     let prompts: PromptRecorder
     let grants: FakeGrants
-    let activations = FakeActivations()
     let model: AppModel
     private let sandbox: Sandbox
     private let pasteboard: NSPasteboard
@@ -562,12 +694,15 @@ private final class PromptHarness {
         )
 
         let permissions = PermissionCoordinator(
-            accessibilityTrusted: { grants.contains(.accessibility) },
+            accessibilityTrusted: { grants.readAccessibility() },
             inputMonitoringAuthorized: { grants.contains(.inputMonitoring) },
             microphoneAuthorizationStatus: { grants.microphoneStatus() },
             speechAuthorizationStatus: { grants.speechStatus() },
             screenRecordingAuthorized: { grants.contains(.screenRecording) },
-            requestMicrophone: { prompts.record(.requestMicrophone) },
+            requestMicrophone: {
+                prompts.record(.requestMicrophone)
+                await prompts.microphoneRequest?()
+            },
             requestSpeechRecognition: { prompts.record(.requestSpeechRecognition) },
             requestScreenRecording: { prompts.record(.requestScreenRecording) },
             openSettings: { prompts.record(.openSettings($0)) },
@@ -595,8 +730,7 @@ private final class PromptHarness {
             dictationFileManager: sandbox.fileManager,
             allowsDictationSystemAccess: allowsDictationSystemAccess,
             dictationPasteStep: pasteStep,
-            permissionPollInterval: pollInterval,
-            applicationActivations: activations
+            permissionPollInterval: pollInterval
         )
     }
 
