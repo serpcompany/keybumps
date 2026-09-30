@@ -20,7 +20,8 @@ struct SnippetImportBatch: Equatable {
 /// What an import did, as counts only: never a snippet's name, keyword, or text.
 struct SnippetImportSummary: Equatable {
     var imported = 0
-    /// Already in the library (the same ID, from an earlier import), so skipped.
+    /// Already in the library (the same ID, from an earlier import), or with a Keychain item left
+    /// from one, so skipped.
     var alreadyImported = 0
     /// Imported without their keyword, which had spaces or was already another snippet's.
     var keywordsDropped = 0

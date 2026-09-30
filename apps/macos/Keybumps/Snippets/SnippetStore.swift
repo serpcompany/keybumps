@@ -33,8 +33,8 @@ enum SnippetLibraryState: Equatable {
     /// Nothing is saved until it can be read (`reload()`) or the user sets it aside (`startOver()`).
     case readOnly
 
-    /// Whether changes can be saved. While they can't, Settings › Snippets turns off +, −, and
-    /// Edit…, and doesn't call the library empty.
+    /// Whether changes can be saved. While they can't, Settings › Snippets turns off +, −, Edit…,
+    /// and Import from Alfred…, and doesn't call the library empty.
     var isWritable: Bool { self != .readOnly }
 }
 
@@ -157,19 +157,27 @@ final class SnippetStore {
     /// Adds snippets from another app's export (`AlfredSnippetImport`) in one save: if the file can't
     /// be written, none are added. Each is checked as the editor would check it:
     /// - one whose ID is already in the library (imported before) is skipped, so importing the
-    ///   same export again adds nothing;
+    ///   same export again adds nothing. So is one whose ID still has a Keychain item: an earlier
+    ///   import made sensitive that the file has since lost (see "Removing Keychain items"). The
+    ///   item may be the only copy of its text, and a plain snippet with its ID would remove it on
+    ///   Delete or overwrite it when turned sensitive;
     /// - one without a name or text is skipped as invalid;
     /// - a keyword with spaces, or one another snippet (or an earlier one in the batch) already
     ///   uses, ignoring case, is dropped, and the snippet is imported without it.
     ///
     /// Every imported snippet is plain, so its text goes into the file; the user can mark it
-    /// Sensitive afterwards. The Keychain isn't touched.
+    /// Sensitive afterwards. The Keychain is only asked which IDs have an item: no text is read or
+    /// written. If it can't say, nothing is imported.
     func importSnippets(_ batch: SnippetImportBatch) throws -> SnippetImportSummary {
         try requireWritable()
+        let itemIDs: Set<UUID>
+        do { itemIDs = try secrets.itemIDs() } catch { throw SnippetStoreError.keychain }
         var summary = SnippetImportSummary(invalid: batch.unreadableEntries)
         var next = snippets
-        var ids = Set(snippets.map(\.id))
-        var keywords = snippets.compactMap(\.keyword)
+        var ids = Set(snippets.map(\.id)).union(itemIDs)
+        // Case-folded, so checking for a clash (ignoring case) is one lookup, not a scan of every keyword.
+        func folded(_ keyword: String) -> String { keyword.folding(options: .caseInsensitive, locale: nil) }
+        var keywords = Set(snippets.compactMap { $0.keyword.map(folded) })
         let date = now()
         for imported in batch.snippets {
             guard !ids.contains(imported.id) else {
@@ -177,10 +185,10 @@ final class SnippetStore {
                 continue
             }
             var draft = SnippetDraft(name: imported.name, keyword: imported.keyword ?? "", text: imported.text)
-            let problem = draft.problem(otherKeywords: keywords)
-            let dropsKeyword = problem == .keywordHasSpaces || problem == .keywordInUse
+            let inUse = draft.normalizedKeyword.map { keywords.contains(folded($0)) } ?? false
+            let dropsKeyword = inUse || draft.problem(otherKeywords: []) == .keywordHasSpaces
             if dropsKeyword { draft.keyword = "" }
-            guard draft.problem(otherKeywords: keywords) == nil else {
+            guard draft.problem(otherKeywords: []) == nil else {
                 summary.invalid += 1
                 continue
             }
@@ -193,7 +201,7 @@ final class SnippetStore {
             )
             next.append(snippet)
             ids.insert(snippet.id)
-            if let keyword = snippet.keyword { keywords.append(keyword) }
+            if let keyword = snippet.keyword { keywords.insert(folded(keyword)) }
             summary.imported += 1
             if dropsKeyword { summary.keywordsDropped += 1 }
         }

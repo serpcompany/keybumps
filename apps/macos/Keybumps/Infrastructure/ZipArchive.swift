@@ -8,9 +8,11 @@ import Foundation
 /// It reads the central directory, then each entry's local header, and supports what exporters
 /// write: stored (method 0) and deflated (method 8, through the Compression framework's raw
 /// DEFLATE) entries in a single-disk, unencrypted, non-ZIP64 archive. Every size is checked against
-/// `Limits` before anything is allocated, a deflated entry can't decode to more than its declared
-/// size, and each entry must match its CRC-32. So a damaged, oversized, or hostile file is refused
-/// rather than read. Entry paths and contents are never logged.
+/// `Limits` before anything is allocated, the entries' compressed data can't add up to more than the
+/// file (entries never share bytes, so reading each entry once decodes no more than the file's
+/// size), a deflated entry can't decode to more than its declared size, and each entry must match
+/// its CRC-32. So a damaged, oversized, or hostile file is refused rather than read. Entry paths and
+/// contents are never logged.
 struct ZipArchive {
     struct Limits: Equatable {
         var maxArchiveBytes: Int
@@ -133,6 +135,7 @@ struct ZipArchive {
         var entries: [Entry] = []
         var position = Int(directoryOffset)
         var totalBytes = 0
+        var totalCompressedBytes = 0
         for _ in 0..<entryCount {
             guard try bytes.uint32(at: position) == centralDirectorySignature else { throw Failure.damaged }
             let compressedSize = try bytes.uint32(at: position + 20)
@@ -147,6 +150,8 @@ struct ZipArchive {
             guard Int(uncompressedSize) <= limits.maxEntryBytes else { throw Failure.tooLarge }
             totalBytes += Int(uncompressedSize)
             guard totalBytes <= limits.maxTotalBytes else { throw Failure.tooLarge }
+            totalCompressedBytes += Int(compressedSize)
+            guard totalCompressedBytes <= bytes.count else { throw Failure.damaged }
 
             let nameStart = position + 46
             let next = nameStart + nameLength + extraLength + commentLength

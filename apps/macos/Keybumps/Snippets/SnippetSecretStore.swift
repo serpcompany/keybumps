@@ -9,6 +9,8 @@ protocol SnippetSecretStoring: AnyObject {
     func setText(_ text: String, for id: UUID) throws
     /// Removes the item if there is one; removing one that doesn't exist succeeds.
     func removeText(for id: UUID) throws
+    /// The IDs that have an item, listed without reading any text.
+    func itemIDs() throws -> Set<UUID>
 }
 
 enum SnippetSecretError: Error, Equatable {
@@ -80,6 +82,24 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         }
     }
 
+    /// Lists every item's attributes, never its data.
+    var itemListQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+    }
+
+    func itemIDs() throws -> Set<UUID> {
+        var result: AnyObject?
+        let status = SecItemCopyMatching(itemListQuery as CFDictionary, &result)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess else { throw SnippetSecretError.keychain(status) }
+        let items = result as? [[String: Any]] ?? []
+        return Set(items.compactMap { ($0[kSecAttrAccount as String] as? String).flatMap(UUID.init(uuidString:)) })
+    }
 }
 
 /// Sensitive snippet text held only in memory: for unit tests and UI tests.
@@ -89,6 +109,8 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     var failsNextWrite = false
     /// Makes the next `removeText` fail.
     var failsNextRemoval = false
+    /// Makes the next `itemIDs` fail.
+    var failsNextListing = false
     /// How many items were ever removed, so tests can prove nothing was removed behind the user's back.
     private(set) var removals = 0
 
@@ -119,6 +141,14 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
         }
         if texts[id] != nil { removals += 1 }
         texts[id] = nil
+    }
+
+    func itemIDs() throws -> Set<UUID> {
+        if failsNextListing {
+            failsNextListing = false
+            throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
+        }
+        return Set(texts.keys)
     }
 
     /// Loses an item behind the store's back, as a Keychain the user edited would.

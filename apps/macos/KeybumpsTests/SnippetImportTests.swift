@@ -1,5 +1,6 @@
 import Compression
 import Foundation
+import Security
 import Testing
 @testable import Keybumps
 
@@ -41,7 +42,7 @@ struct SnippetImportTests {
             #expect(reloaded.snippets.map(\.text) == expected.map { $0.text })
             #expect(reloaded.snippets.allSatisfy { !$0.isSensitive }, "Imported snippets are plain")
         }
-        #expect(secrets.texts.isEmpty && secrets.reads == 0 && secrets.removals == 0, "The Keychain isn't touched")
+        #expect(secrets.texts.isEmpty && secrets.reads == 0 && secrets.removals == 0, "No Keychain text is read or written")
         // The only file written is snippets.json, beside the export in the test's folder.
         #expect(folder.contents() == [SnippetStore.fileName, export.lastPathComponent].sorted())
         #expect(try folder.permissions(of: folder.storageURL) == 0o600)
@@ -158,6 +159,58 @@ struct SnippetImportTests {
         let relaunched = folder.makeStore(secrets: secrets)
         #expect(AlfredSnippetImport.importFile(at: export, into: relaunched).title == "No snippets imported")
         #expect(relaunched.snippets.count == 2)
+    }
+
+    @Test("A snippet whose Keychain item outlived its library entry isn't imported again, so nothing can remove or overwrite the item")
+    func skipsIDsThatStillHaveAKeychainItem() throws {
+        let folder = ImportFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let export = try folder.write(ZipFixture(entries: [
+            .alfred(uid: Uid.greeting, name: "Made-up greeting", keyword: "hi", snippet: "Hello"),
+            .alfred(uid: Uid.signOff, name: "Made-up sign-off", keyword: "bye", snippet: "Bye"),
+        ]))
+        let store = folder.makeStore(secrets: secrets)
+        _ = AlfredSnippetImport.importFile(at: export, into: store)
+        // The user turns Sensitive on and changes the text, which now lives only in the Keychain.
+        let greeting = try #require(UUID(uuidString: Uid.greeting))
+        let secret = "made-up edited secret"
+        try store.update(greeting, with: SnippetDraft(name: "Made-up greeting", keyword: "hi", text: secret, isSensitive: true))
+
+        // The library loses its entry and the item stays, as after Start Over.
+        try FileManager.default.removeItem(at: folder.storageURL)
+        let fresh = folder.makeStore(secrets: secrets)
+        let alert = AlfredSnippetImport.importFile(at: export, into: fresh)
+        #expect(alert == SnippetImportAlert(
+            title: "Imported 1 snippet",
+            message: "1 was already imported.\nTo hide a snippet’s text, edit it and turn on Sensitive."
+        ))
+        #expect(fresh.snippets.map(\.id) == [try #require(UUID(uuidString: Uid.signOff))])
+        // So no Delete or Sensitive toggle can reach the item.
+        #expect(throws: SnippetStoreError.notFound) { try fresh.delete(greeting) }
+        #expect(throws: SnippetStoreError.notFound) {
+            try fresh.update(greeting, with: SnippetDraft(name: "Made-up greeting", text: "Hello", isSensitive: true))
+        }
+        #expect(secrets.texts[greeting] == secret)
+        #expect(secrets.removals == 0)
+
+        // If the Keychain can't say which items it has, nothing is imported.
+        try FileManager.default.removeItem(at: folder.storageURL)
+        let unsure = folder.makeStore(secrets: secrets)
+        secrets.failsNextListing = true
+        #expect(AlfredSnippetImport.importFile(at: export, into: unsure) == .failed("\(SnippetStoreError.keychain.message) Nothing was imported."))
+        #expect(unsure.snippets.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: folder.storageURL.path))
+    }
+
+    @Test("The Keychain is asked which items exist, never for their text")
+    func keychainListingReadsNoText() {
+        let query = KeychainSnippetSecretStore(bundleIdentifier: "com.example.made-up").itemListQuery
+        #expect(query[kSecClass as String] as? String == kSecClassGenericPassword as String)
+        #expect(query[kSecAttrService as String] as? String == "com.example.made-up.snippets")
+        #expect(query[kSecMatchLimit as String] as? String == kSecMatchLimitAll as String)
+        #expect(query[kSecReturnAttributes as String] as? Bool == true)
+        #expect(query[kSecReturnData as String] == nil)
     }
 
     @Test("A uid that isn't a UUID gets the same derived ID every time")
@@ -364,6 +417,68 @@ struct ZipArchiveTests {
         #expect(try archive.contents(of: archive.entries[2]) == text)
         #expect(try archive.contents(of: archive.entries[3]).isEmpty)
     }
+
+    @Test("Reads the layouts ditto and Info-ZIP write: a data descriptor, and local extra fields longer than the directory's")
+    func readsRealWorldLayouts() throws {
+        let json = try JSONSerialization.data(withJSONObject: ["alfredsnippet": [
+            "uid": Uid.fine, "name": "Made-up", "keyword": "mu", "snippet": "Made-up text",
+        ]])
+        let text = Data(String(repeating: "made-up line\n", count: 200).utf8)
+        let layouts: [(label: String, dataDescriptor: Bool, localExtra: Data, centralExtra: Data)] = [
+            // ditto -c -k --sequesterRsrc: files set bit 3 and put their CRC-32 and sizes in a data
+            // descriptor, and the 0x5855 extra field is 16 bytes locally and 12 in the directory.
+            ("ditto", true, ZipFixture.extraField(0x5855, length: 12), ZipFixture.extraField(0x5855, length: 8)),
+            // Info-ZIP zip: the 0x5455 and 0x7875 extra fields are 28 bytes locally and 24 in the directory.
+            ("Info-ZIP", false,
+             ZipFixture.extraField(0x5455, length: 9) + ZipFixture.extraField(0x7875, length: 11),
+             ZipFixture.extraField(0x5455, length: 5) + ZipFixture.extraField(0x7875, length: 11)),
+        ]
+        for layout in layouts {
+            func entry(_ path: String, _ data: Data, _ method: ZipFixture.Method) -> ZipFixture.Entry {
+                ZipFixture.Entry(
+                    path: path, data: data, method: method,
+                    dataDescriptor: layout.dataDescriptor && !path.hasSuffix("/"),
+                    localExtra: layout.localExtra, centralExtra: layout.centralExtra
+                )
+            }
+            let fixture = ZipFixture(entries: [
+                entry("Made-up [\(Uid.fine)].json", json, .stored),
+                entry("deflated.txt", text, .deflated),
+                entry("__MACOSX/", Data(), .stored),
+                entry("__MACOSX/._Made-up [\(Uid.fine)].json", Data("made-up resource fork".utf8), .deflated),
+            ])
+            let archive = try ZipArchive(data: fixture.archive())
+            #expect(archive.entries.count == 4, "\(layout.label)")
+            #expect(try archive.contents(of: archive.entries[0]) == json, "\(layout.label)")
+            #expect(try archive.contents(of: archive.entries[1]) == text, "\(layout.label)")
+            let batch = try AlfredSnippetImport.batch(fromArchive: fixture.archive())
+            #expect(batch == SnippetImportBatch(snippets: [
+                ImportedSnippet(id: try #require(UUID(uuidString: Uid.fine)), name: "Made-up", keyword: "mu", text: "Made-up text"),
+            ]), "\(layout.label)")
+        }
+    }
+
+    @Test("Entries whose data adds up to more than the file share bytes, and are refused before any is decoded")
+    func refusesEntriesThatShareData() throws {
+        let text = Data(String(repeating: "made-up line\n", count: 100).utf8)
+        let separate = ZipFixture(entries: [
+            ZipFixture.Entry(path: "a.txt", data: text),
+            ZipFixture.Entry(path: "b.txt", data: text),
+        ])
+        let archive = try ZipArchive(data: separate.archive())
+        #expect(try archive.entries.map { try archive.contents(of: $0) } == [text, text])
+
+        // A crafted file points a second entry at the first one's data.
+        var shared = separate
+        shared.entries[1].localHeaderOf = 0
+        #expect(throws: ZipArchive.Failure.damaged) { try ZipArchive(data: shared.archive()) }
+        var sharedSnippets = ZipFixture(entries: [
+            .alfred(uid: Uid.greeting, name: "Made-up", keyword: "", snippet: String(repeating: "a", count: 1_000)),
+            .alfred(uid: Uid.greeting, name: "Made-up", keyword: "", snippet: String(repeating: "a", count: 1_000)),
+        ])
+        sharedSnippets.entries[1].localHeaderOf = 0
+        #expect(throws: AlfredSnippetImport.Failure.notAnExport) { try AlfredSnippetImport.batch(fromArchive: sharedSnippets.archive()) }
+    }
 }
 
 // MARK: - Helpers
@@ -394,6 +509,16 @@ private struct ZipFixture {
         var crc: UInt32?
         /// Overrides the uncompressed size written.
         var declaredSize: Int?
+        /// Sets general-purpose bit 3: the local header's CRC-32 and sizes are zero, and a data
+        /// descriptor after the data holds them, as `ditto` writes.
+        var dataDescriptor = false
+        /// The local header's and the central directory's extra fields, which real archivers make
+        /// different lengths.
+        var localExtra = Data()
+        var centralExtra = Data()
+        /// Points the central directory at an earlier entry's local header and data instead of
+        /// writing its own, as a crafted file would.
+        var localHeaderOf: Int?
 
         static func alfred(
             uid: String,
@@ -427,6 +552,7 @@ private struct ZipFixture {
     func archive() -> Data {
         var body = Data()
         var directory = Data()
+        var offsets: [Int] = []
         for entry in entries {
             let raw = [UInt8](entry.data)
             let deflates = entry.method == .deflated && !raw.isEmpty
@@ -435,20 +561,29 @@ private struct ZipFixture {
             let crc = entry.crc ?? ZipArchive.crc32(raw)
             let size = entry.declaredSize ?? raw.count
             let name = [UInt8](entry.path.utf8)
-            let offset = body.count
-            // Version, flags, method, time, date, CRC-32, and sizes: the same in both headers.
-            var fields = le16(20) + le16(entry.flags) + le16(method) + le16(0) + le16(0)
-            fields += le32(crc) + le32(stored.count) + le32(size) + le16(name.count)
+            let offset = entry.localHeaderOf.map { offsets[$0] } ?? body.count
+            offsets.append(offset)
+            // Version, flags, method, time, and date: the same in both headers.
+            let start = le16(20) + le16(entry.dataDescriptor ? entry.flags | 0x8 : entry.flags) + le16(method) + le16(0) + le16(0)
+            let sizes = le32(crc) + le32(stored.count) + le32(size)
 
-            body += le32(0x0403_4B50) + fields
-            body += le16(0) + name + stored
-            directory += le32(0x0201_4B50) + le16(20) + fields
-            // Extra field, comment, disk, attributes, and where the local header is.
-            directory += le16(0) + le16(0) + le16(0) + le16(0) + le32(0) + le32(offset) + name
+            if entry.localHeaderOf == nil {
+                body += le32(0x0403_4B50) + start + (entry.dataDescriptor ? le32(0) + le32(0) + le32(0) : sizes)
+                body += le16(name.count) + le16(entry.localExtra.count) + name + [UInt8](entry.localExtra) + stored
+                if entry.dataDescriptor { body += le32(0x0807_4B50) + sizes }
+            }
+            directory += le32(0x0201_4B50) + le16(20) + start + sizes + le16(name.count) + le16(entry.centralExtra.count)
+            // Comment, disk, attributes, and where the local header is.
+            directory += le16(0) + le16(0) + le16(0) + le32(0) + le32(offset) + name + [UInt8](entry.centralExtra)
         }
         var end = le32(0x0605_4B50) + le16(0) + le16(0) + le16(entries.count) + le16(entries.count)
         end += le32(directory.count) + le32(body.count) + le16(comment.count) + [UInt8](comment)
         return body + directory + Data(end)
+    }
+
+    /// A made-up extra field: its tag, its length, and that many filler bytes.
+    static func extraField(_ tag: UInt16, length: Int) -> Data {
+        Data([UInt8(tag & 0xFF), UInt8(tag >> 8), UInt8(length), 0] + [UInt8](repeating: 0x2A, count: length))
     }
 
     private static func deflate(_ bytes: [UInt8]) -> [UInt8] {
