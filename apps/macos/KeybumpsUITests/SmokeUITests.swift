@@ -93,6 +93,44 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForNonExistence(of: editor))
     }
 
+    func testPaletteSettingsButtonOpensSettings() {
+        // Settings is closed before the palette opens, so only the button can bring it back.
+        launch(permissions: "granted", ["-KBOpenPalette", "clipboard", "-KBCloseSettings", "YES"])
+        let field = paletteField("Search clipboard history")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        let settings = element("settings.detail.permissions")
+        XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
+
+        let settingsButton = app.buttons["palette.settings"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(settingsButton.label, "Keybumps Settings")
+        settingsButton.click()
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")
+    }
+
+    func testQuickSearchOpensKeybumpsSettings() {
+        launch(permissions: "granted", ["-KBOpenPalette", "search", "-KBCloseSettings", "YES"])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        let settings = element("settings.detail.permissions")
+        XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
+
+        app.typeText("settings")
+        let command = element("quickSearch.command.keybumpsSettings")
+        XCTAssertTrue(command.waitForExistence(timeout: 5))
+        let systemSettings = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "System Settings"))
+            .firstMatch
+        XCTAssertTrue(systemSettings.waitForExistence(timeout: 5))
+        XCTAssertLessThan(command.frame.minY, systemSettings.frame.minY, "Keybumps Settings is listed above System Settings")
+
+        // Typing selects the first row, and Return runs it.
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {

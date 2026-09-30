@@ -46,13 +46,14 @@ Permission-gated and system-level features are faked in automated tests, never g
 | `-KBUITestPermissions granted\|denied` | Enters UI test mode and fakes every permission check (Accessibility, Input Monitoring, Microphone, Speech, Screen Recording) as all granted or all denied. It also swaps in an inert pointer event tap, a fake screenshot-folder reader (denied throws access-denied), an inert Spotlight resolver, and inert symbolic-hotkey preferences so macOS screenshot shortcuts are never touched. Dictation refuses audio capture before the microphone opens and never activates another app or synthesizes ⌘V. The Screenshot Editor saves into the sandbox. Data goes to a disposable `$TMPDIR/KeybumpsUITests` root (wiped at each launch), preferences to a wiped `com.serp.keybumps.uitests` suite with onboarding marked complete, and every pasteboard read and write goes to a private named pasteboard (`NSPasteboard.keybumps`). SwiftUI animations are off at every hosting root (`uiTestAnimationsDisabled()`). |
 | `-KBOpenPalette <tab>` | Opens the Command Palette once, at launch, on `search`, `clipboard`, `screenshots`, `dictation`, or `keyboardShortcutter` (shown even while the Hotkeys tab is hidden) |
 | `-KBOpenSettings <section>` | Opens Settings on a `SettingsSection` case name (`search`, `clipboard`, `screenshotTools`, `dictation`, `windows`, `keyboardShortcutter`, `permissions`, `general`) |
+| `-KBCloseSettings YES` | With `-KBOpenPalette`, closes the Settings window before the palette opens, so a test can show that an action opens Settings (in UI test mode the window otherwise already exists at launch) |
 | `-KBDisableHotKeys YES` | Registers shortcuts with an inert backend, so no Carbon hot keys are installed |
 | `-KBLicenseState <state>` | Starts with a fixed license state: `active` (the default), `unlicensed`, or `revoked`. No Keychain or network access |
 | `-KBUITestSeedClipboardImage YES` | Adds one generated PNG to the sandboxed Clipboard History |
 
 Give boolean flags an explicit `YES`. In CI, adding AppKit arguments (`-NSAutomaticWindowAnimationsEnabled NO -ApplePersistenceIgnoreState YES`) after a bare flag stopped the main window from appearing, so the smoke suite doesn't pass them.
 
-Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, and the `commandPalette` and `screenshotEditor` windows.
+Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, `palette.settings` (the palette's Settings button), `quickSearch.command.<command>` (a Quick Search command row), and the `commandPalette` and `screenshotEditor` windows.
 
 ## CI
 
@@ -62,7 +63,7 @@ Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `s
   - **Release gate:** `release.yml` (Release Keybumps, from release-please or run manually) calls `keybumps-unit-tests.yml` and `keybumps-ui-tests.yml` first. The build, notarization, and publish jobs need both to pass.
   - **On demand:** either workflow can also be run from Actions (`workflow_dispatch`).
   - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure.
-  - **UI job:** the whole `KeybumpsUITests` target (today the 5 `SmokeUITests`), ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`), with `-retry-tests-on-failure -test-iterations 3`. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x. The #70 spike proved this path on image `20260907.0351.1`, and it then passed three consecutive runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
+  - **UI job:** the whole `KeybumpsUITests` target (today the 8 `SmokeUITests`), ad-hoc signed (`CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_ALLOWED=YES ENABLE_HARDENED_RUNTIME=NO`), with `-retry-tests-on-failure -test-iterations 3`. Use the command-line flag; the test-plan retry setting is unreliable in Xcode 26.x. The #70 spike proved this path on image `20260907.0351.1`, and it then passed three consecutive runs. The UI tests have their own `KeybumpsUITests` scheme, so a local `xcodebuild test -scheme Keybumps` never drives the screen.
 - **Hygiene:**
   - `build-for-testing` then `test-without-building`
   - cache SPM packages (`-clonedSourcePackagesDirPath`, keyed on `Package.resolved`), not DerivedData

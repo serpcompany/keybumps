@@ -143,6 +143,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let hud = PaletteHUD.shared
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
+    /// Opens Settings. The app shell sets it to the status menu's route.
+    var openSettings: () -> Void = {}
 
     init(
         clipboard: ClipboardHistoryService,
@@ -198,6 +200,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         panel?.isVisible == true && state.tab == tab
     }
 
+    /// Runs a Keybumps command from its Quick Search row, the footer's Settings button, or its
+    /// Command-key shortcut in any tab. The palette closes first.
+    func run(_ command: QuickSearchCommand) {
+        dismiss()
+        switch command {
+        case .keybumpsSettings: openSettings()
+        }
+    }
+
     func windowDidResignKey(_ notification: Notification) {
         if CommandPaletteDismissalPolicy.shouldDismiss(
             isPresentingConfirmation: isPresentingConfirmation
@@ -230,6 +241,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
+                runCommand: { [weak self] command in self?.run(command) },
                 copyClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
                 chooseScreenshot: { [weak self] entry in self?.chooseScreenshot(entry) },
                 copyDictationText: { [weak self] text in
@@ -290,6 +302,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: self.preferences.showsHotkeysTab, selected: self.state.tab)
                 if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
                     self.selectTab(tab)
+                    return nil
+                }
+                if let command = QuickSearchCommand.matchingCommandKey(event.charactersIgnoringModifiers) {
+                    self.run(command)
                     return nil
                 }
                 if event.charactersIgnoringModifiers?.lowercased() == "e", self.state.tab == .clipboard || self.state.tab == .screenshots {
@@ -372,7 +388,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .search:
             search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? search.recentItems.items.count
-                : search.results.count
+                : search.items.count
         case .clipboard:
             filteredClipboard.count
         case .dictation:
@@ -451,9 +467,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 open(search.recentItems.items[state.selection].result)
                 return
             }
-            guard search.results.indices.contains(state.selection) else { return }
-            let result = search.results[state.selection]
-            reveal ? self.reveal(result) : open(result)
+            guard search.items.indices.contains(state.selection) else { return }
+            switch search.items[state.selection] {
+            case .command(let command):
+                run(command)
+            case .result(let result):
+                reveal ? self.reveal(result) : open(result)
+            }
         case .clipboard:
             guard filteredClipboard.indices.contains(state.selection) else { return }
             copyClipboardEntry(filteredClipboard[state.selection])
@@ -545,6 +565,7 @@ private struct CommandPaletteView: View {
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
+    let runCommand: (QuickSearchCommand) -> Void
     let copyClipboardEntry: (ClipboardEntry) -> Void
     let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
@@ -568,7 +589,9 @@ private struct CommandPaletteView: View {
             )
             content
                 .contentMargins(.bottom, 56, for: .scrollContent)
-                .overlay(alignment: .bottom) { PaletteFooter(tab: state.tab) }
+                .overlay(alignment: .bottom) {
+                    PaletteFooter(tab: state.tab, openSettings: { runCommand(.keybumpsSettings) })
+                }
         }
         .background(PaletteTheme.background, in: RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .overlay {
@@ -601,12 +624,13 @@ private struct CommandPaletteView: View {
         switch state.tab {
         case .search:
             SearchResultsView(
-                results: search.results,
+                items: search.items,
                 selection: state.selection,
                 query: search.query,
                 recentItems: search.recentItems.items,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
+                run: runCommand,
                 deleteRecentItem: search.recentItems.delete,
                 clearRecentItems: search.recentItems.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -820,12 +844,13 @@ private struct PaletteSearchField: View {
 }
 
 private struct SearchResultsView: View {
-    let results: [QuickSearchResult]
+    let items: [QuickSearchItem]
     let selection: Int
     let query: String
     let recentItems: [RecentItem]
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
+    let run: (QuickSearchCommand) -> Void
     let deleteRecentItem: (RecentItem) -> Void
     let clearRecentItems: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -881,36 +906,52 @@ private struct SearchResultsView: View {
                         .scrollContentBackground(.hidden)
                     }
                 }
-            } else if results.isEmpty {
+            } else if items.isEmpty {
                 PaletteEmptyState(
                     title: "No local results",
                     systemImage: "magnifyingglass"
                 )
             } else {
                 ScrollViewReader { proxy in
-                    List(Array(results.enumerated()), id: \.element.id) { index, result in
-                        Button {
-                            open(result)
-                        } label: {
-                            SearchResultRow(result: result)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .contentShape(Rectangle())
+                    List(Array(items.enumerated()), id: \.element.id) { index, item in
+                        Group {
+                            switch item {
+                            case .command(let command):
+                                Button {
+                                    run(command)
+                                } label: {
+                                    QuickSearchCommandRow(command: command)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("quickSearch.command.\(command.rawValue)")
+                            case .result(let result):
+                                Button {
+                                    open(result)
+                                } label: {
+                                    SearchResultRow(result: result)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Reveal in Finder") { reveal(result) }
+                                }
+                            }
                         }
-                        .buttonStyle(.plain)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
                         .paletteRowBackground(isSelected: index == selection)
-                        .contextMenu {
-                            Button("Reveal in Finder") { reveal(result) }
-                        }
-                        .id(result.id)
+                        .id(item.id)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .onChange(of: selection) {
-                        if results.indices.contains(selection) {
-                            proxy.scrollTo(results[selection].id)
+                        if items.indices.contains(selection) {
+                            proxy.scrollTo(items[selection].id)
                         }
                     }
                 }
@@ -945,6 +986,29 @@ private struct SearchResultRow: View {
                 .foregroundStyle(.secondary)
         }
         .help(result.detail)
+    }
+}
+
+/// A Keybumps command in Raycast's row: the Keybumps icon, the name, then its shortcut and kind on
+/// the right.
+private struct QuickSearchCommandRow: View {
+    let command: QuickSearchCommand
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+                .resizable()
+                .frame(width: 28, height: 28)
+            Text(command.title)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+                .layoutPriority(1)
+            Spacer(minLength: 12)
+            PaletteKeycaps(shortcut: command.shortcut)
+            Text(command.kindLabel)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -1225,12 +1289,15 @@ private struct PaletteEmptyState: View {
     }
 }
 
-/// Raycast's footer: a floating pill at the bottom right with the tab's actions and their keys.
+/// Raycast's footer: a round Settings button at the bottom left, and a floating pill at the bottom
+/// right with the tab's actions and their keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
+    let openSettings: () -> Void
 
     var body: some View {
         HStack {
+            PaletteSettingsButton(action: openSettings)
             Spacer()
             HStack(spacing: 14) {
                 hint("Select", keys: tab == .screenshots ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
@@ -1244,13 +1311,11 @@ private struct PaletteFooter: View {
             .font(.system(size: 14, weight: .medium))
             .padding(.leading, 16)
             .padding(.trailing, 7)
-            .frame(height: 38)
-            .background(PaletteTheme.pill, in: Capsule())
-            .overlay(Capsule().strokeBorder(PaletteTheme.border, lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+            .frame(height: PaletteTheme.footerHeight)
+            .paletteFloatingSurface(Capsule())
+            .allowsHitTesting(false)
         }
         .padding(10)
-        .allowsHitTesting(false)
     }
 
     private func hint(_ title: String, keys: [String], isPrimary: Bool) -> some View {
@@ -1260,5 +1325,29 @@ private struct PaletteFooter: View {
                 ForEach(keys, id: \.self) { PaletteKeycap($0) }
             }
         }
+    }
+}
+
+/// Raycast's round button at the footer's left, here a gear that opens Keybumps Settings from any tab.
+private struct PaletteSettingsButton: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    private let command = QuickSearchCommand.keybumpsSettings
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "gearshape")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(isHovering ? .primary : .secondary)
+                .frame(width: PaletteTheme.footerHeight, height: PaletteTheme.footerHeight)
+                .paletteFloatingSurface(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help("\(command.title) (\(command.shortcut))")
+        .accessibilityLabel(command.title)
+        .accessibilityIdentifier("palette.settings")
     }
 }

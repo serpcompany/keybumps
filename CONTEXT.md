@@ -22,11 +22,19 @@ _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 A brief, self-dismissing message that grows out of the notch, or the top of the menu bar on screens without one.
 _Avoid_: Toast, HUD, banner
 
+**Settings**:
+The Keybumps window where capabilities are turned on and configured. Quick Search and the Command Palette offer it as Keybumps Settings.
+_Avoid_: Preferences, Settings panel
+
 ### Capabilities
 
 **Quick Search**:
-Finding and opening local applications, files, and folders; the default Command Palette tab.
+Finding and opening local applications, files, and folders, and running Quick Search commands; the default Command Palette tab.
 _Avoid_: Web search, workflow launcher
+
+**Quick Search command**:
+A Keybumps action that Quick Search offers beside applications, files, and folders, such as Keybumps Settings.
+_Avoid_: Workflow, extension command
 
 **Clipboard History**:
 The recent text and image items the user copied, kept locally.
