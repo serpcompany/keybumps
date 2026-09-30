@@ -417,12 +417,12 @@ final class AppModel {
         switch permissions.recoveryAction(for: current) {
         case .openSystemSettings:
             if showSystemSettingsFollowUpIfNeeded(for: [current]) { return }
-            Task { [weak self] in await self?.recoverPermission(current) }
+            Task { [weak self] in await self?.recoverPermission(current, fromSetupCard: true) }
         case .request:
             // While its request is outstanding, the prompt is on screen: leave it alone. Without
             // one, the prompt never appeared, so ask again; macOS shows it only while undecided.
             guard permissions.activeRequest == nil else { return }
-            Task { [weak self] in await self?.recoverPermission(current) }
+            Task { [weak self] in await self?.recoverPermission(current, fromSetupCard: true) }
         case .none:
             break
         }
@@ -445,7 +445,11 @@ final class AppModel {
         return true
     }
 
-    func recoverPermission(_ permission: MacPermission) async {
+    /// `fromSetupCard`: started from a setup card over another app, as every setup walkthrough
+    /// step is. Its System Settings opening stays out of the Settings window's relaunch check, so
+    /// Keybumps becoming active later never claims a relaunch for it.
+    func recoverPermission(_ permission: MacPermission, fromSetupCard: Bool = false) async {
+        let isSetupStep = isPermissionWalkthroughActive
         refreshPermissions()
         guard !permissions.state(for: permission).isGranted else { return }
         let presentation = PermissionRecoveryPresentation.resolve(
@@ -456,7 +460,11 @@ final class AppModel {
             permissionDragAssistant.showEnableSwitch(for: permission)
         }
         if presentation == .applicationDrag {
-            permissionRelaunchAdvisor.didOpenSystemSettings(for: permission)
+            if fromSetupCard {
+                permissionRelaunchAdvisor.didOpenSystemSettingsFromCard(for: permission)
+            } else {
+                permissionRelaunchAdvisor.didOpenSystemSettings(for: permission)
+            }
         }
         await permissions.performRecovery(for: permission)
         refreshPermissions()
@@ -464,6 +472,8 @@ final class AppModel {
         switch presentation {
         case .applicationDrag:
             try? await Task.sleep(for: .milliseconds(450))
+            // Setup ended meanwhile: nothing would re-check the grant to take the card down.
+            guard !isSetupStep || isPermissionWalkthroughActive else { return }
             // Granted while System Settings opened: no card to drag.
             permissions.refresh()
             guard !permissions.state(for: permission).isGranted else { return }
@@ -510,8 +520,13 @@ final class AppModel {
         }
     }
 
-    /// Stops setup and its re-checks. Cards already on screen stay until dismissed or granted.
+    /// Stops setup and its re-checks, and takes down the current step's card: nothing re-checks
+    /// its grant any more, and the next Dictation shortcut offers System Settings again.
     func endPermissionWalkthrough() {
+        if let step = presentedWalkthroughPermission,
+           [.applicationDrag(step), .enableSwitch(step)].contains(permissionDragAssistant.presentation) {
+            permissionDragAssistant.dismiss()
+        }
         isPermissionWalkthroughActive = false
         permissionWalkthroughPermissions = []
         permissionWalkthroughCapability = nil
@@ -652,7 +667,7 @@ final class AppModel {
         presentedWalkthroughPermission = next
         presentedWalkthroughAction = action
         Task { [weak self] in
-            await self?.recoverPermission(next)
+            await self?.recoverPermission(next, fromSetupCard: true)
         }
     }
     func refreshDetectorState() { detectorStatus = detector.status; isAccessibilityTrusted = detector.isAccessibilityTrusted; isInputMonitoringAuthorized = detector.isInputMonitoringAuthorized }

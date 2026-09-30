@@ -248,27 +248,84 @@ struct DictationPastePermissionTests {
         #expect(harness.prompts.calls == [.openSettings(.accessibility), .openSettings(.accessibility)])
     }
 
-    @Test("When macOS reports no grant after Keybumps comes back, Restart is offered beside System Settings, never alone")
-    func realRelaunchOffersRestartBesideSystemSettings() async throws {
+    @Test("Keybumps becoming active after the setup card opened System Settings never claims a relaunch")
+    func activationAfterSetupCardClaimsNoRelaunch() async throws {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
         harness.model.beginPermissionWalkthrough(for: .dictation)
         try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
-        // Keybumps was switched on, but macOS reports it untrusted until a relaunch; the user returns to Keybumps.
+        harness.model.applicationDidBecomeActive()
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty, "not while setup runs")
+        // The user never turns Keybumps on, setup stops, and Keybumps becomes active later, for
+        // example to open Settings, with Accessibility still missing.
+        harness.model.endPermissionWalkthrough()
+        harness.model.applicationDidBecomeActive()
+
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.model.relaunchPromptPermission == nil, "no Restart alert in the Settings window")
+        #expect(PermissionSettingsRowAction.resolve(
+            permission: .accessibility,
+            state: harness.model.permissionReadiness.state(for: .accessibility),
+            requiresRelaunch: harness.model.requiresPermissionRelaunch(.accessibility)
+        ) == .recoverInSystemSettings, "the Permissions row still offers Open System Settings…")
+
+        harness.pressDictationShortcut()
+        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility),
+                "the shortcut still shows one card with Open System Settings… and Restart Keybumps")
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+    }
+
+    @Test("A setup card's System Settings opening is never read as a relaunch, and a grant clears it")
+    func setupCardOpeningStaysOutOfTheRelaunchCheck() {
+        var advisor = PermissionRelaunchAdvisor()
+        advisor.didOpenSystemSettingsFromCard(for: .accessibility)
+        advisor.didBecomeActive { _ in .required }
+        #expect(advisor.permissionsRequiringRelaunch.isEmpty)
+        #expect(advisor.hasOpenedSystemSettings(for: .accessibility), "the shortcut's two-button card still reads it")
+
+        advisor.permissionDidBecomeUsable(.accessibility)
+        #expect(!advisor.hasOpenedSystemSettings(for: .accessibility))
+        advisor.didOpenSystemSettingsFromCard(for: .microphone)
+        #expect(!advisor.hasOpenedSystemSettings(for: .microphone), "as before, only drag-card permissions are recorded")
+    }
+
+    @Test("A card's recovery outside setup still shows the drag card, and records no relaunch")
+    func cardRecoveryOutsideSetupShowsTheDragCard() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        await harness.model.recoverPermission(.accessibility, fromSetupCard: true)
+        #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
+        harness.model.applicationDidBecomeActive()
+        #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.model.relaunchPromptPermission == nil)
+    }
+
+    @Test("Opened from Keybumps' Settings window, a return without the grant still shows the Restart alert, and the shortcut's card offers System Settings beside Restart")
+    func settingsWindowReturnKeepsItsRelaunchCheck() async throws {
+        let harness = try PromptHarness()
+        defer { harness.tearDown() }
+
+        // The Permissions page's Open System Settings…: this flow is unchanged.
+        await harness.model.recoverPermission(.accessibility)
+        #expect(harness.prompts.calls == [.openSettings(.accessibility)])
+        // Keybumps comes back, and macOS still reports no grant.
         harness.model.applicationDidBecomeActive()
         #expect(harness.model.permissionsRequiringRelaunch == [.accessibility])
         #expect(harness.model.relaunchPromptPermission == .accessibility, "the Settings window's Restart alert, as before")
 
-        harness.model.endPermissionWalkthrough()
         harness.pressDictationShortcut()
-        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility))
+        #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility),
+                "Open System Settings… beside Restart Keybumps")
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
 
-        // Once macOS reports the grant, the relaunch state and the card go.
+        // Once macOS reports the grant, the relaunch state, the alert, and the card go.
         harness.grants.grant(.accessibility)
         harness.model.refreshPermissions()
         #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
+        #expect(harness.model.relaunchPromptPermission == nil)
         #expect(harness.model.permissionAssistantPresentation == nil)
     }
 
@@ -338,38 +395,42 @@ struct DictationPastePermissionTests {
                 "the next press offers setup again, which recovers a denial through System Settings")
     }
 
-    @Test("Turning Dictation off ends its setup, so no prompt follows for a capability that's off")
+    @Test("Turning Dictation off ends its setup and takes down its drag card, so nothing follows for a capability that's off")
     func disablingDictationEndsSetup() async throws {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
         harness.model.beginPermissionWalkthrough(for: .dictation)
-        try await harness.waitUntil { harness.prompts.calls == [.openSettings(.accessibility)] }
+        try await harness.waitUntil { harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility) }
         harness.model.setCapability(.dictation, enabled: false)
         #expect(!harness.model.isPermissionWalkthroughActive)
+        #expect(harness.model.permissionAssistantPresentation == nil)
 
         harness.grants.grant(.accessibility) // for example, for Window Manager
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
     }
 
-    @Test("Locking ends setup")
+    @Test("Locking ends setup, and the step's delayed drag card doesn't appear afterwards")
     func lockingEndsSetup() async throws {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
         harness.model.beginPermissionWalkthrough(for: .dictation)
         try await harness.waitUntil { harness.prompts.calls == [.openSettings(.accessibility)] }
+        // Before the drag card's 450 ms delay is up.
         await harness.model.deactivateLicense()
         #expect(!harness.model.isLicensed)
         #expect(!harness.model.isPermissionWalkthroughActive)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(harness.model.permissionAssistantPresentation == nil)
 
         harness.grants.grant(.accessibility)
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
     }
 
-    @Test("Setup stops re-checking after 600 checks")
+    @Test("Setup stops re-checking after 600 checks, and leaves no drag card behind")
     func walkthroughMonitorIsBounded() async throws {
         let harness = try PromptHarness(pollInterval: .zero)
         defer { harness.tearDown() }
@@ -377,7 +438,8 @@ struct DictationPastePermissionTests {
         let before = harness.grants.accessibilityReads
         harness.model.beginPermissionWalkthrough(for: .dictation)
         try await harness.waitUntil { !harness.model.isPermissionWalkthroughActive }
-        try await Task.sleep(for: .milliseconds(600)) // the step's delayed drag card re-checks once more
+        try await Task.sleep(for: .milliseconds(600)) // past the step's delayed drag card
+        #expect(harness.model.permissionAssistantPresentation == nil, "nothing would re-check the grant to take it down")
         let reads = harness.grants.accessibilityReads - before
 
         // One read per re-check, plus the few the first step makes itself.

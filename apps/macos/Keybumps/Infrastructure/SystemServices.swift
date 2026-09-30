@@ -132,14 +132,26 @@ enum PermissionRecoveryPresentation: Equatable {
 
 struct PermissionRelaunchAdvisor {
     private var permissionsAwaitingReturn: [MacPermission] = []
+    /// Opened from a setup card, over another app. Kept out of `didBecomeActive`, so Keybumps
+    /// becoming active later never turns it into a relaunch; only a grant clears it.
+    private var permissionsOpenedFromCard: Set<MacPermission> = []
     private(set) var permissionsRequiringRelaunch: [MacPermission] = []
 
     /// Whether System Settings was opened for `permission` and it isn't usable yet. That's no
     /// evidence it was turned on, so it never counts as needing a relaunch by itself.
     func hasOpenedSystemSettings(for permission: MacPermission) -> Bool {
-        permissionsAwaitingReturn.contains(permission) || permissionsRequiringRelaunch.contains(permission)
+        permissionsOpenedFromCard.contains(permission)
+            || permissionsAwaitingReturn.contains(permission)
+            || permissionsRequiringRelaunch.contains(permission)
     }
 
+    /// A setup card opened System Settings. Only `hasOpenedSystemSettings` reads this.
+    mutating func didOpenSystemSettingsFromCard(for permission: MacPermission) {
+        guard permission.usesApplicationDragAssistant else { return }
+        permissionsOpenedFromCard.insert(permission)
+    }
+
+    /// Keybumps' own Settings window opened System Settings; Keybumps becoming active checks it.
     mutating func didOpenSystemSettings(for permission: MacPermission) {
         guard permission.usesApplicationDragAssistant else { return }
         if !permissionsAwaitingReturn.contains(where: { $0 == permission }) {
@@ -162,6 +174,7 @@ struct PermissionRelaunchAdvisor {
     }
 
     mutating func permissionDidBecomeUsable(_ permission: MacPermission) {
+        permissionsOpenedFromCard.remove(permission)
         permissionsAwaitingReturn.removeAll(where: { $0 == permission })
         permissionsRequiringRelaunch.removeAll(where: { $0 == permission })
     }
