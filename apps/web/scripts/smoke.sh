@@ -2,7 +2,8 @@
 # The checks run through `eventually`, which shellcheck cannot follow.
 # shellcheck disable=SC2329
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
-# trailing-slash and legacy redirects take one 308 hop; search-engine rules and analytics match the
+# trailing-slash and legacy redirects take one 308 hop; /download/ sends a 302 to the current DMG,
+# which the Download buttons link to directly; search-engine rules and analytics match the
 # environment (only production may be indexed or load GTM, which it does on /, /thanks/, and
 # /license/); /thanks/ and /license/ redirect a query away before rendering and are never served to
 # client-side navigation; and the non-canonical hosts (www and workers.dev) redirect to the branded
@@ -122,14 +123,15 @@ robots_header_is() {
 }
 
 # Pages end in a slash and files never do (SERP URL trailing-slash standard).
-for path in / /pricing/ /download/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
+for path in / /pricing/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
   /legal/privacy/ /legal/terms/ /legal/refunds/ /legal/dmca/ /legal/affiliate-disclosure/ \
   /sitemap/ /robots.txt /sitemap-index.xml /sitemaps/pages.xml; do
   eventually "200 $path" status_is "$base$path" 200 "${smoke[@]}"
 done
 
 # The other form redirects in one hop. Shipped app builds link to /pricing, and Polar checkout
-# and receipts may link to /thanks and /license.
+# and receipts may link to /thanks and /license. /download goes to /download/, which then
+# redirects to the DMG (checked below).
 expect_redirect() {
   eventually "308 $1 -> $2" status_is "$base$1" "308 $base$2" "${smoke[@]}"
 }
@@ -145,6 +147,42 @@ for legacy in privacy terms refunds; do
   expect_redirect "/$legacy/" "/legal/$legacy/"
 done
 expect_redirect /sitemap.xml /sitemap-index.xml
+
+# /download/ has no page: it sends a temporary 302 (never a 308, which browsers keep) to the
+# current DMG from latest.json, with no-store, so it always gives the latest build. The Download
+# buttons on / and /thanks/ (the header, the home-page CTAs, and the /thanks/ button) go to the same
+# DMG directly. A release published between two requests can change it, so these retry.
+dmg_url='https://updates\.keybumps\.app/releases/[0-9]+/Keybumps-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?\.dmg'
+dmg=''
+download_redirects_to_dmg() {
+  local headers status location cache
+  headers="$(curl -s "${limits[@]}" "${smoke[@]}" -o /dev/null -D - "$base/download/" || true)"
+  headers="${headers//$'\r'/}"
+  status="$(head -1 <<<"$headers" | awk '{print $2}')"
+  location="$(grep -i '^location:' <<<"$headers" | head -1 | sed 's/^[^:]*: *//' || true)"
+  cache="$(grep -i '^cache-control:' <<<"$headers" | head -1 || true)"
+  if [ "$status" != 302 ] || ! grep -qE "^$dmg_url\$" <<<"$location" ||
+    ! grep -qi 'no-store' <<<"$cache"; then
+    why="got '$status' to '$location' with '${cache:-no Cache-Control}'"
+    return 1
+  fi
+  dmg="$location"
+}
+eventually '302 /download/ -> the current DMG, not cached' download_redirects_to_dmg
+# links_to_dmg <path> <count>: at least <count> links to a DMG, all of them to $dmg, and none to
+# /download/.
+links_to_dmg() {
+  local body links
+  body="$(fetch "$1")"
+  links="$(grep -oE "href=\"$dmg_url\"" <<<"$body" || true)"
+  if [ -z "$dmg" ] || [ "$(grep -c . <<<"$links")" -lt "$2" ] ||
+    grep -vqF "href=\"$dmg\"" <<<"$links" || grep -q 'href="/download/"' <<<"$body"; then
+    why="want $2+ links to '$dmg', got '$(sort -u <<<"$links" | tr '\n' ' ')'"
+    return 1
+  fi
+}
+eventually 'download buttons on / link to the /download/ DMG' links_to_dmg / 3
+eventually 'download links on /thanks/ link to the /download/ DMG' links_to_dmg /thanks/ 2
 
 # Sitemaps list only canonical URLs: child sitemaps are unslashed files, pages end in a slash.
 # sitemap_is_canonical <path> <loc regex>
@@ -221,7 +259,7 @@ og_on() {
     return 1
   fi
 }
-for path in /pricing/ /download/ /license/ /thanks/ /about/ /legal/privacy/ /sitemap/; do
+for path in /pricing/ /license/ /thanks/ /about/ /legal/privacy/ /sitemap/; do
   eventually "og:image on $path" og_on "$path"
 done
 

@@ -47,3 +47,19 @@ export async function getLatestRelease(fetcher: typeof fetch = fetch): Promise<L
     return FALLBACK_RELEASE
   }
 }
+
+/**
+ * /download/ answers with this status. It must be temporary (302 or 307), never 308: the target
+ * changes with every release. 302 is the usual status for a "latest download" link (GitHub's
+ * /releases/latest/download/ uses it), every client follows it for a GET, and it differs from the
+ * 307 that /thanks/ and /license/ use to drop a query, so the smoke test output tells them apart.
+ */
+export const DOWNLOAD_REDIRECT_STATUS = 302
+
+/** The /download/ response: a redirect to the release's DMG that no browser or cache keeps. */
+export function downloadRedirect(release: LatestRelease): Response {
+  return new Response(null, {
+    status: DOWNLOAD_REDIRECT_STATUS,
+    headers: { Location: release.dmgURL, 'Cache-Control': 'no-store' }
+  })
+}

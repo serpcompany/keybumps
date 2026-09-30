@@ -7,8 +7,9 @@ export type SitePage = {
 }
 
 /**
- * Indexable static pages, in the order the HTML sitemap and the pages sitemap list them. Pages
- * that are kept out of search engines (/download/, /thanks/) are not listed.
+ * Indexable static pages, in the order the HTML sitemap and the pages sitemap list them. /thanks/,
+ * which is kept out of search engines, is not listed, and neither is /download/, which only
+ * redirects to the current DMG (src/app/download/route.ts).
  */
 export const sitePages = [
   {

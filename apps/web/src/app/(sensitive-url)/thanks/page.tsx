@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { PageShell } from '@/components/page-shell'
+import { DownloadLink } from '@/components/download-link'
 import { redirectWithoutQuery } from '@/lib/sensitive-url'
 
 export const metadata: Metadata = {
@@ -17,26 +17,21 @@ export const metadata: Metadata = {
 export default async function ThanksPage({ searchParams }: PageProps<'/thanks'>) {
   await redirectWithoutQuery('/thanks/', searchParams)
   return (
-    <PageShell title="Thanks for buying Keybumps">
-      <p>
-        Your license key is in the receipt email from Polar, sent to the address you used at
-        checkout. It usually arrives within a minute.
-      </p>
-      <h2>Activate Keybumps</h2>
-      <ol>
-        <li>
-          <Link href="/download/">Download Keybumps</Link> if you haven’t already.
-        </li>
-        <li>Open Keybumps and go to Settings → License.</li>
-        <li>Paste your license key and choose Activate.</li>
-      </ol>
-      <p>
-        No email? Check your spam folder, or{' '}
-        <Link href="/license/" prefetch={false}>
-          find your key in the customer portal
-        </Link>
-        .
-      </p>
-    </PageShell>
+    <main className="section first">
+      <div className="container narrow text-center">
+        <h1 className="text-[clamp(2rem,5vw,2.8rem)]">Thanks for buying Keybumps</h1>
+        <p className="section-lede">
+          Check your email for your license key from Polar. It usually arrives within a minute.
+        </p>
+        <DownloadLink className="btn btn-lg px-8 py-4 text-lg">Download Keybumps</DownloadLink>
+        <p className="fine mt-10">
+          No email? Check your spam folder, or{' '}
+          <Link href="/license/" prefetch={false}>
+            find your key in the customer portal
+          </Link>
+          .
+        </p>
+      </div>
+    </main>
   )
 }

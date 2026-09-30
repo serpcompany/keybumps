@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 
 export function SiteFooter() {
   return (
@@ -7,7 +8,7 @@ export function SiteFooter() {
         <span>© {new Date().getFullYear()} SERP. Keybumps is a macOS app.</span>
         <nav>
           <Link href="/pricing/">Pricing</Link>
-          <Link href="/download/">Download</Link>
+          <DownloadLink>Download</DownloadLink>
           <Link href="/about/">About</Link>
           <Link href="/support/">Support</Link>
           <Link href="/contact/">Contact</Link>

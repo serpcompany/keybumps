@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 
 export function SiteHeader() {
   return (
@@ -13,9 +14,7 @@ export function SiteHeader() {
           <Link href="/#features">Features</Link>
           <Link href="/pricing/">Pricing</Link>
           <Link href="/#faq">FAQ</Link>
-          <Link href="/download/" className="btn btn-sm">
-            Download
-          </Link>
+          <DownloadLink className="btn btn-sm">Download</DownloadLink>
         </nav>
       </div>
     </header>
