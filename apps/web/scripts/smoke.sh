@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
 # trailing-slash and legacy redirects take one 308 hop; search-engine rules match the environment
-# (only production may be indexed); in production, GTM loads on / but never on /thanks/ or
-# /license/; and a workers.dev URL redirects to its branded domain.
+# (only production may be indexed); in production, GTM loads on /, /thanks/, and /license/;
+# /thanks/ and /license/ redirect a query away before rendering; and a workers.dev URL redirects to
+# its branded domain.
 # Requests carry the smoke-test header so a workers.dev URL serves the site instead of redirecting.
 #
 # usage: scripts/smoke.sh <base-url> <staging|production>
@@ -100,6 +101,22 @@ else
   fail "unknown path $missing gave $missing_status or the wrong 404 page"
 fi
 
+# /thanks/ and /license/ never render with a query: Polar's checkout and customer-session
+# parameters are redirected away before the page renders (src/lib/sensitive-url.ts), so neither
+# the page nor analytics ever holds them. The query values are placeholders. The 404, which can't
+# redirect, strips its query in <head> (src/components/strip-query.tsx).
+for path in /thanks/ /license/; do
+  got="$(curl -s "${smoke[@]}" -o /dev/null -w '%{http_code} %{redirect_url}' \
+    "$base$path?checkout_id=x&customer_session_token=x" || true)"
+  if [ "$got" = "307 $base$path" ]; then
+    pass "307 $path?customer_session_token=… -> $path"
+  else
+    fail "$path?customer_session_token=… gave '$got' (want 307 -> $path)"
+  fi
+done
+grep -q 'window.history.replaceState(window.history.state' <<<"$missing_page" &&
+  pass '404 page strips its query in <head>' || fail '404 page is missing the query strip'
+
 # The pages name src/app/opengraph-image.jpg with a hand-copied cache key (src/lib/metadata.ts).
 # The 404 gets the key Next.js generates, so the two must match, or the copy went stale.
 og_image() { grep -oE '<meta property="og:image" content="[^"]*"' <<<"$1" | head -1 || true; }
@@ -130,23 +147,14 @@ if [ "$env" = production ]; then
   grep -q '^Sitemap: https://keybumps.app/sitemap-index.xml$' <<<"$robots" &&
     pass 'robots.txt lists the sitemap index' || fail 'robots.txt is missing the sitemap index'
   [ -z "$robots_header" ] && pass 'no X-Robots-Tag' || fail "unexpected $robots_header"
-  # GTM loads on ordinary pages, and never on pages whose URLs carry checkout, session, or
-  # license data. The query values are placeholders.
-  # Each body is captured before grep, as for robots.txt: piping curl into `grep -q` under
-  # pipefail can fail when grep exits early, which would flip these results.
+  # GTM loads on ordinary pages and on /thanks/ and /license/, which never render with a query
+  # (checked above). Each body is captured before grep, as for robots.txt: piping curl into
+  # `grep -q` under pipefail can fail when grep exits early, which would flip these results.
   gtm='googletagmanager\.com/gtm\.js'
-  home="$(curl -s "${smoke[@]}" "$base/" || true)"
-  grep -q "$gtm" <<<"$home" && pass 'GTM loads on /' ||
-    fail 'GTM missing on / (is NEXT_PUBLIC_GTM_ID set in the build?)'
-  for path in '/thanks/?checkout_id=x&customer_session_token=x' '/license/?customer_session_token=x'; do
+  for path in / /thanks/ /license/; do
     page="$(curl -s "${smoke[@]}" "$base$path" || true)"
-    if [ -z "$page" ]; then
-      fail "empty response for $path"
-    elif grep -q "$gtm" <<<"$page"; then
-      fail "GTM loads on $path"
-    else
-      pass "no GTM on $path"
-    fi
+    grep -q "$gtm" <<<"$page" && pass "GTM loads on $path" ||
+      fail "GTM missing on $path (is NEXT_PUBLIC_GTM_ID set in the build?)"
   done
 else
   grep -q '^Disallow: /$' <<<"$robots" && pass 'robots.txt disallows crawling' ||

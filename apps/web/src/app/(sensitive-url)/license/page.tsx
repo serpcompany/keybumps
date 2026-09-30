@@ -1,10 +1,14 @@
 import { PageShell } from '@/components/page-shell'
 import { pageMetadata } from '@/lib/metadata'
+import { redirectWithoutQuery } from '@/lib/sensitive-url'
 import { CUSTOMER_PORTAL_URL, SUPPORT_EMAIL } from '@/lib/site'
 
 export const metadata = pageMetadata('/license/')
 
-export default function LicensePage() {
+// Nothing sends a query here today, but this page is where buyers look for their key, so it drops
+// any query the same way /thanks/ does (see src/lib/sensitive-url.ts).
+export default async function LicensePage({ searchParams }: PageProps<'/license'>) {
+  await redirectWithoutQuery('/license/', searchParams)
   const portal = <a href={CUSTOMER_PORTAL_URL}>Polar customer portal</a>
   return (
     <PageShell title="Find your license key">

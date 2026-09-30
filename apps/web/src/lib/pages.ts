@@ -82,8 +82,11 @@ export const legacyRedirects = [
 ] as const satisfies readonly { from: string; to: SitePagePath }[]
 
 /**
- * Pages whose URLs can carry checkout, session, or license data. Analytics must never load on
- * them, so they live outside the src/app/(analytics)/ route group. Polar sends buyers to /thanks/
+ * Pages whose URLs can carry checkout, session, or license data. Polar sends buyers to /thanks/
  * with a customer-session token in the query string, and /license/ is where they find their key.
+ * They live in the src/app/(sensitive-url)/ root layout, which removes the query string before the
+ * App Router or GTM can see it.
  */
-export const noAnalyticsPaths = ['/thanks/', '/license/'] as const
+export const sensitiveUrlPaths = ['/thanks/', '/license/'] as const
+
+export type SensitiveUrlPath = (typeof sensitiveUrlPaths)[number]

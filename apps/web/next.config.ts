@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   // reach their page in one hop. See src/lib/redirects.ts.
   skipTrailingSlashRedirect: true,
   experimental: {
-    // The site has two root layouts (src/app/(analytics), src/app/(no-analytics)) and no shared
+    // The site has two root layouts (src/app/(analytics), src/app/(sensitive-url)) and no shared
     // one, so unmatched URLs render src/app/global-not-found.tsx.
     globalNotFound: true
   },

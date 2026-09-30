@@ -5,11 +5,12 @@ import { rootLayoutMetadata } from '@/lib/metadata'
 export const metadata = rootLayoutMetadata
 
 /**
- * Root layout for pages that may run analytics. Pages whose URLs can carry checkout, session, or
- * license data (/thanks/, /license/) use the separate (no-analytics) root layout instead. Moving
- * between different root layouts is always a full page load, so GTM never keeps running into
- * those pages through client-side navigation or the Back button.
- * src/lib/analytics-scope.test.ts enforces this.
+ * Root layout for ordinary pages. It loads analytics without touching the URL, so campaign
+ * parameters reach GTM. Pages whose URLs can carry checkout, session, or license data (/thanks/,
+ * /license/) use the separate (sensitive-url) root layout instead, which strips the query before
+ * GTM loads. Moving between different root layouts is always a full page load, so a document
+ * that is already running GTM never shows those URLs through client-side navigation or the Back
+ * button. src/lib/analytics-scope.test.ts enforces this.
  */
 export default function AnalyticsRootLayout({ children }: LayoutProps<'/'>) {
   return (

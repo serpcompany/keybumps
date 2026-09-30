@@ -1,47 +1,45 @@
-'use client'
-
-import { useEffect } from 'react'
-
-/** The URL without its query string. Exported for tests. */
-export function strippedUrl(location: Pick<Location, 'pathname' | 'hash'>) {
-  return location.pathname + location.hash
-}
-
 /**
- * Replaces the current history entry's URL with `url` while keeping the Next.js router's state.
- * Once the App Router has patched `history.replaceState` (it does so in an effect of its own),
- * a call without Next.js state goes through the router: it copies the router's history state into
- * the entry and updates the router's URL. Before that, the native method would drop the router's
- * state (and Back into the page would stop rendering it), so the existing state is passed on.
+ * The inline script StripQuery renders. If the URL has a query string, it replaces the current
+ * history entry's URL with the path and hash, passing the entry's state through. If that ever
+ * throws, it stops parsing the page (so the router never starts and GTM never loads) and reloads
+ * the page without the query. Exported for tests.
  */
-export function replaceUrlKeepingRouterState(history: History, url: string) {
-  const patchedByRouter = history.replaceState !== History.prototype.replaceState
-  history.replaceState(patchedByRouter ? null : history.state, '', url)
-}
+export const stripQueryScript = `(function () {
+  var l = window.location
+  if (!l.search) return
+  var url = l.pathname + l.hash
+  try {
+    window.history.replaceState(window.history.state, '', url)
+  } catch (e) {
+    window.stop()
+    l.replace(url)
+  }
+})()`
 
 /**
- * Removes the query string from the address bar and the current history entry once the page has
- * rendered. The (no-analytics) root layout mounts it: those pages' URLs can carry checkout,
- * session, or license data (Polar appends them to /thanks/), and nothing on them reads the query.
- * This is a second layer; those pages never load analytics.
+ * Removes the query string from the address bar and the current history entry before anything
+ * else on the page runs. The (sensitive-url) root layout and the global 404 render it in `<head>`
+ * (through SiteDocument's `head`): Polar appends checkout and customer-session parameters to
+ * /thanks/, and a mistyped URL can carry them to the 404.
  *
- * It runs once per document, when the page that loaded the document hydrates: the (no-analytics)
- * layout and the global 404 mount it, and a layout persists across soft navigations. So:
- * - a later client-side navigation to a (no-analytics) URL that carries a query keeps that query
- *   (no link on the site adds one today); and
- * - a (no-analytics) page must not read its query (`useSearchParams`, `searchParams`), because
- *   the query disappears right after hydration. Such a page needs its own handling first.
+ * On (sensitive-url) pages it is the second layer: those pages redirect a request with a query
+ * before rendering (src/lib/sensitive-url.ts), so normally there is nothing to strip. On the 404,
+ * which never loads analytics, it keeps the query out of the address bar and later Referers.
+ *
+ * Why the order is structural, not a race: this is a parser-inserted classic inline script, so
+ * the browser runs it before it parses anything after it. The App Router hydrates from the RSC
+ * payload in `<body>`, and GTM is inserted by the Analytics component in an effect after
+ * hydration, so `location`, `document.URL`, and the router's URL are already clean when either
+ * starts. It passes the entry's state through, and the router writes its own state afterwards, so
+ * Back and Forward keep working. (The router's state also takes the tree and search from the
+ * server's payload, which is why the pages redirect instead of relying on this alone.)
+ *
+ * It runs once per document, and the (sensitive-url) layout persists across client-side
+ * navigation, so src/lib/analytics-scope.test.ts fails if a source file links to a
+ * (sensitive-url) URL with a query.
  */
 export function StripQuery() {
-  useEffect(() => {
-    if (!window.location.search) return
-    // Wait for the rest of this commit's effects, including the App Router's history patch.
-    const timer = window.setTimeout(() => {
-      if (window.location.search) {
-        replaceUrlKeepingRouterState(window.history, strippedUrl(window.location))
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [])
-  return null
+  // A constant script, not user input. Only an inline script runs before the parser continues.
+  // biome-ignore lint/security/noDangerouslySetInnerHtml: see above.
+  return <script dangerouslySetInnerHTML={{ __html: stripQueryScript }} />
 }

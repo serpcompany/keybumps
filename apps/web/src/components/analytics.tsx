@@ -3,9 +3,11 @@ import Script from 'next/script'
 import { isProductionSite } from '@/lib/site'
 
 /**
- * Production-only analytics, rendered only by the src/app/(analytics)/ route group layout, so
- * never on pages whose URLs carry checkout, session, or license data (/thanks/, /license/).
- * Each tool stays off until its ID is set at build time. Adding or changing a tool means updating
+ * Production-only analytics, rendered only by the two root layouts, src/app/(analytics)/ and
+ * src/app/(sensitive-url)/. The (sensitive-url) layout serves pages whose URLs carry checkout,
+ * session, or license data (/thanks/, /license/) and removes the query string in `<head>`, so GTM,
+ * which this loads after hydration, never sees it. Never render this anywhere else, and never on
+ * the global 404. Each tool stays off until its ID is set at build time. Adding or changing a tool means updating
  * the privacy policy (/legal/privacy/) in the same change.
  *
  * The owner chose Google Tag Manager only. NEXT_PUBLIC_CF_BEACON_TOKEN must not be set until the
