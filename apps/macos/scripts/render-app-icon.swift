@@ -2,7 +2,7 @@
 // the light appearance, into an .iconset folder, for the brand pack's brand/apple/macos/png and
 // Keybumps.icns.
 //
-// usage: swift scripts/render-app-icon.swift <Keybumps.app> <output.iconset>
+// usage (from the repository root): swift apps/macos/scripts/render-app-icon.swift <Keybumps.app> <output.iconset>
 //        iconutil -c icns <output.iconset> -o brand/apple/macos/Keybumps.icns
 //        cp <output.iconset>/*.png brand/apple/macos/png/
 import AppKit

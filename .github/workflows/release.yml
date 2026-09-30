@@ -49,7 +49,7 @@ concurrency:
 env:
   # The Mac app's folder (its Xcode project and scripts/), relative to the repository root.
   # Steps run from the repository root, where CHANGELOG.md and docs/releases/ stay.
-  APP_DIR: .
+  APP_DIR: apps/macos
   FEED_URL: https://updates.keybumps.app/appcast.xml
   # Public Sparkle EdDSA key embedded in every Keybumps build (matches the private key secret).
   UPDATE_PUBLIC_KEY: qier19/D8RhLykVkhe92L3gatkAU6i/Q22/VgmjkeKc=

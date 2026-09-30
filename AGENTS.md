@@ -6,13 +6,13 @@ Across the repo, including the website, use `CONTEXT.md` terminology, preserve t
 
 - Never take over the owner's screen (computer use, browser control, or other screen control) without an explicit handoff.
 - Do not log or commit user content: searches, filenames, clipboard values, transcripts, recordings, window/document titles, URLs, or coaching content. Logs and fixtures hold only structural state, timing, stage, error category, and recovery.
-- Preserve `LICENSE.rectangle`, `LICENSE.shotnix`, and the provenance ledger for donor-derived behavior.
+- Preserve `LICENSE.rectangle`, `LICENSE.shotnix` (both in `apps/macos/`), and the provenance ledger for donor-derived behavior.
 - Do not publish, create a remote, configure commerce, notarize, or distribute without fresh owner authorization.
 
-## Mac app (its code, tests, scripts, and release tooling)
+## Mac app (`apps/macos/`: its code, tests, scripts, and release tooling)
 
 - [`docs/development-workflow.md`](docs/development-workflow.md): Follow this branch, local-build, installed-artifact, manual-QA, and promotion cycle for all product work.
-  Hand the owner work through `scripts/build-qa-candidate.sh <issue>` after your own first pass.
+  Hand the owner work through `apps/macos/scripts/build-qa-candidate.sh <issue>` after your own first pass.
 - [`docs/testing.md`](docs/testing.md): Test frameworks, snapshot fixtures, testability seams, and CI runner decisions. New tests use Swift Testing.
 - User content and processing stay local: no accounts, sync, analytics, cloud transcription, or hosted history.
 - Non-goals: App Store distribution, Intel or pre-macOS-14.2 support, third-party extensions, AI rewriting, meeting/system-audio capture, web search, workflows, and text expansion.

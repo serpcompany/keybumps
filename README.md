@@ -14,19 +14,20 @@ Dictation records for up to five minutes by default. Dictation settings provide 
 
 ## Brand assets
 
-`brand/` holds the approved Keybumps brand pack (see `brand/README.md`): the keycap logo with the mascot, the standalone mascot, and platform exports. The macOS app icon is an Icon Composer file, `Keybumps/Resources/Keybumps.icon` (the 3D keycap and the mascot as separate layers on a purple gradient); Xcode compiles it into the asset catalog with fallbacks for older macOS. Edit it in Icon Composer and copy it to `brand/apple/macos/Keybumps.icon`. The menu-bar item and small in-app marks use the standalone mascot as a template image (`KeybumpsMascot.imageset`, cropped from `brand/monochrome/mascot-dark.png`). The `web/` and `social/` exports are for keybumps.app.
+`brand/` holds the approved Keybumps brand pack (see `brand/README.md`): the keycap logo with the mascot, the standalone mascot, and platform exports. The macOS app icon is an Icon Composer file, `apps/macos/Keybumps/Resources/Keybumps.icon` (the 3D keycap and the mascot as separate layers on a purple gradient); Xcode compiles it into the asset catalog with fallbacks for older macOS. Edit it in Icon Composer and copy it to `brand/apple/macos/Keybumps.icon`. The menu-bar item and small in-app marks use the standalone mascot as a template image (`KeybumpsMascot.imageset`, cropped from `brand/monochrome/mascot-dark.png`). The `web/` and `social/` exports are for keybumps.app.
 
 ## Build and run
 
-Requirements: Apple Silicon Mac, macOS 14.2+, Xcode, and XcodeGen.
+The Mac app lives in `apps/macos/`: its sources, tests, Xcode project (`project.yml`), scripts, and bundled licenses. Commands below run from the repository root unless they `cd` first. Requirements: Apple Silicon Mac, macOS 14.2+, Xcode, and XcodeGen.
 
 ```sh
-./scripts/build-and-run.sh
+apps/macos/scripts/build-and-run.sh
 ```
 
 Run deterministic tests:
 
 ```sh
+cd apps/macos
 xcodegen generate
 xcodebuild -project Keybumps.xcodeproj -scheme Keybumps -configuration Debug -derivedDataPath .derived test
 ```
@@ -34,9 +35,11 @@ xcodebuild -project Keybumps.xcodeproj -scheme Keybumps -configuration Debug -de
 Build, install, and launch a Developer ID-signed manual-QA candidate for an issue (backs up the installed app first):
 
 ```sh
-./scripts/build-qa-candidate.sh <issue-number>
-./scripts/restore-previous-keybumps.sh   # roll back
+apps/macos/scripts/build-qa-candidate.sh <issue-number>
+apps/macos/scripts/restore-previous-keybumps.sh   # roll back
 ```
+
+The old `scripts/build-qa-candidate.sh` and `scripts/restore-previous-keybumps.sh` still work for now; they forward to these (see `docs/adr/0003-mac-app-in-apps-macos.md`).
 
 The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.
 
@@ -46,8 +49,8 @@ The local preview does not present fake commerce or update controls. Production 
 
 ## Attribution
 
-Window Manager behavior is derived from the MIT-licensed Rectangle project and the owner's independently identified fork. See `LICENSE.rectangle` and `docs/provenance/donor-ledger.md`.
+Window Manager behavior is derived from the MIT-licensed Rectangle project and the owner's independently identified fork. See `apps/macos/LICENSE.rectangle` and `docs/provenance/donor-ledger.md`.
 
-Screenshot Tools redaction and markup rendering is adapted from the MIT-licensed Shotnix project. See `LICENSE.shotnix` and `docs/provenance/donor-ledger.md`.
+Screenshot Tools redaction and markup rendering is adapted from the MIT-licensed Shotnix project. See `apps/macos/LICENSE.shotnix` and `docs/provenance/donor-ledger.md`.
 
-Local Whisper transcription uses the MIT-licensed Argmax OSS Swift/WhisperKit package and OpenAI Whisper model family. See `LICENSE.argmax-oss-swift`, `NOTICES.argmax-oss-swift`, and `LICENSE.openai-whisper`.
+Local Whisper transcription uses the MIT-licensed Argmax OSS Swift/WhisperKit package and OpenAI Whisper model family. See `apps/macos/LICENSE.argmax-oss-swift`, `apps/macos/NOTICES.argmax-oss-swift`, and `apps/macos/LICENSE.openai-whisper`.

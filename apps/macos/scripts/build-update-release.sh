@@ -87,4 +87,4 @@ cp "$output_directory/feed/appcast.xml" "$output_directory/publication/publish-l
   "$output_directory/feed/appcast.xml" "$release_build" "$release_version" \
   "$output_directory/Keybumps-$release_version.dmg.sha256" "$output_directory/publication/publish-last/latest.json"
 
-print "Release prepared. Preview with scripts/publish-release.sh \"$output_directory\" production; publish (owner-authorized) by adding --publish."
+print "Release prepared. Preview with apps/macos/scripts/publish-release.sh \"$output_directory\" production; publish (owner-authorized) by adding --publish."
