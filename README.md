@@ -39,8 +39,6 @@ apps/macos/scripts/build-qa-candidate.sh <issue-number>
 apps/macos/scripts/restore-previous-keybumps.sh   # roll back
 ```
 
-The old `scripts/build-qa-candidate.sh` and `scripts/restore-previous-keybumps.sh` still work for now; they forward to these (see `docs/adr/0003-mac-app-in-apps-macos.md`).
-
 The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.
 
 ## Website
