@@ -168,10 +168,10 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(general.exists)
     }
 
-    func testOpeningKeybumpsItselfOpensSettingsOnce() {
+    func testKeybumpsItselfIsNeverListedAndItsSettingsOpenOnce() {
         // Owner QA of 4015.182.3: opening the Keybumps app from Quick Search opened Settings, then
-        // Quick Search came back on top. The app under test isn't in /Applications, so it's seeded
-        // as the one Recent Item, which opens through the same path as a search result.
+        // Quick Search came back on top. Quick Search now never lists Keybumps itself. The app under
+        // test isn't in /Applications, so it's seeded as the one Recent Item, which must stay hidden.
         launch(permissions: "granted", [
             "-KBOpenPalette", "search", "-KBCloseSettings", "YES", "-KBUITestSeedRecentKeybumps", "YES",
         ])
@@ -179,9 +179,15 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 20))
         let settings = element("settings.detail.permissions")
         XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
-        XCTAssertTrue(app.buttons["Clear All"].waitForExistence(timeout: 5), "Keybumps is listed in Recent Items")
+        let emptyRecents = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Start typing to search your Mac"))
+            .firstMatch
+        XCTAssertTrue(emptyRecents.waitForExistence(timeout: 5), "Its only Recent Item, Keybumps, is hidden")
+        XCTAssertFalse(app.buttons["Clear All"].exists)
 
-        // The empty search selects the first Recent Item, and Return opens it.
+        // Typing its name offers Keybumps Settings, which opens Settings once.
+        app.typeText("keybumps")
+        XCTAssertTrue(element("quickSearch.command.keybumpsSettings").waitForExistence(timeout: 5))
         app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
         XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings opens")

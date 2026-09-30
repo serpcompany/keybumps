@@ -43,8 +43,8 @@ struct UITestLaunchConfiguration: Equatable {
     private(set) var closesSettings = false
     private(set) var disablesHotKeys = false
     private(set) var seedsClipboardImage = false
-    /// Adds the running app itself as the one Recent Item, since the app under test isn't in
-    /// `/Applications` for Quick Search to find.
+    /// Adds the running app itself as the one Recent Item, which Quick Search must hide; the app
+    /// under test isn't in `/Applications` for Quick Search to find.
     private(set) var seedsRecentKeybumps = false
     private(set) var licenseState: LicenseStateMode = .active
 

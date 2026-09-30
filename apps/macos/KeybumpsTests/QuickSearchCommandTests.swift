@@ -243,4 +243,55 @@ struct QuickSearchCommandTests {
         #expect(search.recentItems.items.map(\.result) == [preview])
         #expect(opened == [nil])
     }
+
+    /// Owner decision on #186: Keybumps Settings covers Keybumps, so its app row is never listed.
+    @Test("Quick Search never lists Keybumps itself as an app, even with old learned usage")
+    func keybumpsIsNeverAnAppResult() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsHiddenApp-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let running = QuickSearchResult(url: Bundle.main.bundleURL, kind: .application)
+        let copy = try Self.makeApp(named: "Keybumps Copy", identifier: "com.serp.keybumps", in: root)
+        let other = try Self.makeApp(named: "Keybumps Companion", identifier: "com.example.companion", in: root)
+        let search = QuickSearchModel.forTests(in: root, applications: [running, copy, other, preview])
+        // An installed copy opened before this change has learned usage; it must not bring the row back.
+        for _ in 1...5 { search.applicationUsage.record(copy) }
+
+        search.query = "keybumps"
+        #expect(search.items == [.command(settings), .result(other)], "Keybumps Settings, and only apps that aren't Keybumps")
+        search.query = running.name
+        #expect(!search.results.contains(running))
+        search.query = "preview"
+        #expect(search.results == [preview])
+    }
+
+    @Test("Recent Items never show Keybumps itself, even an entry saved before it was hidden")
+    func recentItemsHideKeybumps() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsHiddenRecent-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let running = QuickSearchResult(url: Bundle.main.bundleURL, kind: .application)
+        let copy = try Self.makeApp(named: "Keybumps Copy", identifier: "com.serp.keybumps.debug", in: root)
+        let search = QuickSearchModel.forTests(in: root)
+
+        search.recentItems.record(running)
+        search.recentItems.record(preview)
+        search.recentItems.record(copy)
+
+        #expect(search.recentItems.items.count == 3, "Older entries stay stored")
+        #expect(search.displayedRecentItems.map(\.result) == [preview])
+    }
+
+    /// A minimal app bundle in a temporary folder: enough for `Bundle(url:)` to read its identifier.
+    private static func makeApp(named name: String, identifier: String, in root: URL) throws -> QuickSearchResult {
+        let app = root.appendingPathComponent("\(name).app", isDirectory: true)
+        let contents = app.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": identifier, "CFBundlePackageType": "APPL", "CFBundleName": name,
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: contents.appendingPathComponent("Info.plist"))
+        return QuickSearchResult(url: app, kind: .application)
+    }
 }

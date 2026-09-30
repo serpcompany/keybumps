@@ -44,7 +44,7 @@ final class QuickSearchModel {
         self.applicationUsage = applicationUsage ?? ApplicationUsageStore(fileManager: fileManager)
         self.searchesFiles = searchesFiles && !UnitTestHost.isActive
         if let suppliedApplications {
-            applications = suppliedApplications
+            applications = suppliedApplications.filter { !Self.isKeybumps($0) }
             return
         }
         guard !UnitTestHost.isActive else {
@@ -63,7 +63,22 @@ final class QuickSearchModel {
                 apps.append(QuickSearchResult(url: url, kind: .application))
             }
         }
-        applications = apps.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        applications = apps
+            .filter { !Self.isKeybumps($0) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Recent Items as the palette lists them: never Keybumps itself, even an entry saved before
+    /// Quick Search hid it. Keybumps Settings covers it.
+    var displayedRecentItems: [RecentItem] {
+        recentItems.items.filter { !Self.isKeybumps($0.result) }
+    }
+
+    /// Whether a result is a copy of Keybumps (`QuickSearchCommand.standIn(for:)`), which Quick
+    /// Search never lists as an app: opening it would only reopen Keybumps, and Keybumps Settings is
+    /// listed instead. Its old learned usage is then never looked up.
+    nonisolated static func isKeybumps(_ result: QuickSearchResult) -> Bool {
+        QuickSearchCommand.standIn(for: result) != nil
     }
 
     func refresh() {

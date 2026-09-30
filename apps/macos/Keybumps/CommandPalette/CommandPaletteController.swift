@@ -409,7 +409,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? search.recentItems.items.count
+                ? search.displayedRecentItems.count
                 : search.items.count
         case .clipboard:
             filteredClipboard.count
@@ -432,8 +432,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  search.recentItems.items.indices.contains(index) else { return false }
-            search.recentItems.delete(search.recentItems.items[index])
+                  search.displayedRecentItems.indices.contains(index) else { return false }
+            search.recentItems.delete(search.displayedRecentItems[index])
         case .clipboard:
             guard filteredClipboard.indices.contains(index) else { return false }
             clipboard.delete(filteredClipboard[index])
@@ -485,8 +485,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                guard search.recentItems.items.indices.contains(state.selection) else { return }
-                open(search.recentItems.items[state.selection].result)
+                guard search.displayedRecentItems.indices.contains(state.selection) else { return }
+                open(search.displayedRecentItems[state.selection].result)
                 return
             }
             guard search.items.indices.contains(state.selection) else { return }
@@ -646,11 +646,11 @@ private struct CommandPaletteView: View {
         .onChange(of: search.query) {
             state.selection = 0
         }
-        .onChange(of: search.recentItems.items.map(\.id)) {
+        .onChange(of: search.displayedRecentItems.map(\.id)) {
             guard state.tab == .search,
                   search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  state.selection >= search.recentItems.items.count else { return }
-            state.selection = max(0, search.recentItems.items.count - 1)
+                  state.selection >= search.displayedRecentItems.count else { return }
+            state.selection = max(0, search.displayedRecentItems.count - 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Keybumps command palette")
@@ -666,7 +666,7 @@ private struct CommandPaletteView: View {
                 query: search.query,
                 enabledCapabilities: preferences.enabledCapabilities,
                 visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab),
-                recentItems: search.recentItems.items,
+                recentItems: search.displayedRecentItems,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
                 run: chooseCommand,

@@ -41,7 +41,7 @@ The Quick Search command named for a capability, which goes to it: its Command P
 _Avoid_: Plugin, extension, navigation command
 
 **Recent Items**:
-The apps, files, and folders the user recently opened from Quick Search, listed while its search is empty. Quick Search commands never become Recent Items.
+The apps, files, and folders the user recently opened from Quick Search, listed while its search is empty. Quick Search commands never become Recent Items, and Keybumps itself is never listed.
 _Avoid_: History, recents
 
 **Learned usage**:

@@ -50,7 +50,7 @@ Permission-gated and system-level features are faked in automated tests, never g
 | `-KBDisableHotKeys YES` | Registers shortcuts with an inert backend, so no Carbon hot keys are installed |
 | `-KBLicenseState <state>` | Starts with a fixed license state: `active` (the default), `unlicensed`, or `revoked`. No Keychain or network access |
 | `-KBUITestSeedClipboardImage YES` | Adds one generated PNG to the sandboxed Clipboard History |
-| `-KBUITestSeedRecentKeybumps YES` | Adds the running app itself as the one sandboxed Quick Search Recent Item (the app under test isn't in `/Applications` for search to find) |
+| `-KBUITestSeedRecentKeybumps YES` | Adds the running app itself as the one sandboxed Quick Search Recent Item, which Quick Search must hide (the app under test isn't in `/Applications` for search to find) |
 
 Give boolean flags an explicit `YES`. In CI, adding AppKit arguments (`-NSAutomaticWindowAnimationsEnabled NO -ApplePersistenceIgnoreState YES`) after a bare flag stopped the main window from appearing, so the smoke suite doesn't pass them.
 
