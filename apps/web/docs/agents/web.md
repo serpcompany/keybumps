@@ -56,6 +56,8 @@ TODO(#144): deploys run only through CI (`.github/workflows/web-deploy.yml`): st
 
 Never run `pnpm deploy:cloudflare`, `pnpm upload:cloudflare`, `wrangler deploy`, or `wrangler versions upload` by hand without fresh owner authorization. #144 replaces the first two with `deploy:staging` and `deploy:production`.
 
+Before the site goes live (#144), `dmca@keybumps.app`, the contact address on `/legal/dmca/` (from the SERP DMCA page template), must forward to `dmca@serp.co` through Cloudflare Email Routing, and delivery must be verified. Until then, don't claim the address works.
+
 ## Rollback
 
 TODO(#144): `wrangler rollback --name keybumps-web-production`, and how to confirm it with the production smoke test.
