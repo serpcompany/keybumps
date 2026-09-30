@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.10](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.9...v0.0.3-beta.10) (2026-09-30)
+
+
+### Documentation
+
+* record the first release from the apps/macos layout ([#167](https://github.com/serpcompany/keybumps/issues/167)) ([e1c7a0d](https://github.com/serpcompany/keybumps/commit/e1c7a0d7939986dc7b5d3e9b4c569d12eb7d4351))
+
 ## [0.0.3-beta.9](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.8...v0.0.3-beta.9) (2026-09-30)
 
 
