@@ -40,6 +40,10 @@ Build, install, and launch a Developer ID-signed manual-QA candidate for an issu
 
 The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.
 
+## Website
+
+`apps/web/` holds the keybumps.app website (Next.js on Cloudflare Workers through OpenNext). It is separate from the Mac app: it has its own pnpm project, its own CI (`.github/workflows/web.yml`), and its own agent instructions (`apps/web/AGENTS.md`), and release-please leaves it out of app versions and `CHANGELOG.md`. Run `pnpm install && pnpm check` from `apps/web/`; see `apps/web/README.md`.
+
 ## Attribution
 
 Window Manager behavior is derived from the MIT-licensed Rectangle project and the owner's independently identified fork. See `LICENSE.rectangle` and `docs/provenance/donor-ledger.md`.
