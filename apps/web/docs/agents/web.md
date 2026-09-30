@@ -56,11 +56,11 @@ TODO(#144): until the [domain cutover](#domain-cutover), `env.production` has no
 
 ## Deploys
 
-Deploys run only through CI, in `.github/workflows/web-deploy.yml`. It runs on every push to `main` that touches `apps/web/**` or the workflow itself, and on a manual run from Actions on `main`. Runs queue and never cancel each other (concurrency group `web-deploy`).
+Deploys run only through CI, in `.github/workflows/web-deploy.yml`. It runs on every push to `main` that touches `apps/web/**` or the workflow itself, and on a manual run from Actions on `main`. Runs share the concurrency group `web-deploy` with `cancel-in-progress: false`: a running deploy is never cancelled, and at most one more run waits behind it. A newer waiting run replaces an older one, which is harmless because it deploys the newer `main`, which includes the older commits.
 
 1. **Check:** `pnpm install --frozen-lockfile && pnpm check`.
-2. **Staging:** `pnpm deploy:staging | tee deploy.log` builds with `SITE_ENV=staging` and deploys `--env staging`. Then `scripts/smoke.sh <workers.dev URL from deploy.log> staging` must pass: `noindex`, `robots.txt` disallows crawling, no GTM, and `workers.dev` redirects to `staging.keybumps.app`.
-3. **Production** (`needs: staging`, GitHub environment `production`): `pnpm deploy:production` builds with `SITE_ENV=production` and `NEXT_PUBLIC_GTM_ID` from the environment's variables (the job fails first if it's empty), and deploys `--env production`, whose `vars` set `SITE_ENV=production` at runtime. Then `scripts/smoke.sh <workers.dev URL> production` must pass: `robots.txt` allows crawling, no `X-Robots-Tag` or `noindex` meta, GTM loads on `/` but not on `/thanks/` or `/license/`, and `workers.dev` redirects to `keybumps.app`.
+2. **Staging:** `pnpm deploy:staging | tee deploy.log` builds with `SITE_ENV=staging` (and, from the workflow, a placeholder `NEXT_PUBLIC_GTM_ID=GTM-STAGING0`) and deploys `--env staging`. Then `scripts/smoke.sh <keybumps-web-staging workers.dev URL from deploy.log> staging` must pass: `noindex`, `robots.txt` disallows crawling, no GTM even though the build has an ID (so the `SITE_ENV` gate is what keeps analytics off), and `workers.dev` redirects to `staging.keybumps.app`.
+3. **Production** (`needs: staging`, GitHub environment `production`): `pnpm deploy:production` builds with `SITE_ENV=production` and `NEXT_PUBLIC_GTM_ID` from the environment's variables (the job fails first if it's empty), and deploys `--env production`, whose `vars` set `SITE_ENV=production` at runtime. Then `scripts/smoke.sh <keybumps-web-production workers.dev URL> production` must pass: `robots.txt` allows crawling, no `X-Robots-Tag` or `noindex` meta, GTM loads on `/` but not on `/thanks/` or `/license/`, and `workers.dev` redirects to `keybumps.app`.
 
 The owner's approval of a pull request into `main` is what authorizes its production deploy. A failing staging job stops the run before production. `NEXT_PUBLIC_CF_BEACON_TOKEN` is never passed to a build (see [Environment configuration](#environment-configuration)).
 
@@ -72,20 +72,22 @@ Before the production domains move over (#144), `dmca@keybumps.app`, the contact
 
 ### Domain cutover
 
-TODO(#144): the owner runs this once, watching each step. Nothing here runs automatically, and an agent must not do it. The approach: the first production deploys leave out the production routes, the owner detaches the domains from the old Worker, and a follow-up pull request adds the routes. Record the date and the run links on #144.
+TODO(#144): the owner runs this once, watching each step. Nothing here runs by itself, and an agent must not do it. Record the date and the run links on #144.
 
-Why this order: a Custom Domain belongs to one Worker. When Wrangler runs outside a terminal, as in CI and Workers Builds, it moves a Custom Domain that another Worker holds to the Worker it's deploying, without asking. So adding the routes before the old deploy path is gone could make the two paths take the domains back and forth.
+**Approach: CI takes the domains over.** The first production deploys leave out the production routes. At cutover, a pull request adds them, and that merge's `Web deploy` run moves `keybumps.app` and `www.keybumps.app` from `keybumps-website` to `keybumps-web-production` in one API call. This works because Wrangler (4.135, `publishCustomDomains` in its deploy step) sends `override_existing_origin: true` and `override_existing_dns_record: true` whenever its output isn't a terminal, as in CI (`| tee`). It moves a Custom Domain that another Worker holds without asking. The same behavior is why the routes stay out until Workers Builds is disconnected: otherwise the old deploy path could take the domains back.
+
+**Expected outage: none planned, but not guaranteed.** `keybumps-website` keeps serving until the production deploy step reassigns the domains. That step runs after staging passes and after the new version is uploaded to `keybumps-web-production`. The hostnames' DNS records and certificates already exist; Cloudflare issued an Advanced Certificate for each hostname when it became a Custom Domain, and deleting or moving a Custom Domain doesn't delete that certificate. So the move changes only which Worker the records point to. Cloudflare doesn't document how long that takes to reach every edge location. Expect seconds to a few minutes in which a request reaches either Worker; both serve the same site. If a new certificate were needed after all, HTTPS on the affected hostname would fail until it is issued, usually within minutes. The slower alternative is to detach the domains in the dashboard first. That leaves the site down until the routes pull request is merged and its whole run (check, staging, production) finishes, so it isn't used.
 
 Before starting:
 
 - `Web deploy` has passed on `main`, including the production smoke test on `workers.dev`, and `https://staging.keybumps.app/robots.txt` disallows crawling.
 - The email routing gate above is verified (#143).
+- The routes pull request is open, approved, and green (step 2), so merging it is the only step left.
 
 Steps:
 
-1. **Disconnect Workers Builds** from `keybumps-website` (dashboard: Workers & Pages → `keybumps-website` → Settings → Build → Disconnect), so the old Worker stops redeploying from `serpcompany/keybumps.app`.
-2. **Detach the domains** from `keybumps-website` (Settings → Domains & Routes): remove `keybumps.app` and `www.keybumps.app`. The site is down from here until step 3 finishes, which is acceptable because it hasn't launched.
-3. **Add the production routes** in a pull request: in `wrangler.jsonc`, replace the TODO in `env.production` with
+1. **Disconnect Workers Builds** from `keybumps-website` (dashboard: Workers & Pages → `keybumps-website` → Settings → Build → Disconnect). The old Worker keeps serving its last deployed version but can no longer redeploy from `serpcompany/keybumps.app` and take the domains back. The site stays up.
+2. **Merge the routes pull request.** In `wrangler.jsonc`, it replaces the TODO in `env.production` with the block below, and it updates this guide (the environments table and this section's TODOs):
 
    ```jsonc
    "routes": [
@@ -94,10 +96,21 @@ Steps:
    ],
    ```
 
-   and update this guide (the environments table, this section's TODOs). Once the owner merges it, `Web deploy` attaches both domains to `keybumps-web-production`; its log lists them as custom domains. If that step fails with an authorization error, stop and ask the owner: they can attach both domains in the dashboard (`keybumps-web-production` → Settings → Domains & Routes → Add → Custom domain) and re-run the workflow. Don't widen the token.
-4. **Smoke-test the real domain** from the owner's machine, because bot protection blocks CI runners on it: `scripts/smoke.sh https://keybumps.app production`. Against this URL, the script also checks that `www.keybumps.app` redirects to the apex in one 308. A new certificate can take a few minutes. If every request returns 403, bot protection challenged the request; check the pages in a browser instead. Also run `scripts/smoke.sh https://staging.keybumps.app staging`.
-5. **Delete `keybumps-website`** (owner only, in the dashboard, never with the CI token), after checking it has no domains or routes left. Until then, moving the domains back to it in the dashboard is the cutover's rollback.
-6. **Check that one deploy path remains:** `keybumps-website` is gone, no Worker in the account builds from `serpcompany/keybumps.app`, and `keybumps-web-staging` and `keybumps-web-production` have no Workers Builds connection. Then #145 archives `serpcompany/keybumps.app`.
+   The merge's `Web deploy` run deploys staging, then production. The production deploy moves both domains to `keybumps-web-production`, and its log lists them under custom domains. If staging fails, production doesn't run and the domains stay on `keybumps-website`; fix the problem, then re-run. If the production deploy fails with an authorization error on the custom domains, the domains stay where they are. Stop and ask the owner; don't widen the token.
+3. **Smoke-test the real domains** from the owner's machine, because bot protection blocks CI runners on them:
+   - `scripts/smoke.sh https://keybumps.app production`. Against this URL, the script also checks that `www.keybumps.app` redirects to the apex in one 308. If every request returns 403, bot protection challenged the request; check the pages in a browser instead.
+   - `scripts/smoke.sh https://staging.keybumps.app staging`.
+   - Check the dashboard: `keybumps.app` and `www.keybumps.app` are listed under `keybumps-web-production` → Settings → Domains & Routes, and not under `keybumps-website`.
+   - Send a test message to `dmca@keybumps.app` and `support@keybumps.app` and confirm both still deliver. The deploy was allowed to override DNS records for the two hostnames. That shouldn't touch MX records, but check.
+4. **Delete `keybumps-website`** (owner only, in the dashboard, never with the CI token), once the site has run on `keybumps-web-production` long enough to trust it, and after checking the old Worker has no domains or routes left. Until then, it is the cutover's rollback target.
+5. **Check that one deploy path remains:** `keybumps-website` is gone, no Worker in the account builds from `serpcompany/keybumps.app`, and `keybumps-web-staging` and `keybumps-web-production` have no Workers Builds connection. Then #145 archives `serpcompany/keybumps.app`.
+
+**Cutover rollback** (only while `keybumps-website` exists). If the problem is the new code rather than the domain move, prefer the [Rollback](#rollback) below: it keeps the domains where they are. To move the domains back, go in this order, because every `Web deploy` run from a `main` that lists the production routes takes the domains again:
+
+1. **Stop CI from taking them back:** disable the workflow (Actions → `Web deploy` → Disable workflow, or `gh workflow disable web-deploy.yml`). Don't skip this step. Reverting the routes alone isn't enough, because merging the revert starts a run, and a run already queued from before the revert would still list the routes.
+2. **Revert the routes commit** on `main` through a pull request. While the workflow is disabled, the merge deploys nothing. Removing the routes also doesn't detach anything: Wrangler calls the Custom Domains API only when `routes` lists at least one custom domain, so a deploy without routes leaves existing domains where they are.
+3. **Move the domains back:** in the dashboard, remove `keybumps.app` and `www.keybumps.app` from `keybumps-web-production` (Settings → Domains & Routes), then add both to `keybumps-website` as Custom Domains. The site is down between the removal and the add, usually a minute or two. `keybumps-website` serves its last deployed version, because Workers Builds stays disconnected. Don't reconnect it unless it becomes the deploy path again.
+4. **Re-enable `Web deploy`** once `main` has no production routes. From then on, deploys update only `keybumps-web-staging` and the production Worker's `workers.dev` URL, and never touch the domains. Re-run the cutover when the problem is fixed.
 
 ## Rollback
 
