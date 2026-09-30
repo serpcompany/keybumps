@@ -428,7 +428,7 @@ final class UpdateReleaseScriptTests: XCTestCase {
 
         let staging = try run(publisher, [output.path, "staging"], environment: environment)
         XCTAssertTrue(staging.output.contains("staging/appcast.xml"), staging.output)
-        XCTAssertFalse(staging.output.contains("latest.json"), "only production moves the download page")
+        XCTAssertFalse(staging.output.contains("latest.json"), "only production moves the latest-release pointer")
 
         XCTAssertNotEqual(try run(publisher, [output.path, "beta"], environment: environment).status, 0)
         try writeAppcast("https://updates.keybumps.app/Keybumps-\(version).zip")
