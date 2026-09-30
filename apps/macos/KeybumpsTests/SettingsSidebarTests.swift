@@ -8,7 +8,7 @@ struct SettingsSidebarTests {
         let groups = SettingsSidebar.groups(matching: "")
         #expect(groups == [
             [.general, .permissions],
-            [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .windows]
+            [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows]
         ])
         // The account row sits above the groups, as in Raycast.
         #expect(Set(groups.flatMap { $0 }) == Set(SettingsSection.allCases).subtracting([.account]))

@@ -1,0 +1,346 @@
+import SwiftUI
+
+/// The Snippets page: its command, then every snippet in a searchable table with + and − and
+/// Edit…, which open the editor sheet. Everything here is saved on this Mac only.
+struct SnippetsSettingsView: View {
+    @Environment(AppModel.self) private var model
+    @State private var query = ""
+    @State private var selection: Snippet.ID?
+    @State private var pendingDeletion: Snippet?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        @Bindable var store = model.snippets
+        let results = SnippetSearch.settingsResults(store.snippets, query: query)
+        SettingsPage {
+            CapabilityControl(capability: .snippets, shortcuts: [.snippets])
+            if model.preferences.enabledCapabilities.contains(.snippets),
+               !model.missingPermissions(for: .snippets).isEmpty {
+                SettingsGroup("Paste") {
+                    LabeledContent {
+                        OpenPermissionsButton()
+                    } label: {
+                        SettingsRowLabel(
+                            title: "Paste needs Accessibility",
+                            subtitle: "Without it, ⌘Return in the Snippets tab copies the snippet instead of pasting it into the app you’re using."
+                        )
+                    }
+                }
+            }
+            SettingsGroup("All Snippets", subtitle: "Kept on this Mac only. A keyword is a short word to find a snippet by.") {
+                HStack(spacing: 12) {
+                    SettingsSearchField(text: $query, prompt: "Search snippets…", identifier: "snippets.search")
+                        .frame(maxWidth: 300)
+                    Spacer()
+                    Text(SnippetPresentation.count(store.snippets.count))
+                        .font(.system(size: SettingsTheme.subtitleSize))
+                        .foregroundStyle(.secondary)
+                }
+                if store.snippets.isEmpty {
+                    SettingsRowLabel(
+                        title: "No snippets yet",
+                        subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘Return pastes it."
+                    )
+                } else if results.isEmpty {
+                    SettingsNote("No matching snippets")
+                } else {
+                    table(results)
+                }
+                HStack(spacing: 6) {
+                    SettingsIconButton(systemImage: "plus", help: "New Snippet") {
+                        store.editorRequest = .new
+                    }
+                    .accessibilityIdentifier("snippets.add")
+                    SettingsIconButton(systemImage: "minus", help: "Delete Snippet") {
+                        pendingDeletion = selectedSnippet
+                    }
+                    .disabled(selectedSnippet == nil)
+                    .accessibilityIdentifier("snippets.remove")
+                    Spacer()
+                    Button("Edit…") {
+                        if let selection { store.editorRequest = .edit(selection) }
+                    }
+                    .disabled(selectedSnippet == nil)
+                    .accessibilityIdentifier("snippets.edit")
+                }
+            }
+            if let errorMessage {
+                SettingsNote(errorMessage, tint: .orange)
+            }
+            if let copyName = store.unreadableCopyName {
+                SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in its Application Support folder.", tint: .orange)
+            }
+        }
+        .navigationTitle("Snippets")
+        .sheet(item: $store.editorRequest) { request in
+            SnippetEditorSheet(request: request)
+                .environment(model)
+        }
+        .alert(
+            "Delete this snippet?",
+            isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+            presenting: pendingDeletion
+        ) { snippet in
+            Button("Delete", role: .destructive) { delete(snippet) }
+            Button("Cancel", role: .cancel) {}
+        } message: { snippet in
+            Text("“\(snippet.name)” will be removed from this Mac.")
+        }
+    }
+
+    private var selectedSnippet: Snippet? {
+        selection.flatMap(model.snippets.snippet(withID:))
+    }
+
+    private func table(_ snippets: [Snippet]) -> some View {
+        Table(snippets, selection: $selection) {
+            TableColumn("Name") { snippet in
+                HStack(spacing: 5) {
+                    Text(snippet.name)
+                        .lineLimit(1)
+                    if snippet.isSensitive {
+                        Image(systemName: "lock.fill")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                            .help("Sensitive: the text is kept in the Keychain")
+                            .accessibilityLabel("Sensitive")
+                    }
+                }
+            }
+            .width(min: 140, ideal: 200, max: 260)
+            TableColumn("Keyword") { snippet in
+                if let keyword = snippet.keyword {
+                    SnippetKeywordChip(keyword: keyword)
+                }
+            }
+            .width(min: 80, ideal: 110, max: 170)
+            TableColumn("Snippet") { snippet in
+                Text(SnippetPresentation.preview(of: snippet))
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .tableStyle(.inset(alternatesRowBackgrounds: false))
+        .scrollContentBackground(.hidden)
+        .contextMenu(forSelectionType: Snippet.ID.self) { ids in
+            if let id = ids.first {
+                Button("Edit…") { model.snippets.editorRequest = .edit(id) }
+                Divider()
+                Button("Delete…", role: .destructive) { pendingDeletion = model.snippets.snippet(withID: id) }
+            }
+        } primaryAction: { ids in
+            if let id = ids.first { model.snippets.editorRequest = .edit(id) }
+        }
+        .frame(height: Self.tableHeight(rows: snippets.count))
+        .accessibilityIdentifier("snippets.list")
+    }
+
+    /// Tall enough for a few rows, growing with the list up to twelve before it scrolls. A row with
+    /// a keyword chip is about 30 points tall, and the header about 30.
+    static func tableHeight(rows: Int) -> CGFloat {
+        CGFloat(min(max(rows, 4), 12)) * 31 + 34
+    }
+
+    private func delete(_ snippet: Snippet) {
+        do {
+            try model.snippets.delete(snippet.id)
+            if selection == snippet.id { selection = nil }
+            errorMessage = nil
+        } catch let error as SnippetStoreError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = SnippetStoreError.storage.message
+        }
+    }
+}
+
+/// The editor sheet for a new or existing snippet: Name, Keyword, the text, and Sensitive.
+struct SnippetEditorSheet: View {
+    @Environment(AppModel.self) private var model
+    let request: SnippetEditorRequest
+    @State private var draft = SnippetDraft()
+    @State private var didLoad = false
+    @State private var errorMessage: String?
+    @State private var confirmsDeletion = false
+
+    private var editingID: Snippet.ID? {
+        if case .edit(let id) = request { return id }
+        return nil
+    }
+
+    var body: some View {
+        let problem = model.snippets.problem(with: draft, editing: editingID)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                SettingsIconTile(systemImage: SnippetPaletteResults.symbol, tint: .green, size: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(editingID == nil ? "New Snippet" : "Edit Snippet")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Saved on this Mac only.")
+                        .font(.system(size: SettingsTheme.subtitleSize))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                row("Name") {
+                    TextField("Name", text: $draft.name, prompt: Text("Support reply"))
+                        .textFieldStyle(.roundedBorder)
+                        .labelsHidden()
+                        .accessibilityIdentifier("snippets.editor.name")
+                }
+                divider
+                row("Keyword") {
+                    VStack(alignment: .leading, spacing: 5) {
+                        SnippetKeywordField(keyword: $draft.keyword)
+                        if problem == .keywordHasSpaces || problem == .keywordInUse, let problem {
+                            SettingsNote(problem.message, tint: .orange)
+                        } else {
+                            SettingsNote("A short word to find this snippet.")
+                        }
+                    }
+                }
+                divider
+                row("Snippet", alignment: .top) {
+                    TextEditor(text: $draft.text)
+                        .font(.system(size: 13))
+                        .scrollContentBackground(.hidden)
+                        .padding(6)
+                        .frame(height: 180)
+                        .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.1))
+                        )
+                        .accessibilityLabel("Snippet")
+                        .accessibilityIdentifier("snippets.editor.text")
+                }
+                divider
+                Toggle(isOn: $draft.isSensitive) {
+                    SettingsRowLabel(
+                        title: "Sensitive",
+                        subtitle: "Hides the text in the Command Palette and Settings, and leaves it out of search. The text is kept in the Keychain."
+                    )
+                }
+                .toggleStyle(SettingsSwitchToggleStyle())
+                .padding(.vertical, 10)
+                .accessibilityIdentifier("snippets.editor.sensitive")
+            }
+            .padding(.horizontal, SettingsTheme.rowInset + 4)
+            .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
+            if let errorMessage {
+                SettingsNote(errorMessage, tint: .orange)
+            }
+            HStack(spacing: 8) {
+                if editingID != nil {
+                    Button("Delete…", role: .destructive) { confirmsDeletion = true }
+                        .accessibilityIdentifier("snippets.editor.delete")
+                }
+                Spacer()
+                Button("Cancel") { close() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: save)
+                    .buttonStyle(SettingsButtonStyle(isProminent: true))
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(problem != nil)
+                    .accessibilityIdentifier("snippets.editor.save")
+            }
+            .buttonStyle(SettingsButtonStyle())
+        }
+        .padding(20)
+        .frame(width: 540)
+        .background(SettingsTheme.pageBackground)
+        .font(.system(size: SettingsTheme.titleSize))
+        .accessibilityIdentifier("snippets.editor")
+        .onAppear(perform: load)
+        .alert("Delete this snippet?", isPresented: $confirmsDeletion) {
+            Button("Delete", role: .destructive, action: delete)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(draft.trimmedName)” will be removed from this Mac.")
+        }
+    }
+
+    private var divider: some View {
+        SettingsTheme.separator.frame(height: 1)
+    }
+
+    private func row(
+        _ label: String,
+        alignment: VerticalAlignment = .firstTextBaseline,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        HStack(alignment: alignment, spacing: 12) {
+            Text(label)
+                .frame(width: 70, alignment: .leading)
+                .padding(.top, alignment == .top ? 6 : 0)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func load() {
+        guard !didLoad else { return }
+        didLoad = true
+        guard let editingID else { return }
+        if let existing = model.snippets.draft(for: editingID) {
+            draft = existing
+            if model.snippets.snippet(withID: editingID)?.isSensitive == true, existing.text.isEmpty {
+                errorMessage = "Keybumps couldn’t read this snippet’s text from the Keychain."
+            }
+        } else {
+            errorMessage = SnippetStoreError.notFound.message
+        }
+    }
+
+    private func save() {
+        do {
+            if let editingID {
+                try model.snippets.update(editingID, with: draft)
+            } else {
+                try model.snippets.add(draft)
+            }
+            close()
+        } catch let error as SnippetStoreError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = SnippetStoreError.storage.message
+        }
+    }
+
+    private func delete() {
+        guard let editingID else { return }
+        do {
+            try model.snippets.delete(editingID)
+            close()
+        } catch let error as SnippetStoreError {
+            errorMessage = error.message
+        } catch {
+            errorMessage = SnippetStoreError.storage.message
+        }
+    }
+
+    private func close() {
+        model.snippets.editorRequest = nil
+    }
+}
+
+/// The editor's keyword field, drawn as the keyword chip it becomes: monospaced, on the chip's
+/// subtle fill with a hairline border.
+private struct SnippetKeywordField: View {
+    @Binding var keyword: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
+        TextField("Keyword", text: $keyword, prompt: Text(";ship"))
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .medium, design: .monospaced))
+            .autocorrectionDisabled()
+            .padding(.horizontal, 8)
+            .frame(width: 220, height: 26)
+            .background(PaletteTheme.keycapFill, in: shape)
+            .overlay(shape.strokeBorder(PaletteTheme.keycapBorder, lineWidth: 1))
+            .labelsHidden()
+            .accessibilityIdentifier("snippets.editor.keyword")
+    }
+}

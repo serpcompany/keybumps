@@ -31,6 +31,7 @@ final class AppModel {
     @ObservationIgnored private let notice = PaletteHUD.shared
     @ObservationIgnored private let coachTips: any CoachTipPresenting
     let clipboard: ClipboardHistoryService
+    let snippets: SnippetStore
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
@@ -123,6 +124,8 @@ final class AppModel {
         spotlightShortcutResolver injectedSpotlightShortcutResolver: (any SpotlightShortcutConflictResolving)? = nil,
         screenshotDirectoryReader: (any ScreenshotDirectoryReading)? = nil,
         clipboard injectedClipboard: ClipboardHistoryService? = nil,
+        snippets injectedSnippets: SnippetStore? = nil,
+        textPaster injectedTextPaster: (any TextPasting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
@@ -157,6 +160,14 @@ final class AppModel {
             ?? ClipboardHistoryService(sourceApps: UnitTestHost.isActive ? .inert : .system)
         let dictationHistory = injectedDictationHistory ?? DictationHistoryService()
         self.clipboard = clipboard
+        let snippets = injectedSnippets ?? SnippetStore.makeDefault()
+        self.snippets = snippets
+        // Dictation and Snippets share one paste step. Unit tests and the UI-test composition never
+        // synthesize ⌘V.
+        let textPaster = injectedTextPaster
+            ?? (UnitTestHost.isActive || !allowsDictationSystemAccess
+                ? InertTextPaster()
+                : SystemTextPaster(didWritePasteboard: clipboard.suppressCurrentChange))
         self.windows = injectedWindows ?? WindowManagementService()
         let screenshotDelivery = ScreenshotClipboardDelivery(
             clipboard: clipboard,
@@ -188,7 +199,7 @@ final class AppModel {
             fileManager: dictationFileManager,
             history: dictationHistory,
             transcriber: transcriptionCoordinator,
-            didWritePasteboard: clipboard.suppressCurrentChange,
+            paster: textPaster,
             allowsSystemAccess: allowsDictationSystemAccess
         )
         commandPalette = CommandPaletteController(
@@ -196,10 +207,18 @@ final class AppModel {
             dictationHistory: dictationHistory,
             dictationService: dictation,
             inbox: inbox,
-            preferences: preferences
+            preferences: preferences,
+            snippets: snippets,
+            paster: textPaster
         )
         // The palette's Settings button, Command-comma, and Keybumps Settings result take the status menu's route.
         commandPalette.openSettings = { MainWindowRouter.shared.open() }
+        // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste.
+        let permissions = self.permissions
+        commandPalette.canPaste = {
+            permissions.refresh()
+            return permissions.accessibilityGranted
+        }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences
             ?? (UnitTestHost.isActive ? InertSymbolicHotKeyPreferences() : SystemSymbolicHotKeyPreferences())
@@ -233,7 +252,8 @@ final class AppModel {
                 windows: windows,
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
-            KeyboardShortcutterModule(detector: detector)
+            KeyboardShortcutterModule(detector: detector),
+            SnippetsModule(palette: commandPalette)
         ])
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }

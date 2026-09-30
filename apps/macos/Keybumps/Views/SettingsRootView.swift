@@ -5,8 +5,8 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
-    case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", permissions = "Permissions", general = "General"
-    case account = "Account"
+    case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets"
+    case permissions = "Permissions", general = "General", account = "Account"
     var id: String { rawValue }
 
     /// Capability pages in registry order, then the fixed shell destinations.
@@ -198,6 +198,10 @@ struct SettingsRootView: View {
         }
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
+        // The palette's New Snippet and Edit open the editor, which lives on the Snippets page.
+        .onChange(of: model.snippets.editorRequest, initial: true) { _, request in
+            if request != nil { navigation.navigate(to: .snippets) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
     }
 }
@@ -401,14 +405,16 @@ private struct LicenseSettingsGroup: View {
     }
 }
 
-private struct SettingsSearchField: View {
+struct SettingsSearchField: View {
     @Binding var text: String
+    var prompt = "Search settings…"
+    var identifier = "settings.search"
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search settings…", text: $text)
+            TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: SettingsTheme.titleSize))
         }
@@ -416,7 +422,7 @@ private struct SettingsSearchField: View {
         .frame(height: 29)
         .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
-        .accessibilityIdentifier("settings.search")
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -1081,7 +1087,7 @@ private struct PermissionWalkthroughView: View {
 
 /// The top of a capability's page, as on a Raycast extension page: its icon, name, and summary,
 /// then its command with the hotkey. The enable switch lives in the toolbar.
-private struct CapabilityControl: View {
+struct CapabilityControl: View {
     let capability: Capability
     var shortcuts: [CapabilityShortcut] = []
 
@@ -1154,7 +1160,8 @@ private struct CapabilityShortcutEditor: View {
                     },
                     clear: { model.finishCapabilityShortcutRecording(nil, for: shortcut) }
                 )
-                if binding?.usesSameKeys(as: shortcut.defaultBinding) != true {
+                // A shortcut that starts unassigned has no default to restore; its field clears it.
+                if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
                     SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
                         model.restoreDefaultCapabilityShortcut(shortcut)
                     }
@@ -1215,7 +1222,7 @@ private struct PermissionRow: View {
 }
 
 /// Jumps to the Permissions page from a capability page.
-private struct OpenPermissionsButton: View {
+struct OpenPermissionsButton: View {
     var body: some View {
         Button("Open Permissions…") { NotificationCenter.default.post(name: .openPermissions, object: nil) }
     }

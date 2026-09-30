@@ -157,7 +157,8 @@ final class DictationService {
     private let recoveryURL: URL
     private let history: DictationHistoryService
     private let transcriber: any CompletedAudioTranscribing
-    private let didWritePasteboard: () -> Void
+    /// The paste step Dictation shares with Snippets.
+    private let paster: any TextPasting
     private let allowsSystemAccess: Bool
     var durationLimit: DictationDurationLimit
 
@@ -167,7 +168,7 @@ final class DictationService {
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
-        didWritePasteboard: @escaping () -> Void = {},
+        paster: any TextPasting = SystemTextPaster(),
         allowsSystemAccess: Bool = true
     ) {
         self.allowsSystemAccess = allowsSystemAccess
@@ -179,7 +180,7 @@ final class DictationService {
         self.recoveryURL = recoveryURL
         self.history = history ?? DictationHistoryService(fileManager: fileManager)
         self.transcriber = transcriber ?? AppleSpeechCompletedAudioTranscriber()
-        self.didWritePasteboard = didWritePasteboard
+        self.paster = paster
         recoveredTranscript = try? String(contentsOf: recoveryURL, encoding: .utf8)
     }
 
@@ -397,19 +398,11 @@ final class DictationService {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier else {
             throw NSError(domain: "Keybumps.Dictation", code: 4, userInfo: [NSLocalizedDescriptionKey: "The destination app could not be focused. Your transcript was preserved."])
         }
-        let pasteboard = NSPasteboard.keybumps
-        pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string) else {
+        do {
+            try paster.paste(text, concealed: false)
+        } catch {
             throw NSError(domain: "Keybumps.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])
         }
-        didWritePasteboard()
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
-            throw NSError(domain: "Keybumps.Dictation", code: 3, userInfo: [NSLocalizedDescriptionKey: "The transcript was preserved but could not be pasted."])
-        }
-        down.flags = .maskCommand; up.flags = .maskCommand
-        down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
     }
 
     private func stopAudio() {

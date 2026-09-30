@@ -91,6 +91,12 @@ extension AppModel {
             }()),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
+            // Sensitive snippets stay in memory, never in the Keychain.
+            snippets: SnippetStore(
+                storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(SnippetStore.fileName),
+                secrets: InMemorySnippetSecretStore()
+            ),
+            textPaster: InertTextPaster(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
                     preferredLocation: { sandbox.screenshots.path },

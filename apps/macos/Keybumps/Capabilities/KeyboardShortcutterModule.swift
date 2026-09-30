@@ -11,7 +11,8 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .keyboardShortcutter,
             name: "Hotkeys",
-            commandKey: 5,
+            // Hidden by default, so it follows Snippets (⌘5) and the visible tabs stay ⌘1–⌘5.
+            commandKey: 6,
             systemImage: "keyboard",
             prompt: "Search hotkeys",
             primaryActionTitle: nil,
