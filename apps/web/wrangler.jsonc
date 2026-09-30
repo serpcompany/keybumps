@@ -1,6 +1,17 @@
+/**
+ * Worker configuration for keybumps.app. The top level is local development (`pnpm dev`,
+ * `pnpm preview`) and has no routes, so Wrangler keeps each request's Host header and the host
+ * redirects can be checked locally. `staging` and `production` are the deployed environments,
+ * which only CI deploys (.github/workflows/web-deploy.yml). Bindings, `vars`, `routes`, and
+ * `services` are not inherited, so each environment repeats them. See docs/agents/web.md.
+ *
+ * SITE_ENV is set twice for each deployed environment: at build time by the `deploy:*` script,
+ * and at runtime by the environment's `vars`. OpenNext renders robots.txt and pages on the Worker,
+ * so without the runtime var, production would serve `Disallow: /` and no analytics.
+ */
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "keybumps-website",
+  "name": "keybumps-web",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-19",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -8,18 +19,40 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  "services": [
-    {
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "keybumps-website"
-    }
-  ],
-  "routes": [
-    { "pattern": "keybumps.app", "custom_domain": true },
-    { "pattern": "www.keybumps.app", "custom_domain": true }
-  ],
-  "previews": {},
+  // Workers Logs record each request's URL. Polar sends buyers to /thanks/ with a checkout ID and
+  // a customer-session token in the query string, so the query is always redacted. Every
+  // environment inherits this block; an environment that sets its own `observability` replaces
+  // all of it and must repeat `redact_query_string`. src/lib/worker-config.test.ts checks each one.
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "redact_query_string": true
+  },
+  "upload_source_maps": true,
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web" }],
+  "env": {
+    "staging": {
+      "vars": { "SITE_ENV": "staging" },
+      // Keep workers_dev: CI smoke-tests the workers.dev URL, which skips the zone's bot
+      // protection. Without the smoke-test header, that URL redirects to staging.keybumps.app.
+      "workers_dev": true,
+      "routes": [{ "pattern": "staging.keybumps.app", "custom_domain": true }],
+      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web-staging" }]
+    },
+    "production": {
+      "vars": { "SITE_ENV": "production" },
+      // Keep workers_dev: CI smoke-tests the workers.dev URL, which skips the zone's bot
+      // protection. www redirects to the apex in src/lib/redirects.ts.
+      "workers_dev": true,
+      // TODO(#144) domain cutover: production has no routes until the owner runs the cutover in
+      // docs/agents/web.md (Domain cutover). keybumps.app and www.keybumps.app still belong to
+      // the old Worker, keybumps-website. A CI deploy that lists them here would take them over
+      // without asking, because Wrangler overrides an existing Custom Domain when it isn't
+      // running in a terminal. At cutover, add:
+      //   "routes": [
+      //     { "pattern": "keybumps.app", "custom_domain": true },
+      //     { "pattern": "www.keybumps.app", "custom_domain": true }
+      //   ],
+      "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web-production" }]
+    }
   }
 }
