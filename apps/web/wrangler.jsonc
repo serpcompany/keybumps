@@ -43,15 +43,13 @@
       // Keep workers_dev: CI smoke-tests the workers.dev URL, which skips the zone's bot
       // protection. www redirects to the apex in src/lib/redirects.ts.
       "workers_dev": true,
-      // TODO(#144) domain cutover: production has no routes until the owner runs the cutover in
-      // docs/agents/web.md (Domain cutover). keybumps.app and www.keybumps.app still belong to
-      // the old Worker, keybumps-website. A CI deploy that lists them here would take them over
-      // without asking, because Wrangler overrides an existing Custom Domain when it isn't
-      // running in a terminal. At cutover, add:
-      //   "routes": [
-      //     { "pattern": "keybumps.app", "custom_domain": true },
-      //     { "pattern": "www.keybumps.app", "custom_domain": true }
-      //   ],
+      // keybumps.app and www.keybumps.app moved here from the old Worker, keybumps-website, at the
+      // domain cutover (#144; docs/agents/web.md). CI deploys take over a Custom Domain another
+      // Worker holds without asking, so never list these hostnames on any other Worker.
+      "routes": [
+        { "pattern": "keybumps.app", "custom_domain": true },
+        { "pattern": "www.keybumps.app", "custom_domain": true }
+      ],
       "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web-production" }]
     }
   }
