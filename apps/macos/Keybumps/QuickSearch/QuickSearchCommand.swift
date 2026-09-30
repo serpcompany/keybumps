@@ -64,14 +64,28 @@ enum QuickSearchCommand: Hashable, Identifiable {
     /// How well a query names a command, best first.
     enum Match: Equatable {
         /// Every query word is a whole word of its name, as in "settings" or "dictation". Listed
-        /// above the apps.
+        /// above the apps until learned usage says otherwise.
         case name
         /// Every query word is a whole word of its name or keywords, but some only of a keyword, as
-        /// in "prefs" or "dictate". Listed after the apps, since a keyword can be an app's name
-        /// ("shortcuts", "voice").
+        /// in "prefs" or "dictate". Listed after the apps until learned usage says otherwise, since
+        /// a keyword can be an app's name ("shortcuts", "voice").
         case keyword
-        /// Every query word starts one, as in "sett" or "keybumps pref". Listed after the apps.
+        /// Every query word starts one, as in "sett" or "keybumps pref". Listed after the apps, and
+        /// after keyword matches, until learned usage says otherwise.
         case prefix
+
+        /// The match on the scale `QuickSearchRanking.score(for:normalizedTerm:usage:)` gives apps,
+        /// before learned usage is added. A name match outscores any app's name, even an exact one
+        /// (10,000), by less than one more use (1,500); keyword and prefix matches score below any
+        /// app match (1,000 at least). With no history, names come first and the rest follow the
+        /// apps; learned usage then moves commands past apps exactly as it moves apps past each other.
+        var textScore: Int {
+            switch self {
+            case .name: 10_500
+            case .keyword: 900
+            case .prefix: 800
+            }
+        }
     }
 
     /// How the query matches, or nil when some query word starts no word of the title or keywords.
@@ -167,25 +181,38 @@ enum QuickSearchItem: Identifiable, Hashable {
 }
 
 extension QuickSearchRanking {
-    /// Quick Search's rows for a query. Commands the query names by whole words of their names come
-    /// first, as Alfred puts its preferences first. Commands matched only through a keyword, then
-    /// ones the query only starts, come after the applications, so an app named by the query (such
-    /// as Shortcuts for "shortcuts") stays first and a few letters still find apps first. Files and
-    /// folders come last. Equally good commands keep `QuickSearchCommand.allCases` order.
+    /// Quick Search's rows for a query. Commands and applications are ranked together, each by how
+    /// well it matches plus its learned usage (`usage`), so whichever the user picks more rises, as
+    /// among apps. With no history, commands the query names by whole words of their names come
+    /// first, as Alfred puts its preferences first; commands matched through a keyword, then ones the
+    /// query only starts, come after the applications, so an app named by the query (Shortcuts for
+    /// "shortcuts") stays first and a few letters still find apps first. Equal scores keep that
+    /// order, and equally good commands keep `QuickSearchCommand.allCases` order. Files and folders
+    /// always come last.
+    @MainActor
     static func items(
         matching term: String,
         applications: [QuickSearchResult],
         files: [QuickSearchResult],
-        commands: [QuickSearchCommand] = QuickSearchCommand.allCases
+        commands: [QuickSearchCommand] = QuickSearchCommand.allCases,
+        usage: ApplicationUsageStore? = nil
     ) -> [QuickSearchItem] {
-        let matches = commands.map { (command: $0, match: $0.match(term)) }
-        func listed(_ match: QuickSearchCommand.Match) -> [QuickSearchItem] {
-            matches.filter { $0.match == match }.map { .command($0.command) }
+        let normalizedTerm = normalized(term)
+        let matches = commands.compactMap { command in command.match(term).map { (command: command, match: $0) } }
+        func scoredCommands(_ level: QuickSearchCommand.Match) -> [(item: QuickSearchItem, score: Int)] {
+            matches.filter { $0.match == level }.map { entry in
+                (item: QuickSearchItem.command(entry.command), score: level.textScore + (usage?.priorityScore(for: entry.command) ?? 0))
+            }
         }
-        return listed(.name)
-            + applications.map(QuickSearchItem.result)
-            + listed(.keyword)
-            + listed(.prefix)
-            + files.map(QuickSearchItem.result)
+        let apps = applications.map { app in
+            (item: QuickSearchItem.result(app), score: score(for: app, normalizedTerm: normalizedTerm, usage: usage))
+        }
+        let ranked = (scoredCommands(.name) + apps + scoredCommands(.keyword) + scoredCommands(.prefix))
+            .enumerated()
+            .sorted { lhs, rhs in
+                lhs.element.score != rhs.element.score ? lhs.element.score > rhs.element.score : lhs.offset < rhs.offset
+            }
+            .map(\.element.item)
+        return ranked + files.map(QuickSearchItem.result)
     }
 }

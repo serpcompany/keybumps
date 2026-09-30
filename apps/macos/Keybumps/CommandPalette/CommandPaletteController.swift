@@ -206,9 +206,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The tab the palette is on, or was last on.
     var selectedTab: CommandPaletteTab { state.tab }
 
-    /// Runs a Keybumps command from its Quick Search row, the footer's Settings button, or its
-    /// Command-key shortcut in any tab. A capability's tab opens in place; for Settings the palette
-    /// closes first. Commands never become Recent Items.
+    /// Runs a command the user picked from Quick Search's results (a click, or Return on its row):
+    /// learns it for ranking, as opening an app does, then runs it. It never becomes a Recent Item.
+    func choose(_ command: QuickSearchCommand) {
+        search.recordRunCommand(command)
+        run(command)
+    }
+
+    /// Runs a Keybumps command: from `choose(_:)`, the footer's Settings button, or its Command-key
+    /// shortcut in any tab. Only `choose(_:)` teaches the ranking. A capability's tab opens in place;
+    /// for Settings the palette closes first.
     func run(_ command: QuickSearchCommand) {
         switch command.destination(enabledCapabilities: preferences.enabledCapabilities) {
         case .paletteTab(let tab):
@@ -252,6 +259,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 activateSearchResult: open,
                 revealSearchResult: reveal,
                 runCommand: { [weak self] command in self?.run(command) },
+                chooseCommand: { [weak self] command in self?.choose(command) },
                 chooseClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
                 copyClipboardEntry: { [weak self] entry in self?.copyClipboardEntry(entry) },
                 editClipboardEntry: { [weak self] entry in _ = self?.editClipboardImage(entry) },
@@ -482,7 +490,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard search.items.indices.contains(state.selection) else { return }
             switch search.items[state.selection] {
             case .command(let command):
-                run(command)
+                choose(command)
             case .result(let result):
                 reveal ? self.reveal(result) : open(result)
             }
@@ -577,7 +585,10 @@ private struct CommandPaletteView: View {
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
+    /// Runs a command without teaching the ranking (the footer's Settings button).
     let runCommand: (QuickSearchCommand) -> Void
+    /// Runs a command picked from Quick Search's results, which teaches the ranking.
+    let chooseCommand: (QuickSearchCommand) -> Void
     /// A click: Command-click edits an image, anything else copies.
     let chooseClipboardEntry: (ClipboardEntry) -> Void
     /// Always copies, whatever keys are held (the context menu's Copy).
@@ -648,7 +659,7 @@ private struct CommandPaletteView: View {
                 recentItems: search.recentItems.items,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
-                run: runCommand,
+                run: chooseCommand,
                 deleteRecentItem: search.recentItems.delete,
                 clearRecentItems: search.recentItems.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged

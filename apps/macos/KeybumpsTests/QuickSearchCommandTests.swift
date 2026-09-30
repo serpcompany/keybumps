@@ -28,9 +28,9 @@ struct QuickSearchCommandTests {
         #expect(settings.match(query) == .name)
     }
 
-    /// Since #182, a keyword ranks a command after the apps, like any capability command's keyword.
-    /// No stock app is named Preferences on macOS 14.2 and later (System Preferences became System
-    /// Settings), so in practice these still list it first.
+    /// Since #182, with no history a keyword ranks a command after the apps, like any capability
+    /// command's keyword. No stock app is named Preferences on macOS 14.2 and later (System
+    /// Preferences became System Settings), so in practice these still list it first.
     @Test("Its keywords, alone or with its name, match by keyword", arguments: ["preferences", "prefs", "Keybumps Prefs"])
     func keywordMatches(query: String) {
         #expect(settings.match(query) == .keyword)
@@ -121,6 +121,34 @@ struct QuickSearchCommandTests {
             .command(settings), .command(.capability(.screenshotTools)), .command(.capability(.dictation)),
             .command(.capability(.windowManagement)), .command(.capability(.keyboardShortcutter)),
         ])
+    }
+
+    /// #179 listed Keybumps Settings above System Settings for "settings" whatever the history. Since
+    /// #186 the owner's rule applies: what the user picks more ranks first, as among apps.
+    @Test("Learned usage decides between Keybumps Settings and System Settings for \"settings\"")
+    func historyDecidesSettings() {
+        let storageURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("quick-search-command-history-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storageURL) }
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let usage = ApplicationUsageStore(storageURL: storageURL, now: { now })
+        func items() -> [QuickSearchItem] {
+            QuickSearchRanking.items(
+                matching: "settings",
+                applications: QuickSearchRanking.sortedApplications(matching: "settings", from: [systemSettings], usage: usage),
+                files: [file],
+                usage: usage
+            )
+        }
+
+        #expect(items() == [.command(settings), .result(systemSettings), .result(file)], "No history: as in #179")
+        // System Settings only starts a word with "settings", so it needs four picks to pass the name match.
+        for _ in 1...3 { usage.record(systemSettings) }
+        #expect(items().first == .command(settings))
+        usage.record(systemSettings)
+        #expect(items() == [.result(systemSettings), .command(settings), .result(file)])
+        usage.record(settings)
+        #expect(items() == [.command(settings), .result(systemSettings), .result(file)])
     }
 
     // MARK: Command Palette entry points

@@ -5,6 +5,10 @@ struct ApplicationUsageRecord: Codable, Equatable {
     var lastOpenedAt: Date
 }
 
+/// Quick Search's learned usage: how often and how recently the user opened each app, or ran each
+/// Quick Search command, from Quick Search. It is kept per item, not per query, and only ranks
+/// results; it never lists anything (Recent Items does). Apps are keyed by their standardized path
+/// and commands by `command:<id>`, so the keys never collide and older builds ignore command keys.
 @MainActor
 final class ApplicationUsageStore {
     private var records: [String: ApplicationUsageRecord] = [:]
@@ -27,7 +31,35 @@ final class ApplicationUsageStore {
 
     func record(_ result: QuickSearchResult) {
         guard result.kind == .application else { return }
-        let key = result.url.standardizedFileURL.path
+        record(key: result.url.standardizedFileURL.path)
+    }
+
+    /// Learns a command the user ran from Quick Search's results, exactly as an opened app.
+    func record(_ command: QuickSearchCommand) {
+        record(key: Self.key(for: command))
+    }
+
+    func record(for url: URL) -> ApplicationUsageRecord? {
+        records[url.standardizedFileURL.path]
+    }
+
+    func record(for command: QuickSearchCommand) -> ApplicationUsageRecord? {
+        records[Self.key(for: command)]
+    }
+
+    func priorityScore(for result: QuickSearchResult) -> Int {
+        priorityScore(for: record(for: result.url))
+    }
+
+    func priorityScore(for command: QuickSearchCommand) -> Int {
+        priorityScore(for: record(for: command))
+    }
+
+    private static func key(for command: QuickSearchCommand) -> String {
+        "command:\(command.id)"
+    }
+
+    private func record(key: String) {
         let existing = records[key]
         records[key] = ApplicationUsageRecord(
             launchCount: (existing?.launchCount ?? 0) + 1,
@@ -36,12 +68,8 @@ final class ApplicationUsageStore {
         persist()
     }
 
-    func record(for url: URL) -> ApplicationUsageRecord? {
-        records[url.standardizedFileURL.path]
-    }
-
-    func priorityScore(for result: QuickSearchResult) -> Int {
-        guard let record = record(for: result.url) else { return 0 }
+    private func priorityScore(for record: ApplicationUsageRecord?) -> Int {
+        guard let record else { return 0 }
         let frequencyScore = min(record.launchCount, 20) * 1_500
         let age = max(0, now().timeIntervalSince(record.lastOpenedAt))
         let recencyScore: Int
@@ -83,15 +111,28 @@ enum QuickSearchRanking {
         from applications: [QuickSearchResult],
         usage: ApplicationUsageStore
     ) -> [QuickSearchResult] {
-        let term = rawTerm.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let term = normalized(rawTerm)
         return applications
             .filter { normalizedName(for: $0).contains(term) }
             .sorted { lhs, rhs in
-                let lhsScore = textScore(for: lhs, term: term) + usage.priorityScore(for: lhs)
-                let rhsScore = textScore(for: rhs, term: term) + usage.priorityScore(for: rhs)
+                let lhsScore = score(for: lhs, normalizedTerm: term, usage: usage)
+                let rhsScore = score(for: rhs, normalizedTerm: term, usage: usage)
                 if lhsScore != rhsScore { return lhsScore > rhsScore }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+    }
+
+    /// An app's rank for a query: how well its name matches, from 10,000 for the exact name down to
+    /// 1,000 for a late substring, plus its learned usage. Commands are ranked on the same scale
+    /// (`QuickSearchCommand.Match.textScore`).
+    @MainActor
+    static func score(for result: QuickSearchResult, normalizedTerm term: String, usage: ApplicationUsageStore?) -> Int {
+        textScore(for: result, term: term) + (usage?.priorityScore(for: result) ?? 0)
+    }
+
+    /// A query as the rankings compare it: case and accents ignored.
+    static func normalized(_ term: String) -> String {
+        term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 
     private static func textScore(for result: QuickSearchResult, term: String) -> Int {
@@ -107,6 +148,6 @@ enum QuickSearchRanking {
     }
 
     private static func normalizedName(for result: QuickSearchResult) -> String {
-        result.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        normalized(result.name)
     }
 }

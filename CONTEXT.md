@@ -40,6 +40,14 @@ _Avoid_: Workflow, extension command
 The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
 _Avoid_: Plugin, extension, navigation command
 
+**Recent Items**:
+The apps, files, and folders the user recently opened from Quick Search, listed while its search is empty. Quick Search commands never become Recent Items.
+_Avoid_: History, recents
+
+**Learned usage**:
+How often and how recently the user picked each app or Quick Search command from Quick Search, kept locally and used only to rank results, so whichever the user picks more comes first. It is never listed, and no query is kept.
+_Avoid_: Search history, frecency
+
 **Clipboard History**:
 The recent text and image items the user copied, kept locally.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate

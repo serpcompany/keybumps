@@ -139,11 +139,9 @@ struct CapabilityCommandTests {
     private let systemSettings = app("/System/Applications/System Settings.app")
 
     /// Quick Search's rows for a query over those apps, with the real app ranking and no files.
-    private func rows(_ query: String) -> [QuickSearchItem] {
-        let usage = ApplicationUsageStore(
-            storageURL: FileManager.default.temporaryDirectory
-                .appendingPathComponent("capability-command-usage-\(UUID().uuidString).json")
-        )
+    /// Without `usage` there is no history.
+    private func rows(_ query: String, usage: ApplicationUsageStore? = nil) -> [QuickSearchItem] {
+        let usage = usage ?? Self.usageStore()
         let applications = [
             shortcutsApp, screenshotApp, screenSharing, imageCapture, voiceMemos, voiceOverUtility,
             keyboardMaestro, pasteApp, windowsApp, dictionaryApp, systemSettings,
@@ -151,8 +149,20 @@ struct CapabilityCommandTests {
         return QuickSearchRanking.items(
             matching: query,
             applications: QuickSearchRanking.sortedApplications(matching: query, from: applications, usage: usage),
-            files: []
+            files: [],
+            usage: usage
         )
+    }
+
+    /// Learned usage in a temporary file (written only once something is recorded; remove it with
+    /// `defer`). Every use is at the same moment, so the recency bonus never varies.
+    private static func usageStore(at url: URL = temporaryUsageURL()) -> ApplicationUsageStore {
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        return ApplicationUsageStore(storageURL: url, now: { now })
+    }
+
+    nonisolated private static func temporaryUsageURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("capability-command-usage-\(UUID().uuidString).json")
     }
 
     @Test(
@@ -201,12 +211,72 @@ struct CapabilityCommandTests {
         #expect(rows(query).first == .command(command))
     }
 
-    /// Owner decision on #186: a word of a command's name outranks an app that shares it. The
-    /// alternative is that apps always win such ties.
-    @Test("A name word shared with an app lists the command first: screenshot, shortcut")
+    @Test("With no history, a name word shared with an app lists the command first: screenshot, shortcut")
     func nameWordSharedWithAnApp() {
         #expect(rows("screenshot") == [.command(screenshots), .result(screenshotApp)])
         #expect(rows("shortcut") == [.command(coach), .result(shortcutsApp)])
+    }
+
+    // MARK: Learned usage (owner decision on #186: history decides)
+
+    @Test("Screenshot.app picked once rises above Screenshot Tools; the command picked more rises back")
+    func historyDecidesScreenshot() {
+        let url = Self.temporaryUsageURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let usage = Self.usageStore(at: url)
+
+        usage.record(screenshotApp)
+        #expect(rows("screenshot", usage: usage) == [.result(screenshotApp), .command(screenshots)])
+        usage.record(screenshots)
+        #expect(rows("screenshot", usage: usage) == [.command(screenshots), .result(screenshotApp)], "Picked as often: the name match wins")
+        usage.record(screenshotApp)
+        #expect(rows("screenshot", usage: usage).first == .result(screenshotApp))
+        usage.record(screenshots)
+        usage.record(screenshots)
+        #expect(rows("screenshot", usage: usage) == [.command(screenshots), .result(screenshotApp)])
+    }
+
+    @Test("Shortcuts.app, a prefix of \"shortcut\", needs three picks to pass Shortcut Coach's name")
+    func historyDecidesShortcut() {
+        let url = Self.temporaryUsageURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let usage = Self.usageStore(at: url)
+
+        usage.record(shortcutsApp)
+        usage.record(shortcutsApp)
+        #expect(rows("shortcut", usage: usage).first == .command(coach))
+        usage.record(shortcutsApp)
+        #expect(rows("shortcut", usage: usage) == [.result(shortcutsApp), .command(coach)])
+        usage.record(coach)
+        #expect(rows("shortcut", usage: usage) == [.command(coach), .result(shortcutsApp)])
+    }
+
+    /// Consistent with app learning, where an often-opened app with a weaker match passes an unused
+    /// app with the exact name: a keyword command picked often enough passes the app it names.
+    @Test("A keyword command rises above an app with that exact name only after six picks")
+    func historyLiftsKeywordCommandsLikeApps() {
+        let url = Self.temporaryUsageURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let usage = Self.usageStore(at: url)
+
+        for _ in 1...5 { usage.record(coach) }
+        #expect(rows("shortcuts", usage: usage) == [.result(shortcutsApp), .command(coach)])
+        usage.record(coach)
+        #expect(rows("shortcuts", usage: usage) == [.command(coach), .result(shortcutsApp)])
+        #expect(rows("hotkeys", usage: usage) == [.command(coach)])
+    }
+
+    @Test("History is kept per item, not per query, as for apps")
+    func historyIsPerItem() {
+        let url = Self.temporaryUsageURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let usage = Self.usageStore(at: url)
+
+        usage.record(screenshotApp)
+        #expect(rows("screenshot", usage: usage).first == .result(screenshotApp))
+        #expect(rows("screen", usage: usage).first == .result(screenshotApp), "Learned from any query, it lifts the app everywhere")
+        #expect(usage.record(for: screenshots) == nil)
+        #expect(usage.record(for: screenshotApp.url)?.launchCount == 1)
     }
 
     @Test("A keyword with no app of that name still lists the command first, before files")
@@ -349,7 +419,7 @@ struct CapabilityCommandTests {
     }
 
     /// A palette over the harness's services with its own Quick Search stores in a temporary folder.
-    @Test("Running any command, on or off, adds no Recent Item or learned app usage")
+    @Test("Picking any command from the results, on or off, learns its own usage but adds no Recent Item")
     func commandsStayOutOfRecentItems() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityCommandRecents-\(UUID().uuidString)", isDirectory: true)
@@ -376,16 +446,61 @@ struct CapabilityCommandTests {
             for command in QuickSearchCommand.allCases {
                 search.query = command.title
                 #expect(search.items.first == .command(command))
-                palette.run(command)
+                palette.choose(command)
             }
         }
         #expect(recentItems.items.isEmpty)
-        #expect(!FileManager.default.fileExists(atPath: usageURL.path), "No app usage was learned")
+        for command in QuickSearchCommand.allCases {
+            #expect(usage.record(for: command)?.launchCount == 2, "\(command.id)")
+            #expect(ApplicationUsageStore(storageURL: usageURL).record(for: command)?.launchCount == 2, "Kept locally")
+        }
+        #expect(usage.record(for: dictionaryApp.url) == nil, "No app usage was learned")
+
+        // The footer's Settings button and Command-comma run Keybumps Settings without teaching the ranking.
+        palette.run(.keybumpsSettings)
+        #expect(usage.record(for: .keybumpsSettings)?.launchCount == 2)
 
         // The same stores do record an opened app, so the checks above can fail.
         search.recordOpenResult(dictionaryApp, succeeded: true)
         #expect(recentItems.items.map(\.result) == [dictionaryApp])
         #expect(usage.record(for: dictionaryApp.url)?.launchCount == 1)
+    }
+
+    @Test("Quick Search ranks with what the palette learns: picking a command lifts it back above the app")
+    func paletteLearnsFromPicks() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsCapabilityCommandLearning-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: allCapabilities, missing: nil, root: root)
+        let model = harness.model
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let search = QuickSearchModel(
+            recentItems: RecentItemStore(storageURL: root.appendingPathComponent("recent-items.json")),
+            applicationUsage: ApplicationUsageStore(storageURL: root.appendingPathComponent("application-usage.json"), now: { now }),
+            applications: [screenshotApp],
+            searchesFiles: false
+        )
+        let palette = CommandPaletteController(
+            clipboard: model.clipboard,
+            dictationHistory: model.dictationHistory,
+            dictationService: model.dictation,
+            inbox: model.inbox,
+            preferences: model.preferences,
+            search: search
+        )
+        palette.openSettings = { _ in }
+        func firstRow() -> QuickSearchItem? {
+            search.query = "screenshot"
+            return search.items.first
+        }
+
+        #expect(firstRow() == .command(screenshots))
+        search.recordOpenResult(screenshotApp, succeeded: true)
+        #expect(firstRow() == .result(screenshotApp))
+        palette.choose(screenshots)
+        #expect(firstRow() == .command(screenshots))
+        #expect(search.recentItems.items.map(\.result) == [screenshotApp], "Only the app became a Recent Item")
     }
 
     // MARK: Settings route

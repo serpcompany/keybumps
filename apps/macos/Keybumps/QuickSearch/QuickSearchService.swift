@@ -72,7 +72,9 @@ final class QuickSearchModel {
             from: applications,
             usage: applicationUsage
         )
-        items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: [])
+        items = QuickSearchRanking.items(
+            matching: term, applications: Array(appMatches.prefix(12)), files: [], usage: applicationUsage
+        )
         guard searchesFiles else { return }
 
         let query = NSMetadataQuery()
@@ -96,6 +98,12 @@ final class QuickSearchModel {
         applicationUsage.record(result)
     }
 
+    /// Learns a command the user ran from the results, so it ranks like an app opened as often.
+    /// Commands never become Recent Items.
+    func recordRunCommand(_ command: QuickSearchCommand) {
+        applicationUsage.record(command)
+    }
+
     private func consume(query: NSMetadataQuery, term: String, appMatches: [QuickSearchResult]) {
         query.disableUpdates()
         defer { query.enableUpdates() }
@@ -110,7 +118,9 @@ final class QuickSearchModel {
             files.append(QuickSearchResult(url: url, kind: isDirectory.boolValue ? .folder : .file))
             if files.count == 30 { break }
         }
-        items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: files)
+        items = QuickSearchRanking.items(
+            matching: term, applications: Array(appMatches.prefix(12)), files: files, usage: applicationUsage
+        )
     }
 
     private func clearObservers() {
