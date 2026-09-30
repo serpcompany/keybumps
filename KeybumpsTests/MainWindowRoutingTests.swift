@@ -34,7 +34,6 @@ struct MainWindowRoutingTests {
         quickSearchRouter.configure { quickSearchOpens += 1 }
         let delegate = AppDelegate(
             quickSearchRouter: quickSearchRouter,
-            appShellRouter: AppShellRouter(),
             mainWindowRouter: mainWindowRouter
         )
 
@@ -45,5 +44,18 @@ struct MainWindowRoutingTests {
             DispatchQueue.main.async { continuation.resume() }
         }
         #expect(quickSearchOpens == 1)
+    }
+}
+
+@MainActor
+@Suite("Legacy banner cleanup")
+struct LegacyBannerCleanupTests {
+    @Test("Old Notification Center banners are cleared once per install")
+    func clearsOnce() {
+        let defaults = InMemoryDefaults()
+        var clears = 0
+        AppDelegate.clearLegacyBannersOnce(defaults: defaults) { clears += 1 }
+        AppDelegate.clearLegacyBannersOnce(defaults: defaults) { clears += 1 }
+        #expect(clears == 1)
     }
 }

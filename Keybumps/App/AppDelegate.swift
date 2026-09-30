@@ -6,15 +6,13 @@ extension Notification.Name {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let quickSearchRouter: QuickSearchRouter
-    private let appShellRouter: AppShellRouter
     private let mainWindowRouter: MainWindowRouter
     private let confirmQuit: ([String]) -> Bool
 
     override init() {
         quickSearchRouter = .shared
-        appShellRouter = .shared
         mainWindowRouter = .shared
         confirmQuit = Self.presentQuitConfirmation
         super.init()
@@ -23,12 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// Tests inject `confirmQuit`; by default it declines, so tests never show a dialog.
     init(
         quickSearchRouter: QuickSearchRouter,
-        appShellRouter: AppShellRouter? = nil,
         mainWindowRouter: MainWindowRouter? = nil,
         confirmQuit: @escaping ([String]) -> Bool = { _ in false }
     ) {
         self.quickSearchRouter = quickSearchRouter
-        self.appShellRouter = appShellRouter ?? .shared
         self.mainWindowRouter = mainWindowRouter ?? .shared
         self.confirmQuit = confirmQuit
         super.init()
@@ -36,7 +32,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.configureWindowBehavior()
-        UNUserNotificationCenter.current().delegate = self
+        Self.clearLegacyBannersOnce(defaults: .standard)
+    }
+
+    /// Keybumps no longer posts banners; clears any an earlier build left in Notification Center,
+    /// once per install.
+    static func clearLegacyBannersOnce(defaults: UserDefaults, clear: () -> Void = {
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+    }) {
+        let key = "didClearLegacyNotificationBanners"
+        guard !UnitTestHost.isActive || defaults !== UserDefaults.standard,
+              !defaults.bool(forKey: key) else { return }
+        clear()
+        defaults.set(true, forKey: key)
     }
 
     static func configureWindowBehavior() {
@@ -47,9 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // Settings asked for the window before it ever existed: let SwiftUI create it.
         if mainWindowRouter.consumeReopenRequest() { return true }
         DispatchQueue.main.async { [weak self] in
-            guard let self,
-                  !self.appShellRouter.shouldSuppressGenericReopen else { return }
-            self.quickSearchRouter.open()
+            self?.quickSearchRouter.open()
         }
         return false
     }
@@ -79,29 +85,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         alert.addButton(withTitle: "Quit")
         NSApplication.shared.activate(ignoringOtherApps: true)
         return alert.runModal() == .alertSecondButtonReturn
-    }
-
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        completionHandler([.banner, .sound, .badge])
-    }
-
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
-    ) {
-        _ = handleNotificationResponse(userInfo: response.notification.request.content.userInfo)
-        completionHandler()
-    }
-
-    @discardableResult
-    func handleNotificationResponse(userInfo: [AnyHashable: Any]) -> Bool {
-        guard let rawDestination = userInfo[NativeNotificationPayload.destinationKey] as? String,
-              let destination = AppShellDestination.decode(rawDestination) else { return false }
-        return appShellRouter.open(destination)
     }
 }

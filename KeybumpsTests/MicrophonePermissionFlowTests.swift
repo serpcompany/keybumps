@@ -26,9 +26,7 @@ final class MicrophonePermissionFlowTests: XCTestCase {
         PermissionReadinessSnapshot.resolve(
             enabledCapabilities: [.dictation],
             states: Dictionary(uniqueKeysWithValues: MacPermission.allCases.map { ($0, coordinator.state(for: $0)) }),
-            permissionsRequiringRelaunch: [],
-            selectedChannels: [],
-            notificationAuthorization: .authorized
+            permissionsRequiringRelaunch: []
         )
     }
 

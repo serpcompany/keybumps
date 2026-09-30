@@ -807,13 +807,6 @@ struct KeyboardShortcutterSettingsView: View {
                     Text("Shortcut Coach needs Accessibility and Input Monitoring access to recognize supported actions outside this app.").foregroundStyle(.secondary)
                     OpenPermissionsButton()
                 }
-            } else if model.preferences.enabledCapabilities.contains(.keyboardShortcutter),
-                      model.permissionReadiness(for: [.keyboardShortcutter]).nativeNotificationNeedsAttention {
-                SettingsGroup("Setup required") {
-                    Text("Native macOS Banner needs Notifications access before it can appear.")
-                        .foregroundStyle(.secondary)
-                    OpenPermissionsButton()
-                }
             }
             SettingsGroup("Status") {
                 if !isEnabled {
@@ -830,16 +823,8 @@ struct KeyboardShortcutterSettingsView: View {
                         .foregroundStyle(.orange)
                     Button("Try Again") { model.retryDetection() }
                 }
-                Button("Send Test Suggestion") { Task { await model.deliverSample() } }
+                Button("Send Test Suggestion") { model.showSampleTip() }
                     .disabled(!isEnabled || !readiness.isReady)
-            }
-            SettingsGroup("Presentation channels") {
-                ForEach(NotificationChannel.allCases.filter { $0 != .sound }) { channel in
-                    channelControl(channel)
-                }
-            }
-            SettingsGroup("Sound") {
-                channelControl(.sound)
             }
             SettingsGroup("Keyboard symbols") {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
@@ -855,41 +840,6 @@ struct KeyboardShortcutterSettingsView: View {
             }
         }
         .navigationTitle("Shortcut Coach")
-    }
-
-    @ViewBuilder
-    private func channelControl(_ channel: NotificationChannel) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Text(channel.title)
-                Spacer(minLength: 12)
-                if channel.supportsPreview {
-                    Button("Preview") { Task { await model.previewSample(channel: channel) } }
-                }
-                Toggle(channel.title, isOn: Binding(
-                    get: { model.preferences.selectedChannels.contains(channel) },
-                    set: { model.setChannel(channel, enabled: $0) }
-                ))
-                .settingsCompactSwitch()
-                .labelsHidden()
-            }
-            ForEach(model.previewOutcomes(for: channel).keys.sorted(by: { $0.rawValue < $1.rawValue })) { deliveredChannel in
-                if let outcome = model.previewOutcomes(for: channel)[deliveredChannel] {
-                    switch outcome {
-                    case .delivered:
-                        SettingsNote("\(deliveredChannel.title) preview sent", tint: .green)
-                    case .failed(let message):
-                        SettingsNote("\(deliveredChannel.title) preview failed: \(message)", tint: .orange)
-                        if deliveredChannel == .nativeBanner {
-                            Button("Open Notification Settings…") {
-                                model.openNotificationSettings()
-                            }
-                            .controlSize(.small)
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -927,51 +877,12 @@ private struct PermissionsView: View {
                 ForEach(PermissionSettingsPresentation.visiblePermissions) { permission in
                     PermissionRow(permission: permission)
                 }
-                NotificationPermissionRow()
             }
         }
         .navigationTitle("Permissions")
         .task {
             await model.monitorSystemPermissionChanges()
         }
-    }
-}
-
-private struct NotificationPermissionRow: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            SettingsRowLabel(title: "Notifications", subtitle: "Lets the native macOS banner presentation appear in Notification Center.")
-            Spacer()
-            Text(statusText)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(model.nativeNotificationAuthorization.canPresentAlerts ? .green : .red)
-            if !model.nativeNotificationAuthorization.canPresentAlerts {
-                Button(actionTitle) {
-                    Task { await model.requestNotificationPermission() }
-                }
-            }
-        }
-        .task {
-            await model.monitorNotificationPermissionChanges()
-        }
-    }
-
-    private var statusText: String {
-        switch model.nativeNotificationAuthorization {
-        case .authorized, .provisional, .ephemeral: "Granted"
-        case .notDetermined: "Not Requested"
-        case .authorizedWithoutAlerts: "Banners Off"
-        case .denied: "Denied"
-        case .unknown: "Unavailable"
-        }
-    }
-
-    private var actionTitle: String {
-        model.nativeNotificationAuthorization == .notDetermined
-            ? "Request Access…"
-            : "Open System Settings…"
     }
 }
 
@@ -1148,11 +1059,6 @@ private struct PermissionWalkthroughView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            } else if readiness.nativeNotificationNeedsAttention {
-                NotificationPermissionRow()
-                Text("After changing Notification settings, return to Keybumps and choose Refresh Status.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } else if readiness.isReady {
                 Label("All permissions needed by your enabled features are ready.", systemImage: "checkmark.circle.fill")
                     .font(compact ? .headline : .body)

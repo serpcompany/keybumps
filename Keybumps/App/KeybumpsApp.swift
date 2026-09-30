@@ -49,7 +49,6 @@ struct KeybumpsApp: App {
                 .uiTestAnimationsDisabled()
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     model.applicationDidBecomeActive()
-                    Task { await model.refreshNotificationPermission() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
                     model.applicationDidResignActive()
@@ -110,7 +109,7 @@ private struct OpenMainWindowButton: View {
 }
 
 /// Everything Keybumps needs to run, none of which depends on a window: capabilities and global
-/// shortcuts, the status item, and the Dock, notification, and Quick Search routes. Runs once.
+/// shortcuts, the status item, and the Dock and Quick Search routes. Runs once.
 @MainActor
 enum AppShellLaunch {
     private static var didStart = false
@@ -120,12 +119,6 @@ enum AppShellLaunch {
         didStart = true
         model.start()
         QuickSearchRouter.shared.configure(model.showQuickSearch)
-        AppShellRouter.shared.configure { destination in
-            switch destination {
-            case .keyboardShortcutterHistory:
-                model.showKeyboardShortcutterHistory()
-            }
-        }
         NativeStatusItemController.shared.configureQuickSearch(
             isVisible: { model.isQuickSearchVisible },
             setVisible: model.setQuickSearchVisible,

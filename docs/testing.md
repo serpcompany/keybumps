@@ -43,7 +43,7 @@ Permission-gated and system-level features are faked in automated tests, never g
 
 | Argument | Effect |
 | --- | --- |
-| `-KBUITestPermissions granted\|denied` | Enters UI test mode and fakes every permission check (Accessibility, Input Monitoring, Microphone, Speech, Screen Recording, notifications) as all granted or all denied. It also swaps in an inert pointer event tap, a fake screenshot-folder reader (denied throws access-denied), an inert Spotlight resolver, and inert symbolic-hotkey preferences so macOS screenshot shortcuts are never touched. Dictation refuses audio capture before the microphone opens and never activates another app or synthesizes ⌘V. The Screenshot Editor saves into the sandbox. Data goes to a disposable `$TMPDIR/KeybumpsUITests` root (wiped at each launch), preferences to a wiped `com.serp.keybumps.uitests` suite with onboarding marked complete, and every pasteboard read and write goes to a private named pasteboard (`NSPasteboard.keybumps`). SwiftUI animations are off at every hosting root (`uiTestAnimationsDisabled()`). |
+| `-KBUITestPermissions granted\|denied` | Enters UI test mode and fakes every permission check (Accessibility, Input Monitoring, Microphone, Speech, Screen Recording) as all granted or all denied. It also swaps in an inert pointer event tap, a fake screenshot-folder reader (denied throws access-denied), an inert Spotlight resolver, and inert symbolic-hotkey preferences so macOS screenshot shortcuts are never touched. Dictation refuses audio capture before the microphone opens and never activates another app or synthesizes ⌘V. The Screenshot Editor saves into the sandbox. Data goes to a disposable `$TMPDIR/KeybumpsUITests` root (wiped at each launch), preferences to a wiped `com.serp.keybumps.uitests` suite with onboarding marked complete, and every pasteboard read and write goes to a private named pasteboard (`NSPasteboard.keybumps`). SwiftUI animations are off at every hosting root (`uiTestAnimationsDisabled()`). |
 | `-KBOpenPalette <tab>` | Opens the Command Palette once, at launch, on `search`, `clipboard`, `screenshots`, `dictation`, or `keyboardShortcutter` (shown even while the Hotkeys tab is hidden) |
 | `-KBOpenSettings <section>` | Opens Settings on a `SettingsSection` case name (`search`, `clipboard`, `screenshotTools`, `dictation`, `windows`, `keyboardShortcutter`, `permissions`, `general`) |
 | `-KBDisableHotKeys YES` | Registers shortcuts with an inert backend, so no Carbon hot keys are installed |
@@ -77,7 +77,7 @@ For changes that touch capability wiring or system integration, the hand-off inc
 2. A window shortcut and one drag-to-snap work on a normal app window.
 3. Dictation inserts text into TextEdit; Escape cancels.
 4. Shift-Command-2/3/4 capture from another app (Shift-Command-3 opens the editor), the shot appears in ⌘3, Done shows Copied to Clipboard at the notch and pastes into another app, and macOS's own Shift-Command-3/4 work again with Screenshot Tools off.
-5. A Shortcut Coach action in Finder produces its notification.
+5. A Shortcut Coach action in Finder produces its notch notice; while Dictation is recording, the same action shows nothing in the notch but still appears in Shortcut Coach history.
 6. A denied permission shows System Settings recovery.
 7. Toggling a capability off and on in Settings stops and restores it.
 8. Quit and relaunch keeps settings and histories.

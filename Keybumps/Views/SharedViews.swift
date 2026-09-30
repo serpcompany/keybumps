@@ -25,12 +25,11 @@ struct ShortcutKeycapMetrics: Equatable {
 struct KeyboardKeycap: View {
     let label: String
     var compact = false
-    var fontSize: CGFloat?
 
     var body: some View {
         let metrics = ShortcutKeycapMetrics.value(compact: compact)
         Text(label)
-            .font(.system(size: fontSize ?? metrics.fontSize, weight: .semibold, design: .rounded))
+            .font(.system(size: metrics.fontSize, weight: .semibold, design: .rounded))
             .lineLimit(1)
             .padding(.horizontal, metrics.horizontalPadding)
             .frame(minWidth: metrics.minimumWidth, minHeight: metrics.height, maxHeight: metrics.height)
@@ -41,13 +40,12 @@ struct KeyboardKeycap: View {
 struct ShortcutKeycaps: View {
     let shortcut: String
     var compact = false
-    var fontSize: CGFloat?
 
     var body: some View {
         let presentation = ShortcutKeycapPresentation(shortcut: shortcut)
         HStack(spacing: compact ? 3 : 6) {
             ForEach(presentation.keys, id: \.self) { key in
-                KeyboardKeycap(label: key, compact: compact, fontSize: fontSize)
+                KeyboardKeycap(label: key, compact: compact)
             }
         }
         .accessibilityElement(children: .ignore)

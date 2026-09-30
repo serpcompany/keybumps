@@ -7,7 +7,7 @@ final class ScreenshotEditorPresenter {
     private var controller: ScreenshotEditorWindowController?
     private let fallbackFolder: () -> URL
     private let editingChanged: (Bool) -> Void
-    private let notice = PaletteHUD()
+    private let notice = PaletteHUD.shared
 
     init(fallbackFolder: @escaping () -> URL, editingChanged: @escaping (Bool) -> Void) {
         self.fallbackFolder = fallbackFolder

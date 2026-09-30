@@ -6,40 +6,40 @@ final class StandardWindowControlTests: XCTestCase {
     private let detector = WindowControlActionDetector()
 
     func testMinimizeEmitsOnlyAfterTheSameWindowBecomesMinimized() {
-        XCTAssertNil(detector.detect(trace(kind: .minimize), applicationName: "Finder", pointer: .zero))
+        XCTAssertNil(detector.detect(trace(kind: .minimize), applicationName: "Finder"))
         let minimized = trace(kind: .minimize, postMinimized: true)
-        let event = detector.detect(minimized, applicationName: "Finder", pointer: .zero)
+        let event = detector.detect(minimized, applicationName: "Finder")
         XCTAssertEqual(event?.shortcut, "⌘M")
         XCTAssertEqual(event?.shortcutProvenance, .liveAX)
         XCTAssertEqual(event?.rawShortcutEvidence, shortcutEvidence(for: "⌘M"))
     }
 
     func testCloseWindowRequiresTheCapturedWindowToDisappear() {
-        XCTAssertNil(detector.detect(trace(kind: .close), applicationName: "Google Chrome", pointer: .zero))
+        XCTAssertNil(detector.detect(trace(kind: .close), applicationName: "Google Chrome"))
         let closed = trace(kind: .close, postPresent: false, shortcut: "⇧⌘W")
-        let event = detector.detect(closed, applicationName: "Google Chrome", pointer: .zero)
+        let event = detector.detect(closed, applicationName: "Google Chrome")
         XCTAssertEqual(event?.actionTitle, "Close Window")
         XCTAssertEqual(event?.shortcut, "⇧⌘W")
     }
 
     func testChromeFullScreenRequiresStateToggleAndFrameTransition() {
-        XCTAssertNil(detector.detect(trace(kind: .fullScreen), applicationName: "Google Chrome", pointer: .zero))
+        XCTAssertNil(detector.detect(trace(kind: .fullScreen), applicationName: "Google Chrome"))
         let resizedOnly = trace(kind: .fullScreen, frameChanged: true)
-        XCTAssertNil(detector.detect(resizedOnly, applicationName: "Google Chrome", pointer: .zero))
+        XCTAssertNil(detector.detect(resizedOnly, applicationName: "Google Chrome"))
 
         let entered = trace(kind: .fullScreen, shortcut: "⌃⌘F", postFullScreen: true, frameChanged: true)
-        XCTAssertEqual(detector.detect(entered, applicationName: "Google Chrome", pointer: .zero)?.actionTitle, "Enter Full Screen")
+        XCTAssertEqual(detector.detect(entered, applicationName: "Google Chrome")?.actionTitle, "Enter Full Screen")
     }
 
     func testExitFullScreenRequiresTheInverseStateAndFrameTransition() {
         let exited = trace(kind: .fullScreen, shortcut: "⌃⌘F", preFullScreen: true, postFullScreen: false, frameChanged: true)
-        XCTAssertEqual(detector.detect(exited, applicationName: "Google Chrome", pointer: .zero)?.actionTitle, "Exit Full Screen")
+        XCTAssertEqual(detector.detect(exited, applicationName: "Google Chrome")?.actionTitle, "Exit Full Screen")
     }
 
     func testGenericAXFullScreenTransitionsStaySuppressedWithoutAnAppAdapter() {
         for profile in [WindowControlApplicationProfile.finder, .safari, .other] {
             let generic = trace(kind: .fullScreen, profile: profile, shortcut: "⌃⌘F", postFullScreen: true, frameChanged: true)
-            XCTAssertNil(detector.detect(generic, applicationName: "Other app", pointer: .zero))
+            XCTAssertNil(detector.detect(generic, applicationName: "Other app"))
         }
     }
 
@@ -77,7 +77,7 @@ final class StandardWindowControlTests: XCTestCase {
             .appendingPathComponent("KeybumpsTests/Fixtures/KeyboardShortcutter/chrome-green-captured-sanitized-trace.json")
         let data = try Data(contentsOf: fixtureURL)
         let trace = try JSONDecoder().decode(WindowControlTrace.self, from: data)
-        XCTAssertEqual(detector.detect(trace, applicationName: "Google Chrome", pointer: .zero)?.actionTitle, "Enter Full Screen")
+        XCTAssertEqual(detector.detect(trace, applicationName: "Google Chrome")?.actionTitle, "Enter Full Screen")
 
         let text = String(decoding: data, as: UTF8.self).lowercased()
         for forbidden in ["windowtitle", "documenttitle", "contents", "pointerx", "pointery", "pid", "token"] {

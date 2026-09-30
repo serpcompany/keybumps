@@ -109,8 +109,7 @@ struct WindowControlActionDetector {
 
     func detect(
         _ trace: WindowControlTrace,
-        applicationName: String,
-        pointer: CGPoint
+        applicationName: String
     ) -> CoachingEvent? {
         guard trace.schemaVersion == Self.currentSchemaVersion,
               trace.prePresent,
@@ -133,9 +132,7 @@ struct WindowControlActionDetector {
         return CoachingEventFactory.make(
             applicationName: applicationName,
             actionTitle: title,
-            shortcutEvidence: shortcutEvidence,
-            pointerX: pointer.x,
-            pointerY: pointer.y
+            shortcutEvidence: shortcutEvidence
         )
     }
 
@@ -320,7 +317,7 @@ final class StandardWindowControlMonitor {
             postFullScreen: post.fullScreen,
             frameChanged: frameChanged
         )
-        return detector.detect(trace, applicationName: session.applicationName, pointer: session.pointerDown)
+        return detector.detect(trace, applicationName: session.applicationName)
     }
 
     private func controlKind(_ element: AXUIElement) -> StandardWindowControlKind? {

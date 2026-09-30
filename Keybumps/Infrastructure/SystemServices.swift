@@ -212,8 +212,6 @@ struct PermissionReadinessSnapshot: Equatable {
     let requiredPermissions: [MacPermission]
     let states: [MacPermission: PermissionAuthorizationState]
     let permissionsRequiringRelaunch: Set<MacPermission>
-    let includesNativeNotifications: Bool
-    let notificationAuthorization: NativeNotificationAuthorization
 
     var missingPermissions: [MacPermission] {
         requiredPermissions.filter {
@@ -222,13 +220,8 @@ struct PermissionReadinessSnapshot: Equatable {
     }
 
     var currentPermission: MacPermission? { missingPermissions.first }
-    var nativeNotificationNeedsAttention: Bool {
-        includesNativeNotifications && !notificationAuthorization.canPresentAlerts
-    }
-    var missingCount: Int {
-        missingPermissions.count + (nativeNotificationNeedsAttention ? 1 : 0)
-    }
-    var totalCount: Int { requiredPermissions.count + (includesNativeNotifications ? 1 : 0) }
+    var missingCount: Int { missingPermissions.count }
+    var totalCount: Int { requiredPermissions.count }
     var completedCount: Int { totalCount - missingCount }
     var isReady: Bool { missingCount == 0 }
 
@@ -243,17 +236,12 @@ struct PermissionReadinessSnapshot: Equatable {
     static func resolve(
         enabledCapabilities: Set<Capability>,
         states: [MacPermission: PermissionAuthorizationState],
-        permissionsRequiringRelaunch: Set<MacPermission>,
-        selectedChannels: Set<NotificationChannel>,
-        notificationAuthorization: NativeNotificationAuthorization
+        permissionsRequiringRelaunch: Set<MacPermission>
     ) -> PermissionReadinessSnapshot {
         PermissionReadinessSnapshot(
             requiredPermissions: PermissionSetupPlan.requiredPermissions(for: enabledCapabilities),
             states: states,
-            permissionsRequiringRelaunch: permissionsRequiringRelaunch,
-            includesNativeNotifications: enabledCapabilities.contains(.keyboardShortcutter)
-                && selectedChannels.contains(.nativeBanner),
-            notificationAuthorization: notificationAuthorization
+            permissionsRequiringRelaunch: permissionsRequiringRelaunch
         )
     }
 }

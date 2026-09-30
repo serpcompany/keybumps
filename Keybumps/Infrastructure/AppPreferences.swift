@@ -5,7 +5,8 @@ import Observation
 @Observable
 final class AppPreferences {
     private enum Key {
-        static let selectedChannels = "selectedNotificationChannels"
+        /// Retired: the old presentation-channel list. Removed on load.
+        static let retiredSelectedChannels = "selectedNotificationChannels"
         static let showInDockAndSwitcher = "showInDockAndSwitcher"
         static let enabledCapabilities = "enabledCapabilities"
         static let knownCapabilities = "knownCapabilities"
@@ -22,10 +23,6 @@ final class AppPreferences {
     }
 
     private let defaults: UserDefaults
-
-    var selectedChannels: Set<NotificationChannel> {
-        didSet { persistChannels() }
-    }
 
     var showInDockAndSwitcher: Bool {
         didSet { defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher) }
@@ -129,22 +126,6 @@ final class AppPreferences {
                 action.defaultShortcut.map { (action.rawValue, $0) }
             })
         }
-        let currentChannels = defaults.array(forKey: Key.selectedChannels) as? [String]
-        let legacyChannels = legacyDefaults.lazy.compactMap {
-            $0.array(forKey: Key.selectedChannels) as? [String]
-        }.first
-        let channelsWereNormalized: Bool
-        if let rawChannels = currentChannels ?? legacyChannels {
-            let decodedChannels = Set(rawChannels.compactMap(NotificationChannel.init(rawValue:)))
-            let normalizedChannels = PresentationOverlapPolicy.normalized(decodedChannels)
-            selectedChannels = normalizedChannels
-            channelsWereNormalized = normalizedChannels != decodedChannels
-                || rawChannels.sorted() != normalizedChannels.map(\.rawValue).sorted()
-        } else {
-            selectedChannels = [.notch]
-            channelsWereNormalized = false
-        }
-
         if defaults.object(forKey: Key.showInDockAndSwitcher) != nil {
             showInDockAndSwitcher = defaults.bool(forKey: Key.showInDockAndSwitcher)
         } else if let legacyPresenceDefaults = legacyDefaults.first(where: {
@@ -155,9 +136,7 @@ final class AppPreferences {
             showInDockAndSwitcher = true
         }
 
-        if (currentChannels == nil && legacyChannels != nil) || channelsWereNormalized {
-            persistChannels()
-        }
+        defaults.removeObject(forKey: Key.retiredSelectedChannels)
         if introducedShortcuts {
             persistCapabilityShortcuts()
         }
@@ -166,14 +145,6 @@ final class AppPreferences {
             defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher)
         }
         normalizeShortcutConflictsFavoringExistingWindowBindings()
-    }
-
-    func set(_ channel: NotificationChannel, enabled: Bool) {
-        if enabled {
-            selectedChannels = PresentationOverlapPolicy.selecting(channel, in: selectedChannels)
-        } else {
-            selectedChannels.remove(channel)
-        }
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
@@ -231,10 +202,6 @@ final class AppPreferences {
             capabilityShortcuts[key] = nil
         }
         windowShortcuts = defaults
-    }
-
-    private func persistChannels() {
-        defaults.set(selectedChannels.map(\.rawValue).sorted(), forKey: Key.selectedChannels)
     }
 
     private func persistWindowShortcuts() {

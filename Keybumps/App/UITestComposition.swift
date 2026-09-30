@@ -59,7 +59,6 @@ extension AppModel {
                 monitor: InertPointerEventMonitor(),
                 permissions: FakeDetectorPermissions(granted: granted)
             ),
-            presenter: PresentationWindowController(),
             shortcutCoordinator: configuration.disablesHotKeys
                 ? GlobalShortcutCoordinator(backend: InertGlobalHotKeyBackend())
                 : nil,
@@ -72,7 +71,6 @@ extension AppModel {
                 requestScreenRecording: {},
                 openSettings: { _ in }
             ),
-            nativeNotificationCenter: FakeNativeNotificationCenter(granted: granted),
             licensing: FixedLicenseController(state: {
                 switch configuration.licenseState {
                 case .active: return .active(FixedLicenseController.sampleCheck)
@@ -158,13 +156,6 @@ private final class InertGlobalHotKeyBackend: GlobalHotKeyRegistering {
     func installHandler(_ handler: @escaping (UInt32) -> Void) {}
     func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { true }
     func unregister(identifier: UInt32) {}
-}
-
-struct FakeNativeNotificationCenter: NativeNotificationCenterClient {
-    let granted: Bool
-    func authorizationStatus() async -> NativeNotificationAuthorization { granted ? .authorized : .denied }
-    func requestAuthorization() async throws -> Bool { granted }
-    func add(identifier: String, payload: NativeNotificationPayload) async throws {}
 }
 
 final class InertSpotlightShortcutResolver: SpotlightShortcutConflictResolving {

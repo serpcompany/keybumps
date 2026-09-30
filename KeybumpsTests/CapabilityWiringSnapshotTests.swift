@@ -267,7 +267,6 @@ final class WiringHarness {
                 monitor: LoggingPointerMonitor(log: log),
                 permissions: FakeDetectorPermissions(grants: grants)
             ),
-            presenter: PresentationWindowController(),
             shortcutCoordinator: coordinator,
             permissionCoordinator: PermissionCoordinator(
                 accessibilityTrusted: { grants.isGranted(.accessibility) },
@@ -278,7 +277,6 @@ final class WiringHarness {
                 requestScreenRecording: {},
                 openSettings: { _ in }
             ),
-            nativeNotificationCenter: FakeNativeNotificationCenter(granted: true),
             updater: DisabledUpdateController(reason: "Capability wiring snapshot"),
             dictationModelManager: DictationModelManager(
                 modelsRoot: directory.appendingPathComponent("models", isDirectory: true),

@@ -28,7 +28,8 @@ final class AppModel {
     let inbox: InboxStore
     let shortcuts: GlobalShortcutCoordinator
     let permissions: PermissionCoordinator
-    @ObservationIgnored private let notice = PaletteHUD()
+    @ObservationIgnored private let notice = PaletteHUD.shared
+    @ObservationIgnored private let coachTips: any CoachTipPresenting
     let clipboard: ClipboardHistoryService
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
@@ -42,10 +43,7 @@ final class AppModel {
     /// The app-shell licensing seam (ADR 0002). Capability modules start only while it is entitled.
     let licensing: any LicenseControlling
     let updateSafetyPolicy: UpdateInstallationSafetyPolicy
-    private let delivery: NotificationDeliveryService
-    private let nativeNotificationCenter: any NativeNotificationCenterClient
     private let detector: ManualActionDetector
-    private let presenter: PresentationWindowController
     private let presenceController: any AppPresenceControlling
     let commandPalette: CommandPaletteController
     let capabilities: CapabilityRegistry
@@ -57,8 +55,6 @@ final class AppModel {
     private(set) var detectorStatus: ManualActionDetector.Status = .stopped
     private(set) var isAccessibilityTrusted = false
     private(set) var isInputMonitoringAuthorized = false
-    private(set) var lastReport: DeliveryReport?
-    private(set) var lastPreviewChannel: NotificationChannel?
     private(set) var isStarted = false
     private(set) var isPermissionWalkthroughActive = false
     private(set) var permissionsRequiringRelaunch: [MacPermission] = []
@@ -69,7 +65,6 @@ final class AppModel {
             if !newValue { dismissPermissionRelaunchPrompt() }
         }
     }
-    private(set) var nativeNotificationAuthorization: NativeNotificationAuthorization = .notDetermined
     private(set) var updateSnapshot: UpdateSnapshot
     private(set) var licenseSnapshot: LicenseSnapshot
     private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
@@ -82,7 +77,6 @@ final class AppModel {
     var permissionReadiness: PermissionReadinessSnapshot {
         permissionReadiness(for: preferences.enabledCapabilities)
     }
-    var nativeNotificationNeedsAttention: Bool { permissionReadiness.nativeNotificationNeedsAttention }
     var missingPermissionCount: Int { permissionReadiness.missingCount }
     var permissionSetupProgress: PermissionSetupProgress {
         let readiness = permissionReadiness
@@ -100,9 +94,7 @@ final class AppModel {
             states: Dictionary(uniqueKeysWithValues: MacPermission.allCases.map {
                 ($0, permissions.state(for: $0))
             }),
-            permissionsRequiringRelaunch: Set(permissionsRequiringRelaunch),
-            selectedChannels: preferences.selectedChannels,
-            notificationAuthorization: nativeNotificationAuthorization
+            permissionsRequiringRelaunch: Set(permissionsRequiringRelaunch)
         )
     }
 
@@ -112,7 +104,6 @@ final class AppModel {
             inbox: InboxStore(),
             presenceController: AppPresenceController(),
             detector: ManualActionDetector(),
-            presenter: PresentationWindowController(),
             licensing: LicenseControllerFactory.makeDefault(),
             screenshotDirectoryReader: FileSystemScreenshotDirectoryReader()
         )
@@ -124,10 +115,8 @@ final class AppModel {
         inbox: InboxStore,
         presenceController: any AppPresenceControlling,
         detector: ManualActionDetector,
-        presenter: PresentationWindowController,
         shortcutCoordinator: GlobalShortcutCoordinator? = nil,
         permissionCoordinator: PermissionCoordinator? = nil,
-        nativeNotificationCenter: (any NativeNotificationCenterClient)? = nil,
         updater injectedUpdater: (any UpdateControlling)? = nil,
         licensing injectedLicensing: (any LicenseControlling)? = nil,
         dictationModelManager injectedDictationModelManager: DictationModelManager? = nil,
@@ -138,19 +127,19 @@ final class AppModel {
         windows injectedWindows: WindowManagementService? = nil,
         screenshotTools injectedScreenshotTools: ScreenshotToolsService? = nil,
         dictationIndicator injectedDictationIndicator: DictationIndicatorController? = nil,
+        coachTips: (any CoachTipPresenting)? = nil,
         dictationFileManager: FileManager = .default,
         allowsDictationSystemAccess: Bool = true,
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil
     ) {
-        self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector; self.presenter = presenter
+        self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
+        self.coachTips = coachTips ?? PaletteHUD.shared
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
             ?? SpotlightShortcutConflictResolver(preferences: SystemSymbolicHotKeyPreferences())
-        let nativeNotificationCenter = nativeNotificationCenter ?? SystemNativeNotificationCenterClient()
-        self.nativeNotificationCenter = nativeNotificationCenter
         let updateSafetyPolicy = UpdateInstallationSafetyPolicy.shared
         self.updateSafetyPolicy = updateSafetyPolicy
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
@@ -236,13 +225,9 @@ final class AppModel {
                 windows: windows,
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
-            KeyboardShortcutterModule(detector: detector, presenter: presenter)
+            KeyboardShortcutterModule(detector: detector)
         ])
-        var adapters: [NotificationChannel: any ChannelDelivering] = [.nativeBanner: NativeNotificationAdapter(center: nativeNotificationCenter), .sound: SoundAdapter()]
-        if adapters[.notch] == nil { adapters[.notch] = NotchChannelAdapter() }
-        for channel in NotificationChannel.allCases where adapters[channel] == nil { adapters[channel] = PanelChannelAdapter(channel: channel, presenter: presenter) }
-        delivery = NotificationDeliveryService(inbox: inbox, adapters: adapters)
-        detector.onEvent = { [weak self] event in Task { @MainActor in await self?.deliver(event) } }
+        detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
@@ -257,7 +242,6 @@ final class AppModel {
         licensing.start()
         if preferences.didCompleteOnboarding && isLicensed { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
-        Task { await refreshNotificationPermission() }
         updater.start()
     }
 
@@ -483,20 +467,6 @@ final class AppModel {
         updateMissingPermissionBadge()
     }
 
-    func refreshNotificationPermission() async {
-        nativeNotificationAuthorization = await nativeNotificationCenter.authorizationStatus()
-        updateMissingPermissionBadge()
-    }
-
-    func monitorNotificationPermissionChanges(
-        interval: Duration = .seconds(1),
-        maximumRefreshes: Int? = nil
-    ) async {
-        await monitorPermissionChanges(interval: interval, maximumRefreshes: maximumRefreshes) { [weak self] in
-            await self?.refreshNotificationPermission()
-        }
-    }
-
     func monitorSystemPermissionChanges(
         interval: Duration = .seconds(1),
         maximumRefreshes: Int? = nil
@@ -522,19 +492,6 @@ final class AppModel {
                 return
             }
         }
-    }
-
-    func requestNotificationPermission() async {
-        do {
-            if nativeNotificationAuthorization == .notDetermined {
-                _ = try await nativeNotificationCenter.requestAuthorization()
-            } else if !nativeNotificationAuthorization.canPresentAlerts {
-                openNotificationSettings()
-            }
-        } catch {
-            // The row remains in its truthful attention state and offers Settings recovery.
-        }
-        await refreshNotificationPermission()
     }
 
     private func advancePermissionWalkthroughIfNeeded() {
@@ -627,41 +584,21 @@ final class AppModel {
     func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
     func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
-    func deliverSample(channel: NotificationChannel? = nil) async { await deliver(.sample, through: channel.map { Set([$0]) } ?? preferences.selectedChannels) }
-    func previewSample(channel: NotificationChannel) async {
-        let channels = PreviewChannelPlan.channels(
-            for: channel,
-            selectedChannels: preferences.selectedChannels
-        )
-        let outcomes = await delivery.preview(.sample, through: channels)
-        lastPreviewChannel = channel
-        lastReport = DeliveryReport(eventID: CoachingEvent.sample.id, inboxRecorded: false, outcomes: outcomes)
-        if channel == .nativeBanner {
-            await refreshNotificationPermission()
-        }
-    }
-    func previewOutcomes(for channel: NotificationChannel) -> [NotificationChannel: DeliveryOutcome] {
-        guard lastPreviewChannel == channel else { return [:] }
-        return lastReport?.outcomes ?? [:]
-    }
-    func openNotificationSettings() {
-        NSWorkspace.shared.open(NotificationSettingsRecovery.url)
-    }
+    /// Shows the sample tip in the notch without adding it to history.
+    func showSampleTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
     func openPermissionSettings(_ permission: MacPermission) {
         permissions.openSettings(permission)
-    }
-    func setChannel(_ channel: NotificationChannel, enabled: Bool) {
-        preferences.set(channel, enabled: enabled)
-        updateMissingPermissionBadge()
-        if channel == .nativeBanner, enabled {
-            Task { await requestNotificationPermission() }
-        }
     }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }
     func markRead(_ id: UUID) { inbox.markRead(id) }
     func markAllRead() { inbox.markAllRead() }
     func clearHistory() { inbox.clear() }
-    private func deliver(_ event: CoachingEvent, through channels: Set<NotificationChannel>? = nil) async { lastReport = await delivery.deliver(event, through: channels ?? preferences.selectedChannels) }
+    /// Records a detected action in history, then shows its tip in the notch.
+    func deliver(_ event: CoachingEvent) {
+        guard preferences.enabledCapabilities.contains(.keyboardShortcutter),
+              (try? inbox.append(event)) != nil else { return }
+        coachTips.showCoach(NotchCoachPresentation(event: event))
+    }
 
     private func updateMissingPermissionBadge() {
         NSApplication.shared.dockTile.badgeLabel = missingPermissionCount > 0 ? "!" : nil

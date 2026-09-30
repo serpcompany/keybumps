@@ -48,6 +48,7 @@ struct DictationNotchPanelTests {
     @Test("Recording shows the notch view in a visible panel at the top of the screen, and idle hides it")
     func showsNotchView() throws {
         let indicator = DictationIndicatorController()
+        defer { indicator.update(.idle) }
         indicator.update(.recording)
         let panel = try #require(indicator.panel)
         #expect(panel.contentView is NSHostingView<DictationNotchView>)
@@ -57,5 +58,74 @@ struct DictationNotchPanelTests {
         }
         indicator.update(.idle)
         #expect(!panel.isVisible)
+    }
+}
+
+@MainActor
+@Suite("Dictation keeps the notch to itself", .serialized)
+struct DictationNotchSuppressionTests {
+    @Test("While Dictation shows its state, other notch notices are dropped; idle lets them through")
+    func dictationSuppressesNotices() {
+        let indicator = DictationIndicatorController()
+        defer { indicator.update(.idle) }
+        for phase: DictationPhase in [.recording, .transcribing, .inserting, .failed("Example")] {
+            indicator.update(phase)
+            #expect(PaletteHUD.shared.isSuppressed, "\(phase)")
+        }
+        indicator.update(.idle)
+        #expect(!PaletteHUD.shared.isSuppressed)
+    }
+
+    @Test("A suppressed notice never appears, and suppression hides one already showing")
+    func suppressedNoticeNeverAppears() {
+        let notice = PaletteHUD()
+        defer { notice.dismiss() }
+        notice.show("Copied to Clipboard")
+        #expect(visibleNotices() == 1)
+
+        let owner = NSObject()
+        notice.claimNotch(for: owner)
+        #expect(visibleNotices() == 0)
+        notice.show("Copied to Clipboard")
+        notice.showCoach(NotchCoachPresentation(event: .sample))
+        #expect(visibleNotices() == 0)
+
+        notice.releaseNotch(from: NSObject())
+        #expect(notice.isSuppressed, "only the owner can release the notch")
+        notice.releaseNotch(from: owner)
+        #expect(!notice.isSuppressed)
+    }
+
+    @Test("A failure gives the notch back after it hides; a new phase in that window keeps it")
+    func failureHideReleasesTheNotch() async throws {
+        let indicator = DictationIndicatorController()
+        indicator.failureDisplayDuration = .milliseconds(20)
+        defer { indicator.update(.idle) }
+
+        indicator.update(.failed("Example"))
+        #expect(PaletteHUD.shared.isSuppressed)
+        indicator.update(.recording)
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(PaletteHUD.shared.isSuppressed, "recording after a failure keeps the notch")
+
+        indicator.update(.failed("Example"))
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(!PaletteHUD.shared.isSuppressed)
+        #expect(indicator.panel?.isVisible != true)
+    }
+
+    @Test("An owner that goes away can't leave notices suppressed")
+    func releasedOwnerNeverSticks() {
+        let notice = PaletteHUD()
+        do {
+            let owner = NSObject()
+            notice.claimNotch(for: owner)
+            #expect(notice.isSuppressed)
+        }
+        #expect(!notice.isSuppressed)
+    }
+
+    private func visibleNotices() -> Int {
+        NSApp.windows.filter { $0.identifier?.rawValue == "paletteHUD" && $0.isVisible }.count
     }
 }
