@@ -1,8 +1,10 @@
-.dev.vars
+.dev.vars*
+.env*
 .next/
 .open-next/
 .wrangler/
-CLAUDE.md
 cloudflare-env.d.ts
+coverage/
 node_modules/
 *.tsbuildinfo
+next-env.d.ts

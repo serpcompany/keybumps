@@ -4,10 +4,13 @@ The product landing page for `keybumps.app`.
 
 ## Public URLs
 
+Pages end in a trailing slash and files never do ([SERP URL trailing-slash standard](docs/agents/web.md#canonical-urls-and-hosts)); the other form redirects with one 308.
+
 - `https://keybumps.app/` — one-page product lander (brand assets copied from `serpcompany/keybumps` `brand/`).
-- `https://keybumps.app/pricing`, `/terms`, `/privacy`, `/refunds` — pricing and legal pages needed for Polar checkout review. Price, checkout link, and the legal "last updated" date live in `src/lib/site.ts`; `CHECKOUT_URL` is the Polar checkout link behind the buy button (set it to `null` to fall back to `/download`).
-- `https://keybumps.app/thanks` — Polar checkout success page (set it as the checkout link's success URL). `https://keybumps.app/license` — where to find the license key (Polar receipt and customer portal, `CUSTOMER_PORTAL_URL` in `src/lib/site.ts`).
-- `https://keybumps.app/download` — stable user-facing download page with a clickable link to the latest notarized macOS DMG.
+- `https://keybumps.app/pricing/` and `/legal/terms/`, `/legal/privacy/`, `/legal/refunds/` — pricing and legal pages needed for Polar checkout review. The old `/terms`, `/privacy`, and `/refunds` URLs redirect to them. Price, checkout link, and the legal "last updated" date live in `src/lib/site.ts`; `CHECKOUT_URL` is the Polar checkout link behind the buy button (set it to `null` to fall back to `/download/`).
+- `https://keybumps.app/thanks/` — Polar checkout success page (set it as the checkout link's success URL). `https://keybumps.app/license/` — where to find the license key (Polar receipt and customer portal, `CUSTOMER_PORTAL_URL` in `src/lib/site.ts`).
+- `https://keybumps.app/download/` — stable user-facing download page with a clickable link to the latest macOS DMG, signed with Developer ID.
+- `/about/`, `/support/`, `/contact/`, `/legal/`, `/legal/dmca/`, `/legal/affiliate-disclosure/`, and `/sitemap/` — SOP pages. `src/lib/pages.ts` lists every indexable page for the sitemaps (`/sitemap-index.xml`, `/sitemaps/pages.xml`) and the HTML sitemap.
 - `https://updates.keybumps.app/` — release-file origin only. Its root intentionally has no directory page.
 
 The download page reads `https://updates.keybumps.app/latest.json` (re-checked at most every five minutes) and links to the DMG it names. The Keybumps release tooling writes that file (`scripts/write-latest-release-pointer.sh` in `serpcompany/keybumps`) and publishes it beside `appcast.xml`, so a new release needs no change here. The page only accepts a pointer whose DMG is HTTPS on `updates.keybumps.app` and matches the stated version; otherwise, or if the file is unavailable, it shows `FALLBACK_RELEASE` in `src/lib/latest-release.ts` (currently `0.0.3-beta.3` build `4007`).
@@ -22,7 +25,10 @@ pnpm dev
 pnpm test
 pnpm check
 pnpm preview
+scripts/smoke.sh http://localhost:8787 staging
 ```
+
+See [`docs/agents/web.md`](docs/agents/web.md) for what each command verifies and how environments are configured.
 
 The site deploys to Cloudflare Workers through OpenNext. App releases and signed Sparkle update files are owned by `serpcompany/keybumps` and served separately from the R2-backed `updates.keybumps.app` origin.
 
