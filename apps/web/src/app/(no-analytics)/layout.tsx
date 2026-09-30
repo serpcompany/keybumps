@@ -1,13 +1,8 @@
-import type { Metadata } from 'next'
 import { SiteDocument } from '@/components/site-document'
 import { StripQuery } from '@/components/strip-query'
-import { rootLayoutMetadata } from '@/lib/metadata'
+import { noAnalyticsLayoutMetadata } from '@/lib/metadata'
 
-export const metadata: Metadata = {
-  ...rootLayoutMetadata,
-  // These URLs can carry checkout, session, or license data; never send them on as a Referer.
-  referrer: 'no-referrer'
-}
+export const metadata = noAnalyticsLayoutMetadata
 
 /**
  * Root layout for pages whose URLs can carry checkout, session, or license data (/thanks/,

@@ -47,6 +47,26 @@ export const siteMetadata: Metadata = {
 /** Root layout metadata: the shared metadata plus the Open Graph defaults. */
 export const rootLayoutMetadata: Metadata = { ...siteMetadata, openGraph: defaultOpenGraph }
 
+/** The (no-analytics) root layout: its URLs can carry checkout, session, or license data. */
+export const noAnalyticsLayoutMetadata: Metadata = {
+  ...rootLayoutMetadata,
+  // Never send those URLs on as a Referer.
+  referrer: 'no-referrer'
+}
+
+/**
+ * The global 404 (src/app/global-not-found.tsx). It has no explicit Open Graph image: Next.js
+ * attaches src/app/opengraph-image.jpg with the generated cache key, which scripts/smoke.sh
+ * compares with openGraphImage. A mistyped URL can carry a checkout or session query, so it sends
+ * no Referer either.
+ */
+export const notFoundMetadata: Metadata = {
+  ...siteMetadata,
+  title: { absolute: '404: This page could not be found.' },
+  openGraph: openGraphWithoutImage,
+  referrer: 'no-referrer'
+}
+
 /** Title, description, canonical URL, and Open Graph for a static page. */
 export function pageMetadata(path: SitePagePath): Metadata {
   const page = pageFor(path)

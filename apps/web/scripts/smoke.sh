@@ -111,6 +111,15 @@ if [ -n "$home_og" ] && [ "$home_og" = "$missing_og" ]; then
 else
   fail "og:image cache key is stale: pages have '$home_og', Next.js generates '$missing_og'"
 fi
+# Every key page keeps that image: Next.js replaces a layout's openGraph when a page sets one.
+for path in /pricing/ /download/ /license/ /thanks/ /about/ /legal/privacy/ /sitemap/; do
+  page_og="$(og_image "$(curl -s "${smoke[@]}" "$base$path" || true)")"
+  if [ -n "$missing_og" ] && [ "$page_og" = "$missing_og" ]; then
+    pass "og:image on $path"
+  else
+    fail "og:image on $path is '$page_og' (want '$missing_og')"
+  fi
+done
 
 robots="$(curl -s "${smoke[@]}" "$base/robots.txt")"
 robots_header="$(curl -sI "${smoke[@]}" "$base/" | tr -d '\r' | grep -i '^x-robots-tag:' || true)"

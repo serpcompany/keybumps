@@ -24,6 +24,13 @@ export function replaceUrlKeepingRouterState(history: History, url: string) {
  * rendered. The (no-analytics) root layout mounts it: those pages' URLs can carry checkout,
  * session, or license data (Polar appends them to /thanks/), and nothing on them reads the query.
  * This is a second layer; those pages never load analytics.
+ *
+ * It runs once per document, when the page that loaded the document hydrates: the (no-analytics)
+ * layout and the global 404 mount it, and a layout persists across soft navigations. So:
+ * - a later client-side navigation to a (no-analytics) URL that carries a query keeps that query
+ *   (no link on the site adds one today); and
+ * - a (no-analytics) page must not read its query (`useSearchParams`, `searchParams`), because
+ *   the query disappears right after hydration. Such a page needs its own handling first.
  */
 export function StripQuery() {
   useEffect(() => {
