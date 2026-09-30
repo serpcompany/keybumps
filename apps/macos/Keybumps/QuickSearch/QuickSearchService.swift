@@ -15,7 +15,10 @@ struct QuickSearchResult: Codable, Identifiable, Hashable {
 @Observable
 final class QuickSearchModel {
     var query = "" { didSet { refresh() } }
-    private(set) var results: [QuickSearchResult] = []
+    /// The rows for the current query: Keybumps commands, apps, then files and folders.
+    private(set) var items: [QuickSearchItem] = []
+    /// The apps, files, and folders among `items`.
+    var results: [QuickSearchResult] { items.compactMap(\.result) }
     var selection = 0
     let recentItems: RecentItemStore
     let applicationUsage: ApplicationUsageStore
@@ -56,7 +59,7 @@ final class QuickSearchModel {
         clearObservers()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else {
-            results = []
+            items = []
             selection = 0
             return
         }
@@ -66,7 +69,7 @@ final class QuickSearchModel {
             from: applications,
             usage: applicationUsage
         )
-        results = Array(appMatches.prefix(12))
+        items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: [])
         selection = 0
 
         let query = NSMetadataQuery()
@@ -77,7 +80,7 @@ final class QuickSearchModel {
         for name in [Notification.Name.NSMetadataQueryDidFinishGathering, Notification.Name.NSMetadataQueryDidUpdate] {
             observers.append(center.addObserver(forName: name, object: query, queue: .main) { [weak self, weak query] _ in
                 guard let query else { return }
-                Task { @MainActor in self?.consume(query: query, appMatches: appMatches) }
+                Task { @MainActor in self?.consume(query: query, term: term, appMatches: appMatches) }
             })
         }
         metadataQuery = query
@@ -99,7 +102,7 @@ final class QuickSearchModel {
         applicationUsage.record(result)
     }
 
-    private func consume(query: NSMetadataQuery, appMatches: [QuickSearchResult]) {
+    private func consume(query: NSMetadataQuery, term: String, appMatches: [QuickSearchResult]) {
         query.disableUpdates()
         defer { query.enableUpdates() }
         var seen = Set(appMatches.map(\.url))
@@ -113,8 +116,8 @@ final class QuickSearchModel {
             files.append(QuickSearchResult(url: url, kind: isDirectory.boolValue ? .folder : .file))
             if files.count == 30 { break }
         }
-        results = Array(appMatches.prefix(12)) + files
-        if selection >= results.count { selection = max(0, results.count - 1) }
+        items = QuickSearchRanking.items(matching: term, applications: Array(appMatches.prefix(12)), files: files)
+        if selection >= items.count { selection = max(0, items.count - 1) }
     }
 
     private func clearObservers() {

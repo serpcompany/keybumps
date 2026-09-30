@@ -93,6 +93,31 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForNonExistence(of: editor))
     }
 
+    func testPaletteSettingsButtonOpensSettings() {
+        launch(permissions: "granted", ["-KBOpenPalette", "clipboard"])
+        let field = paletteField("Search clipboard history")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        let settingsButton = app.buttons["palette.settings"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(settingsButton.label, "Keybumps Settings")
+        settingsButton.click()
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes before Settings opens")
+        XCTAssertTrue(element("settings.detail.permissions").waitForExistence(timeout: 10))
+    }
+
+    func testQuickSearchOpensKeybumpsSettings() {
+        launch(permissions: "granted", ["-KBOpenPalette", "search"])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        app.typeText("settings")
+        XCTAssertTrue(element("quickSearch.command.keybumpsSettings").waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "Return on Keybumps Settings closes the palette")
+        XCTAssertTrue(element("settings.detail.permissions").waitForExistence(timeout: 10))
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {

@@ -52,7 +52,7 @@ Permission-gated and system-level features are faked in automated tests, never g
 
 Give boolean flags an explicit `YES`. In CI, adding AppKit arguments (`-NSAutomaticWindowAnimationsEnabled NO -ApplePersistenceIgnoreState YES`) after a bare flag stopped the main window from appearing, so the smoke suite doesn't pass them.
 
-Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, and the `commandPalette` and `screenshotEditor` windows.
+Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, `palette.settings` (the palette's Settings button), `quickSearch.command.<command>` (a Quick Search command row), and the `commandPalette` and `screenshotEditor` windows.
 
 ## CI
 
