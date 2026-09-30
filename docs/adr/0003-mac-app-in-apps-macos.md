@@ -22,3 +22,4 @@ Status: Accepted (2026-09-30). Reverses "The Mac app stays at the repo root" in 
 - Caches start fresh: the package cache path changes to `apps/macos/.spm`, so the first CI runs after the move resolve packages again. A local `.derived/` at the root is orphaned; `build-and-run.sh` now builds into `apps/macos/.derived/`.
 - The installed app's identity and permissions don't change: the designated requirement is the bundle ID and team, with no path.
 - Only a real release run proves the whole release path in the new layout. So a Release Keybumps dry run (`publish=false`, `notarize=false`) from the branch, diffed against beta.8's artifact, is required before this merges.
+- Proven on 2026-09-30: the dry run from the move branch (run 36696230429) matched beta.8's artifact, and 0.0.3-beta.9 (build 4014, release run 36698736502) was the first published release built from `apps/macos/`.
