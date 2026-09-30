@@ -88,6 +88,16 @@ struct CapabilityModuleTests {
         #expect(Array(SettingsSection.allCases.suffix(3)) == [.permissions, .general, .account])
     }
 
+    @Test("The Screenshots tab copies on Return or a click, like the Clipboard tab, and edits with Command")
+    func screenshotsTabCopiesAndEditsWithCommand() {
+        #expect(ScreenshotPaletteAction(withCommand: false) == .copy)
+        #expect(ScreenshotPaletteAction(withCommand: true) == .edit)
+        // The footer pill names them in that order: Copy ↵, then Edit ⌘↵.
+        #expect(CommandPaletteTab.screenshots.primaryActionTitle == "Copy")
+        #expect(CommandPaletteTab.screenshots.primaryActionTitle == CommandPaletteTab.clipboard.primaryActionTitle)
+        #expect(CommandPaletteTab.screenshots.secondaryActionTitle == "Edit")
+    }
+
     @Test("Only the modules that own critical operations declare them")
     func criticalOperationsAreDeclaredByTheirOwners() {
         let declared = Dictionary(uniqueKeysWithValues: CapabilityCatalog.descriptors.map {

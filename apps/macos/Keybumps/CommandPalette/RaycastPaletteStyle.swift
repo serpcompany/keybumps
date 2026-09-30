@@ -13,6 +13,11 @@ enum PaletteTheme {
     static let rowRadius: CGFloat = 8
     /// The height of the footer's floating pill and its round Settings button.
     static let footerHeight: CGFloat = 38
+    /// The outline of every floating surface: a capsule, or a circle in a square frame. Its ends
+    /// must be circular, not SwiftUI's default continuous curve. SwiftUI draws the hairline border
+    /// as a Core Animation layer border, and Core Animation draws a continuous capsule's border with
+    /// a straight 1-point line through the middle of each end, just outside the curve.
+    static let floatingShape = Capsule(style: .circular)
 }
 
 /// A small gray group title above results, like Raycast's "Suggestions".
@@ -102,16 +107,14 @@ private struct PalettePill: View {
             if style.isCircular {
                 label
                     .frame(width: style.size.height, height: style.size.height)
-                    .paletteFloatingSurface(Circle())
-                    .contentShape(Circle())
             } else {
                 label
                     .padding(.horizontal, style.size.horizontalPadding)
                     .frame(height: style.size.height)
-                    .paletteFloatingSurface(Capsule())
-                    .contentShape(Capsule())
             }
         }
+        .paletteFloatingSurface()
+        .contentShape(PaletteTheme.floatingShape)
         .font(.system(size: style.size.fontSize, weight: .medium))
         .foregroundStyle(color)
         .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
@@ -130,9 +133,11 @@ private struct PalettePill: View {
 }
 
 extension View {
-    /// Raycast's floating footer surface, shared by the action pill and the round Settings button.
-    func paletteFloatingSurface(_ shape: some InsettableShape) -> some View {
-        background(PaletteTheme.pill, in: shape)
+    /// Raycast's floating footer surface, shared by the action pill, the round Settings button, and
+    /// `PalettePillButtonStyle`. It's always `PaletteTheme.floatingShape`, so a square frame makes it round.
+    func paletteFloatingSurface() -> some View {
+        let shape = PaletteTheme.floatingShape
+        return background(PaletteTheme.pill, in: shape)
             .overlay(shape.strokeBorder(PaletteTheme.border, lineWidth: 1))
             .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
     }

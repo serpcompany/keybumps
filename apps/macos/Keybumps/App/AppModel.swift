@@ -38,7 +38,8 @@ final class AppModel {
     let windows: WindowManagementService
     let launchAtLogin = LaunchAtLoginController()
     let conflicts = ConflictDetector()
-    private let spotlightShortcutResolver: any SpotlightShortcutConflictResolving
+    /// Read by the unit-test isolation guard.
+    let spotlightShortcutResolver: any SpotlightShortcutConflictResolving
     let dictation: DictationService
     let updater: any UpdateControlling
     /// The app-shell licensing seam (ADR 0002). Capability modules start only while it is entitled.
@@ -142,7 +143,7 @@ final class AppModel {
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
         self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
-            ?? SpotlightShortcutConflictResolver(preferences: SystemSymbolicHotKeyPreferences())
+            ?? SpotlightShortcutConflictResolver(preferences: Self.defaultSymbolicHotKeyPreferences)
         let updateSafetyPolicy = UpdateInstallationSafetyPolicy.shared
         self.updateSafetyPolicy = updateSafetyPolicy
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
@@ -219,8 +220,7 @@ final class AppModel {
             return permissions.accessibilityGranted
         }
         // Unit tests must never rewrite the owner's macOS shortcuts.
-        let symbolicHotKeys = symbolicHotKeyPreferences
-            ?? (UnitTestHost.isActive ? InertSymbolicHotKeyPreferences() : SystemSymbolicHotKeyPreferences())
+        let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
         let screenshotModule = ScreenshotToolsModule(
             service: screenshotTools,
             palette: commandPalette,
@@ -261,6 +261,13 @@ final class AppModel {
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
         refreshDetectorState()
+    }
+
+    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screenshot Tools
+    /// takeover use unless a composition injects its own: the owner's `com.apple.symbolichotkeys`,
+    /// or inert ones under the unit-test host, so unit tests never rewrite the owner's macOS shortcuts.
+    static var defaultSymbolicHotKeyPreferences: any SymbolicHotKeyPreferences {
+        UnitTestHost.isActive ? InertSymbolicHotKeyPreferences() : SystemSymbolicHotKeyPreferences()
     }
 
     func start() {

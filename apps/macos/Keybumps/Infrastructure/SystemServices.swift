@@ -550,7 +550,8 @@ final class SpotlightShortcutConflictResolver: SpotlightShortcutConflictResolvin
         static let spotlightSearch = "64"
     }
 
-    private let preferences: any SymbolicHotKeyPreferences
+    /// Read by the unit-test isolation guard.
+    let preferences: any SymbolicHotKeyPreferences
 
     init(preferences: any SymbolicHotKeyPreferences) {
         self.preferences = preferences
