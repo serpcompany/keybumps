@@ -50,12 +50,21 @@ describe('analytics scope', () => {
       join('components', 'analytics.tsx'),
       join('app', analyticsGroup, 'layout.tsx')
     ].sort()
-    const markers = ['<Analytics', 'GoogleTagManager', 'googletagmanager', 'cloudflareinsights']
+    // Match the modules, not only the JSX names, so aliased imports (`import { Analytics as X }`)
+    // and other @next/third-parties tools (GoogleAnalytics, gtag) are caught too.
+    const markers = [
+      /['"][^'"]*components\/analytics['"]/, // any import of the analytics component
+      /['"]@next\/third-parties/, // GoogleTagManager, GoogleAnalytics, and the rest
+      /<Analytics\b/,
+      /GoogleTagManager|GoogleAnalytics/,
+      /googletagmanager|google-analytics|gtag\(/i,
+      /cloudflareinsights/i
+    ]
     const found = files(srcDir)
-      .filter(file => /\.(ts|tsx|js|jsx|mjs)$/.test(file) && !/\.test\.ts$/.test(file))
+      .filter(file => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file) && !/\.test\.ts$/.test(file))
       .filter(file => {
         const source = readFileSync(file, 'utf8')
-        return markers.some(marker => source.includes(marker))
+        return markers.some(marker => marker.test(source))
       })
       .map(file => relative(srcDir, file))
       .sort()

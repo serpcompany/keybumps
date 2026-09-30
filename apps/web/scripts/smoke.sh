@@ -87,6 +87,31 @@ else
   fail 'pages sitemap has a non-canonical URL'
 fi
 
+# Unmatched URLs render the global 404 (experimental globalNotFound, since the site has two root
+# layouts): status 404, noindex, no referrer, and never analytics, even with a checkout query.
+missing='/thanks/x/?customer_session_token=x'
+missing_status="$(curl -s "${smoke[@]}" -o /dev/null -w '%{http_code}' "$base$missing" || true)"
+missing_page="$(curl -s "${smoke[@]}" "$base$missing" || true)"
+if [ "$missing_status" = 404 ] && grep -q '<meta name="robots" content="noindex' <<<"$missing_page" &&
+  grep -q '<meta name="referrer" content="no-referrer"' <<<"$missing_page" &&
+  ! grep -q 'googletagmanager' <<<"$missing_page"; then
+  pass "404 page for unknown paths (noindex, no-referrer, no GTM)"
+else
+  fail "unknown path $missing gave $missing_status or the wrong 404 page"
+fi
+
+# The pages name src/app/opengraph-image.jpg with a hand-copied cache key (src/lib/metadata.ts).
+# The 404 gets the key Next.js generates, so the two must match, or the copy went stale.
+og_image() { grep -oE '<meta property="og:image" content="[^"]*"' <<<"$1" | head -1 || true; }
+home_page="$(curl -s "${smoke[@]}" "$base/" || true)"
+home_og="$(og_image "$home_page")"
+missing_og="$(og_image "$missing_page")"
+if [ -n "$home_og" ] && [ "$home_og" = "$missing_og" ]; then
+  pass 'og:image cache key matches the generated one'
+else
+  fail "og:image cache key is stale: pages have '$home_og', Next.js generates '$missing_og'"
+fi
+
 robots="$(curl -s "${smoke[@]}" "$base/robots.txt")"
 robots_header="$(curl -sI "${smoke[@]}" "$base/" | tr -d '\r' | grep -i '^x-robots-tag:' || true)"
 

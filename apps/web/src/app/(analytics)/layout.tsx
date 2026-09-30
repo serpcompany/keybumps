@@ -1,5 +1,6 @@
 import { Analytics } from '@/components/analytics'
-import { rootLayoutMetadata, SiteDocument } from '@/components/site-document'
+import { SiteDocument } from '@/components/site-document'
+import { rootLayoutMetadata } from '@/lib/metadata'
 
 export const metadata = rootLayoutMetadata
 
