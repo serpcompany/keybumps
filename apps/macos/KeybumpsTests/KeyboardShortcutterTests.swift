@@ -342,6 +342,56 @@ final class KeyboardShortcutterTests: XCTestCase {
         )
     }
 
+    func testTapRecoveryDropsTheChromeGestureOfAPressStillBeingChecked() async {
+        let preTabs = ChromeTabState(
+            containerToken: "strip",
+            tabs: (0..<2).map { chromeNode("tab-\($0)", role: kAXRadioButtonRole as String, selected: $0 == 0) }
+        )
+        let settledTabs = ChromeTabState(
+            containerToken: "strip",
+            tabs: (0..<3).map { chromeNode("tab-\($0)", role: kAXRadioButtonRole as String, selected: $0 == 0) }
+        )
+        let newTab = AccessibilitySnapshot(
+            pid: 123,
+            bundleIdentifier: "com.google.Chrome",
+            applicationVersion: "153.0.8010.48",
+            applicationName: "Google Chrome",
+            hit: chromeNode("new-tab", role: kAXButtonRole as String, description: "New Tab"),
+            ancestors: []
+        )
+        let monitor = StubPointerMonitor()
+        let runtimeReader = StubChromeRuntimeReader([chromeRuntime(tabs: preTabs), chromeRuntime(tabs: settledTabs)])
+        // Holds each hit-test on the detection queue until the test lets it answer.
+        let answer = DispatchSemaphore(value: 0)
+        let detector = ManualActionDetector(
+            monitor: monitor,
+            snapshotter: StubAccessibilitySnapshotter([newTab, newTab]),
+            permissions: StubDetectorPermissions(accessibility: true, inputMonitoring: true),
+            chromeRuntimeReader: runtimeReader,
+            clickTargets: ScriptedClickTargets([.application(FakeProcess.app)]),
+            accessibility: .recording(AccessibilityLog()) { _ in
+                _ = answer.wait(timeout: .now() + 2)
+                return AXUIElementCreateApplication(FakeProcess.app)
+            }
+        )
+        var events: [CoachingEvent] = []
+        detector.onEvent = { events.append($0) }
+        detector.start()
+        defer { detector.stop() }
+
+        // The event tap recovers while the press on New Tab is still being checked, so the press's
+        // result reaches the main thread after the recovery. The recovery still drops its gesture.
+        monitor.send(PointerSample(phase: .down, location: CGPoint(x: 5, y: 5), modifiers: [], timestamp: 1))
+        monitor.onTapRecovered?()
+        answer.signal()
+        answer.signal()
+        monitor.send(PointerSample(phase: .up, location: CGPoint(x: 5, y: 5), modifiers: [], timestamp: 1.1))
+        try? await Task.sleep(for: .milliseconds(600))
+
+        XCTAssertEqual(events.map(\.actionTitle), [])
+        XCTAssertEqual(runtimeReader.requests.count, 1, "only the press read Chrome's tabs; nothing checked for a new one")
+    }
+
     func testPermissionRecoveryRechecksAlreadyGrantedAccessBeforeOpeningSystemSettings() async {
         var accessibilityTrusted = false
         var openedSettings: [MacPermission] = []

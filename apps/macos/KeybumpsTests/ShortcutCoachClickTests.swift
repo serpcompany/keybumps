@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -85,6 +86,18 @@ struct ClickTargetProbeTests {
         #expect(probe([]).target(at: Self.point) == .nothing)
     }
 
+    @Test("Keybumps' click-through panels, like the notch notice, let the click through to the window below")
+    func clickThroughPanels() {
+        // The window list can't tell a panel that ignores mouse events from one that takes them.
+        let notice = 4_101
+        let stacked = [
+            window(FakeProcess.keybumps, Self.under, layer: CGWindowLevelForKey(.popUpMenuWindow), number: notice),
+            window(FakeProcess.app, Self.under)
+        ]
+        #expect(probe(stacked).target(at: Self.point, clickThrough: [notice]) == .application(FakeProcess.app))
+        #expect(probe(stacked).target(at: Self.point, clickThrough: [4_102]) == .keybumps, "a panel that takes clicks is Keybumps'")
+    }
+
     private func probe(_ windows: [[String: Any]], frontmost: pid_t? = FakeProcess.app) -> WindowListClickTargetProbe {
         WindowListClickTargetProbe(
             ownProcess: FakeProcess.keybumps,
@@ -95,8 +108,9 @@ struct ClickTargetProbeTests {
     }
 
     /// A window as `CGWindowListCopyWindowInfo` describes it. Titles are never read.
-    private func window(_ owner: pid_t, _ frame: CGRect, layer: Int32 = 0, alpha: Double = 1) -> [String: Any] {
+    private func window(_ owner: pid_t, _ frame: CGRect, layer: Int32 = 0, alpha: Double = 1, number: Int = 1) -> [String: Any] {
         [
+            kCGWindowNumber as String: NSNumber(value: number),
             kCGWindowOwnerPID as String: NSNumber(value: owner),
             kCGWindowBounds as String: frame.dictionaryRepresentation,
             kCGWindowLayer as String: NSNumber(value: layer),
@@ -142,6 +156,46 @@ struct DetectionAccessibilityTests {
 
         // A hit in another app can lead into Keybumps, as an open panel's remote view does.
         #expect(accessibility.element(at: Self.point, in: FakeProcess.app) == nil)
+        #expect(log.messages.map(\.name) == [AccessibilityLog.hitTest])
+    }
+
+    @Test("An app that doesn't answer in time is asked nothing more until the next press or release")
+    func unresponsiveApp() {
+        let log = AccessibilityLog()
+        let hit = AXUIElementCreateApplication(FakeProcess.app)
+        let other = AXUIElementCreateApplication(FakeProcess.otherApp)
+        let accessibility = DetectionAccessibility.recording(log, unresponsive: [FakeProcess.app]) { _ in hit }
+
+        accessibility.beginPressOrRelease()
+        #expect(accessibility.element(at: Self.point, in: FakeProcess.app) === hit)
+        #expect(accessibility.copyAttribute(kAXRoleAttribute, from: hit) == nil, "timed out")
+        _ = accessibility.copyAttribute(kAXParentAttribute, from: hit)
+        _ = accessibility.actionNames(of: hit)
+        #expect(accessibility.element(at: Self.point, in: FakeProcess.app) == nil)
+        #expect(log.messages.map(\.name) == [AccessibilityLog.hitTest, kAXRoleAttribute], "nothing after the timeout")
+
+        _ = accessibility.copyAttribute(kAXRoleAttribute, from: other)
+        #expect(log.messages.last?.element === other, "other apps are still asked")
+
+        accessibility.beginPressOrRelease()
+        #expect(accessibility.element(at: Self.point, in: FakeProcess.app) === hit, "the next press or release asks again")
+        #expect(log.count(of: AccessibilityLog.hitTest) == 2)
+    }
+
+    @Test("An app whose hit-test times out is asked nothing more during that press or release")
+    func unresponsiveHitTest() {
+        let log = AccessibilityLog()
+        var accessibility = DetectionAccessibility.recording(log) { _ in nil }
+        accessibility.copyElementAtPosition = { application, point in
+            log.record(AccessibilityLog.hitTest, application, at: point)
+            return (.cannotComplete, nil)
+        }
+        let element = AXUIElementCreateApplication(FakeProcess.app)
+
+        accessibility.beginPressOrRelease()
+        #expect(accessibility.element(at: Self.point, in: FakeProcess.app) == nil)
+        #expect(accessibility.copyAttribute(kAXRoleAttribute, from: element) == nil)
+        #expect(accessibility.actionNames(of: element).isEmpty)
         #expect(log.messages.map(\.name) == [AccessibilityLog.hitTest])
     }
 
@@ -230,6 +284,67 @@ struct ClickHitTestTests {
         #expect(events.map(\.actionTitle) == ["Duplicate"])
         #expect(events.map(\.shortcut) == ["⌘D"])
     }
+
+    @Test("Each press and release tells the probe which of Keybumps' windows let clicks through")
+    func clickThroughWindowsReachTheProbe() async throws {
+        // Never ordered in, so never on screen; a window has its number once it's created.
+        let clickThrough = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+                                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        clickThrough.ignoresMouseEvents = true
+        let takesClicks = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+                                  styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let harness = DetectorHarness(targets: [.nothing]) { _ in nil }
+        defer { harness.stop() }
+
+        harness.click(at: Self.point)
+        try await harness.waitUntil { harness.targets.callCount == 2 }
+
+        let received = harness.targets.clickThrough
+        #expect(received.count == 2, "the press and the release")
+        #expect(received.allSatisfy { $0.contains(clickThrough.windowNumber) })
+        #expect(received.allSatisfy { !$0.contains(takesClicks.windowNumber) })
+    }
+
+    @Test("An app that stops answering after the hit-test is asked nothing more that press or release")
+    func unresponsiveAppIsAskedNothingMore() async throws {
+        let hit = AXUIElementCreateApplication(FakeProcess.app)
+        let harness = DetectorHarness(targets: [.application(FakeProcess.app), .application(FakeProcess.app), .nothing],
+                                      unresponsive: [FakeProcess.app]) { _ in hit }
+        defer { harness.stop() }
+
+        harness.click(at: Self.point)
+        harness.press(at: Self.elsewhere)
+        try await harness.waitUntil { harness.targets.callCount == 3 }
+
+        // Each of the press and the release: its hit-test, then the first read, which timed out.
+        let names = harness.log.messages.map(\.name)
+        #expect(names.count == 4)
+        #expect(names.enumerated().allSatisfy { ($0.offset % 2 == 0) == ($0.element == AccessibilityLog.hitTest) })
+    }
+
+    @Test("A window-control tip verified just before Shortcut Coach stops, as locking stops it, never arrives")
+    func eventsAfterStopAreDropped() async {
+        let harness = DetectorHarness(targets: [.nothing]) { _ in nil }
+        defer { harness.stop() }
+        var events: [CoachingEvent] = []
+        harness.detector.onEvent = { events.append($0) }
+        let windowControl = harness.detector.detection.windowControlMonitor
+        let finder = harness.detector.detection.finderTrashMonitor
+        let minimize = CoachingEvent(applicationName: "Example App", actionTitle: "Minimize Window", shortcut: "⌘M")
+
+        // What each detector queues for the main thread once it verifies an action on the detection queue.
+        DispatchQueue.main.async {
+            windowControl.onEvent?(minimize)
+            finder.onEvent?(minimize)
+        }
+        harness.stop()
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(events.isEmpty, "no tip, and nothing for history")
+
+        harness.detector.start()
+        windowControl.onEvent?(minimize)
+        #expect(events.map(\.actionTitle) == ["Minimize Window"], "while Shortcut Coach runs, its tips arrive")
+    }
 }
 
 // MARK: - Test doubles
@@ -272,24 +387,35 @@ final class AccessibilityLog: @unchecked Sendable {
 }
 
 extension DetectionAccessibility {
-    /// Records every message in `log` and answers none, apart from the hit-test's `hit`.
-    static func recording(_ log: AccessibilityLog, hit: @escaping (CGPoint) -> AXUIElement?) -> DetectionAccessibility {
+    /// Records every message in `log` and answers none, apart from the hit-test's `hit`. Reads of
+    /// `unresponsive` apps' elements time out.
+    static func recording(_ log: AccessibilityLog, unresponsive: Set<pid_t> = [],
+                          hit: @escaping (CGPoint) -> AXUIElement?) -> DetectionAccessibility {
+        func error(for element: AXUIElement) -> AXError {
+            var pid: pid_t = 0
+            return AXUIElementGetPid(element, &pid) == .success && unresponsive.contains(pid) ? .cannotComplete : .noValue
+        }
         var accessibility = DetectionAccessibility()
         accessibility.setMessagingTimeout = { log.setTimeout($0, $1) }
         accessibility.copyElementAtPosition = { application, point in
             log.record(AccessibilityLog.hitTest, application, at: point)
-            return hit(point)
+            let element = hit(point)
+            return (element == nil ? .noValue : .success, element)
         }
         accessibility.copyAttributeValue = { element, name in
             log.record(name, element)
-            return nil
+            return (error(for: element), nil)
         }
         accessibility.copyActionNames = { element in
             log.record(AccessibilityLog.actions, element)
-            return []
+            return (error(for: element), [])
         }
         return accessibility
     }
+}
+
+extension ClickTargetProbing {
+    func target(at point: CGPoint) -> ClickTarget { target(at: point, clickThrough: []) }
 }
 
 /// Answers each press and release with the next target, then the last one again.
@@ -297,14 +423,18 @@ final class ScriptedClickTargets: ClickTargetProbing, @unchecked Sendable {
     private let lock = NSLock()
     private var remaining: [ClickTarget]
     private var calls = 0
+    private var received: [Set<Int>] = []
 
     init(_ targets: [ClickTarget]) { remaining = targets }
 
     var callCount: Int { lock.withLock { calls } }
+    /// The click-through windows each call was given.
+    var clickThrough: [Set<Int>] { lock.withLock { received } }
 
-    func target(at point: CGPoint) -> ClickTarget {
+    func target(at point: CGPoint, clickThrough: Set<Int>) -> ClickTarget {
         lock.withLock {
             calls += 1
+            received.append(clickThrough)
             return remaining.count > 1 ? remaining.removeFirst() : remaining.first ?? .nothing
         }
     }
@@ -369,7 +499,7 @@ private final class DetectorHarness {
     let detector: ManualActionDetector
 
     init(targets: [ClickTarget], snapshotter: (any AccessibilitySnapshotting)? = nil,
-         hit: @escaping (CGPoint) -> AXUIElement?) {
+         unresponsive: Set<pid_t> = [], hit: @escaping (CGPoint) -> AXUIElement?) {
         self.targets = ScriptedClickTargets(targets)
         detector = ManualActionDetector(
             monitor: monitor,
@@ -377,7 +507,7 @@ private final class DetectorHarness {
             permissions: GrantedDetectorPermissions(),
             chromeRuntimeReader: UnavailableChromeRuntime(),
             clickTargets: self.targets,
-            accessibility: .recording(log, hit: hit)
+            accessibility: .recording(log, unresponsive: unresponsive, hit: hit)
         )
         detector.start()
     }
