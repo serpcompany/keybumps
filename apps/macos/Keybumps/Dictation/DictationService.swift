@@ -168,7 +168,9 @@ final class DictationService {
         fileManager: FileManager = .default,
         history: DictationHistoryService? = nil,
         transcriber: (any CompletedAudioTranscribing)? = nil,
-        paster: any TextPasting = SystemTextPaster(),
+        // Only the app shell's paste step keeps the write out of Clipboard History, so a service
+        // built without one never pastes.
+        paster: any TextPasting = InertTextPaster(),
         allowsSystemAccess: Bool = true
     ) {
         self.allowsSystemAccess = allowsSystemAccess

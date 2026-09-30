@@ -8,22 +8,39 @@ struct SnippetsSettingsView: View {
     @State private var selection: Snippet.ID?
     @State private var pendingDeletion: Snippet?
     @State private var errorMessage: String?
+    @State private var confirmsStartOver = false
 
     var body: some View {
         @Bindable var store = model.snippets
         let results = SnippetSearch.settingsResults(store.snippets, query: query)
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
-            if model.preferences.enabledCapabilities.contains(.snippets),
-               !model.missingPermissions(for: .snippets).isEmpty {
+            // Accessibility is optional: without it, ⌘Return copies instead of pasting.
+            if model.preferences.enabledCapabilities.contains(.snippets), !model.permissions.accessibilityGranted {
                 SettingsGroup("Paste") {
                     LabeledContent {
-                        OpenPermissionsButton()
+                        Button("Allow…") { Task { await model.recoverPermission(.accessibility) } }
+                            .disabled(model.permissions.activeRequest != nil)
+                            .accessibilityLabel("Allow Accessibility so ⌘Return pastes")
                     } label: {
                         SettingsRowLabel(
-                            title: "Paste needs Accessibility",
-                            subtitle: "Without it, ⌘Return in the Snippets tab copies the snippet instead of pasting it into the app you’re using."
+                            title: "⌘Return pastes with Accessibility",
+                            subtitle: "Without it, ⌘Return in the Snippets tab copies the snippet instead of pasting it into the app you’re using. Copying needs no permission."
                         )
+                    }
+                }
+            }
+            if store.libraryState == .readOnly {
+                SettingsGroup("Saved snippets can’t be read") {
+                    SettingsNote(
+                        "Keybumps can’t read snippets.json in its Application Support folder, so it won’t save any changes until it can. Check the file’s permissions and Try Again, or set the file aside and start a new library.",
+                        tint: .orange
+                    )
+                    HStack(spacing: 8) {
+                        Button("Try Again") { store.reload() }
+                            .accessibilityIdentifier("snippets.reload")
+                        Button("Start Over…") { confirmsStartOver = true }
+                            .accessibilityIdentifier("snippets.startOver")
                     }
                 }
             }
@@ -67,11 +84,24 @@ struct SnippetsSettingsView: View {
             if let errorMessage {
                 SettingsNote(errorMessage, tint: .orange)
             }
-            if let copyName = store.unreadableCopyName {
+            if case .recovered(let copyName) = store.libraryState {
                 SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in its Application Support folder.", tint: .orange)
             }
         }
         .navigationTitle("Snippets")
+        .alert("Start a new snippet library?", isPresented: $confirmsStartOver) {
+            Button("Start Over", role: .destructive) {
+                do {
+                    try store.startOver()
+                    errorMessage = nil
+                } catch {
+                    errorMessage = SnippetStoreError.storage.message
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Keybumps renames snippets.json to keep it, unread, beside the new library in its Application Support folder.")
+        }
         .sheet(item: $store.editorRequest) { request in
             SnippetEditorSheet(request: request)
                 .environment(model)
@@ -163,6 +193,11 @@ struct SnippetEditorSheet: View {
     @State private var didLoad = false
     @State private var errorMessage: String?
     @State private var confirmsDeletion = false
+    /// Whether the text shows while Sensitive is on. It starts hidden.
+    @State private var showsSensitiveText = false
+    /// A sensitive snippet's saved text stays in the Keychain, unread, until Show (or turning
+    /// Sensitive off) needs it. Saving without it keeps the saved text.
+    @State private var keepsSavedText = false
 
     private var editingID: Snippet.ID? {
         if case .edit(let id) = request { return id }
@@ -170,7 +205,7 @@ struct SnippetEditorSheet: View {
     }
 
     var body: some View {
-        let problem = model.snippets.problem(with: draft, editing: editingID)
+        let problem = model.snippets.problem(with: draft, editing: editingID, keepsText: keepsSavedText)
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 SettingsIconTile(systemImage: SnippetPaletteResults.symbol, tint: .green, size: 34)
@@ -202,21 +237,31 @@ struct SnippetEditorSheet: View {
                 }
                 divider
                 row("Snippet", alignment: .top) {
-                    TextEditor(text: $draft.text)
-                        .font(.system(size: 13))
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .frame(height: 180)
-                        .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.1))
-                        )
-                        .accessibilityLabel("Snippet")
-                        .accessibilityIdentifier("snippets.editor.text")
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if draft.isSensitive, !showsSensitiveText {
+                            maskedText
+                        } else {
+                            TextEditor(text: $draft.text)
+                                .font(.system(size: 13))
+                                .scrollContentBackground(.hidden)
+                                .padding(6)
+                                .frame(height: 180)
+                                .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
+                                        .strokeBorder(Color.primary.opacity(0.1))
+                                )
+                                .accessibilityLabel("Snippet")
+                                .accessibilityIdentifier("snippets.editor.text")
+                        }
+                        if draft.isSensitive {
+                            Button(showsSensitiveText ? "Hide" : "Show") { toggleSensitiveText() }
+                                .accessibilityIdentifier("snippets.editor.show")
+                        }
+                    }
                 }
                 divider
-                Toggle(isOn: $draft.isSensitive) {
+                Toggle(isOn: Binding(get: { draft.isSensitive }, set: setSensitive)) {
                     SettingsRowLabel(
                         title: "Sensitive",
                         subtitle: "Hides the text in the Command Palette and Settings, and leaves it out of search. The text is kept in the Keychain."
@@ -264,6 +309,47 @@ struct SnippetEditorSheet: View {
         SettingsTheme.separator.frame(height: 1)
     }
 
+    /// The text while it's hidden: the mask, in the field's place.
+    private var maskedText: some View {
+        Text(SnippetPresentation.maskedText)
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+            .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1))
+            )
+            .accessibilityLabel("Snippet, hidden")
+            .accessibilityIdentifier("snippets.editor.masked")
+    }
+
+    private func toggleSensitiveText() {
+        if !showsSensitiveText, !loadSavedText() { return }
+        showsSensitiveText.toggle()
+    }
+
+    /// Turning Sensitive on hides the text; turning it off shows it, since it will be saved in the file.
+    private func setSensitive(_ isSensitive: Bool) {
+        if !isSensitive, !loadSavedText() { return }
+        draft.isSensitive = isSensitive
+        showsSensitiveText = !isSensitive
+    }
+
+    /// Reads a sensitive snippet's saved text from the Keychain, once, when it's needed.
+    private func loadSavedText() -> Bool {
+        guard keepsSavedText else { return true }
+        guard let editingID, let snippet = model.snippets.snippet(withID: editingID),
+              let text = model.snippets.text(for: snippet) else {
+            errorMessage = "Keybumps couldn’t read this snippet’s text from the Keychain."
+            return false
+        }
+        draft.text = text
+        keepsSavedText = false
+        return true
+    }
+
     private func row(
         _ label: String,
         alignment: VerticalAlignment = .firstTextBaseline,
@@ -285,9 +371,8 @@ struct SnippetEditorSheet: View {
         guard let editingID else { return }
         if let existing = model.snippets.draft(for: editingID) {
             draft = existing
-            if model.snippets.snippet(withID: editingID)?.isSensitive == true, existing.text.isEmpty {
-                errorMessage = "Keybumps couldn’t read this snippet’s text from the Keychain."
-            }
+            // Its text stays in the Keychain until Show.
+            keepsSavedText = existing.isSensitive
         } else {
             errorMessage = SnippetStoreError.notFound.message
         }
@@ -296,7 +381,7 @@ struct SnippetEditorSheet: View {
     private func save() {
         do {
             if let editingID {
-                try model.snippets.update(editingID, with: draft)
+                try model.snippets.update(editingID, with: draft, keepsText: keepsSavedText)
             } else {
                 try model.snippets.add(draft)
             }

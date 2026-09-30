@@ -204,18 +204,17 @@ struct CapabilityModuleTests {
         #expect(!harness.model.shortcuts.desiredOwners.contains(CapabilityShortcut.snippets.ownerID))
     }
 
-    @Test("Snippets needs Accessibility only to paste, and reports it on its own page")
-    func snippetsReportsMissingAccessibility() {
-        #expect(CapabilityDescriptor.snippets.requiredPermissions == [.accessibility])
+    @Test("Snippets requires no permission: missing Accessibility adds no attention or badge count")
+    func snippetsRequiresNoPermission() {
+        #expect(CapabilityDescriptor.snippets.requiredPermissions.isEmpty)
         #expect(CapabilityDescriptor.snippets.dependencies.isEmpty)
         let harness = ModuleHarness(accessibilityGranted: false)
         defer { harness.tearDown() }
+        harness.model.preferences.enabledCapabilities = [.snippets]
         harness.model.start()
-        #expect(harness.model.settingsAttentionCount(for: .snippets) == 1)
-        #expect(harness.model.missingPermissions(for: .snippets) == [.accessibility])
-
-        harness.model.setCapability(.snippets, enabled: false)
         #expect(harness.model.settingsAttentionCount(for: .snippets) == 0)
+        #expect(harness.model.missingPermissions(for: .snippets).isEmpty)
+        #expect(harness.model.missingPermissionCount == 0, "No Dock badge on installs that never granted Accessibility")
     }
 }
 

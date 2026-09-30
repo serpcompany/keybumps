@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 import Security
 import Testing
@@ -60,8 +61,8 @@ struct SnippetStorageTests {
         #expect(snippet.updatedAt == snippet.createdAt)
     }
 
-    @Test("An unreadable file is kept as a copy instead of being overwritten")
-    func unreadableFileIsSetAside() throws {
+    @Test("An undecodable file is kept as a copy before anything overwrites it, and only once")
+    func undecodableFileIsCopiedAside() throws {
         let folder = TemporaryFolder()
         defer { folder.remove() }
         let garbage = Data("not json at all".utf8)
@@ -69,14 +70,94 @@ struct SnippetStorageTests {
 
         let store = folder.makeStore()
         #expect(store.snippets.isEmpty)
-        let copyName = try #require(store.unreadableCopyName)
+        guard case .recovered(let copyName) = store.libraryState else {
+            Issue.record("Expected a kept copy, got \(store.libraryState)")
+            return
+        }
         #expect(copyName.hasPrefix("snippets.unreadable-"))
         let copyURL = folder.url.appendingPathComponent(copyName)
         #expect(try Data(contentsOf: copyURL) == garbage)
         #expect(try folder.permissions(of: copyURL) == 0o600)
 
+        // Another launch before any save reuses the identical copy instead of making another.
+        #expect(folder.makeStore().libraryState == .recovered(copyName: copyName))
+        #expect(folder.unreadableCopies() == [copyName])
+
         try store.add(SnippetDraft(name: "Made-up", text: "text"))
         #expect(try Data(contentsOf: copyURL) == garbage, "Saving never touches the kept copy")
+        #expect(folder.makeStore().libraryState == .ready)
+    }
+
+    @Test("A file that exists but can't be read is never overwritten; Try Again reads it once it can")
+    func unreadableFileMakesTheStoreReadOnly() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let seeded = folder.makeStore()
+        let kept = try seeded.add(SnippetDraft(name: "Made-up", text: "text"))
+        let original = try Data(contentsOf: folder.storageURL)
+        try folder.setPermissions(0o000, of: folder.storageURL)
+
+        let store = folder.makeStore()
+        #expect(store.libraryState == .readOnly)
+        #expect(store.snippets.isEmpty)
+        #expect(throws: SnippetStoreError.readOnly) { try store.add(SnippetDraft(name: "New", text: "text")) }
+        store.markUsed(kept.id)
+        #expect(folder.unreadableCopies().isEmpty)
+
+        try folder.setPermissions(0o600, of: folder.storageURL)
+        #expect(try Data(contentsOf: folder.storageURL) == original, "The file is untouched")
+        store.reload()
+        #expect(store.libraryState == .ready)
+        #expect(store.snippets.map(\.id) == [kept.id])
+    }
+
+    @Test("Start Over renames an unreadable file aside, unread, and starts a library that saves")
+    func startOverKeepsTheUnreadableFile() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        try folder.makeStore().add(SnippetDraft(name: "Made-up", text: "text"))
+        let original = try Data(contentsOf: folder.storageURL)
+        try folder.setPermissions(0o000, of: folder.storageURL)
+
+        let store = folder.makeStore()
+        try store.startOver()
+        guard case .recovered(let copyName) = store.libraryState else {
+            Issue.record("Expected the file to be set aside, got \(store.libraryState)")
+            return
+        }
+        try store.add(SnippetDraft(name: "New", text: "text"))
+        #expect(folder.makeStore().snippets.map(\.name) == ["New"])
+
+        let copyURL = folder.url.appendingPathComponent(copyName)
+        try folder.setPermissions(0o600, of: copyURL)
+        #expect(try Data(contentsOf: copyURL) == original)
+    }
+
+    @Test("If the copy of an undecodable file can't be written, nothing is saved over it")
+    func failedCopyBlocksSaving() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let garbage = Data("not json at all".utf8)
+        try garbage.write(to: folder.storageURL)
+        try folder.setPermissions(0o500, of: folder.url)
+
+        let store = folder.makeStore()
+        #expect(store.libraryState == .readOnly)
+        #expect(throws: SnippetStoreError.readOnly) { try store.add(SnippetDraft(name: "New", text: "text")) }
+        try folder.setPermissions(0o700, of: folder.url)
+        #expect(try Data(contentsOf: folder.storageURL) == garbage)
+    }
+
+    @Test("Only a missing file is an empty library")
+    func missingFileIsEmpty() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let store = folder.makeStore()
+        #expect(store.libraryState == .ready)
+        #expect(store.snippets.isEmpty)
+        #expect(SnippetStore.isMissingFile(CocoaError(.fileReadNoSuchFile)))
+        #expect(!SnippetStore.isMissingFile(CocoaError(.fileReadNoPermission)))
+        #expect(!SnippetStore.isMissingFile(CocoaError(.fileReadCorruptFile)))
     }
 
     @Test("One unreadable entry is skipped, and the file is kept as a copy before the next save")
@@ -89,7 +170,7 @@ struct SnippetStorageTests {
 
         let store = folder.makeStore()
         #expect(store.snippets.map(\.id) == [good])
-        #expect(store.unreadableCopyName != nil)
+        if case .recovered = store.libraryState {} else { Issue.record("Expected a kept copy") }
     }
 
     @Test("The editor's problems: a name, a keyword without spaces that no other snippet uses, and text")
@@ -163,7 +244,7 @@ struct SensitiveSnippetTests {
         #expect(snippet.text.isEmpty)
         #expect(secrets.texts[snippet.id] == Self.secret)
         #expect(store.text(for: snippet) == Self.secret)
-        #expect(store.draft(for: snippet.id)?.text == Self.secret, "The editor shows it")
+        #expect(store.draft(for: snippet.id)?.text.isEmpty == true, "The editor reads it only on Show")
 
         let file = try String(contentsOf: folder.storageURL, encoding: .utf8)
         #expect(!file.contains(Self.secret))
@@ -226,7 +307,7 @@ struct SensitiveSnippetTests {
         #expect(folder.makeStore().snippets.first?.text.isEmpty == true)
     }
 
-    @Test("Keychain items are this app's, per snippet, readable only while unlocked, and never synced")
+    @Test("Keychain items are this app's, one per snippet, not synchronizable, with a generic label")
     func keychainItemAttributes() {
         let store = KeychainSnippetSecretStore(bundleIdentifier: "com.example.made-up")
         let id = UUID()
@@ -236,10 +317,141 @@ struct SensitiveSnippetTests {
         #expect(query[kSecAttrAccount as String] as? String == id.uuidString)
 
         let attributes = store.newItemAttributes(for: id, data: Data("made-up".utf8))
-        #expect(attributes[kSecAttrAccessible as String] as? String == kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
+        // Items go to the login keychain; without the data protection keychain an accessibility
+        // class would have no effect, so none is claimed.
+        #expect(attributes[kSecUseDataProtectionKeychain as String] == nil)
+        #expect(attributes[kSecAttrAccessible as String] == nil)
         #expect(attributes[kSecAttrSynchronizable as String] as? Bool == false)
         #expect(attributes[kSecAttrLabel as String] as? String == "Keybumps snippet", "No name or keyword in the Keychain")
         #expect(attributes[kSecValueData as String] as? Data == Data("made-up".utf8))
+    }
+}
+
+// MARK: - Keychain cleanup
+
+@MainActor
+@Suite("Snippets: no sensitive text outlives its snippet")
+struct SnippetKeychainCleanupTests {
+    static let secret = "made-up-secret-7f3a"
+
+    @Test("Deleting removes the snippet's Keychain item even when it isn't sensitive now")
+    func deleteAlwaysRemovesTheItem() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let snippet = try store.add(SnippetDraft(name: "Made-up", text: "text"))
+        try secrets.setText(Self.secret, for: snippet.id)
+        try store.delete(snippet.id)
+        #expect(secrets.texts.isEmpty)
+    }
+
+    @Test("If the Keychain won't remove the item, the snippet isn't deleted")
+    func failedRemovalKeepsTheSnippet() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let snippet = try store.add(SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: true))
+        secrets.failsNextRemoval = true
+        #expect(throws: SnippetStoreError.keychain) { try store.delete(snippet.id) }
+        #expect(folder.makeStore(secrets: secrets).snippet(withID: snippet.id) != nil)
+        #expect(secrets.texts[snippet.id] == Self.secret)
+    }
+
+    @Test("Turning Sensitive off fails as a whole if the Keychain won't remove the item")
+    func failedRemovalKeepsItSensitive() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let snippet = try store.add(SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: true))
+        secrets.failsNextRemoval = true
+        #expect(throws: SnippetStoreError.keychain) {
+            try store.update(snippet.id, with: SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: false))
+        }
+        #expect(store.snippet(withID: snippet.id)?.isSensitive == true)
+        #expect(secrets.texts[snippet.id] == Self.secret)
+        #expect(!(try String(contentsOf: folder.storageURL, encoding: .utf8).contains(Self.secret)))
+    }
+
+    @Test("If the file can't be written after the Keychain changed, the Keychain is put back")
+    func keychainIsRestoredWhenTheFileFails() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let snippet = try store.add(SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: true))
+        try folder.setPermissions(0o500, of: folder.url)
+        defer { try? folder.setPermissions(0o700, of: folder.url) }
+
+        #expect(throws: SnippetStoreError.storage) {
+            try store.update(snippet.id, with: SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: false))
+        }
+        #expect(secrets.texts[snippet.id] == Self.secret)
+        #expect(throws: SnippetStoreError.storage) { try store.delete(snippet.id) }
+        #expect(secrets.texts[snippet.id] == Self.secret)
+        #expect(store.snippet(withID: snippet.id)?.isSensitive == true)
+    }
+
+    @Test("Saving without showing the text keeps a sensitive snippet's saved text")
+    func keepsSavedText() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let snippet = try store.add(SnippetDraft(name: "Made-up", text: Self.secret, isSensitive: true))
+        let hidden = try #require(store.draft(for: snippet.id))
+        #expect(store.problem(with: hidden, editing: snippet.id, keepsText: true) == nil)
+
+        var renamed = hidden
+        renamed.name = "Renamed"
+        try store.update(snippet.id, with: renamed, keepsText: true)
+        #expect(store.snippet(withID: snippet.id)?.name == "Renamed")
+        #expect(secrets.texts[snippet.id] == Self.secret)
+
+        secrets.removeTextForTesting(snippet.id)
+        #expect(throws: SnippetStoreError.keychain) { try store.update(snippet.id, with: renamed, keepsText: true) }
+    }
+
+    @Test("Reading the whole file removes Keychain items no sensitive snippet uses")
+    func unusedItemsAreRemovedAtLoad() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        let sensitive = try store.add(SnippetDraft(name: "Kept", text: Self.secret, isSensitive: true))
+        let plain = try store.add(SnippetDraft(name: "Plain", text: "text"))
+        let orphan = UUID()
+        try secrets.setText("left by another build", for: orphan)
+        try secrets.setText("left by a failed removal", for: plain.id)
+
+        _ = folder.makeStore(secrets: secrets)
+        #expect(Set(secrets.texts.keys) == [sensitive.id])
+    }
+
+    @Test("Nothing is removed from the Keychain when the file wasn't read in full or items can't be listed")
+    func cleanupNeedsTheWholeFile() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let orphan = UUID()
+        let secrets = InMemorySnippetSecretStore([orphan: "made-up"])
+
+        _ = folder.makeStore(secrets: secrets)
+        #expect(secrets.texts[orphan] != nil, "No file yet")
+
+        try Data("not json".utf8).write(to: folder.storageURL)
+        _ = folder.makeStore(secrets: secrets)
+        #expect(secrets.texts[orphan] != nil, "The file wasn't read")
+
+        try Data("[]".utf8).write(to: folder.storageURL)
+        secrets.failsListing = true
+        _ = folder.makeStore(secrets: secrets)
+        #expect(secrets.texts[orphan] != nil, "Items couldn't be listed")
+
+        secrets.failsListing = false
+        _ = folder.makeStore(secrets: secrets)
+        #expect(secrets.texts[orphan] == nil)
     }
 }
 
@@ -374,11 +586,13 @@ struct SnippetPaletteTests {
         #expect(fixture.clipboard.entries.isEmpty)
     }
 
-    @Test("Without Accessibility, ⌘Return copies instead of pasting")
+    @Test("Without Accessibility, ⌘Return copies instead of pasting and offers the setup")
     func pasteWithoutAccessibilityCopies() throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         fixture.palette.canPaste = { false }
+        var offers = 0
+        fixture.palette.offerPasteSetup = { offers += 1 }
         let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
 
         fixture.palette.pasteSnippet(snippet)
@@ -388,6 +602,7 @@ struct SnippetPaletteTests {
         #expect(fixture.clipboard.entries.isEmpty)
         #expect(fixture.snippets.snippet(withID: snippet.id)?.lastUsedAt != nil)
         #expect(fixture.notices.shown == [.init(message: "Copied · Paste needs Accessibility", isWarning: true)])
+        #expect(offers == 1)
     }
 
     @Test("With Accessibility, ⌘Return hands the text to the shared paste step")
@@ -440,6 +655,106 @@ struct SnippetPaletteTests {
         #expect(fixture.snippets.snippets.count == 1, "Nothing is deleted until it's confirmed")
     }
 
+    @Test("⌘Return with Keybumps itself in front copies, and says there's no app to paste into")
+    func pasteWithKeybumpsInFrontCopies() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        fixture.palette.frontmostApp = { PasteTarget(processIdentifier: 1, isKeybumps: true) }
+        fixture.palette.rememberPasteTarget()
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
+
+        fixture.palette.pasteSnippet(snippet)
+        #expect(fixture.paster.pasted.isEmpty)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown == [.init(message: "Copied · No app to paste into", isWarning: true)])
+    }
+
+    @Test("If another app comes to the front during the wait, ⌘Return copies instead")
+    func pasteIntoAChangedAppCopies() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        fixture.palette.pasteDelay = .milliseconds(30)
+        fixture.palette.rememberPasteTarget()
+        fixture.palette.frontmostApp = { PasteTarget(processIdentifier: 99, isKeybumps: false) }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
+
+        fixture.palette.pasteSnippet(snippet)
+        try await fixture.waitUntil { !fixture.notices.shown.isEmpty }
+        #expect(fixture.paster.pasted.isEmpty)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown == [.init(message: "Copied · Couldn’t paste", isWarning: true)])
+    }
+
+    @Test("Opening the palette again during the wait cancels the paste")
+    func reopeningCancelsThePaste() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        fixture.palette.pasteDelay = .milliseconds(30)
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
+
+        fixture.palette.pasteSnippet(snippet)
+        fixture.palette.rememberPasteTarget()
+        try await fixture.waitUntil { !fixture.notices.shown.isEmpty }
+        #expect(fixture.paster.pasted.isEmpty)
+        #expect(fixture.notices.shown == [.init(message: "Copied · Couldn’t paste", isWarning: true)])
+    }
+
+    @Test("The paste route: another app, still in front, with the palette closed and Accessibility")
+    func pasteRoute() {
+        let app = PasteTarget(processIdentifier: 42, isKeybumps: false)
+        let keybumps = PasteTarget(processIdentifier: 7, isKeybumps: true)
+        #expect(SnippetPasteRoute.beforeClosing(canPaste: true, target: app) == .paste)
+        #expect(SnippetPasteRoute.beforeClosing(canPaste: false, target: app) == .copy(.needsAccessibility))
+        #expect(SnippetPasteRoute.beforeClosing(canPaste: true, target: keybumps) == .copy(.noOtherApp))
+        #expect(SnippetPasteRoute.beforeClosing(canPaste: false, target: nil) == .copy(.noOtherApp))
+        #expect(SnippetPasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: false, isStillWanted: true))
+        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: keybumps, paletteIsVisible: false, isStillWanted: true))
+        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: nil, paletteIsVisible: false, isStillWanted: true))
+        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: true, isStillWanted: true))
+        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: false, isStillWanted: false))
+    }
+
+    @Test("The shared paste step writes, keeps the write out of Clipboard History, then presses ⌘V")
+    func systemPasteStepOrder() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let paster = try #require(
+            AppModel.makeTextPaster(clipboard: fixture.clipboard, allowsSystemAccess: true, isUnitTestHost: false)
+                as? SystemTextPaster
+        )
+        var steps: [String] = []
+        var recording = paster
+        recording.pasteboard = { fixture.pasteboard }
+        let suppress = paster.didWritePasteboard
+        recording.didWritePasteboard = {
+            steps.append("write:\(fixture.pasteboard.string(forType: .string) ?? "")")
+            suppress()
+        }
+        recording.postCommandV = { steps.append("⌘V") }
+
+        try recording.paste("made-up text", concealed: true)
+        #expect(steps == ["write:made-up text", "⌘V"])
+        #expect(fixture.pasteboard.data(forType: .concealed) != nil)
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.isEmpty, "The shell's paste step keeps its write out of Clipboard History")
+
+        // Without that suppression, the same write would be recorded.
+        fixture.pasteboard.writeText("made-up copy")
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.map(\.text) == ["made-up copy"])
+    }
+
+    @Test("Unit tests and sessions without system access get the inert paste step")
+    func pasteStepIsInertInTests() {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        #expect(AppModel.makeTextPaster(clipboard: fixture.clipboard, allowsSystemAccess: true) is InertTextPaster)
+        #expect(AppModel.makeTextPaster(clipboard: fixture.clipboard, allowsSystemAccess: false, isUnitTestHost: false) is InertTextPaster)
+    }
+
     @Test("A text write can carry nspasteboard.org's concealed marker")
     func writeTextMarksConcealed() {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsSnippetWrite-\(UUID().uuidString)"))
@@ -449,6 +764,9 @@ struct SnippetPaletteTests {
         #expect(pasteboard.types?.contains(NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")) == true)
         #expect(pasteboard.writeText("plain"))
         #expect(pasteboard.data(forType: .concealed) == nil)
+        // A concealed write stays on this Mac, so Universal Clipboard doesn't send it to other devices.
+        #expect(NSPasteboard.contentsOptions(concealed: true) == .currentHostOnly)
+        #expect(NSPasteboard.contentsOptions(concealed: false) == [])
     }
 
     @Test("Snippets takes ⌘5 and the hidden-by-default Hotkeys tab moves to ⌘6")
@@ -461,6 +779,100 @@ struct SnippetPaletteTests {
         #expect(CommandPaletteTab.matchingCommandKey("5", in: visible) == .snippets)
         #expect(CommandPaletteTab.matchingCommandKey("6", in: visible) == nil)
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search).last == .keyboardShortcutter)
+    }
+}
+
+// MARK: - Palette keys
+
+@MainActor
+@Suite("Snippets: palette keys")
+struct SnippetPaletteKeyTests {
+    static func key(_ keyCode: Int, _ characters: String = "", command: Bool = false) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: command ? [.command] : [],
+            timestamp: 0, windowNumber: 0, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode)
+        )!
+    }
+
+    static let returnKey = key(kVK_Return, "\r")
+    static let commandReturn = key(kVK_Return, "\r", command: true)
+    static let deleteKey = key(kVK_Delete, "\u{7f}")
+
+    @Test("Return copies the selected snippet and ⌘Return pastes it")
+    func returnAndCommandReturn() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
+        fixture.palette.state.select(.snippets)
+
+        #expect(fixture.palette.handleKeyDown(Self.returnKey) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown.map(\.message) == ["Copied to Clipboard"])
+
+        #expect(fixture.palette.handleKeyDown(Self.commandReturn) == nil)
+        try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
+        #expect(fixture.paster.pasted.map(\.text) == ["made-up text"])
+    }
+
+    @Test("⌘N makes a new snippet and ⌘E edits the selected one, in Settings")
+    func newAndEdit() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        var settingsOpened = 0
+        fixture.palette.openSettings = { settingsOpened += 1 }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "text"))
+        fixture.palette.state.select(.snippets)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_N, "n", command: true)) == nil)
+        #expect(fixture.snippets.editorRequest == .new)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_E, "e", command: true)) == nil)
+        #expect(fixture.snippets.editorRequest == .edit(snippet.id))
+        #expect(settingsOpened == 2)
+    }
+
+    @Test("⌘N and ⌘E do nothing while Snippets is off")
+    func newAndEditNeedSnippetsOn() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        var settingsOpened = 0
+        fixture.palette.openSettings = { settingsOpened += 1 }
+        try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "text"))
+        fixture.preferences.setCapability(.snippets, enabled: false)
+        fixture.palette.state.select(.snippets)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_N, "n", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_E, "e", command: true)) == nil)
+        #expect(fixture.snippets.editorRequest == nil)
+        #expect(settingsOpened == 0)
+    }
+
+    @Test("Delete asks first, and while the alert shows the palette leaves its keys alone")
+    func deleteAsksAndTheAlertKeepsItsKeys() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "text"))
+        fixture.palette.state.select(.snippets)
+
+        #expect(fixture.palette.handleKeyDown(Self.deleteKey) == nil)
+        #expect(fixture.palette.state.snippetPendingDeletion == snippet)
+        #expect(fixture.snippets.snippets.count == 1)
+
+        let passedOn = fixture.palette.handleKeyDown(Self.returnKey)
+        #expect(passedOn != nil, "Return goes to the alert")
+        #expect(fixture.pasteboard.string(forType: .string) == nil, "Nothing was copied")
+    }
+
+    @Test("⌘5 selects Snippets; ⌘6 does nothing while the Hotkeys tab is hidden")
+    func tabKeys() {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.state.select(.search)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_5, "5", command: true)) == nil)
+        #expect(fixture.palette.state.tab == .snippets)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_6, "6", command: true)) != nil)
+        #expect(fixture.palette.state.tab == .snippets)
     }
 }
 
@@ -490,11 +902,26 @@ private struct TemporaryFolder {
         return (attributes[.posixPermissions] as? NSNumber)?.intValue ?? -1
     }
 
+    func setPermissions(_ mode: Int, of file: URL) throws {
+        try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: file.path)
+    }
+
+    func unreadableCopies() -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? [])
+            .filter { $0.hasPrefix("snippets.unreadable-") }
+            .sorted()
+    }
+
     func leftoverTemporaryFiles() -> [String] {
         ((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []).filter { $0.hasSuffix(".tmp") }
     }
 
+    /// Restores permissions a test took away, then deletes the folder.
     func remove() {
+        try? setPermissions(0o700, of: url)
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? [] {
+            try? setPermissions(0o600, of: url.appendingPathComponent(name))
+        }
         try? FileManager.default.removeItem(at: url)
     }
 }
@@ -508,7 +935,10 @@ private final class PaletteFixture {
     let notices = RecordingNotices()
     let clipboard: ClipboardHistoryService
     let snippets: SnippetStore
+    let preferences = AppPreferences(defaults: InMemoryDefaults())
     let palette: CommandPaletteController
+    /// Another app, in front when the palette opened and still in front.
+    static let otherApp = PasteTarget(processIdentifier: 4242, isKeybumps: false)
 
     init() {
         let root = folder.url
@@ -531,13 +961,15 @@ private final class PaletteFixture {
                 allowsSystemAccess: false
             ),
             inbox: InboxStore(persistence: NoEventPersistence()),
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            preferences: preferences,
             snippets: snippets,
             paster: paster,
             pasteboard: pasteboard,
             notices: notices
         )
         palette.pasteDelay = .zero
+        palette.frontmostApp = { Self.otherApp }
+        palette.rememberPasteTarget()
     }
 
     func waitUntil(_ condition: () -> Bool) async throws {

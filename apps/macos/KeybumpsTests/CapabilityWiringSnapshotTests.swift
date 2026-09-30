@@ -1,11 +1,12 @@
 import AppKit
 import AVFoundation
+import Carbon.HIToolbox
 import Foundation
 import Speech
 import Testing
 @testable import Keybumps
 
-/// Characterizes how `AppModel` wires the six capabilities, so a refactor can prove it changed nothing.
+/// Characterizes how `AppModel` wires every capability, so a refactor can prove it changed nothing.
 /// Re-record only with `KEYBUMPS_RECORD_SNAPSHOTS=1` (through xcodebuild: `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1`).
 @MainActor
 @Suite("Capability wiring snapshot")
@@ -236,6 +237,9 @@ final class WiringHarness {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.enabledCapabilities = enabled
         preferences.didCompleteOnboarding = didCompleteOnboarding
+        // Open Snippets starts unassigned; give it one so the snapshot records Snippets registering
+        // and releasing its only shortcut.
+        preferences.setCapabilityShortcut(Self.snippetsBinding, for: .snippets)
 
         let log = log
         let grants = FakePermissionState(missing: missing)
@@ -295,6 +299,12 @@ final class WiringHarness {
         _ = log.drain()
         lastShortcuts = shortcuts()
     }
+
+    static let snippetsBinding = ShortcutBinding(
+        keyCode: UInt32(kVK_ANSI_S),
+        modifiers: UInt32(controlKey | optionKey | shiftKey),
+        displayName: "⌃⌥⇧S"
+    )
 
     /// Named pasteboards live in the pasteboard server until released, so drop each one with its harness.
     deinit {

@@ -165,9 +165,7 @@ final class AppModel {
         // Dictation and Snippets share one paste step. Unit tests and the UI-test composition never
         // synthesize ⌘V.
         let textPaster = injectedTextPaster
-            ?? (UnitTestHost.isActive || !allowsDictationSystemAccess
-                ? InertTextPaster()
-                : SystemTextPaster(didWritePasteboard: clipboard.suppressCurrentChange))
+            ?? Self.makeTextPaster(clipboard: clipboard, allowsSystemAccess: allowsDictationSystemAccess)
         self.windows = injectedWindows ?? WindowManagementService()
         let screenshotDelivery = ScreenshotClipboardDelivery(
             clipboard: clipboard,
@@ -213,7 +211,8 @@ final class AppModel {
         )
         // The palette's Settings button, Command-comma, and Keybumps Settings result take the status menu's route.
         commandPalette.openSettings = { MainWindowRouter.shared.open() }
-        // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste.
+        // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste. It's
+        // optional for Snippets: without it ⌘Return copies and offers the usual permission setup.
         let permissions = self.permissions
         commandPalette.canPaste = {
             permissions.refresh()
@@ -257,6 +256,7 @@ final class AppModel {
         ])
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
+        commandPalette.offerPasteSetup = { [weak self] in self?.offerSnippetPasteSetup() }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
@@ -384,6 +384,13 @@ final class AppModel {
             }
         case .toggleDictation:
             dictation.toggle()
+        }
+    }
+
+    /// After ⌘Return had to copy for lack of Accessibility: offers the usual Accessibility setup.
+    private func offerSnippetPasteSetup() {
+        permissionDragAssistant.showSnippetPasteSetup { [weak self] in
+            Task { await self?.recoverPermission(.accessibility) }
         }
     }
 

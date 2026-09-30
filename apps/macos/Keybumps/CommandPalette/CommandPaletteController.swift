@@ -154,12 +154,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     var editImage: ((ClipboardEntry) -> Bool)?
     /// Opens Settings. The app shell sets it to the status menu's route.
     var openSettings: () -> Void = {}
-    /// Whether ⌘V can reach the app in front, which needs Accessibility. The shell re-reads it from
+    /// Whether ⌘V can reach another app, which needs Accessibility. The shell re-reads it from
     /// macOS on every paste; without it, pasting a snippet copies it instead.
     var canPaste: () -> Bool = { false }
+    /// Offers to set up Accessibility after a paste had to copy instead. Set by the shell.
+    var offerPasteSetup: () -> Void = {}
+    /// The app in front right now; tests replace it.
+    var frontmostApp: () -> PasteTarget? = { PasteTarget.frontmost() }
     /// How long a snippet paste waits after the palette closes, so the app in front has its
     /// keyboard focus back before ⌘V.
     var pasteDelay: Duration = .milliseconds(120)
+    /// The app that was in front when the palette opened: the only app ⌘Return pastes into.
+    private(set) var pasteTarget: PasteTarget?
+    /// The snippet paste waiting out `pasteDelay`; opening the palette again cancels it.
+    private var pendingPaste: UUID?
 
     init(
         clipboard: ClipboardHistoryService,
@@ -195,6 +203,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         if panel == nil { makePanel() }
         guard let panel else { return }
 
+        rememberPasteTarget()
         state.select(tab)
         search.query = ""
         position(panel)
@@ -205,6 +214,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.focusInput()
         }
+    }
+
+    /// Runs as the palette opens. The palette never activates Keybumps, so the app in front is the
+    /// one you were typing in, unless Keybumps already was (a Dock click, or Settings). Opening the
+    /// palette also cancels a paste still waiting to happen.
+    func rememberPasteTarget() {
+        pasteTarget = frontmostApp()
+        pendingPaste = nil
     }
 
     func dismiss() {
@@ -330,55 +347,60 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func installKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            // A confirmation alert handles its own keys: Return confirms, Escape cancels.
-            guard !self.isPresentingConfirmation else { return event }
+            self?.handleKeyDown(event) ?? event
+        }
+    }
 
-            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
-                let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: self.preferences.showsHotkeysTab, selected: self.state.tab)
-                if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
-                    self.selectTab(tab)
-                    return nil
-                }
-                if let command = QuickSearchCommand.matchingCommandKey(event.charactersIgnoringModifiers) {
-                    self.run(command)
-                    return nil
-                }
-                if event.charactersIgnoringModifiers?.lowercased() == "e", self.state.tab == .clipboard || self.state.tab == .screenshots {
-                    self.editSelectedClipboardImage()
-                    return nil
-                }
-                if self.state.tab == .snippets, self.handleSnippetCommandKey(event.charactersIgnoringModifiers) {
-                    return nil
-                }
-            }
+    /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
+    /// with synthesized events, so no real keystroke is posted.
+    func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+        // A confirmation alert handles its own keys: Return confirms, Escape cancels.
+        guard !isPresentingConfirmation else { return event }
 
-            switch event.keyCode {
-            case 53:
-                self.dismiss()
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+            let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab)
+            if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
+                selectTab(tab)
                 return nil
-            case 125:
-                self.moveSelection(self.state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
-                return nil
-            case 126:
-                self.moveSelection(self.state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
-                return nil
-            case 123, 124:
-                // Left and Right move through the screenshot grid; elsewhere they move the caret.
-                guard self.state.tab == .screenshots, self.activeQuery.isEmpty else { return event }
-                self.moveSelection(event.keyCode == 124 ? 1 : -1)
-                return nil
-            case 36:
-                self.activateSelection(reveal: event.modifierFlags.contains(.command))
-                return nil
-            case 51, 117:
-                // Delete removes the highlighted row once the search field is empty (or with Command).
-                guard self.activeQuery.isEmpty || event.modifierFlags.contains(.command),
-                      self.deleteSelection() else { return event }
-                return nil
-            default:
-                return event
             }
+            if let command = QuickSearchCommand.matchingCommandKey(event.charactersIgnoringModifiers) {
+                run(command)
+                return nil
+            }
+            if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots {
+                editSelectedClipboardImage()
+                return nil
+            }
+            if state.tab == .snippets, handleSnippetCommandKey(event.charactersIgnoringModifiers) {
+                return nil
+            }
+        }
+
+        switch event.keyCode {
+        case 53:
+            dismiss()
+            return nil
+        case 125:
+            moveSelection(state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
+            return nil
+        case 126:
+            moveSelection(state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
+            return nil
+        case 123, 124:
+            // Left and Right move through the screenshot grid; elsewhere they move the caret.
+            guard state.tab == .screenshots, activeQuery.isEmpty else { return event }
+            moveSelection(event.keyCode == 124 ? 1 : -1)
+            return nil
+        case 36:
+            activateSelection(reveal: event.modifierFlags.contains(.command))
+            return nil
+        case 51, 117:
+            // Delete removes the highlighted row once the search field is empty (or with Command).
+            guard activeQuery.isEmpty || event.modifierFlags.contains(.command),
+                  deleteSelection() else { return event }
+            return nil
+        default:
+            return event
         }
     }
 
@@ -595,38 +617,55 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         snippets.markUsed(snippet.id)
     }
 
-    /// Command-Return: closes the palette and pastes the snippet into the app in front, which the
-    /// non-activating palette never took over. Without Accessibility, ⌘V can't reach that app, so
-    /// it copies instead and the notch notice says so.
+    /// Command-Return: closes the palette and pastes the snippet into the app that was in front when
+    /// the palette opened (the non-activating palette never took it over). When it can't paste, it
+    /// copies instead and the notch notice says why (`SnippetPasteRoute`).
     func pasteSnippet(_ snippet: Snippet) {
         guard let text = snippetText(snippet) else { return }
-        guard canPaste() else {
-            guard pasteboard.writeText(text, concealed: snippet.isSensitive) else { return }
-            clipboard.suppressCurrentChange()
+        let route = SnippetPasteRoute.beforeClosing(canPaste: canPaste(), target: pasteTarget)
+        guard route == .paste, let target = pasteTarget else {
             dismiss()
-            showWarning(Self.pasteNeedsAccessibilityNotice)
-            snippets.markUsed(snippet.id)
+            copySnippetInstead(text, snippet: snippet, notice: route.notice)
+            if route == .copy(.needsAccessibility) { offerPasteSetup() }
             return
         }
         dismiss()
         snippets.markUsed(snippet.id)
+        let id = UUID()
+        pendingPaste = id
         let paster = paster
         let delay = pasteDelay
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
+            guard let self else { return }
+            let isStillWanted = self.pendingPaste == id
+            if isStillWanted { self.pendingPaste = nil }
+            // Paste only into the same app, still in front, with the palette closed.
+            guard SnippetPasteRoute.canPasteNow(
+                into: target,
+                frontmost: self.frontmostApp(),
+                paletteIsVisible: self.panel?.isVisible == true,
+                isStillWanted: isStillWanted
+            ) else {
+                self.copySnippetInstead(text, snippet: snippet, notice: SnippetPasteRoute.Reason.targetChanged.notice)
+                return
+            }
             do {
                 try paster.paste(text, concealed: snippet.isSensitive)
             } catch {
                 // The text still ends up on the clipboard, ready to paste by hand.
-                guard let self, self.pasteboard.writeText(text, concealed: snippet.isSensitive) else { return }
-                self.clipboard.suppressCurrentChange()
-                self.showWarning(Self.pasteFailedNotice)
+                self.copySnippetInstead(text, snippet: snippet, notice: SnippetPasteRoute.Reason.pasteFailed.notice)
             }
         }
     }
 
-    static let pasteNeedsAccessibilityNotice = "Copied · Paste needs Accessibility"
-    static let pasteFailedNotice = "Copied · Couldn’t paste"
+    /// Puts the text on the clipboard, kept out of Clipboard History, and says why it didn't paste.
+    private func copySnippetInstead(_ text: String, snippet: Snippet, notice: String?) {
+        guard pasteboard.writeText(text, concealed: snippet.isSensitive) else { return }
+        clipboard.suppressCurrentChange()
+        if let notice { showWarning(notice) }
+        snippets.markUsed(snippet.id)
+    }
 
     /// Closes the palette and opens the snippet editor in Settings.
     func openSnippetEditor(_ request: SnippetEditorRequest) {
@@ -663,8 +702,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         notices.showNotice(message, isWarning: true)
     }
 
-    /// ⌘N makes a new snippet and ⌘E edits the highlighted one, both in Settings.
+    /// ⌘N makes a new snippet and ⌘E edits the highlighted one, both in Settings. While Snippets is
+    /// off, they do nothing.
     private func handleSnippetCommandKey(_ characters: String?) -> Bool {
+        guard ["n", "e"].contains(characters?.lowercased()) else { return false }
+        guard preferences.enabledCapabilities.contains(.snippets) else { return true }
         switch characters?.lowercased() {
         case "n":
             openSnippetEditor(.new)

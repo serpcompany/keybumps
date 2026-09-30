@@ -92,7 +92,7 @@ A short word, such as `;ship`, that finds a snippet in search. It's shown as a c
 _Avoid_: Abbreviation, shortcut (a key combination), tag
 
 **Sensitive snippet**:
-A snippet whose text is hidden in the Command Palette and Settings, left out of search, and kept in the Keychain.
+A snippet whose text is hidden in the Command Palette and Settings (the editor shows it only on request), left out of search, kept in the login keychain instead of the snippets file, and kept off other devices when copied.
 _Avoid_: Secret, password snippet
 
 **Snippets tab**:

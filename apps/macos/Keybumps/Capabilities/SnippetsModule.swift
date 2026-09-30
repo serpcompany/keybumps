@@ -6,8 +6,9 @@ extension CapabilityDescriptor {
         title: "Snippets",
         systemImage: "text.quote",
         iconTint: .green,
-        // Only ⌘Return's paste needs it: posting ⌘V into another app. Without it, ⌘Return copies.
-        requiredPermissions: [.accessibility],
+        // Copying needs no permission. ⌘Return's paste uses Accessibility when it's granted and
+        // copies otherwise, so Accessibility is optional here and never counts as missing.
+        requiredPermissions: [],
         dependencies: [],
         paletteTab: CapabilityPaletteTab(
             tab: .snippets,
@@ -52,11 +53,5 @@ final class SnippetsModule: CapabilityModule {
 
     func deactivate(_ context: CapabilityContext) {
         palette.dismiss(ifDisplaying: .snippets)
-    }
-
-    /// Without Accessibility, ⌘Return copies instead of pasting; the page says so.
-    func attentionCount(_ context: CapabilityContext) -> Int {
-        guard context.isEnabled(capability) else { return 0 }
-        return context.permissionReadiness([capability]).missingCount
     }
 }
