@@ -39,7 +39,7 @@ scripts/smoke.sh http://localhost:8787 production
 
 Without `--var`, the build is production but the Worker isn't: `next.config.ts` drops the `X-Robots-Tag` header, while `robots.txt` and the layout, which render on the Worker at request time, still behave as non-production. The smoke test catches that mismatch.
 
-Against `localhost`, the smoke test also checks the host redirects by sending `Host: www.keybumps.app` and a `workers.dev` `Host`. That works because the top level of `wrangler.jsonc` has no routes. Don't preview with `--env staging` (or `--env production` once it has its routes): Wrangler then replaces the `Host` header with the route's domain, so the host rules never match and those checks fail. `src/lib/redirects.test.ts` covers the same rules.
+Against `localhost`, the smoke test also checks the host redirects by sending `Host: www.keybumps.app` and a `workers.dev` `Host`. That works because the top level of `wrangler.jsonc` has no routes. Don't preview with `--env staging` or `--env production`: both have routes, so Wrangler replaces the `Host` header with the route's domain, so the host rules never match and those checks fail. `src/lib/redirects.test.ts` covers the same rules.
 
 ## Environments
 
