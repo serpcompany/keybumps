@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.9](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.8...v0.0.3-beta.9) (2026-09-30)
+
+
+### Chores
+
+* describe latest.json as the website's latest-release pointer ([#164](https://github.com/serpcompany/keybumps/issues/164)) ([79c3085](https://github.com/serpcompany/keybumps/commit/79c3085f12d863067157ce0a03340ee55bb50065))
+
 ## [0.0.3-beta.8](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.7...v0.0.3-beta.8) (2026-09-30)
 
 
