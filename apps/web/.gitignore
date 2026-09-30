@@ -1,0 +1,8 @@
+.dev.vars
+.next/
+.open-next/
+.wrangler/
+CLAUDE.md
+cloudflare-env.d.ts
+node_modules/
+*.tsbuildinfo
