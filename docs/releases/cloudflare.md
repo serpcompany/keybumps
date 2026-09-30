@@ -1,11 +1,12 @@
 # Cloudflare resources
 
-Keybumps's public web presence runs on the **SERP** Cloudflare account (`cec5f04e1d18bcc65f2be0aefb04f059`). Inventory captured 2026-09-28 (read-only). Update this file whenever a resource changes.
+Keybumps's public web presence runs on the **SERP** Cloudflare account (`cec5f04e1d18bcc65f2be0aefb04f059`). Inventory captured 2026-09-28, updated 2026-09-30 after the website moved into this repository. Update this file whenever a resource changes.
 
 | Resource | Purpose | Owned and configured by |
 | --- | --- | --- |
 | Zone `keybumps.app` (`e641400d1648da94e95380533b25d227`) | DNS and TLS for `keybumps.app`, `www.keybumps.app`, and `updates.keybumps.app` (all proxied through Cloudflare) | Cloudflare dashboard |
-| Worker `keybumps-website` | Serves `keybumps.app` and `www.keybumps.app` (custom domains), including `/download` | `serpcompany/keybumps.app` (`wrangler.jsonc`); Workers Builds deploys `main` to production and uploads other branches as previews |
+| Worker `keybumps-web-production` | Serves `keybumps.app` and `www.keybumps.app` (custom domains). `/download/` redirects to the current DMG. | This repository: `apps/web/wrangler.jsonc`, deployed only by `.github/workflows/web-deploy.yml` |
+| Worker `keybumps-web-staging` | Serves `staging.keybumps.app` (custom domain, not indexed) | This repository: `apps/web/wrangler.jsonc`, deployed only by `.github/workflows/web-deploy.yml` |
 | R2 bucket `keybumps-updates` (APAC, Standard storage) | Release origin behind the `updates.keybumps.app` custom domain (TLS 1.2+). Public `r2.dev` access is disabled. No CORS rules. Lifecycle: abort incomplete multipart uploads after 7 days. | This repository: `scripts/publish-release.sh` |
 
 ## Release origin layout (`updates.keybumps.app`)
