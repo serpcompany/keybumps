@@ -1,6 +1,6 @@
 # Architecture
 
-`KeybumpsApp` and `AppModel` own composition and lifecycle. Feature services own behavior but never create another app delegate, status item, Settings scene, updater, licensing controller, or launch-at-login controller. `AppModel.forLaunch()` returns the normal composition unless `-KBUITestPermissions` is present; the UI test composition in `UITestComposition.swift` fakes every permission, event tap, hot-key, audio, and user-folder boundary and keeps data in a disposable sandbox (see `testing.md`).
+`KeybumpsApp` and `AppModel` own composition and lifecycle. Feature services own behavior but never create another app delegate, status item, Settings scene, updater, licensing controller, or launch-at-login controller. `AppModel.forLaunch()` returns the normal composition unless `-KBUITestPermissions` is present; the UI test composition in `UITestComposition.swift` fakes every permission, event tap, hot-key, audio, and user-folder boundary and keeps data in a disposable sandbox (see `testing.md`). Unit tests build their own compositions. Under the unit-test host (`UnitTestHost`: a Debug build that XCTest loaded, never Release, a QA candidate, or a UI-test launch), `ProductPaths` resolves the owner's folders into `UnitTestHost.dataDirectory`, a per-run temporary folder, so every store built with its default location keeps its data there.
 
 Each capability is a first-party **capability module** under `apps/macos/Keybumps/Capabilities/`, registered by the app shell rather than hand-wired across enums and views. A module has two halves:
 

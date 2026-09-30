@@ -36,6 +36,13 @@ Permission-gated and system-level features are faked in automated tests, never g
 - Tests never touch real user folders or the real pasteboard: inject readers, named pasteboards, and temporary directories, as the existing Screenshot Tools and Clipboard tests do. Release a named pasteboard (`releaseGlobally()`) when the test is done, because it otherwise stays in the pasteboard server until logout.
 - Tests never create a real preferences domain. Pass `InMemoryDefaults()` wherever a `UserDefaults` is needed: cfprefsd writes a removed suite's plist back to `~/Library/Preferences` after the test deletes it. `InMemoryDefaultsTests` fails if any test file calls `UserDefaults(suiteName:)`.
 - Keybumps.app hosts the unit tests. Debug builds, and so every test host, use the bundle identifier `com.serp.keybumps.debug`; Release and Developer ID QA builds keep `com.serp.keybumps`. The installed app can therefore keep running during tests without sharing preferences, permissions, or quit requests with the host (a quit sent to `com.serp.keybumps` once ended test runs midway). Scripts that quit Keybumps match the `/Applications` copy by path, never by process name. Under XCTest, Debug builds also run a bare `NSApplication` instead of the app (`KeybumpsMain`), so the host never registers hot keys, a status item, or real pasteboard monitoring.
+- Default locations are isolated under the unit-test host too, so a test that forgets to inject a store can't reach the owner's data (#191).
+  - `UnitTestHost.isActive` is true only in a Debug build that XCTest loaded (`XCTestConfigurationFilePath` is set). Release builds, and so QA candidates, compile it as false, and a UI-test launch isn't a unit-test host.
+  - Under that host, `ProductPaths.keybumps()` moves the owner's Application Support, Documents, and temporary folders into `UnitTestHost.dataDirectory`, a per-run temporary folder. So every default store stays in it: Dictation History, Clipboard History and its media, Shortcut Coach history, the Dictation recovery file, Dictation models, and translated audio.
+  - The UI-test sandbox (`ProductPaths.sandboxRoot`) still comes first, and a test's own rooted `FileManager` is kept.
+  - `ScreenshotLocationResolver.system` reads no screenshot preference and uses a Desktop in the same folder, and `AppModel`'s default Spotlight shortcut resolver uses inert symbolic-hotkey preferences.
+  - `UnitTestDataIsolationTests` fails if a default goes back to the owner's folders.
+  - Tests still inject their own stores wherever the data matters to the test. The Whisper timing benchmark takes its model folder only from `KEYBUMPS_WHISPER_BENCHMARK_MODEL`.
 
 ### UI test launch arguments
 

@@ -6,18 +6,15 @@ import XCTest
 final class DictationWarmRuntimeBenchmarkTests: XCTestCase {
     func testReportsColdLoadAndWarmInferenceTimingsWhenFixtureIsProvided() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let installedModelLocation = ProductPaths.keybumps().dictationModels
-            .appendingPathComponent(DictationTranscriptionEngine.whisperTurboCompressed.rawValue)
-            .appendingPathComponent("model-location.txt")
+        // The model folder is named explicitly: tests never read the installed app's data, so
+        // under the unit-test host its model location isn't looked up.
         let modelPath = environment["KEYBUMPS_WHISPER_BENCHMARK_MODEL"]
-            ?? (try? String(contentsOf: installedModelLocation, encoding: .utf8)
-                .trimmingCharacters(in: .whitespacesAndNewlines))
         let audioPath = environment["KEYBUMPS_WHISPER_BENCHMARK_AUDIO"]
             ?? "/tmp/keybumps-whisper-benchmark.wav"
         guard let modelPath,
               FileManager.default.fileExists(atPath: modelPath),
               FileManager.default.fileExists(atPath: audioPath) else {
-            throw XCTSkip("Set the benchmark model and non-private WAV paths to collect local timing evidence.")
+            throw XCTSkip("Set KEYBUMPS_WHISPER_BENCHMARK_MODEL to a model folder and provide a non-private WAV to collect local timing evidence.")
         }
 
         let modelURL = URL(fileURLWithPath: modelPath, isDirectory: true)

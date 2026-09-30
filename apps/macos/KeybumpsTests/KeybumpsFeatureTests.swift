@@ -1276,8 +1276,8 @@ final class KeybumpsFeatureTests: XCTestCase {
         let coordinator = GlobalShortcutCoordinator(backend: backend)
         let model = AppModel(
             preferences: preferences,
-            inbox: InboxStore(),
-            presenceController: AppPresenceController(),
+            inbox: InboxStore(persistence: InMemoryEventPersistence()),
+            presenceController: StubAppPresenceController(),
             detector: ManualActionDetector(),
             shortcutCoordinator: coordinator
         )

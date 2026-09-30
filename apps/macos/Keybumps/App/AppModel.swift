@@ -138,8 +138,11 @@ final class AppModel {
         self.coachTips = coachTips ?? PaletteHUD.shared
         self.permissions = permissionCoordinator ?? PermissionCoordinator()
         self.shortcuts = shortcutCoordinator ?? GlobalShortcutCoordinator()
+        // Unit tests must never rewrite the owner's Spotlight shortcut.
         self.spotlightShortcutResolver = injectedSpotlightShortcutResolver
-            ?? SpotlightShortcutConflictResolver(preferences: SystemSymbolicHotKeyPreferences())
+            ?? SpotlightShortcutConflictResolver(
+                preferences: UnitTestHost.isActive ? InertSymbolicHotKeyPreferences() : SystemSymbolicHotKeyPreferences()
+            )
         let updateSafetyPolicy = UpdateInstallationSafetyPolicy.shared
         self.updateSafetyPolicy = updateSafetyPolicy
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)

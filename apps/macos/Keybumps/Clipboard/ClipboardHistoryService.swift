@@ -103,9 +103,10 @@ class ClipboardHistoryService {
     /// When a pasteboard change was last seen, including suppressed changes and restores.
     private var lastChangeSeenAt: Date?
     private var suppressedChangeCount: Int?
-    private let storageURL: URL
+    /// Where the index and media are kept; read by the unit-test isolation guard.
+    let storageURL: URL
     private let pasteboard: NSPasteboard
-    private let mediaDirectoryURL: URL
+    let mediaDirectoryURL: URL
     private let fileManager: FileManager
     private let sourceTracker: ClipboardSourceTracker
 
@@ -117,13 +118,14 @@ class ClipboardHistoryService {
         sourceApps: ClipboardSourceAppReader = .system
     ) {
         let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
-        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         self.fileManager = fileManager
         sourceTracker = ClipboardSourceTracker(reader: sourceApps)
         self.storageURL = storageURL ?? directory.appendingPathComponent("clipboard-history.json")
         self.mediaDirectoryURL = mediaDirectoryURL ?? directory.appendingPathComponent("clipboard-media", isDirectory: true)
         self.pasteboard = pasteboard
         lastChangeCount = pasteboard.changeCount
+        // Only the folders this history uses, so injected locations never create the default one.
+        try? fileManager.createDirectory(at: self.storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: self.mediaDirectoryURL, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: self.storageURL),
            let decoded = try? JSONDecoder().decode([ClipboardEntry].self, from: data) {
