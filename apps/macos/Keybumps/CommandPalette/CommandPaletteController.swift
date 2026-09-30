@@ -883,23 +883,23 @@ private struct SearchResultsView: View {
                         .padding(.top, 10)
                         .padding(.bottom, 6)
 
+                        // No per-row trash button: Delete removes the highlighted Recent Item, and the
+                        // context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
                         List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
-                            HStack(spacing: 10) {
-                                Button { open(item.result) } label: {
-                                    SearchResultRow(result: item.result)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                Button(role: .destructive) { deleteRecentItem(item) } label: {
-                                    Image(systemName: "trash")
-                                        .frame(width: 24, height: 24)
-                                }
-                                .buttonStyle(.borderless)
-                                .help("Delete (⌫)")
-                                .accessibilityLabel("Delete recent item \(item.result.name)")
+                            Button { open(item.result) } label: {
+                                SearchResultRow(result: item.result)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                    .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Open") { open(item.result) }
+                                Button("Reveal in Finder") { reveal(item.result) }
+                                Divider()
+                                Button("Delete", role: .destructive) { deleteRecentItem(item) }
+                            }
+                            .accessibilityAction(named: "Delete") { deleteRecentItem(item) }
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
                             .paletteRowBackground(isSelected: index == selection)
@@ -1106,33 +1106,60 @@ struct ClipboardRow: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            // Only the app name and domain give way when space runs out.
-            HStack(spacing: 14) {
-                if showsEditHint {
-                    HStack(spacing: 6) {
-                        Text("Edit").fixedSize()
-                        HStack(spacing: 3) {
-                            PaletteKeycap("⌘")
-                            PaletteKeycap("E")
+            // Right to left: the app icon column, the app name, the domain, then Edit ⌘E on the
+            // selected image row. Only the name and domain give way when space runs out.
+            HStack(spacing: 10) {
+                HStack(spacing: 14) {
+                    if showsEditHint {
+                        HStack(spacing: 6) {
+                            Text("Edit").fixedSize()
+                            HStack(spacing: 3) {
+                                PaletteKeycap("⌘")
+                                PaletteKeycap("E")
+                            }
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Edit with Command-E")
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Edit with Command-E")
+                    if let domain = entry.sourceDomain {
+                        ClipboardSourceDomainLabel(domain: domain)
+                    }
+                    if let sourceApp = entry.sourceApp {
+                        ClipboardSourceAppLabel(app: sourceApp)
+                    }
                 }
-                if let sourceApp = entry.sourceApp {
-                    ClipboardSourceAppLabel(app: sourceApp)
-                }
-                if let domain = entry.sourceDomain {
-                    ClipboardSourceDomainLabel(domain: domain)
-                }
+                .lineLimit(1)
+                // The palette's right-aligned accessory size, as in Quick Search's rows.
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                ClipboardSourceAppIcon(app: entry.sourceApp)
             }
-            .lineLimit(1)
-            // The palette's right-aligned accessory size, as in Quick Search's rows.
-            .font(.system(size: 14))
-            .foregroundStyle(.secondary)
             .frame(maxWidth: Self.accessoryMaxWidth, alignment: .trailing)
             .layoutPriority(1)
         }
+    }
+}
+
+/// The right-hand icon column: the source app's icon at one fixed size, or empty space of the same
+/// size (no source app, or an app this Mac doesn't have), so names and domains line up across rows.
+struct ClipboardSourceAppIcon: View {
+    static let size: CGFloat = 24
+
+    let app: ClipboardSourceApp?
+
+    var body: some View {
+        Group {
+            if let app, let icon = ClipboardSourceAppIcons.icon(for: app) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .help("Copied from \(app.name)")
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: Self.size, height: Self.size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1181,25 +1208,17 @@ enum ClipboardRowPresentation {
     }
 }
 
-/// The app a clipboard item was copied from: its icon, when this Mac has the app, and its name.
+/// The name of the app a clipboard item was copied from. Its icon sits in the row's icon column,
+/// to the right (`ClipboardSourceAppIcon`).
 struct ClipboardSourceAppLabel: View {
     let app: ClipboardSourceApp
 
     var body: some View {
-        HStack(spacing: 5) {
-            if let icon = ClipboardSourceAppIcons.icon(for: app) {
-                Image(nsImage: icon)
-                    .resizable()
-                    .frame(width: 16, height: 16)
-                    .accessibilityHidden(true)
-            }
-            Text(app.name)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .help("Copied from \(app.name)")
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Copied from \(app.name)")
+        Text(app.name)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help("Copied from \(app.name)")
+            .accessibilityLabel("Copied from \(app.name)")
     }
 }
 
