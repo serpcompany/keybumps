@@ -42,7 +42,7 @@ The local preview does not present fake commerce or update controls. Production 
 
 ## Website
 
-`apps/web/` holds the keybumps.app website (Next.js on Cloudflare Workers through OpenNext). It is separate from the Mac app: it has its own pnpm project, its own CI (`.github/workflows/web.yml`), and its own agent instructions (`apps/web/AGENTS.md`), and release-please leaves it out of app versions and `CHANGELOG.md`. Run `pnpm install && pnpm check` from `apps/web/`; see `apps/web/README.md`.
+`apps/web/` holds the keybumps.app website (Next.js on Cloudflare Workers through OpenNext). It is separate from the Mac app, with its own pnpm project, CI (`.github/workflows/web.yml`), and agent instructions (`apps/web/AGENTS.md`). Release-please skips a commit only if every file it touches is under `apps/web/`, so website PRs change only `apps/web/**`; a needed root change goes in a separate `chore:`, `docs:`, or `ci:` PR. Run `pnpm install && pnpm check` from `apps/web/`; see `apps/web/README.md`.
 
 ## Attribution
 

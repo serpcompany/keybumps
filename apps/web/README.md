@@ -27,3 +27,5 @@ pnpm preview
 The site deploys to Cloudflare Workers through OpenNext. App releases and signed Sparkle update files are owned by `serpcompany/keybumps` and served separately from the R2-backed `updates.keybumps.app` origin.
 
 Cloudflare Workers Builds deploys `main` to production and uploads other branches as preview versions. Routine deployments are triggered by Git pushes rather than local deployment commands.
+
+This site now lives in `serpcompany/keybumps` under `apps/web/`. Until serpcompany/keybumps#144 moves deploys to CI here, production still deploys from `serpcompany/keybumps.app` through Workers Builds, so changes merged here don't deploy yet. Don't edit the site in both places.
