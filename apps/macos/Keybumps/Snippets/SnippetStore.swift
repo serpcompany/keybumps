@@ -11,7 +11,8 @@ enum SnippetStoreError: Error, Equatable {
     case storage
     /// `snippets.json` couldn't be read, so nothing is saved until it can be (`SnippetLibraryState.readOnly`).
     case readOnly
-    /// Two saved snippets share an ID, which only a hand-edited file can do, so they can't be told apart.
+    /// Two saved snippets share an ID, which only a hand-edited file can do, so they can't be marked
+    /// Sensitive or Not Sensitive apart.
     case sharedID
 
     var message: String {
@@ -235,9 +236,16 @@ final class SnippetStore {
         }
         // The text changes, or moves into the file: read the saved text to put it back if the file
         // can't be written (and to move it, when Sensitive is turned off without showing it).
-        let originalSecret = original.isSensitive ? secrets.text(for: id) : nil
         // Turning Sensitive on overwrites any item the plain snippet still has: keep it to put back.
-        let leftover = !original.isSensitive && draft.isSensitive ? secrets.text(for: id) : nil
+        // An item the Keychain won't read couldn't be put back, so nothing changes.
+        let originalSecret: String?
+        let leftover: String?
+        do {
+            originalSecret = try original.isSensitive ? secrets.storedText(for: id) : nil
+            leftover = try !original.isSensitive && draft.isSensitive ? secrets.storedText(for: id) : nil
+        } catch {
+            throw SnippetStoreError.keychain
+        }
         if original.isSensitive, originalSecret == nil, keepsText || !draft.isSensitive {
             // The saved text is needed and the Keychain won't give it back.
             throw SnippetStoreError.keychain
@@ -280,16 +288,23 @@ final class SnippetStore {
 
     /// Deletes snippets, and each one's Keychain item whether or not it's sensitive now, so no text
     /// outlives them, in one save. Their items are read first, only to put them back if a later step
-    /// fails. If an item can't be read or removed, nothing is deleted. IDs no longer in the library
-    /// are skipped.
+    /// fails. An item the Keychain won't read can't be put back, so it's removed last. If an item
+    /// can't be removed, nothing is deleted. IDs no longer in the library are skipped, and entries
+    /// sharing an ID (a hand-edited file) are all deleted.
     func delete(_ ids: Set<Snippet.ID>) throws {
-        let deleted = try entries(for: ids).map(\.id)
-        let before = try keychainTexts(of: deleted)
-        try changeKeychain(for: deleted, restoring: before) { try secrets.removeText(for: $0) }
+        var seen = Set<Snippet.ID>()
+        let deleted = try entries(for: ids, allowingSharedIDs: true).map(\.id).filter { seen.insert($0).inserted }
+        var before: [Snippet.ID: String] = [:]
+        var unreadable: [Snippet.ID] = []
+        for id in deleted {
+            do { before[id] = try secrets.storedText(for: id) } catch { unreadable.append(id) }
+        }
+        let order = deleted.filter { !unreadable.contains($0) } + unreadable
+        try changeKeychain(for: order, restoring: before) { try secrets.removeText(for: $0) }
         do {
             try commit(snippets.filter { !ids.contains($0.id) })
         } catch {
-            restoreKeychain(before, for: deleted)
+            restoreKeychain(before, for: order)
             throw error
         }
     }
@@ -364,13 +379,13 @@ final class SnippetStore {
 
     // MARK: Keychain
 
-    /// The library's entries for `ids`, before a change to all of them. Two entries sharing an ID
-    /// can't be told apart, so neither is changed.
-    private func entries(for ids: Set<Snippet.ID>) throws -> [Snippet] {
+    /// The library's entries for `ids`, before a change to all of them. Unless `allowingSharedIDs`,
+    /// two entries sharing an ID can't be told apart, so neither is changed.
+    private func entries(for ids: Set<Snippet.ID>, allowingSharedIDs: Bool = false) throws -> [Snippet] {
         try requireWritable()
         let entries = snippets.filter { ids.contains($0.id) }
         guard !entries.isEmpty else { throw SnippetStoreError.notFound }
-        guard Set(entries.map(\.id)).count == entries.count else { throw SnippetStoreError.sharedID }
+        if !allowingSharedIDs, Set(entries.map(\.id)).count != entries.count { throw SnippetStoreError.sharedID }
         return entries
     }
 

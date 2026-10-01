@@ -73,6 +73,12 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        return try Self.text(status: status, result: result)
+    }
+
+    /// What a read's status and result mean: nil for no item (or data that isn't text), the text,
+    /// or an error for any other status.
+    static func text(status: OSStatus, result: AnyObject?) throws -> String? {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw SnippetSecretError.keychain(status) }
         return (result as? Data).flatMap { String(data: $0, encoding: .utf8) }

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import Keybumps
 
@@ -356,23 +357,23 @@ struct SnippetBulkChangeTests {
         #expect(store.snippets.count == 2)
 
         #expect(throws: SnippetStoreError.sharedID) { try store.setSensitive(true, for: [id]) }
-        #expect(throws: SnippetStoreError.sharedID) { try store.delete([id]) }
+        #expect(throws: SnippetStoreError.sharedID) { try store.setSensitive(false, for: [id]) }
         #expect(store.snippets.map(\.text) == ["made-up one", "made-up two"], "No text is lost")
         #expect(try Data(contentsOf: folder.storageURL) == fileBefore)
         #expect(secrets.texts.isEmpty)
+
+        // Deleting is well defined: both entries go, as before.
+        try store.delete(id)
+        #expect(store.snippets.isEmpty)
     }
 
-    @Test("An item the Keychain won't read stops the change before anything changes")
-    func unreadableItemStopsTheChange() throws {
+    @Test("An item the Keychain won't read stops Mark as Sensitive or Not Sensitive before anything changes")
+    func unreadableItemStopsMarking() throws {
         let library = try Library()
         defer { library.folder.remove() }
         let fileBefore = library.fileText
         // As a locked Keychain, or a denied access prompt, would refuse to read it.
         library.secrets.unreadableIDs = [library.hiddenA.id]
-
-        #expect(throws: SnippetStoreError.keychain) {
-            try library.store.delete([library.hiddenA.id, library.hiddenB.id])
-        }
         #expect(throws: SnippetStoreError.keychain) {
             try library.store.setSensitive(false, for: [library.hiddenA.id, library.hiddenB.id])
         }
@@ -384,7 +385,26 @@ struct SnippetBulkChangeTests {
         #expect(library.secrets.removals == 0)
         #expect(library.secrets.texts == [library.hiddenA.id: Self.secretA, library.hiddenB.id: Self.secretB])
         #expect(library.fileText == fileBefore)
+    }
+
+    @Test("Delete still deletes a snippet whose item can't be read, removing that item last")
+    func unreadableItemIsDeletedLast() throws {
+        let library = try Library()
+        defer { library.folder.remove() }
+        library.secrets.unreadableIDs = [library.hiddenA.id]
+
+        // Hidden B's removal is refused before Hidden A's item, which couldn't be put back, is touched.
+        library.secrets.refusedIDs = [library.hiddenB.id]
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.delete([library.hiddenA.id, library.hiddenB.id])
+        }
+        #expect(library.secrets.texts == [library.hiddenA.id: Self.secretA, library.hiddenB.id: Self.secretB])
         #expect(library.store.snippets.count == 4)
+
+        library.secrets.refusedIDs = []
+        try library.store.delete([library.hiddenA.id, library.hiddenB.id])
+        #expect(library.secrets.texts.isEmpty)
+        #expect(library.store.snippets.map(\.id) == [library.plainA.id, library.plainB.id])
     }
 
     @Test("The editor's Sensitive switch also puts back a leftover item when the save fails")
@@ -401,6 +421,14 @@ struct SnippetBulkChangeTests {
         }
         #expect(library.secrets.texts[library.plainA.id] == leftover)
         #expect(library.store.snippet(withID: library.plainA.id)?.isSensitive == false)
+
+        // A leftover it can't read couldn't be put back, so the editor refuses before overwriting it.
+        try library.folder.setPermissions(0o700, of: library.folder.url)
+        library.secrets.unreadableIDs = [library.plainA.id]
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.update(library.plainA.id, with: SnippetDraft(name: "Plain A", text: "made-up plain a", isSensitive: true))
+        }
+        #expect(library.secrets.texts[library.plainA.id] == leftover)
     }
 
     @Test("Nothing to change saves nothing, and snippets that no longer exist are reported")
@@ -428,6 +456,32 @@ struct SnippetBulkChangeTests {
         #expect(throws: SnippetStoreError.readOnly) { try store.delete([library.plainA.id]) }
         #expect(throws: SnippetStoreError.readOnly) { try store.setSensitive(true, for: [library.plainA.id]) }
         #expect(library.secrets.texts.count == 2)
+    }
+}
+
+// MARK: - Reading the Keychain
+
+@Suite("Snippets: telling a missing Keychain item from a failed read")
+struct SnippetKeychainReadTests {
+    @Test("No item reads as none, an item as its text, and any other status throws")
+    func statusMapping() throws {
+        #expect(try KeychainSnippetSecretStore.text(status: errSecItemNotFound, result: nil) == nil)
+        #expect(try KeychainSnippetSecretStore.text(status: errSecSuccess, result: Data("made-up".utf8) as NSData) == "made-up")
+        #expect(try KeychainSnippetSecretStore.text(status: errSecSuccess, result: Data([0xFF, 0xFE]) as NSData) == nil, "Not text")
+        for status in [errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled] {
+            #expect(throws: SnippetSecretError.keychain(status)) {
+                try KeychainSnippetSecretStore.text(status: status, result: nil)
+            }
+        }
+    }
+
+    @Test("Copy, paste, and the editor's Show get nothing when the read fails")
+    func failedReadIsNoText() throws {
+        let id = UUID()
+        let secrets = InMemorySnippetSecretStore([id: "made-up-secret"])
+        secrets.unreadableIDs = [id]
+        #expect(secrets.text(for: id) == nil)
+        #expect(throws: SnippetSecretError.self) { try secrets.storedText(for: id) }
     }
 }
 
