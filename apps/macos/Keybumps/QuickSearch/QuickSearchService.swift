@@ -15,12 +15,15 @@ struct QuickSearchResult: Codable, Identifiable, Hashable {
 @Observable
 final class QuickSearchModel {
     var query = "" { didSet { refresh() } }
-    /// The rows for the current query: Keybumps commands, apps, then files and folders.
+    /// The rows for the current query: Keybumps commands, apps, snippets, then files and folders.
     private(set) var items: [QuickSearchItem] = []
     /// The apps, files, and folders among `items`.
     var results: [QuickSearchResult] { items.compactMap(\.result) }
     let recentItems: RecentItemStore
     let applicationUsage: ApplicationUsageStore
+    /// The snippets a query can find: none until the palette supplies them, which it does only while
+    /// Snippets is on.
+    @ObservationIgnored var snippets: () -> [Snippet] = { [] }
 
     private let applications: [QuickSearchResult]
     /// Whether a query also runs the Spotlight search of the home folder for files and folders.
@@ -96,7 +99,7 @@ final class QuickSearchModel {
             usage: applicationUsage
         )
         items = QuickSearchRanking.items(
-            matching: term, applications: Array(appMatches.prefix(12)), files: [], usage: applicationUsage
+            matching: term, applications: Array(appMatches.prefix(12)), files: [], snippets: snippets(), usage: applicationUsage
         )
         guard searchesFiles else { return }
 
@@ -142,7 +145,7 @@ final class QuickSearchModel {
             if files.count == 30 { break }
         }
         items = QuickSearchRanking.items(
-            matching: term, applications: Array(appMatches.prefix(12)), files: files, usage: applicationUsage
+            matching: term, applications: Array(appMatches.prefix(12)), files: files, snippets: snippets(), usage: applicationUsage
         )
     }
 

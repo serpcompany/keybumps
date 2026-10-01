@@ -29,7 +29,7 @@ _Avoid_: Preferences, Settings panel
 ### Capabilities
 
 **Quick Search**:
-Finding and opening local applications, files, and folders, and running Quick Search commands; the default Command Palette tab.
+Finding and opening local applications, files, and folders, finding snippets by keyword or name, and running Quick Search commands; the default Command Palette tab.
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:

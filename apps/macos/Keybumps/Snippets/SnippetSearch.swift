@@ -22,14 +22,32 @@ enum SnippetSearch {
     /// first and then by name. Otherwise snippets are grouped by `Match`, and each group keeps
     /// that same order. Case and accents are ignored.
     static func results(_ snippets: [Snippet], query: String) -> [Snippet] {
-        let ordered = snippets.sorted(by: listOrder)
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return ordered }
-        let matches = ordered.compactMap { snippet in match(snippet, query: trimmed).map { (snippet, $0) } }
+        guard !trimmed.isEmpty else { return snippets.sorted(by: listOrder) }
+        return ranked(snippets, query: trimmed).map(\.snippet)
+    }
+
+    /// How many snippets Quick Search lists at most, so they never bury apps and files.
+    static let quickSearchLimit = 8
+
+    /// Quick Search's snippets for a query, ranked as in the Snippets tab but matched only by keyword
+    /// and name: text is never searched there, so snippet text doesn't flood app and file results.
+    static func quickSearchMatches(_ snippets: [Snippet], query: String) -> [(snippet: Snippet, match: Match)] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return Array(ranked(snippets, query: trimmed).filter { $0.match != .text }.prefix(quickSearchLimit))
+    }
+
+    /// The snippets `query` (trimmed, not empty) matches, grouped by `Match` best first, each group
+    /// in `listOrder`.
+    private static func ranked(_ snippets: [Snippet], query: String) -> [(snippet: Snippet, match: Match)] {
+        let matches = snippets.sorted(by: listOrder).compactMap { snippet in
+            match(snippet, query: query).map { (snippet: snippet, match: $0) }
+        }
         // A stable sort by match keeps the list order inside each group.
         return matches.enumerated()
-            .sorted { ($0.element.1, $0.offset) < ($1.element.1, $1.offset) }
-            .map(\.element.0)
+            .sorted { ($0.element.match, $0.offset) < ($1.element.match, $1.offset) }
+            .map(\.element)
     }
 
     /// The Settings list: by name with an empty search, where you manage snippets rather than use

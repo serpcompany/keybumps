@@ -193,9 +193,11 @@ extension QuickSearchCommand {
 
 // MARK: - Quick Search rows
 
-/// One Quick Search result row: a Keybumps command, or an app, file, or folder.
+/// One Quick Search result row: a Keybumps command, a snippet, or an app, file, or folder.
 enum QuickSearchItem: Identifiable, Hashable {
     case command(QuickSearchCommand)
+    /// Return copies it and Command-Return pastes it, as in the Snippets tab.
+    case snippet(Snippet)
     case result(QuickSearchResult)
 
     var id: Self { self }
@@ -203,6 +205,17 @@ enum QuickSearchItem: Identifiable, Hashable {
     var result: QuickSearchResult? {
         guard case .result(let result) = self else { return nil }
         return result
+    }
+
+    /// The footer's actions while this row is selected: a snippet's, or the Search tab's.
+    var primaryActionTitle: String? {
+        guard case .snippet = self else { return CommandPaletteTab.search.primaryActionTitle }
+        return "Copy"
+    }
+
+    var secondaryActionTitle: String? {
+        guard case .snippet = self else { return CommandPaletteTab.search.secondaryActionTitle }
+        return "Paste"
     }
 }
 
@@ -215,12 +228,17 @@ extension QuickSearchRanking {
     /// "shortcuts") stays first and a few letters still find apps first. Equal scores keep that
     /// order, and equally good commands keep `QuickSearchCommand.allCases` order. Files and folders
     /// always come last.
+    ///
+    /// Snippets (`SnippetSearch.quickSearchMatches`) match only by keyword and name. One whose
+    /// keyword is the query comes first of all, since a keyword is typed to find exactly it; the
+    /// rest follow the apps and commands, before files.
     @MainActor
     static func items(
         matching term: String,
         applications: [QuickSearchResult],
         files: [QuickSearchResult],
         commands: [QuickSearchCommand] = QuickSearchCommand.allCases,
+        snippets: [Snippet] = [],
         usage: ApplicationUsageStore? = nil
     ) -> [QuickSearchItem] {
         let normalizedTerm = normalized(term)
@@ -239,6 +257,9 @@ extension QuickSearchRanking {
                 lhs.element.score != rhs.element.score ? lhs.element.score > rhs.element.score : lhs.offset < rhs.offset
             }
             .map(\.element.item)
-        return ranked + files.map(QuickSearchItem.result)
+        let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term)
+        let exactKeywords = snippetMatches.filter { $0.match == .keyword }.map { QuickSearchItem.snippet($0.snippet) }
+        let otherSnippets = snippetMatches.filter { $0.match != .keyword }.map { QuickSearchItem.snippet($0.snippet) }
+        return exactKeywords + ranked + otherSnippets + files.map(QuickSearchItem.result)
     }
 }
