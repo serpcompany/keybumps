@@ -6,16 +6,22 @@ import Testing
 @testable import Keybumps
 
 /// Shortcut Coach's click checks (#212): where a click lands, the one Accessibility hit-test each
-/// press and release gets, its timeout, and the queue it runs on.
+/// press and release gets, its timeout, the queue it runs on, and the checks after a click.
 ///
 /// Every process here is made up: macOS never hands out a process identifier above 99,999. No test
-/// sends a real Accessibility message. The fakes answer none, and creating an element sends nothing.
+/// sends a real Accessibility message. The fakes answer from their own tables, and creating an
+/// element sends nothing.
 enum FakeProcess {
     static let keybumps: pid_t = 900_001
     static let app: pid_t = 900_002
     static let otherApp: pid_t = 900_003
     static let panelService: pid_t = 900_004
     static let windowServer: pid_t = 900_005
+    static let chrome: pid_t = 900_006
+    // A made-up app's elements are told apart by process, so each part of its window gets its own.
+    static let window: pid_t = 900_007
+    static let menuBar: pid_t = 900_008
+    static let menuItem: pid_t = 900_009
 }
 
 @Suite("Shortcut Coach click targets")
@@ -199,6 +205,27 @@ struct DetectionAccessibilityTests {
         #expect(log.messages.map(\.name) == [AccessibilityLog.hitTest])
     }
 
+    @Test("A check after the click gives the app it asks one fresh try, and no other app")
+    func delayedCheckAsksAgain() {
+        let log = AccessibilityLog()
+        let app = AXUIElementCreateApplication(FakeProcess.app)
+        let other = AXUIElementCreateApplication(FakeProcess.otherApp)
+        let accessibility = DetectionAccessibility.recording(log, unresponsive: [FakeProcess.app, FakeProcess.otherApp]) { _ in nil }
+
+        accessibility.beginPressOrRelease()
+        _ = accessibility.copyAttribute(kAXRoleAttribute, from: app)
+        _ = accessibility.copyAttribute(kAXRoleAttribute, from: other)
+        #expect(log.messages.count == 2, "both timed out during the click")
+
+        accessibility.beginDelayedCheck(of: FakeProcess.app)
+        _ = accessibility.copyAttribute(kAXRoleAttribute, from: other)
+        _ = accessibility.copyAttribute(kAXRoleAttribute, from: app)
+        _ = accessibility.copyAttribute(kAXParentAttribute, from: app)
+        _ = accessibility.actionNames(of: app)
+        #expect(log.messages.count == 3, "one more message: the app's fresh try, which timed out again")
+        #expect(log.messages.last?.element === app)
+    }
+
     private func processIdentifier(of element: AXUIElement) -> pid_t? {
         var pid: pid_t = 0
         return AXUIElementGetPid(element, &pid) == .success ? pid : nil
@@ -347,7 +374,195 @@ struct ClickHitTestTests {
     }
 }
 
+/// The checks that run after a click to see what it did: Chrome's five follow-up reads, and window
+/// control's checks at 0.35 s and 1.0 s. The app is often still busy with the click as it's released,
+/// and these checks exist to wait it out.
+@MainActor
+@Suite("Shortcut Coach checks after a click")
+struct DelayedCheckTests {
+    static let point = CGPoint(x: 400, y: 300)
+
+    @Test("Chrome, still busy with + as it's released, still gets the New Tab tip")
+    func busyChromeGetsItsTip() async throws {
+        let chrome = ChromeClick { apps in apps.stall(FakeProcess.chrome) }
+        defer { chrome.harness.stop() }
+        var events: [CoachingEvent] = []
+        chrome.harness.detector.onEvent = { events.append($0) }
+
+        chrome.harness.click(at: Self.point)
+        try await chrome.harness.waitUntil { !events.isEmpty }
+
+        #expect(events.map(\.actionTitle) == ["New Tab"])
+        #expect(events.map(\.shortcut) == ["⌘T"])
+        #expect(chrome.runtime.readCount == 2, "the press's read, then the first follow-up read found the new tab")
+    }
+
+    @Test("A Chrome that stops answering as + is released is asked once for each check after it, off the main thread")
+    func hungChromeIsAskedOncePerCheck() async throws {
+        let chrome = ChromeClick { apps in apps.hang(FakeProcess.chrome) }
+        defer { chrome.harness.stop() }
+        var events: [CoachingEvent] = []
+        chrome.harness.detector.onEvent = { events.append($0) }
+
+        chrome.harness.click(at: Self.point)
+        // The press's read, then the five follow-up reads.
+        try await chrome.harness.waitUntil { chrome.runtime.readCount == 6 }
+        try await Task.sleep(for: .milliseconds(400))
+
+        #expect(chrome.runtime.readCount == 6, "nothing more after the fifth follow-up read")
+        #expect(events.isEmpty)
+        let messages = chrome.harness.log.messages
+        let hitTests = messages.indices.filter { messages[$0].name == AccessibilityLog.hitTest }
+        try #require(hitTests.count == 2)
+        // The release's first read, then one for each follow-up read, each timing out. At 0.25 s apiece,
+        // a hung Chrome holds the detection queue for 1.5 s at most.
+        #expect(messages[(hitTests[1] + 1)...].count == 6)
+        #expect(messages.allSatisfy { !$0.onMainThread })
+    }
+
+    @Test("Window control's checks give an app still busy with the click a fresh try", arguments: [1, 2])
+    func windowControlChecksAskAgain(busyMessages: Int) async throws {
+        // 1: busy through the release, so the check at 0.35 s finds the window minimized.
+        // 2: busy through that check too, so the re-check at 1.0 s finds it.
+        let log = AccessibilityLog()
+        let app = MinimizeButtonApp()
+        let accessibility = DetectionAccessibility.recording(log, apps: app.apps) { _ in app.button }
+        let pipeline = DetectionPipeline(
+            clickTargets: ScriptedClickTargets([.application(FakeProcess.app)]),
+            accessibility: accessibility,
+            snapshotter: ReadingSnapshotter(accessibility, describing: nil) { app.minimize(busyFor: busyMessages) },
+            chromeRuntimeReader: UnavailableChromeRuntime(),
+            runningApplication: { pid in
+                pid == FakeProcess.app
+                    ? RunningApplicationState(bundleIdentifier: "com.example.app", name: "Example App", isActive: true)
+                    : nil
+            }
+        )
+        var events: [CoachingEvent] = []
+        pipeline.windowControlMonitor.onEvent = { events.append($0) }
+
+        for (phase, timestamp) in [(PointerSample.Phase.down, 1.0), (.up, 1.1)] {
+            let sample = PointerSample(phase: phase, location: MinimizeButtonApp.buttonCenter, modifiers: [], timestamp: timestamp)
+            pipeline.queue.async { _ = pipeline.process(sample, clickThrough: []) }
+        }
+        try await waitForDetection { !events.isEmpty }
+
+        #expect(events.map(\.actionTitle) == ["Minimize Window"])
+        #expect(events.map(\.shortcut) == ["⌘M"])
+        #expect(log.count(of: kAXMinimizedAttribute) == 1 + busyMessages,
+                "read at the press, then by each check until one finds the window minimized")
+    }
+}
+
 // MARK: - Test doubles
+
+/// A running detector and a made-up Chrome whose + button is under the pointer. Chrome answers the
+/// press, then `onRelease` runs as + is released, when Chrome adds the tab.
+@MainActor
+private struct ChromeClick {
+    let harness: DetectorHarness
+    let runtime: ScriptedChromeRuntime
+
+    init(onRelease: @escaping (ScriptedApps) -> Void) {
+        let log = AccessibilityLog()
+        let apps = ScriptedApps()
+        apps.answer(FakeProcess.chrome, kAXFocusedWindowAttribute, with: AXUIElementCreateApplication(FakeProcess.chrome))
+        let accessibility = DetectionAccessibility.recording(log, apps: apps) { _ in
+            AXUIElementCreateApplication(FakeProcess.chrome)
+        }
+        runtime = ScriptedChromeRuntime(accessibility, states: [Self.chrome(tabs: 2), Self.chrome(tabs: 3)])
+        harness = DetectorHarness(
+            targets: [.application(FakeProcess.chrome)], log: log, accessibility: accessibility,
+            snapshotter: ReadingSnapshotter(accessibility, describing: Self.newTabButton) { onRelease(apps) },
+            chromeRuntimeReader: runtime
+        )
+    }
+
+    static let newTabButton = AccessibilitySnapshot(
+        pid: FakeProcess.chrome, bundleIdentifier: "com.google.Chrome", applicationName: "Google Chrome",
+        hit: AXNodeSnapshot(
+            token: "new-tab", role: kAXButtonRole as String, subrole: nil, title: nil, elementDescription: "New Tab",
+            identifier: nil, value: nil, selected: nil, enabled: true, actions: [kAXPressAction as String],
+            frame: nil, menuShortcut: nil
+        ),
+        ancestors: []
+    )
+
+    /// Chrome with `count` tabs, the first selected, and New Tab ⌘T and Close Tab ⌘W in its menus.
+    static func chrome(tabs count: Int) -> ChromeRuntimeState {
+        let tabs = (0..<count).map { index in
+            AXNodeSnapshot(
+                token: "tab-\(index)", role: kAXRadioButtonRole as String, subrole: nil, title: nil,
+                elementDescription: nil, identifier: nil, value: index == 0 ? "1" : "0", selected: index == 0,
+                enabled: true, actions: [], frame: nil, menuShortcut: nil
+            )
+        }
+        func shortcut(_ character: String) -> LiveShortcutResolution {
+            .resolved(LiveShortcutObservation(evidence: AXShortcutEvidence(
+                commandCharacter: character, modifiers: 0, commandGlyph: nil, virtualKey: nil
+            ))!)
+        }
+        return ChromeRuntimeState(
+            tabs: ChromeTabState(containerToken: "strip", tabs: tabs),
+            tabShortcuts: ChromeTabShortcutState(newTab: shortcut("T"), closeTab: shortcut("W"), directSelection: [:]),
+            settingsShortcut: .unavailable,
+            destination: .unavailable,
+            applicationVersion: nil
+        )
+    }
+}
+
+/// A made-up app with one standard window whose minimize button is under the pointer, and Window ›
+/// Minimize (⌘M) in its menu bar. The window minimizes as the button is released.
+final class MinimizeButtonApp: @unchecked Sendable {
+    static let buttonFrame = CGRect(x: 100, y: 100, width: 16, height: 16)
+    static let buttonCenter = CGPoint(x: buttonFrame.midX, y: buttonFrame.midY)
+    let apps = ScriptedApps()
+    /// The app's element is the button too: the two are asked different attributes.
+    let button = AXUIElementCreateApplication(FakeProcess.app)
+
+    init() {
+        let window = AXUIElementCreateApplication(FakeProcess.window)
+        let menuBar = AXUIElementCreateApplication(FakeProcess.menuBar)
+        let item = AXUIElementCreateApplication(FakeProcess.menuItem)
+        // The button.
+        apps.answer(FakeProcess.app, kAXRoleAttribute, with: kAXButtonRole as CFString)
+        apps.answer(FakeProcess.app, kAXSubroleAttribute, with: kAXMinimizeButtonSubrole as CFString)
+        apps.answerActions(FakeProcess.app, [kAXPressAction as String])
+        apps.answer(FakeProcess.app, kAXWindowAttribute, with: window)
+        answerFrame(FakeProcess.app, Self.buttonFrame)
+        // The app.
+        apps.answer(FakeProcess.app, kAXWindowsAttribute, with: [window] as CFArray)
+        apps.answer(FakeProcess.app, kAXMenuBarAttribute, with: menuBar)
+        // Its window.
+        apps.answer(FakeProcess.window, kAXSubroleAttribute, with: kAXStandardWindowSubrole as CFString)
+        apps.answer(FakeProcess.window, kAXModalAttribute, with: kCFBooleanFalse)
+        apps.answer(FakeProcess.window, kAXMinimizedAttribute, with: kCFBooleanFalse)
+        apps.answer(FakeProcess.window, "AXFullScreen", with: kCFBooleanFalse)
+        answerFrame(FakeProcess.window, CGRect(x: 90, y: 90, width: 600, height: 400))
+        // Window › Minimize.
+        apps.answer(FakeProcess.menuBar, kAXRoleAttribute, with: kAXMenuBarRole as CFString)
+        apps.answer(FakeProcess.menuBar, kAXChildrenAttribute, with: [item] as CFArray)
+        apps.answer(FakeProcess.menuItem, kAXRoleAttribute, with: kAXMenuItemRole as CFString)
+        apps.answer(FakeProcess.menuItem, kAXEnabledAttribute, with: kCFBooleanTrue)
+        apps.answer(FakeProcess.menuItem, kAXTitleAttribute, with: "Minimize" as CFString)
+        apps.answer(FakeProcess.menuItem, kAXMenuItemCmdCharAttribute, with: "M" as CFString)
+        apps.answer(FakeProcess.menuItem, kAXMenuItemCmdModifiersAttribute, with: NSNumber(value: 0))
+    }
+
+    /// The release: the window minimizes, and the app is too busy to answer its next `messages`.
+    func minimize(busyFor messages: Int) {
+        apps.answer(FakeProcess.window, kAXMinimizedAttribute, with: kCFBooleanTrue)
+        apps.stall(FakeProcess.app, messages: messages)
+    }
+
+    private func answerFrame(_ pid: pid_t, _ frame: CGRect) {
+        var origin = frame.origin
+        var size = frame.size
+        apps.answer(pid, kAXPositionAttribute, with: AXValueCreate(.cgPoint, &origin)!)
+        apps.answer(pid, kAXSizeAttribute, with: AXValueCreate(.cgSize, &size)!)
+    }
+}
 
 /// Every Accessibility message a `DetectionAccessibility` would send, none of them answered. The
 /// detection queue writes it and the test reads it.
@@ -388,12 +603,11 @@ final class AccessibilityLog: @unchecked Sendable {
 
 extension DetectionAccessibility {
     /// Records every message in `log` and answers none, apart from the hit-test's `hit`. Reads of
-    /// `unresponsive` apps' elements time out.
-    static func recording(_ log: AccessibilityLog, unresponsive: Set<pid_t> = [],
+    /// `unresponsive` apps' elements time out. With `apps`, reads are answered from its table instead.
+    static func recording(_ log: AccessibilityLog, unresponsive: Set<pid_t> = [], apps: ScriptedApps? = nil,
                           hit: @escaping (CGPoint) -> AXUIElement?) -> DetectionAccessibility {
         func error(for element: AXUIElement) -> AXError {
-            var pid: pid_t = 0
-            return AXUIElementGetPid(element, &pid) == .success && unresponsive.contains(pid) ? .cannotComplete : .noValue
+            unresponsive.contains(ScriptedApps.processIdentifier(of: element)) ? .cannotComplete : .noValue
         }
         var accessibility = DetectionAccessibility()
         accessibility.setMessagingTimeout = { log.setTimeout($0, $1) }
@@ -404,13 +618,121 @@ extension DetectionAccessibility {
         }
         accessibility.copyAttributeValue = { element, name in
             log.record(name, element)
-            return (error(for: element), nil)
+            return apps?.value(of: name, from: element) ?? (error(for: element), nil)
         }
         accessibility.copyActionNames = { element in
             log.record(AccessibilityLog.actions, element)
-            return (error(for: element), [])
+            return apps?.actionNames(of: element) ?? (error(for: element), [])
         }
         return accessibility
+    }
+}
+
+/// Made-up apps that answer reads from a table; an attribute not in it has no value. An app can
+/// stall, timing out its next few messages as an app still busy with a click does, or hang, timing
+/// out every message from then on.
+final class ScriptedApps: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [pid_t: [String: CFTypeRef]] = [:]
+    private var actions: [pid_t: [String]] = [:]
+    private var stalls: [pid_t: Int] = [:]
+    private var hung: Set<pid_t> = []
+
+    func answer(_ pid: pid_t, _ name: String, with value: CFTypeRef) {
+        lock.withLock { values[pid, default: [:]][name] = value }
+    }
+
+    func answerActions(_ pid: pid_t, _ names: [String]) {
+        lock.withLock { actions[pid] = names }
+    }
+
+    func stall(_ pid: pid_t, messages: Int = 1) {
+        lock.withLock { stalls[pid, default: 0] += messages }
+    }
+
+    func hang(_ pid: pid_t) {
+        lock.withLock { _ = hung.insert(pid) }
+    }
+
+    func value(of name: String, from element: AXUIElement) -> (AXError, CFTypeRef?) {
+        let pid = Self.processIdentifier(of: element)
+        return lock.withLock {
+            if timesOut(pid) { return (.cannotComplete, nil) }
+            guard let value = values[pid]?[name] else { return (.noValue, nil) }
+            return (.success, value)
+        }
+    }
+
+    func actionNames(of element: AXUIElement) -> (AXError, [String]) {
+        let pid = Self.processIdentifier(of: element)
+        return lock.withLock { timesOut(pid) ? (.cannotComplete, []) : (.success, actions[pid] ?? []) }
+    }
+
+    static func processIdentifier(of element: AXUIElement) -> pid_t {
+        var pid: pid_t = 0
+        return AXUIElementGetPid(element, &pid) == .success ? pid : 0
+    }
+
+    /// Called with the lock held.
+    private func timesOut(_ pid: pid_t) -> Bool {
+        if hung.contains(pid) { return true }
+        guard let remaining = stalls[pid], remaining > 0 else { return false }
+        stalls[pid] = remaining - 1
+        return true
+    }
+}
+
+/// Reads the hit as the real snapshotter's first read does, through `DetectionAccessibility`, and
+/// describes it as `snapshot` whatever the read answers: the real one still names the app, from
+/// `NSRunningApplication`. `onRelease` runs just before the second snapshot, the release's, which is
+/// when the app gets the click.
+final class ReadingSnapshotter: AccessibilitySnapshotting, @unchecked Sendable {
+    private let accessibility: DetectionAccessibility
+    private let snapshot: AccessibilitySnapshot?
+    private let onRelease: () -> Void
+    /// Only the detection queue touches it.
+    private var calls = 0
+
+    init(_ accessibility: DetectionAccessibility, describing snapshot: AccessibilitySnapshot?,
+         onRelease: @escaping () -> Void) {
+        self.accessibility = accessibility
+        self.snapshot = snapshot
+        self.onRelease = onRelease
+    }
+
+    func snapshot(of hit: AXUIElement) -> AccessibilitySnapshot? {
+        calls += 1
+        if calls == 2 { onRelease() }
+        _ = accessibility.copyAttribute(kAXRoleAttribute, from: hit)
+        return snapshot
+    }
+}
+
+/// Reads Chrome through `DetectionAccessibility` a read at a time, as the real reader does: its
+/// focused window, then the menu bar and windows its tab and shortcut walks start from. Like those
+/// walks, it goes on reading after a read fails, so the test sees every read that gets through. Once
+/// the window answers, it describes Chrome as the next of `states`, then the last one again.
+final class ScriptedChromeRuntime: ChromeRuntimeStateReading, @unchecked Sendable {
+    private let accessibility: DetectionAccessibility
+    private let lock = NSLock()
+    private var states: [ChromeRuntimeState]
+    private var reads = 0
+
+    init(_ accessibility: DetectionAccessibility, states: [ChromeRuntimeState]) {
+        self.accessibility = accessibility
+        self.states = states
+    }
+
+    var readCount: Int { lock.withLock { reads } }
+
+    func read(pid: Int32, requirement: ChromeRuntimeRequirement) -> ChromeRuntimeState {
+        lock.withLock { reads += 1 }
+        let chrome = AXUIElementCreateApplication(pid)
+        let window = accessibility.copyAttribute(kAXFocusedWindowAttribute, from: chrome)
+        _ = accessibility.copyAttribute(kAXMenuBarAttribute, from: chrome)
+        _ = accessibility.copyAttribute(kAXWindowsAttribute, from: chrome)
+        guard window != nil else { return .unavailable }
+        return lock.withLock { states.count > 1 ? states.removeFirst() : states[0] }
     }
 }
 
@@ -494,20 +816,30 @@ private struct UnavailableChromeRuntime: ChromeRuntimeStateReading {
 @MainActor
 private final class DetectorHarness {
     let monitor = SamplePointerMonitor()
-    let log = AccessibilityLog()
+    let log: AccessibilityLog
     let targets: ScriptedClickTargets
     let detector: ManualActionDetector
 
-    init(targets: [ClickTarget], snapshotter: (any AccessibilitySnapshotting)? = nil,
-         unresponsive: Set<pid_t> = [], hit: @escaping (CGPoint) -> AXUIElement?) {
+    convenience init(targets: [ClickTarget], snapshotter: (any AccessibilitySnapshotting)? = nil,
+                     unresponsive: Set<pid_t> = [], hit: @escaping (CGPoint) -> AXUIElement?) {
+        let log = AccessibilityLog()
+        self.init(targets: targets, log: log, accessibility: .recording(log, unresponsive: unresponsive, hit: hit),
+                  snapshotter: snapshotter)
+    }
+
+    /// `accessibility` records its messages in `log`.
+    init(targets: [ClickTarget], log: AccessibilityLog, accessibility: DetectionAccessibility,
+         snapshotter: (any AccessibilitySnapshotting)? = nil,
+         chromeRuntimeReader: any ChromeRuntimeStateReading = UnavailableChromeRuntime()) {
+        self.log = log
         self.targets = ScriptedClickTargets(targets)
         detector = ManualActionDetector(
             monitor: monitor,
             snapshotter: snapshotter,
             permissions: GrantedDetectorPermissions(),
-            chromeRuntimeReader: UnavailableChromeRuntime(),
+            chromeRuntimeReader: chromeRuntimeReader,
             clickTargets: self.targets,
-            accessibility: .recording(log, unresponsive: unresponsive, hit: hit)
+            accessibility: accessibility
         )
         detector.start()
     }
@@ -522,11 +854,17 @@ private final class DetectorHarness {
     }
 
     func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<300 where !condition() {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(condition(), "timed out waiting for Shortcut Coach's detection queue")
+        try await waitForDetection(condition)
     }
 
     func stop() { detector.stop() }
+}
+
+/// Waits up to 3 seconds, long enough for every check Shortcut Coach runs after a click.
+@MainActor
+private func waitForDetection(_ condition: () -> Bool) async throws {
+    for _ in 0..<300 where !condition() {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(condition(), "timed out waiting for Shortcut Coach's detection queue")
 }
