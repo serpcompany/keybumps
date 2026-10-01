@@ -343,23 +343,64 @@ struct SnippetBulkChangeTests {
         #expect(library.store.snippets.count == 4)
     }
 
-    @Test("Two entries with the same ID are marked together, without crashing")
+    @Test("Two entries with the same ID (only a hand-edited file has them) are left alone")
     func duplicateIDs() throws {
         let folder = TemporaryFolder()
         defer { folder.remove() }
         let id = UUID()
         try Data(#"[{"id":"\#(id.uuidString)","name":"First","text":"made-up one"},{"id":"\#(id.uuidString)","name":"Second","text":"made-up two"}]"#.utf8)
             .write(to: folder.storageURL)
+        let fileBefore = try Data(contentsOf: folder.storageURL)
         let secrets = InMemorySnippetSecretStore()
         let store = folder.makeStore(secrets: secrets)
         #expect(store.snippets.count == 2)
 
-        try store.setSensitive(true, for: [id])
-        #expect(store.snippets.allSatisfy { $0.isSensitive })
-        #expect(secrets.texts[id] != nil)
-        try store.setSensitive(false, for: [id])
-        #expect(!store.snippets.contains { $0.isSensitive })
+        #expect(throws: SnippetStoreError.sharedID) { try store.setSensitive(true, for: [id]) }
+        #expect(throws: SnippetStoreError.sharedID) { try store.delete([id]) }
+        #expect(store.snippets.map(\.text) == ["made-up one", "made-up two"], "No text is lost")
+        #expect(try Data(contentsOf: folder.storageURL) == fileBefore)
         #expect(secrets.texts.isEmpty)
+    }
+
+    @Test("An item the Keychain won't read stops the change before anything changes")
+    func unreadableItemStopsTheChange() throws {
+        let library = try Library()
+        defer { library.folder.remove() }
+        let fileBefore = library.fileText
+        // As a locked Keychain, or a denied access prompt, would refuse to read it.
+        library.secrets.unreadableIDs = [library.hiddenA.id]
+
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.delete([library.hiddenA.id, library.hiddenB.id])
+        }
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.setSensitive(false, for: [library.hiddenA.id, library.hiddenB.id])
+        }
+        library.secrets.unreadableIDs = [library.plainA.id]
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.setSensitive(true, for: [library.plainA.id])
+        }
+
+        #expect(library.secrets.removals == 0)
+        #expect(library.secrets.texts == [library.hiddenA.id: Self.secretA, library.hiddenB.id: Self.secretB])
+        #expect(library.fileText == fileBefore)
+        #expect(library.store.snippets.count == 4)
+    }
+
+    @Test("The editor's Sensitive switch also puts back a leftover item when the save fails")
+    func editorPutsBackALeftoverItem() throws {
+        let library = try Library()
+        defer { library.folder.remove() }
+        let leftover = "made-up-leftover"
+        try library.secrets.setText(leftover, for: library.plainA.id)
+        try library.folder.setPermissions(0o500, of: library.folder.url)
+        defer { try? library.folder.setPermissions(0o700, of: library.folder.url) }
+
+        #expect(throws: SnippetStoreError.storage) {
+            try library.store.update(library.plainA.id, with: SnippetDraft(name: "Plain A", text: "made-up plain a", isSensitive: true))
+        }
+        #expect(library.secrets.texts[library.plainA.id] == leftover)
+        #expect(library.store.snippet(withID: library.plainA.id)?.isSensitive == false)
     }
 
     @Test("Nothing to change saves nothing, and snippets that no longer exist are reported")

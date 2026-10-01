@@ -11,6 +11,8 @@ enum SnippetStoreError: Error, Equatable {
     case storage
     /// `snippets.json` couldn't be read, so nothing is saved until it can be (`SnippetLibraryState.readOnly`).
     case readOnly
+    /// Two saved snippets share an ID, which only a hand-edited file can do, so they can't be told apart.
+    case sharedID
 
     var message: String {
         switch self {
@@ -19,6 +21,7 @@ enum SnippetStoreError: Error, Equatable {
         case .keychain: "The Keychain didn’t allow it. Nothing was changed."
         case .storage: "Keybumps couldn’t save your snippets."
         case .readOnly: "Keybumps can’t read your saved snippets, so it won’t save changes until it can. See Settings › Snippets."
+        case .sharedID: "Two saved snippets have the same ID in snippets.json, so Keybumps can’t tell them apart. Nothing was changed."
         }
     }
 }
@@ -233,6 +236,8 @@ final class SnippetStore {
         // The text changes, or moves into the file: read the saved text to put it back if the file
         // can't be written (and to move it, when Sensitive is turned off without showing it).
         let originalSecret = original.isSensitive ? secrets.text(for: id) : nil
+        // Turning Sensitive on overwrites any item the plain snippet still has: keep it to put back.
+        let leftover = !original.isSensitive && draft.isSensitive ? secrets.text(for: id) : nil
         if original.isSensitive, originalSecret == nil, keepsText || !draft.isSensitive {
             // The saved text is needed and the Keychain won't give it back.
             throw SnippetStoreError.keychain
@@ -260,8 +265,8 @@ final class SnippetStore {
         do {
             try commit(next)
         } catch {
-            if let originalSecret {
-                try? secrets.setText(originalSecret, for: id)
+            if let previous = originalSecret ?? leftover {
+                try? secrets.setText(previous, for: id)
             } else if draft.isSensitive, !original.isSensitive {
                 try? secrets.removeText(for: id)
             }
@@ -275,12 +280,11 @@ final class SnippetStore {
 
     /// Deletes snippets, and each one's Keychain item whether or not it's sensitive now, so no text
     /// outlives them, in one save. Their items are read first, only to put them back if a later step
-    /// fails. If an item can't be removed, nothing is deleted. IDs no longer in the library are skipped.
+    /// fails. If an item can't be read or removed, nothing is deleted. IDs no longer in the library
+    /// are skipped.
     func delete(_ ids: Set<Snippet.ID>) throws {
-        try requireWritable()
-        let deleted = snippets.filter { ids.contains($0.id) }.map(\.id)
-        guard !deleted.isEmpty else { throw SnippetStoreError.notFound }
-        let before = keychainTexts(of: deleted)
+        let deleted = try entries(for: ids).map(\.id)
+        let before = try keychainTexts(of: deleted)
         try changeKeychain(for: deleted, restoring: before) { try secrets.removeText(for: $0) }
         do {
             try commit(snippets.filter { !ids.contains($0.id) })
@@ -295,16 +299,13 @@ final class SnippetStore {
     /// off reads every text first, then moves it into the file and removes the item. If any Keychain
     /// step fails, or the file can't be written, nothing changes and every item is put back as it was.
     func setSensitive(_ isSensitive: Bool, for ids: Set<Snippet.ID>) throws {
-        try requireWritable()
-        guard snippets.contains(where: { ids.contains($0.id) }) else { throw SnippetStoreError.notFound }
-        func changes(_ snippet: Snippet) -> Bool { ids.contains(snippet.id) && snippet.isSensitive != isSensitive }
-        let changed = snippets.filter(changes)
+        let changed = try entries(for: ids).filter { $0.isSensitive != isSensitive }
         guard !changed.isEmpty else { return }
         let changedIDs = changed.map(\.id)
-        let before = keychainTexts(of: changedIDs)
+        let before = try keychainTexts(of: changedIDs)
         // Each text that moves into the file must be read before anything changes.
         if !isSensitive, changedIDs.contains(where: { before[$0] == nil }) { throw SnippetStoreError.keychain }
-        let plainTexts = Dictionary(changed.map { ($0.id, $0.text) }) { _, last in last }
+        let plainTexts = Dictionary(uniqueKeysWithValues: changed.map { ($0.id, $0.text) })
         try changeKeychain(for: changedIDs, restoring: before) { id in
             if isSensitive {
                 try secrets.setText(plainTexts[id] ?? "", for: id)
@@ -314,7 +315,7 @@ final class SnippetStore {
         }
         let date = now()
         var next = snippets
-        for index in next.indices where changes(next[index]) {
+        for index in next.indices where plainTexts[next[index].id] != nil {
             next[index].text = isSensitive ? "" : before[next[index].id] ?? ""
             next[index].isSensitive = isSensitive
             next[index].updatedAt = date
@@ -363,12 +364,23 @@ final class SnippetStore {
 
     // MARK: Keychain
 
-    /// The Keychain text each snippet has now; one without an item (or whose item can't be read)
-    /// has none. Read so a failed change can put the Keychain back as it was.
-    private func keychainTexts(of ids: [Snippet.ID]) -> [Snippet.ID: String] {
+    /// The library's entries for `ids`, before a change to all of them. Two entries sharing an ID
+    /// can't be told apart, so neither is changed.
+    private func entries(for ids: Set<Snippet.ID>) throws -> [Snippet] {
+        try requireWritable()
+        let entries = snippets.filter { ids.contains($0.id) }
+        guard !entries.isEmpty else { throw SnippetStoreError.notFound }
+        guard Set(entries.map(\.id)).count == entries.count else { throw SnippetStoreError.sharedID }
+        return entries
+    }
+
+    /// The Keychain text each snippet has now (none without an item), read so a failed change can
+    /// put the Keychain back as it was. An item the Keychain won't read couldn't be put back, so it
+    /// stops the change before anything changes.
+    private func keychainTexts(of ids: [Snippet.ID]) throws -> [Snippet.ID: String] {
         var texts: [Snippet.ID: String] = [:]
         for id in ids {
-            texts[id] = secrets.text(for: id)
+            do { texts[id] = try secrets.storedText(for: id) } catch { throw SnippetStoreError.keychain }
         }
         return texts
     }

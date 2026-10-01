@@ -5,12 +5,21 @@ import Security
 /// Keychain; unit tests and the UI-test composition keep it in memory, so they never touch the
 /// owner's Keychain.
 protocol SnippetSecretStoring: AnyObject {
-    func text(for id: UUID) -> String?
+    /// The item's text, or nil when there's no item (or its data isn't text). Throws when the
+    /// Keychain won't read it, for example while it's locked or after a denied access prompt.
+    func storedText(for id: UUID) throws -> String?
     func setText(_ text: String, for id: UUID) throws
     /// Removes the item if there is one; removing one that doesn't exist succeeds.
     func removeText(for id: UUID) throws
     /// The IDs that have an item, listed without reading any text.
     func itemIDs() throws -> Set<UUID>
+}
+
+extension SnippetSecretStoring {
+    /// The item's text, or nil when there's none or it can't be read.
+    func text(for id: UUID) -> String? {
+        try? storedText(for: id)
+    }
 }
 
 enum SnippetSecretError: Error, Equatable {
@@ -58,14 +67,15 @@ final class KeychainSnippetSecretStore: SnippetSecretStoring {
         return attributes
     }
 
-    func text(for id: UUID) -> String? {
+    func storedText(for id: UUID) throws -> String? {
         var query = query(for: id)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw SnippetSecretError.keychain(status) }
+        return (result as? Data).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     func setText(_ text: String, for id: UUID) throws {
@@ -128,6 +138,8 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     var failsNextListing = false
     /// IDs whose items can't be written or removed, as items the Keychain won't let this app change.
     var refusedIDs: Set<UUID> = []
+    /// IDs whose items can't be read, as a locked Keychain or a denied access prompt would refuse.
+    var unreadableIDs: Set<UUID> = []
     /// How many items were ever removed, so tests can prove nothing was removed behind the user's back.
     private(set) var removals = 0
 
@@ -138,8 +150,9 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     /// How many times a text was read, so tests can prove a save didn't need it.
     private(set) var reads = 0
 
-    func text(for id: UUID) -> String? {
+    func storedText(for id: UUID) throws -> String? {
         reads += 1
+        if unreadableIDs.contains(id) { throw SnippetSecretError.keychain(errSecInteractionNotAllowed) }
         return texts[id]
     }
 
