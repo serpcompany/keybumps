@@ -229,9 +229,10 @@ extension QuickSearchRanking {
     /// order, and equally good commands keep `QuickSearchCommand.allCases` order. Files and folders
     /// always come last.
     ///
-    /// Snippets (`SnippetSearch.quickSearchMatches`) match only by keyword and name. One whose
-    /// keyword is the query comes first of all, since a keyword is typed to find exactly it; the
-    /// rest follow the apps and commands, before files.
+    /// Snippets (`SnippetSearch.quickSearchMatches`) match only by keyword and name. One whose whole
+    /// keyword, punctuation included, is the query comes first of all, since a keyword is typed to
+    /// find exactly it; the rest follow the apps and commands, before files. So `mail` keeps Mail
+    /// first even with a `;mail` snippet.
     @MainActor
     static func items(
         matching term: String,
@@ -257,9 +258,10 @@ extension QuickSearchRanking {
                 lhs.element.score != rhs.element.score ? lhs.element.score > rhs.element.score : lhs.offset < rhs.offset
             }
             .map(\.element.item)
-        let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term)
-        let exactKeywords = snippetMatches.filter { $0.match == .keyword }.map { QuickSearchItem.snippet($0.snippet) }
-        let otherSnippets = snippetMatches.filter { $0.match != .keyword }.map { QuickSearchItem.snippet($0.snippet) }
-        return exactKeywords + ranked + otherSnippets + files.map(QuickSearchItem.result)
+        let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term).map(\.snippet)
+        let typedKeywords = snippetMatches.filter { SnippetSearch.isWholeKeyword($0, query: term) }
+        let otherSnippets = snippetMatches.filter { !SnippetSearch.isWholeKeyword($0, query: term) }
+        return typedKeywords.map(QuickSearchItem.snippet) + ranked + otherSnippets.map(QuickSearchItem.snippet)
+            + files.map(QuickSearchItem.result)
     }
 }

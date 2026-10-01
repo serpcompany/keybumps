@@ -35,19 +35,26 @@ enum SnippetSearch {
     static func quickSearchMatches(_ snippets: [Snippet], query: String) -> [(snippet: Snippet, match: Match)] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return Array(ranked(snippets, query: trimmed).filter { $0.match != .text }.prefix(quickSearchLimit))
+        return Array(ranked(snippets, query: trimmed, includingText: false).prefix(quickSearchLimit))
+    }
+
+    /// Whether `query` is the snippet's whole keyword, punctuation included (`;ship`, not `ship`),
+    /// ignoring case and accents: Quick Search lists it first, since a keyword is typed to find it.
+    static func isWholeKeyword(_ snippet: Snippet, query: String) -> Bool {
+        guard let keyword = snippet.keyword else { return false }
+        return fold(keyword) == fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// The snippets `query` (trimmed, not empty) matches, grouped by `Match` best first, each group
     /// in `listOrder`.
-    private static func ranked(_ snippets: [Snippet], query: String) -> [(snippet: Snippet, match: Match)] {
-        let matches = snippets.sorted(by: listOrder).compactMap { snippet in
-            match(snippet, query: query).map { (snippet: snippet, match: $0) }
-        }
-        // A stable sort by match keeps the list order inside each group.
-        return matches.enumerated()
-            .sorted { ($0.element.match, $0.offset) < ($1.element.match, $1.offset) }
-            .map(\.element)
+    private static func ranked(
+        _ snippets: [Snippet],
+        query: String,
+        includingText: Bool = true
+    ) -> [(snippet: Snippet, match: Match)] {
+        snippets
+            .compactMap { snippet in match(snippet, query: query, includingText: includingText).map { (snippet: snippet, match: $0) } }
+            .sorted { $0.match != $1.match ? $0.match < $1.match : listOrder($0.snippet, $1.snippet) }
     }
 
     /// The Settings list: by name with an empty search, where you manage snippets rather than use
@@ -75,8 +82,9 @@ enum SnippetSearch {
         return byName == .orderedSame ? lhs.createdAt < rhs.createdAt : byName == .orderedAscending
     }
 
-    /// The best way `query` (already trimmed) matches `snippet`, or nil.
-    static func match(_ snippet: Snippet, query: String) -> Match? {
+    /// The best way `query` (already trimmed) matches `snippet`, or nil. Without `includingText`,
+    /// the text isn't read at all.
+    static func match(_ snippet: Snippet, query: String, includingText: Bool = true) -> Match? {
         let folded = fold(query)
         if let keyword = snippet.keyword.map(fold) {
             let bare = String(keyword.drop { !$0.isLetter && !$0.isNumber })
@@ -90,7 +98,7 @@ enum SnippetSearch {
             return .nameWords
         }
         if name.contains(folded) { return .name }
-        if !snippet.isSensitive, fold(snippet.text).contains(folded) { return .text }
+        if includingText, !snippet.isSensitive, fold(snippet.text).contains(folded) { return .text }
         return nil
     }
 

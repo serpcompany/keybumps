@@ -19,6 +19,13 @@ final class QuickSearchModel {
     private(set) var items: [QuickSearchItem] = []
     /// The apps, files, and folders among `items`.
     var results: [QuickSearchResult] { items.compactMap(\.result) }
+
+    /// The highlighted result, if any. With an empty query the palette lists Recent Items instead,
+    /// even if a late Spotlight update refilled `items`.
+    func highlightedItem(at selection: Int) -> QuickSearchItem? {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, items.indices.contains(selection) else { return nil }
+        return items[selection]
+    }
     let recentItems: RecentItemStore
     let applicationUsage: ApplicationUsageStore
     /// The snippets a query can find: none until the palette supplies them, which it does only while

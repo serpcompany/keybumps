@@ -1070,12 +1070,28 @@ struct SnippetQuickSearchTests {
         #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
         #expect(fixture.notices.shown.map(\.message) == ["Copied to Clipboard"])
         #expect(fixture.snippets.snippet(withID: snippet.id)?.lastUsedAt != nil, "The use is recorded")
+        // …as a snippet's use, never as a Recent Item or Quick Search's learned usage.
+        #expect(fixture.search.displayedRecentItems.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: fixture.folder.url.appendingPathComponent("recent-items.json").path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.folder.url.appendingPathComponent("application-usage.json").path))
 
         fixture.palette.state.select(.search)
         fixture.search.query = ";reply"
         #expect(fixture.palette.handleKeyDown(SnippetPaletteKeyTests.commandReturn) == nil)
         try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
         #expect(fixture.paster.pasted.map(\.text) == ["made-up text"])
+    }
+
+    @Test("The footer names the highlighted result's actions only while there's a query")
+    func footerFollowsTheQuery() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up reply", keyword: ";reply", text: "made-up text"))
+        fixture.search.query = "reply"
+        #expect(fixture.search.highlightedItem(at: 0) == .snippet(snippet))
+        #expect(fixture.search.highlightedItem(at: 5) == nil)
+        fixture.search.query = "  "
+        #expect(fixture.search.highlightedItem(at: 0) == nil, "Recent Items show; their actions are the tab's")
     }
 
     @Test("Quick Search lists no snippets while Snippets is off, and finds them again when it's on")

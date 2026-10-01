@@ -868,8 +868,7 @@ private struct CommandPaletteView: View {
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
                         tab: state.tab,
-                        selectedSearchItem: state.tab == .search && search.items.indices.contains(state.selection)
-                            ? search.items[state.selection] : nil,
+                        selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
                         openSettings: { runCommand(.keybumpsSettings) }
                     )
                 }
@@ -1254,7 +1253,8 @@ private struct SearchResultsView: View {
                                     Button("Copy") { snippetActions.copy(snippet) }
                                     Button("Paste") { snippetActions.paste(snippet) }
                                 }
-                                .accessibilityHint("Return copies it; Command-Return pastes it")
+                                .accessibilityAction(named: "Paste") { snippetActions.paste(snippet) }
+                                .accessibilityHint("Copies the snippet")
                                 .accessibilityIdentifier("quickSearch.snippet")
                             case .result(let result):
                                 Button {

@@ -52,20 +52,32 @@ struct QuickSearchSnippetTests {
         #expect(SnippetSearch.quickSearchMatches(snippets, query: "made").count == 8)
     }
 
-    @Test("An exact keyword comes first; other snippets come after apps and commands, and before files")
+    @Test("A keyword typed in full comes first; other snippets come after apps and commands, and before files")
     func ranking() {
-        let exact = Self.snippet("Template", keyword: ";clip")
+        let typed = Self.snippet("Template", keyword: "clip")
+        let bare = Self.snippet("Signature", keyword: ";clip")
         let named = Self.snippet("Clipping rules")
         let app = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Clipper.app"), kind: .application)
         let file = QuickSearchResult(url: URL(fileURLWithPath: "/tmp/fixture/clip.txt"), kind: .file)
         let clipboard = QuickSearchCommand.capability(.clipboardHistory)
 
         let rows = QuickSearchRanking.items(
-            matching: "clip", applications: [app], files: [file], commands: [clipboard], snippets: [named, exact]
+            matching: "clip", applications: [app], files: [file], commands: [clipboard], snippets: [named, bare, typed]
         )
-        #expect(rows == [.snippet(exact), .result(app), .command(clipboard), .snippet(named), .result(file)])
+        // `;clip` without its punctuation is still a keyword match, but it doesn't jump above the
+        // apps: typing "mail" should still put Mail first.
+        #expect(rows == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named), .result(file)])
+        #expect(QuickSearchRanking.items(matching: ";clip", applications: [], files: [], commands: [], snippets: [named, bare]).first
+            == .snippet(bare), "…and comes first when typed with it")
         #expect(QuickSearchRanking.items(matching: "clip", applications: [app], files: [file], commands: [clipboard])
             == [.result(app), .command(clipboard), .result(file)], "No snippets supplied, none listed")
+    }
+
+    @Test("Quick Search's matching never reads snippet text")
+    func neverText() {
+        let snippet = Self.snippet("Greeting", text: "we ship on Mondays")
+        #expect(SnippetSearch.match(snippet, query: "mondays") == .text, "The Snippets tab searches text")
+        #expect(SnippetSearch.match(snippet, query: "mondays", includingText: false) == nil)
     }
 
     @Test("A snippet row's footer says Copy and Paste; other rows keep the Search tab's")
