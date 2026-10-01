@@ -126,6 +126,8 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     var failsNextRemoval = false
     /// Makes the next `itemIDs` fail.
     var failsNextListing = false
+    /// IDs whose items can't be written or removed, as items the Keychain won't let this app change.
+    var refusedIDs: Set<UUID> = []
     /// How many items were ever removed, so tests can prove nothing was removed behind the user's back.
     private(set) var removals = 0
 
@@ -142,7 +144,7 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     }
 
     func setText(_ text: String, for id: UUID) throws {
-        if failsNextWrite {
+        if failsNextWrite || refusedIDs.contains(id) {
             failsNextWrite = false
             throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
         }
@@ -150,7 +152,7 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     }
 
     func removeText(for id: UUID) throws {
-        if failsNextRemoval {
+        if failsNextRemoval || refusedIDs.contains(id) {
             failsNextRemoval = false
             throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
         }

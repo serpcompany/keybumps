@@ -1094,7 +1094,7 @@ struct SnippetPlainTextTests {
 
 /// A temporary folder holding one `snippets.json`.
 @MainActor
-private struct TemporaryFolder {
+struct TemporaryFolder {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("KeybumpsSnippets-\(UUID().uuidString)", isDirectory: true)
 
@@ -1106,9 +1106,10 @@ private struct TemporaryFolder {
 
     func makeStore(
         secrets: any SnippetSecretStoring = InMemorySnippetSecretStore(),
+        fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) -> SnippetStore {
-        SnippetStore(storageURL: storageURL, secrets: secrets, now: now)
+        SnippetStore(storageURL: storageURL, secrets: secrets, fileManager: fileManager, now: now)
     }
 
     func permissions(of file: URL) throws -> Int {
