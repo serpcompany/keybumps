@@ -1,13 +1,16 @@
 import SwiftUI
 
 /// The Snippets page: its command, then every snippet in a searchable table with + and − and
-/// Edit…, which open the editor sheet, and Import from Alfred… (`AlfredSnippetImport`).
-/// Everything here is saved on this Mac only.
+/// Edit…, which open the editor sheet, and Import from Alfred… (`AlfredSnippetImport`). The table
+/// sorts by column (`SnippetTableSort`) and selects several snippets at once, which −, Delete, and
+/// the context menu's Delete… and Mark as Sensitive / Not Sensitive act on together
+/// (`SnippetTableSelection`). Everything here is saved on this Mac only.
 struct SnippetsSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
-    @State private var selection: Snippet.ID?
-    @State private var pendingDeletion: Snippet?
+    @State private var selection: Set<Snippet.ID> = []
+    @State private var sortOrder: [SnippetTableSort] = []
+    @State private var pendingDeletion: SnippetTableSelection?
     @State private var errorMessage: String?
     @State private var confirmsStartOver = false
     @State private var choosesAlfredExport = false
@@ -15,7 +18,8 @@ struct SnippetsSettingsView: View {
 
     var body: some View {
         @Bindable var store = model.snippets
-        let results = SnippetSearch.settingsResults(store.snippets, query: query)
+        let rows = SnippetTableSort.sorted(SnippetSearch.settingsResults(store.snippets, query: query), by: sortOrder)
+        let selected = SnippetTableSelection(selection, in: rows)
         let isWritable = store.libraryState.isWritable
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
@@ -54,9 +58,10 @@ struct SnippetsSettingsView: View {
                         .frame(maxWidth: 300)
                     Spacer()
                     if isWritable {
-                        Text(SnippetPresentation.count(store.snippets.count))
+                        Text(SnippetTableSelection.countText(total: store.snippets.count, selected: selected.snippets.count))
                             .font(.system(size: SettingsTheme.subtitleSize))
                             .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("snippets.count")
                     }
                 }
                 if !isWritable {
@@ -67,10 +72,10 @@ struct SnippetsSettingsView: View {
                         title: "No snippets yet",
                         subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘Return pastes it."
                     )
-                } else if results.isEmpty {
+                } else if rows.isEmpty {
                     SettingsNote("No matching snippets")
                 } else {
-                    table(results)
+                    table(rows)
                 }
                 HStack(spacing: 6) {
                     SettingsIconButton(systemImage: "plus", help: "New Snippet") {
@@ -78,10 +83,10 @@ struct SnippetsSettingsView: View {
                     }
                     .disabled(!isWritable)
                     .accessibilityIdentifier("snippets.add")
-                    SettingsIconButton(systemImage: "minus", help: "Delete Snippet") {
-                        pendingDeletion = selectedSnippet
+                    SettingsIconButton(systemImage: "minus", help: "Delete Selected Snippets") {
+                        pendingDeletion = selected
                     }
-                    .disabled(selectedSnippet == nil || !isWritable)
+                    .disabled(selected.isEmpty || !isWritable)
                     .accessibilityIdentifier("snippets.remove")
                     Spacer()
                     Button("Import from Alfred…") { choosesAlfredExport = true }
@@ -89,9 +94,9 @@ struct SnippetsSettingsView: View {
                         .help("Add the snippets from an Alfred snippets export (.alfredsnippets)")
                         .accessibilityIdentifier("snippets.importAlfred")
                     Button("Edit…") {
-                        if let selection { store.editorRequest = .edit(selection) }
+                        if let id = selected.editableID { store.editorRequest = .edit(id) }
                     }
-                    .disabled(selectedSnippet == nil || !isWritable)
+                    .disabled(selected.editableID == nil || !isWritable)
                     .accessibilityIdentifier("snippets.edit")
                 }
             }
@@ -121,14 +126,14 @@ struct SnippetsSettingsView: View {
                 .environment(model)
         }
         .alert(
-            "Delete this snippet?",
+            pendingDeletion?.deletionTitle ?? "",
             isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
             presenting: pendingDeletion
-        ) { snippet in
-            Button("Delete", role: .destructive) { delete(snippet) }
+        ) { deletion in
+            Button("Delete", role: .destructive) { delete(deletion.ids) }
             Button("Cancel", role: .cancel) {}
-        } message: { snippet in
-            Text("“\(snippet.name)” will be removed from this Mac.")
+        } message: { deletion in
+            Text(deletion.deletionMessage)
         }
         .fileImporter(isPresented: $choosesAlfredExport, allowedContentTypes: [AlfredSnippetImport.contentType]) { result in
             switch result {
@@ -149,13 +154,9 @@ struct SnippetsSettingsView: View {
         }
     }
 
-    private var selectedSnippet: Snippet? {
-        selection.flatMap(model.snippets.snippet(withID:))
-    }
-
-    private func table(_ snippets: [Snippet]) -> some View {
-        Table(snippets, selection: $selection) {
-            TableColumn("Name") { snippet in
+    private func table(_ rows: [Snippet]) -> some View {
+        Table(rows, selection: $selection, sortOrder: $sortOrder) {
+            TableColumn("Name", sortUsing: SnippetTableSort(column: .name)) { snippet in
                 HStack(spacing: 5) {
                     Text(snippet.name)
                         .lineLimit(1)
@@ -169,13 +170,13 @@ struct SnippetsSettingsView: View {
                 }
             }
             .width(min: 140, ideal: 200, max: 260)
-            TableColumn("Keyword") { snippet in
+            TableColumn("Keyword", sortUsing: SnippetTableSort(column: .keyword)) { snippet in
                 if let keyword = snippet.keyword {
                     SnippetKeywordChip(keyword: keyword)
                 }
             }
             .width(min: 80, ideal: 110, max: 170)
-            TableColumn("Snippet") { snippet in
+            TableColumn("Snippet", sortUsing: SnippetTableSort(column: .snippet)) { snippet in
                 Text(SnippetPresentation.preview(of: snippet))
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
@@ -184,16 +185,29 @@ struct SnippetsSettingsView: View {
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         .scrollContentBackground(.hidden)
         .contextMenu(forSelectionType: Snippet.ID.self) { ids in
-            if let id = ids.first {
-                Button("Edit…") { model.snippets.editorRequest = .edit(id) }
+            // The clicked row, or every selected row when the click is inside the selection.
+            let chosen = SnippetTableSelection(ids, in: rows)
+            if !chosen.isEmpty {
+                if let id = chosen.editableID {
+                    Button("Edit…") { model.snippets.editorRequest = .edit(id) }
+                }
+                if chosen.canMarkSensitive {
+                    Button("Mark as Sensitive") { setSensitive(true, chosen.ids) }
+                }
+                if chosen.canMarkNotSensitive {
+                    Button("Mark as Not Sensitive") { setSensitive(false, chosen.ids) }
+                }
                 Divider()
-                Button("Delete…", role: .destructive) { pendingDeletion = model.snippets.snippet(withID: id) }
+                Button("Delete…", role: .destructive) { pendingDeletion = chosen }
             }
         } primaryAction: { ids in
-            if let id = ids.first { model.snippets.editorRequest = .edit(id) }
+            if let id = SnippetTableSelection(ids, in: rows).editableID { model.snippets.editorRequest = .edit(id) }
         }
-        .onDeleteCommand { pendingDeletion = selectedSnippet }
-        .frame(height: Self.tableHeight(rows: snippets.count))
+        .onDeleteCommand {
+            let selected = SnippetTableSelection(selection, in: rows)
+            if !selected.isEmpty { pendingDeletion = selected }
+        }
+        .frame(height: Self.tableHeight(rows: rows.count))
         .accessibilityIdentifier("snippets.list")
     }
 
@@ -203,16 +217,27 @@ struct SnippetsSettingsView: View {
         CGFloat(min(max(rows, 4), 12)) * 31 + 34
     }
 
-    private func delete(_ snippet: Snippet) {
+    private func delete(_ ids: Set<Snippet.ID>) {
+        if perform({ try model.snippets.delete(ids) }) { selection.subtract(ids) }
+    }
+
+    private func setSensitive(_ isSensitive: Bool, _ ids: Set<Snippet.ID>) {
+        perform { try model.snippets.setSensitive(isSensitive, for: ids) }
+    }
+
+    /// Runs a change to the library, showing why it failed, if it did.
+    @discardableResult
+    private func perform(_ change: () throws -> Void) -> Bool {
         do {
-            try model.snippets.delete(snippet.id)
-            if selection == snippet.id { selection = nil }
+            try change()
             errorMessage = nil
+            return true
         } catch let error as SnippetStoreError {
             errorMessage = error.message
         } catch {
             errorMessage = SnippetStoreError.storage.message
         }
+        return false
     }
 }
 

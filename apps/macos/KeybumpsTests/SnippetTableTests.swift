@@ -231,7 +231,7 @@ struct SnippetBulkChangeTests {
         #expect(library.files.saves == savesBefore + 1, "One save")
         let reloaded = library.reloaded()
         for store in [library.store, reloaded] {
-            #expect(store.snippets.allSatisfy(\.isSensitive))
+            #expect(store.snippets.allSatisfy { $0.isSensitive })
             #expect(store.snippet(withID: library.plainA.id)?.updatedAt != library.plainA.updatedAt)
             #expect(store.snippet(withID: library.hiddenA.id)?.updatedAt == library.hiddenA.updatedAt, "Already sensitive: unchanged")
         }
@@ -252,7 +252,7 @@ struct SnippetBulkChangeTests {
         #expect(library.files.saves == savesBefore + 1, "One save")
         let reloaded = library.reloaded()
         for store in [library.store, reloaded] {
-            #expect(!store.snippets.contains(where: \.isSensitive))
+            #expect(!store.snippets.contains { $0.isSensitive })
             #expect(store.snippet(withID: library.hiddenA.id)?.text == Self.secretA)
             #expect(store.snippet(withID: library.hiddenB.id)?.text == Self.secretB)
             #expect(store.snippet(withID: library.plainA.id)?.updatedAt == library.plainA.updatedAt, "Already plain: unchanged")
