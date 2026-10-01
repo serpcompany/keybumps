@@ -13,7 +13,8 @@ import Foundation
 ///   thread, and its accessibility is main-thread-only. Hit-tests go to the other app's element,
 ///   but a remote view's ancestors (an open panel's, say) can lead back into Keybumps.
 /// - An app that doesn't answer in time isn't messaged again until the next press or release, so
-///   it holds up detection for one timeout, not one for each of the press's many reads.
+///   it holds up detection for one timeout, not one for each of the press's many reads. Each check
+///   that follows a click asks that app once more (`beginDelayedCheck(of:)`).
 ///
 /// Tests replace the raw calls. Creating an element sends no message.
 struct DetectionAccessibility {
@@ -49,6 +50,14 @@ struct DetectionAccessibility {
     /// last one are asked again.
     func beginPressOrRelease() {
         unresponsive.removeAll()
+    }
+
+    /// Called at the start of each check that follows a click to see what it did (Chrome's follow-up
+    /// reads, window control's checks): `application` gets one fresh try. It's often still busy with
+    /// the click as it's released, and these checks exist to wait it out. An app that never answers
+    /// still costs only one timeout per check.
+    func beginDelayedCheck(of application: pid_t) {
+        unresponsive.remove(application)
     }
 
     /// The one hit-test of a press or release: the element at `point` in `application`'s windows.
@@ -93,7 +102,7 @@ struct DetectionAccessibility {
     }
 }
 
-/// The apps that didn't answer in time during the current press or release. Locked, because
+/// The apps that didn't answer in time during the current press, release, or check. Locked, because
 /// `DetectionAccessibility.system` is shared.
 private final class UnresponsiveApplications: @unchecked Sendable {
     private let lock = NSLock()
@@ -101,5 +110,6 @@ private final class UnresponsiveApplications: @unchecked Sendable {
 
     func contains(_ pid: pid_t) -> Bool { lock.withLock { processes.contains(pid) } }
     func insert(_ pid: pid_t) { lock.withLock { _ = processes.insert(pid) } }
+    func remove(_ pid: pid_t) { lock.withLock { _ = processes.remove(pid) } }
     func removeAll() { lock.withLock { processes.removeAll() } }
 }

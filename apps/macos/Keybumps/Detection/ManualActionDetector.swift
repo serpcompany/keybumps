@@ -217,10 +217,7 @@ final class ManualActionDetector {
         let runtimeRequirement = chromeClickDetector.postRuntimeRequirement
         let detection = detection
         detection.queue.asyncAfter(deadline: .now() + delays[attempt]) { [weak self] in
-            let runtime = detection.chromeRuntimeReader.read(
-                pid: processIdentity.pid,
-                requirement: runtimeRequirement
-            )
+            let runtime = detection.readChromeAfterClick(pid: processIdentity.pid, requirement: runtimeRequirement)
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.generation == currentGeneration else { return }
                 let outcome = self.chromeClickDetector.receive(
@@ -244,7 +241,7 @@ final class DetectionPipeline: @unchecked Sendable {
     let queue = DispatchQueue(label: "com.serp.keybumps.shortcut-coach.detection", qos: .userInitiated)
     let windowControlMonitor: StandardWindowControlMonitor
     let finderTrashMonitor: FinderTrashMonitor
-    let chromeRuntimeReader: any ChromeRuntimeStateReading
+    private let chromeRuntimeReader: any ChromeRuntimeStateReading
     private let clickTargets: any ClickTargetProbing
     private let accessibility: DetectionAccessibility
     private let snapshotter: any AccessibilitySnapshotting
@@ -253,19 +250,22 @@ final class DetectionPipeline: @unchecked Sendable {
         clickTargets: any ClickTargetProbing,
         accessibility: DetectionAccessibility,
         snapshotter: any AccessibilitySnapshotting,
-        chromeRuntimeReader: any ChromeRuntimeStateReading
+        chromeRuntimeReader: any ChromeRuntimeStateReading,
+        runningApplication: @escaping (pid_t) -> RunningApplicationState? = RunningApplicationState.current
     ) {
         self.clickTargets = clickTargets
         self.accessibility = accessibility
         self.snapshotter = snapshotter
         self.chromeRuntimeReader = chromeRuntimeReader
-        windowControlMonitor = StandardWindowControlMonitor(queue: queue, accessibility: accessibility)
+        windowControlMonitor = StandardWindowControlMonitor(queue: queue, accessibility: accessibility,
+                                                            runningApplication: runningApplication)
         finderTrashMonitor = FinderTrashMonitor(queue: queue, accessibility: accessibility)
     }
 
     /// On `queue`: hands the sample and its hit to every detector, and describes the hit for the
     /// menu and Chrome checks on the main thread.
     func process(_ sample: PointerSample, clickThrough: Set<Int>) -> (snapshot: AccessibilitySnapshot?, runtime: ChromeRuntimeState?) {
+        dispatchPrecondition(condition: .onQueue(queue))
         let hit = sharedHit(for: sample, clickThrough: clickThrough)
         windowControlMonitor.handle(sample, hit: hit)
         finderTrashMonitor.handle(sample, hit: hit)
@@ -273,6 +273,14 @@ final class DetectionPipeline: @unchecked Sendable {
         guard sample.phase == .down, let snapshot else { return (snapshot, nil) }
         let requirement = ChromeActionAdapter().contextRequirement(for: snapshot)
         return (snapshot, chromeRuntimeReader.read(pid: snapshot.pid, requirement: requirement))
+    }
+
+    /// On `queue`: one of Chrome's follow-up reads after a click. Chrome is often still busy with the
+    /// click as it's released, so each read gives it a fresh try.
+    func readChromeAfterClick(pid: pid_t, requirement: ChromeRuntimeRequirement) -> ChromeRuntimeState {
+        dispatchPrecondition(condition: .onQueue(queue))
+        accessibility.beginDelayedCheck(of: pid)
+        return chromeRuntimeReader.read(pid: pid, requirement: requirement)
     }
 
     func cancelGestures() {

@@ -148,6 +148,20 @@ struct WindowControlActionDetector {
     }
 }
 
+/// What window control reads about the app it checks, from `NSRunningApplication`, which, unlike
+/// `NSWorkspace.frontmostApplication`, is documented safe off the main thread. Tests make one up.
+struct RunningApplicationState: Equatable, Sendable {
+    var bundleIdentifier: String?
+    var name: String?
+    var isActive: Bool
+
+    static func current(_ pid: pid_t) -> RunningApplicationState? {
+        NSRunningApplication(processIdentifier: pid).map {
+            RunningApplicationState(bundleIdentifier: $0.bundleIdentifier, name: $0.localizedName, isActive: $0.isActive)
+        }
+    }
+}
+
 final class StandardWindowControlMonitor {
     private final class Session {
         let kind: StandardWindowControlKind
@@ -188,12 +202,15 @@ final class StandardWindowControlMonitor {
     /// Accessibility read stay on it.
     private let queue: DispatchQueue
     private let accessibility: DetectionAccessibility
+    private let runningApplication: (pid_t) -> RunningApplicationState?
     private let detector = WindowControlActionDetector()
     private var session: Session?
 
-    init(queue: DispatchQueue, accessibility: DetectionAccessibility) {
+    init(queue: DispatchQueue, accessibility: DetectionAccessibility,
+         runningApplication: @escaping (pid_t) -> RunningApplicationState? = RunningApplicationState.current) {
         self.queue = queue
         self.accessibility = accessibility
+        self.runningApplication = runningApplication
     }
 
     func cancel() {
@@ -233,10 +250,8 @@ final class StandardWindowControlMonitor {
               ) else { return }
 
         var pid: pid_t = 0
-        // `NSRunningApplication`, unlike `NSWorkspace.frontmostApplication`, is documented safe off
-        // the main thread.
         guard AXUIElementGetPid(hit, &pid) == .success,
-              let running = NSRunningApplication(processIdentifier: pid),
+              let running = runningApplication(pid),
               let bundle = running.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier,
               running.isActive else { return }
@@ -247,7 +262,7 @@ final class StandardWindowControlMonitor {
         guard let shortcut = liveShortcut(for: kind, in: application, state: pre, requireEnabled: true) else { return }
         session = Session(
             kind: kind,
-            applicationName: running.localizedName ?? "Current app",
+            applicationName: running.name ?? "Current app",
             applicationProfile: WindowControlApplicationProfile(bundleIdentifier: bundle),
             processIdentifier: pid,
             application: application,
@@ -264,7 +279,7 @@ final class StandardWindowControlMonitor {
         guard let current = session else { return }
         guard !current.modifiersPresent,
               !WindowControlActionDetector.hasDisallowedModifiers(sample.modifiers),
-              NSRunningApplication(processIdentifier: current.processIdentifier)?.isActive == true,
+              runningApplication(current.processIdentifier)?.isActive == true,
               sample.timestamp - current.downTimestamp <= 1.5,
               current.maximumTravel <= 4,
               current.buttonFrame.insetBy(dx: -2, dy: -2).contains(sample.location) else {
@@ -296,7 +311,10 @@ final class StandardWindowControlMonitor {
         }
     }
 
+    /// The check at 0.35 s, and the re-check at 1.0 s if that one fails. The app is often still busy
+    /// with the click, so each gives it a fresh try.
     private func verifiedEvent(for session: Session) -> CoachingEvent? {
+        accessibility.beginDelayedCheck(of: session.processIdentifier)
         let post = state(of: session.window, in: session.application)
         guard WindowControlActionDetector.shortcutIsCurrent(
             session.shortcut,
