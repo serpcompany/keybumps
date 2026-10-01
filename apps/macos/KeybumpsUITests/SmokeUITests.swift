@@ -111,6 +111,26 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(importAlfred.isEnabled, "Import from Alfred… is offered while snippets can be saved")
     }
 
+    func testSelectAllSnippetsAndDeleteThemTogether() {
+        launch(permissions: "granted", ["-KBOpenSettings", "snippets", "-KBUITestSeedSnippets", "YES"])
+        XCTAssertTrue(element("snippets.list").waitForExistence(timeout: 20))
+        let first = app.staticTexts["Made-up alpha"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5), "The seeded snippets are listed")
+        XCTAssertTrue(app.staticTexts["3 snippets"].exists)
+
+        first.click()
+        XCTAssertTrue(element("snippets.edit").isEnabled, "Edit… takes one selected snippet")
+        app.typeKey("a", modifierFlags: .command)
+        XCTAssertTrue(app.staticTexts["3 selected"].waitForExistence(timeout: 5), "⌘A selects every snippet")
+        XCTAssertFalse(element("snippets.edit").isEnabled, "…and Edit… waits for just one")
+
+        app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
+        XCTAssertTrue(app.staticTexts["Delete 3 snippets?"].waitForExistence(timeout: 5), "One confirmation for all three")
+        // The alert's buttons are also in the Touch Bar, which isn't inside a window.
+        app.windows.buttons["Delete"].firstMatch.click()
+        XCTAssertTrue(app.staticTexts["No snippets yet"].waitForExistence(timeout: 5), "All three are deleted")
+    }
+
     func testCommandEOnClipboardImageOpensScreenshotEditor() {
         launch(permissions: "granted", ["-KBOpenPalette", "clipboard", "-KBUITestSeedClipboardImage", "YES"])
         XCTAssertTrue(paletteField("Search clipboard history").waitForExistence(timeout: 20))

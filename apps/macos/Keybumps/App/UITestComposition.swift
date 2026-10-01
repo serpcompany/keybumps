@@ -66,6 +66,16 @@ extension AppModel {
             // Into the sandbox's Recent Items, before the palette's Quick Search loads them.
             RecentItemStore().record(QuickSearchResult(url: Bundle.main.bundleURL, kind: .application))
         }
+        // Sensitive snippets stay in memory, never in the Keychain.
+        let snippets = SnippetStore(
+            storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(SnippetStore.fileName),
+            secrets: InMemorySnippetSecretStore()
+        )
+        if configuration.seedsSnippets {
+            for name in ["Made-up alpha", "Made-up beta", "Made-up gamma"] {
+                _ = try? snippets.add(SnippetDraft(name: name, text: "Text of \(name)"))
+            }
+        }
         let model = AppModel(
             preferences: AppPreferences(defaults: defaults),
             inbox: InboxStore(),
@@ -98,11 +108,7 @@ extension AppModel {
             }()),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
-            // Sensitive snippets stay in memory, never in the Keychain.
-            snippets: SnippetStore(
-                storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(SnippetStore.fileName),
-                secrets: InMemorySnippetSecretStore()
-            ),
+            snippets: snippets,
             // Never writes the pasteboard or posts ⌘V, even if system access were allowed.
             textPaster: InertTextPaster(),
             screenshotTools: ScreenshotToolsService(

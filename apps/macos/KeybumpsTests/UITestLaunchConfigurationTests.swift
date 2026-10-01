@@ -15,6 +15,7 @@ struct UITestLaunchConfigurationTests {
         #expect(!configuration.disablesHotKeys)
         #expect(!configuration.seedsClipboardImage)
         #expect(!configuration.seedsRecentKeybumps)
+        #expect(!configuration.seedsSnippets)
     }
 
     @Test func otherFlagsAreIgnoredWithoutThePermissionsFlag() {
@@ -105,6 +106,14 @@ struct UITestLaunchConfigurationTests {
         ])
         #expect(configuration.seedsRecentKeybumps)
         #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestSeedRecentKeybumps", "YES"]).seedsRecentKeybumps)
+    }
+
+    @Test func parsesSnippetsSeed() {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted", "-KBUITestSeedSnippets", "YES",
+        ])
+        #expect(configuration.seedsSnippets)
+        #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestSeedSnippets", "YES"]).seedsSnippets)
     }
 
     @Test func settingsLaunchTokensAreUniqueAndStable() {
