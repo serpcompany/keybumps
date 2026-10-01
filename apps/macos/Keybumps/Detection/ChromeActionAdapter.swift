@@ -162,7 +162,10 @@ enum ChromeSettingsSemantics {
     }
 }
 
+/// Reads Chrome's tabs and menus on `ManualActionDetector`'s detection queue.
 struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
+    var accessibility = DetectionAccessibility.system
+
     func read(pid: Int32, requirement: ChromeRuntimeRequirement) -> ChromeRuntimeState {
         let application = AXUIElementCreateApplication(pid)
         let applicationVersion = NSRunningApplication(processIdentifier: pid)?.bundleURL
@@ -200,7 +203,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             observations.append(ChromeMenuCommandObservation(
                 node: node,
                 enabled: attribute(kAXEnabledAttribute, from: element),
-                shortcutEvidence: AXShortcutEvidenceReader.read(from: element)
+                shortcutEvidence: AXShortcutEvidenceReader.read(from: element, using: accessibility)
             ))
         }
         return ChromeSettingsSemantics.resolveShortcut(from: observations)
@@ -219,7 +222,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
             if (attribute(kAXRoleAttribute, from: element) as String?) == kAXMenuItemRole as String,
                (attribute(kAXEnabledAttribute, from: element) as Bool?) == true,
                let title: String = attribute(kAXTitleAttribute, from: element),
-               let shortcut = LiveShortcutObservation(evidence: AXShortcutEvidenceReader.read(from: element)) {
+               let shortcut = LiveShortcutObservation(evidence: AXShortcutEvidenceReader.read(from: element, using: accessibility)) {
                 observations.append((title, shortcut))
             }
             let children: [AXUIElement] = attribute(kAXChildrenAttribute, from: element) ?? []
@@ -313,9 +316,7 @@ struct SystemChromeRuntimeStateReader: ChromeRuntimeStateReading {
 
     private func token(for element: AXUIElement) -> String { String(CFHash(element), radix: 16) }
     private func copyAttribute(_ name: String, from element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value
+        accessibility.copyAttribute(name, from: element)
     }
     private func attribute<T>(_ name: String, from element: AXUIElement) -> T? { copyAttribute(name, from: element) as? T }
 }

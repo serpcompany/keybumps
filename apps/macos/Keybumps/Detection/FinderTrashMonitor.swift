@@ -111,30 +111,35 @@ final class FinderTrashMonitor {
     }
 
     var onEvent: ((CoachingEvent) -> Void)?
-    // Keep AX access serialized with every other detector path.
-    private let queue = DispatchQueue.main
+    /// `ManualActionDetector`'s detection queue. The session, its timer, and every Accessibility read
+    /// stay on it.
+    private let queue: DispatchQueue
+    private let accessibility: DetectionAccessibility
     private let detector = DragDropActionDetector()
     private var session: Session?
 
-    func receive(_ sample: PointerSample) {
-        queue.async { [weak self] in self?.handle(sample) }
+    init(queue: DispatchQueue, accessibility: DetectionAccessibility) {
+        self.queue = queue
+        self.accessibility = accessibility
     }
 
     func cancel() {
         queue.async { [weak self] in self?.session = nil }
     }
 
-    private func handle(_ sample: PointerSample) {
+    /// Called on the detection queue with every pointer sample, in order. `hit` is the element under
+    /// a press or release, from the one hit-test every detector shares.
+    func handle(_ sample: PointerSample, hit: AXUIElement?) {
         switch sample.phase {
         case .down:
-            begin(sample)
+            begin(sample, hit: hit)
         case .dragged:
             guard let session else { return }
             session.modifiersPresent = session.modifiersPresent || DragDropActionDetector.hasDisallowedModifiers(sample.modifiers)
             session.maximumTravel = max(session.maximumTravel, hypot(sample.location.x - session.down.x, sample.location.y - session.down.y))
         case .up:
             guard let current = session else { return }
-            let targetIsTrash = isDockTrash(at: sample.location)
+            let targetIsTrash = hit.map(isDockTrash) ?? false
             let modified = current.modifiersPresent || DragDropActionDetector.hasDisallowedModifiers(sample.modifiers)
             let meaningful = current.maximumTravel >= 8
             queue.asyncAfter(deadline: .now() + 0.45) { [weak self, weak current] in
@@ -157,10 +162,10 @@ final class FinderTrashMonitor {
         }
     }
 
-    private func begin(_ sample: PointerSample) {
+    private func begin(_ sample: PointerSample, hit: AXUIElement?) {
         session = nil
         guard !DragDropActionDetector.hasDisallowedModifiers(sample.modifiers),
-              let hit = element(at: sample.location),
+              let hit,
               applicationBundle(for: hit) == "com.apple.finder",
               isFinderItem(hit) else { return }
         let parent: AXUIElement? = attribute(kAXParentAttribute, from: hit)
@@ -220,8 +225,8 @@ final class FinderTrashMonitor {
         return .unknown
     }
 
-    private func isDockTrash(at point: CGPoint) -> Bool {
-        guard let hit = element(at: point), applicationBundle(for: hit) == "com.apple.dock" else { return false }
+    private func isDockTrash(_ hit: AXUIElement) -> Bool {
+        guard applicationBundle(for: hit) == "com.apple.dock" else { return false }
         var cursor = hit
         for _ in 0..<8 {
             if (attribute(kAXSubroleAttribute, from: cursor) as String?) == kAXTrashDockItemSubrole as String { return true }
@@ -232,17 +237,9 @@ final class FinderTrashMonitor {
     }
 
     private func postcondition(for session: Session) -> FinderTrashPostcondition {
-        guard let parent = session.parent else { return .inaccessible }
-        var rawChildren: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(parent, kAXChildrenAttribute as CFString, &rawChildren) == .success,
-              let children = rawChildren as? [AXUIElement] else { return .inaccessible }
+        guard let parent = session.parent,
+              let children: [AXUIElement] = attribute(kAXChildrenAttribute, from: parent) else { return .inaccessible }
         return children.contains { CFEqual($0, session.source) } ? .stillPresent : .removedFromOriginalParent
-    }
-
-    private func element(at point: CGPoint) -> AXUIElement? {
-        var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &element) == .success else { return nil }
-        return element
     }
 
     private func applicationBundle(for element: AXUIElement) -> String? {
@@ -258,9 +255,7 @@ final class FinderTrashMonitor {
     }
 
     private func copyAttribute(_ name: String, from element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
-        return value
+        accessibility.copyAttribute(name, from: element)
     }
 
     private func attribute<T>(_ name: String, from element: AXUIElement) -> T? {
