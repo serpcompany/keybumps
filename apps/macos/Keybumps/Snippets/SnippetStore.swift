@@ -274,27 +274,18 @@ final class SnippetStore {
     }
 
     /// Deletes snippets, and each one's Keychain item whether or not it's sensitive now, so no text
-    /// outlives them, in one save. Sensitive text is read first, only to put it back if a later step
+    /// outlives them, in one save. Their items are read first, only to put them back if a later step
     /// fails. If an item can't be removed, nothing is deleted. IDs no longer in the library are skipped.
     func delete(_ ids: Set<Snippet.ID>) throws {
         try requireWritable()
-        let deleted = snippets.filter { ids.contains($0.id) }
+        let deleted = snippets.filter { ids.contains($0.id) }.map(\.id)
         guard !deleted.isEmpty else { throw SnippetStoreError.notFound }
-        let saved = savedTexts(of: deleted.filter(\.isSensitive))
-        var removed: [Snippet.ID] = []
-        for snippet in deleted {
-            do {
-                try secrets.removeText(for: snippet.id)
-            } catch {
-                putBack(saved, for: removed)
-                throw SnippetStoreError.keychain
-            }
-            removed.append(snippet.id)
-        }
+        let before = keychainTexts(of: deleted)
+        try changeKeychain(for: deleted, restoring: before) { try secrets.removeText(for: $0) }
         do {
             try commit(snippets.filter { !ids.contains($0.id) })
         } catch {
-            putBack(saved, for: removed)
+            restoreKeychain(before, for: deleted)
             throw error
         }
     }
@@ -302,48 +293,36 @@ final class SnippetStore {
     /// Marks snippets Sensitive or Not Sensitive in one save, as the editor's switch would; those
     /// already that way are left alone. Turning it on moves each text into the Keychain; turning it
     /// off reads every text first, then moves it into the file and removes the item. If any Keychain
-    /// step fails, or the file can't be written, nothing changes and every item is put back.
+    /// step fails, or the file can't be written, nothing changes and every item is put back as it was.
     func setSensitive(_ isSensitive: Bool, for ids: Set<Snippet.ID>) throws {
         try requireWritable()
         guard snippets.contains(where: { ids.contains($0.id) }) else { throw SnippetStoreError.notFound }
-        let changed = snippets.filter { ids.contains($0.id) && $0.isSensitive != isSensitive }
+        func changes(_ snippet: Snippet) -> Bool { ids.contains(snippet.id) && snippet.isSensitive != isSensitive }
+        let changed = snippets.filter(changes)
         guard !changed.isEmpty else { return }
-        // The text each snippet keeps: a plain one's from the file, a sensitive one's from the Keychain.
-        let texts = isSensitive ? Dictionary(uniqueKeysWithValues: changed.map { ($0.id, $0.text) }) : savedTexts(of: changed)
-        guard texts.count == changed.count else { throw SnippetStoreError.keychain }
-
-        var done: [Snippet.ID] = []
-        func undo() {
+        let changedIDs = changed.map(\.id)
+        let before = keychainTexts(of: changedIDs)
+        // Each text that moves into the file must be read before anything changes.
+        if !isSensitive, changedIDs.contains(where: { before[$0] == nil }) { throw SnippetStoreError.keychain }
+        let plainTexts = Dictionary(changed.map { ($0.id, $0.text) }) { _, last in last }
+        try changeKeychain(for: changedIDs, restoring: before) { id in
             if isSensitive {
-                for id in done { try? secrets.removeText(for: id) }
+                try secrets.setText(plainTexts[id] ?? "", for: id)
             } else {
-                putBack(texts, for: done)
+                try secrets.removeText(for: id)
             }
-        }
-        for snippet in changed {
-            do {
-                if isSensitive {
-                    try secrets.setText(texts[snippet.id] ?? "", for: snippet.id)
-                } else {
-                    try secrets.removeText(for: snippet.id)
-                }
-            } catch {
-                undo()
-                throw SnippetStoreError.keychain
-            }
-            done.append(snippet.id)
         }
         let date = now()
         var next = snippets
-        for index in next.indices where texts[next[index].id] != nil {
+        for index in next.indices where changes(next[index]) {
+            next[index].text = isSensitive ? "" : before[next[index].id] ?? ""
             next[index].isSensitive = isSensitive
-            next[index].text = isSensitive ? "" : texts[next[index].id] ?? ""
             next[index].updatedAt = date
         }
         do {
             try commit(next)
         } catch {
-            undo()
+            restoreKeychain(before, for: changedIDs)
             throw error
         }
     }
@@ -382,23 +361,49 @@ final class SnippetStore {
         libraryState = .recovered(copyName: name)
     }
 
-    // MARK: Storage
+    // MARK: Keychain
 
-    /// The Keychain text of each snippet whose item can be read.
-    private func savedTexts(of snippets: [Snippet]) -> [Snippet.ID: String] {
+    /// The Keychain text each snippet has now; one without an item (or whose item can't be read)
+    /// has none. Read so a failed change can put the Keychain back as it was.
+    private func keychainTexts(of ids: [Snippet.ID]) -> [Snippet.ID: String] {
         var texts: [Snippet.ID: String] = [:]
-        for snippet in snippets {
-            texts[snippet.id] = secrets.text(for: snippet.id)
+        for id in ids {
+            texts[id] = secrets.text(for: id)
         }
         return texts
     }
 
-    /// Writes saved text back into the Keychain for each of `ids` that had some.
-    private func putBack(_ texts: [Snippet.ID: String], for ids: [Snippet.ID]) {
+    /// Runs one Keychain step per snippet. If one fails, the Keychain is put back for the steps
+    /// already done and nothing else changes.
+    private func changeKeychain(
+        for ids: [Snippet.ID],
+        restoring before: [Snippet.ID: String],
+        _ step: (Snippet.ID) throws -> Void
+    ) throws {
+        var done: [Snippet.ID] = []
         for id in ids {
-            if let text = texts[id] { try? secrets.setText(text, for: id) }
+            do {
+                try step(id)
+            } catch {
+                restoreKeychain(before, for: done)
+                throw SnippetStoreError.keychain
+            }
+            done.append(id)
         }
     }
+
+    /// Puts each snippet's Keychain item back as `before` had it: its text, or no item.
+    private func restoreKeychain(_ before: [Snippet.ID: String], for ids: [Snippet.ID]) {
+        for id in ids {
+            if let text = before[id] {
+                try? secrets.setText(text, for: id)
+            } else {
+                try? secrets.removeText(for: id)
+            }
+        }
+    }
+
+    // MARK: Storage
 
     private func requireWritable() throws {
         guard libraryState.isWritable else { throw SnippetStoreError.readOnly }

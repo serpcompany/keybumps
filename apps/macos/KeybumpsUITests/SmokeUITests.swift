@@ -126,7 +126,8 @@ final class SmokeUITests: XCTestCase {
 
         app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
         XCTAssertTrue(app.staticTexts["Delete 3 snippets?"].waitForExistence(timeout: 5), "One confirmation for all three")
-        app.buttons["Delete"].firstMatch.click()
+        // The alert's buttons are also in the Touch Bar, which isn't inside a window.
+        app.windows.buttons["Delete"].firstMatch.click()
         XCTAssertTrue(app.staticTexts["No snippets yet"].waitForExistence(timeout: 5), "All three are deleted")
     }
 

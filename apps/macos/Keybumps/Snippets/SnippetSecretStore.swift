@@ -144,18 +144,20 @@ final class InMemorySnippetSecretStore: SnippetSecretStoring {
     }
 
     func setText(_ text: String, for id: UUID) throws {
-        if failsNextWrite || refusedIDs.contains(id) {
+        if failsNextWrite {
             failsNextWrite = false
             throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
         }
+        if refusedIDs.contains(id) { throw SnippetSecretError.keychain(errSecInteractionNotAllowed) }
         texts[id] = text
     }
 
     func removeText(for id: UUID) throws {
-        if failsNextRemoval || refusedIDs.contains(id) {
+        if failsNextRemoval {
             failsNextRemoval = false
             throw SnippetSecretError.keychain(errSecInteractionNotAllowed)
         }
+        if refusedIDs.contains(id) { throw SnippetSecretError.keychain(errSecInteractionNotAllowed) }
         if texts[id] != nil { removals += 1 }
         texts[id] = nil
     }

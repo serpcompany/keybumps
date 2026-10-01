@@ -75,7 +75,7 @@ struct SnippetsSettingsView: View {
                 } else if rows.isEmpty {
                     SettingsNote("No matching snippets")
                 } else {
-                    table(rows)
+                    table(rows, selected: selected)
                 }
                 HStack(spacing: 6) {
                     SettingsIconButton(systemImage: "plus", help: "New Snippet") {
@@ -84,7 +84,7 @@ struct SnippetsSettingsView: View {
                     .disabled(!isWritable)
                     .accessibilityIdentifier("snippets.add")
                     SettingsIconButton(systemImage: "minus", help: "Delete Selected Snippets") {
-                        pendingDeletion = selected
+                        confirmDeletion(selected)
                     }
                     .disabled(selected.isEmpty || !isWritable)
                     .accessibilityIdentifier("snippets.remove")
@@ -154,7 +154,7 @@ struct SnippetsSettingsView: View {
         }
     }
 
-    private func table(_ rows: [Snippet]) -> some View {
+    private func table(_ rows: [Snippet], selected: SnippetTableSelection) -> some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
             TableColumn("Name", sortUsing: SnippetTableSort(column: .name)) { snippet in
                 HStack(spacing: 5) {
@@ -198,15 +198,12 @@ struct SnippetsSettingsView: View {
                     Button("Mark as Not Sensitive") { setSensitive(false, chosen.ids) }
                 }
                 Divider()
-                Button("Delete…", role: .destructive) { pendingDeletion = chosen }
+                Button("Delete…", role: .destructive) { confirmDeletion(chosen) }
             }
         } primaryAction: { ids in
             if let id = SnippetTableSelection(ids, in: rows).editableID { model.snippets.editorRequest = .edit(id) }
         }
-        .onDeleteCommand {
-            let selected = SnippetTableSelection(selection, in: rows)
-            if !selected.isEmpty { pendingDeletion = selected }
-        }
+        .onDeleteCommand { confirmDeletion(selected) }
         .frame(height: Self.tableHeight(rows: rows.count))
         .accessibilityIdentifier("snippets.list")
     }
@@ -215,6 +212,10 @@ struct SnippetsSettingsView: View {
     /// a keyword chip is about 30 points tall, and the header about 30.
     static func tableHeight(rows: Int) -> CGFloat {
         CGFloat(min(max(rows, 4), 12)) * 31 + 34
+    }
+
+    private func confirmDeletion(_ selection: SnippetTableSelection) {
+        if !selection.isEmpty { pendingDeletion = selection }
     }
 
     private func delete(_ ids: Set<Snippet.ID>) {

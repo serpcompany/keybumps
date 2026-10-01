@@ -315,6 +315,53 @@ struct SnippetBulkChangeTests {
         #expect(library.secrets.texts == [library.hiddenA.id: Self.secretA, library.hiddenB.id: Self.secretB])
     }
 
+    @Test("A plain snippet's leftover Keychain item is put back as it was when a change fails")
+    func leftoverItemIsPutBack() throws {
+        let library = try Library()
+        defer { library.folder.remove() }
+        // An item a plain snippet still has, for example from a library restored from an older file.
+        let leftover = "made-up-leftover"
+        try library.secrets.setText(leftover, for: library.plainA.id)
+
+        library.secrets.refusedIDs = [library.hiddenB.id]
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.delete([library.plainA.id, library.hiddenB.id])
+        }
+        #expect(library.secrets.texts[library.plainA.id] == leftover, "Delete's rollback")
+
+        library.secrets.refusedIDs = [library.plainB.id]
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.setSensitive(true, for: [library.plainA.id, library.plainB.id])
+        }
+        #expect(library.secrets.texts[library.plainA.id] == leftover, "Mark as Sensitive's rollback")
+
+        library.secrets.refusedIDs = []
+        try library.folder.setPermissions(0o500, of: library.folder.url)
+        defer { try? library.folder.setPermissions(0o700, of: library.folder.url) }
+        #expect(throws: SnippetStoreError.storage) { try library.store.delete([library.plainA.id]) }
+        #expect(library.secrets.texts[library.plainA.id] == leftover, "A failed save's rollback")
+        #expect(library.store.snippets.count == 4)
+    }
+
+    @Test("Two entries with the same ID are marked together, without crashing")
+    func duplicateIDs() throws {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let id = UUID()
+        try Data(#"[{"id":"\#(id.uuidString)","name":"First","text":"made-up one"},{"id":"\#(id.uuidString)","name":"Second","text":"made-up two"}]"#.utf8)
+            .write(to: folder.storageURL)
+        let secrets = InMemorySnippetSecretStore()
+        let store = folder.makeStore(secrets: secrets)
+        #expect(store.snippets.count == 2)
+
+        try store.setSensitive(true, for: [id])
+        #expect(store.snippets.allSatisfy { $0.isSensitive })
+        #expect(secrets.texts[id] != nil)
+        try store.setSensitive(false, for: [id])
+        #expect(!store.snippets.contains { $0.isSensitive })
+        #expect(secrets.texts.isEmpty)
+    }
+
     @Test("Nothing to change saves nothing, and snippets that no longer exist are reported")
     func nothingToChange() throws {
         let library = try Library()
