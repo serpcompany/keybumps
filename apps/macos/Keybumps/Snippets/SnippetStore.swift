@@ -56,7 +56,9 @@ enum SnippetLibraryState: Equatable {
 ///   that only renames a sensitive snippet, or leaves its text as it was, doesn't touch the Keychain.
 /// - **Removing Keychain items:** only for a snippet the user deleted (sensitive or not) or turned
 ///   Sensitive off for, or a new item when adding or changing that snippet fails; if the Keychain
-///   refuses, nothing changes, and the Keychain is put back if the file can't be written. Nothing is
+///   refuses, nothing changes, and the Keychain is put back if the file can't be written. The one
+///   exception is an item the Keychain won't read: Delete still removes it (last), so it can't be
+///   put back if a later step fails. Nothing is
 ///   ever removed because the file doesn't mention it: the file can be a Start Over or recovered
 ///   library that replaced a kept copy, or another build's older list, and the item may hold the
 ///   only copy of a secret.

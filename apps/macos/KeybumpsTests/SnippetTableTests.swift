@@ -362,9 +362,11 @@ struct SnippetBulkChangeTests {
         #expect(try Data(contentsOf: folder.storageURL) == fileBefore)
         #expect(secrets.texts.isEmpty)
 
-        // Deleting is well defined: both entries go, as before.
+        // Deleting is well defined: both entries go, as before, and their one item is read once.
+        let readsBefore = secrets.reads
         try store.delete(id)
         #expect(store.snippets.isEmpty)
+        #expect(secrets.reads == readsBefore + 1)
     }
 
     @Test("An item the Keychain won't read stops Mark as Sensitive or Not Sensitive before anything changes")
@@ -405,6 +407,18 @@ struct SnippetBulkChangeTests {
         try library.store.delete([library.hiddenA.id, library.hiddenB.id])
         #expect(library.secrets.texts.isEmpty)
         #expect(library.store.snippets.map(\.id) == [library.plainA.id, library.plainB.id])
+    }
+
+    @Test("Saving new text over a sensitive snippet whose item can't be read changes nothing")
+    func editorRefusesAnUnreadableSecret() throws {
+        let library = try Library()
+        defer { library.folder.remove() }
+        library.secrets.unreadableIDs = [library.hiddenA.id]
+        #expect(throws: SnippetStoreError.keychain) {
+            try library.store.update(library.hiddenA.id, with: SnippetDraft(name: "Hidden A", text: "made-up new text", isSensitive: true))
+        }
+        #expect(library.secrets.texts[library.hiddenA.id] == Self.secretA)
+        #expect(library.store.text(for: library.hiddenA) == nil, "Copy and paste get nothing while it can't be read")
     }
 
     @Test("The editor's Sensitive switch also puts back a leftover item when the save fails")
