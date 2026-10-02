@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.13](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.12...v0.0.3-beta.13) (2026-10-02)
+
+
+### Documentation
+
+* write the 0.0.3-beta.13 notes (notarized again) ([#223](https://github.com/serpcompany/keybumps/issues/223)) ([1f2a12f](https://github.com/serpcompany/keybumps/commit/1f2a12fc8498c267e58057c5af579f4c015e9b58))
+
 ## [0.0.3-beta.12](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.11...v0.0.3-beta.12) (2026-10-02)
 
 
