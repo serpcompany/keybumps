@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.0.3-beta.12](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.11...v0.0.3-beta.12) (2026-10-02)
+
+
+### Features
+
+* expand snippet keywords as you type in any app ([#220](https://github.com/serpcompany/keybumps/issues/220)) ([92be364](https://github.com/serpcompany/keybumps/commit/92be364865dd591432835d0a32796d036e8446e2))
+* find snippets by keyword and name in Quick Search ([#218](https://github.com/serpcompany/keybumps/issues/218)) ([7badd69](https://github.com/serpcompany/keybumps/commit/7badd69e2150cb053182215b4e33688339fff5ad))
+* go to each capability by searching its name in Quick Search ([#186](https://github.com/serpcompany/keybumps/issues/186)) ([6c88045](https://github.com/serpcompany/keybumps/commit/6c88045329e1a815e58628fbdbc8e46c0c254139))
+* import snippets from an Alfred export ([#209](https://github.com/serpcompany/keybumps/issues/209)) ([6382444](https://github.com/serpcompany/keybumps/commit/63824448869d62834211b7430b52ac65a1a65b9f))
+* save text as snippets and copy or paste it from the Command Palette ([#190](https://github.com/serpcompany/keybumps/issues/190)) ([dc29440](https://github.com/serpcompany/keybumps/commit/dc29440ab0e48b5386a9c6c75a4769d2de4347e9))
+* sort the Snippets table by column and change several snippets at once ([#216](https://github.com/serpcompany/keybumps/issues/216)) ([9bd6652](https://github.com/serpcompany/keybumps/commit/9bd66520a473b1852597d315aeb3a02215776bc1))
+
+
+### Fixes
+
+* copy on Return in the Screenshots tab, and edit with ⌘Return ([#196](https://github.com/serpcompany/keybumps/issues/196)) ([68690e4](https://github.com/serpcompany/keybumps/commit/68690e437adb2c5578a8f3f9da8a01de4dad445b))
+* Dictation asks for the Accessibility access it needs to paste ([#195](https://github.com/serpcompany/keybumps/issues/195)) ([0b5cb8b](https://github.com/serpcompany/keybumps/commit/0b5cb8baf31df71c8852a2474765ec21fe24c1bd))
+* keep screenshots in the Screenshots tab when clearing the Clipboard tab ([#204](https://github.com/serpcompany/keybumps/issues/204)) ([4b579ca](https://github.com/serpcompany/keybumps/commit/4b579caff838cc59ed797bd7b90e9ff2b7c2e680))
+* remove the thin line at the ends of the palette's pills ([#198](https://github.com/serpcompany/keybumps/issues/198)) ([83fc126](https://github.com/serpcompany/keybumps/commit/83fc1268a328571eb5c72d4bdc711336cc17c041))
+* stop Shortcut Coach's click checks from freezing Keybumps ([#213](https://github.com/serpcompany/keybumps/issues/213)) ([0a59900](https://github.com/serpcompany/keybumps/commit/0a59900cde8298ed60bf8a272fb44792158c3268))
+
 ## [0.0.3-beta.11](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.10...v0.0.3-beta.11) (2026-09-30)
 
 
