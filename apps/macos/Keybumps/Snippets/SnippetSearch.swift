@@ -1,6 +1,6 @@
 import Foundation
 
-/// How the Snippets tab and the Settings list find and order snippets.
+/// How the Snippets tab, the Settings list, and Quick Search find and order snippets.
 enum SnippetSearch {
     /// How well a query matches a snippet, best first.
     enum Match: Int, Comparable {
@@ -32,10 +32,10 @@ enum SnippetSearch {
 
     /// Quick Search's snippets for a query, ranked as in the Snippets tab but matched only by keyword
     /// and name: text is never searched there, so snippet text doesn't flood app and file results.
-    static func quickSearchMatches(_ snippets: [Snippet], query: String) -> [(snippet: Snippet, match: Match)] {
+    static func quickSearchMatches(_ snippets: [Snippet], query: String) -> [Snippet] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return Array(ranked(snippets, query: trimmed, includingText: false).prefix(quickSearchLimit))
+        return Array(ranked(snippets, query: trimmed, includingText: false).prefix(quickSearchLimit).map(\.snippet))
     }
 
     /// Whether `query` is the snippet's whole keyword, punctuation included (`;ship`, not `ship`),

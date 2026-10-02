@@ -15,7 +15,7 @@ struct QuickSearchResult: Codable, Identifiable, Hashable {
 @Observable
 final class QuickSearchModel {
     var query = "" { didSet { refresh() } }
-    /// The rows for the current query: Keybumps commands, apps, snippets, then files and folders.
+    /// The rows for the current query, ranked by `QuickSearchRanking.items`.
     private(set) var items: [QuickSearchItem] = []
     /// The apps, files, and folders among `items`.
     var results: [QuickSearchResult] { items.compactMap(\.result) }
@@ -23,6 +23,10 @@ final class QuickSearchModel {
     /// The highlighted result, if any. With an empty query the palette lists Recent Items instead,
     /// even if a late Spotlight update refilled `items`.
     func highlightedItem(at selection: Int) -> QuickSearchItem? {
+        Self.highlightedItem(in: items, query: query, selection: selection)
+    }
+
+    nonisolated static func highlightedItem(in items: [QuickSearchItem], query: String, selection: Int) -> QuickSearchItem? {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, items.indices.contains(selection) else { return nil }
         return items[selection]
     }

@@ -1092,6 +1092,9 @@ struct SnippetQuickSearchTests {
         #expect(fixture.search.highlightedItem(at: 5) == nil)
         fixture.search.query = "  "
         #expect(fixture.search.highlightedItem(at: 0) == nil, "Recent Items show; their actions are the tab's")
+        // Even if a late Spotlight update refilled the results after the query was cleared.
+        #expect(QuickSearchModel.highlightedItem(in: [.snippet(snippet)], query: "  ", selection: 0) == nil)
+        #expect(QuickSearchModel.highlightedItem(in: [.snippet(snippet)], query: "reply", selection: 0) == .snippet(snippet))
     }
 
     @Test("Quick Search lists no snippets while Snippets is off, and finds them again when it's on")

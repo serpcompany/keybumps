@@ -22,7 +22,7 @@ struct QuickSearchSnippetTests {
     }
 
     static func names(_ snippets: [Snippet], _ query: String) -> [String] {
-        SnippetSearch.quickSearchMatches(snippets, query: query).map(\.snippet.name)
+        SnippetSearch.quickSearchMatches(snippets, query: query).map(\.name)
     }
 
     @Test("Snippets match by keyword, with or without its punctuation, and by name, but never by text")

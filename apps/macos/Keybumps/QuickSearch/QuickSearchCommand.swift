@@ -258,7 +258,7 @@ extension QuickSearchRanking {
                 lhs.element.score != rhs.element.score ? lhs.element.score > rhs.element.score : lhs.offset < rhs.offset
             }
             .map(\.element.item)
-        let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term).map(\.snippet)
+        let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term)
         let typedKeywords = snippetMatches.filter { SnippetSearch.isWholeKeyword($0, query: term) }
         let otherSnippets = snippetMatches.filter { !SnippetSearch.isWholeKeyword($0, query: term) }
         return typedKeywords.map(QuickSearchItem.snippet) + ranked + otherSnippets.map(QuickSearchItem.snippet)
