@@ -199,7 +199,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         notices: (any PaletteNoticePresenting)? = nil,
         search: QuickSearchModel? = nil
     ) {
-        self.search = search ?? QuickSearchModel()
+        let search = search ?? QuickSearchModel()
+        // Quick Search finds snippets only while Snippets is on.
+        search.snippets = { preferences.enabledCapabilities.contains(.snippets) ? snippets.snippets : [] }
+        self.search = search
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService
@@ -594,6 +597,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             switch search.items[state.selection] {
             case .command(let command):
                 choose(command)
+            case .snippet(let snippet):
+                reveal ? pasteSnippet(snippet) : copySnippet(snippet)
             case .result(let result):
                 reveal ? self.reveal(result) : open(result)
             }
@@ -861,7 +866,11 @@ private struct CommandPaletteView: View {
             content
                 .contentMargins(.bottom, 56, for: .scrollContent)
                 .overlay(alignment: .bottom) {
-                    PaletteFooter(tab: state.tab, openSettings: { runCommand(.keybumpsSettings) })
+                    PaletteFooter(
+                        tab: state.tab,
+                        selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
+                        openSettings: { runCommand(.keybumpsSettings) }
+                    )
                 }
         }
         .background(PaletteTheme.background, in: RoundedRectangle(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
@@ -904,6 +913,7 @@ private struct CommandPaletteView: View {
                 open: activateSearchResult,
                 reveal: revealSearchResult,
                 run: chooseCommand,
+                snippetActions: snippetActions,
                 deleteRecentItem: search.recentItems.delete,
                 clearRecentItems: search.recentItems.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -1141,6 +1151,7 @@ private struct SearchResultsView: View {
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
     let run: (QuickSearchCommand) -> Void
+    let snippetActions: SnippetPaletteActions
     let deleteRecentItem: (RecentItem) -> Void
     let clearRecentItems: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -1228,6 +1239,23 @@ private struct SearchResultsView: View {
                                 .help(hint)
                                 .accessibilityHint(hint)
                                 .accessibilityIdentifier("quickSearch.command.\(command.id)")
+                            case .snippet(let snippet):
+                                Button {
+                                    snippetActions.copy(snippet)
+                                } label: {
+                                    QuickSearchSnippetRow(snippet: snippet)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Copy") { snippetActions.copy(snippet) }
+                                    Button("Paste") { snippetActions.paste(snippet) }
+                                }
+                                .accessibilityAction(named: "Paste") { snippetActions.paste(snippet) }
+                                .accessibilityHint("Copies the snippet")
+                                .accessibilityIdentifier("quickSearch.snippet")
                             case .result(let result):
                                 Button {
                                     open(result)
@@ -1287,6 +1315,42 @@ private struct SearchResultRow: View {
                 .foregroundStyle(.secondary)
         }
         .help(result.detail)
+    }
+}
+
+/// A snippet in Quick Search's row layout: the snippet icon, its name (with a lock when it's
+/// sensitive), and its keyword chip and kind on the right. Its text never shows here.
+private struct QuickSearchSnippetRow: View {
+    let snippet: Snippet
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: SnippetPaletteResults.symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .accessibilityHidden(true)
+            Text(snippet.name)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+                .layoutPriority(1)
+            if snippet.isSensitive {
+                Image(systemName: "lock.fill")
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+                    .help("Sensitive: the text is kept in the Keychain")
+                    .accessibilityLabel("Sensitive")
+            }
+            Spacer(minLength: 12)
+            if let keyword = snippet.keyword {
+                SnippetKeywordChip(keyword: keyword)
+            }
+            Text("Snippet")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1825,7 +1889,12 @@ struct PaletteEmptyState: View {
 /// right with the tab's actions and their keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
+    /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
+    let selectedSearchItem: QuickSearchItem?
     let openSettings: () -> Void
+
+    private var primaryActionTitle: String? { selectedSearchItem?.primaryActionTitle ?? tab.primaryActionTitle }
+    private var secondaryActionTitle: String? { selectedSearchItem?.secondaryActionTitle ?? tab.secondaryActionTitle }
 
     var body: some View {
         HStack {
@@ -1833,10 +1902,10 @@ private struct PaletteFooter: View {
             Spacer()
             HStack(spacing: 14) {
                 hint("Select", keys: tab == .screenshots ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
-                if let primaryActionTitle = tab.primaryActionTitle {
+                if let primaryActionTitle {
                     hint(primaryActionTitle, keys: ["↵"], isPrimary: true)
                 }
-                if let secondaryActionTitle = tab.secondaryActionTitle {
+                if let secondaryActionTitle {
                     hint(secondaryActionTitle, keys: ["⌘", "↵"], isPrimary: false)
                 }
             }

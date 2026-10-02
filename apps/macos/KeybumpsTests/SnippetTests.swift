@@ -1092,6 +1092,67 @@ struct SnippetPaletteKeyTests {
     }
 }
 
+
+@MainActor
+@Suite("Snippets: in Quick Search")
+struct SnippetQuickSearchTests {
+    @Test("Quick Search lists a snippet by keyword: Return copies it and ⌘Return pastes it")
+    func copiesAndPastes() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up reply", keyword: ";reply", text: "made-up text"))
+        fixture.palette.state.select(.search)
+
+        fixture.search.query = "reply"
+        #expect(fixture.search.items.first == .snippet(snippet))
+        #expect(fixture.palette.handleKeyDown(SnippetPaletteKeyTests.returnKey) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown.map(\.message) == ["Copied to Clipboard"])
+        #expect(fixture.snippets.snippet(withID: snippet.id)?.lastUsedAt != nil, "The use is recorded")
+        // …as a snippet's use, never as a Recent Item or Quick Search's learned usage.
+        #expect(fixture.search.displayedRecentItems.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: fixture.folder.url.appendingPathComponent("recent-items.json").path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.folder.url.appendingPathComponent("application-usage.json").path))
+
+        fixture.palette.state.select(.search)
+        fixture.search.query = ";reply"
+        #expect(fixture.palette.handleKeyDown(SnippetPaletteKeyTests.commandReturn) == nil)
+        try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
+        #expect(fixture.paster.pasted.map(\.text) == ["made-up text"])
+    }
+
+    @Test("The footer names the highlighted result's actions only while there's a query")
+    func footerFollowsTheQuery() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up reply", keyword: ";reply", text: "made-up text"))
+        fixture.search.query = "reply"
+        #expect(fixture.search.highlightedItem(at: 0) == .snippet(snippet))
+        #expect(fixture.search.highlightedItem(at: 5) == nil)
+        fixture.search.query = "  "
+        #expect(fixture.search.highlightedItem(at: 0) == nil, "Recent Items show; their actions are the tab's")
+        // Even if a late Spotlight update refilled the results after the query was cleared.
+        #expect(QuickSearchModel.highlightedItem(in: [.snippet(snippet)], query: "  ", selection: 0) == nil)
+        #expect(QuickSearchModel.highlightedItem(in: [.snippet(snippet)], query: "reply", selection: 0) == .snippet(snippet))
+    }
+
+    @Test("Quick Search lists no snippets while Snippets is off, and finds them again when it's on")
+    func onlyWhileOn() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up reply", keyword: ";reply", text: "made-up text"))
+
+        fixture.preferences.setCapability(.snippets, enabled: false)
+        fixture.search.query = "reply"
+        #expect(!fixture.search.items.contains(.snippet(snippet)))
+
+        fixture.preferences.setCapability(.snippets, enabled: true)
+        fixture.search.query = "repl"
+        #expect(fixture.search.items.contains(.snippet(snippet)))
+    }
+}
+
 // MARK: - Plain text entry
 
 @MainActor
@@ -1191,6 +1252,7 @@ private final class PaletteFixture {
     let clipboard: ClipboardHistoryService
     let snippets: SnippetStore
     let preferences = AppPreferences(defaults: InMemoryDefaults())
+    let search: QuickSearchModel
     let palette: CommandPaletteController
     /// Another app, in front when the palette opened and still in front.
     static let otherApp = PasteTarget(processIdentifier: 4242, isKeybumps: false)
@@ -1208,6 +1270,7 @@ private final class PaletteFixture {
             sourceApps: .inert
         )
         snippets = folder.makeStore()
+        search = QuickSearchModel.forTests(in: root)
         let dictationHistory = DictationHistoryService(recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true))
         palette = CommandPaletteController(
             clipboard: clipboard,
@@ -1224,7 +1287,8 @@ private final class PaletteFixture {
             snippets: snippets,
             paster: paster,
             pasteboard: pasteboard,
-            notices: notices
+            notices: notices,
+            search: search
         )
         palette.pasteDelay = .zero
         palette.frontmostApp = { Self.otherApp }
