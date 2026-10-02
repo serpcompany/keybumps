@@ -7,8 +7,8 @@ protocol KeyTypingMonitoring: AnyObject {
     /// Starts listening; false when macOS refuses (Input Monitoring isn't granted).
     func start() -> Bool
     func stop()
-    /// Whether another key went down after the last key handed on: typing that may already have
-    /// landed after the keyword, so deleting the keyword now would delete it instead.
+    /// Whether a key or click came after the last key handed on: typing that may already have
+    /// landed after the keyword, or a click that moved the caret, so deleting now would be wrong.
     func keyWentDownSinceLastKey() -> Bool
 }
 
@@ -80,8 +80,15 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
 
     func keyWentDownSinceLastKey() -> Bool {
         guard let lastKeyUptime else { return false }
-        let since = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown)
-        return ProcessInfo.processInfo.systemUptime - since > lastKeyUptime + 0.01
+        let sinceInput = [CGEventType.keyDown, .leftMouseDown, .rightMouseDown].map {
+            CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0)
+        }
+        return Self.happenedSince(lastKeyUptime: lastKeyUptime, now: ProcessInfo.processInfo.systemUptime, secondsSinceInput: sinceInput)
+    }
+
+    /// Whether any input (a key or a click) came more than 10 ms after the last key handed on.
+    static func happenedSince(lastKeyUptime: TimeInterval, now: TimeInterval, secondsSinceInput: [TimeInterval]) -> Bool {
+        secondsSinceInput.contains { now - $0 > lastKeyUptime + 0.01 }
     }
 
     /// When a key event happened, in system uptime; nil for an event posted without a timestamp.

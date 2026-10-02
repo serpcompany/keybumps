@@ -64,6 +64,17 @@ struct TypedKeyTests {
         event.timestamp = CGEventTimestamp(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
         let read = try #require(KeyTypingMonitor.uptime(of: event))
         #expect(abs(read - ProcessInfo.processInfo.systemUptime) < 0.05)
+        event.timestamp = 0
+        #expect(KeyTypingMonitor.uptime(of: event) == nil)
+    }
+
+    @Test("A key or click after the keyword's last key, by more than 10 ms, counts as newer input")
+    func newerInput() {
+        // The keyword's last key went down at 100.000; now is 100.200.
+        #expect(!KeyTypingMonitor.happenedSince(lastKeyUptime: 100.0, now: 100.2, secondsSinceInput: [0.2, 5, 5]), "That key itself")
+        #expect(KeyTypingMonitor.happenedSince(lastKeyUptime: 100.0, now: 100.2, secondsSinceInput: [0.05, 5, 5]), "A newer key")
+        #expect(KeyTypingMonitor.happenedSince(lastKeyUptime: 100.0, now: 100.2, secondsSinceInput: [0.2, 0.05, 5]), "A click")
+        #expect(!KeyTypingMonitor.happenedSince(lastKeyUptime: 100.0, now: 100.2, secondsSinceInput: [0.195, 5, 5]), "Within 10 ms")
     }
 }
 
@@ -264,6 +275,19 @@ struct KeywordExpansionControllerTests {
         #expect(fixture.store.snippet(withID: fixture.plain.id)?.lastUsedAt == nil)
     }
 
+    @Test("If the paste fails before writing the clipboard, nothing needs putting back")
+    func pasteFailsBeforeWriting() async throws {
+        let fixture = try ExpansionFixture()
+        defer { fixture.tearDown() }
+        fixture.pasteboard.writeText("made-up earlier copy")
+        fixture.replacer.pasteFailsBeforeWriting = true
+        fixture.type(";ship")
+        #expect(fixture.notices.shown == ["Couldn’t paste the snippet"])
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(fixture.restores == 0)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up earlier copy")
+    }
+
     @Test("If the keyword can't be replaced, nothing is recorded and the clipboard is left alone")
     func failure() async throws {
         let fixture = try ExpansionFixture()
@@ -452,6 +476,8 @@ private final class RecordingReplacer: TextPasting {
     var fails = false
     /// Writes the pasteboard, then fails to press ⌘V.
     var pasteFails = false
+    /// Fails before writing the pasteboard.
+    var pasteFailsBeforeWriting = false
     var copiesWhileDeleting: String?
 
     init(pasteboard: NSPasteboard) {
@@ -465,6 +491,7 @@ private final class RecordingReplacer: TextPasting {
     }
 
     func paste(_ text: String, concealed: Bool) throws {
+        if pasteFailsBeforeWriting { throw TextPasteError.pasteboardWriteFailed }
         pasteboard.writeText(text, concealed: concealed)
         if pasteFails { throw TextPasteError.keystrokeUnavailable }
         steps.append("paste \(text)" + (concealed ? " (concealed)" : ""))
