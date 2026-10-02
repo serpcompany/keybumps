@@ -21,6 +21,7 @@ final class AppPreferences {
         static let showsHotkeysTab = "showsHotkeysTab"
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
+        static let expandsSnippetKeywords = "expandsSnippetKeywords"
     }
 
     private let defaults: UserDefaults
@@ -78,6 +79,12 @@ final class AppPreferences {
         didSet { defaults.set(copiesScreenshotsToClipboard, forKey: Key.copiesScreenshotsToClipboard) }
     }
 
+    /// Whether typing a snippet's keyword in another app replaces it with the snippet (keyword
+    /// auto-expansion, ADR 0004). Off by default.
+    var expandsSnippetKeywords: Bool {
+        didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
@@ -107,6 +114,7 @@ final class AppPreferences {
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
+        expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

@@ -100,8 +100,12 @@ A named piece of text the user saved to reuse, kept locally.
 _Avoid_: Clipping, template, abbreviation
 
 **Keyword**:
-A short word, such as `;ship`, that finds a snippet in search. It's shown as a code-style chip.
+A short word, such as `;ship`, that finds a snippet in search and, with auto-expansion on, expands to it as you type. It's shown as a code-style chip.
 _Avoid_: Abbreviation, shortcut (a key combination), tag
+
+**Auto-expansion**:
+Replacing a snippet's keyword with the snippet as you type it in another app, then putting the clipboard back. Off until turned on in Settings › Snippets (ADR 0004).
+_Avoid_: Text expansion, autocorrect, abbreviation expansion
 
 **Sensitive snippet**:
 A snippet whose text is hidden in the Command Palette and Settings, left out of search, and kept in the Keychain instead of the snippets file.

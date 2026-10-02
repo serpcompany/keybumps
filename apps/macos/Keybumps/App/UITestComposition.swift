@@ -111,6 +111,8 @@ extension AppModel {
             snippets: snippets,
             // Never writes the pasteboard or posts ⌘V, even if system access were allowed.
             textPaster: InertTextPaster(),
+            // Never listens to the keyboard.
+            keyTypingMonitor: InertKeyTypingMonitor(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
                     preferredLocation: { sandbox.screenshots.path },
