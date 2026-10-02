@@ -35,7 +35,7 @@ cd "$app_root"
 typeset -a signing_settings
 export_options="$app_root/scripts/ExportOptions-DeveloperID.plist"
 if [[ -n "${KEYBUMPS_MANUAL_SIGNING:-}" ]]; then
-  signing_settings=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" DEVELOPMENT_TEAM=847HR8U8D9 PROVISIONING_PROFILE_SPECIFIER=)
+  signing_settings=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" DEVELOPMENT_TEAM=W3GXL2NQQP PROVISIONING_PROFILE_SPECIFIER=)
   export_options="$app_root/scripts/ExportOptions-DeveloperID-Manual.plist"
 fi
 xcodegen generate

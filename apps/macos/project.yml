@@ -57,7 +57,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: Keybumps
         CODE_SIGN_ENTITLEMENTS: Keybumps/Resources/Keybumps.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 847HR8U8D9
+        DEVELOPMENT_TEAM: W3GXL2NQQP
         ENABLE_APP_SANDBOX: NO
       configs:
         # Debug builds (the unit- and UI-test host, build-and-run.sh) get their own identity so they
@@ -97,7 +97,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps.tests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 847HR8U8D9
+        DEVELOPMENT_TEAM: W3GXL2NQQP
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Keybumps.app/Contents/MacOS/Keybumps"
         BUNDLE_LOADER: "$(TEST_HOST)"
   KeybumpsUITests:
@@ -112,7 +112,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps.uitests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: 847HR8U8D9
+        DEVELOPMENT_TEAM: W3GXL2NQQP
         TEST_TARGET_NAME: Keybumps
 schemes:
   Keybumps:

@@ -66,7 +66,7 @@ if [[ "$fixture_mode" == --signed-not-notarized ]]; then
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$app_path"
   # Capture first: with pipefail, grep -q exiting early can fail the pipeline on a valid app.
   signature=$(/usr/bin/codesign -dv --verbose=2 "$app_path" 2>&1)
-  [[ "$signature" == *$'\nAuthority=Developer ID Application:'* && "$signature" == *$'\nTeamIdentifier=847HR8U8D9'* ]] || {
+  [[ "$signature" == *$'\nAuthority=Developer ID Application:'* && "$signature" == *$'\nTeamIdentifier=W3GXL2NQQP'* ]] || {
     print -u2 "app is not signed with the Keybumps Developer ID Application certificate"
     exit 70
   }
