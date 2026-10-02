@@ -75,7 +75,10 @@ codesign --verify --deep --strict "$candidate_app"
 candidate_requirement=$(codesign -d -r- "$candidate_app" 2>&1 | sed -n 's/^designated => //p')
 if [[ "$candidate_requirement" != "$baseline_requirement" ]]; then
   team=$(/usr/libexec/PlistBuddy -c "Print :teamID" "$app_root/scripts/ExportOptions-DeveloperID.plist")
-  if (( new_signing_team )) && [[ "$candidate_requirement" == *"subject.OU] = $team"* || "$candidate_requirement" == *"subject.OU] = \"$team\""* ]]; then
+  # The only change allowed is the team: the installed requirement with its team swapped for ours.
+  old_team=$(print -r -- "$baseline_requirement" | sed -nE 's/.*subject\.OU\] = "?([A-Z0-9]{10})"?.*/\1/p')
+  if (( new_signing_team )) && [[ -n "$old_team" && "$old_team" != "$team" \
+        && "$candidate_requirement" == "${baseline_requirement//$old_team/$team}" ]]; then
     print -u2 "warning: the candidate is signed by team $team, not the installed app's team; macOS will ask for every permission again"
   else
     print -u2 "designated requirement differs from the installed baseline; refusing (TCC continuity). After a signing-team change, pass --new-signing-team once."
