@@ -36,6 +36,8 @@ final class AppModel {
     @ObservationIgnored private let coachTips: any CoachTipPresenting
     let clipboard: ClipboardHistoryService
     let snippets: SnippetStore
+    /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
+    let keywordExpansion: KeywordExpansionController
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
@@ -252,6 +254,7 @@ final class AppModel {
             replacer: textPaster
         )
         keywordExpansion.didRestorePasteboard = { [weak clipboard] in clipboard?.suppressCurrentChange() }
+        self.keywordExpansion = keywordExpansion
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
         let screenshotModule = ScreenshotToolsModule(

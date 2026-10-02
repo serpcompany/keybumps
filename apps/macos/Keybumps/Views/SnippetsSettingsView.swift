@@ -39,7 +39,11 @@ struct SnippetsSettingsView: View {
                 .toggleStyle(SettingsSwitchToggleStyle())
                 .accessibilityIdentifier("snippets.expansion")
                 if model.preferences.enabledCapabilities.contains(.snippets) {
-                    ForEach(SnippetsModule.missingExpansionPermissions(model.capabilityContext), id: \.self) { permission in
+                    let missing = SnippetsModule.missingExpansionPermissions(model.capabilityContext)
+                    if model.preferences.expandsSnippetKeywords, missing.isEmpty, !model.keywordExpansion.isListening {
+                        SettingsNote("Keybumps can’t hear typing yet. Quit and reopen Keybumps, then try again.", tint: .orange)
+                    }
+                    ForEach(missing, id: \.self) { permission in
                         LabeledContent {
                             Button("Allow…") { Task { await model.recoverPermission(permission) } }
                                 .disabled(model.permissions.activeRequest != nil)

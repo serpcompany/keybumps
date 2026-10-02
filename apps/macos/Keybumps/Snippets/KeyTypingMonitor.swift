@@ -1,5 +1,4 @@
-import CoreGraphics
-import Foundation
+import AppKit
 
 /// Where keyword expansion hears typing. Tests and the UI-test composition use fakes that never
 /// listen to the keyboard.
@@ -13,11 +12,19 @@ protocol KeyTypingMonitoring: AnyObject {
 /// A session-wide, listen-only event tap for key presses and clicks. Listen-only, so it can never
 /// delay or change what the user types, and it needs Input Monitoring. The callback only reads the
 /// key's code, characters, and flags and hands them on: it never logs them, and nothing slow runs
-/// on that path.
+/// on that path. A key that arrives late (Keybumps was busy) counts as a reset, since more typing
+/// may already have landed after it.
 final class KeyTypingMonitor: KeyTypingMonitoring {
     var onKey: ((TypedKey) -> Void)?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+
+    /// How late a key may arrive and still count.
+    static let lateness: TimeInterval = 0.1
+
+    deinit {
+        stop()
+    }
 
     func start() -> Bool {
         stop()
@@ -31,7 +38,9 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
                 if let tap = monitor.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
                 monitor.onKey?(.reset)
             case .keyDown:
-                monitor.onKey?(KeyTypingMonitor.typedKey(from: event))
+                let sent = NSEvent(cgEvent: event)?.timestamp
+                let isLate = sent.map { KeyTypingMonitor.isLate(eventUptime: $0, now: ProcessInfo.processInfo.systemUptime) } ?? false
+                monitor.onKey?(isLate ? .reset : KeyTypingMonitor.typedKey(from: event))
             default:
                 // A click can move the caret.
                 monitor.onKey?(.reset)
@@ -57,7 +66,11 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
         eventTap = nil
     }
 
-    private static func typedKey(from event: CGEvent) -> TypedKey {
+    static func isLate(eventUptime: TimeInterval, now: TimeInterval) -> Bool {
+        now - eventUptime > lateness
+    }
+
+    static func typedKey(from event: CGEvent) -> TypedKey {
         var length = 0
         var characters = [UniChar](repeating: 0, count: 8)
         event.keyboardGetUnicodeString(maxStringLength: characters.count, actualStringLength: &length, unicodeString: &characters)

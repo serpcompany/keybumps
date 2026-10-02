@@ -43,13 +43,13 @@ enum TextPasteError: Error, Equatable {
 /// control this computer" alert. So callers check Accessibility first, and the poster checks again.
 protocol TextPasting {
     @MainActor func paste(_ text: String, concealed: Bool) throws
-    /// Keyword expansion: deletes the `count` characters just typed (the keyword), then pastes.
-    @MainActor func replaceTyped(_ count: Int, with text: String, concealed: Bool) throws
+    /// Keyword expansion: deletes the `count` characters just typed (the keyword), before pasting.
+    @MainActor func deleteTyped(_ count: Int) throws
 }
 
 extension TextPasting {
     @MainActor
-    func replaceTyped(_ count: Int, with text: String, concealed: Bool) throws {
+    func deleteTyped(_ count: Int) throws {
         throw TextPasteError.unavailable
     }
 }
@@ -76,9 +76,8 @@ struct SystemTextPaster: TextPasting {
     }
 
     @MainActor
-    func replaceTyped(_ count: Int, with text: String, concealed: Bool) throws {
+    func deleteTyped(_ count: Int) throws {
         try postBackspaces(count)
-        try paste(text, concealed: concealed)
     }
 
     /// The only keyboard-event poster in Keybumps, with `postSystemBackspaces`. macOS delivers

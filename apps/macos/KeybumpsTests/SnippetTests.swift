@@ -1042,6 +1042,29 @@ struct SnippetPaletteKeyTests {
         #expect(module.attentionCount(unreadable.context(enabled: [])) == 0)
     }
 
+    @Test("Snippets listens for keywords only while it, the switch, and both permissions are on")
+    func expansionFollowsTheModule() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let monitor = FakeTypingMonitor()
+        let module = fixture.module(monitor: monitor)
+
+        module.apply(fixture.context(enabled: [.snippets]))
+        #expect(!monitor.isRunning, "The switch is off by default")
+        fixture.preferences.expandsSnippetKeywords = true
+        module.apply(fixture.context(enabled: [.snippets]))
+        #expect(monitor.isRunning)
+        module.permissionsDidRefresh(fixture.context(enabled: [.snippets], granted: false))
+        #expect(!monitor.isRunning, "A permission was taken away")
+        module.permissionsDidRefresh(fixture.context(enabled: [.snippets]))
+        #expect(monitor.isRunning)
+        module.apply(fixture.context(enabled: []))
+        #expect(!monitor.isRunning, "Snippets off, or the license locked")
+        module.apply(fixture.context(enabled: [.snippets]))
+        module.deactivate(fixture.context(enabled: [.snippets]))
+        #expect(!monitor.isRunning)
+    }
+
     @Test("With keyword expansion on, Snippets flags each permission it still needs")
     func attentionForExpansionPermissions() throws {
         let fixture = PaletteFixture()
@@ -1209,12 +1232,12 @@ private final class PaletteFixture {
     }
 
     /// What the shell hands a module, with fakes that grant every permission.
-    /// The Snippets module, with keyword expansion that never listens or posts keys.
-    func module() -> SnippetsModule {
+    /// The Snippets module, with keyword expansion that never listens to the keyboard or posts keys.
+    func module(monitor: any KeyTypingMonitoring = InertKeyTypingMonitor()) -> SnippetsModule {
         SnippetsModule(
             palette: palette,
             snippets: snippets,
-            expansion: KeywordExpansionController(snippets: snippets, monitor: InertKeyTypingMonitor(), replacer: InertTextPaster())
+            expansion: KeywordExpansionController(snippets: snippets, monitor: monitor, replacer: InertTextPaster())
         )
     }
 

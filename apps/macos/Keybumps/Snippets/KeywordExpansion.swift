@@ -16,7 +16,8 @@ enum TypedKey: Equatable {
         if isSynthetic || !flags.isDisjoint(with: [.maskCommand, .maskControl]) {
             self = .reset
         } else if keyCode == kVK_Delete {
-            self = .deleteBackward
+            // ⌥⌫ deletes a word, so what's on screen no longer matches.
+            self = flags.contains(.maskAlternate) ? .reset : .deleteBackward
         } else if !characters.isEmpty, characters.unicodeScalars.allSatisfy(Self.isTyped) {
             self = .characters(characters)
         } else {
@@ -81,35 +82,47 @@ struct KeywordBuffer {
 /// replaces it with the snippet's text, then puts the clipboard back as it was.
 /// - **Listening** goes through `KeyTypingMonitoring`, a listen-only tap that can't delay typing.
 ///   It runs only while Snippets and Settings' switch are on and Input Monitoring and Accessibility
-///   are granted (`shouldListen`, from `SnippetsModule`).
-/// - **Never** in Keybumps' own windows (so the snippet editor's Keyword field doesn't expand) or
+///   are granted (`shouldListen`, from `SnippetsModule`). If macOS refuses the tap anyway (it can
+///   until Keybumps relaunches), `isListening` stays false and Settings says so.
+/// - **Never** in Keybumps' own windows, the Command Palette included (`isTypingInKeybumps`), or
 ///   during secure input (password fields).
-/// - **Replacing** deletes the keyword and pastes through the shared paste step, kept out of
-///   Clipboard History; a sensitive snippet's text comes from the Keychain and is marked concealed.
+/// - **Replacing** reads the text first (from the Keychain for a sensitive snippet), deletes the
+///   keyword at once, then pastes through the shared paste step, kept out of Clipboard History and
+///   marked concealed for a sensitive snippet.
 /// - **The clipboard** is put back after `restoreDelay` unless something else was copied
-///   meanwhile; quick expansions in a row put back the clipboard from before the first.
+///   meanwhile; quick expansions in a row put back the clipboard from before the first, unless
+///   something was copied between them.
 @MainActor
+@Observable
 final class KeywordExpansionController {
-    private let snippets: SnippetStore
-    private let monitor: any KeyTypingMonitoring
-    private let replacer: any TextPasting
-    private let pasteboard: NSPasteboard
-    private let notices: any PaletteNoticePresenting
-    private var buffer = KeywordBuffer()
-    private var isListening = false
-    private var appSwitchObserver: NSObjectProtocol?
-    /// The clipboard from before the first expansion still waiting to be put back.
-    private var pendingSnapshot: PasteboardSnapshot?
-    private var pendingRestore: Task<Void, Never>?
+    private(set) var isListening = false
+
+    @ObservationIgnored private let snippets: SnippetStore
+    @ObservationIgnored private let monitor: any KeyTypingMonitoring
+    @ObservationIgnored private let replacer: any TextPasting
+    @ObservationIgnored private let pasteboard: NSPasteboard
+    @ObservationIgnored private let notices: any PaletteNoticePresenting
+    @ObservationIgnored private var buffer = KeywordBuffer()
+    @ObservationIgnored private var appSwitchObserver: NSObjectProtocol?
+    /// The clipboard from before the first of a run of expansions, still waiting to be put back,
+    /// and the clipboard's change count right after the last paste.
+    @ObservationIgnored private var pendingSnapshot: PasteboardSnapshot?
+    @ObservationIgnored private var pendingChangeCount: Int?
+    @ObservationIgnored private var pendingRestore: Task<Void, Never>?
 
     /// How long to wait before putting the clipboard back, so the app in front has read the paste.
-    var restoreDelay: Duration = .milliseconds(500)
-    var keybumpsIsFrontmost: () -> Bool = {
-        NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier
+    @ObservationIgnored var restoreDelay: Duration = .milliseconds(500)
+    @ObservationIgnored var typingIsInKeybumps: () -> Bool = {
+        KeywordExpansionController.isTypingInKeybumps(
+            isActive: NSApp.isActive,
+            hasKeyWindow: NSApp.keyWindow != nil,
+            frontmostIsKeybumps: NSWorkspace.shared.frontmostApplication?.processIdentifier
+                == ProcessInfo.processInfo.processIdentifier
+        )
     }
-    var secureInputEnabled: () -> Bool = { IsSecureEventInputEnabled() }
+    @ObservationIgnored var secureInputEnabled: () -> Bool = { IsSecureEventInputEnabled() }
     /// Called right after the clipboard is put back, so Clipboard History skips that change.
-    var didRestorePasteboard: () -> Void = {}
+    @ObservationIgnored var didRestorePasteboard: () -> Void = {}
 
     init(
         snippets: SnippetStore,
@@ -131,12 +144,21 @@ final class KeywordExpansionController {
         snippetsOn && switchOn && inputMonitoring && accessibility
     }
 
-    /// Starts or stops listening. Stopping forgets what was typed.
+    /// Whether typing goes to Keybumps: it's the active app, or one of its windows is key. The
+    /// Command Palette is a key window that never makes Keybumps active, so the app under it
+    /// stays frontmost.
+    nonisolated static func isTypingInKeybumps(isActive: Bool, hasKeyWindow: Bool, frontmostIsKeybumps: Bool) -> Bool {
+        isActive || hasKeyWindow || frontmostIsKeybumps
+    }
+
+    /// Starts or stops listening. Stopping forgets what was typed. While it should listen but macOS
+    /// refused the tap, each update tries again.
     func update(listening: Bool) {
         guard listening != isListening else { return }
         _ = buffer.handle(.reset, keywords: [])
         if listening {
-            isListening = monitor.start()
+            guard monitor.start() else { return }
+            isListening = true
             appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
             ) { [weak self] _ in
@@ -152,20 +174,28 @@ final class KeywordExpansionController {
 
     func handle(_ key: TypedKey) {
         guard let match = buffer.handle(key, keywords: KeywordExpansion.entries(for: snippets.snippets)) else { return }
-        guard !keybumpsIsFrontmost(), !secureInputEnabled(),
+        guard !typingIsInKeybumps(), !secureInputEnabled(),
               let snippet = snippets.snippet(withID: match.snippetID) else { return }
         guard let text = snippets.text(for: snippet) else {
             notices.showNotice("Couldn’t read this snippet from the Keychain", isWarning: true)
             return
         }
-        let snapshot = pendingSnapshot ?? PasteboardSnapshot(pasteboard)
+        // Delete the keyword before anything slower, such as reading the clipboard, so more typing
+        // can't land in between.
         do {
-            try replacer.replaceTyped(match.length, with: text, concealed: snippet.isSensitive)
+            try replacer.deleteTyped(match.length)
+        } catch {
+            return
+        }
+        let snapshot = pendingChangeCount == pasteboard.changeCount ? pendingSnapshot : nil
+        let previous = snapshot ?? PasteboardSnapshot(pasteboard)
+        do {
+            try replacer.paste(text, concealed: snippet.isSensitive)
         } catch {
             return
         }
         snippets.markUsed(snippet.id)
-        scheduleRestore(of: snapshot)
+        scheduleRestore(of: previous)
     }
 
     /// Puts the clipboard back once the paste has been read, unless something else was copied.
@@ -173,11 +203,13 @@ final class KeywordExpansionController {
         pendingRestore?.cancel()
         pendingSnapshot = snapshot
         let changeCount = pasteboard.changeCount
+        pendingChangeCount = changeCount
         let delay = restoreDelay
         pendingRestore = Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
             guard let self, !Task.isCancelled else { return }
             self.pendingSnapshot = nil
+            self.pendingChangeCount = nil
             self.pendingRestore = nil
             guard self.pasteboard.changeCount == changeCount else { return }
             snapshot.restore(to: self.pasteboard)
