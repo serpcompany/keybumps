@@ -637,7 +637,8 @@ struct PermissionPromptSourceTests {
         let source = try String(contentsOf: Self.appDirectory.appendingPathComponent("App/UITestComposition.swift"), encoding: .utf8)
         for seam in ["requestMicrophone: PermissionPrompts.inert", "requestSpeechRecognition: PermissionPrompts.inert",
                      "requestScreenRecording: PermissionPrompts.inert", "openSystemSettings: PermissionPrompts.inert",
-                     "allowsDictationSystemAccess: false", "textPaster: InertTextPaster()"] {
+                     "allowsDictationSystemAccess: false", "textPaster: InertTextPaster()",
+                     "keyTypingMonitor: InertKeyTypingMonitor()"] {
             #expect(source.contains(seam), "missing \(seam)")
         }
     }

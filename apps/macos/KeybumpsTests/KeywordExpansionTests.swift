@@ -54,9 +54,16 @@ struct TypedKeyTests {
     }
 
     @Test("A key that reaches Keybumps late is never expanded, since more typing may have landed first")
-    func lateKeys() {
+    func lateKeys() throws {
         #expect(!KeyTypingMonitor.isLate(eventUptime: 10.0, now: 10.05))
         #expect(KeyTypingMonitor.isLate(eventUptime: 10.0, now: 10.2))
+        #expect(!KeyTypingMonitor.isLate(eventUptime: 0, now: 10.2), "A key posted with no timestamp counts as on time")
+
+        // A real event's timestamp is read on the same clock as system uptime.
+        let event = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_S), keyDown: true))
+        event.timestamp = CGEventTimestamp(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
+        let read = try #require(KeyTypingMonitor.uptime(of: event))
+        #expect(abs(read - ProcessInfo.processInfo.systemUptime) < 0.05)
     }
 }
 
@@ -109,6 +116,16 @@ struct KeywordBufferTests {
         #expect(Self.type("ip", into: &buffer)?.snippetID == Self.ship)
     }
 
+    @Test("An empty or spaced keyword, possible only in a hand-edited file, is never listened for")
+    func emptyKeywords() {
+        let entries = KeywordExpansion.entries(for: [
+            Snippet(name: "Empty", text: "made-up text", keyword: "", createdAt: .distantPast),
+            Snippet(name: "Spaces", text: "made-up text", keyword: "  ", createdAt: .distantPast),
+            Snippet(name: "Spaced", text: "made-up text", keyword: "a b", createdAt: .distantPast),
+        ])
+        #expect(entries.isEmpty)
+    }
+
     @Test("It never keeps more characters than the longest keyword, and none without keywords")
     func bounded() {
         var buffer = KeywordBuffer()
@@ -133,6 +150,7 @@ struct KeywordExpansionControllerTests {
 
         fixture.type(";ship")
         #expect(fixture.replacer.steps == ["delete 5", "paste made-up shipping text"], "The keyword goes first, then the paste")
+        #expect(fixture.monitor.newerKeyChecks == 1, "It checks for newer typing right before deleting")
         #expect(fixture.store.snippet(withID: fixture.plain.id)?.lastUsedAt != nil)
         try await fixture.waitUntil { fixture.pasteboard.string(forType: .string) == "made-up earlier copy" }
         #expect(fixture.restores == 1, "Putting the clipboard back is kept out of Clipboard History")
@@ -210,6 +228,40 @@ struct KeywordExpansionControllerTests {
         fixture.type(";ship")
         try await fixture.waitUntil { fixture.restores == 1 }
         #expect(fixture.pasteboard.string(forType: .string) == "made-up copy in between")
+    }
+
+    @Test("The clipboard is read after the keyword is deleted, never before")
+    func snapshotAfterDelete() async throws {
+        let fixture = try ExpansionFixture()
+        defer { fixture.tearDown() }
+        fixture.pasteboard.writeText("made-up earlier copy")
+        // Stands in for anything that changes the clipboard while the Deletes go out.
+        fixture.replacer.copiesWhileDeleting = "made-up copy during the deletes"
+        fixture.type(";ship")
+        try await fixture.waitUntil { fixture.restores == 1 }
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up copy during the deletes")
+    }
+
+    @Test("A key typed after the keyword stops the expansion before anything is deleted")
+    func newerTyping() throws {
+        let fixture = try ExpansionFixture()
+        defer { fixture.tearDown() }
+        fixture.monitor.newerKeyWentDown = true
+        fixture.type(";ship")
+        #expect(fixture.replacer.steps.isEmpty)
+    }
+
+    @Test("If the paste fails after the Deletes, a notice says so and the clipboard is still put back")
+    func pasteFails() async throws {
+        let fixture = try ExpansionFixture()
+        defer { fixture.tearDown() }
+        fixture.pasteboard.writeText("made-up earlier copy")
+        fixture.replacer.pasteFails = true
+        fixture.type(";ship")
+        #expect(fixture.notices.shown == ["Couldn’t paste the snippet"])
+        try await fixture.waitUntil { fixture.restores == 1 }
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up earlier copy")
+        #expect(fixture.store.snippet(withID: fixture.plain.id)?.lastUsedAt == nil)
     }
 
     @Test("If the keyword can't be replaced, nothing is recorded and the clipboard is left alone")
@@ -330,6 +382,7 @@ private final class ExpansionFixture {
     let store = SnippetStore(storageURL: nil, secrets: InMemorySnippetSecretStore())
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsExpansion-\(UUID().uuidString)"))
     let monitor = FakeTypingMonitor()
+    let notices = RecordingExpansionNotices()
     let replacer: RecordingReplacer
     let controller: KeywordExpansionController
     let plain: Snippet
@@ -346,7 +399,7 @@ private final class ExpansionFixture {
             monitor: monitor,
             replacer: replacer,
             pasteboard: pasteboard,
-            notices: SilentNotices()
+            notices: notices
         )
         controller.restoreDelay = restoreDelay
         controller.typingIsInKeybumps = { [unowned self] in typingIsInKeybumps }
@@ -376,11 +429,18 @@ final class FakeTypingMonitor: KeyTypingMonitoring {
     private(set) var isRunning = false
     /// Refuses to start, as macOS does without Input Monitoring.
     var refuses = false
+    /// Whether another key went down after the one that completed the keyword.
+    var newerKeyWentDown = false
+    private(set) var newerKeyChecks = 0
     func start() -> Bool {
         isRunning = !refuses
         return isRunning
     }
     func stop() { isRunning = false }
+    func keyWentDownSinceLastKey() -> Bool {
+        newerKeyChecks += 1
+        return newerKeyWentDown
+    }
 }
 
 /// Records each step and writes pasted text to the pasteboard, as the real paste step would.
@@ -390,6 +450,9 @@ private final class RecordingReplacer: TextPasting {
     private(set) var steps: [String] = []
     /// Refuses to delete, as without Accessibility.
     var fails = false
+    /// Writes the pasteboard, then fails to press ⌘V.
+    var pasteFails = false
+    var copiesWhileDeleting: String?
 
     init(pasteboard: NSPasteboard) {
         self.pasteboard = pasteboard
@@ -397,15 +460,18 @@ private final class RecordingReplacer: TextPasting {
 
     func deleteTyped(_ count: Int) throws {
         if fails { throw TextPasteError.accessibilityRequired }
+        if let copiesWhileDeleting { pasteboard.writeText(copiesWhileDeleting) }
         steps.append("delete \(count)")
     }
 
     func paste(_ text: String, concealed: Bool) throws {
         pasteboard.writeText(text, concealed: concealed)
+        if pasteFails { throw TextPasteError.keystrokeUnavailable }
         steps.append("paste \(text)" + (concealed ? " (concealed)" : ""))
     }
 }
 
-private final class SilentNotices: PaletteNoticePresenting {
-    func showNotice(_ message: String, isWarning: Bool) {}
+private final class RecordingExpansionNotices: PaletteNoticePresenting {
+    private(set) var shown: [String] = []
+    func showNotice(_ message: String, isWarning: Bool) { shown.append(message) }
 }

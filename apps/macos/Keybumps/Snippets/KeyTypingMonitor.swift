@@ -7,6 +7,13 @@ protocol KeyTypingMonitoring: AnyObject {
     /// Starts listening; false when macOS refuses (Input Monitoring isn't granted).
     func start() -> Bool
     func stop()
+    /// Whether another key went down after the last key handed on: typing that may already have
+    /// landed after the keyword, so deleting the keyword now would delete it instead.
+    func keyWentDownSinceLastKey() -> Bool
+}
+
+extension KeyTypingMonitoring {
+    func keyWentDownSinceLastKey() -> Bool { false }
 }
 
 /// A session-wide, listen-only event tap for key presses and clicks. Listen-only, so it can never
@@ -18,6 +25,8 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
     var onKey: ((TypedKey) -> Void)?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    /// When the last key handed on went down, in system uptime.
+    private var lastKeyUptime: TimeInterval?
 
     /// How late a key may arrive and still count.
     static let lateness: TimeInterval = 0.1
@@ -28,6 +37,8 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
 
     func start() -> Bool {
         stop()
+        // Read silently first: creating a keyboard tap without Input Monitoring can make macOS prompt.
+        guard CGPreflightListenEventAccess() else { return false }
         let types: [CGEventType] = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -38,8 +49,9 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
                 if let tap = monitor.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
                 monitor.onKey?(.reset)
             case .keyDown:
-                let sent = NSEvent(cgEvent: event)?.timestamp
+                let sent = KeyTypingMonitor.uptime(of: event)
                 let isLate = sent.map { KeyTypingMonitor.isLate(eventUptime: $0, now: ProcessInfo.processInfo.systemUptime) } ?? false
+                monitor.lastKeyUptime = sent
                 monitor.onKey?(isLate ? .reset : KeyTypingMonitor.typedKey(from: event))
             default:
                 // A click can move the caret.
@@ -66,8 +78,21 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
         eventTap = nil
     }
 
+    func keyWentDownSinceLastKey() -> Bool {
+        guard let lastKeyUptime else { return false }
+        let since = CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown)
+        return ProcessInfo.processInfo.systemUptime - since > lastKeyUptime + 0.01
+    }
+
+    /// When a key event happened, in system uptime; nil for an event posted without a timestamp.
+    static func uptime(of event: CGEvent) -> TimeInterval? {
+        guard event.timestamp != 0 else { return nil }
+        return NSEvent(cgEvent: event)?.timestamp
+    }
+
+    /// Whether a key reached Keybumps too late to trust. A key with no timestamp (0) is on time.
     static func isLate(eventUptime: TimeInterval, now: TimeInterval) -> Bool {
-        now - eventUptime > lateness
+        eventUptime > 0 && now - eventUptime > lateness
     }
 
     static func typedKey(from event: CGEvent) -> TypedKey {

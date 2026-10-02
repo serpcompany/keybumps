@@ -40,9 +40,11 @@ enum KeywordExpansion {
     }
 
     /// The keywords to listen for, longest first, so `;ship` wins over `ship` when both were typed.
+    /// An empty or spaced keyword, which only a hand-edited file can hold, would match far too often.
     static func entries(for snippets: [Snippet]) -> [Entry] {
         snippets
             .compactMap { snippet in snippet.keyword.map { Entry(keyword: $0, snippetID: snippet.id) } }
+            .filter { !$0.keyword.isEmpty && !$0.keyword.contains(where: \.isWhitespace) }
             .sorted { $0.keyword.count > $1.keyword.count }
     }
 }
@@ -180,8 +182,9 @@ final class KeywordExpansionController {
             notices.showNotice("Couldn’t read this snippet from the Keychain", isWarning: true)
             return
         }
-        // Delete the keyword before anything slower, such as reading the clipboard, so more typing
-        // can't land in between.
+        // More typing after the keyword would be deleted instead of it. Otherwise, delete the
+        // keyword before anything slower, such as reading the clipboard.
+        guard !monitor.keyWentDownSinceLastKey() else { return }
         do {
             try replacer.deleteTyped(match.length)
         } catch {
@@ -189,9 +192,12 @@ final class KeywordExpansionController {
         }
         let snapshot = pendingChangeCount == pasteboard.changeCount ? pendingSnapshot : nil
         let previous = snapshot ?? PasteboardSnapshot(pasteboard)
+        let changeCount = pasteboard.changeCount
         do {
             try replacer.paste(text, concealed: snippet.isSensitive)
         } catch {
+            notices.showNotice("Couldn’t paste the snippet", isWarning: true)
+            if pasteboard.changeCount != changeCount { scheduleRestore(of: previous) }
             return
         }
         snippets.markUsed(snippet.id)

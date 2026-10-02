@@ -41,7 +41,11 @@ struct SnippetsSettingsView: View {
                 if model.preferences.enabledCapabilities.contains(.snippets) {
                     let missing = SnippetsModule.missingExpansionPermissions(model.capabilityContext)
                     if model.preferences.expandsSnippetKeywords, missing.isEmpty, !model.keywordExpansion.isListening {
-                        SettingsNote("Keybumps can’t hear typing yet. Quit and reopen Keybumps, then try again.", tint: .orange)
+                        LabeledContent {
+                            Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
+                        } label: {
+                            SettingsNote("Keybumps can’t hear typing yet. macOS applies Input Monitoring after a restart.", tint: .orange)
+                        }
                     }
                     ForEach(missing, id: \.self) { permission in
                         LabeledContent {
