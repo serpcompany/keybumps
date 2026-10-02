@@ -790,15 +790,15 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					16EA3C6D651A8AAA3A2782B1 = {
-						DevelopmentTeam = 847HR8U8D9;
+						DevelopmentTeam = W3GXL2NQQP;
 						ProvisioningStyle = Automatic;
 					};
 					3356307D476DF647068D33C8 = {
-						DevelopmentTeam = 847HR8U8D9;
+						DevelopmentTeam = W3GXL2NQQP;
 						ProvisioningStyle = Automatic;
 					};
 					F4E6E2BFC7CC1DD1C3C50FD8 = {
-						DevelopmentTeam = 847HR8U8D9;
+						DevelopmentTeam = W3GXL2NQQP;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 16EA3C6D651A8AAA3A2782B1;
 					};
@@ -1063,7 +1063,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 847HR8U8D9;
+				DEVELOPMENT_TEAM = W3GXL2NQQP;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1082,7 +1082,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 847HR8U8D9;
+				DEVELOPMENT_TEAM = W3GXL2NQQP;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1102,7 +1102,7 @@
 				CODE_SIGN_ENTITLEMENTS = Keybumps/Resources/Keybumps.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 847HR8U8D9;
+				DEVELOPMENT_TEAM = W3GXL2NQQP;
 				ENABLE_APP_SANDBOX = NO;
 				EXECUTABLE_NAME = Keybumps;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1124,7 +1124,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 847HR8U8D9;
+				DEVELOPMENT_TEAM = W3GXL2NQQP;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1213,7 +1213,7 @@
 				CODE_SIGN_ENTITLEMENTS = Keybumps/Resources/Keybumps.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 847HR8U8D9;
+				DEVELOPMENT_TEAM = W3GXL2NQQP;
 				ENABLE_APP_SANDBOX = NO;
 				EXECUTABLE_NAME = Keybumps;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1235,7 +1235,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = 847HR8U8D9;
+				DEVELOPMENT_TEAM = W3GXL2NQQP;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -3,13 +3,26 @@
 # back up the installed Keybumps, install the candidate, and launch it.
 # Never notarizes, publishes, tags, or touches the update feed.
 #
-# usage: apps/macos/scripts/build-qa-candidate.sh <issue-number> [--no-install]
+# usage: apps/macos/scripts/build-qa-candidate.sh <issue-number> [--no-install] [--new-signing-team]
+#
+# --new-signing-team allows, once, a candidate signed by the team in ExportOptions-DeveloperID.plist
+# when the installed app is signed by another team (ADR 0005). macOS then treats it as a new app:
+# every permission must be granted again.
 set -euo pipefail
 
-(( $# >= 1 )) && [[ "$1" == <-> ]] || { print -u2 "usage: $0 <issue-number> [--no-install]"; exit 64; }
+usage="usage: $0 <issue-number> [--no-install] [--new-signing-team]"
+(( $# >= 1 )) && [[ "$1" == <-> ]] || { print -u2 "$usage"; exit 64; }
 issue=$1
+shift
 install=1
-[[ "${2:-}" == "--no-install" ]] && install=0
+new_signing_team=0
+for option in "$@"; do
+  case $option in
+    --no-install) install=0 ;;
+    --new-signing-team) new_signing_team=1 ;;
+    *) print -u2 "$usage"; exit 64 ;;
+  esac
+done
 
 app_root=${0:A:h:h}
 installed_app=/Applications/Keybumps.app
@@ -60,7 +73,15 @@ candidate_app="$output/export/Keybumps.app"
 
 codesign --verify --deep --strict "$candidate_app"
 candidate_requirement=$(codesign -d -r- "$candidate_app" 2>&1 | sed -n 's/^designated => //p')
-[[ "$candidate_requirement" == "$baseline_requirement" ]] || { print -u2 "designated requirement differs from the installed baseline; refusing (TCC continuity)"; exit 67; }
+if [[ "$candidate_requirement" != "$baseline_requirement" ]]; then
+  team=$(/usr/libexec/PlistBuddy -c "Print :teamID" "$app_root/scripts/ExportOptions-DeveloperID.plist")
+  if (( new_signing_team )) && [[ "$candidate_requirement" == *"subject.OU] = $team"* || "$candidate_requirement" == *"subject.OU] = \"$team\""* ]]; then
+    print -u2 "warning: the candidate is signed by team $team, not the installed app's team; macOS will ask for every permission again"
+  else
+    print -u2 "designated requirement differs from the installed baseline; refusing (TCC continuity). After a signing-team change, pass --new-signing-team once."
+    exit 67
+  fi
+fi
 [[ "$(plist_value "$candidate_app" CFBundleIdentifier)" == "com.serp.keybumps" ]] || { print -u2 "unexpected bundle identifier"; exit 67; }
 
 cat > "$output/candidate.txt" <<EOF
