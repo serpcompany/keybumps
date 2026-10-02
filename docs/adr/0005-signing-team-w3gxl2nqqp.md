@@ -15,6 +15,7 @@ Since 0.0.3-beta.4, every release has shipped Developer ID-signed by team 847HR8
 
 ## Consequences
 
-- **Permissions:** macOS ties privacy permissions to the designated requirement, so the first W3GXL2NQQP build is a new app to it. Accessibility, Input Monitoring, Screen Recording, and Microphone must be granted again, and System Settings may list the old entry beside the new one. The release notes say so.
-- **Keychain:** items the old build created, the license and sensitive snippets, can ask once for access from the new build.
+- **Permissions:** macOS ties privacy permissions to the designated requirement, so the first W3GXL2NQQP build is a new app to it. Accessibility, Input Monitoring, Screen Recording, Microphone, and Speech Recognition must be granted again, and System Settings may list the old entry beside the new one.
+- **Keychain:** each item the old build created (the license, sensitive snippets) asks for the login password before the new build can read it, and only Always Allow stops the prompt. Denying it makes the license unreadable. How the first W3GXL2NQQP release handles this is decided before it ships (#221).
+- **Release notes required:** this PR is a `build:` commit, which release-please leaves out of the changelog. So the first W3GXL2NQQP release needs hand-written notes in `docs/releases/v<version>.md`, which `write-release-notes.sh` keeps, telling users what to grant again and what to allow.
 - **Old builds:** they keep running with their old signatures, and the 847HR8U8D9 certificate is no longer used.
