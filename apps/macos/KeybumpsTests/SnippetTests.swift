@@ -1034,10 +1034,27 @@ struct SnippetPaletteKeyTests {
         defer { readable.tearDown() }
         let unreadable = PaletteFixture(unreadableLibrary: true)
         defer { unreadable.tearDown() }
-        #expect(SnippetsModule(palette: readable.palette, snippets: readable.snippets).attentionCount(readable.context(enabled: [.snippets])) == 0)
-        let module = SnippetsModule(palette: unreadable.palette, snippets: unreadable.snippets)
+        #expect(readable.module().attentionCount(readable.context(enabled: [.snippets])) == 0)
+        #expect(readable.module().attentionCount(readable.context(enabled: [.snippets], granted: false)) == 0,
+                "Paste's optional Accessibility is never flagged")
+        let module = unreadable.module()
         #expect(module.attentionCount(unreadable.context(enabled: [.snippets])) == 1)
         #expect(module.attentionCount(unreadable.context(enabled: [])) == 0)
+    }
+
+    @Test("With keyword expansion on, Snippets flags each permission it still needs")
+    func attentionForExpansionPermissions() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.preferences.expandsSnippetKeywords = true
+        let module = fixture.module()
+        #expect(module.attentionCount(fixture.context(enabled: [.snippets])) == 0)
+        let denied = fixture.context(enabled: [.snippets], granted: false)
+        #expect(SnippetsModule.missingExpansionPermissions(denied) == [.inputMonitoring, .accessibility])
+        #expect(module.attentionCount(denied) == 2)
+        #expect(module.attentionCount(fixture.context(enabled: [], granted: false)) == 0, "Not while Snippets is off")
+        fixture.preferences.expandsSnippetKeywords = false
+        #expect(module.attentionCount(denied) == 0)
     }
 
     @Test("⌘5 selects Snippets; ⌘6 does nothing while the Hotkeys tab is hidden")
@@ -1192,10 +1209,19 @@ private final class PaletteFixture {
     }
 
     /// What the shell hands a module, with fakes that grant every permission.
-    func context(enabled: Set<Capability>) -> CapabilityContext {
+    /// The Snippets module, with keyword expansion that never listens or posts keys.
+    func module() -> SnippetsModule {
+        SnippetsModule(
+            palette: palette,
+            snippets: snippets,
+            expansion: KeywordExpansionController(snippets: snippets, monitor: InertKeyTypingMonitor(), replacer: InertTextPaster())
+        )
+    }
+
+    func context(enabled: Set<Capability>, granted: Bool = true) -> CapabilityContext {
         let permissions = PermissionCoordinator(
-            accessibilityTrusted: { true },
-            inputMonitoringAuthorized: { true },
+            accessibilityTrusted: { granted },
+            inputMonitoringAuthorized: { granted },
             microphoneAuthorizationStatus: { .authorized },
             speechAuthorizationStatus: { .authorized },
             screenRecordingAuthorized: { true },

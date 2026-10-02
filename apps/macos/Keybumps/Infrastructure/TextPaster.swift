@@ -43,6 +43,15 @@ enum TextPasteError: Error, Equatable {
 /// control this computer" alert. So callers check Accessibility first, and the poster checks again.
 protocol TextPasting {
     @MainActor func paste(_ text: String, concealed: Bool) throws
+    /// Keyword expansion: deletes the `count` characters just typed (the keyword), then pastes.
+    @MainActor func replaceTyped(_ count: Int, with text: String, concealed: Bool) throws
+}
+
+extension TextPasting {
+    @MainActor
+    func replaceTyped(_ count: Int, with text: String, concealed: Bool) throws {
+        throw TextPasteError.unavailable
+    }
 }
 
 struct SystemTextPaster: TextPasting {
@@ -52,6 +61,12 @@ struct SystemTextPaster: TextPasting {
     /// Presses ⌘V in the app in front, or refuses without Accessibility. Tests replace it, so they
     /// never post a real keystroke.
     var postCommandV: @MainActor () throws -> Void = { try SystemTextPaster.postSystemCommandV() }
+    /// Presses Delete this many times in the app in front, or refuses without Accessibility.
+    var postBackspaces: @MainActor (Int) throws -> Void = { try SystemTextPaster.postSystemBackspaces(count: $0) }
+
+    /// Marks every key Keybumps posts (`eventSourceUserData`), so keyword expansion's typing
+    /// monitor never mistakes them for the user's typing.
+    static let syntheticEventMarker: Int64 = 0x4B42_5053
 
     @MainActor
     func paste(_ text: String, concealed: Bool) throws {
@@ -60,24 +75,56 @@ struct SystemTextPaster: TextPasting {
         try postCommandV()
     }
 
-    /// The only keyboard-event poster in Keybumps. macOS delivers synthesized key events to other
-    /// apps only while Keybumps is trusted for Accessibility, so the silent check lives here and no
-    /// caller can post untrusted. Tests pass a fake trust check and sender, never macOS.
+    @MainActor
+    func replaceTyped(_ count: Int, with text: String, concealed: Bool) throws {
+        try postBackspaces(count)
+        try paste(text, concealed: concealed)
+    }
+
+    /// The only keyboard-event poster in Keybumps, with `postSystemBackspaces`. macOS delivers
+    /// synthesized key events to other apps only while Keybumps is trusted for Accessibility, so the
+    /// silent check lives here and no caller can post untrusted. Tests pass a fake trust check and
+    /// sender, never macOS.
     @MainActor
     static func postSystemCommandV(
         accessibilityTrusted: () -> Bool = { AXIsProcessTrusted() },
         send: (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
     ) throws {
+        try postKeys([(CGKeyCode(kVK_ANSI_V), .maskCommand)], accessibilityTrusted: accessibilityTrusted, send: send)
+    }
+
+    /// Deletes the keyword keyword expansion just matched: one Delete per character.
+    @MainActor
+    static func postSystemBackspaces(
+        count: Int,
+        accessibilityTrusted: () -> Bool = { AXIsProcessTrusted() },
+        send: (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
+    ) throws {
+        let delete = (CGKeyCode(kVK_Delete), CGEventFlags())
+        try postKeys(Array(repeating: delete, count: max(0, count)), accessibilityTrusted: accessibilityTrusted, send: send)
+    }
+
+    /// Presses and releases each key in order, marked as Keybumps' own.
+    @MainActor
+    private static func postKeys(
+        _ keys: [(code: CGKeyCode, flags: CGEventFlags)],
+        accessibilityTrusted: () -> Bool,
+        send: (CGEvent) -> Void
+    ) throws {
         guard accessibilityTrusted() else { throw TextPasteError.accessibilityRequired }
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
-            throw TextPasteError.keystrokeUnavailable
+        guard let source = CGEventSource(stateID: .combinedSessionState) else { throw TextPasteError.keystrokeUnavailable }
+        source.userData = syntheticEventMarker
+        var events: [CGEvent] = []
+        for key in keys {
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: key.code, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: key.code, keyDown: false) else {
+                throw TextPasteError.keystrokeUnavailable
+            }
+            down.flags = key.flags
+            up.flags = key.flags
+            events += [down, up]
         }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        send(down)
-        send(up)
+        events.forEach(send)
     }
 }
 

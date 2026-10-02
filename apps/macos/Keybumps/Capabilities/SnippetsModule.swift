@@ -31,18 +31,22 @@ extension CapabilityDescriptor {
     )
 }
 
-/// Owns the optional Open Snippets shortcut and the Snippets tab. The snippets themselves live in
-/// the shell's `SnippetStore`; nothing runs in the background. Its Settings attention is a library
-/// that can't be read, never a permission.
+/// Owns the optional Open Snippets shortcut, the Snippets tab, and keyword auto-expansion. The
+/// snippets themselves live in the shell's `SnippetStore`. Nothing runs in the background unless
+/// Settings' Expand keywords as you type is on (`KeywordExpansionController`). Its Settings
+/// attention is a library that can't be read, and, while that switch is on, a missing Input
+/// Monitoring or Accessibility permission.
 @MainActor
 final class SnippetsModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.snippets
     private let palette: CommandPaletteController
     private let snippets: SnippetStore
+    private let expansion: KeywordExpansionController
 
-    init(palette: CommandPaletteController, snippets: SnippetStore) {
+    init(palette: CommandPaletteController, snippets: SnippetStore, expansion: KeywordExpansionController) {
         self.palette = palette
         self.snippets = snippets
+        self.expansion = expansion
     }
 
     func apply(_ context: CapabilityContext) {
@@ -53,13 +57,39 @@ final class SnippetsModule: CapabilityModule {
         ) { [weak palette] in
             palette?.toggle(.snippets)
         }
+        updateExpansion(context)
     }
 
     func deactivate(_ context: CapabilityContext) {
         palette.dismiss(ifDisplaying: .snippets)
+        expansion.update(listening: false)
+    }
+
+    func permissionsDidRefresh(_ context: CapabilityContext) {
+        updateExpansion(context)
     }
 
     func attentionCount(_ context: CapabilityContext) -> Int {
-        context.isEnabled(capability) && snippets.libraryState == .readOnly ? 1 : 0
+        guard context.isEnabled(capability) else { return 0 }
+        let unreadable = snippets.libraryState == .readOnly ? 1 : 0
+        return unreadable + Self.missingExpansionPermissions(context).count
+    }
+
+    /// The permissions keyword expansion still needs while its switch is on.
+    static func missingExpansionPermissions(_ context: CapabilityContext) -> [MacPermission] {
+        guard context.preferences.expandsSnippetKeywords else { return [] }
+        var missing: [MacPermission] = []
+        if !context.permissions.inputMonitoringGranted { missing.append(.inputMonitoring) }
+        if !context.permissions.accessibilityGranted { missing.append(.accessibility) }
+        return missing
+    }
+
+    private func updateExpansion(_ context: CapabilityContext) {
+        expansion.update(listening: KeywordExpansionController.shouldListen(
+            snippetsOn: context.isEnabled(capability),
+            switchOn: context.preferences.expandsSnippetKeywords,
+            inputMonitoring: context.permissions.inputMonitoringGranted,
+            accessibility: context.permissions.accessibilityGranted
+        ))
     }
 }

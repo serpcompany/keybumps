@@ -131,6 +131,17 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No snippets yet"].waitForExistence(timeout: 5), "All three are deleted")
     }
 
+    func testKeywordExpansionSwitchIsOffAndAsksForItsPermissions() {
+        launch(permissions: "denied", ["-KBOpenSettings", "snippets"])
+        let expansion = element("snippets.expansion")
+        XCTAssertTrue(expansion.waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["Allow Input Monitoring so keywords expand"].exists, "Off by default, so it needs nothing")
+
+        expansion.click()
+        XCTAssertTrue(app.buttons["Allow Input Monitoring so keywords expand"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Allow Accessibility so keywords expand"].exists)
+    }
+
     func testCommandEOnClipboardImageOpensScreenshotEditor() {
         launch(permissions: "granted", ["-KBOpenPalette", "clipboard", "-KBUITestSeedClipboardImage", "YES"])
         XCTAssertTrue(paletteField("Search clipboard history").waitForExistence(timeout: 20))

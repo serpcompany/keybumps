@@ -23,8 +23,42 @@ struct SnippetsSettingsView: View {
         let isWritable = store.libraryState.isWritable
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
-            // Accessibility is optional: without it, ⌘Return copies instead of pasting.
-            if model.preferences.enabledCapabilities.contains(.snippets), !model.permissions.accessibilityGranted {
+            SettingsGroup("Auto-expansion") {
+                Toggle(isOn: Binding(
+                    get: { model.preferences.expandsSnippetKeywords },
+                    set: { isOn in
+                        model.preferences.expandsSnippetKeywords = isOn
+                        model.applyCapabilities()
+                    }
+                )) {
+                    SettingsRowLabel(
+                        title: "Expand keywords as you type",
+                        subtitle: "Type a snippet’s keyword in any app and Keybumps replaces it with the snippet, then puts your clipboard back. Never in password fields or in Keybumps itself."
+                    )
+                }
+                .toggleStyle(SettingsSwitchToggleStyle())
+                .accessibilityIdentifier("snippets.expansion")
+                if model.preferences.enabledCapabilities.contains(.snippets) {
+                    ForEach(SnippetsModule.missingExpansionPermissions(model.capabilityContext), id: \.self) { permission in
+                        LabeledContent {
+                            Button("Allow…") { Task { await model.recoverPermission(permission) } }
+                                .disabled(model.permissions.activeRequest != nil)
+                                .accessibilityLabel("Allow \(permission.title) so keywords expand")
+                        } label: {
+                            SettingsRowLabel(
+                                title: "Expanding needs \(permission.title)",
+                                subtitle: permission == .inputMonitoring
+                                    ? "Lets Keybumps notice when you type a keyword."
+                                    : "Lets Keybumps replace the keyword with the snippet."
+                            )
+                        }
+                    }
+                }
+            }
+            // Accessibility is optional: without it, ⌘Return copies instead of pasting. While
+            // auto-expansion is on, its own row above asks for it instead.
+            if model.preferences.enabledCapabilities.contains(.snippets), !model.preferences.expandsSnippetKeywords,
+               !model.permissions.accessibilityGranted {
                 SettingsGroup("Paste") {
                     LabeledContent {
                         Button("Allow…") { Task { await model.recoverPermission(.accessibility) } }

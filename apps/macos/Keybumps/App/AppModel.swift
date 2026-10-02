@@ -141,6 +141,7 @@ final class AppModel {
         clipboard injectedClipboard: ClipboardHistoryService? = nil,
         snippets injectedSnippets: SnippetStore? = nil,
         textPaster injectedTextPaster: (any TextPasting)? = nil,
+        keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -243,6 +244,14 @@ final class AppModel {
             permissions.refresh()
             return permissions.accessibilityGranted
         }
+        // Keyword auto-expansion listens only in the production composition: unit tests and the
+        // UI-test composition never hear the keyboard, and their paste step never posts keys.
+        let keywordExpansion = KeywordExpansionController(
+            snippets: snippets,
+            monitor: injectedKeyTypingMonitor ?? (UnitTestHost.isActive ? InertKeyTypingMonitor() : KeyTypingMonitor()),
+            replacer: textPaster
+        )
+        keywordExpansion.didRestorePasteboard = { [weak clipboard] in clipboard?.suppressCurrentChange() }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
         let screenshotModule = ScreenshotToolsModule(
@@ -276,7 +285,7 @@ final class AppModel {
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
             KeyboardShortcutterModule(detector: detector),
-            SnippetsModule(palette: commandPalette, snippets: snippets)
+            SnippetsModule(palette: commandPalette, snippets: snippets, expansion: keywordExpansion)
         ])
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
