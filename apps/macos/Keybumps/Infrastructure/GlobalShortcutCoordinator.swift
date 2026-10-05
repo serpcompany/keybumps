@@ -265,6 +265,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case screenshotScreenAndEdit
     case screenshotArea
     case snippets
+    case timer
 
     var id: String { rawValue }
     var ownerID: String { rawValue }
@@ -280,6 +281,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .dictation: .dictation
         case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea: .screenshotTools
         case .snippets: .snippets
+        case .timer: .timer
         }
     }
 
@@ -292,6 +294,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreenAndEdit: "Screenshot Screen and Edit"
         case .screenshotArea: "Screenshot Area"
         case .snippets: "Open Snippets"
+        case .timer: "Open Timers"
         }
     }
 
@@ -304,7 +307,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea
-        case .snippets: nil
+        case .snippets, .timer: nil
         }
     }
 }

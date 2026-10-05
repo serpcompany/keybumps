@@ -30,7 +30,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
         for section in ["search", "clipboard", "screenshotTools", "dictation",
-                        "windows", "keyboardShortcutter", "snippets", "permissions", "general"] {
+                        "windows", "keyboardShortcutter", "snippets", "timer", "permissions", "general"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -66,6 +66,7 @@ final class SmokeUITests: XCTestCase {
             ("3", "Search screenshots"),
             ("4", "Search dictation history"),
             ("5", "Search snippets"),
+            ("6", "Start a timer: 5m, 1h30m, tea 25"),
             ("1", "Search apps, files, and folders"),
         ]
         for (key, prompt) in prompts {
@@ -73,10 +74,10 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(paletteField(prompt).waitForExistence(timeout: 5), "⌘\(key)")
         }
 
-        // The Hotkeys tab (⌘6) is hidden by default.
+        // The Hotkeys tab (⌘7) is hidden by default.
         XCTAssertFalse(app.buttons["palette.tab.keyboardShortcutter"].exists)
-        app.typeKey("6", modifierFlags: .command)
-        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘6 is ignored")
+        app.typeKey("7", modifierFlags: .command)
+        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘7 is ignored")
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -84,6 +85,18 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])
         XCTAssertTrue(paletteField("Search hotkeys").waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["No matching hotkeys"].waitForExistence(timeout: 5), "The sandbox history is empty")
+    }
+
+    func testTimersTabStartsATimer() {
+        // Its rows come from Timer's module (`TimerPaletteContent`).
+        launch(permissions: "granted", ["-KBOpenPalette", "timers", "-KBCloseSettings", "YES"])
+        let field = paletteField("Start a timer: 5m, 1h30m, tea 25")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        field.typeText("tea 5m")
+        XCTAssertTrue(element("palette.timers.new").waitForExistence(timeout: 5), "Typing offers to start it")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: field), "Return starts it and closes the palette")
     }
 
     func testSnippetsTabCreatesASnippetInSettings() {

@@ -40,6 +40,8 @@ targets:
         buildPhase: resources
       - path: LICENSE.shotnix
         buildPhase: resources
+      - path: LICENSE.tock
+        buildPhase: resources
       - path: LICENSE.argmax-oss-swift
         buildPhase: resources
       - path: NOTICES.argmax-oss-swift

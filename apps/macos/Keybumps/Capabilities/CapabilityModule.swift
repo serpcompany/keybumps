@@ -59,6 +59,13 @@ enum CapabilityCatalog {
     /// Registry order. It is the Settings sidebar order and the order modules apply in; a module
     /// follows every module it depends on, so a dependency is settled before its dependents read it.
     static let descriptors: [CapabilityDescriptor] = [
+        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer
+    ]
+
+    /// The default capabilities: the feature set Keybumps was locked at (#205). Every capability
+    /// added since, starting with Timer, is an added capability, which Settings lists in its own
+    /// group below them.
+    static let defaultCapabilities: Set<Capability> = [
         .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
     ]
 

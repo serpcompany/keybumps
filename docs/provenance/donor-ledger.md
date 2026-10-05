@@ -20,3 +20,13 @@ Captured 2026-09-12 before implementation.
 No GPL or AGPL source was used. Better Shot was excluded because it mixes BSD-3-Clause with AGPL-3.0/GPL-3.0 files and annotation code of unstated origin.
 
 The new repository has no runtime or checkout-path dependency on any donor. No Superwhisper or Alfred source/assets were copied.
+
+## Timer (added 2026-10-06, issue #205)
+
+| Source | Donor | Commit | License | Disposition |
+| --- | --- | --- | --- | --- |
+| Duration parsing: `m:ss` and `h:mm:ss`, numbers with units (`1h30m`, `1.5h`), a number without a unit taking the next smaller one (`1h 30`), unit spellings | [edelstone/tock](https://github.com/edelstone/tock) `Tock/TockModel.swift` (`parsedDuration`, `parsedCompositeDuration`, `parsedColonDuration`, `unitForToken`) | `bc36b00ca1c51daba1a428801ebee701b4f120a7` | MIT | Adapted into `apps/macos/Keybumps/Timer/TimerDurationParser.swift`. `apps/macos/LICENSE.tock` ships in the app bundle. |
+| A timer as an end date plus remaining time while paused, an injected clock, a finished state that waits to be seen, and one sound per finish | [antonyshakirov/hop](https://github.com/antonyshakirov/hop) `Sources/HopCore/TimerEngine.swift` | `5b5b006c08c4d996cf26e898d46d1eb3afe63c69` | MIT | Design reference only; no source copied. |
+| Feature set and lessons (ring until dismissed needs a clear dismiss) | [raycast/extensions](https://github.com/raycast/extensions) `extensions/timers`, `extensions/pomodoro` | `2a329b9` | MIT | Design reference only; no source copied. |
+
+GPL and unlicensed timer apps were excluded.

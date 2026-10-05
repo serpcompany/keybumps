@@ -22,6 +22,14 @@ _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 A brief, self-dismissing message that grows out of the notch, or the top of the menu bar on screens without one.
 _Avoid_: Toast, HUD, banner
 
+**Default capability**:
+One of the seven capabilities Keybumps's feature set was locked at: Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, and Snippets.
+_Avoid_: Core plugin, built-in plugin
+
+**Added capability**:
+A capability added after the default set, starting with Timer. Settings lists added capabilities in their own group below the default ones.
+_Avoid_: Plugin, extension, add-on
+
 **Settings**:
 The Keybumps window where capabilities are turned on and configured. Quick Search and the Command Palette offer it as Keybumps Settings.
 _Avoid_: Preferences, Settings panel
@@ -114,6 +122,14 @@ _Avoid_: Secret, password snippet
 **Snippets tab**:
 The Command Palette tab (⌘5) that lists snippets. Return copies one and ⌘Return pastes it into the app in front.
 _Avoid_: Snippet library, snippet manager
+
+**Timer**:
+Counting down from a duration you type, and being told when it ends.
+_Avoid_: Alarm, reminder, stopwatch, pomodoro
+
+**Timers tab**:
+The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it.
+_Avoid_: Timer list, timer manager
 
 ### Licensing
 

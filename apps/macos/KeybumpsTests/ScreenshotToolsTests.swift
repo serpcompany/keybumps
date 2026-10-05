@@ -271,8 +271,8 @@ final class ScreenshotToolsTests: XCTestCase {
         defaults.set(["clipboardHistory", "quickSearch", "windowManagement"], forKey: "enabledCapabilities")
 
         let upgraded = AppPreferences(defaults: defaults)
-        // Snippets, introduced later, is enabled once the same way.
-        XCTAssertEqual(upgraded.enabledCapabilities, [.clipboardHistory, .quickSearch, .windowManagement, .screenshotTools, .snippets])
+        // Snippets and Timer, introduced later, are enabled once the same way.
+        XCTAssertEqual(upgraded.enabledCapabilities, [.clipboardHistory, .quickSearch, .windowManagement, .screenshotTools, .snippets, .timer])
         XCTAssertEqual(AppPreferences(defaults: defaults).enabledCapabilities, upgraded.enabledCapabilities)
 
         upgraded.setCapability(.screenshotTools, enabled: false)

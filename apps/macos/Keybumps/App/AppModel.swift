@@ -36,6 +36,8 @@ final class AppModel {
     @ObservationIgnored private let coachTips: any CoachTipPresenting
     let clipboard: ClipboardHistoryService
     let snippets: SnippetStore
+    /// The Timers tab's countdowns, run by `TimerModule`.
+    let timers: TimerStore
     /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
     let keywordExpansion: KeywordExpansionController
     let screenshotTools: ScreenshotToolsService
@@ -156,6 +158,8 @@ final class AppModel {
         keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
         updatePrompt injectedUpdatePrompt: (any UpdatePromptPresenting)? = nil,
         whatsNew injectedWhatsNew: (any WhatsNewPresenting)? = nil,
+        timers injectedTimers: TimerStore? = nil,
+        timerAlerts injectedTimerAlerts: (any TimerAlerting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -204,6 +208,8 @@ final class AppModel {
         self.clipboard = clipboard
         let snippets = injectedSnippets ?? SnippetStore.makeDefault()
         self.snippets = snippets
+        let timers = injectedTimers ?? TimerStore.makeDefault()
+        self.timers = timers
         // Dictation and Snippets share one paste step. Unit tests and the UI-test composition never
         // synthesize ⌘V.
         let textPaster = injectedTextPaster
@@ -309,7 +315,15 @@ final class AppModel {
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
             KeyboardShortcutterModule(detector: detector, inbox: inbox, preferences: preferences),
-            SnippetsModule(palette: commandPalette, snippets: snippets, expansion: keywordExpansion)
+            SnippetsModule(palette: commandPalette, snippets: snippets, expansion: keywordExpansion),
+            TimerModule(
+                palette: commandPalette,
+                store: timers,
+                preferences: preferences,
+                attention: CapabilityMenuBarAttention(attention: menuBarAttention, capability: .timer),
+                // Unit tests never play a sound or show a notice.
+                alerts: injectedTimerAlerts ?? (UnitTestHost.isActive ? InertTimerAlerts() : SystemTimerAlerts())
+            )
         ])
         commandPalette.tabContents = capabilities.paletteContents
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }

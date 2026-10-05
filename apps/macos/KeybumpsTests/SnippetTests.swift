@@ -874,15 +874,15 @@ struct SnippetPaletteTests {
         #expect(NSPasteboard.contentsOptions(concealed: false) == [])
     }
 
-    @Test("Snippets takes ⌘5 and the hidden-by-default Hotkeys tab moves to ⌘6")
+    @Test("Snippets takes ⌘5, and the hidden-by-default Hotkeys tab stays last, after Timers")
     func tabOrdering() {
-        #expect(CommandPaletteTab.allCases.suffix(2) == [.snippets, .keyboardShortcutter])
+        #expect(CommandPaletteTab.allCases.suffix(3) == [.snippets, .timers, .keyboardShortcutter])
         #expect(CommandPaletteTab.snippets.shortcutLabel == "⌘5")
-        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘6")
+        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘7")
         let visible = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search)
-        #expect(visible.map(\.shortcutLabel) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"], "No gap in the visible tabs")
+        #expect(visible.map(\.shortcutLabel) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6"], "No gap in the visible tabs")
         #expect(CommandPaletteTab.matchingCommandKey("5", in: visible) == .snippets)
-        #expect(CommandPaletteTab.matchingCommandKey("6", in: visible) == nil)
+        #expect(CommandPaletteTab.matchingCommandKey("7", in: visible) == nil)
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search).last == .keyboardShortcutter)
     }
 }
@@ -1080,14 +1080,14 @@ struct SnippetPaletteKeyTests {
         #expect(module.attentionCount(denied) == 0)
     }
 
-    @Test("⌘5 selects Snippets; ⌘6 does nothing while the Hotkeys tab is hidden")
+    @Test("⌘5 selects Snippets; ⌘7 does nothing while the Hotkeys tab is hidden")
     func tabKeys() {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         fixture.palette.state.select(.search)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_5, "5", command: true)) == nil)
         #expect(fixture.palette.state.tab == .snippets)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_6, "6", command: true)) != nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_7, "7", command: true)) != nil)
         #expect(fixture.palette.state.tab == .snippets)
     }
 }
