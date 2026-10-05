@@ -18,7 +18,7 @@ That model needs a runtime for outside code, an isolation and permission model, 
 1. **"Plugin" is the owner's word for a capability.** Code and docs keep saying capability (`CONTEXT.md`).
 2. **The default capabilities** are the seven the feature set was locked at: Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, and Snippets (`CapabilityCatalog.defaultCapabilities`).
 3. **Added capabilities ship inside the app, first-party.** Each is built with the recipe in `docs/architecture.md` and reaches people in a normal release, through Sparkle. A new one:
-   - is turned on once for existing installs (known capabilities), and can be turned off in Settings;
+   - is turned on once for existing installs (known capabilities), unless its manifest says it ships off (`isOnByDefault`), and can be turned on or off in Settings;
    - is listed in its own Settings group, below the default ones.
 
    Timer is the first.

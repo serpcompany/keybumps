@@ -1199,6 +1199,9 @@ private struct CapabilityShortcutEditor: View {
 struct PermissionRow: View {
     @Environment(AppModel.self) private var model
     let permission: MacPermission
+    /// For a permission a plugin can use but doesn't need: why it helps. The row is then marked
+    /// Optional, and a missing grant isn't shown as a problem.
+    var optionalReason: String?
 
     var body: some View {
         let readiness = model.permissionReadiness
@@ -1211,14 +1214,22 @@ struct PermissionRow: View {
         content(state: state, action: action)
     }
 
+    /// The status beside the row. An optional permission that isn't granted reads "Not Granted",
+    /// never "Required".
+    static func status(_ state: PermissionAuthorizationState, requiresRelaunch: Bool, isOptional: Bool) -> String {
+        if requiresRelaunch { return "Restart Required" }
+        return isOptional && !state.isGranted ? "Not Granted" : state.rawValue
+    }
+
     @ViewBuilder
     private func content(state: PermissionAuthorizationState, action: PermissionSettingsRowAction) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            SettingsRowLabel(title: permission.title, subtitle: permission.explanation)
+            SettingsRowLabel(title: optionalReason == nil ? permission.title : "\(permission.title) (Optional)",
+                             subtitle: optionalReason ?? permission.explanation)
             Spacer()
-            Text(model.requiresPermissionRelaunch(permission) ? "Restart Required" : state.rawValue)
+            Text(Self.status(state, requiresRelaunch: model.requiresPermissionRelaunch(permission), isOptional: optionalReason != nil))
                 .font(.caption.weight(.medium))
-                .foregroundStyle(state.isGranted ? .green : .orange)
+                .foregroundStyle(state.isGranted ? .green : (optionalReason == nil ? .orange : .secondary))
             switch action {
             case .restartKeybumps:
                 Button("Restart Keybumps") { model.restartForPermissionRelaunch() }

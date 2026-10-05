@@ -135,17 +135,26 @@ final class AppPreferences {
         didSet { defaults.set(lastLaunchedVersion, forKey: Key.lastLaunchedVersion) }
     }
 
+    /// The plugins that start on: in a new install every one but those that ship off; in an existing
+    /// install the ones it had on, plus any an update added since (not in `known`) that ship on.
+    static func initialCapabilities(stored: [String]?, known: [String]?, shippingOff: Set<Capability>) -> Set<Capability> {
+        guard let stored else { return Set(Capability.allCases).subtracting(shippingOff) }
+        let knownSet = known.map { Set($0.compactMap(Capability.init(rawValue:))) } ?? Capability.originalCapabilities
+        let introduced = Set(Capability.allCases).subtracting(knownSet).subtracting(shippingOff)
+        return Set(stored.compactMap(Capability.init(rawValue:))).union(introduced)
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
-        if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
-            let known = (defaults.array(forKey: Key.knownCapabilities) as? [String])
-                .map { Set($0.compactMap(Capability.init(rawValue:))) } ?? Capability.originalCapabilities
-            let introduced = Set(Capability.allCases).subtracting(known)
-            let migrated = Set(raw.compactMap(Capability.init(rawValue:))).union(introduced)
-            enabledCapabilities = migrated
-            defaults.set(migrated.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities)
-        } else {
-            enabledCapabilities = Set(Capability.allCases)
+        let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
+        let initial = Self.initialCapabilities(
+            stored: stored,
+            known: defaults.array(forKey: Key.knownCapabilities) as? [String],
+            shippingOff: Set(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability))
+        )
+        enabledCapabilities = initial
+        if stored != nil {
+            defaults.set(initial.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities)
         }
         defaults.set(Capability.allCases.map(\.rawValue).sorted(), forKey: Key.knownCapabilities)
         dictationLanguage = defaults.string(forKey: Key.dictationLanguage) ?? "en-US"
