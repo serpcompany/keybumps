@@ -19,7 +19,7 @@ What a capability declares about itself, so the shell draws its Settings page, i
 _Avoid_: Plist, config, schema
 
 **Plugins page**:
-Two places with one name. In the app, Settings › Plugins lists every plugin with its switch; Quick Search's Plugins command opens it. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
+Two places with one name. In the app, Settings › Plugins lists every plugin with its switch; Quick Search's Plugins command opens it. A turned-off plugin's own page says so at the top, with a Turn On button. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
 _Avoid_: Store, marketplace, gallery
 
 **Capability Module**:
@@ -57,7 +57,7 @@ A Keybumps action that Quick Search offers beside applications, files, and folde
 _Avoid_: Workflow, extension command
 
 **Capability command**:
-The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off. A turned-off plugin's page says so at the top, with a Turn On button.
+The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
 _Avoid_: Plugin, extension, navigation command
 
 **Recent Items**:
@@ -148,7 +148,7 @@ The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25
 _Avoid_: Timer list, timer manager
 
 **Emoji Picker**:
-Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it or pasting it into the app you're using. The first plugin that ships off; it's turned on in Settings › Plugins.
+Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it or pasting it into the app you're using. The first plugin that ships off; it's turned on in Settings › Plugins or with Turn On on its page.
 _Avoid_: Emoji keyboard, character viewer
 
 **Emoji tab**:

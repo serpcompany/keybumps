@@ -1101,7 +1101,8 @@ private struct PermissionWalkthroughView: View {
 }
 
 /// The top of a capability's page, as on a Raycast extension page: its icon, name, and summary,
-/// then its command with the hotkey. The enable switch lives in the toolbar.
+/// a banner while it's turned off, then its command with the hotkey. The enable switch lives in the
+/// toolbar.
 struct CapabilityControl: View {
     let capability: Capability
     var shortcuts: [CapabilityShortcut] = []
@@ -1143,6 +1144,7 @@ struct CapabilityOffBanner: View {
                 Spacer(minLength: 12)
                 Button("Turn On") { model.setCapability(capability, enabled: true) }
                     .buttonStyle(SettingsButtonStyle(isProminent: true))
+                    .accessibilityLabel("Turn On \(capability.title)")
                     .accessibilityIdentifier("capability.offBanner.turnOn.\(capability.rawValue)")
             }
             .padding(.horizontal, SettingsTheme.rowInset + 3)
