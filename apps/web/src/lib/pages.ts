@@ -19,6 +19,12 @@ export const sitePages = [
       'Quick search, clipboard history, screenshots, on-device dictation, window management, and shortcut coaching in one native macOS app.'
   },
   {
+    path: '/plugins/',
+    title: 'Plugins',
+    description:
+      'Every Keybumps plugin, official and built by Keybumps, with its Command Palette tab, shortcuts, and the macOS permissions it needs.'
+  },
+  {
     path: '/pricing/',
     title: 'Pricing',
     description: `Keybumps is a ${PRICE} one-time purchase for one Mac, with a 30-day money-back guarantee.`

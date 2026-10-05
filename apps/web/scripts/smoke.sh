@@ -123,19 +123,19 @@ robots_header_is() {
 }
 
 # Pages end in a slash and files never do (SERP URL trailing-slash standard).
-for path in / /pricing/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
+for path in / /plugins/ /pricing/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
   /legal/privacy/ /legal/terms/ /legal/refunds/ /legal/dmca/ /legal/affiliate-disclosure/ \
   /sitemap/ /robots.txt /sitemap-index.xml /sitemaps/pages.xml; do
   eventually "200 $path" status_is "$base$path" 200 "${smoke[@]}"
 done
 
-# The other form redirects in one hop. Shipped app builds link to /pricing, and Polar checkout
-# and receipts may link to /thanks and /license. /download goes to /download/, which then
-# redirects to the DMG (checked below).
+# The other form redirects in one hop. Shipped app builds link to /pricing, builds with the Store
+# link to /plugins, and Polar checkout and receipts may link to /thanks and /license. /download
+# goes to /download/, which then redirects to the DMG (checked below).
 expect_redirect() {
   eventually "308 $1 -> $2" status_is "$base$1" "308 $base$2" "${smoke[@]}"
 }
-for page in /pricing /download /license /thanks /support /legal/dmca; do
+for page in /pricing /plugins /download /license /thanks /support /legal/dmca; do
   expect_redirect "$page" "$page/"
 done
 expect_redirect /robots.txt/ /robots.txt
@@ -260,7 +260,7 @@ og_on() {
     return 1
   fi
 }
-for path in /pricing/ /license/ /thanks/ /about/ /legal/privacy/ /sitemap/; do
+for path in /plugins/ /pricing/ /license/ /thanks/ /about/ /legal/privacy/ /sitemap/; do
   eventually "og:image on $path" og_on "$path"
 done
 
