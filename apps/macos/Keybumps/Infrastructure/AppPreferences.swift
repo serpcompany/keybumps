@@ -89,7 +89,7 @@ final class AppPreferences {
         didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
     }
 
-    /// Whether a timer's end plays a sound as well as its notch notice. On by default.
+    /// Whether a timer's alarm rings until it's stopped, rather than showing silently. On by default.
     var timerPlaysSound: Bool {
         didSet { defaults.set(timerPlaysSound, forKey: Key.timerPlaysSound) }
     }

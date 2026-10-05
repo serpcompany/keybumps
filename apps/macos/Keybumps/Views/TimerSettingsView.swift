@@ -14,8 +14,8 @@ struct TimerSettingsView: View {
                     set: { model.preferences.timerPlaysSound = $0 }
                 )) {
                     SettingsRowLabel(
-                        title: "Play a sound",
-                        subtitle: "Keybumps always shows a notch notice, and marks its menu bar icon until you open the Timers tab."
+                        title: "Ring until you stop it",
+                        subtitle: "Keybumps always shows an alarm that stays on screen until you click Stop or open the Timers tab. Turn this off for a silent alarm."
                     )
                 }
                 .toggleStyle(SettingsSwitchToggleStyle())

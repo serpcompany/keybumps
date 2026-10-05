@@ -127,6 +127,10 @@ _Avoid_: Snippet library, snippet manager
 Counting down from a duration you type, and being told when it ends.
 _Avoid_: Alarm, reminder, stopwatch, pomodoro
 
+**Timer alarm**:
+The card that stays at the top of the screen when a timer ends, ringing unless sound is off, until Stop, Repeat, or the Timers tab.
+_Avoid_: Notification, banner, popup
+
 **Timers tab**:
 The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it.
 _Avoid_: Timer list, timer manager

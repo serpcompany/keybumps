@@ -179,16 +179,6 @@ extension PaletteHUD: PaletteNoticePresenting {
     }
 }
 
-/// A notice waiting for the notch (`PaletteHUD.showWhenNotchFree`), built when it shows.
-struct WaitingNotice {
-    let message: String
-    let systemImage: String
-    let tint: Color
-    let duration: TimeInterval
-    /// Runs as it shows, such as a sound.
-    var whenShown: (() -> Void)?
-}
-
 /// A brief notice such as "Copied to Clipboard" that grows out of the notch: the message sits
 /// left of the notch and an icon (or a shortcut's keycaps) right of it, on black that blends with
 /// the notch. Screens without a notch show the same black tab hanging from the top of the menu bar.
@@ -206,9 +196,9 @@ final class PaletteHUD: CoachTipPresenting {
     /// other notices are dropped rather than drawn over it, and one already showing is hidden. It is
     /// weak, so an owner that goes away can never leave notices suppressed.
     private weak var notchOwner: AnyObject?
-    /// A notice that must not be lost, waiting for the notch (`showWhenNotchFree`), and since when.
-    private var waitingNotice: (source: String, since: Date, show: (TimeInterval) -> Void)?
-    /// The clock for how long a notice waited; tests replace it.
+    /// What waits for the notch (`whenNotchFree`), whose it is, and since when.
+    private var waitingForNotch: (source: String, since: Date, run: (TimeInterval) -> Void)?
+    /// The clock for how long it waited; tests replace it.
     var now: () -> Date = Date.init
 
     var isSuppressed: Bool { notchOwner != nil }
@@ -217,40 +207,37 @@ final class PaletteHUD: CoachTipPresenting {
     func claimNotch(for owner: AnyObject) {
         notchOwner = owner
         dismiss()
+        onClaim?()
     }
+
+    /// Runs whenever a surface claims the notch, so a sound playing then can stop at once.
+    var onClaim: (() -> Void)?
 
     /// Gives the notch back, if `owner` still holds it.
     func releaseNotch(from owner: AnyObject) {
         guard notchOwner === owner else { return }
         notchOwner = nil
-        let waiting = waitingNotice
-        waitingNotice = nil
-        if let waiting { waiting.show(now().timeIntervalSince(waiting.since)) }
+        let waiting = waitingForNotch
+        waitingForNotch = nil
+        if let waiting { waiting.run(now().timeIntervalSince(waiting.since)) }
     }
 
-    /// A notice that must not be lost, such as a timer ending: shown now, or, while another surface
-    /// holds the notch (Dictation, however long it records), as soon as it gives the notch back.
-    /// `notice` builds it when it shows, from how long it waited, so a late one can say so. Whatever
-    /// it does when shown, such as a sound, waits too rather than reaching Dictation's microphone.
-    /// A newer one replaces one still waiting, and one left waiting by a surface that went away
-    /// without giving the notch back shows with the next.
-    func showWhenNotchFree(from source: String, _ notice: @escaping (_ waited: TimeInterval) -> WaitingNotice) {
-        let show: (TimeInterval) -> Void = { [weak self] waited in
-            let notice = notice(waited)
-            self?.show(notice.message, systemImage: notice.systemImage, tint: notice.tint, duration: notice.duration)
-            notice.whenShown?()
-        }
+    /// Runs `action` now, or, while another surface holds the notch, as soon as it gives the notch
+    /// back, with how long it waited: for whatever must not happen during Dictation, such as a
+    /// timer's ringing reaching its microphone. A newer one from any source replaces one still
+    /// waiting.
+    func whenNotchFree(from source: String, _ action: @escaping (_ waited: TimeInterval) -> Void) {
         if isSuppressed {
-            waitingNotice = (source, now(), show)
+            waitingForNotch = (source, now(), action)
         } else {
-            waitingNotice = nil
-            show(0)
+            waitingForNotch = nil
+            action(0)
         }
     }
 
-    /// Drops `source`'s notice if it is still waiting, as when what it announced is gone.
-    func cancelWaitingNotice(from source: String) {
-        if waitingNotice?.source == source { waitingNotice = nil }
+    /// Drops what `source` left waiting for the notch, as when what it was for is gone.
+    func cancelWaiting(from source: String) {
+        if waitingForNotch?.source == source { waitingForNotch = nil }
     }
 
     func show(

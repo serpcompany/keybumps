@@ -90,6 +90,7 @@
 		7C2F84E684B274FAE230FC8B /* SnippetsModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = B19CB2A313982E002E9097B7 /* SnippetsModule.swift */; };
 		7C5C620EDEABCBCF01BA1DE3 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */; };
 		7CE0B6A945403834D41BBF7E /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7837F25296045EA5F5984 /* SmokeUITests.swift */; };
+		7EFB3F00AAD957729181BAA1 /* TimerAlarm.swift in Sources */ = {isa = PBXBuildFile; fileRef = A76FE81D232C2F0746205266 /* TimerAlarm.swift */; };
 		80EBAD50A5F6E554E63A4CC4 /* ProductIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 997F4D090D8DCBF03DAFC78E /* ProductIdentity.swift */; };
 		81BA58EB099F44DBEE5F94BD /* MenuBarAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44AC426D00D2407454C265DD /* MenuBarAttention.swift */; };
 		839ADB854B9177E47955376F /* WhatsNew.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */; };
@@ -317,6 +318,7 @@
 		A6088743D694CB89ED371F73 /* PasteboardSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteboardSnapshot.swift; sourceTree = "<group>"; };
 		A660F126D44D431EBC8A7A20 /* LICENSE.shotnix */ = {isa = PBXFileReference; path = LICENSE.shotnix; sourceTree = "<group>"; };
 		A6CDB0E47E43E83CA21714BF /* QuickSearchCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchCommand.swift; sourceTree = "<group>"; };
+		A76FE81D232C2F0746205266 /* TimerAlarm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerAlarm.swift; sourceTree = "<group>"; };
 		A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationAudioPlayer.swift; sourceTree = "<group>"; };
 		ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionDetectionTests.swift; sourceTree = "<group>"; };
 		AD2D4D253FCAFCBC20E1EB93 /* TimerPaletteContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerPaletteContent.swift; sourceTree = "<group>"; };
@@ -609,6 +611,7 @@
 		70C15B86C1B9CC0E077A17F7 /* Timer */ = {
 			isa = PBXGroup;
 			children = (
+				A76FE81D232C2F0746205266 /* TimerAlarm.swift */,
 				6CA172708D898A0BF0D7278B /* TimerDurationParser.swift */,
 				8225D646846A30ACE4D44904 /* TimerItem.swift */,
 				AD2D4D253FCAFCBC20E1EB93 /* TimerPaletteContent.swift */,
@@ -1055,6 +1058,7 @@
 				B276B1127A353841F9623DE6 /* StandardWindowControlMonitor.swift in Sources */,
 				9198579854CC8F0979A2D87D /* SystemServices.swift in Sources */,
 				41861F4AB6A67650E7EEF001 /* TextPaster.swift in Sources */,
+				7EFB3F00AAD957729181BAA1 /* TimerAlarm.swift in Sources */,
 				1D325D80A085336EFE15D81D /* TimerDurationParser.swift in Sources */,
 				6D5FEC708B529450EB85EDEE /* TimerItem.swift in Sources */,
 				86BB57587481ECAD2AFDD92F /* TimerModule.swift in Sources */,
