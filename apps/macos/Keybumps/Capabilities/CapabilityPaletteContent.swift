@@ -10,6 +10,13 @@ protocol CapabilityPaletteContent: AnyObject {
     var tab: CommandPaletteTab { get }
     /// Whether typing moves the selection back to the first row, as when the rows re-rank.
     var resetsSelectionWhileTyping: Bool { get }
+    /// Whether the rows for `query` are a grid, such as emoji to browse while the search is empty:
+    /// all four arrow keys go to `selection(after:from:query:)`, and the footer shows them. A list's
+    /// Up and Down step one row and wrap.
+    func isGrid(query: String) -> Bool
+    /// Where an arrow key moves a grid's selection from `row`, or nil to stay put. `PaletteGrid`
+    /// works it out for rows laid out in sections.
+    func selection(after move: PaletteMove, from row: Int, query: String) -> Int?
     /// The rows Up and Down move through, for the text in the search field.
     func rowCount(query: String) -> Int
     /// Return on the selected row; `withCommand` is Command-Return.
@@ -27,6 +34,8 @@ protocol CapabilityPaletteContent: AnyObject {
 
 extension CapabilityPaletteContent {
     var resetsSelectionWhileTyping: Bool { false }
+    func isGrid(query: String) -> Bool { false }
+    func selection(after move: PaletteMove, from row: Int, query: String) -> Int? { nil }
     func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {}
     func delete(row: Int, query: String) -> Bool { false }
     func footerActions(row: Int, query: String) -> PaletteFooterActions { PaletteFooterActions(tab: tab) }
@@ -60,6 +69,58 @@ struct PaletteContentActions {
     /// the selection while typing, it also moves the selection back to the first row, so select a
     /// row after clearing, not before.
     let clearQuery: () -> Void
+    /// Copies text, keeping it out of Clipboard History, then closes the palette and confirms the
+    /// copy at the notch.
+    var copy: (String) -> Void = { _ in }
+    /// Closes the palette and pastes text into the app that was in front when it opened, or copies
+    /// it and says why when it can't (`PalettePasteRoute`). With `restoresClipboard` true, what was on
+    /// the clipboard comes back once the paste has been read.
+    var paste: (_ text: String, _ restoresClipboard: Bool) -> Void = { _, _ in }
+}
+
+/// An arrow key in a grid tab.
+enum PaletteMove: Equatable {
+    case up, down, left, right
+
+    /// The move an arrow key's key code stands for.
+    init?(keyCode: UInt16) {
+        switch keyCode {
+        case 123: self = .left
+        case 124: self = .right
+        case 125: self = .down
+        case 126: self = .up
+        default: return nil
+        }
+    }
+}
+
+/// Arrow-key moves through a grid laid out in sections, each section starting a new row, as a
+/// palette tab draws its rows: Left and Right step one item, across rows and sections; Up and
+/// Down move a row, to the same column, or the last item of a shorter row. Moves stop at the edges.
+enum PaletteGrid {
+    static func selection(after move: PaletteMove, from index: Int, sectionCounts: [Int], columns: Int) -> Int? {
+        let total = sectionCounts.reduce(0, +)
+        guard columns > 0, (0..<total).contains(index) else { return nil }
+        switch move {
+        case .left: return index > 0 ? index - 1 : nil
+        case .right: return index < total - 1 ? index + 1 : nil
+        case .up, .down:
+            // Each row as the index of its first item and how many it holds.
+            var rows: [(start: Int, count: Int)] = []
+            var start = 0
+            for count in sectionCounts where count > 0 {
+                for offset in stride(from: 0, to: count, by: columns) {
+                    rows.append((start + offset, min(columns, count - offset)))
+                }
+                start += count
+            }
+            guard let row = rows.firstIndex(where: { (0..<$0.count).contains(index - $0.start) }) else { return nil }
+            let column = index - rows[row].start
+            let target = move == .up ? row - 1 : row + 1
+            guard rows.indices.contains(target) else { return nil }
+            return rows[target].start + min(column, rows[target].count - 1)
+        }
+    }
 }
 
 /// What the palette hands a tab's view each time it draws it.

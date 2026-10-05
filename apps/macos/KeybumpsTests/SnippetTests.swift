@@ -793,15 +793,15 @@ struct SnippetPaletteTests {
     func pasteRoute() {
         let app = PasteTarget(processIdentifier: 42, isKeybumps: false)
         let keybumps = PasteTarget(processIdentifier: 7, isKeybumps: true)
-        #expect(SnippetPasteRoute.beforeClosing(canPaste: true, target: app) == .paste)
-        #expect(SnippetPasteRoute.beforeClosing(canPaste: false, target: app) == .copy(.needsAccessibility))
-        #expect(SnippetPasteRoute.beforeClosing(canPaste: true, target: keybumps) == .copy(.noOtherApp))
-        #expect(SnippetPasteRoute.beforeClosing(canPaste: false, target: nil) == .copy(.noOtherApp))
-        #expect(SnippetPasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: false, isStillWanted: true))
-        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: keybumps, paletteIsVisible: false, isStillWanted: true))
-        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: nil, paletteIsVisible: false, isStillWanted: true))
-        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: true, isStillWanted: true))
-        #expect(!SnippetPasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: false, isStillWanted: false))
+        #expect(PalettePasteRoute.beforeClosing(canPaste: true, target: app) == .paste)
+        #expect(PalettePasteRoute.beforeClosing(canPaste: false, target: app) == .copy(.needsAccessibility))
+        #expect(PalettePasteRoute.beforeClosing(canPaste: true, target: keybumps) == .copy(.noOtherApp))
+        #expect(PalettePasteRoute.beforeClosing(canPaste: false, target: nil) == .copy(.noOtherApp))
+        #expect(PalettePasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: false, isStillWanted: true))
+        #expect(!PalettePasteRoute.canPasteNow(into: app, frontmost: keybumps, paletteIsVisible: false, isStillWanted: true))
+        #expect(!PalettePasteRoute.canPasteNow(into: app, frontmost: nil, paletteIsVisible: false, isStillWanted: true))
+        #expect(!PalettePasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: true, isStillWanted: true))
+        #expect(!PalettePasteRoute.canPasteNow(into: app, frontmost: app, paletteIsVisible: false, isStillWanted: false))
     }
 
     @Test("The shared paste step writes, keeps the write out of Clipboard History, then presses ⌘V")
@@ -1241,6 +1241,74 @@ struct TemporaryFolder {
     }
 }
 
+/// Copy and paste that any module tab can ask the palette for (`PaletteContentActions`), on the
+/// same path as the Snippets tab.
+@MainActor
+@Suite("Command Palette: copy and paste for module tabs")
+struct PaletteTextActionTests {
+    @Test("Paste can put back what was on the clipboard once the app has read the paste")
+    func pasteRestoresTheClipboard() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        fixture.palette.clipboardRestoreDelay = .milliseconds(20)
+        fixture.paster.pasteboard = fixture.pasteboard
+        _ = fixture.pasteboard.writeText("made-up earlier copy", concealed: false)
+        fixture.clipboard.pollForTesting()
+        let historyCount = fixture.clipboard.entries.count
+
+        fixture.palette.pasteText("made-up pasted text", restoresClipboard: true)
+        try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
+        #expect(fixture.paster.pasted.map(\.text) == ["made-up pasted text"])
+        try await fixture.waitUntil { fixture.pasteboard.string(forType: .string) == "made-up earlier copy" }
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.count == historyCount, "Clipboard History skips the restore")
+    }
+
+    @Test("Something copied before the restore is kept")
+    func newerCopyWins() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { true }
+        fixture.palette.clipboardRestoreDelay = .milliseconds(80)
+        fixture.paster.pasteboard = fixture.pasteboard
+        _ = fixture.pasteboard.writeText("made-up earlier copy", concealed: false)
+
+        fixture.palette.pasteText("made-up pasted text", restoresClipboard: true)
+        try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
+        _ = fixture.pasteboard.writeText("made-up newer copy", concealed: false)
+        try await Task.sleep(for: .milliseconds(160))
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up newer copy")
+    }
+
+    @Test("Without Accessibility, paste copies instead, says why, and restores nothing")
+    func pasteWithoutAccessibilityCopies() async throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.canPaste = { false }
+        fixture.palette.clipboardRestoreDelay = .milliseconds(20)
+        var used = 0
+        fixture.palette.pasteText("made-up text", restoresClipboard: true) { used += 1 }
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown == [.init(message: "Copied · Paste needs Accessibility", isWarning: true)])
+        #expect(used == 1)
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.isEmpty, "Kept out of Clipboard History")
+    }
+
+    @Test("Copy is kept out of Clipboard History and confirmed at the notch")
+    func copyIsConfirmed() {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.copyText("made-up text")
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown == [.init(message: "Copied to Clipboard", isWarning: false)])
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.isEmpty)
+    }
+}
+
 /// A Command Palette over a named pasteboard, temporary folders, and a recording paste step.
 @MainActor
 private final class PaletteFixture {
@@ -1341,9 +1409,12 @@ private final class PaletteFixture {
 private final class RecordingPaster: TextPasting {
     private(set) var pasted: [(text: String, concealed: Bool)] = []
     var fails = false
+    /// When set, a paste writes the text here first, as the real paste step does.
+    var pasteboard: NSPasteboard?
 
     func paste(_ text: String, concealed: Bool) throws {
         if fails { throw TextPasteError.keystrokeUnavailable }
+        _ = pasteboard?.writeText(text, concealed: concealed)
         pasted.append((text, concealed))
     }
 }

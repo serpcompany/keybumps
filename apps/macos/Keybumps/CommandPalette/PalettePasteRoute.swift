@@ -23,7 +23,7 @@ struct PasteTarget: Equatable {
 /// and a short wait, with the palette not reopened. Posting ⌘V into another app needs
 /// Accessibility, which is optional for Snippets: without it ⌘Return copies, and the permission
 /// assistant offers the usual setup. The paste itself is `TextPasting`, the step Dictation shares.
-enum SnippetPasteRoute: Equatable {
+enum PalettePasteRoute: Equatable {
     enum Reason: Equatable {
         /// Posting ⌘V into another app needs Accessibility.
         case needsAccessibility
@@ -52,7 +52,7 @@ enum SnippetPasteRoute: Equatable {
     }
 
     /// Decided when ⌘Return is pressed, before the palette closes.
-    static func beforeClosing(canPaste: Bool, target: PasteTarget?) -> SnippetPasteRoute {
+    static func beforeClosing(canPaste: Bool, target: PasteTarget?) -> PalettePasteRoute {
         guard let target, !target.isKeybumps else { return .copy(.noOtherApp) }
         guard canPaste else { return .copy(.needsAccessibility) }
         return .paste
