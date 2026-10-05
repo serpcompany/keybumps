@@ -1323,8 +1323,6 @@ final class ShortcutRecorderState {
     }
 }
 
-/// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
-/// a hotkey field that is recording, a sheet or alert, or a text field with text in it.
 /// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
 /// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at.
 struct SettingsWindowFiller: NSViewRepresentable {
@@ -1347,16 +1345,30 @@ struct SettingsWindowFiller: NSViewRepresentable {
             super.viewDidMoveToWindow()
             guard window != nil, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
             // After this turn, so the frame macOS restores for the window doesn't replace it.
-            DispatchQueue.main.async { [weak self] in
-                guard let self, let window, let screen = window.screen ?? NSScreen.main,
-                      !preferences.didFillSettingsWindow else { return }
-                window.setFrame(screen.visibleFrame, display: true)
-                preferences.didFillSettingsWindow = true
+            DispatchQueue.main.async { [weak self] in self?.fill(attempt: 1) }
+        }
+
+        /// Fills the screen, then checks once the window has settled: if macOS restored a saved
+        /// size over it, fills again, up to three times. Only a fill that held, or the last try,
+        /// counts as the first open.
+        private func fill(attempt: Int) {
+            guard let window, let screen = window.screen ?? NSScreen.main, !preferences.didFillSettingsWindow else { return }
+            let target = screen.visibleFrame
+            window.setFrame(target, display: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self, let window = self.window else { return }
+                if window.frame != target, attempt < 3 {
+                    fill(attempt: attempt + 1)
+                } else {
+                    preferences.didFillSettingsWindow = true
+                }
             }
         }
     }
 }
 
+/// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
+/// a hotkey field that is recording, a sheet or alert, or a text field with text in it.
 struct SettingsEscapeCloser: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { EscapeView() }
     func updateNSView(_ nsView: NSView, context: Context) {}

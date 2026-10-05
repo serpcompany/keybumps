@@ -32,6 +32,19 @@ struct SettingsSidebarTests {
         #expect(PluginsTable.sections(matching: "zzz").isEmpty)
     }
 
+    @Test("A Plugins row shows the tab's Command-number while the tab can show, and the first shortcut and how many more")
+    func pluginsRowKeys() {
+        #expect(PluginsTable.tabKey(for: .timer, showsHotkeysTab: false) == "⌘6")
+        #expect(PluginsTable.tabKey(for: .windowManagement, showsHotkeysTab: true) == "", "No tab")
+        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, showsHotkeysTab: false) == "", "The Hotkeys tab is hidden")
+        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, showsHotkeysTab: true) == "⌘7")
+
+        let key = ShortcutBinding(keyCode: 1, modifiers: 0, displayName: "⇧⌘2")
+        #expect(PluginsTable.shortcutText(for: .screenshotTools) { _ in key } == "⇧⌘2 +2")
+        #expect(PluginsTable.shortcutText(for: .screenshotTools) { $0 == .screenshotArea ? key : nil } == "⇧⌘2")
+        #expect(PluginsTable.shortcutText(for: .timer) { _ in nil } == "", "Unassigned")
+    }
+
     @Test("The default capabilities are the seven Keybumps was locked at; anything newer is added")
     func defaultCapabilities() {
         #expect(CapabilityCatalog.defaultCapabilities == [

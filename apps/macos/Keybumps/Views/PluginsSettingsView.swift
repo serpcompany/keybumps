@@ -21,6 +21,20 @@ enum PluginsTable {
         ].filter { !$0.plugins.isEmpty }
     }
 
+    /// A plugin's palette tab Command-number, while the tab can be shown; the Hotkeys tab only
+    /// while its Settings page shows it.
+    static func tabKey(for descriptor: CapabilityDescriptor, showsHotkeysTab: Bool) -> String {
+        guard let tab = descriptor.paletteTab?.tab, tab != .keyboardShortcutter || showsHotkeysTab else { return "" }
+        return tab.shortcutLabel
+    }
+
+    /// A plugin's first assigned shortcut, and how many more it has, such as "⇧⌘2 +2".
+    static func shortcutText(for descriptor: CapabilityDescriptor, binding: (CapabilityShortcut) -> ShortcutBinding?) -> String {
+        let assigned = descriptor.shortcuts.compactMap { binding($0)?.displayName }
+        guard let first = assigned.first else { return "" }
+        return assigned.count > 1 ? "\(first) +\(assigned.count - 1)" : first
+    }
+
     /// The sections, keeping plugins whose name or Quick Search keywords contain `query`.
     static func sections(matching query: String) -> [Section] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,7 +54,6 @@ enum PluginsTable {
 /// ones, with its palette tab, its shortcut, and its switch. Clicking one opens its own page, which
 /// has its own row in the sidebar.
 struct PluginsSettingsView: View {
-    @Environment(AppModel.self) private var model
     let open: (SettingsSection) -> Void
     @State private var query = ""
 
@@ -86,15 +99,19 @@ private struct PluginsListRow: View {
                                 .foregroundStyle(.red)
                                 .accessibilityLabel("Needs attention")
                         }
-                        Text(tabKey(descriptor))
+                        let tabKey = PluginsTable.tabKey(for: descriptor, showsHotkeysTab: model.preferences.showsHotkeysTab)
+                        Text(tabKey)
                             .foregroundStyle(.secondary)
                             .frame(width: 36, alignment: .trailing)
                             .help("Its Command Palette tab")
-                        Text(shortcut(descriptor))
+                            .accessibilityLabel(tabKey.isEmpty ? "" : "Command Palette tab \(tabKey)")
+                        let shortcut = PluginsTable.shortcutText(for: descriptor) { model.preferences.capabilityShortcut(for: $0) }
+                        Text(shortcut)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .frame(width: 96, alignment: .trailing)
-                            .help("Its shortcut")
+                            .help("Its shortcuts")
+                            .accessibilityLabel(shortcut.isEmpty ? "" : "Shortcut \(shortcut)")
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.tertiary)
@@ -109,17 +126,5 @@ private struct PluginsListRow: View {
                 CapabilityToggle(capability: capability)
             }
         }
-    }
-
-    /// Its palette tab's Command-number, while the tab can be shown.
-    private func tabKey(_ descriptor: CapabilityDescriptor) -> String {
-        guard let tab = descriptor.paletteTab?.tab,
-              tab != .keyboardShortcutter || model.preferences.showsHotkeysTab else { return "" }
-        return tab.shortcutLabel
-    }
-
-    /// Its first shortcut that's assigned.
-    private func shortcut(_ descriptor: CapabilityDescriptor) -> String {
-        descriptor.shortcuts.lazy.compactMap { model.preferences.capabilityShortcut(for: $0)?.displayName }.first ?? ""
     }
 }
