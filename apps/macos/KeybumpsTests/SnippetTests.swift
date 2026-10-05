@@ -678,8 +678,8 @@ struct SnippetPaletteTests {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         fixture.palette.canPaste = { false }
-        var offers = 0
-        fixture.palette.offerPasteSetup = { offers += 1 }
+        var offers: [Capability] = []
+        fixture.palette.offerPasteSetup = { offers.append($0) }
         let snippet = try fixture.snippets.add(SnippetDraft(name: "Made-up", text: "made-up text"))
 
         fixture.palette.pasteSnippet(snippet)
@@ -689,7 +689,7 @@ struct SnippetPaletteTests {
         #expect(fixture.clipboard.entries.isEmpty)
         #expect(fixture.snippets.snippet(withID: snippet.id)?.lastUsedAt != nil)
         #expect(fixture.notices.shown == [.init(message: "Copied · Paste needs Accessibility", isWarning: true)])
-        #expect(offers == 1)
+        #expect(offers == [.snippets], "Offered for Snippets")
     }
 
     @Test("With Accessibility, ⌘Return hands the text to the shared paste step")
@@ -1246,53 +1246,40 @@ struct TemporaryFolder {
 @MainActor
 @Suite("Command Palette: copy and paste for module tabs")
 struct PaletteTextActionTests {
-    @Test("Paste can put back what was on the clipboard once the app has read the paste")
+    @Test("Paste can put back what was on the clipboard once the app has read the paste, and Clipboard History skips the restore")
     func pasteRestoresTheClipboard() async throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         fixture.palette.canPaste = { true }
-        fixture.palette.clipboardRestoreDelay = .milliseconds(20)
+        fixture.palette.clipboardRestorer.delay = .zero
         fixture.paster.pasteboard = fixture.pasteboard
         _ = fixture.pasteboard.writeText("made-up earlier copy", concealed: false)
-        fixture.clipboard.pollForTesting()
-        let historyCount = fixture.clipboard.entries.count
 
-        fixture.palette.pasteText("made-up pasted text", restoresClipboard: true)
+        fixture.palette.pasteText("made-up pasted text", restoresClipboard: true, for: .snippets)
         try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
+        // The paste schedules the restore in the same turn; wait for it to run.
+        await fixture.palette.clipboardRestorer.pendingRestore?.value
         #expect(fixture.paster.pasted.map(\.text) == ["made-up pasted text"])
-        try await fixture.waitUntil { fixture.pasteboard.string(forType: .string) == "made-up earlier copy" }
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up earlier copy")
+        // History saw nothing before, so a recorded restore would show up as a new entry.
         fixture.clipboard.pollForTesting()
-        #expect(fixture.clipboard.entries.count == historyCount, "Clipboard History skips the restore")
+        #expect(fixture.clipboard.entries.isEmpty, "Clipboard History skips the restore")
     }
 
-    @Test("Something copied before the restore is kept")
-    func newerCopyWins() async throws {
-        let fixture = PaletteFixture()
-        defer { fixture.tearDown() }
-        fixture.palette.canPaste = { true }
-        fixture.palette.clipboardRestoreDelay = .milliseconds(80)
-        fixture.paster.pasteboard = fixture.pasteboard
-        _ = fixture.pasteboard.writeText("made-up earlier copy", concealed: false)
-
-        fixture.palette.pasteText("made-up pasted text", restoresClipboard: true)
-        try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
-        _ = fixture.pasteboard.writeText("made-up newer copy", concealed: false)
-        try await Task.sleep(for: .milliseconds(160))
-        #expect(fixture.pasteboard.string(forType: .string) == "made-up newer copy")
-    }
-
-    @Test("Without Accessibility, paste copies instead, says why, and restores nothing")
-    func pasteWithoutAccessibilityCopies() async throws {
+    @Test("Without Accessibility, paste copies instead, says why, offers setup for that plugin, and restores nothing")
+    func pasteWithoutAccessibilityCopies() {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         fixture.palette.canPaste = { false }
-        fixture.palette.clipboardRestoreDelay = .milliseconds(20)
+        var offered: [Capability] = []
+        fixture.palette.offerPasteSetup = { offered.append($0) }
         var used = 0
-        fixture.palette.pasteText("made-up text", restoresClipboard: true) { used += 1 }
-        try await Task.sleep(for: .milliseconds(60))
+        fixture.palette.pasteText("made-up text", restoresClipboard: true, for: .timer) { used += 1 }
         #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
         #expect(fixture.notices.shown == [.init(message: "Copied · Paste needs Accessibility", isWarning: true)])
+        #expect(offered == [.timer])
         #expect(used == 1)
+        #expect(fixture.palette.clipboardRestorer.pendingRestore == nil)
         fixture.clipboard.pollForTesting()
         #expect(fixture.clipboard.entries.isEmpty, "Kept out of Clipboard History")
     }
@@ -1306,6 +1293,62 @@ struct PaletteTextActionTests {
         #expect(fixture.notices.shown == [.init(message: "Copied to Clipboard", isWarning: false)])
         fixture.clipboard.pollForTesting()
         #expect(fixture.clipboard.entries.isEmpty)
+    }
+}
+
+/// One restorer for keyword expansion and the palette: pastes in a row put back the clipboard from
+/// before the first.
+@MainActor
+@Suite("Clipboard restore after a paste")
+struct ClipboardRestorerTests {
+    private let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsRestorer-\(UUID().uuidString)"))
+
+    /// A paste as a feature makes one: take the clipboard to put back, write, then schedule the restore.
+    private func paste(_ text: String, with restorer: ClipboardRestorer) {
+        let previous = restorer.clipboardBeforePaste()
+        _ = pasteboard.writeText(text, concealed: false)
+        restorer.restore(previous)
+    }
+
+    @Test("Two quick pastes put back the clipboard from before the first")
+    func pastesInARow() async {
+        let restorer = ClipboardRestorer(pasteboard: pasteboard)
+        restorer.delay = .milliseconds(200)
+        var restores = 0
+        restorer.didRestore = { restores += 1 }
+        _ = pasteboard.writeText("made-up original", concealed: false)
+
+        paste("made-up first", with: restorer)
+        paste("made-up second", with: restorer)
+        await restorer.pendingRestore?.value
+        #expect(pasteboard.string(forType: .string) == "made-up original")
+        #expect(restores == 1)
+    }
+
+    @Test("Something copied before the restore is kept, and a paste after it puts that back")
+    func newerCopyWins() async {
+        let restorer = ClipboardRestorer(pasteboard: pasteboard)
+        restorer.delay = .milliseconds(200)
+        _ = pasteboard.writeText("made-up original", concealed: false)
+
+        paste("made-up pasted", with: restorer)
+        _ = pasteboard.writeText("made-up newer copy", concealed: false)
+        paste("made-up pasted again", with: restorer)
+        await restorer.pendingRestore?.value
+        #expect(pasteboard.string(forType: .string) == "made-up newer copy")
+
+        paste("made-up last", with: restorer)
+        _ = pasteboard.writeText("made-up copied meanwhile", concealed: false)
+        await restorer.pendingRestore?.value
+        #expect(pasteboard.string(forType: .string) == "made-up copied meanwhile", "Never overwrites a newer copy")
+    }
+
+    @Test("The palette and keyword expansion share the shell's restorer")
+    func sharedInTheApp() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsRestorerShared-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root)
+        #expect(harness.model.keywordExpansion.restorer === harness.model.commandPalette.clipboardRestorer)
     }
 }
 

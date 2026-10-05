@@ -170,15 +170,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// macOS on every paste; without it, pasting a snippet copies it instead.
     var canPaste: () -> Bool = { false }
     /// Offers to set up Accessibility after a paste had to copy instead. Set by the shell.
-    var offerPasteSetup: () -> Void = {}
+    /// Offers Accessibility setup after a paste had to copy, for the plugin that pasted.
+    var offerPasteSetup: (Capability) -> Void = { _ in }
     /// The app in front right now; tests replace it.
     var frontmostApp: () -> PasteTarget? = { PasteTarget.frontmost() }
     /// How long a snippet paste waits after the palette closes, so the app in front has its
     /// keyboard focus back before ⌘V.
     var pasteDelay: Duration = .milliseconds(120)
-    /// How long a paste that restores the clipboard waits before putting it back, as keyword
-    /// expansion waits; tests shorten it.
-    var clipboardRestoreDelay: Duration = .milliseconds(500)
+    /// Puts the clipboard back after a paste that asks for it. The shell shares one with keyword
+    /// expansion, so quick pastes from either put back the clipboard from before the first.
+    lazy var clipboardRestorer: ClipboardRestorer = {
+        let restorer = ClipboardRestorer(pasteboard: pasteboard)
+        restorer.didRestore = { [weak clipboard] in clipboard?.suppressCurrentChange() }
+        return restorer
+    }()
     /// The app that was in front when the palette opened: the only app ⌘Return pastes into.
     private(set) var pasteTarget: PasteTarget?
     /// The paste waiting out `pasteDelay`; opening the palette again cancels it.
@@ -425,9 +430,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         }
 
-        // A grid tab's rows take all four arrow keys.
-        if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode) {
-            if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
+        // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control they
+        // stay with the search field.
+        if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
+           event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
+            if !(0..<itemCount).contains(state.selection) {
+                state.selection = 0
+            } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
             }
             return nil
@@ -511,7 +520,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             selectRow: { [weak self] row in self?.state.selection = row },
             clearQuery: { [weak self] in self?.state.historyQuery = "" },
             copy: { [weak self] text in self?.copyText(text) },
-            paste: { [weak self] text, restoresClipboard in self?.pasteText(text, restoresClipboard: restoresClipboard) }
+            paste: { [weak self] text, restoresClipboard in
+                guard let self else { return }
+                self.pasteText(text, restoresClipboard: restoresClipboard, for: self.state.tab.owner)
+            }
         )
     }
 
@@ -705,7 +717,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Command-Return on a snippet: pastes it (`pasteText`), counting it as used either way.
     func pasteSnippet(_ snippet: Snippet) {
         guard let text = snippetText(snippet) else { return }
-        pasteText(text, concealed: snippet.isSensitive, restoresClipboard: false) { [weak self] in
+        pasteText(text, concealed: snippet.isSensitive, restoresClipboard: false, for: .snippets) { [weak self] in
             self?.snippets.markUsed(snippet.id)
         }
     }
@@ -714,14 +726,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// (the non-activating palette never took it over). When it can't paste, it copies instead and
     /// the notch notice says why (`PalettePasteRoute`). `used` runs once, either way. With
     /// `restoresClipboard`, what was on the clipboard comes back once the paste has been read, unless
-    /// something else was copied by then. Snippets' ⌘Return and a module tab's paste both come here.
-    func pasteText(_ text: String, concealed: Bool = false, restoresClipboard: Bool, used: @escaping () -> Void = {}) {
+    /// something else was copied by then. Snippets' ⌘Return and a module tab's paste both come here;
+    /// `plugin` is the one pasting, named in the Accessibility setup offer.
+    func pasteText(_ text: String, concealed: Bool = false, restoresClipboard: Bool, for plugin: Capability, used: @escaping () -> Void = {}) {
         let route = PalettePasteRoute.beforeClosing(canPaste: canPaste(), target: pasteTarget)
         guard route == .paste, let target = pasteTarget else {
             dismiss()
             copyInstead(text, concealed: concealed, notice: route.notice)
             used()
-            if route == .copy(.needsAccessibility) { offerPasteSetup() }
+            if route == .copy(.needsAccessibility) { offerPasteSetup(plugin) }
             return
         }
         dismiss()
@@ -745,7 +758,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 self.copyInstead(text, concealed: concealed, notice: PalettePasteRoute.Reason.targetChanged.notice)
                 return
             }
-            let previous = restoresClipboard ? PasteboardSnapshot(self.pasteboard) : nil
+            let previous = restoresClipboard ? self.clipboardRestorer.clipboardBeforePaste() : nil
             do {
                 try paster.paste(text, concealed: concealed)
             } catch {
@@ -753,7 +766,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 self.copyInstead(text, concealed: concealed, notice: PalettePasteRoute.Reason.pasteFailed.notice)
                 return
             }
-            if let previous { self.restoreClipboard(previous) }
+            if let previous { self.clipboardRestorer.restore(previous) }
         }
     }
 
@@ -762,19 +775,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard pasteboard.writeText(text, concealed: concealed) else { return }
         clipboard.suppressCurrentChange()
         if let notice { showWarning(notice) }
-    }
-
-    /// Puts `previous` back on the clipboard once the app has had time to read the paste, unless
-    /// something else was copied meanwhile. Clipboard History skips the restore.
-    private func restoreClipboard(_ previous: PasteboardSnapshot) {
-        let changeCount = pasteboard.changeCount
-        let delay = clipboardRestoreDelay
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
-            guard let self, self.pasteboard.changeCount == changeCount else { return }
-            previous.restore(to: self.pasteboard)
-            self.clipboard.suppressCurrentChange()
-        }
     }
 
     /// Closes the palette and opens the snippet editor in Settings. While the saved snippets can't

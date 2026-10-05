@@ -23,6 +23,7 @@
 		0CE65D6BB1349F12A293FD9D /* NOTICES.argmax-oss-swift in Resources */ = {isa = PBXBuildFile; fileRef = E61586690B952F46EBCDED78 /* NOTICES.argmax-oss-swift */; };
 		0EB3BC94CED52DB51E59CC16 /* SnippetTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = A030F6D32D510B17A0EA3F2C /* SnippetTable.swift */; };
 		0F5B463A70383784E45A5ED2 /* QuickSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8898653639A2B580518571 /* QuickSearchService.swift */; };
+		0F9EABDF5F3BCBE02BFBF742 /* ClipboardRestorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF70B9542E1EC86EB3239F6 /* ClipboardRestorer.swift */; };
 		105F1C13F817F48FC866DF69 /* WhisperKitModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBBB83D782A2BF34F2C7854D /* WhisperKitModelDownloader.swift */; };
 		12F31F615607750DD9191EC4 /* PolarLicenseProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */; };
 		161A262BE3EB96DB9C2DAB51 /* WindowManagementModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A74EE27B85AA3D9E80FB0F /* WindowManagementModule.swift */; };
@@ -335,6 +336,7 @@
 		AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionAdapter.swift; sourceTree = "<group>"; };
 		AF3482EA5975104D852E8A6E /* LicenseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseModels.swift; sourceTree = "<group>"; };
 		AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainTextInput.swift; sourceTree = "<group>"; };
+		AFF70B9542E1EC86EB3239F6 /* ClipboardRestorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardRestorer.swift; sourceTree = "<group>"; };
 		B19CB2A313982E002E9097B7 /* SnippetsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsModule.swift; sourceTree = "<group>"; };
 		B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
 		B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarLicenseProvider.swift; sourceTree = "<group>"; };
@@ -593,6 +595,7 @@
 			children = (
 				25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */,
 				6CF370D4AAE4252C8026A77E /* AppPresenceController.swift */,
+				AFF70B9542E1EC86EB3239F6 /* ClipboardRestorer.swift */,
 				60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */,
 				3FE3159CDD93E812D43C4592 /* InboxStore.swift */,
 				A6088743D694CB89ED371F73 /* PasteboardSnapshot.swift */,
@@ -1004,6 +1007,7 @@
 				60BD77AFC6B27EFE357D36BA /* ClickTargetProbe.swift in Sources */,
 				056730D3FDC7666D9EDAAB12 /* ClipboardHistoryModule.swift in Sources */,
 				EC784D4AB4204072FEBCC20F /* ClipboardHistoryService.swift in Sources */,
+				0F9EABDF5F3BCBE02BFBF742 /* ClipboardRestorer.swift in Sources */,
 				915369B9277C294F9BCBD14A /* ClipboardSourceApp.swift in Sources */,
 				6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */,
 				081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */,
