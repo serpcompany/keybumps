@@ -64,15 +64,20 @@ repository_root=$(git -C "$app_root" rev-parse --show-toplevel)
 latest_notes="$repository_root/docs/releases/v$(<"$repository_root/version.txt").md"
 print "Building $candidate_version ($candidate_build) from $branch @ $short_commit"
 xcodegen generate >/dev/null
+# Signs with the Developer ID identity directly, as the release pipeline does, so no development
+# certificate for the team is needed.
+signing_team=$(/usr/libexec/PlistBuddy -c "Print :teamID" "$app_root/scripts/ExportOptions-DeveloperID-Manual.plist")
 xcodebuild -quiet -project Keybumps.xcodeproj -scheme Keybumps-Release -configuration Release \
   -archivePath "$output/Keybumps.xcarchive" \
   MARKETING_VERSION="$candidate_version" CURRENT_PROJECT_VERSION="$candidate_build" \
   KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" \
-  KEYBUMPS_RELEASE_NOTES="$latest_notes" archive
+  KEYBUMPS_RELEASE_NOTES="$latest_notes" \
+  CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" DEVELOPMENT_TEAM="$signing_team" PROVISIONING_PROFILE_SPECIFIER= \
+  archive
 xcodebuild -quiet -exportArchive \
   -archivePath "$output/Keybumps.xcarchive" \
   -exportPath "$output/export" \
-  -exportOptionsPlist "$app_root/scripts/ExportOptions-DeveloperID.plist"
+  -exportOptionsPlist "$app_root/scripts/ExportOptions-DeveloperID-Manual.plist"
 candidate_app="$output/export/Keybumps.app"
 
 codesign --verify --deep --strict "$candidate_app"
