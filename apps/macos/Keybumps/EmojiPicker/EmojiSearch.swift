@@ -9,7 +9,8 @@ struct EmojiLibrary: Sendable {
     private let tokens: [Tokens]
 
     /// What a search matches against, lowercased: name words, keyword words, and aliases with their
-    /// parts (`thumbs_up` is also `thumbs` and `up`).
+    /// parts (`thumbs_up` is also `thumbs` and `up`). Hyphenated words count whole and in parts
+    /// (`t-rex` is also `t` and `rex`).
     private struct Tokens: Sendable {
         let name: String
         let nameWords: [String]
@@ -31,9 +32,9 @@ struct EmojiLibrary: Sendable {
         tokens = emoji.map { emoji in
             let aliases = emoji.aliases.map { $0.lowercased() }
             return Tokens(
-                name: emoji.name.lowercased(),
-                nameWords: Self.words(emoji.name),
-                keywordWords: emoji.keywords.flatMap(Self.words),
+                name: Self.words(emoji.name).joined(separator: " "),
+                nameWords: Self.withHyphenParts(Self.words(emoji.name)),
+                keywordWords: Self.withHyphenParts(emoji.keywords.flatMap(Self.words)),
                 aliases: aliases,
                 aliasWords: aliases.flatMap { $0.split(separator: "_").map(String.init) }
             )
@@ -82,6 +83,10 @@ struct EmojiLibrary: Sendable {
             if lhsRecent != rhsRecent { return lhsRecent < rhsRecent }
             return lhs.index < rhs.index
         }.map { emoji[$0.index] }
+    }
+
+    private static func withHyphenParts(_ words: [String]) -> [String] {
+        words + words.filter { $0.contains("-") }.flatMap { $0.split(separator: "-").map(String.init) }
     }
 
     /// Lowercased words, split at spaces and punctuation but keeping `+` and `-` inside a word (`+1`).

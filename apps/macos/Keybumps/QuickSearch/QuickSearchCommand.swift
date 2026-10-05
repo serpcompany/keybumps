@@ -166,7 +166,7 @@ extension QuickSearchCommand {
     }
 
     /// The keycaps its row shows: its own shortcut, or the Command-number of the tab it goes to while
-    /// that tab is in the tab bar (the Hotkeys tab is usually hidden, and then Command-7 does nothing).
+    /// that tab is in the tab bar (the Hotkeys tab is usually hidden, and then Command-8 does nothing).
     func rowShortcut(enabledCapabilities: Set<Capability>, visibleTabs: [CommandPaletteTab]) -> String? {
         if let shortcut { return shortcut }
         guard case .paletteTab(let tab) = destination(enabledCapabilities: enabledCapabilities),

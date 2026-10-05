@@ -28,9 +28,19 @@ struct EmojiSearchTests {
     @MainActor
     func everyWord() throws {
         let library = try everyEmoji()
-        #expect(library.search("hair red").first?.glyph == "👩‍🦰" || library.search("hair red").contains { $0.glyph == "👩‍🦰" })
+        let redHair = library.search("hair red")
+        #expect(redHair.contains { $0.glyph == "👩‍🦰" })
+        #expect(redHair.allSatisfy { $0.name.contains("red hair") || $0.keywords.contains("red hair") })
         #expect(library.search("zzzz").isEmpty)
         #expect(library.search("   ").isEmpty)
+    }
+
+    @Test("Hyphenated names match by their parts, and a name with a colon can match exactly")
+    @MainActor
+    func hyphensAndColons() throws {
+        let library = try everyEmoji()
+        #expect(library.search("rex").first?.glyph == "🦖", "t-rex")
+        #expect(library.search("flag: united states").first?.glyph == "🇺🇸")
     }
 
     @Test("Among equal matches, recently used emoji come first")
@@ -58,8 +68,8 @@ struct EmojiSearchTests {
 @Suite("Emoji Picker: drawing check")
 struct EmojiRenderCheckTests {
     @Test("Apple Color Emoji draws a real emoji, but not a made-up sequence or plain text")
-    func drawing() {
-        let check = EmojiRenderCheck()
+    func drawing() throws {
+        let check = try #require(EmojiRenderCheck(), "Apple Color Emoji is on every Mac")
         #expect(check.canDraw("😀"))
         #expect(check.canDraw("👍🏽"))
         #expect(check.canDraw("🧑‍🤝‍🧑"))
@@ -86,6 +96,18 @@ struct EmojiRecentsTests {
         #expect(EmojiRecents(storageURL: url).glyphs == recents.glyphs)
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         #expect((attributes?[.posixPermissions] as? NSNumber)?.intValue == 0o600, "Only this user can read it")
+    }
+
+    @Test("A damaged file, or one past the limit, still reads safely")
+    func damagedFile() throws {
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("not json".utf8).write(to: url)
+        #expect(EmojiRecents(storageURL: url).glyphs.isEmpty)
+        try JSONEncoder().encode((0..<40).map { "made-up-\($0)" }).write(to: url)
+        let recents = EmojiRecents(storageURL: url)
+        recents.use("😀")
+        #expect(recents.glyphs.count == EmojiRecents.limit)
+        #expect(recents.glyphs.first == "😀")
     }
 
     @Test("Clearing removes them and their file")
@@ -118,12 +140,16 @@ struct EmojiPaletteContentTests {
 
     private let url = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsEmojiTab-\(UUID().uuidString).json")
 
+    /// The tab with Emoji Picker turned on, loading at once.
     private func content(_ preferences: AppPreferences? = nil) throws -> EmojiPaletteContent {
         let library = try everyEmoji()
+        let preferences = preferences ?? AppPreferences(defaults: InMemoryDefaults())
+        preferences.setCapability(.emojiPicker, enabled: true)
         return EmojiPaletteContent(
-            preferences: preferences ?? AppPreferences(defaults: InMemoryDefaults()),
+            preferences: preferences,
             recents: EmojiRecents(storageURL: url),
-            loadLibrary: { library }
+            loadLibrary: { library },
+            loadsInBackground: false
         )
     }
 
@@ -171,6 +197,28 @@ struct EmojiPaletteContentTests {
         #expect(tab.recents.glyphs == ["👍"])
         let smile = try #require(tab.library?.emoji(withGlyph: "😀"))
         #expect(tab.glyph(for: smile) == "😀", "No tones, no change")
+        let holdingHands = try #require(tab.library?.emoji(withGlyph: "🧑‍🤝‍🧑"))
+        #expect(tab.glyph(for: holdingHands) == "🧑🏽‍🤝‍🧑🏽", "Both people take the tone")
+    }
+
+    @Test("While Emoji Picker is off the tab has no rows")
+    func offHasNoRows() throws {
+        defer { try? FileManager.default.removeItem(at: url) }
+        let tab = try content()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let library = tab.library
+        let off = EmojiPaletteContent(preferences: preferences, recents: tab.recents, loadLibrary: { library }, loadsInBackground: false)
+        #expect(off.rowCount(query: "") == 0)
+        #expect(off.rowCount(query: "cat") == 0)
+    }
+
+    @Test("Without its list (no emoji font, or no data), the tab says it couldn't load")
+    func failedLoad() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.setCapability(.emojiPicker, enabled: true)
+        let tab = EmojiPaletteContent(preferences: preferences, recents: EmojiRecents(storageURL: url), loadLibrary: { nil }, loadsInBackground: false)
+        #expect(tab.loadFailed)
+        #expect(tab.rowCount(query: "") == 0)
     }
 
     @Test("With recent emoji turned off, nothing is remembered and Recent doesn't show")
@@ -201,6 +249,7 @@ struct EmojiPickerPluginTests {
         #expect(!descriptor.isOnByDefault)
         #expect(descriptor.preferences.map(\.key) == ["skinTone", "remembersRecent"])
         #expect(CapabilityShortcut.emojiPicker.defaultBinding == nil, "Open Emoji Picker starts unassigned")
+        #expect(CapabilityCatalog.requiredPermissions(for: [.emojiPicker]).isEmpty, "An optional permission is never setup it needs")
         #expect(QuickSearchCommand.capability(.emojiPicker).match("emoji") == .name || QuickSearchCommand.capability(.emojiPicker).match("emoji") == .keyword)
     }
 }

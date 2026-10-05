@@ -879,11 +879,11 @@ struct SnippetPaletteTests {
         #expect(CommandPaletteTab.allCases.suffix(4) == [.snippets, .timers, .emoji, .keyboardShortcutter])
         #expect(CommandPaletteTab.snippets.shortcutLabel == "⌘5")
         #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘8")
-        let visible = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search)
+        let visible = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: Set(Capability.allCases))
         #expect(visible.map(\.shortcutLabel) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7"], "No gap in the visible tabs")
         #expect(CommandPaletteTab.matchingCommandKey("5", in: visible) == .snippets)
         #expect(CommandPaletteTab.matchingCommandKey("8", in: visible) == nil)
-        #expect(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search).last == .keyboardShortcutter)
+        #expect(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases)).last == .keyboardShortcutter)
     }
 }
 

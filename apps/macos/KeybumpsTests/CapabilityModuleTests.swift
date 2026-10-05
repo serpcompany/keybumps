@@ -108,11 +108,22 @@ struct CapabilityModuleTests {
         #expect(CapabilityDescriptor.screenshotTools.dependencies == [.clipboardHistory])
     }
 
+    @Test("Turning off Remember recently used emoji clears them, through the app model")
+    func turningOffRecentEmojiClearsThem() throws {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+        let tab = try #require(harness.model.commandPalette.tabContents[.emoji] as? EmojiPaletteContent)
+        tab.recents.use("😀")
+        harness.model.setPluginPreference(.emojiRemembersRecent, to: .bool(false), for: .emojiPicker)
+        #expect(tab.recents.glyphs.isEmpty)
+    }
+
     @Test("A plugin that's off has no tab in the bar, and its Command-number does nothing, unless its tab is on screen")
     func offPluginsHaveNoTab() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
         let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled)
-        #expect(tabs == [.search, .screenshots, .dictation, .snippets, .timers])
+        #expect(tabs == [.search, .dictation, .snippets, .timers], "Screenshots lists Clipboard History, so it goes too")
         #expect(CommandPaletteTab.matchingCommandKey("7", in: tabs) == nil)
         #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == .timers, "Numbers stay fixed")
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .emoji, enabled: enabled).contains(.emoji))

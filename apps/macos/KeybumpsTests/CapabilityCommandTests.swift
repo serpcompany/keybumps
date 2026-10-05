@@ -381,7 +381,7 @@ struct CapabilityCommandTests {
     /// What `SearchResultsView` computes for each command row from the palette's enabled set.
     @Test("A row says Turned off, shows no keycaps, and opens Settings exactly while its capability is off")
     func turnedOffRows() {
-        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search)
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases))
         let states = [allCapabilities, []] + Capability.allCases.map { allCapabilities.subtracting([$0]) }
         for enabled in states {
             for command in QuickSearchCommand.allCases {
@@ -402,8 +402,8 @@ struct CapabilityCommandTests {
 
     @Test("Rows show the tab's Command-number only when Return goes to a tab in the tab bar")
     func rowShortcuts() {
-        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search)
-        let tabsWithHotkeys = CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search)
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: Set(Capability.allCases))
+        let tabsWithHotkeys = CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases))
         #expect(clipboard.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘2")
         #expect(screenshots.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘3")
         #expect(dictation.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘4")

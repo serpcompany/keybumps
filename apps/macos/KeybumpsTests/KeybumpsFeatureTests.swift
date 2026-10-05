@@ -2298,12 +2298,12 @@ final class KeybumpsFeatureTests: XCTestCase {
 
         // The Hotkeys tab is hidden by default, except while it is open, so the visible tabs stay ⌘1–⌘7.
         XCTAssertFalse(AppPreferences(defaults: InMemoryDefaults()).showsHotkeysTab)
-        let hidden = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search)
+        let hidden = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: Set(Capability.allCases))
         XCTAssertEqual(hidden, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji])
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("7", in: hidden), .emoji)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("8", in: hidden))
-        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .keyboardShortcutter).last, .keyboardShortcutter)
-        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search), CommandPaletteTab.allCases)
+        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .keyboardShortcutter, enabled: Set(Capability.allCases)).last, .keyboardShortcutter)
+        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases)), CommandPaletteTab.allCases)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("9"))
         XCTAssertEqual(CommandPaletteTab.snippets.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.snippets.secondaryActionTitle, "Paste")

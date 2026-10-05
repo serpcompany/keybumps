@@ -7,10 +7,15 @@ import Foundation
 /// time the Emoji tab opens. A count of glyphs would be wrong: Apple draws many two-person emoji as
 /// two glyphs in one emoji's space.
 struct EmojiRenderCheck {
-    private let font = CTFontCreateWithName("AppleColorEmoji" as CFString, 32, nil)
+    private let font: CTFont
     private let emojiWidth: Double
 
-    init() {
+    /// Nil when Apple Color Emoji is missing: CoreText would quietly substitute another font, and
+    /// every emoji would fail the check.
+    init?() {
+        let font = CTFontCreateWithName("AppleColorEmoji" as CFString, 32, nil)
+        guard CTFontCopyPostScriptName(font) as String == "AppleColorEmoji" else { return nil }
+        self.font = font
         emojiWidth = Self.width(of: "\u{1F600}", font: font)
     }
 

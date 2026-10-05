@@ -125,7 +125,9 @@ struct PluginManifestTests {
     func oldInstallSkipsPluginsThatShipOff() {
         // No known list: only the original five were known.
         let started = AppPreferences.initialCapabilities(stored: ["dictation"], known: nil, shippingOff: [.timer])
-        #expect(started == [.dictation, .screenshotTools, .snippets])
+        let added = Set(Capability.allCases).subtracting(Capability.originalCapabilities).subtracting([.timer])
+        #expect(started == added.union([.dictation]))
+        #expect(!started.contains(.timer))
     }
 
     @Test("An optional permission that isn't granted reads Not Granted, never Required")

@@ -1,9 +1,10 @@
+import AppKit
 import SwiftUI
 
 /// The Emoji tab (#243). With the search empty it's a grid to browse: Recent, then Unicode's groups.
 /// Typing turns it into a ranked list, as the Search tab is. Return copies the emoji and ⌘Return
-/// pastes it into the app you were using, putting your clipboard back afterwards. The emoji takes
-/// the skin tone set in Settings when it has one.
+/// pastes it into the app you were using, putting your clipboard back afterwards; a double-click
+/// copies too. The emoji takes the skin tone set in Settings when it has one.
 @MainActor
 @Observable
 final class EmojiPaletteContent: CapabilityPaletteContent {
@@ -18,34 +19,70 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
         let emoji: [Emoji]
     }
 
+    /// The list, once loaded; nil while it loads, or when it couldn't be.
+    private(set) var library: EmojiLibrary?
+    private(set) var loadFailed = false
+    @ObservationIgnored private var isLoading = false
     @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored let recents: EmojiRecents
-    @ObservationIgnored private let loadLibrary: () -> EmojiLibrary?
-    @ObservationIgnored private var cachedLibrary: EmojiLibrary??
+    @ObservationIgnored private let loadLibrary: @Sendable () -> EmojiLibrary?
+    @ObservationIgnored private let loadsInBackground: Bool
+    /// The grid's sections, kept until Recent or the setting changes.
+    @ObservationIgnored private var cachedSections: (key: [String], sections: [Section])?
+    /// The last search's results, kept until the query or Recent changes.
+    @ObservationIgnored private var cachedSearch: (query: String, recent: [String], results: [Emoji])?
 
-    /// `loadLibrary` runs once, the first time the tab needs its emoji.
-    init(preferences: AppPreferences, recents: EmojiRecents, loadLibrary: @escaping () -> EmojiLibrary? = EmojiPaletteContent.bundledLibrary) {
+    /// `loadLibrary` runs once, the first time the tab shows: off the main thread in the app, or at
+    /// once when `loadsInBackground` is false, as tests ask.
+    init(
+        preferences: AppPreferences,
+        recents: EmojiRecents,
+        loadLibrary: @escaping @Sendable () -> EmojiLibrary? = EmojiPaletteContent.bundledLibrary,
+        loadsInBackground: Bool = true
+    ) {
         self.preferences = preferences
         self.recents = recents
         self.loadLibrary = loadLibrary
+        self.loadsInBackground = loadsInBackground
+        if !loadsInBackground { finishLoading(loadLibrary()) }
     }
 
-    /// The bundled catalog, without what this Mac can't draw.
-    static func bundledLibrary() -> EmojiLibrary? {
-        guard let catalog = try? EmojiCatalog.bundled() else { return nil }
-        let check = EmojiRenderCheck()
+    /// The bundled catalog, without what this Mac can't draw; nil when either is missing.
+    nonisolated static func bundledLibrary() -> EmojiLibrary? {
+        guard let catalog = try? EmojiCatalog.bundled(), let check = EmojiRenderCheck() else { return nil }
         return EmojiLibrary(catalog: catalog, canDraw: check.canDraw)
     }
 
-    var library: EmojiLibrary? {
-        if let cachedLibrary { return cachedLibrary }
-        let loaded = loadLibrary()
-        cachedLibrary = .some(loaded)
-        return loaded
+    func didShow(palette: PaletteContentActions) {
+        loadIfNeeded()
+    }
+
+    private func loadIfNeeded() {
+        guard library == nil, !loadFailed, !isLoading else { return }
+        isLoading = true
+        let load = loadLibrary
+        Task { [weak self] in
+            let loaded = await Task.detached(priority: .userInitiated) { load() }.value
+            self?.finishLoading(loaded)
+        }
+    }
+
+    private func finishLoading(_ loaded: EmojiLibrary?) {
+        isLoading = false
+        library = loaded
+        loadFailed = loaded == nil
+    }
+
+    var isEnabled: Bool {
+        preferences.enabledCapabilities.contains(.emojiPicker)
     }
 
     private var remembersRecent: Bool {
         preferences.bool(.emojiRemembersRecent, for: .emojiPicker)
+    }
+
+    private var recentGlyphs: [String] {
+        remembersRecent ? recents.glyphs : []
     }
 
     /// The skin tone set in Settings: 0 for none (yellow), 1 light to 5 dark.
@@ -69,21 +106,39 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
 
     /// The browsing grid's sections: Recent (when kept and not empty), then each group.
     var sections: [Section] {
-        guard let library else { return [] }
-        let recent = remembersRecent ? recents.glyphs.compactMap(library.emoji(withGlyph:)) : []
-        var sections = recent.isEmpty ? [] : [Section(title: "Recent", emoji: recent)]
+        guard isEnabled, let library else { return [] }
+        let recent = recentGlyphs
+        if let cachedSections, cachedSections.key == recent { return cachedSections.sections }
+        let recentEmoji = recent.compactMap(library.emoji(withGlyph:))
+        var sections = recentEmoji.isEmpty ? [] : [Section(title: "Recent", emoji: recentEmoji)]
         let byGroup = Dictionary(grouping: library.emoji, by: \.group)
         for (index, title) in library.groups.enumerated() {
             if let emoji = byGroup[index], !emoji.isEmpty { sections.append(Section(title: title, emoji: emoji)) }
         }
+        cachedSections = (recent, sections)
         return sections
+    }
+
+    /// The row index of each section's first emoji.
+    static func starts(of sections: [Section]) -> [Int] {
+        var starts: [Int] = []
+        var total = 0
+        for section in sections {
+            starts.append(total)
+            total += section.emoji.count
+        }
+        return starts
     }
 
     /// The emoji the rows stand for, in order: the grid's, or the search's.
     func rows(query: String) -> [Emoji] {
-        guard let library else { return [] }
-        if Self.isSearching(query) { return library.search(query, recent: remembersRecent ? recents.glyphs : []) }
-        return sections.flatMap(\.emoji)
+        guard isEnabled, let library else { return [] }
+        guard Self.isSearching(query) else { return sections.flatMap(\.emoji) }
+        let recent = recentGlyphs
+        if let cachedSearch, cachedSearch.query == query, cachedSearch.recent == recent { return cachedSearch.results }
+        let results = library.search(query, recent: recent)
+        cachedSearch = (query, recent, results)
+        return results
     }
 
     func rowCount(query: String) -> Int {
@@ -118,7 +173,15 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
     }
 
     func makeView(_ context: PaletteContentContext) -> AnyView {
-        AnyView(EmojiPaletteResults(content: self, query: context.query, selection: context.selection, select: context.actions.selectRow))
+        let actions = context.actions
+        let query = context.query
+        return AnyView(EmojiPaletteResults(
+            content: self,
+            query: query,
+            selection: context.selection,
+            select: actions.selectRow,
+            pick: { [weak self] row in self?.activate(row: row, query: query, withCommand: false, palette: actions) }
+        ))
     }
 }
 
@@ -128,11 +191,17 @@ private struct EmojiPaletteResults: View {
     let query: String
     let selection: Int
     let select: (Int) -> Void
+    /// A double-click: what Return does.
+    let pick: (Int) -> Void
 
     var body: some View {
         PaletteResultsContainer {
-            if content.library == nil {
+            if !content.isEnabled {
+                PaletteEmptyState(title: "Emoji Picker is turned off. Turn it on in Settings › Plugins.", systemImage: "face.smiling")
+            } else if content.loadFailed {
                 PaletteEmptyState(title: "Emoji couldn’t be loaded", systemImage: "face.smiling")
+            } else if content.library == nil {
+                ProgressView().controlSize(.small)
             } else if content.isGrid(query: query) {
                 grid
             } else {
@@ -145,10 +214,11 @@ private struct EmojiPaletteResults: View {
 
     private var grid: some View {
         let sections = content.sections
-        let starts = Self.starts(of: sections)
+        let starts = EmojiPaletteContent.starts(of: sections)
         let all = sections.flatMap(\.emoji)
+        let selected = all.indices.contains(selection) ? all[selection] : nil
         return VStack(spacing: 0) {
-            selectedName(all.indices.contains(selection) ? all[selection] : nil)
+            selectedName(selected)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
@@ -159,8 +229,14 @@ private struct EmojiPaletteResults: View {
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: EmojiPaletteContent.columns), spacing: 4) {
                                 ForEach(Array(section.emoji.enumerated()), id: \.element.glyph) { offset, emoji in
                                     let index = starts[sectionIndex] + offset
-                                    EmojiCell(glyph: content.glyph(for: emoji), name: emoji.name, isSelected: index == selection) { select(index) }
-                                        .id(index)
+                                    EmojiCell(
+                                        glyph: content.glyph(for: emoji),
+                                        name: emoji.name,
+                                        isSelected: index == selection,
+                                        select: { select(index) },
+                                        pick: { pick(index) }
+                                    )
+                                    .id(index)
                                 }
                             }
                         }
@@ -169,20 +245,21 @@ private struct EmojiPaletteResults: View {
                     .padding(.bottom, 8)
                 }
                 .scrollIndicators(.never)
-                .onChange(of: selection) { proxy.scrollTo(selection) }
+                .onChange(of: selection) {
+                    proxy.scrollTo(selection)
+                    // Arrowing through the grid moves no VoiceOver cursor, so say where it went.
+                    if let selected { Self.announce(selected.name) }
+                }
             }
         }
     }
 
-    /// The row index of each section's first emoji.
-    static func starts(of sections: [EmojiPaletteContent.Section]) -> [Int] {
-        var starts: [Int] = []
-        var total = 0
-        for section in sections {
-            starts.append(total)
-            total += section.emoji.count
-        }
-        return starts
+    private static func announce(_ text: String) {
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.medium.rawValue]
+        )
     }
 
     private func selectedName(_ emoji: Emoji?) -> some View {
@@ -220,9 +297,11 @@ private struct EmojiPaletteResults: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .simultaneousGesture(TapGesture(count: 2).onEnded { pick(index) })
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
                         .paletteRowBackground(isSelected: index == selection)
+                        .accessibilityAddTraits(index == selection ? .isSelected : [])
                         .accessibilityIdentifier("palette.emoji.row")
                     }
                     .listStyle(.plain)
@@ -241,6 +320,7 @@ private struct EmojiCell: View {
     let name: String
     let isSelected: Bool
     let select: () -> Void
+    let pick: () -> Void
 
     var body: some View {
         Button(action: select) {
@@ -258,6 +338,7 @@ private struct EmojiCell: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(TapGesture(count: 2).onEnded(pick))
         .accessibilityLabel(name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("palette.emoji.cell")

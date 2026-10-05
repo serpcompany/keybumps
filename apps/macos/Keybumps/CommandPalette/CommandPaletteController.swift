@@ -30,15 +30,22 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     static let drawnByPalette: Set<CommandPaletteTab> = [.search, .clipboard, .dictation, .screenshots, .snippets]
     var prompt: String { registration.prompt }
 
-    /// The tabs in the tab bar. The Hotkeys tab is hidden unless the owner shows it, or it is open.
-    /// The tabs in the tab bar: those of plugins that are on, as Raycast leaves out turned-off
-    /// extensions (their Command-numbers stay fixed), without the Hotkeys tab unless its Settings
-    /// page shows it. The tab on screen always stays.
-    static func visibleTabs(showsHotkeys: Bool, selected: CommandPaletteTab, enabled: Set<Capability> = Set(Capability.allCases)) -> [CommandPaletteTab] {
+    /// The tabs in the tab bar: those of plugins that are on, and whose data source is on too (the
+    /// Screenshots tab lists Clipboard History), as Raycast leaves out turned-off extensions.
+    /// Command-numbers stay fixed. The Hotkeys tab shows only when its Settings page says so, and
+    /// the tab on screen always stays.
+    static func visibleTabs(showsHotkeys: Bool, selected: CommandPaletteTab, enabled: Set<Capability>) -> [CommandPaletteTab] {
         allCases.filter { tab in
-            tab == selected || (enabled.contains(tab.owner) && (tab != .keyboardShortcutter || showsHotkeys))
+            tab == selected || (
+                enabled.contains(tab.owner)
+                    && (tab.dataSource.map(enabled.contains) ?? true)
+                    && (tab != .keyboardShortcutter || showsHotkeys)
+            )
         }
     }
+
+    /// Another plugin whose data the tab lists, such as Clipboard History for Screenshots.
+    var dataSource: Capability? { registration.dataSource }
 
     static func matchingCommandKey(_ characters: String?, in tabs: [CommandPaletteTab] = allCases) -> CommandPaletteTab? {
         tabs.first { characters == String($0.registration.commandKey) }
