@@ -9,6 +9,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
     case screenshotTools
     case snippets
     case timer
+    case emojiPicker
 
     var id: String { rawValue }
 

@@ -29,7 +29,7 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer"] {
+        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -77,10 +77,26 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(paletteField(prompt).waitForExistence(timeout: 5), "⌘\(key)")
         }
 
-        // The Hotkeys tab (⌘7) is hidden by default.
+        // Emoji (⌘7) ships off, and the Hotkeys tab (⌘8) is hidden by default: neither shows, and
+        // their Command-numbers do nothing.
+        XCTAssertFalse(app.buttons["palette.tab.emoji"].exists)
         XCTAssertFalse(app.buttons["palette.tab.keyboardShortcutter"].exists)
         app.typeKey("7", modifierFlags: .command)
-        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘7 is ignored")
+        app.typeKey("8", modifierFlags: .command)
+        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘7 and ⌘8 are ignored")
+    }
+
+    func testEmojiPickerShipsOffAndTurnsOnInSettings() {
+        // Its page is drawn by the plugin template, with Accessibility as an optional permission.
+        launch(permissions: "denied", ["-KBOpenSettings", "emojiPicker"])
+        let toggle = element("capability.toggle.emojiPicker")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForValue(of: toggle, 0), "Emoji Picker ships off")
+        XCTAssertTrue(app.staticTexts["Accessibility (Optional)"].exists)
+        XCTAssertTrue(element("plugin.emojiPicker.skinTone").exists)
+
+        toggle.click()
+        XCTAssertTrue(waitForValue(of: toggle, 1))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {

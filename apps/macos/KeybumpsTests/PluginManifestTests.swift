@@ -125,7 +125,9 @@ struct PluginManifestTests {
     func oldInstallSkipsPluginsThatShipOff() {
         // No known list: only the original five were known.
         let started = AppPreferences.initialCapabilities(stored: ["dictation"], known: nil, shippingOff: [.timer])
-        #expect(started == [.dictation, .screenshotTools, .snippets])
+        let added = Set(Capability.allCases).subtracting(Capability.originalCapabilities).subtracting([.timer])
+        #expect(started == added.union([.dictation]))
+        #expect(!started.contains(.timer))
     }
 
     @Test("An optional permission that isn't granted reads Not Granted, never Required")
@@ -136,9 +138,9 @@ struct PluginManifestTests {
         #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
     }
 
-    @Test("Every plugin ships on today; one that ships off is the Emoji Picker's job (#243)")
-    func everyPluginShipsOnToday() {
-        let allOn = CapabilityCatalog.descriptors.allSatisfy(\.isOnByDefault)
-        #expect(allOn)
+    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243)")
+    func onlyTheEmojiPickerShipsOff() {
+        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker])
+        #expect(CapabilityDescriptor.emojiPicker.optionalPermissions.map(\.permission) == [.accessibility])
     }
 }

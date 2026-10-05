@@ -15,7 +15,8 @@ struct CapabilityModuleTests {
         defer { harness.tearDown() }
 
         let order: [Capability] = [
-            .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer
+            .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer,
+            .emojiPicker,
         ]
         #expect(CapabilityCatalog.descriptors.map(\.capability) == order)
         #expect(harness.model.capabilities.modules.map(\.capability) == order)
@@ -26,15 +27,16 @@ struct CapabilityModuleTests {
         }
     }
 
-    @Test("Shortcut Coach's and Timer's modules supply their tabs' rows, and the app gives them to the palette")
+    @Test("Shortcut Coach's, Timer's, and Emoji Picker's modules supply their tabs' rows, and the app gives them to the palette")
     func moduleRowsComeFromTheModules() {
         let harness = ModuleHarness()
         defer { harness.tearDown() }
 
-        #expect(Set(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter, .timers])
+        #expect(Set(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter, .timers, .emoji])
         #expect(harness.model.capabilities.module(for: .keyboardShortcutter)?.paletteContent?.tab == .keyboardShortcutter)
         #expect(harness.model.capabilities.module(for: .timer)?.paletteContent?.tab == .timers)
-        #expect(Set(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter, .timers])
+        #expect(harness.model.capabilities.module(for: .emojiPicker)?.paletteContent?.tab == .emoji)
+        #expect(Set(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter, .timers, .emoji])
     }
 
     @Test("Every palette tab is drawn by the palette or supplied by its module, never neither or both")
@@ -106,12 +108,33 @@ struct CapabilityModuleTests {
         #expect(CapabilityDescriptor.screenshotTools.dependencies == [.clipboardHistory])
     }
 
+    @Test("Turning off Remember recently used emoji clears them, through the app model")
+    func turningOffRecentEmojiClearsThem() throws {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+        let tab = try #require(harness.model.commandPalette.tabContents[.emoji] as? EmojiPaletteContent)
+        tab.recents.use("😀")
+        harness.model.setPluginPreference(.emojiRemembersRecent, to: .bool(false), for: .emojiPicker)
+        #expect(tab.recents.glyphs.isEmpty)
+    }
+
+    @Test("A plugin that's off has no tab in the bar, and its Command-number does nothing, unless its tab is on screen")
+    func offPluginsHaveNoTab() {
+        let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled)
+        #expect(tabs == [.search, .dictation, .snippets, .timers], "Screenshots lists Clipboard History, so it goes too")
+        #expect(CommandPaletteTab.matchingCommandKey("7", in: tabs) == nil)
+        #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == .timers, "Numbers stay fixed")
+        #expect(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .emoji, enabled: enabled).contains(.emoji))
+    }
+
     @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs
-        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6, 7])
+        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6, 7, 8])
         #expect(Set(tabs.map(\.tab)).count == tabs.count)
-        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets", "timers"] {
+        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets", "timers", "emoji"] {
             #expect(CommandPaletteTab(rawValue: rawValue).map(CommandPaletteTab.allCases.contains) == true)
         }
         #expect(CommandPaletteTab.search.owner == .quickSearch)
@@ -119,6 +142,7 @@ struct CapabilityModuleTests {
         #expect(CommandPaletteTab.screenshots.owner == .screenshotTools)
         #expect(CommandPaletteTab.snippets.owner == .snippets)
         #expect(CommandPaletteTab.timers.owner == .timer)
+        #expect(CommandPaletteTab.emoji.owner == .emojiPicker)
         #expect(CapabilityCatalog.paletteTab(for: .screenshots).tab.dataSource == .clipboardHistory)
         #expect(CapabilityDescriptor.windowManagement.paletteTab == nil)
 
@@ -156,7 +180,8 @@ struct CapabilityModuleTests {
             .windowManagement: [.windowAction, .windowDrag],
             .keyboardShortcutter: [],
             .snippets: [],
-            .timer: []
+            .timer: [],
+            .emojiPicker: []
         ])
     }
 
@@ -213,7 +238,7 @@ struct CapabilityModuleTests {
     func preferenceKeysAndKnownCapabilitiesMigration() {
         #expect(Capability.allCases.map(\.rawValue) == [
             "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools", "snippets",
-            "timer",
+            "timer", "emojiPicker",
         ])
         #expect(Capability.originalCapabilities == [
             .quickSearch, .clipboardHistory, .dictation, .windowManagement, .keyboardShortcutter
@@ -302,6 +327,13 @@ private final class ModuleHarness {
         displayName: "⌃⌥⇧T"
     )
 
+    /// A binding for the Open Emoji Picker shortcut, which also starts unassigned.
+    static let emojiPickerBinding = ShortcutBinding(
+        keyCode: UInt32(kVK_ANSI_E),
+        modifiers: UInt32(controlKey | optionKey | shiftKey),
+        displayName: "⌃⌥⇧E"
+    )
+
     init(
         licensing: (any LicenseControlling)? = nil,
         assignsSnippetsShortcut: Bool = true,
@@ -314,10 +346,13 @@ private final class ModuleHarness {
         pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityModules-\(id)"))
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.didCompleteOnboarding = true
+        // Every module on, including those that ship off, so every module's lifecycle is covered.
+        preferences.enabledCapabilities = Set(Capability.allCases)
         if assignsSnippetsShortcut {
             preferences.setCapabilityShortcut(Self.snippetsBinding, for: .snippets)
         }
         preferences.setCapabilityShortcut(Self.timerBinding, for: .timer)
+        preferences.setCapabilityShortcut(Self.emojiPickerBinding, for: .emojiPicker)
 
         clipboard = TrackingClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
@@ -392,6 +427,7 @@ private final class ModuleHarness {
         case .keyboardShortcutter: []
         case .snippets: [CapabilityShortcut.snippets.ownerID]
         case .timer: [CapabilityShortcut.timer.ownerID]
+        case .emojiPicker: [CapabilityShortcut.emojiPicker.ownerID]
         }
     }
 
@@ -404,7 +440,7 @@ private final class ModuleHarness {
     /// resource are judged by their shortcut alone.
     func resourcesRunning(for capability: Capability) -> Bool {
         switch capability {
-        case .quickSearch, .dictation, .snippets:
+        case .quickSearch, .dictation, .snippets, .emojiPicker:
             model.shortcuts.activeOwners.isSuperset(of: Self.ownedShortcuts(for: capability))
         case .clipboardHistory: clipboard.isMonitoring
         case .windowManagement: windows.isDragSnapping

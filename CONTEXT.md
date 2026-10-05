@@ -147,6 +147,18 @@ _Avoid_: Notification, banner, popup
 The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it.
 _Avoid_: Timer list, timer manager
 
+**Emoji Picker**:
+Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it or pasting it into the app you're using. The first plugin that ships off; it's turned on in Settings › Plugins.
+_Avoid_: Emoji keyboard, character viewer
+
+**Emoji tab**:
+The Command Palette tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. Return copies; ⌘Return pastes and puts the clipboard back.
+_Avoid_: Emoji grid, emoji search
+
+**Recent emoji**:
+The emoji you picked most recently, shown first in the Emoji tab. User content, kept only on this Mac (`emoji-recent.json`) and never logged; turning off "Remember recently used emoji" clears them.
+_Avoid_: Frequently used, history
+
 ### Licensing
 
 **License Check**:

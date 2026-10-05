@@ -120,7 +120,7 @@ struct QuickSearchCommandTests {
             .result(safari), .result(systemSettings), .result(keybumpsApp),
             .command(settings), .command(.capability(.screenshotTools)), .command(.capability(.dictation)),
             .command(.capability(.windowManagement)), .command(.capability(.keyboardShortcutter)),
-            .command(.capability(.snippets)),
+            .command(.capability(.snippets)), .command(.capability(.emojiPicker)),
         ])
     }
 
