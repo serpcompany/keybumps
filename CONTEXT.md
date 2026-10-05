@@ -7,7 +7,7 @@ Keybumps is one installed native macOS companion made of independently enabled c
 ### App shell
 
 **Capability**:
-A user-enabled area of Keybumps that delivers one coherent outcome and owns its own resources and shortcuts. People see it as a **plugin**. Code and docs say capability for the module and what it does, and plugin for what it declares to people: its manifest (`PluginManifest.swift`), its preferences (stored as `plugin.<capability>.<key>`), its Settings page (`PluginSettingsPage`), and its Store listing (ADR 0006).
+A user-enabled area of Keybumps that delivers one coherent outcome and owns its own resources and shortcuts. People see it as a **plugin**. Code and docs say capability for the module and what it does, and plugin for what it declares to people: its manifest (`PluginManifest.swift`), its preferences (stored as `plugin.<capability>.<key>`), its Settings page (`PluginSettingsPage`), and its listing on the website (ADR 0006).
 _Avoid_: Mini-app, embedded app, feature, extension
 
 **Plugin**:
