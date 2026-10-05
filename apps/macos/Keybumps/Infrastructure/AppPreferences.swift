@@ -23,6 +23,8 @@ final class AppPreferences {
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
         static let timerPlaysSound = "timerPlaysSound"
+        static let timerShowsMenuBarCountdown = "timerShowsMenuBarCountdown"
+        static let timerListsTimersInMenu = "timerListsTimersInMenu"
         static let lastLaunchedVersion = "lastLaunchedVersion"
     }
 
@@ -92,6 +94,16 @@ final class AppPreferences {
         didSet { defaults.set(timerPlaysSound, forKey: Key.timerPlaysSound) }
     }
 
+    /// Whether the menu bar item shows the soonest running timer beside its icon. On by default.
+    var timerShowsMenuBarCountdown: Bool {
+        didSet { defaults.set(timerShowsMenuBarCountdown, forKey: Key.timerShowsMenuBarCountdown) }
+    }
+
+    /// Whether the Keybumps menu lists the timers at its top. On by default.
+    var timerListsTimersInMenu: Bool {
+        didSet { defaults.set(timerListsTimersInMenu, forKey: Key.timerListsTimersInMenu) }
+    }
+
     /// The version that last launched, so What's New shows once after an update (#225).
     var lastLaunchedVersion: String? {
         didSet { defaults.set(lastLaunchedVersion, forKey: Key.lastLaunchedVersion) }
@@ -128,6 +140,10 @@ final class AppPreferences {
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
         timerPlaysSound = defaults.object(forKey: Key.timerPlaysSound) == nil || defaults.bool(forKey: Key.timerPlaysSound)
+        timerShowsMenuBarCountdown = defaults.object(forKey: Key.timerShowsMenuBarCountdown) == nil
+            || defaults.bool(forKey: Key.timerShowsMenuBarCountdown)
+        timerListsTimersInMenu = defaults.object(forKey: Key.timerListsTimersInMenu) == nil
+            || defaults.bool(forKey: Key.timerListsTimersInMenu)
         lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),

@@ -96,6 +96,8 @@ final class AppModel {
     private let whatsNew: any WhatsNewPresenting
     /// The menu bar icon's red dot: a waiting update, or a capability with something waiting.
     @ObservationIgnored let menuBarAttention = MenuBarAttention()
+    /// Text beside the menu bar icon and capability sections in its menu, such as running timers.
+    @ObservationIgnored let menuBarStatus = MenuBarStatus()
     private(set) var licenseSnapshot: LicenseSnapshot
     private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
         manualRecovery: "Checking the Quick Search shortcut…"
@@ -321,6 +323,7 @@ final class AppModel {
                 store: timers,
                 preferences: preferences,
                 attention: CapabilityMenuBarAttention(attention: menuBarAttention, capability: .timer),
+                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .timer),
                 // Unit tests never play a sound or show a notice.
                 alerts: injectedTimerAlerts ?? (UnitTestHost.isActive ? InertTimerAlerts() : SystemTimerAlerts())
             )
@@ -418,6 +421,7 @@ final class AppModel {
             for capability in preferences.enabledCapabilities {
                 capabilities.deactivate(capability, context: context)
                 menuBarAttention.clear(.capability(capability))
+                menuBarStatus.clear(capability)
             }
             commandPalette.dismiss()
         }
@@ -476,6 +480,7 @@ final class AppModel {
             capabilities.deactivate(capability, context: capabilityContext)
             // Nothing is left to open that would clear a turned-off capability's dot.
             menuBarAttention.clear(.capability(capability))
+            menuBarStatus.clear(capability)
             // Setup for a capability that's now off would prompt for nothing.
             if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
             if capability == .dictation { dismissDictationSetupCards() }
