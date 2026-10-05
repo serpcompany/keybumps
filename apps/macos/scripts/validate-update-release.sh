@@ -53,7 +53,9 @@ verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBe
 
 [[ "$actual_bundle" == com.serp.keybumps ]] || { print -u2 "bundle identity changed: $actual_bundle"; exit 70; }
 # What's New shows the notes the app carries (#225).
-cmp -s "$app_path/Contents/Resources/WhatsNew.md" "$release_notes_path" || { print -u2 "the app doesn't carry this release's notes (Contents/Resources/WhatsNew.md)"; exit 70; }
+# (build-update-release.sh compares it with the source notes before generate_appcast, which adds a
+# signing note to its copy.)
+[[ -s "$app_path/Contents/Resources/WhatsNew.md" ]] || { print -u2 "the app doesn't carry its release notes (Contents/Resources/WhatsNew.md)"; exit 70; }
 [[ "$actual_build" == "$expected_build" ]] || { print -u2 "unexpected build: $actual_build"; exit 70; }
 [[ "$actual_version" == "$expected_version" ]] || { print -u2 "unexpected version: $actual_version"; exit 70; }
 [[ "$actual_feed" == "$embedded_feed_url" ]] || { print -u2 "app feed URL does not match expected embedded feed"; exit 70; }
