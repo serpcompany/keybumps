@@ -121,6 +121,21 @@ struct PluginManifestTests {
         #expect(AppPreferences.initialCapabilities(stored: stored + ["timer"], known: allKnown, shippingOff: [.timer]).contains(.timer))
     }
 
+    @Test("An install from before plugins were tracked gets the ones that ship on, never one that ships off")
+    func oldInstallSkipsPluginsThatShipOff() {
+        // No known list: only the original five were known.
+        let started = AppPreferences.initialCapabilities(stored: ["dictation"], known: nil, shippingOff: [.timer])
+        #expect(started == [.dictation, .screenshotTools, .snippets])
+    }
+
+    @Test("An optional permission that isn't granted reads Not Granted, never Required")
+    func optionalPermissionStatus() {
+        let missing = PermissionAuthorizationState.required
+        #expect(PermissionRow.status(missing, requiresRelaunch: false, isOptional: true) == "Not Granted")
+        #expect(PermissionRow.status(missing, requiresRelaunch: false, isOptional: false) == missing.rawValue)
+        #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
+    }
+
     @Test("Every plugin ships on today; one that ships off is the Emoji Picker's job (#243)")
     func everyPluginShipsOnToday() {
         let allOn = CapabilityCatalog.descriptors.allSatisfy(\.isOnByDefault)
