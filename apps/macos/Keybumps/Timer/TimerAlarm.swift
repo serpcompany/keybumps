@@ -166,6 +166,20 @@ final class InertTimerAlerts: TimerAlerting {
     func stop() {}
 }
 
+/// The bell's motion while the alarm rings: a repeating bounce, which macOS 15 brings, or a pulse
+/// on macOS 14, where a repeating bounce isn't available.
+private struct RingingEffect: ViewModifier {
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.symbolEffect(.bounce, options: .repeating, isActive: isActive)
+        } else {
+            content.symbolEffect(.pulse, options: .repeating, isActive: isActive)
+        }
+    }
+}
+
 /// The alarm card: the timer icon, what ended and when, and Repeat and Stop.
 private struct TimerAlarmCard: View {
     let alarm: TimerAlarm
@@ -177,7 +191,7 @@ private struct TimerAlarmCard: View {
             Image(systemName: alarm.rings ? "bell.and.waves.left.and.right.fill" : "timer")
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(.orange)
-                .symbolEffect(.bounce, options: .repeating, isActive: alarm.rings)
+                .modifier(RingingEffect(isActive: alarm.rings))
                 .frame(width: 34)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
