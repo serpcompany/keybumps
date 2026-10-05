@@ -68,6 +68,17 @@ targets:
       - package: Sparkle
       - package: ArgmaxOSS
         product: WhisperKit
+    postCompileScripts:
+      - name: Bundle this release's notes for What's New
+        # build-update-release.sh and build-qa-candidate.sh pass KEYBUMPS_RELEASE_NOTES; other builds carry none (#225).
+        script: |
+          notes="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhatsNew.md"
+          if [ -n "${KEYBUMPS_RELEASE_NOTES:-}" ] && [ -f "$KEYBUMPS_RELEASE_NOTES" ]; then
+            cp "$KEYBUMPS_RELEASE_NOTES" "$notes"
+          else
+            rm -f "$notes"
+          fi
+        basedOnDependencyAnalysis: false
     preBuildScripts:
       - name: Validate Keybumps release configuration
         script: |

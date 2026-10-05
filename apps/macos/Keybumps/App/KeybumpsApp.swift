@@ -130,5 +130,7 @@ enum AppShellLaunch {
             restartWhenSafe: model.restartToUpdate
         )
         NativeStatusItemController.shared.install()
+        model.onUpdateSnapshotChange = { NativeStatusItemController.shared.refreshUpdateBadge() }
+        NativeStatusItemController.shared.refreshUpdateBadge()
     }
 }

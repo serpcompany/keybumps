@@ -43,7 +43,7 @@
     <key>SUFeedURL</key>
     <string>$(KEYBUMPS_UPDATE_FEED_URL)</string>
     <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
+    <integer>3600</integer>
     <key>SUPublicEDKey</key>
     <string>$(KEYBUMPS_UPDATE_PUBLIC_KEY)</string>
     <key>SURequireSignedFeed</key>

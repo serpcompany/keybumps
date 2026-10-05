@@ -83,7 +83,17 @@ final class AppModel {
             if !newValue { dismissPermissionRelaunchPrompt() }
         }
     }
-    private(set) var updateSnapshot: UpdateSnapshot
+    private(set) var updateSnapshot: UpdateSnapshot {
+        didSet {
+            updateReminder.evaluate()
+            onUpdateSnapshotChange()
+        }
+    }
+    /// Asks to restart while an update waits (#225).
+    let updateReminder: UpdateReminder
+    private let whatsNew: any WhatsNewPresenting
+    /// The status item's red dot follows the update state.
+    @ObservationIgnored var onUpdateSnapshotChange: () -> Void = {}
     private(set) var licenseSnapshot: LicenseSnapshot
     private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
         manualRecovery: "Checking the Quick Search shortcut…"
@@ -144,6 +154,8 @@ final class AppModel {
         snippets injectedSnippets: SnippetStore? = nil,
         textPaster injectedTextPaster: (any TextPasting)? = nil,
         keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
+        updatePrompt injectedUpdatePrompt: (any UpdatePromptPresenting)? = nil,
+        whatsNew injectedWhatsNew: (any WhatsNewPresenting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -170,6 +182,14 @@ final class AppModel {
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
         self.updater = updater
         self.updateSnapshot = updater.snapshot
+        // Unit tests never show these windows.
+        self.updateReminder = UpdateReminder(
+            snapshot: { updater.snapshot },
+            isSafe: { updateSafetyPolicy.isSafeToInstall },
+            restart: { updater.restartWhenSafe() },
+            presenter: injectedUpdatePrompt ?? (UnitTestHost.isActive ? InertUpdatePromptPresenter() : UpdatePromptWindowController())
+        )
+        self.whatsNew = injectedWhatsNew ?? (UnitTestHost.isActive ? InertWhatsNewPresenter() : WhatsNewWindowController())
         #if DEBUG
         // Unit tests and injected compositions run entitled unless they pass a license state.
         let licensing = injectedLicensing ?? FixedLicenseController()
@@ -237,6 +257,8 @@ final class AppModel {
             paster: textPaster,
             search: injectedQuickSearch
         )
+        // The restart prompt never appears over the palette, so it never takes the palette's keys.
+        updateReminder.isSuppressed = { [commandPalette] in commandPalette.isVisible }
         // The palette's Settings button, Command-comma, and Quick Search commands take the status
         // menu's route; a capability's command asks for its page.
         commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
@@ -314,6 +336,39 @@ final class AppModel {
         if preferences.didCompleteOnboarding && isLicensed { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
         updater.start()
+        updateReminder.start()
+        updateReminder.evaluate()
+        showWhatsNewIfNeeded()
+        previewUpdateWindowsIfAsked()
+    }
+
+    /// QA and Debug builds only: shows both update windows (`UpdatePreview`).
+    private func previewUpdateWindowsIfAsked() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        guard UpdatePreview.isAllowed(version: version),
+              UpdatePreview.isRequested else { return }
+        if let notes = WhatsNew.bundledNotes() { whatsNew.show(ReleaseNotesDocument(markdown: notes)) }
+        let prompt = updateReminder.presenter
+        prompt.show(version: "\(version) (preview)", restart: { prompt.close() }, later: { prompt.close() })
+    }
+
+    /// After an update, shows that version's release notes once (#225), then records the version.
+    func showWhatsNewIfNeeded(
+        currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+        notes: String? = WhatsNew.bundledNotes()
+    ) {
+        // QA candidates carry notes only for the preview: they never show What's New or record a
+        // version, so going back to a release afterwards doesn't show its notes again.
+        guard !currentVersion.contains("-dev.") else { return }
+        let shows = notes != nil && WhatsNew.shouldShow(
+            currentVersion: currentVersion,
+            lastLaunchedVersion: preferences.lastLaunchedVersion,
+            completedOnboarding: preferences.didCompleteOnboarding,
+            hasNotes: true
+        )
+        // Recorded first, so a problem showing it can't repeat it on every launch.
+        preferences.lastLaunchedVersion = currentVersion
+        if shows, let notes { whatsNew.show(ReleaseNotesDocument(markdown: notes)) }
     }
 
     func checkForUpdates() { updater.checkNow() }
