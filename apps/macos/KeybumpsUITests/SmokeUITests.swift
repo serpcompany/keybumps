@@ -29,18 +29,14 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general"] {
+        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
-        // Plugins opens on its first plugin.
+        // The Plugins page lists every plugin, and a row opens that plugin's page.
         element("settings.sidebar.plugins").click()
-        XCTAssertTrue(element("settings.detail.search").waitForExistence(timeout: 5), "plugins")
-        // Every plugin's page opens from the Plugins table, as in Raycast's settings.
-        for section in ["search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer"] {
-            element("plugins.row.\(section)").click()
-            XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
-        }
+        element("plugins.row.timer").click()
+        XCTAssertTrue(element("settings.detail.timer").waitForExistence(timeout: 5), "A Plugins row opens its page")
     }
 
     func testEscapeClosesSettings() {

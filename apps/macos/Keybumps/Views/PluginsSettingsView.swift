@@ -21,13 +21,6 @@ enum PluginsTable {
         ].filter { !$0.plugins.isEmpty }
     }
 
-    /// The page a request for `section` shows: for Plugins itself, the plugin last shown, else the
-    /// first in the table; any other page as is.
-    static func landingPage(for section: SettingsSection, after last: SettingsSection?) -> SettingsSection {
-        guard section == .plugins else { return section }
-        return last ?? sections.first?.plugins.first ?? .search
-    }
-
     /// The sections, keeping plugins whose name or Quick Search keywords contain `query`.
     static func sections(matching query: String) -> [Section] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -43,101 +36,90 @@ enum PluginsTable {
     }
 }
 
-/// Settings › Plugins, like Raycast's Extensions tab: a searchable table of every plugin with its
-/// switch, and the selected plugin's page beside it. Opening Plugins selects a plugin
-/// (`PluginsTable.landingPage`), so a plugin is always selected.
+/// Settings › Plugins, like Raycast's Extensions list: every plugin, the default ones then added
+/// ones, with its palette tab, its shortcut, and its switch. Clicking one opens its own page, which
+/// has its own row in the sidebar.
 struct PluginsSettingsView: View {
     @Environment(AppModel.self) private var model
-    let selection: SettingsSection
-    let select: (SettingsSection) -> Void
+    let open: (SettingsSection) -> Void
     @State private var query = ""
 
-    private var selected: SettingsSection { PluginsTable.landingPage(for: selection, after: nil) }
-
     var body: some View {
-        HStack(spacing: 0) {
-            // Wide enough for every plugin's name; at the default window width each plugin's page
-            // keeps the width it had as its own sidebar page.
-            table
-                .frame(width: 260)
-                .background(SettingsTheme.sidebarBackground)
-            Divider()
-            Group {
-                if let page = selected.capability?.descriptor.settingsPage {
-                    page.content()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        // A plugin opened from elsewhere, such as its Quick Search command, shows in the table even
-        // if the search would hide it.
-        .onChange(of: selected) {
-            if !PluginsTable.sections(matching: query).contains(where: { $0.plugins.contains(selected) }) { query = "" }
-        }
-    }
-
-    private var table: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let sections = PluginsTable.sections(matching: query)
+        SettingsPage {
             SettingsSearchField(text: $query, prompt: "Search plugins…", identifier: "plugins.search")
-                .padding(.horizontal, 10)
-                .padding(.top, 10)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(PluginsTable.sections(matching: query), id: \.title) { section in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(section.title)
-                                .font(.system(size: SettingsTheme.subtitleSize, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .accessibilityAddTraits(.isHeader)
-                            ForEach(section.plugins) { page in
-                                PluginsTableRow(page: page, isSelected: page == selected) { select(page) }
-                            }
-                        }
+            if sections.isEmpty {
+                SettingsNote("No plugins match.")
+            }
+            ForEach(sections, id: \.title) { section in
+                SettingsGroup(section.title) {
+                    ForEach(section.plugins) { page in
+                        PluginsListRow(page: page) { open(page) }
                     }
                 }
-                .padding(.horizontal, 6)
-                .padding(.bottom, 12)
             }
-            .scrollIndicators(.never)
         }
+        .navigationTitle("Plugins")
     }
 }
 
-/// A plugin's row: its icon and name (selecting it shows its page), whether it needs attention, and
-/// its switch, the only one for the plugin, as in Raycast's table.
-private struct PluginsTableRow: View {
+/// A plugin's row: its icon, name, and summary (clicking them opens its page), whether it needs
+/// attention, its palette tab and shortcut, and its switch.
+private struct PluginsListRow: View {
     @Environment(AppModel.self) private var model
     let page: SettingsSection
-    let isSelected: Bool
-    let select: () -> Void
+    let open: () -> Void
 
     var body: some View {
         if let capability = page.capability {
             let descriptor = capability.descriptor
-            HStack(spacing: 8) {
-                Button(action: select) {
-                    HStack(spacing: 9) {
-                        SettingsIconTile(systemImage: descriptor.systemImage, tint: descriptor.iconTint, size: 22)
-                        Text(descriptor.title)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.primary)
+            HStack(spacing: 12) {
+                Button(action: open) {
+                    HStack(spacing: 11) {
+                        SettingsIconTile(systemImage: descriptor.systemImage, tint: descriptor.iconTint, size: 26)
+                            .accessibilityHidden(true)
+                        SettingsRowLabel(title: descriptor.title, subtitle: descriptor.settingsPage?.summary)
                             .lineLimit(1)
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 8)
                         if model.settingsAttentionCount(for: page) > 0 {
                             Image(systemName: "exclamationmark.circle.fill")
                                 .foregroundStyle(.red)
                                 .accessibilityLabel("Needs attention")
                         }
+                        Text(tabKey(descriptor))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 36, alignment: .trailing)
+                            .help("Its Command Palette tab")
+                        Text(shortcut(descriptor))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(width: 96, alignment: .trailing)
+                            .help("Its shortcut")
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
-                    .frame(minHeight: 30)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(SettingsSidebarButtonStyle(isSelected: isSelected))
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Opens its settings")
                 .accessibilityIdentifier("plugins.row.\(page.launchToken)")
                 CapabilityToggle(capability: capability)
             }
-            .padding(.trailing, 6)
         }
+    }
+
+    /// Its palette tab's Command-number, while the tab can be shown.
+    private func tabKey(_ descriptor: CapabilityDescriptor) -> String {
+        guard let tab = descriptor.paletteTab?.tab,
+              tab != .keyboardShortcutter || model.preferences.showsHotkeysTab else { return "" }
+        return tab.shortcutLabel
+    }
+
+    /// Its first shortcut that's assigned.
+    private func shortcut(_ descriptor: CapabilityDescriptor) -> String {
+        descriptor.shortcuts.lazy.compactMap { model.preferences.capabilityShortcut(for: $0)?.displayName }.first ?? ""
     }
 }

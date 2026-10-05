@@ -9,14 +9,11 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case plugins = "Plugins", permissions = "Permissions", general = "General", account = "Account"
     var id: String { rawValue }
 
-    /// Capability pages in registry order, then the fixed shell destinations. A capability page
-    /// shows inside Plugins, with its plugin selected.
+    /// Capability pages in registry order, then the fixed shell destinations. Each capability page
+    /// has its own sidebar row, and the Plugins page lists them all.
     static var allCases: [SettingsSection] {
         CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.plugins, .permissions, .general, .account]
     }
-
-    /// Whether it's shown in Settings › Plugins: the table, or a plugin selected in it.
-    var isInPlugins: Bool { self == .plugins || capability != nil }
 
     /// The module whose Settings page this is; nil for the shell's Permissions and General.
     var capability: Capability? {
@@ -37,24 +34,18 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsNavigationHistory: Equatable {
-    /// Never `.plugins` itself: Plugins always shows a plugin, the one last shown or else the first.
-    private(set) var selection: SettingsSection {
-        didSet { if selection.capability != nil { lastPlugin = selection } }
-    }
+    private(set) var selection: SettingsSection
     private(set) var backStack: [SettingsSection] = []
     private(set) var forwardStack: [SettingsSection] = []
-    private var lastPlugin: SettingsSection?
 
     init(selection: SettingsSection = .permissions) {
-        self.selection = PluginsTable.landingPage(for: selection, after: nil)
-        if self.selection.capability != nil { lastPlugin = self.selection }
+        self.selection = selection
     }
 
     var canGoBack: Bool { !backStack.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }
 
     mutating func navigate(to section: SettingsSection) {
-        let section = PluginsTable.landingPage(for: section, after: lastPlugin)
         guard section != selection else { return }
         backStack.append(selection)
         forwardStack = []
@@ -85,8 +76,9 @@ extension View {
     }
 }
 
-/// The Settings sidebar, modeled on Raycast's: the account row on top (outside these groups), the
-/// app's own pages, then Plugins, filtered by search.
+/// The Settings sidebar: the account row on top (outside these groups); General, Permissions, and
+/// Plugins; then a row per plugin, the default ones (Quick Search first, then by name) and the added
+/// ones in their own group below; filtered by search.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -94,24 +86,17 @@ enum SettingsSidebar {
 
     /// What VoiceOver says for a row's attention mark.
     static func attentionLabel(_ count: Int, for section: SettingsSection) -> String {
-        switch section {
-        case .permissions: "\(count) permission items need attention"
-        case .plugins: count == 1 ? "1 plugin needs attention" : "\(count) plugins need attention"
-        default: "Needs attention"
-        }
+        section == .permissions ? "\(count) permission items need attention" : "Needs attention"
     }
 
-    /// General and Permissions, then Plugins, which lists every plugin, as Raycast's settings do.
-    /// Searching also finds a plugin by name, so its page is one click away.
     static func groups(matching query: String) -> [[SettingsSection]] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches: (SettingsSection) -> Bool = {
             trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
         }
-        let app = [SettingsSection.general, .permissions].filter(matches)
-        guard isSearching(query) else { return [app, [.plugins]] }
-        let plugins = PluginsTable.sections.flatMap { $0.plugins }.filter(matches)
-        return [app, plugins + [SettingsSection.plugins].filter(matches)].filter { !$0.isEmpty }
+        let app = [SettingsSection.general, .permissions, .plugins].filter(matches)
+        let plugins = PluginsTable.sections.map { $0.plugins.filter(matches) }
+        return ([app] + plugins).filter { !$0.isEmpty }
     }
 }
 
@@ -143,8 +128,7 @@ struct SettingsRootView: View {
                                 ForEach(group) { section in
                                     SettingsSidebarRow(
                                         section: section,
-                                        isSelected: visibleSelection == section
-                                            || (section == .plugins && visibleSelection.capability != nil && !SettingsSidebar.isSearching(query)),
+                                        isSelected: visibleSelection == section,
                                         attentionCount: model.settingsAttentionCount(for: section)
                                     ) {
                                         navigation.navigate(to: section)
@@ -166,8 +150,10 @@ struct SettingsRootView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
             Group {
-                if visibleSelection.isInPlugins {
-                    PluginsSettingsView(selection: visibleSelection) { navigation.navigate(to: $0) }
+                if let page = visibleSelection.capability?.descriptor.settingsPage {
+                    page.content()
+                } else if visibleSelection == .plugins {
+                    PluginsSettingsView { navigation.navigate(to: $0) }
                 } else if visibleSelection == .permissions {
                     PermissionsView()
                 } else if visibleSelection == .account {
@@ -177,6 +163,16 @@ struct SettingsRootView: View {
                 }
             }
             .environment(model)
+            .toolbar {
+                if #available(macOS 26.0, *) {
+                    ToolbarSpacer(.flexible)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if let capability = visibleSelection.capability {
+                        CapabilityToggle(capability: capability)
+                    }
+                }
+            }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("settings.detail.\(visibleSelection.launchToken)")
         }
@@ -224,10 +220,6 @@ struct SettingsRootView: View {
 extension AppModel {
     func settingsAttentionCount(for section: SettingsSection) -> Int {
         if section == .permissions { return missingPermissionCount }
-        // How many plugins need attention, not how many things do.
-        if section == .plugins {
-            return SettingsSection.allCases.filter { $0.capability != nil && settingsAttentionCount(for: $0) > 0 }.count
-        }
         guard let capability = section.capability else { return 0 }
         return capabilities.attentionCount(for: capability, context: capabilityContext)
     }
@@ -1131,15 +1123,14 @@ struct CapabilityControl: View {
     }
 }
 
-/// A plugin's switch, in its Plugins table row.
+/// A plugin's switch: on its page's toolbar, and in its row on the Plugins page.
 struct CapabilityToggle: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
 
     var body: some View {
         Toggle("Enable \(capability.title)", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
-            .toggleStyle(.switch)
-            .controlSize(.mini)
+            .settingsCompactSwitch()
             .labelsHidden()
             .help(capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
             .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
