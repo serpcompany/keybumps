@@ -16,6 +16,7 @@ struct PluginManifestTests {
         #expect(CapabilityDescriptor.timer.category == .productivity)
         #expect(CapabilityDescriptor.dictation.category == .writing)
         #expect(PluginSettingsPage<EmptyView>.byline(.timer) == "Official plugin by Keybumps · Productivity")
+        #expect(CapabilityOffBanner.title(.emojiPicker) == "Emoji Picker is turned off")
     }
 
     @Test("A plugin's shortcuts and preference groups come from its manifest, in order")

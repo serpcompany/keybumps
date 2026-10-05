@@ -54,10 +54,14 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertTrue(waitForValue(of: toggle, 1))
 
+        XCTAssertFalse(element("capability.offBanner.clipboardHistory").exists, "An on plugin shows no banner")
+
         toggle.click()
         XCTAssertTrue(waitForValue(of: toggle, 0))
+        XCTAssertTrue(element("capability.offBanner.clipboardHistory").waitForExistence(timeout: 5), "Turning it off says so")
         toggle.click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.clipboardHistory").waitForNonExistence(timeout: 5))
     }
 
     func testPaletteCommandNumberSwitchesTabs() {
@@ -94,9 +98,12 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForValue(of: toggle, 0), "Emoji Picker ships off")
         XCTAssertTrue(app.staticTexts["Accessibility (Optional)"].exists)
         XCTAssertTrue(element("plugin.emojiPicker.skinTone").exists)
+        XCTAssertTrue(element("capability.offBanner.emojiPicker").exists, "Its page says it's off")
 
-        toggle.click()
+        // The banner's Turn On does what the switch does.
+        element("capability.offBanner.turnOn.emojiPicker").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.emojiPicker").waitForNonExistence(timeout: 5))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {

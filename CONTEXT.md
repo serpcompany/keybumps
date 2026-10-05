@@ -57,7 +57,7 @@ A Keybumps action that Quick Search offers beside applications, files, and folde
 _Avoid_: Workflow, extension command
 
 **Capability command**:
-The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
+The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off. A turned-off plugin's page says so at the top, with a Turn On button.
 _Avoid_: Plugin, extension, navigation command
 
 **Recent Items**:

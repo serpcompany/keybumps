@@ -1116,12 +1116,49 @@ struct CapabilityControl: View {
             summary: descriptor.settingsPage?.summary ?? "",
             byline: byline
         )
+        CapabilityOffBanner(capability: capability)
         if !shortcuts.isEmpty {
             SettingsGroup("Commands") {
                 ForEach(shortcuts) { CapabilityShortcutEditor(shortcut: $0) }
             }
         }
     }
+}
+
+/// Says plainly, under a plugin's header, that the plugin is off, with a button to turn it on
+/// (#254). The toolbar switch alone was easy to miss, such as for a plugin that ships off and is
+/// opened from Quick Search. It goes away once the plugin is on.
+struct CapabilityOffBanner: View {
+    @Environment(AppModel.self) private var model
+    let capability: Capability
+
+    var body: some View {
+        if !model.preferences.enabledCapabilities.contains(capability) {
+            HStack(spacing: 12) {
+                Image(systemName: "power.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                SettingsRowLabel(title: Self.title(capability), subtitle: Self.subtitle)
+                Spacer(minLength: 12)
+                Button("Turn On") { model.setCapability(capability, enabled: true) }
+                    .buttonStyle(SettingsButtonStyle(isProminent: true))
+                    .accessibilityIdentifier("capability.offBanner.turnOn.\(capability.rawValue)")
+            }
+            .padding(.horizontal, SettingsTheme.rowInset + 3)
+            .padding(.vertical, 12)
+            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous)
+                    .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+            )
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("capability.offBanner.\(capability.rawValue)")
+        }
+    }
+
+    static func title(_ capability: Capability) -> String { "\(capability.title) is turned off" }
+    static let subtitle = "Its shortcuts and features don't work until you turn it on."
 }
 
 /// A plugin's switch: on its page's toolbar, and in its row on the Plugins page.
