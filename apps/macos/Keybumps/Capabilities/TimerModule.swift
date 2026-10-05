@@ -77,6 +77,24 @@ struct InertTimerAlerts: TimerAlerting {
     func cancelWaitingAnnouncement() {}
 }
 
+/// Wakes after a delay by the Mac's own uptime, not the wall clock, so setting the clock back
+/// doesn't freeze the menu bar countdown. A timer's end itself stays on the wall clock
+/// (`WallClockTimerScheduler`); after sleep, the store's wake check refreshes the menu bar.
+struct MonotonicTickScheduler: TimerScheduling {
+    func schedule(at date: Date, _ action: @escaping @MainActor () -> Void) -> any TimerScheduledAction {
+        let source = DispatchSource.makeTimerSource(queue: .main)
+        source.schedule(deadline: .now() + max(0, date.timeIntervalSinceNow), leeway: .milliseconds(50))
+        source.setEventHandler { MainActor.assumeIsolated { action() } }
+        source.resume()
+        return Tick(source: source)
+    }
+
+    private struct Tick: TimerScheduledAction {
+        let source: DispatchSourceTimer
+        func cancel() { source.cancel() }
+    }
+}
+
 /// Owns the Timers tab, its optional Open Timers shortcut, and the timers' ends: a notch notice,
 /// a sound unless it's off, and the menu bar dot until the Timers tab shows. While a timer runs it
 /// also shows the soonest beside the menu bar icon and lists the timers in the Keybumps menu (each
@@ -119,7 +137,7 @@ final class TimerModule: CapabilityModule {
     ) {
         self.timersTabIsShowing = timersTabIsShowing ?? { [weak palette] in palette?.isDisplaying(.timers) ?? false }
         self.showTimersTab = showTimersTab ?? { [weak palette] in palette?.show(.timers) }
-        self.ticker = ticker ?? WallClockTimerScheduler()
+        self.ticker = ticker ?? MonotonicTickScheduler()
         self.menuBar = menuBar
         self.palette = palette
         self.store = store
@@ -179,15 +197,18 @@ final class TimerModule: CapabilityModule {
         }
         let now = store.now()
         let countdown = preferences.timerShowsMenuBarCountdown ? Self.countdown(of: store.displayed, now: now) : nil
-        menuBar.setTitle(countdown?.title, spoken: countdown?.spoken)
-        menuBar.setItems(preferences.timerListsTimersInMenu ? menuItems(now: now) : [])
+        menuBar.set(
+            title: countdown?.title,
+            spoken: countdown?.spoken,
+            items: preferences.timerListsTimersInMenu ? menuItems(now: now) : []
+        )
 
         let showsTime = preferences.timerShowsMenuBarCountdown || preferences.timerListsTimersInMenu
         guard showsTime, let soonest = store.displayed.first(where: \.isRunning) else { return }
         // The clock rounds up, so the shown second changes as the time left crosses a whole second.
         let remaining = soonest.remaining(at: now)
         let untilNextSecond = remaining - remaining.rounded(.down)
-        let wait = untilNextSecond > 0.001 ? untilNextSecond : 1
+        let wait = untilNextSecond > 0 ? untilNextSecond : 1
         nextTick = ticker.schedule(at: now.addingTimeInterval(wait + 0.01)) { [weak self] in self?.refreshMenuBar() }
     }
 

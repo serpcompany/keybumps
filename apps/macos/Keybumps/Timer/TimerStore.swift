@@ -231,7 +231,7 @@ final class TimerStore {
     /// them is logged.
     private func commit(_ next: [TimerItem]) {
         items = next
-        onChange()
+        defer { onChange() }
         guard let storageURL else { return }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

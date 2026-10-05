@@ -109,6 +109,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     private var openMenu: NSMenu?
     private var statusMenuItems: [(id: String, item: NSMenuItem)] = []
     private var statusActions: [String: @MainActor () -> Void] = [:]
+    private var dotFrameObserver: NSObjectProtocol?
 
     init(router: MainWindowRouter? = nil) {
         self.router = router ?? .shared
@@ -174,12 +175,11 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         return menu
     }
 
-    /// Shows or hides the red dot on the menu bar icon, and names its reasons for VoiceOver. Called
-    /// whenever `MenuBarAttention` changes.
     /// Redraws the menu bar item: the text beside the icon, the red dot on the icon, and their
     /// VoiceOver name; and, while the menu is open, its capability items. Called whenever
     /// `MenuBarAttention` or `MenuBarStatus` changes.
     func refreshMenuBarItem() {
+        refreshOpenMenu()
         guard let item = statusItem, let button = item.button else { return }
         if let title = status?.title {
             item.length = NSStatusItem.variableLength
@@ -197,7 +197,6 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         let label = [attention?.accessibilityLabel(productName: productName) ?? productName, status?.spokenTitle]
         button.setAccessibilityLabel(label.compactMap { $0 }.joined(separator: ", "))
         refreshDot(on: button)
-        refreshOpenMenu()
     }
 
     private func refreshDot(on button: NSStatusBarButton) {
@@ -216,16 +215,31 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
             button.addSubview(dot)
             return dot
         }()
-        // On the icon's top-right corner, also while text follows it. The button's coordinates
-        // are flipped: y 1 is its top edge.
-        button.layoutSubtreeIfNeeded()
+        placeDot(dot, on: button)
+        // The status item resizes after this call when text comes or goes, so place it again then.
+        if dotFrameObserver == nil {
+            button.postsFrameChangedNotifications = true
+            dotFrameObserver = NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification, object: button, queue: .main
+            ) { [weak self, weak button] _ in
+                MainActor.assumeIsolated {
+                    guard let button, let dot = button.subviews.first(where: { $0.identifier == identifier }) else { return }
+                    self?.placeDot(dot, on: button)
+                }
+            }
+        }
+    }
+
+    /// On the icon's top-right corner, also while text follows it. The button's coordinates are
+    /// flipped: y 1 is its top edge.
+    private func placeDot(_ dot: NSView, on button: NSStatusBarButton) {
         let icon = button.cell?.imageRect(forBounds: button.bounds) ?? button.bounds
         dot.frame = NSRect(x: min(icon.maxX, button.bounds.maxX) - 6, y: 1, width: 7, height: 7)
     }
 
     /// While the menu is open, a timer ticking updates its item in place; items coming or going
     /// rebuild the menu.
-    private func refreshOpenMenu() {
+    func refreshOpenMenu() {
         guard let openMenu else { return }
         let sections = status?.sections ?? []
         let items = sections.flatMap { $0 }
@@ -233,8 +247,9 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
             populate(openMenu)
             return
         }
-        for (new, shown) in zip(items, statusMenuItems) where shown.item.title != new.title {
-            shown.item.title = new.title
+        for (new, shown) in zip(items, statusMenuItems) {
+            if shown.item.title != new.title { shown.item.title = new.title }
+            shown.item.image = new.systemImage.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
             statusActions[new.id] = new.action
         }
     }

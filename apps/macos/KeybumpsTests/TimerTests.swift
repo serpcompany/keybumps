@@ -585,6 +585,7 @@ struct TimerMenuBarTests {
         fixture.store.start(duration: 2700, name: "Laundry")
         fixture.store.start(duration: 300, name: "Tea")
         #expect(fixture.menuBarStatus.title == "5:00 +1")
+        #expect(fixture.ticker.pendingDates == [fixture.clock.now.addingTimeInterval(1.01)], "Next second, just after it turns")
         #expect(fixture.menuBarStatus.spokenTitle == "Tea, \(TimerText.spokenLength(300)) left, and 1 more timer")
 
         fixture.clock.advance(1.01)

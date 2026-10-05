@@ -34,18 +34,14 @@ final class MenuBarStatus {
     /// The menu's sections at its top, in registry order, leaving out empty ones.
     var sections: [[MenuBarItem]] { ordered.map(\.items).filter { !$0.isEmpty } }
 
-    func setTitle(_ title: String?, spoken: String?, for capability: Capability) {
-        guard parts[capability]?.title != title || parts[capability]?.spokenTitle != spoken else { return }
-        parts[capability, default: Part()].title = title
-        parts[capability, default: Part()].spokenTitle = spoken
-        onChange()
-    }
-
-    func setItems(_ items: [MenuBarItem], for capability: Capability) {
-        let old = parts[capability]?.items ?? []
-        guard old.map(\.id) != items.map(\.id) || old.map(\.title) != items.map(\.title) else { return }
-        parts[capability, default: Part()].items = items
-        onChange()
+    /// Sets a capability's text and menu section at once, redrawing once if either changed.
+    func set(title: String?, spoken: String?, items: [MenuBarItem], for capability: Capability) {
+        let old = parts[capability] ?? Part()
+        let changed = old.title != title || old.spokenTitle != spoken
+            || old.items.map(\.id) != items.map(\.id) || old.items.map(\.title) != items.map(\.title)
+            || old.items.map(\.systemImage) != items.map(\.systemImage)
+        parts[capability] = Part(title: title, spokenTitle: spoken, items: items)
+        if changed { onChange() }
     }
 
     func clear(_ capability: Capability) {
@@ -64,14 +60,10 @@ struct CapabilityMenuBarStatus {
     let status: MenuBarStatus
     let capability: Capability
 
-    /// Shows `title` beside the icon (nil for none); VoiceOver says `spoken`.
-    func setTitle(_ title: String?, spoken: String?) {
-        status.setTitle(title, spoken: spoken, for: capability)
-    }
-
-    /// The capability's section at the top of the Keybumps menu; empty for none.
-    func setItems(_ items: [MenuBarItem]) {
-        status.setItems(items, for: capability)
+    /// Shows `title` beside the icon (nil for none), which VoiceOver says as `spoken`, and `items`
+    /// as the capability's section at the top of the Keybumps menu (empty for none).
+    func set(title: String?, spoken: String?, items: [MenuBarItem]) {
+        status.set(title: title, spoken: spoken, items: items, for: capability)
     }
 
     func clear() {
