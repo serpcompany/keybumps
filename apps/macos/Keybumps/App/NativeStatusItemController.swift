@@ -174,12 +174,13 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
             return
         }
         guard badge == nil else { return }
-        let dot = NSView(frame: NSRect(x: button.bounds.maxX - 8, y: button.bounds.maxY - 8, width: 7, height: 7))
+        // The button's coordinates are flipped: y 1 is its top edge.
+        let dot = NSView(frame: NSRect(x: button.bounds.maxX - 8, y: 1, width: 7, height: 7))
         dot.identifier = identifier
         dot.wantsLayer = true
         dot.layer?.backgroundColor = NSColor.systemRed.cgColor
         dot.layer?.cornerRadius = 3.5
-        dot.autoresizingMask = [.minXMargin, .minYMargin]
+        dot.autoresizingMask = [.minXMargin, .maxYMargin]
         button.addSubview(dot)
         button.setAccessibilityLabel("\(ReleaseLane.current.productName), update ready")
     }

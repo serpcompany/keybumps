@@ -52,6 +52,10 @@ struct ReleaseNotesDocument: Equatable {
             }
             if line.isEmpty {
                 flush()
+            } else if line.hasPrefix("### ") {
+                // Notes generated from CHANGELOG.md use ### for Features and Fixes.
+                flush()
+                blocks.append(.heading(String(line.dropFirst(4))))
             } else if line.hasPrefix("## ") {
                 flush()
                 blocks.append(.heading(String(line.dropFirst(3))))
@@ -84,6 +88,7 @@ final class WhatsNewWindowController: WhatsNewPresenting {
     func show(_ notes: ReleaseNotesDocument) {
         let window = NSWindow(contentViewController: NSHostingController(rootView: WhatsNewView(notes: notes) { [weak self] in
             self?.window?.close()
+            self?.window = nil
         }))
         window.title = "What's New in Keybumps"
         window.styleMask = [.titled, .closable]

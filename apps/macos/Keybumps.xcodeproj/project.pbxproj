@@ -890,7 +890,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -n \"${KEYBUMPS_RELEASE_NOTES:-}\" ] && [ -f \"$KEYBUMPS_RELEASE_NOTES\" ]; then\n  cp \"$KEYBUMPS_RELEASE_NOTES\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhatsNew.md\"\nfi\n";
+			shellScript = "notes=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhatsNew.md\"\nif [ -n \"${KEYBUMPS_RELEASE_NOTES:-}\" ] && [ -f \"$KEYBUMPS_RELEASE_NOTES\" ]; then\n  cp \"$KEYBUMPS_RELEASE_NOTES\" \"$notes\"\nelse\n  rm -f \"$notes\"\nfi\n";
 		};
 		49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */ = {
 			isa = PBXShellScriptBuildPhase;

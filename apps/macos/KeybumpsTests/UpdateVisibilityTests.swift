@@ -64,15 +64,34 @@ struct UpdateReminderTests {
         #expect(fixture.presenter.shown == ["0.0.3-beta.14", "0.0.3-beta.15"])
     }
 
-    @Test("Restart Now restarts through the safe path; the prompt closes once nothing is waiting")
+    @Test("Restart Now restarts through the safe path and doesn't ask again while Keybumps quits")
     func restartNow() {
         let fixture = ReminderFixture(snapshot: Self.ready)
         fixture.reminder.evaluate()
         fixture.presenter.chooseRestart()
         #expect(fixture.restarts == 1)
         #expect(!fixture.presenter.isShowing)
-
         fixture.reminder.evaluate()
+        #expect(fixture.presenter.shown.count == 1, "No second prompt while the restart happens")
+    }
+
+    @Test("It closes when nothing is waiting or restarting stops being safe, and stays away while the palette is open")
+    func closesAndWaits() {
+        let fixture = ReminderFixture(snapshot: Self.ready)
+        fixture.paletteIsOpen = true
+        fixture.reminder.evaluate()
+        #expect(fixture.presenter.shown.isEmpty, "Not over the Command Palette")
+
+        fixture.paletteIsOpen = false
+        fixture.reminder.evaluate()
+        #expect(fixture.presenter.isShowing)
+        fixture.isSafe = false
+        fixture.reminder.evaluate()
+        #expect(!fixture.presenter.isShowing, "Dictation started: Restart Now couldn't work now")
+        fixture.isSafe = true
+        fixture.reminder.evaluate()
+        #expect(fixture.presenter.shown.count == 2, "Back once it's safe; closing it wasn't a Later")
+
         fixture.snapshot = Self.idle
         fixture.reminder.evaluate()
         #expect(!fixture.presenter.isShowing, "Nothing left to restart for")
@@ -150,6 +169,8 @@ struct WhatsNewTests {
 
         ## Snippets (new)
 
+        ### Features
+
         - First made-up change
         - Second made-up change
         """)
@@ -158,9 +179,30 @@ struct WhatsNewTests {
             .paragraph("This beta adds made-up things. It spans two lines."),
             .callout(["**Heads up:** a made-up callout", "- with a made-up point"]),
             .heading("Snippets (new)"),
+            .heading("Features"),
             .bullet("First made-up change"),
             .bullet("Second made-up change"),
         ])
+    }
+
+    @Test("Every release's notes parse with no Markdown left showing")
+    func realNotes() throws {
+        let releases = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("docs/releases")
+        let files = try FileManager.default.contentsOfDirectory(atPath: releases.path).filter { $0.hasPrefix("v") && $0.hasSuffix(".md") }
+        #expect(!files.isEmpty)
+        for file in files {
+            let notes = ReleaseNotesDocument(markdown: try String(contentsOf: releases.appendingPathComponent(file), encoding: .utf8))
+            guard case .title = notes.blocks.first else { Issue.record("\(file) has no title"); continue }
+            for block in notes.blocks {
+                switch block {
+                case .title(let text), .heading(let text), .paragraph(let text), .bullet(let text):
+                    #expect(!text.hasPrefix("#") && !text.hasPrefix(">"), "\(file): \(text.prefix(20))")
+                case .callout(let lines):
+                    #expect(!lines.contains { $0.hasPrefix(">") }, "\(file)")
+                }
+            }
+        }
     }
 
     @Test("Release builds carry that version's notes into the app")
@@ -171,6 +213,8 @@ struct WhatsNewTests {
         let project = try String(contentsOf: app.appendingPathComponent("project.yml"), encoding: .utf8)
         #expect(project.contains("WhatsNew.md"))
         #expect(WhatsNew.notesResourceName == "WhatsNew")
+        let validate = try String(contentsOf: app.appendingPathComponent("scripts/validate-update-release.sh"), encoding: .utf8)
+        #expect(validate.contains("Contents/Resources/WhatsNew.md"), "A release without its notes fails validation")
     }
 }
 
@@ -180,6 +224,7 @@ struct WhatsNewTests {
 private final class ReminderFixture {
     var snapshot: UpdateSnapshot
     var isSafe = true
+    var paletteIsOpen = false
     var now = Date(timeIntervalSinceReferenceDate: 1_000_000)
     private(set) var restarts = 0
     let presenter = RecordingPromptPresenter()
@@ -194,6 +239,7 @@ private final class ReminderFixture {
             presenter: presenter,
             now: { [unowned self] in self.now }
         )
+        reminder.isSuppressed = { [unowned self] in self.paletteIsOpen }
     }
 }
 

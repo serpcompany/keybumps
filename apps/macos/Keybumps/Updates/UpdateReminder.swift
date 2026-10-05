@@ -19,8 +19,9 @@ enum UpdatePromptText {
 
 /// Asks to restart for a downloaded update, so nobody has to remember to (#225): as soon as an
 /// update is ready and restarting is safe (`UpdateInstallationSafetyPolicy`, so never during
-/// Dictation or an unsaved screenshot edit), then again an hour after each Later, every hour until
-/// the restart. A newer update asks right away. It never restarts on its own.
+/// Dictation or an unsaved screenshot edit) and the Command Palette is closed, then again an hour
+/// after each Later, every hour until the restart. It closes itself while those stop holding, and it
+/// never restarts on its own.
 @MainActor
 final class UpdateReminder {
     static let interval: TimeInterval = 60 * 60
@@ -33,6 +34,8 @@ final class UpdateReminder {
     private var laterAt: Date?
     private var laterVersion: String?
     private var timer: Timer?
+    /// While true, the prompt waits: the Command Palette is open, so it never takes its keys.
+    var isSuppressed: () -> Bool = { false }
 
     init(
         snapshot: @escaping () -> UpdateSnapshot,
@@ -51,9 +54,15 @@ final class UpdateReminder {
     /// Re-checks every minute, so an hour after Later, or the moment restarting becomes safe, it asks.
     func start() {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.evaluate() }
+        let timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] timer in
+            guard let self else {
+                timer.invalidate()
+                return
+            }
+            MainActor.assumeIsolated { self.evaluate() }
         }
+        timer.tolerance = 10
+        self.timer = timer
     }
 
     func stop() {
@@ -63,18 +72,23 @@ final class UpdateReminder {
 
     func evaluate() {
         let current = snapshot()
-        guard current.canRestart else {
+        let version = current.status.pendingVersion
+        guard current.canRestart, isSafe(), !isSuppressed() else {
+            // Restart Now couldn't work now, or the palette needs the keys: it comes back, not as a Later.
             if presenter.isShowing { presenter.close() }
             return
         }
-        let version = current.status.pendingVersion
-        guard !presenter.isShowing, isSafe() else { return }
+        guard !presenter.isShowing else { return }
         if let laterAt, laterVersion == version, now().timeIntervalSince(laterAt) < Self.interval { return }
         presenter.show(
             version: version,
             restart: { [weak self] in
-                self?.presenter.close()
-                self?.restart()
+                guard let self else { return }
+                // A restart still looks available until Keybumps quits; don't ask meanwhile.
+                laterAt = now()
+                laterVersion = version
+                presenter.close()
+                restart()
             },
             later: { [weak self] in
                 guard let self else { return }
@@ -86,28 +100,37 @@ final class UpdateReminder {
     }
 }
 
-/// The restart prompt: a small floating window that brings Keybumps forward, so it can't be missed.
-/// Closing it with its close button counts as Later.
+/// The restart prompt: a small floating panel above every app, on every Space and over full-screen
+/// apps, so it can't be missed. It never takes keyboard focus and has no default button, so a key
+/// meant for another app can't restart Keybumps: only a click does. Closing it counts as Later.
 @MainActor
 final class UpdatePromptWindowController: NSObject, UpdatePromptPresenting, NSWindowDelegate {
-    private var window: NSWindow?
+    private var window: NSPanel?
     private var later: (() -> Void)?
 
-    var isShowing: Bool { window?.isVisible == true }
+    /// True from show until close, even while Keybumps is hidden, so there's only ever one.
+    var isShowing: Bool { window != nil }
 
     func show(version: String?, restart: @escaping () -> Void, later: @escaping () -> Void) {
-        let view = UpdatePromptView(version: version, restart: restart, later: later)
-        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
-        window.title = "Keybumps Update"
-        window.styleMask = [.titled, .closable]
-        window.level = .floating
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.center()
-        self.window = window
+        let hosting = NSHostingController(rootView: UpdatePromptView(version: version, restart: restart, later: later))
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: hosting.view.fittingSize),
+            styleMask: [.titled, .closable, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentViewController = hosting
+        panel.title = "Keybumps Update"
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.isReleasedWhenClosed = false
+        panel.delegate = self
+        panel.center()
+        window = panel
         self.later = later
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
     }
 
     func close() {
@@ -149,12 +172,12 @@ struct UpdatePromptView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                // No keyboard shortcuts: the panel never has focus, and Return mustn't restart.
                 HStack {
                     Spacer()
                     Button("Later", action: later)
-                        .keyboardShortcut(.cancelAction)
                     Button("Restart Now", action: restart)
-                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                 }
                 .padding(.top, 6)
             }

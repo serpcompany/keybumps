@@ -257,6 +257,8 @@ final class AppModel {
             paster: textPaster,
             search: injectedQuickSearch
         )
+        // The restart prompt never appears over the palette, so it never takes the palette's keys.
+        updateReminder.isSuppressed = { [commandPalette] in commandPalette.isVisible }
         // The palette's Settings button, Command-comma, and Quick Search commands take the status
         // menu's route; a capability's command asks for its page.
         commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
@@ -344,14 +346,15 @@ final class AppModel {
         currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
         notes: String? = WhatsNew.bundledNotes()
     ) {
-        defer { preferences.lastLaunchedVersion = currentVersion }
-        guard let notes, WhatsNew.shouldShow(
+        let shows = notes != nil && WhatsNew.shouldShow(
             currentVersion: currentVersion,
             lastLaunchedVersion: preferences.lastLaunchedVersion,
             completedOnboarding: preferences.didCompleteOnboarding,
             hasNotes: true
-        ) else { return }
-        whatsNew.show(ReleaseNotesDocument(markdown: notes))
+        )
+        // Recorded first, so a problem showing it can't repeat it on every launch.
+        preferences.lastLaunchedVersion = currentVersion
+        if shows, let notes { whatsNew.show(ReleaseNotesDocument(markdown: notes)) }
     }
 
     func checkForUpdates() { updater.checkNow() }

@@ -72,8 +72,11 @@ targets:
       - name: Bundle this release's notes for What's New
         # build-update-release.sh passes KEYBUMPS_RELEASE_NOTES; other builds carry no notes (#225).
         script: |
+          notes="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhatsNew.md"
           if [ -n "${KEYBUMPS_RELEASE_NOTES:-}" ] && [ -f "$KEYBUMPS_RELEASE_NOTES" ]; then
-            cp "$KEYBUMPS_RELEASE_NOTES" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhatsNew.md"
+            cp "$KEYBUMPS_RELEASE_NOTES" "$notes"
+          else
+            rm -f "$notes"
           fi
         basedOnDependencyAnalysis: false
     preBuildScripts:

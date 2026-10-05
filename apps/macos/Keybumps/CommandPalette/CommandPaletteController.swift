@@ -268,6 +268,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Whether the palette is on screen, on any tab.
+    var isVisible: Bool { panel?.isVisible == true }
+
     func isDisplaying(_ tab: CommandPaletteTab) -> Bool {
         panel?.isVisible == true && state.tab == tab
     }

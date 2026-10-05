@@ -52,6 +52,8 @@ requires_signed_feed=$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' "
 verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info_plist")
 
 [[ "$actual_bundle" == com.serp.keybumps ]] || { print -u2 "bundle identity changed: $actual_bundle"; exit 70; }
+# What's New shows the notes the app carries (#225).
+[[ -s "$app_path/Contents/Resources/WhatsNew.md" ]] || { print -u2 "the app doesn't carry its release notes (WhatsNew.md)"; exit 70; }
 [[ "$actual_build" == "$expected_build" ]] || { print -u2 "unexpected build: $actual_build"; exit 70; }
 [[ "$actual_version" == "$expected_version" ]] || { print -u2 "unexpected version: $actual_version"; exit 70; }
 [[ "$actual_feed" == "$embedded_feed_url" ]] || { print -u2 "app feed URL does not match expected embedded feed"; exit 70; }
