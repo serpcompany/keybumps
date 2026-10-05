@@ -33,27 +33,35 @@ extension CapabilityDescriptor {
 /// How a timer's end reaches you. Unit tests and the UI-test composition record instead.
 @MainActor
 protocol TimerAlerting {
-    /// A notch notice that waits while Dictation holds the notch, rather than being dropped. A quiet
-    /// one is for a timer that ended a while ago.
-    func showNotice(_ message: String, quiet: Bool)
-    func playSound()
+    /// A notch notice, with a sound when `withSound`. While Dictation holds the notch both wait,
+    /// rather than the notice being dropped or the sound reaching its microphone. A quiet notice is
+    /// for a timer that ended a while ago.
+    func announce(_ message: String, quiet: Bool, withSound: Bool)
+    /// Drops an announcement still waiting, as when Timer is turned off.
+    func cancelWaitingAnnouncement()
 }
 
 /// The production alerts: `PaletteHUD`'s notch notice and a system sound, so there's no audio
 /// file to ship.
 struct SystemTimerAlerts: TimerAlerting {
-    func showNotice(_ message: String, quiet: Bool) {
-        PaletteHUD.shared.showWhenNotchFree(message, systemImage: "timer", tint: quiet ? .gray : .orange, duration: 4)
+    func announce(_ message: String, quiet: Bool, withSound: Bool) {
+        PaletteHUD.shared.showWhenNotchFree(
+            message,
+            systemImage: "timer",
+            tint: quiet ? .gray : .orange,
+            duration: 4,
+            whenShown: withSound ? { NSSound(named: NSSound.Name("Glass"))?.play() } : nil
+        )
     }
 
-    func playSound() {
-        NSSound(named: NSSound.Name("Glass"))?.play()
+    func cancelWaitingAnnouncement() {
+        PaletteHUD.shared.cancelWaitingNotice()
     }
 }
 
 struct InertTimerAlerts: TimerAlerting {
-    func showNotice(_ message: String, quiet: Bool) {}
-    func playSound() {}
+    func announce(_ message: String, quiet: Bool, withSound: Bool) {}
+    func cancelWaitingAnnouncement() {}
 }
 
 /// Owns the Timers tab, its optional Open Timers shortcut, and the timers' ends: a notch notice,
@@ -101,7 +109,12 @@ final class TimerModule: CapabilityModule {
             palette?.toggle(.timers)
         }
         if context.isEnabled(capability) {
+            guard !store.isActive else { return }
             store.activate()
+            // A finish not yet seen before a relaunch keeps its dot.
+            if store.hasUnseenFinish, !palette.isDisplaying(.timers) {
+                attention.show(saying: "timer finished")
+            }
         } else if store.isActive {
             // Locked: nothing runs, so the timers stop too.
             stop()
@@ -116,6 +129,7 @@ final class TimerModule: CapabilityModule {
     private func stop() {
         store.deactivate()
         attention.clear()
+        alerts.cancelWaitingAnnouncement()
     }
 
     private func timersShown() {
@@ -132,12 +146,13 @@ final class TimerModule: CapabilityModule {
         } else if onTime {
             message = "\(first.item.title) finished"
         } else {
-            message = "\(first.item.title) ended at \(TimerText.time(Self.endDate(of: first.item)))"
+            message = "\(first.item.title) ended \(TimerText.when(Self.endDate(of: first.item), now: store.now()))"
         }
-        alerts.showNotice(message, quiet: !onTime)
-        if onTime, preferences.timerPlaysSound { alerts.playSound() }
+        alerts.announce(message, quiet: !onTime, withSound: onTime && preferences.timerPlaysSound)
         if palette.isDisplaying(.timers) {
             store.markFinishesSeen()
+            // The finished timer moved to the top; keep the highlight on the timer it was on.
+            timersTab.keepSelectionOnSameTimer()
         } else {
             attention.show(saying: finishes.count > 1 ? "timers finished" : "timer finished")
         }

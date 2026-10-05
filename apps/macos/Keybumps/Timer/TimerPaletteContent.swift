@@ -52,6 +52,9 @@ final class TimerPaletteContent: CapabilityPaletteContent {
     private let notices: any PaletteNoticePresenting
     /// Runs each time the tab shows, so its finished timers count as seen.
     var shown: () -> Void = {}
+    /// The timer the highlight was last drawn on, and how to move it, so it can stay on that timer
+    /// when the list reorders under it.
+    private var drawnSelection: (timerID: UUID, query: String, actions: PaletteContentActions)?
 
     init(store: TimerStore, preferences: AppPreferences, notices: any PaletteNoticePresenting) {
         self.store = store
@@ -59,10 +62,24 @@ final class TimerPaletteContent: CapabilityPaletteContent {
         self.notices = notices
     }
 
-    private var isEnabled: Bool { preferences.enabledCapabilities.contains(.timer) }
+    /// Timers run only while Timer is on and Keybumps is set up and licensed (`TimerStore.isActive`),
+    /// so the tab offers nothing to start before then.
+    private var isRunning: Bool { preferences.enabledCapabilities.contains(.timer) && store.isActive }
 
     private func rows(query: String) -> [TimerPaletteRow] {
-        isEnabled ? TimerPaletteRow.resolve(query: query, timers: store.displayed) : []
+        isRunning ? TimerPaletteRow.resolve(query: query, timers: store.displayed) : []
+    }
+
+    /// Where a timer's row is now, after pausing or finishing moved it to another section.
+    private func row(of id: UUID, query: String) -> Int? {
+        rows(query: query).firstIndex { if case .timer(let item) = $0 { item.id == id } else { false } }
+    }
+
+    /// Moves the highlight back onto the timer it was on, as after one finished and jumped to the
+    /// top while the tab was open.
+    func keepSelectionOnSameTimer() {
+        guard let drawnSelection, let row = row(of: drawnSelection.timerID, query: drawnSelection.query) else { return }
+        drawnSelection.actions.selectRow(row)
     }
 
     func rowCount(query: String) -> Int {
@@ -83,6 +100,8 @@ final class TimerPaletteContent: CapabilityPaletteContent {
             break
         case .timer(let item):
             item.isFinished ? store.restart(item.id) : store.togglePause(item.id)
+            // It moved to another section; the highlight follows it.
+            if let moved = self.row(of: item.id, query: query) { palette.selectRow(moved) }
         }
     }
 
@@ -104,7 +123,13 @@ final class TimerPaletteContent: CapabilityPaletteContent {
     }
 
     func makeView(_ context: PaletteContentContext) -> AnyView {
-        AnyView(TimerPaletteResults(
+        let rows = rows(query: context.query)
+        if rows.indices.contains(context.selection), case .timer(let item) = rows[context.selection] {
+            drawnSelection = (item.id, context.query, context.actions)
+        } else {
+            drawnSelection = nil
+        }
+        return AnyView(TimerPaletteResults(
             store: store,
             preferences: preferences,
             query: context.query,
@@ -115,7 +140,8 @@ final class TimerPaletteContent: CapabilityPaletteContent {
 }
 
 /// The Timers tab: the new-timer row while you type, then Finished, Running, and Paused timers,
-/// each with a ring for the time left. Its clock ticks only while the tab is on screen.
+/// each with a ring for the time left. It redraws each second only while a timer runs and the
+/// palette is on screen (an animation timeline follows the display).
 private struct TimerPaletteResults: View {
     @Bindable var store: TimerStore
     @Bindable var preferences: AppPreferences
@@ -127,9 +153,11 @@ private struct TimerPaletteResults: View {
         PaletteResultsContainer {
             if !preferences.enabledCapabilities.contains(.timer) {
                 PaletteEmptyState(title: "Timer is turned off", systemImage: "timer")
+            } else if !store.isActive {
+                PaletteEmptyState(title: "Timers start once Keybumps is set up", systemImage: "timer")
             } else {
-                // Redraws every second while on screen; the time comes from the store's clock.
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                // The time comes from the store's clock; the timeline only asks for a redraw.
+                TimelineView(.animation(minimumInterval: 1, paused: !store.items.contains(where: \.isRunning))) { _ in
                     let rows = TimerPaletteRow.resolve(query: query, timers: store.displayed)
                     if rows.isEmpty {
                         PaletteEmptyState(title: "Type a duration, like 5m or tea 25, and press Return", systemImage: "timer")
@@ -142,6 +170,15 @@ private struct TimerPaletteResults: View {
     }
 
     private func list(_ rows: [TimerPaletteRow], now: Date) -> some View {
+        ScrollViewReader { proxy in
+            timerList(rows, now: now)
+                .onChange(of: selection) {
+                    if rows.indices.contains(selection) { proxy.scrollTo(rows[selection].id) }
+                }
+        }
+    }
+
+    private func timerList(_ rows: [TimerPaletteRow], now: Date) -> some View {
         List {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 if let header = header(for: row, after: index > 0 ? rows[index - 1] : nil) {
@@ -211,7 +248,27 @@ private struct TimerRowView: View {
             trailing
         }
         .frame(minHeight: 42)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenLabel)
+    }
+
+    /// What VoiceOver says for the row: the time left as a length, never as a time of day.
+    private var spokenLabel: String {
+        switch row {
+        case .start(let parsed):
+            "Start \(parsed.name ?? "a timer"), \(TimerText.spokenLength(parsed.duration)), ends at \(TimerText.time(now.addingTimeInterval(parsed.duration)))"
+        case .tooLong: title
+        case .unreadable: title
+        case .timer(let item):
+            switch item.state {
+            case .running(let endsAt):
+                "\(item.title), running, \(TimerText.spokenLength(item.remaining(at: now))) left, ends at \(TimerText.time(endsAt))"
+            case .paused(let remaining):
+                "\(item.title), paused, \(TimerText.spokenLength(remaining)) left"
+            case .finished(let at, _):
+                "\(item.title), finished, ended \(TimerText.when(at, now: now))"
+            }
+        }
     }
 
     private var title: String {
@@ -232,7 +289,7 @@ private struct TimerRowView: View {
             switch item.state {
             case .running(let endsAt): "\(TimerText.length(item.duration)) · ends \(TimerText.time(endsAt))"
             case .paused: "\(TimerText.length(item.duration)) · paused"
-            case .finished(let at, _): "\(TimerText.length(item.duration)) · ended \(TimerText.time(at))"
+            case .finished(let at, _): "\(TimerText.length(item.duration)) · ended \(TimerText.when(at, now: now))"
             }
         }
     }

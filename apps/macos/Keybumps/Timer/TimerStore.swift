@@ -14,17 +14,23 @@ protocol TimerScheduledAction {
     func cancel()
 }
 
-/// The production scheduler: a wall-clock deadline on the main queue.
+/// The production scheduler: a one-shot, strict wall-clock dispatch timer on the main queue.
+/// `asyncAfter` would let macOS coalesce the wake-up up to 60 seconds late; `.strict` with a small
+/// leeway fires it on time, and cancelling disarms it.
 struct WallClockTimerScheduler: TimerScheduling {
+    static let leeway = DispatchTimeInterval.milliseconds(100)
+
     func schedule(at date: Date, _ action: @escaping @MainActor () -> Void) -> any TimerScheduledAction {
-        let work = DispatchWorkItem { MainActor.assumeIsolated { action() } }
-        DispatchQueue.main.asyncAfter(wallDeadline: .now() + max(0, date.timeIntervalSinceNow), execute: work)
-        return ScheduledWork(work: work)
+        let source = DispatchSource.makeTimerSource(flags: .strict, queue: .main)
+        source.schedule(wallDeadline: .now() + max(0, date.timeIntervalSinceNow), leeway: Self.leeway)
+        source.setEventHandler { MainActor.assumeIsolated { action() } }
+        source.resume()
+        return ScheduledSource(source: source)
     }
 
-    private struct ScheduledWork: TimerScheduledAction {
-        let work: DispatchWorkItem
-        func cancel() { work.cancel() }
+    private struct ScheduledSource: TimerScheduledAction {
+        let source: DispatchSourceTimer
+        func cancel() { source.cancel() }
     }
 }
 
@@ -54,7 +60,8 @@ final class TimerStore {
     private let notifications: NotificationCenter
     @ObservationIgnored private var scheduled: (any TimerScheduledAction)?
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
-    @ObservationIgnored private(set) var isActive = false
+    /// Whether Timer is running: on, and Keybumps set up and licensed. Timers start only then.
+    private(set) var isActive = false
 
     init(
         storageURL: URL?,

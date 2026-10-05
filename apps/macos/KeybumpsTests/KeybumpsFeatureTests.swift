@@ -482,6 +482,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         for resource in [
             "LICENSE.rectangle",
             "LICENSE.shotnix",
+            "LICENSE.tock",
             "LICENSE.argmax-oss-swift",
             "NOTICES.argmax-oss-swift",
             "LICENSE.openai-whisper"

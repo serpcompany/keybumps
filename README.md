@@ -1,6 +1,6 @@
 # Keybumps
 
-Keybumps is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, Screenshot Tools, on-device Dictation, Snippets, Window Manager, and Shortcut Coach in one app. Search (⌘1), Clipboard History (⌘2), Screenshots (⌘3), Dictation History (⌘4), Snippets (⌘5), and Shortcut Coach History (Hotkeys, ⌘6, hidden by default) share one Raycast-style, keyboard-first Command Palette. Snippets are text you save to reuse: Return copies one and ⌘Return pastes it into the app you're using. Delete removes the highlighted row (in Snippets it asks first), and copies confirm with a brief notice that grows out of the notch.
+Keybumps is a native macOS utility combining local Quick Search, bounded text-and-image Clipboard History, Screenshot Tools, on-device Dictation, Snippets, Timer, Window Manager, and Shortcut Coach in one app. Search (⌘1), Clipboard History (⌘2), Screenshots (⌘3), Dictation History (⌘4), Snippets (⌘5), Timers (⌘6), and Shortcut Coach History (Hotkeys, ⌘7, hidden by default) share one Raycast-style, keyboard-first Command Palette. In Timers, type a duration such as `5m` or `tea 25` and press Return; when it ends, a notice grows out of the notch. Snippets are text you save to reuse: Return copies one and ⌘Return pastes it into the app you're using. Delete removes the highlighted row (in Snippets it asks first), and copies confirm with a brief notice that grows out of the notch.
 
 Screenshot Tools takes screenshots with its own hotkeys (⇧⌘2 every screen, ⇧⌘3 every screen then edit, ⇧⌘4 a selected area; it needs Screen Recording and temporarily takes over macOS's own ⇧⌘3/⇧⌘4), and adds those and macOS's ⇧⌘5 screenshots to Clipboard History and the ⌘3 Screenshots grid. New screenshots also go on the clipboard unless that's turned off in Screenshot Tools settings or you've copied something since the screenshot was saved; ⇧⌘3 copies only when you Save, so an unredacted shot never lands there. In the ⌘3 grid, Return copies a screenshot, as in the Clipboard tab, and ⌘Return (or ⌘E on any image) opens a lightweight editor with blur, redact, arrow, draw, and text; Save (Return) copies the flattened image and saves `<name> (edited).png` beside the original, and Cancel (Esc) discards it.
 
@@ -50,5 +50,7 @@ The local preview does not present fake commerce or update controls. Production 
 Window Manager behavior is derived from the MIT-licensed Rectangle project and the owner's independently identified fork. See `apps/macos/LICENSE.rectangle` and `docs/provenance/donor-ledger.md`.
 
 Screenshot Tools redaction and markup rendering is adapted from the MIT-licensed Shotnix project. See `apps/macos/LICENSE.shotnix` and `docs/provenance/donor-ledger.md`.
+
+Timer's duration parsing is adapted from the MIT-licensed Tock project. See `apps/macos/LICENSE.tock` and `docs/provenance/donor-ledger.md`.
 
 Local Whisper transcription uses the MIT-licensed Argmax OSS Swift/WhisperKit package and OpenAI Whisper model family. See `apps/macos/LICENSE.argmax-oss-swift`, `apps/macos/NOTICES.argmax-oss-swift`, and `apps/macos/LICENSE.openai-whisper`.

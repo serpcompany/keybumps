@@ -28,6 +28,11 @@ struct TimerDurationParserTests {
             ("Tea for 10 minutes", 600, "Tea"),
             ("laundry 45", 2700, "laundry"),
             ("  standup prep   15m ", 900, "standup prep"),
+            ("5m for tea", 300, "tea"),
+            ("1,5h", 5400, nil),
+            ("2,5", 150, nil),
+            ("1h0m", 3600, nil),
+            ("2m 0s", 120, nil),
         ] as [(String, TimeInterval, String?)]
     )
     func readsDurations(input: String, seconds: TimeInterval, name: String?) {
@@ -36,7 +41,7 @@ struct TimerDurationParserTests {
 
     @Test(
         "Text that isn't a duration of at least a second starts nothing",
-        arguments: ["", "   ", "tea", "for", "0", "0m", "-5m", "5x", "5:60", "1:60:00", "5:00pm", ":30", "0.2s", "m5"]
+        arguments: ["", "   ", "tea", "for", "0", "0m", "-5m", "5x", "5:60", "1:60:00", "5:00pm", ":30", "0.2s", "m5", "0x10", "1e1", "1.", "+5"]
     )
     func rejects(input: String) {
         #expect(TimerDurationParser.parse(input) == nil)
@@ -49,6 +54,28 @@ struct TimerDurationParserTests {
         #expect(TimerDurationParser.parse("24h")?.duration == TimerDurationParser.maximumDuration)
     }
 
+    @Test(
+        "Huge numbers are too long, never a crash",
+        arguments: ["9999999999999999:0:0", "153722867280912931:00", "99999999999999999:00", "99999999999999999999999h", "1\(String(repeating: "0", count: 150))"]
+    )
+    func hugeNumbers(input: String) throws {
+        let parsed = try #require(TimerDurationParser.parse(input))
+        #expect(parsed.duration > TimerDurationParser.maximumDuration)
+    }
+
+    @Test("Long text is never read as a timer, and reading it stays fast")
+    func longText() {
+        let document = Array(repeating: "lorem 5m ipsum", count: 2_000).joined(separator: " ")
+        let clock = ContinuousClock()
+        let elapsed = clock.measure { _ = TimerDurationParser.parse(document) }
+        #expect(TimerDurationParser.parse(document) == nil)
+        #expect(elapsed < .milliseconds(50))
+
+        // Under the limit, only a few words at each end are tried.
+        let sentence = Array(repeating: "word", count: 20).joined(separator: " ") + " 5m"
+        #expect(TimerDurationParser.parse(sentence)?.duration == 300)
+    }
+
     @Test("Lengths and clocks read the way the tab shows them")
     func text() {
         #expect(TimerText.length(300) == "5 min")
@@ -58,6 +85,14 @@ struct TimerDurationParserTests {
         #expect(TimerText.clock(4634) == "1:17:14")
         #expect(TimerText.clock(0.2) == "0:01", "Never 0:00 while still running")
         #expect(TimerItem(id: UUID(), name: nil, duration: 300, state: .paused(remaining: 1)).title == "5 min timer")
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        #expect(TimerText.when(now.addingTimeInterval(-60), now: now, calendar: calendar).hasPrefix("at "))
+        #expect(TimerText.when(now.addingTimeInterval(-86_400), now: now, calendar: calendar).hasPrefix("yesterday at "))
+        #expect(TimerText.when(now.addingTimeInterval(-3 * 86_400), now: now, calendar: calendar).hasPrefix("on "))
+        #expect(TimerText.spokenLength(245).contains("4 minutes"))
     }
 }
 
@@ -264,7 +299,7 @@ struct TimerModuleTests {
 
         fixture.clock.advance(300 + TimerModule.onTimeGrace + 1)
         fixture.store.checkDue()
-        #expect(fixture.alerts.notices == [.init(message: "Tea ended at \(TimerText.time(end))", quiet: true)])
+        #expect(fixture.alerts.notices == [.init(message: "Tea ended \(TimerText.when(end, now: fixture.clock.now))", quiet: true)])
         #expect(fixture.alerts.sounds == 0)
         #expect(fixture.attention.showsDot)
     }
@@ -390,6 +425,83 @@ struct TimerModuleTests {
         #expect(content.rowCount(query: "5m") == 0)
     }
 
+    @Test("Return moves the highlight with the timer it acted on, even into another section")
+    func selectionFollowsTheTimer() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.preferences.setCapability(.timer, enabled: true)
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        let content = try #require(fixture.module.paletteContent)
+        fixture.store.start(duration: 300, name: "tea")
+        fixture.store.start(duration: 600, name: "pasta")
+
+        // Tea is first while running; paused, it moves below Pasta.
+        content.activate(row: 0, query: "", withCommand: false, palette: fixture.actions)
+        #expect(fixture.selectedRows.last == 1)
+        #expect(fixture.store.displayed.map(\.name) == ["pasta", "tea"])
+
+        // Return again resumes Tea, not Pasta.
+        content.activate(row: 1, query: "", withCommand: false, palette: fixture.actions)
+        let allRunning = fixture.store.items.allSatisfy(\.isRunning)
+        #expect(allRunning)
+        #expect(fixture.selectedRows.last == 0)
+    }
+
+    @Test("A timer finishing while the tab is open keeps the highlight on the timer it was on")
+    func selectionSurvivesAFinish() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.preferences.setCapability(.timer, enabled: true)
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        let content = try #require(fixture.module.paletteContent as? TimerPaletteContent)
+        fixture.store.start(duration: 60, name: "eggs")
+        fixture.store.start(duration: 600, name: "pasta")
+        _ = content.makeView(PaletteContentContext(query: "", selection: 1, actions: fixture.actions, confirmationPresentationChanged: { _ in }))
+
+        fixture.clock.advance(60)
+        fixture.store.checkDue()
+        content.keepSelectionOnSameTimer()
+        #expect(fixture.store.displayed.map(\.name) == ["eggs", "pasta"])
+        #expect(fixture.selectedRows.last == 1, "Still on pasta")
+    }
+
+    @Test("A finish not yet seen before a relaunch keeps its dot")
+    func dotAfterRelaunch() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        fixture.store.start(duration: 60, name: nil)
+        fixture.clock.advance(60)
+        fixture.scheduler.fire()
+
+        let relaunched = ModuleFixture(sharing: fixture)
+        defer { relaunched.tearDown() }
+        relaunched.module.apply(relaunched.context(enabled: [.timer]))
+        #expect(relaunched.attention.showsDot)
+        #expect(relaunched.alerts.notices.isEmpty, "It was announced before the relaunch")
+    }
+
+    @Test("Turning Timer off drops an announcement still waiting for the notch")
+    func turningOffCancelsWaitingNotice() {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        let context = fixture.context(enabled: [.timer])
+        fixture.module.apply(context)
+        fixture.module.deactivate(context)
+        #expect(fixture.alerts.cancels == 1)
+    }
+
+    @Test("Before Timer runs (onboarding, Locked), the tab offers nothing to start")
+    func inactiveTab() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.preferences.setCapability(.timer, enabled: true)
+        let content = try #require(fixture.module.paletteContent)
+        #expect(content.rowCount(query: "5m") == 0)
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        #expect(content.rowCount(query: "5m") == 1)
+    }
+
     @Test("Timer registers its tab, Settings page, and Quick Search keywords")
     func descriptor() {
         let descriptor = CapabilityDescriptor.timer
@@ -401,6 +513,60 @@ struct TimerModuleTests {
         #expect(CapabilityShortcut.timer.capability == .timer)
         #expect(CapabilityShortcut.timer.defaultBinding == nil, "Open Timers starts unassigned")
         #expect(!Capability.originalCapabilities.contains(.timer), "Turned on once for existing installs")
+    }
+}
+
+// MARK: - Notices that wait for the notch
+
+@MainActor
+@Suite("Notch notices that wait for the notch")
+struct NotchWaitTests {
+    @Test("While another surface holds the notch, the notice and its sound wait, then show once")
+    func waitsThenShows() {
+        let hud = PaletteHUD()
+        defer { hud.dismiss() }
+        let dictation = NSObject()
+        var shown = 0
+        hud.claimNotch(for: dictation)
+        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
+        #expect(shown == 0)
+
+        hud.releaseNotch(from: dictation)
+        #expect(shown == 1)
+        hud.claimNotch(for: dictation)
+        hud.releaseNotch(from: dictation)
+        #expect(shown == 1, "Shown once")
+    }
+
+    @Test("A waiting notice can be dropped, and one that waited too long is never shown")
+    func cancelAndStale() {
+        let hud = PaletteHUD()
+        defer { hud.dismiss() }
+        var now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        hud.now = { now }
+        let dictation = NSObject()
+        var shown = 0
+
+        hud.claimNotch(for: dictation)
+        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
+        hud.cancelWaitingNotice()
+        hud.releaseNotch(from: dictation)
+        #expect(shown == 0)
+
+        hud.claimNotch(for: dictation)
+        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
+        now = now.addingTimeInterval(PaletteHUD.longestNoticeWait + 1)
+        hud.releaseNotch(from: dictation)
+        #expect(shown == 0)
+    }
+
+    @Test("With the notch free, it shows at once")
+    func showsAtOnce() {
+        let hud = PaletteHUD()
+        defer { hud.dismiss() }
+        var shown = 0
+        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
+        #expect(shown == 1)
     }
 }
 
@@ -469,9 +635,14 @@ private final class RecordingTimerAlerts: TimerAlerting {
 
     private(set) var notices: [Notice] = []
     private(set) var sounds = 0
+    private(set) var cancels = 0
 
-    func showNotice(_ message: String, quiet: Bool) { notices.append(Notice(message: message, quiet: quiet)) }
-    func playSound() { sounds += 1 }
+    func announce(_ message: String, quiet: Bool, withSound: Bool) {
+        notices.append(Notice(message: message, quiet: quiet))
+        if withSound { sounds += 1 }
+    }
+
+    func cancelWaitingAnnouncement() { cancels += 1 }
 }
 
 @MainActor
@@ -493,7 +664,7 @@ private final class NoTimerHotKeys: GlobalHotKeyRegistering {
 private final class ModuleFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsTimer-\(UUID().uuidString)"))
-    let clock = TestClock()
+    let clock: TestClock
     let scheduler = ManualTimerScheduler()
     let preferences = AppPreferences(defaults: InMemoryDefaults())
     let alerts = RecordingTimerAlerts()
@@ -503,14 +674,30 @@ private final class ModuleFixture {
     let palette: CommandPaletteController
     let module: TimerModule
     private(set) var dismissals = 0
+    private(set) var selectedRows: [Int] = []
     var actions: PaletteContentActions {
-        PaletteContentActions(dismiss: { [weak self] in self?.dismissals += 1 }, selectRow: { _ in }, clearQuery: {})
+        PaletteContentActions(
+            dismiss: { [weak self] in self?.dismissals += 1 },
+            selectRow: { [weak self] in self?.selectedRows.append($0) },
+            clearQuery: {}
+        )
     }
 
-    init() {
+    /// A second fixture over the same timers file and clock, as after a relaunch.
+    convenience init(sharing other: ModuleFixture) {
+        self.init(timersURL: other.timersURL, clock: other.clock)
+    }
+
+    let timersURL: URL
+
+    init(timersURL: URL? = nil, clock: TestClock? = nil) {
         let root = folder.url
+        let clock = clock ?? TestClock()
+        self.clock = clock
+        let timersURL = timersURL ?? root.appendingPathComponent(TimerStore.fileName)
+        self.timersURL = timersURL
         store = TimerStore(
-            storageURL: root.appendingPathComponent(TimerStore.fileName),
+            storageURL: timersURL,
             now: { [clock] in clock.now },
             scheduler: scheduler,
             notifications: NotificationCenter()

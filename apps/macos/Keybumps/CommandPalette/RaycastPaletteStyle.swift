@@ -196,8 +196,13 @@ final class PaletteHUD: CoachTipPresenting {
     /// other notices are dropped rather than drawn over it, and one already showing is hidden. It is
     /// weak, so an owner that goes away can never leave notices suppressed.
     private weak var notchOwner: AnyObject?
-    /// A notice that must not be lost, waiting for the notch (`showWhenNotchFree`).
-    private var waitingNotice: (() -> Void)?
+    /// A notice that must not be lost, waiting for the notch (`showWhenNotchFree`), and since when.
+    private var waitingNotice: (show: () -> Void, since: Date)?
+    /// A waiting notice older than this is dropped rather than shown late, as when the surface that
+    /// held the notch went away without giving it back.
+    static let longestNoticeWait: TimeInterval = 15 * 60
+    /// The clock for that wait; tests replace it.
+    var now: () -> Date = Date.init
 
     var isSuppressed: Bool { notchOwner != nil }
 
@@ -213,16 +218,35 @@ final class PaletteHUD: CoachTipPresenting {
         notchOwner = nil
         let waiting = waitingNotice
         waitingNotice = nil
-        waiting?()
+        if let waiting, now().timeIntervalSince(waiting.since) <= Self.longestNoticeWait { waiting.show() }
     }
 
     /// A notice that must not be lost, such as a timer ending: shown now, or, while another surface
-    /// holds the notch, as soon as it gives the notch back. A newer one replaces one still waiting.
-    func showWhenNotchFree(_ message: String, systemImage: String, tint: Color, duration: TimeInterval) {
+    /// holds the notch, as soon as it gives the notch back. `whenShown` runs with it, so a sound
+    /// waits too rather than playing into Dictation's microphone. A newer one replaces one still
+    /// waiting.
+    func showWhenNotchFree(
+        _ message: String,
+        systemImage: String,
+        tint: Color,
+        duration: TimeInterval,
+        whenShown: (() -> Void)? = nil
+    ) {
         let show: () -> Void = { [weak self] in
             self?.show(message, systemImage: systemImage, tint: tint, duration: duration)
+            whenShown?()
         }
-        if isSuppressed { waitingNotice = show } else { show() }
+        if isSuppressed {
+            waitingNotice = (show, now())
+        } else {
+            waitingNotice = nil
+            show()
+        }
+    }
+
+    /// Drops a notice still waiting for the notch, as when what it announced is gone.
+    func cancelWaitingNotice() {
+        waitingNotice = nil
     }
 
     func show(

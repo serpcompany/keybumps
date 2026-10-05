@@ -115,6 +115,14 @@ _Avoid_: Secret, password snippet
 The Command Palette tab (⌘5) that lists snippets. Return copies one and ⌘Return pastes it into the app in front.
 _Avoid_: Snippet library, snippet manager
 
+**Timer**:
+Counting down from a duration you type, and being told when it ends.
+_Avoid_: Alarm, reminder, stopwatch, pomodoro
+
+**Timers tab**:
+The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it.
+_Avoid_: Timer list, timer manager
+
 ### Licensing
 
 **License Check**:

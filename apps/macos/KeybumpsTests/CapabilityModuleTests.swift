@@ -340,7 +340,11 @@ private final class ModuleHarness {
             ),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
-            timers: TimerStore(storageURL: root.appendingPathComponent(TimerStore.fileName)),
+            timers: TimerStore(
+                storageURL: root.appendingPathComponent(TimerStore.fileName),
+                scheduler: NoTimerWakeUps(),
+                notifications: NotificationCenter()
+            ),
             dictationHistory: DictationHistoryService(
                 recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
             ),
@@ -401,6 +405,13 @@ private final class ModuleHarness {
             model.timers.isActive && model.shortcuts.activeOwners.isSuperset(of: Self.ownedShortcuts(for: capability))
         }
     }
+}
+
+/// Never schedules a wake-up: these tests start no timers.
+@MainActor
+private struct NoTimerWakeUps: TimerScheduling {
+    private struct Never: TimerScheduledAction { func cancel() {} }
+    func schedule(at date: Date, _ action: @escaping @MainActor () -> Void) -> any TimerScheduledAction { Never() }
 }
 
 @MainActor

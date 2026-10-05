@@ -1,7 +1,8 @@
 import Foundation
 
 /// One countdown in the Timers tab. A running timer keeps the moment it ends, never a count of
-/// ticks, so it stays right across sleep and relaunch.
+/// ticks, so it stays right across sleep and relaunch. That moment is on the wall clock, so setting
+/// the Mac's clock moves it too: back an hour and a running timer runs an hour longer.
 struct TimerItem: Codable, Equatable, Identifiable {
     enum State: Codable, Equatable {
         case running(endsAt: Date)
@@ -69,5 +70,23 @@ enum TimerText {
     /// A time of day in the person's own format ("3:47 PM").
     static func time(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// When something happened, to follow a verb: "at 3:47 PM" today, "yesterday at 3:47 PM", or
+    /// "on" a date and time before that.
+    static func when(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDate(date, inSameDayAs: now) { return "at \(time(date))" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "yesterday at \(time(date))"
+        }
+        return "on \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    /// A length as VoiceOver says it: "4 minutes, 5 seconds".
+    static func spokenLength(_ seconds: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .full
+        formatter.allowedUnits = [.hour, .minute, .second]
+        return formatter.string(from: seconds.rounded(.up)) ?? length(seconds)
     }
 }
