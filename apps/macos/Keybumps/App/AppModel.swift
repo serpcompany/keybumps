@@ -328,7 +328,8 @@ final class AppModel {
                 menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .timer),
                 // Unit tests never play a sound or show a notice.
                 alerts: injectedTimerAlerts ?? (UnitTestHost.isActive ? InertTimerAlerts() : SystemTimerAlerts())
-            )
+            ),
+            EmojiPickerModule(palette: commandPalette, preferences: preferences, recents: .makeDefault())
         ])
         commandPalette.tabContents = capabilities.paletteContents
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }

@@ -136,9 +136,9 @@ struct PluginManifestTests {
         #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
     }
 
-    @Test("Every plugin ships on today; one that ships off is the Emoji Picker's job (#243)")
-    func everyPluginShipsOnToday() {
-        let allOn = CapabilityCatalog.descriptors.allSatisfy(\.isOnByDefault)
-        #expect(allOn)
+    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243)")
+    func onlyTheEmojiPickerShipsOff() {
+        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker])
+        #expect(CapabilityDescriptor.emojiPicker.optionalPermissions.map(\.permission) == [.accessibility])
     }
 }

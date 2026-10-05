@@ -6,6 +6,7 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
+    case emojiPicker = "Emoji Picker"
     case plugins = "Plugins", permissions = "Permissions", general = "General", account = "Account"
     var id: String { rawValue }
 

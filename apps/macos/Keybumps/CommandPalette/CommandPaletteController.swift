@@ -11,6 +11,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case screenshots
     case snippets
     case timers
+    case emoji
 
     var id: String { rawValue }
 
@@ -30,8 +31,13 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var prompt: String { registration.prompt }
 
     /// The tabs in the tab bar. The Hotkeys tab is hidden unless the owner shows it, or it is open.
-    static func visibleTabs(showsHotkeys: Bool, selected: CommandPaletteTab) -> [CommandPaletteTab] {
-        allCases.filter { $0 != .keyboardShortcutter || showsHotkeys || $0 == selected }
+    /// The tabs in the tab bar: those of plugins that are on, as Raycast leaves out turned-off
+    /// extensions (their Command-numbers stay fixed), without the Hotkeys tab unless its Settings
+    /// page shows it. The tab on screen always stays.
+    static func visibleTabs(showsHotkeys: Bool, selected: CommandPaletteTab, enabled: Set<Capability> = Set(Capability.allCases)) -> [CommandPaletteTab] {
+        allCases.filter { tab in
+            tab == selected || (enabled.contains(tab.owner) && (tab != .keyboardShortcutter || showsHotkeys))
+        }
     }
 
     static func matchingCommandKey(_ characters: String?, in tabs: [CommandPaletteTab] = allCases) -> CommandPaletteTab? {
@@ -412,7 +418,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard !isPresentingConfirmation else { return event }
 
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
-            let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab)
+            let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
                 selectTab(tab)
                 return nil
@@ -915,7 +921,7 @@ private struct CommandPaletteView: View {
                 focused: $inputFocused
             )
             PaletteTabBar(
-                tabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab),
+                tabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities),
                 selected: state.tab,
                 select: selectTab
             )
@@ -982,7 +988,7 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 query: search.query,
                 enabledCapabilities: preferences.enabledCapabilities,
-                visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab),
+                visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities),
                 recentItems: search.displayedRecentItems,
                 open: activateSearchResult,
                 reveal: revealSearchResult,

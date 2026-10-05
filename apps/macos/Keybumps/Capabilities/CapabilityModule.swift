@@ -69,7 +69,7 @@ enum CapabilityCatalog {
     /// Registry order. It is the order modules apply in and Quick Search lists their commands; a module
     /// follows every module it depends on, so a dependency is settled before its dependents read it.
     static let descriptors: [CapabilityDescriptor] = [
-        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer
+        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer, .emojiPicker
     ]
 
     /// The default capabilities: the feature set Keybumps was locked at (#205). Every capability
