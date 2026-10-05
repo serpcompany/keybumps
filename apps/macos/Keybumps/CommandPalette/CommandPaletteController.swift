@@ -170,15 +170,23 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// macOS on every paste; without it, pasting a snippet copies it instead.
     var canPaste: () -> Bool = { false }
     /// Offers to set up Accessibility after a paste had to copy instead. Set by the shell.
-    var offerPasteSetup: () -> Void = {}
+    /// Offers Accessibility setup after a paste had to copy, for the plugin that pasted.
+    var offerPasteSetup: (Capability) -> Void = { _ in }
     /// The app in front right now; tests replace it.
     var frontmostApp: () -> PasteTarget? = { PasteTarget.frontmost() }
     /// How long a snippet paste waits after the palette closes, so the app in front has its
     /// keyboard focus back before ⌘V.
     var pasteDelay: Duration = .milliseconds(120)
+    /// Puts the clipboard back after a paste that asks for it. The shell shares one with keyword
+    /// expansion, so quick pastes from either put back the clipboard from before the first.
+    lazy var clipboardRestorer: ClipboardRestorer = {
+        let restorer = ClipboardRestorer(pasteboard: pasteboard)
+        restorer.didRestore = { [weak clipboard] in clipboard?.suppressCurrentChange() }
+        return restorer
+    }()
     /// The app that was in front when the palette opened: the only app ⌘Return pastes into.
     private(set) var pasteTarget: PasteTarget?
-    /// The snippet paste waiting out `pasteDelay`; opening the palette again cancels it.
+    /// The paste waiting out `pasteDelay`; opening the palette again cancels it.
     private var pendingPaste: UUID?
 
     init(
@@ -422,6 +430,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         }
 
+        // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control they
+        // stay with the search field.
+        if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
+           event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
+            if !(0..<itemCount).contains(state.selection) {
+                state.selection = 0
+            } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
+                state.selection = target
+            }
+            return nil
+        }
+
         switch event.keyCode {
         case 53:
             dismiss()
@@ -498,7 +518,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         PaletteContentActions(
             dismiss: { [weak self] in self?.dismiss() },
             selectRow: { [weak self] row in self?.state.selection = row },
-            clearQuery: { [weak self] in self?.state.historyQuery = "" }
+            clearQuery: { [weak self] in self?.state.historyQuery = "" },
+            copy: { [weak self] text in self?.copyText(text) },
+            paste: { [weak self] text, restoresClipboard in
+                guard let self else { return }
+                self.pasteText(text, restoresClipboard: restoresClipboard, for: self.state.tab.owner)
+            }
         )
     }
 
@@ -683,20 +708,37 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         snippets.markUsed(snippet.id)
     }
 
-    /// Command-Return: closes the palette and pastes the snippet into the app that was in front when
-    /// the palette opened (the non-activating palette never took it over). When it can't paste, it
-    /// copies instead and the notch notice says why (`SnippetPasteRoute`).
+    /// A module tab's copy: kept out of Clipboard History, then the palette closes and the notch
+    /// confirms it.
+    func copyText(_ text: String) {
+        _ = copy(text, suppressClipboardHistory: true)
+    }
+
+    /// Command-Return on a snippet: pastes it (`pasteText`), counting it as used either way.
     func pasteSnippet(_ snippet: Snippet) {
         guard let text = snippetText(snippet) else { return }
-        let route = SnippetPasteRoute.beforeClosing(canPaste: canPaste(), target: pasteTarget)
+        pasteText(text, concealed: snippet.isSensitive, restoresClipboard: false, for: .snippets) { [weak self] in
+            self?.snippets.markUsed(snippet.id)
+        }
+    }
+
+    /// Closes the palette and pastes text into the app that was in front when the palette opened
+    /// (the non-activating palette never took it over). When it can't paste, it copies instead and
+    /// the notch notice says why (`PalettePasteRoute`). `used` runs once, either way. With
+    /// `restoresClipboard`, what was on the clipboard comes back once the paste has been read, unless
+    /// something else was copied by then. Snippets' ⌘Return and a module tab's paste both come here;
+    /// `plugin` is the one pasting, named in the Accessibility setup offer.
+    func pasteText(_ text: String, concealed: Bool = false, restoresClipboard: Bool, for plugin: Capability, used: @escaping () -> Void = {}) {
+        let route = PalettePasteRoute.beforeClosing(canPaste: canPaste(), target: pasteTarget)
         guard route == .paste, let target = pasteTarget else {
             dismiss()
-            copySnippetInstead(text, snippet: snippet, notice: route.notice)
-            if route == .copy(.needsAccessibility) { offerPasteSetup() }
+            copyInstead(text, concealed: concealed, notice: route.notice)
+            used()
+            if route == .copy(.needsAccessibility) { offerPasteSetup(plugin) }
             return
         }
         dismiss()
-        snippets.markUsed(snippet.id)
+        used()
         let id = UUID()
         pendingPaste = id
         let paster = paster
@@ -707,30 +749,32 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let isStillWanted = self.pendingPaste == id
             if isStillWanted { self.pendingPaste = nil }
             // Paste only into the same app, still in front, with the palette closed.
-            guard SnippetPasteRoute.canPasteNow(
+            guard PalettePasteRoute.canPasteNow(
                 into: target,
                 frontmost: self.frontmostApp(),
                 paletteIsVisible: self.panel?.isVisible == true,
                 isStillWanted: isStillWanted
             ) else {
-                self.copySnippetInstead(text, snippet: snippet, notice: SnippetPasteRoute.Reason.targetChanged.notice)
+                self.copyInstead(text, concealed: concealed, notice: PalettePasteRoute.Reason.targetChanged.notice)
                 return
             }
+            let previous = restoresClipboard ? self.clipboardRestorer.clipboardBeforePaste() : nil
             do {
-                try paster.paste(text, concealed: snippet.isSensitive)
+                try paster.paste(text, concealed: concealed)
             } catch {
                 // The text still ends up on the clipboard, ready to paste by hand.
-                self.copySnippetInstead(text, snippet: snippet, notice: SnippetPasteRoute.Reason.pasteFailed.notice)
+                self.copyInstead(text, concealed: concealed, notice: PalettePasteRoute.Reason.pasteFailed.notice)
+                return
             }
+            if let previous { self.clipboardRestorer.restore(previous) }
         }
     }
 
     /// Puts the text on the clipboard, kept out of Clipboard History, and says why it didn't paste.
-    private func copySnippetInstead(_ text: String, snippet: Snippet, notice: String?) {
-        guard pasteboard.writeText(text, concealed: snippet.isSensitive) else { return }
+    private func copyInstead(_ text: String, concealed: Bool, notice: String?) {
+        guard pasteboard.writeText(text, concealed: concealed) else { return }
         clipboard.suppressCurrentChange()
         if let notice { showWarning(notice) }
-        snippets.markUsed(snippet.id)
     }
 
     /// Closes the palette and opens the snippet editor in Settings. While the saved snippets can't
@@ -880,6 +924,7 @@ private struct CommandPaletteView: View {
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
                         tab: state.tab,
+                        isGrid: state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
                         selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
                         contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
                         openSettings: { runCommand(.keybumpsSettings) }
@@ -1869,6 +1914,8 @@ extension PaletteFooterActions {
 /// right with the tab's actions and their keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
+    /// Whether Left and Right move the selection too.
+    let isGrid: Bool
     /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
     let selectedSearchItem: QuickSearchItem?
     /// A module tab's actions for its selected row; they replace the tab's registered titles.
@@ -1886,7 +1933,7 @@ private struct PaletteFooter: View {
             PaletteSettingsButton(action: openSettings)
             Spacer()
             HStack(spacing: 14) {
-                hint("Select", keys: tab == .screenshots ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
+                hint("Select", keys: isGrid ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
                 if let primaryActionTitle {
                     hint(primaryActionTitle, keys: ["↵"], isPrimary: true)
                 }

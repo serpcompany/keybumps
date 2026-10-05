@@ -59,6 +59,45 @@ struct CapabilityPaletteContentTests {
         ])
     }
 
+    @Test("A grid tab's rows get all four arrow keys; a list's, or a grid's once you type, leave Left and Right to the search field")
+    func gridGetsArrowKeys() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil, "A list leaves Right to the caret")
+
+        fixture.content.isGrid = true
+        fixture.content.rows = 6
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.selection == 1)
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.state.selection == 4, "Down moves a row of 3")
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.state.selection == 4, "Down at the last row stays put")
+        #expect(fixture.content.moves == [.right, .down, .down])
+
+        // With Command (or Shift, Option, Control), arrows stay with the search field.
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow, command: true)) != nil)
+        // A selection left past the end comes back to the first item.
+        fixture.palette.state.selection = 99
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.selection == 0)
+
+        // Typing turns the grid into a list: Right goes back to the search field's caret.
+        fixture.palette.state.historyQuery = "made-up"
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil)
+    }
+
+    @Test("A tab's rows can copy through the palette, kept out of Clipboard History")
+    func rowsCopyThroughThePalette() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.copiesOnActivate = "made-up text"
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        #expect(fixture.palette.handleKeyDown(Self.returnKey) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+    }
+
     @Test("Delete goes to the rows, and the selection stays on a row that still exists")
     func deleteGoesToTheContent() {
         let fixture = ModuleTabFixture()
@@ -204,6 +243,9 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
     var rows = 3
     var refusesDelete = false
     var clearsQueryOnActivate = false
+    var isGrid = false
+    var copiesOnActivate: String?
+    private(set) var moves: [PaletteMove] = []
     private(set) var shows = 0
     private(set) var activations: [Activation] = []
     private(set) var deletions: [Int] = []
@@ -214,9 +256,18 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
 
     func rowCount(query: String) -> Int { rows }
 
+    /// A grid only while the search is empty, as emoji to browse.
+    func isGrid(query: String) -> Bool { isGrid && query.isEmpty }
+
+    func selection(after move: PaletteMove, from row: Int, query: String) -> Int? {
+        moves.append(move)
+        return PaletteGrid.selection(after: move, from: row, sectionCounts: [rows], columns: 3)
+    }
+
     func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
         activations.append(Activation(row: row, query: query, withCommand: withCommand))
         if clearsQueryOnActivate { palette.clearQuery() }
+        if let copiesOnActivate { palette.copy(copiesOnActivate) }
     }
 
     func delete(row: Int, query: String) -> Bool {

@@ -301,10 +301,10 @@ struct DictationPastePermissionTests {
         defer { harness.tearDown() }
 
         // ⌘Return in the Snippets tab had to copy for lack of Accessibility.
-        harness.model.commandPalette.offerPasteSetup()
-        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        harness.model.commandPalette.offerPasteSetup(.snippets)
+        #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
         // Set Up Paste…: System Settings and the drag card.
-        await harness.model.setUpSnippetPaste()
+        await harness.model.setUpPaste()
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
         #expect(harness.model.permissionAssistantPresentation == .applicationDrag(.accessibility))
 
@@ -324,9 +324,9 @@ struct DictationPastePermissionTests {
         let harness = try PromptHarness(enabled: [.snippets])
         defer { harness.tearDown() }
 
-        harness.model.commandPalette.offerPasteSetup()
+        harness.model.commandPalette.offerPasteSetup(.snippets)
         harness.model.refreshPermissions()
-        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
         harness.grants.grant(.accessibility)
         harness.model.refreshPermissions()
         #expect(harness.model.permissionAssistantPresentation == nil)
@@ -470,10 +470,10 @@ struct DictationPastePermissionTests {
 
         // Nor is Snippets' Set Up Paste… card.
         harness.model.setCapability(.dictation, enabled: true)
-        harness.model.commandPalette.offerPasteSetup()
-        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        harness.model.commandPalette.offerPasteSetup(.snippets)
+        #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
         harness.model.setCapability(.dictation, enabled: false)
-        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
     }
 
     @Test("Locking ends setup, and the step's delayed drag card doesn't appear afterwards")
@@ -524,10 +524,10 @@ struct DictationPastePermissionTests {
 
         // Nor is Snippets' Set Up Paste… card.
         await harness.model.activateLicense(key: FixedLicenseController.sampleCheck.key)
-        harness.model.commandPalette.offerPasteSetup()
-        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        harness.model.commandPalette.offerPasteSetup(.snippets)
+        #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
         await harness.model.deactivateLicense()
-        #expect(harness.model.permissionAssistantPresentation == .snippetPasteSetup)
+        #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
     }
 
     @Test("A step scheduled as setup ends never starts, as when the grant lands on the last re-check")

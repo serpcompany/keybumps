@@ -280,9 +280,11 @@ final class AppModel {
         let keywordExpansion = KeywordExpansionController(
             snippets: snippets,
             monitor: injectedKeyTypingMonitor ?? (UnitTestHost.isActive ? InertKeyTypingMonitor() : KeyTypingMonitor()),
-            replacer: textPaster
+            replacer: textPaster,
+            // One restorer for keyword expansion and the palette's pastes, so quick pastes from
+            // either put back the clipboard from before the first.
+            restorer: commandPalette.clipboardRestorer
         )
-        keywordExpansion.didRestorePasteboard = { [weak clipboard] in clipboard?.suppressCurrentChange() }
         self.keywordExpansion = keywordExpansion
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
@@ -331,7 +333,7 @@ final class AppModel {
         commandPalette.tabContents = capabilities.paletteContents
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
-        commandPalette.offerPasteSetup = { [weak self] in self?.offerSnippetPasteSetup() }
+        commandPalette.offerPasteSetup = { [weak self] plugin in self?.offerPasteSetup(for: plugin) }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
@@ -570,20 +572,21 @@ final class AppModel {
     }
 
     /// After ⌘Return had to copy for lack of Accessibility: offers the usual Accessibility setup.
-    private func offerSnippetPasteSetup() {
-        permissionDragAssistant.showSnippetPasteSetup { [weak self] in
-            Task { await self?.setUpSnippetPaste() }
+    private func offerPasteSetup(for plugin: Capability) {
+        permissionDragAssistant.showPasteSetup(plugin: plugin.title) { [weak self] in
+            Task { await self?.setUpPaste() }
         }
     }
 
-    /// Snippets' Set Up Paste…. Like Dictation's card, it opens System Settings over another app,
-    /// so that opening stays out of the Settings window's relaunch check.
-    func setUpSnippetPaste() async {
+    /// Set Up Paste…, offered after a plugin's ⌘Return had to copy. Like Dictation's card, it opens
+    /// System Settings over another app, so that opening stays out of the Settings window's
+    /// relaunch check.
+    func setUpPaste() async {
         await recoverPermission(.accessibility, fromSetupCard: true)
     }
 
     /// `fromSetupCard`: started from a setup card over another app, as every setup walkthrough
-    /// step and Snippets' Set Up Paste… are. Its System Settings opening stays out of the Settings
+    /// step and a plugin's Set Up Paste… are. Its System Settings opening stays out of the Settings
     /// window's relaunch check, so Keybumps becoming active later never claims a relaunch for it.
     func recoverPermission(_ permission: MacPermission, fromSetupCard: Bool = false) async {
         let isSetupStep = isPermissionWalkthroughActive

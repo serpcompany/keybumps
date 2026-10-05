@@ -106,14 +106,14 @@ final class KeywordExpansionController {
     @ObservationIgnored private let notices: any PaletteNoticePresenting
     @ObservationIgnored private var buffer = KeywordBuffer()
     @ObservationIgnored private var appSwitchObserver: NSObjectProtocol?
-    /// The clipboard from before the first of a run of expansions, still waiting to be put back,
-    /// and the clipboard's change count right after the last paste.
-    @ObservationIgnored private var pendingSnapshot: PasteboardSnapshot?
-    @ObservationIgnored private var pendingChangeCount: Int?
-    @ObservationIgnored private var pendingRestore: Task<Void, Never>?
+    /// Puts the clipboard back after each expansion; the shell shares it with the Command Palette.
+    @ObservationIgnored let restorer: ClipboardRestorer
 
     /// How long to wait before putting the clipboard back, so the app in front has read the paste.
-    @ObservationIgnored var restoreDelay: Duration = .milliseconds(500)
+    var restoreDelay: Duration {
+        get { restorer.delay }
+        set { restorer.delay = newValue }
+    }
     @ObservationIgnored var typingIsInKeybumps: () -> Bool = {
         KeywordExpansionController.isTypingInKeybumps(
             isActive: NSApp.isActive,
@@ -124,19 +124,24 @@ final class KeywordExpansionController {
     }
     @ObservationIgnored var secureInputEnabled: () -> Bool = { IsSecureEventInputEnabled() }
     /// Called right after the clipboard is put back, so Clipboard History skips that change.
-    @ObservationIgnored var didRestorePasteboard: () -> Void = {}
+    var didRestorePasteboard: () -> Void {
+        get { restorer.didRestore }
+        set { restorer.didRestore = newValue }
+    }
 
     init(
         snippets: SnippetStore,
         monitor: any KeyTypingMonitoring,
         replacer: any TextPasting,
         pasteboard: NSPasteboard = .keybumps,
+        restorer: ClipboardRestorer? = nil,
         notices: (any PaletteNoticePresenting)? = nil
     ) {
         self.snippets = snippets
         self.monitor = monitor
         self.replacer = replacer
         self.pasteboard = pasteboard
+        self.restorer = restorer ?? ClipboardRestorer(pasteboard: pasteboard)
         self.notices = notices ?? PaletteHUD.shared
         // The tap delivers on the main run loop.
         monitor.onKey = { [weak self] key in MainActor.assumeIsolated { self?.handle(key) } }
@@ -190,36 +195,16 @@ final class KeywordExpansionController {
         } catch {
             return
         }
-        let snapshot = pendingChangeCount == pasteboard.changeCount ? pendingSnapshot : nil
-        let previous = snapshot ?? PasteboardSnapshot(pasteboard)
+        let previous = restorer.clipboardBeforePaste()
         let changeCount = pasteboard.changeCount
         do {
             try replacer.paste(text, concealed: snippet.isSensitive)
         } catch {
             notices.showNotice("Couldn’t paste the snippet", isWarning: true)
-            if pasteboard.changeCount != changeCount { scheduleRestore(of: previous) }
+            if pasteboard.changeCount != changeCount { restorer.restore(previous) }
             return
         }
         snippets.markUsed(snippet.id)
-        scheduleRestore(of: previous)
-    }
-
-    /// Puts the clipboard back once the paste has been read, unless something else was copied.
-    private func scheduleRestore(of snapshot: PasteboardSnapshot) {
-        pendingRestore?.cancel()
-        pendingSnapshot = snapshot
-        let changeCount = pasteboard.changeCount
-        pendingChangeCount = changeCount
-        let delay = restoreDelay
-        pendingRestore = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
-            guard let self, !Task.isCancelled else { return }
-            self.pendingSnapshot = nil
-            self.pendingChangeCount = nil
-            self.pendingRestore = nil
-            guard self.pasteboard.changeCount == changeCount else { return }
-            snapshot.restore(to: self.pasteboard)
-            self.didRestorePasteboard()
-        }
+        restorer.restore(previous)
     }
 }

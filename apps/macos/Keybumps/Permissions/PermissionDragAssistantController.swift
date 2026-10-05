@@ -34,7 +34,7 @@ final class PermissionDragAssistantController {
         case enableSwitch(MacPermission)
         case dictationSetup([MacPermission])
         /// Snippets' offer to set up Accessibility after ⌘Return had to copy.
-        case snippetPasteSetup
+        case pasteSetup
         case systemSettingsFollowUp(MacPermission)
     }
 
@@ -107,15 +107,16 @@ final class PermissionDragAssistantController {
     }
 
     /// After ⌘Return in the Snippets tab copied because Keybumps lacks Accessibility.
-    func showSnippetPasteSetup(onContinue: @escaping () -> Void) {
+    /// After a plugin's ⌘Return had to copy: Accessibility setup so it pastes next time.
+    func showPasteSetup(plugin: String, onContinue: @escaping () -> Void) {
         showSetup(
             CapabilitySetupOffer(
-                capability: "Snippets",
+                capability: plugin,
                 permissionNames: MacPermission.accessibility.title,
-                instruction: "Set up Accessibility so ⌘Return pastes snippets into the app you’re using.",
+                instruction: "Set up Accessibility so ⌘Return pastes into the app you’re using.",
                 buttonTitle: "Set Up Paste…"
             ),
-            as: .snippetPasteSetup,
+            as: .pasteSetup,
             onContinue: onContinue
         )
     }
@@ -152,7 +153,7 @@ final class PermissionDragAssistantController {
     func dismissIfGranted(using coordinator: PermissionCoordinator) {
         let permission: MacPermission? = switch presentation {
         case .applicationDrag(let permission), .enableSwitch(let permission), .systemSettingsFollowUp(let permission): permission
-        case .snippetPasteSetup: .accessibility
+        case .pasteSetup: .accessibility
         case .dictationSetup, nil: nil
         }
         guard let permission, coordinator.state(for: permission).isGranted else { return }
