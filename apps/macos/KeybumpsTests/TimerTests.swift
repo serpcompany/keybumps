@@ -278,21 +278,27 @@ struct TimerStoreTests {
 @MainActor
 @Suite("Timer: ends, the tab, and the menu bar dot")
 struct TimerModuleTests {
-    @Test("A timer that ends on time shows its notice, plays the sound, and marks the menu bar")
-    func onTimeFinish() {
+    @Test("A timer that ends on time raises an alarm that rings, and marks the menu bar")
+    func onTimeFinish() throws {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
         fixture.module.apply(fixture.context(enabled: [.timer]))
         fixture.store.start(duration: 300, name: "Tea")
+        let end = fixture.clock.now.addingTimeInterval(300)
 
         fixture.clock.advance(300)
         fixture.scheduler.fire()
-        #expect(fixture.alerts.notices == [.init(message: "Tea finished", quiet: false)])
-        #expect(fixture.alerts.sounds == 1)
+        let alarm = try #require(fixture.alerts.raised.last)
+        #expect(alarm == TimerAlarm(
+            title: "Tea finished",
+            detail: "5 min · ended \(TimerText.when(end, now: fixture.clock.now))",
+            rings: true,
+            canRepeat: true
+        ))
         #expect(fixture.attention.accessibilityLabel(productName: "Keybumps") == "Keybumps, timer finished")
     }
 
-    @Test("Without a name, the notice names the length; with sound off, it's silent")
+    @Test("Without a name, the alarm names the length; with sound off, it doesn't ring")
     func unnamedAndSilent() {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
@@ -302,26 +308,25 @@ struct TimerModuleTests {
 
         fixture.clock.advance(300)
         fixture.scheduler.fire()
-        #expect(fixture.alerts.notices.map(\.message) == ["5 min timer finished"])
-        #expect(fixture.alerts.sounds == 0)
+        #expect(fixture.alerts.raised.map(\.title) == ["5 min timer finished"])
+        #expect(fixture.alerts.raised.last?.rings == false)
     }
 
-    @Test("A timer that ended over a minute ago gets a quiet notice saying when, and no sound")
+    @Test("A timer that ended over a minute ago, while the Mac slept, raises its alarm quietly")
     func lateFinish() {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
         fixture.module.apply(fixture.context(enabled: [.timer]))
         fixture.store.start(duration: 300, name: "Tea")
-        let end = fixture.clock.now.addingTimeInterval(300)
 
         fixture.clock.advance(300 + TimerModule.onTimeGrace + 1)
         fixture.store.checkDue()
-        #expect(fixture.alerts.notices == [.init(message: "Tea ended \(TimerText.when(end, now: fixture.clock.now))", quiet: true)])
-        #expect(fixture.alerts.sounds == 0)
+        #expect(fixture.alerts.raised.map(\.title) == ["Tea finished"])
+        #expect(fixture.alerts.raised.last?.rings == false)
         #expect(fixture.attention.showsDot)
     }
 
-    @Test("Within a minute late, as after an update's relaunch, it finishes as usual")
+    @Test("Within a minute late, as after an update's relaunch, it rings as usual")
     func withinGrace() {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
@@ -330,22 +335,65 @@ struct TimerModuleTests {
 
         fixture.clock.advance(300 + TimerModule.onTimeGrace)
         fixture.store.checkDue()
-        #expect(fixture.alerts.notices == [.init(message: "Tea finished", quiet: false)])
-        #expect(fixture.alerts.sounds == 1)
+        #expect(fixture.alerts.raised.last?.rings == true)
     }
 
-    @Test("Timers ending together share one notice")
+    @Test("Timers ending together, or while the alarm is up, share one alarm, which keeps ringing")
     func together() {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
         fixture.module.apply(fixture.context(enabled: [.timer]))
         fixture.store.start(duration: 60, name: "a")
         fixture.store.start(duration: 60, name: "b")
+        fixture.store.start(duration: 600, name: "c")
 
         fixture.clock.advance(60)
         fixture.scheduler.fire()
-        #expect(fixture.alerts.notices.map(\.message) == ["2 timers finished"])
-        #expect(fixture.alerts.sounds == 1)
+        #expect(fixture.alerts.raised.last == TimerAlarm(title: "2 timers finished", detail: "a, b", rings: true, canRepeat: false))
+
+        // C ends much later, unstopped: one alarm, still ringing.
+        fixture.preferences.timerPlaysSound = false
+        fixture.clock.advance(540)
+        fixture.scheduler.fire()
+        #expect(fixture.alerts.raised.last == TimerAlarm(title: "3 timers finished", detail: "a, b, c", rings: true, canRepeat: false))
+    }
+
+    @Test("Stop closes the alarm, counts its timers as seen, and clears the dot")
+    func stop() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        fixture.store.start(duration: 60, name: "Tea")
+        fixture.clock.advance(60)
+        fixture.scheduler.fire()
+
+        let onStopButton = try #require(fixture.alerts.onStop)
+        onStopButton()
+        #expect(fixture.alerts.stops == 1)
+        #expect(!fixture.attention.showsDot)
+        #expect(!fixture.store.hasUnseenFinish)
+
+        // A later finish raises a new alarm of its own.
+        fixture.store.start(duration: 30, name: "Eggs")
+        fixture.clock.advance(30)
+        fixture.scheduler.fire()
+        #expect(fixture.alerts.raised.last?.title == "Eggs finished")
+    }
+
+    @Test("Repeat runs the timer again and stops the alarm")
+    func repeatTimer() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        let tea = fixture.store.start(duration: 300, name: "Tea")
+        fixture.clock.advance(300)
+        fixture.scheduler.fire()
+
+        let onRepeatButton = try #require(fixture.alerts.onRepeat)
+        onRepeatButton()
+        #expect(fixture.alerts.stops == 1)
+        #expect(fixture.store.items.first { $0.id == tea.id }?.state == .running(endsAt: fixture.clock.now.addingTimeInterval(300)))
+        #expect(!fixture.attention.showsDot)
     }
 
     @Test("Showing the Timers tab marks finished timers seen and clears the dot")
@@ -362,6 +410,7 @@ struct TimerModuleTests {
         content.didShow(palette: fixture.actions)
         #expect(!fixture.attention.showsDot)
         #expect(!fixture.store.hasUnseenFinish)
+        #expect(fixture.alerts.stops == 1, "Opening the Timers tab stops the alarm")
     }
 
     @Test("Turning Timer off cancels the timers and clears the dot")
@@ -488,21 +537,6 @@ struct TimerModuleTests {
         _ = old
     }
 
-    @Test("A notice that waited for Dictation past the grace is quiet, says when, and plays no sound")
-    func waitedPastGrace() {
-        let fixture = ModuleFixture()
-        defer { fixture.tearDown() }
-        fixture.alerts.waited = TimerModule.onTimeGrace + 1
-        fixture.module.apply(fixture.context(enabled: [.timer]))
-        fixture.store.start(duration: 300, name: "Tea")
-        let end = fixture.clock.now.addingTimeInterval(300)
-
-        fixture.clock.advance(300)
-        fixture.scheduler.fire()
-        #expect(fixture.alerts.notices == [.init(message: "Tea ended \(TimerText.when(end, now: fixture.clock.now))", quiet: true)])
-        #expect(fixture.alerts.sounds == 0)
-    }
-
     @Test("After a relaunch with several unseen finishes, VoiceOver says timers, plural")
     func pluralRelaunchDot() {
         let fixture = ModuleFixture()
@@ -519,7 +553,7 @@ struct TimerModuleTests {
         #expect(relaunched.attention.accessibilityLabel(productName: "Keybumps") == "Keybumps, timers finished")
     }
 
-    @Test("A finish not yet seen before a relaunch keeps its dot")
+    @Test("A finish not yet seen before a relaunch keeps its dot and its alarm, quietly")
     func dotAfterRelaunch() throws {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
@@ -532,17 +566,21 @@ struct TimerModuleTests {
         defer { relaunched.tearDown() }
         relaunched.module.apply(relaunched.context(enabled: [.timer]))
         #expect(relaunched.attention.showsDot)
-        #expect(relaunched.alerts.notices.isEmpty, "It was announced before the relaunch")
+        #expect(relaunched.alerts.raised.map(\.title) == ["1 min timer finished"])
+        #expect(relaunched.alerts.raised.last?.rings == false, "It already rang before the relaunch")
     }
 
-    @Test("Turning Timer off drops an announcement still waiting for the notch")
-    func turningOffCancelsWaitingNotice() {
+    @Test("Turning Timer off stops the alarm")
+    func turningOffStopsTheAlarm() {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
         let context = fixture.context(enabled: [.timer])
         fixture.module.apply(context)
+        fixture.store.start(duration: 60, name: nil)
+        fixture.clock.advance(60)
+        fixture.scheduler.fire()
         fixture.module.deactivate(context)
-        #expect(fixture.alerts.cancels == 1)
+        #expect(fixture.alerts.stops == 1)
     }
 
     @Test("Before Timer runs (onboarding, Locked), the tab offers nothing to start")
@@ -672,68 +710,56 @@ struct TimerMenuBarTests {
     }
 }
 
-// MARK: - Notices that wait for the notch
+// MARK: - Waiting for the notch
 
 @MainActor
-@Suite("Notch notices that wait for the notch")
+@Suite("Waiting for the notch")
 struct NotchWaitTests {
-    private static func notice(_ shown: @escaping () -> Void) -> (TimeInterval) -> WaitingNotice {
-        { _ in WaitingNotice(message: "Tea finished", systemImage: "timer", tint: .orange, duration: 0.1, whenShown: shown) }
-    }
-
-    @Test("While another surface holds the notch, however long, the notice and its sound wait, then show once, knowing how long they waited")
-    func waitsThenShows() {
+    @Test("While another surface holds the notch, however long, the action waits, then runs once, knowing how long it waited")
+    func waitsThenRuns() {
         let hud = PaletteHUD()
-        defer { hud.dismiss() }
         var now = Date(timeIntervalSinceReferenceDate: 800_000_000)
         hud.now = { now }
         let dictation = NSObject()
-        var shown = 0
-        var waited: TimeInterval?
+        var waited: [TimeInterval] = []
         hud.claimNotch(for: dictation)
-        hud.showWhenNotchFree(from: "timer") { wait in
-            waited = wait
-            return WaitingNotice(message: "Tea finished", systemImage: "timer", tint: .orange, duration: 0.1, whenShown: { shown += 1 })
-        }
-        #expect(shown == 0)
+        hud.whenNotchFree(from: "timer") { waited.append($0) }
+        #expect(waited.isEmpty)
 
         now = now.addingTimeInterval(45 * 60)
         hud.releaseNotch(from: dictation)
-        #expect(shown == 1)
-        #expect(waited == TimeInterval(45 * 60))
+        #expect(waited == [TimeInterval(45 * 60)])
         hud.claimNotch(for: dictation)
         hud.releaseNotch(from: dictation)
-        #expect(shown == 1, "Shown once")
+        #expect(waited.count == 1, "Run once")
     }
 
-    @Test("A waiting notice is dropped only by the surface that queued it")
+    @Test("What waits is dropped only by the source that left it")
     func cancelBySource() {
         let hud = PaletteHUD()
-        defer { hud.dismiss() }
         let dictation = NSObject()
-        var shown = 0
+        var runs = 0
 
         hud.claimNotch(for: dictation)
-        hud.showWhenNotchFree(from: "timer", Self.notice { shown += 1 })
-        hud.cancelWaitingNotice(from: "someone else")
-        hud.cancelWaitingNotice(from: "timer")
+        hud.whenNotchFree(from: "timer") { _ in runs += 1 }
+        hud.cancelWaiting(from: "someone else")
+        hud.cancelWaiting(from: "timer")
         hud.releaseNotch(from: dictation)
-        #expect(shown == 0)
+        #expect(runs == 0)
 
         hud.claimNotch(for: dictation)
-        hud.showWhenNotchFree(from: "timer", Self.notice { shown += 1 })
-        hud.cancelWaitingNotice(from: "someone else")
+        hud.whenNotchFree(from: "timer") { _ in runs += 1 }
+        hud.cancelWaiting(from: "someone else")
         hud.releaseNotch(from: dictation)
-        #expect(shown == 1)
+        #expect(runs == 1)
     }
 
-    @Test("With the notch free, it shows at once")
-    func showsAtOnce() {
+    @Test("With the notch free, it runs at once")
+    func runsAtOnce() {
         let hud = PaletteHUD()
-        defer { hud.dismiss() }
-        var shown = 0
-        hud.showWhenNotchFree(from: "timer", Self.notice { shown += 1 })
-        #expect(shown == 1)
+        var runs = 0
+        hud.whenNotchFree(from: "timer") { _ in runs += 1 }
+        #expect(runs == 1)
     }
 }
 
@@ -795,24 +821,23 @@ private final class StoreFixture {
 
 @MainActor
 private final class RecordingTimerAlerts: TimerAlerting {
-    struct Notice: Equatable {
-        let message: String
-        let quiet: Bool
+    private(set) var raised: [TimerAlarm] = []
+    private(set) var stops = 0
+    /// The showing alarm's buttons.
+    private(set) var onStop: (() -> Void)?
+    private(set) var onRepeat: (() -> Void)?
+
+    func raise(_ alarm: TimerAlarm, onStop: @escaping () -> Void, onRepeat: @escaping () -> Void) {
+        raised.append(alarm)
+        self.onStop = onStop
+        self.onRepeat = onRepeat
     }
 
-    private(set) var notices: [Notice] = []
-    private(set) var sounds = 0
-    private(set) var cancels = 0
-    /// How long each announcement waits for the notch before it shows.
-    var waited: TimeInterval = 0
-
-    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement) {
-        let shown = announcement(waited)
-        notices.append(Notice(message: shown.message, quiet: shown.quiet))
-        if shown.withSound { sounds += 1 }
+    func stop() {
+        stops += 1
+        onStop = nil
+        onRepeat = nil
     }
-
-    func cancelWaitingAnnouncement() { cancels += 1 }
 }
 
 @MainActor

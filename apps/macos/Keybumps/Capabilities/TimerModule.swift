@@ -30,53 +30,6 @@ extension CapabilityDescriptor {
     )
 }
 
-/// What a timer's end says, and whether it plays the sound. A quiet one is for timers that ended a
-/// while ago.
-struct TimerAnnouncement: Equatable {
-    let message: String
-    let quiet: Bool
-    let withSound: Bool
-}
-
-/// How a timer's end reaches you. Unit tests and the UI-test composition record instead.
-@MainActor
-protocol TimerAlerting {
-    /// A notch notice, with a sound when the announcement says so. While Dictation holds the notch
-    /// both wait, however long it records, rather than the notice being dropped or the sound
-    /// reaching its microphone; `announcement` gets how long they waited, so a late one says so.
-    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement)
-    /// Drops an announcement still waiting, as when Timer is turned off.
-    func cancelWaitingAnnouncement()
-}
-
-/// The production alerts: `PaletteHUD`'s notch notice and a system sound, so there's no audio
-/// file to ship.
-struct SystemTimerAlerts: TimerAlerting {
-    static let noticeSource = "timer"
-
-    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement) {
-        PaletteHUD.shared.showWhenNotchFree(from: Self.noticeSource) { waited in
-            let announcement = announcement(waited)
-            return WaitingNotice(
-                message: announcement.message,
-                systemImage: "timer",
-                tint: announcement.quiet ? .gray : .orange,
-                duration: 4,
-                whenShown: announcement.withSound ? { NSSound(named: NSSound.Name("Glass"))?.play() } : nil
-            )
-        }
-    }
-
-    func cancelWaitingAnnouncement() {
-        PaletteHUD.shared.cancelWaitingNotice(from: Self.noticeSource)
-    }
-}
-
-struct InertTimerAlerts: TimerAlerting {
-    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement) {}
-    func cancelWaitingAnnouncement() {}
-}
-
 /// Wakes after a delay by the Mac's own uptime, not the wall clock, so setting the clock back
 /// doesn't freeze the menu bar countdown. A timer's end itself stays on the wall clock
 /// (`WallClockTimerScheduler`); after sleep, the store's wake check refreshes the menu bar.
@@ -95,15 +48,17 @@ struct MonotonicTickScheduler: TimerScheduling {
     }
 }
 
-/// Owns the Timers tab, its optional Open Timers shortcut, and the timers' ends: a notch notice,
-/// a sound unless it's off, and the menu bar dot until the Timers tab shows. While a timer runs it
-/// also shows the soonest beside the menu bar icon and lists the timers in the Keybumps menu (each
-/// can be turned off), updating them once a second. It runs nothing while no timer runs:
+/// Owns the Timers tab, its optional Open Timers shortcut, and the timers' ends: an alarm card that
+/// stays on screen and rings (unless sound is off), and the menu bar dot, until Stop, Repeat, or
+/// the Timers tab. While a timer runs it also shows the soonest beside the menu bar icon and lists
+/// the timers in the Keybumps menu (each can be turned off), updating them once a second. It runs
+/// nothing while no timer runs:
 /// `TimerStore` schedules one wake-up, for the soonest end.
 @MainActor
 final class TimerModule: CapabilityModule {
-    /// A timer that ended at most this long ago finishes as usual, with its sound: about the gap an
-    /// update's relaunch leaves. One that ended earlier gets a quiet notice saying when it ended.
+    /// A timer that ended at most this long ago rings as usual: about the gap an update's relaunch
+    /// leaves. One that ended earlier, while the Mac slept or Keybumps wasn't running, shows its
+    /// alarm quietly.
     static let onTimeGrace: TimeInterval = 60
 
     let descriptor = CapabilityDescriptor.timer
@@ -122,6 +77,10 @@ final class TimerModule: CapabilityModule {
     /// Wakes the module once a second while a timer runs, to update the menu bar.
     private let ticker: any TimerScheduling
     private var nextTick: (any TimerScheduledAction)?
+    /// The finished timers the alarm is showing, oldest first, until it's acknowledged.
+    private var alarmed: [UUID] = []
+    /// Whether one of them just ended, so the alarm rings.
+    private var alarmRings = false
 
     init(
         palette: CommandPaletteController,
@@ -162,8 +121,12 @@ final class TimerModule: CapabilityModule {
             defer { refreshMenuBar() }
             guard !store.isActive else { return }
             store.activate()
-            // A finish not yet seen before a relaunch keeps its dot.
-            if store.hasUnseenFinish, !timersTabIsShowing() { showDot() }
+            // A finish not yet seen before a relaunch keeps its dot and its alarm, quietly.
+            let unseen = store.displayed.filter { if case .finished(_, false) = $0.state { true } else { false } }
+            if !unseen.isEmpty, !timersTabIsShowing() {
+                showDot()
+                raiseAlarm(adding: unseen.reversed().map(\.id), rings: false)
+            }
         } else if store.isActive {
             // Locked: nothing runs, so the timers stop too.
             stop()
@@ -178,7 +141,9 @@ final class TimerModule: CapabilityModule {
     private func stop() {
         store.deactivate()
         attention.clear()
-        alerts.cancelWaitingAnnouncement()
+        alerts.stop()
+        alarmed = []
+        alarmRings = false
         nextTick?.cancel()
         nextTick = nil
         menuBar.clear()
@@ -252,8 +217,7 @@ final class TimerModule: CapabilityModule {
     }
 
     private func timersShown() {
-        store.markFinishesSeen()
-        attention.clear()
+        acknowledge()
     }
 
     private func showDot() {
@@ -262,11 +226,6 @@ final class TimerModule: CapabilityModule {
 
     private func timersFinished(_ finishes: [TimerFinish]) {
         guard !finishes.isEmpty else { return }
-        let now = store.now
-        let playsSound = preferences.timerPlaysSound
-        alerts.announce { waited in
-            Self.announcement(for: finishes, waited: waited, playsSound: playsSound, now: now())
-        }
         if timersTabIsShowing() {
             store.markFinishesSeen()
             // The finished timer moved to the top; keep the highlight on the timer it was on.
@@ -274,21 +233,53 @@ final class TimerModule: CapabilityModule {
         } else {
             showDot()
         }
+        let onTime = finishes.contains { $0.lateness <= Self.onTimeGrace }
+        raiseAlarm(adding: finishes.map(\.item.id), rings: onTime && preferences.timerPlaysSound)
     }
 
-    /// What ending timers say once the notice shows, `waited` after they were noticed: a finish
-    /// still within `onTimeGrace` then plays the sound; anything later is quiet and says when.
-    static func announcement(for finishes: [TimerFinish], waited: TimeInterval, playsSound: Bool, now: Date) -> TimerAnnouncement {
-        let onTime = finishes.contains { $0.lateness + waited <= onTimeGrace }
-        let message: String
-        if finishes.count > 1 {
-            message = onTime ? "\(finishes.count) timers finished" : "\(finishes.count) timers ended"
-        } else if onTime {
-            message = "\(finishes[0].item.title) finished"
-        } else {
-            message = "\(finishes[0].item.title) ended \(TimerText.when(endDate(of: finishes[0].item), now: now))"
+    /// Shows the alarm for every timer it holds, adding `ids`; it rings once any of them rang.
+    private func raiseAlarm(adding ids: [UUID], rings: Bool) {
+        alarmed += ids.filter { !alarmed.contains($0) }
+        alarmRings = alarmRings || rings
+        let timers = alarmed.compactMap { id in store.items.first { $0.id == id } }
+        guard let alarm = Self.alarm(for: timers, rings: alarmRings, now: store.now()) else { return }
+        alerts.raise(alarm, onStop: { [weak self] in self?.acknowledge() }, onRepeat: { [weak self] in self?.repeatAlarmed() })
+    }
+
+    /// Stop, the Timers tab, or the Keybumps menu's finished timer: the alarm stops ringing and
+    /// closes, and its timers count as seen.
+    private func acknowledge() {
+        alarmed = []
+        alarmRings = false
+        alerts.stop()
+        store.markFinishesSeen()
+        attention.clear()
+    }
+
+    private func repeatAlarmed() {
+        let ids = alarmed
+        acknowledge()
+        for id in ids { store.restart(id) }
+    }
+
+    /// The alarm card for finished timers: one names its length and when it ended; several list
+    /// their names. Nil without any.
+    static func alarm(for timers: [TimerItem], rings: Bool, now: Date) -> TimerAlarm? {
+        guard let first = timers.first else { return nil }
+        if timers.count > 1 {
+            return TimerAlarm(
+                title: "\(timers.count) timers finished",
+                detail: timers.map(\.title).joined(separator: ", "),
+                rings: rings,
+                canRepeat: false
+            )
         }
-        return TimerAnnouncement(message: message, quiet: !onTime, withSound: onTime && playsSound)
+        return TimerAlarm(
+            title: "\(first.title) finished",
+            detail: "\(TimerText.length(first.duration)) · ended \(TimerText.when(endDate(of: first), now: now))",
+            rings: rings,
+            canRepeat: true
+        )
     }
 
     private static func endDate(of item: TimerItem) -> Date {
