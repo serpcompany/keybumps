@@ -7,12 +7,24 @@ Keybumps is one installed native macOS companion made of independently enabled c
 ### App shell
 
 **Capability**:
-A user-enabled area of Keybumps that delivers one coherent outcome and owns its own resources and shortcuts.
-_Avoid_: Mini-app, embedded app, feature
+A user-enabled area of Keybumps that delivers one coherent outcome and owns its own resources and shortcuts. People see it as a **plugin**; code and docs say capability (ADR 0006).
+_Avoid_: Mini-app, embedded app, feature, extension
+
+**Plugin**:
+What people see a capability called: in Settings › Plugins, the Store, and on the website.
+_Avoid_: Extension, add-on, app
+
+**Plugin manifest**:
+What a capability declares about itself, so the shell draws its Settings page, its Plugins table row, and its Store listing the same way for every plugin: its name, summary, icon, and category; its commands (palette tab and shortcuts); the permissions it needs; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
+_Avoid_: Plist, config, schema
+
+**Store**:
+Where people browse plugins and get or remove them, in the Command Palette. For now it lists only official plugins, built by Keybumps; getting one turns it on, and removing one turns it off and keeps its data.
+_Avoid_: Marketplace, gallery, app store
 
 **Capability Module**:
 The internal, first-party unit that implements one Capability for the app shell.
-_Avoid_: Plugin, extension
+_Avoid_: Extension
 
 **Command Palette**:
 The single floating, keyboard-first surface whose tabs present the capabilities' searchable content.
