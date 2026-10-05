@@ -30,6 +30,11 @@ struct CapabilityDescriptor: Identifiable {
     var publisher: PluginPublisher = .keybumps
     /// Its declared settings, which its Settings page draws and `AppPreferences` stores.
     var preferences: [PluginPreference] = []
+    /// Permissions it can use but doesn't need (`requiredPermissions` are the ones it needs).
+    var optionalPermissions: [PluginOptionalPermission] = []
+    /// Whether it's on in a new install, and turned on once in existing installs by the update that
+    /// adds it. One that ships off is listed in Settings › Plugins with its switch off.
+    var isOnByDefault = true
 
     var id: Capability { capability }
 }

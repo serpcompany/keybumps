@@ -16,6 +16,14 @@ enum PluginLinks {
     static let website = URL(string: "https://keybumps.app/plugins")!
 }
 
+/// A permission a plugin can use but doesn't need, such as Accessibility to paste, and why it helps.
+/// Its Settings page lists it as Optional; it never counts as missing setup.
+struct PluginOptionalPermission: Equatable {
+    let permission: MacPermission
+    /// What it adds, and what happens without it.
+    let reason: String
+}
+
 /// Who makes a plugin. For now every plugin is official, built by Keybumps (ADR 0006).
 enum PluginPublisher: Equatable {
     case keybumps

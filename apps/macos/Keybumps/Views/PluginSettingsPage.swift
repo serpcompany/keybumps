@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// A plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
-/// extension's settings: its header with who makes it, its Commands, the permissions it needs, its
+/// extension's settings: its header with who makes it, its Commands, the permissions it needs and
+/// then the ones it can use (marked Optional), its
 /// declared preferences by group, and last a slot for parts no declaration covers (such as a
 /// library to edit). Timer uses it so far; the other plugins move over one at a time.
 struct PluginSettingsPage<Custom: View>: View {
@@ -18,10 +19,13 @@ struct PluginSettingsPage<Custom: View>: View {
         let descriptor = capability.descriptor
         SettingsPage {
             CapabilityControl(capability: capability, shortcuts: descriptor.shortcuts, byline: Self.byline(descriptor))
-            if !descriptor.requiredPermissions.isEmpty {
+            if !descriptor.requiredPermissions.isEmpty || !descriptor.optionalPermissions.isEmpty {
                 SettingsGroup("Permissions") {
                     ForEach(MacPermission.allCases.filter(descriptor.requiredPermissions.contains), id: \.self) {
                         PermissionRow(permission: $0)
+                    }
+                    ForEach(descriptor.optionalPermissions, id: \.permission) {
+                        PermissionRow(permission: $0.permission, optionalReason: $0.reason)
                     }
                 }
             }
@@ -34,7 +38,7 @@ struct PluginSettingsPage<Custom: View>: View {
         }
         .task {
             // Permission rows follow System Settings while the page is open, as other pages' do.
-            guard !descriptor.requiredPermissions.isEmpty else { return }
+            guard !descriptor.requiredPermissions.isEmpty || !descriptor.optionalPermissions.isEmpty else { return }
             await model.monitorSystemPermissionChanges()
         }
     }

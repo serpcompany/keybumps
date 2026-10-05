@@ -91,4 +91,39 @@ struct PluginManifestTests {
             }
         }
     }
+
+    @Test("A permission is required or optional, never both, and an optional one says why")
+    func optionalPermissions() {
+        for descriptor in CapabilityCatalog.descriptors {
+            let optional = descriptor.optionalPermissions.map(\.permission)
+            #expect(Set(optional).count == optional.count, "\(descriptor.title) lists an optional permission twice")
+            #expect(descriptor.requiredPermissions.isDisjoint(with: optional), "\(descriptor.title)")
+            let reasonsGiven = descriptor.optionalPermissions.allSatisfy { !$0.reason.isEmpty }
+            #expect(reasonsGiven, "\(descriptor.title)")
+        }
+    }
+
+    @Test("A new install starts with every plugin on except those that ship off")
+    func newInstallSkipsPluginsThatShipOff() {
+        let started = AppPreferences.initialCapabilities(stored: nil, known: nil, shippingOff: [.timer])
+        #expect(started == Set(Capability.allCases).subtracting([.timer]))
+        #expect(AppPreferences.initialCapabilities(stored: nil, known: nil, shippingOff: []) == Set(Capability.allCases))
+    }
+
+    @Test("An update turns on a plugin it adds only if that plugin ships on, and keeps what was on")
+    func updateTurnsOnOnlyPluginsThatShipOn() {
+        let known = Capability.allCases.filter { $0 != .timer }.map(\.rawValue)
+        let stored = ["quickSearch", "snippets"]
+        #expect(AppPreferences.initialCapabilities(stored: stored, known: known, shippingOff: [.timer]) == [.quickSearch, .snippets])
+        #expect(AppPreferences.initialCapabilities(stored: stored, known: known, shippingOff: []) == [.quickSearch, .snippets, .timer])
+        // Once known, a plugin that ships off stays as the person left it.
+        let allKnown = Capability.allCases.map(\.rawValue)
+        #expect(AppPreferences.initialCapabilities(stored: stored + ["timer"], known: allKnown, shippingOff: [.timer]).contains(.timer))
+    }
+
+    @Test("Every plugin ships on today; one that ships off is the Emoji Picker's job (#243)")
+    func everyPluginShipsOnToday() {
+        let allOn = CapabilityCatalog.descriptors.allSatisfy(\.isOnByDefault)
+        #expect(allOn)
+    }
 }
