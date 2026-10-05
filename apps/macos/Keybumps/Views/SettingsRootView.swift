@@ -1333,6 +1333,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
     final class FillerView: NSView {
         private let preferences: AppPreferences
+        private var keyObserver: Any?
 
         init(preferences: AppPreferences) {
             self.preferences = preferences
@@ -1341,26 +1342,43 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
         required init?(coder: NSCoder) { nil }
 
+        deinit {
+            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            guard window != nil, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
+            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+            keyObserver = nil
+            guard let window, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
+            // Each time Settings comes forward until it has filled once, so a first open that was
+            // closed straight away fills the next time instead.
+            keyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.fill(attempt: 1) }
+            }
             // After this turn, so the frame macOS restores for the window doesn't replace it.
             DispatchQueue.main.async { [weak self] in self?.fill(attempt: 1) }
         }
 
         /// Fills the screen, then checks once the window has settled: if macOS restored a saved
         /// size over it, fills again, up to three times. Only a fill that held, or the last try,
-        /// counts as the first open.
+        /// counts as the first open. A window that isn't showing is left alone, so this never
+        /// brings a closed Settings window back.
         private func fill(attempt: Int) {
-            guard let window, let screen = window.screen ?? NSScreen.main, !preferences.didFillSettingsWindow else { return }
+            guard let window, window.isVisible, let screen = window.screen ?? NSScreen.main,
+                  !preferences.didFillSettingsWindow else { return }
             let target = screen.visibleFrame
             window.setFrame(target, display: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                guard let self, let window = self.window else { return }
+                guard let self, let window = self.window, window.isVisible, !preferences.didFillSettingsWindow else { return }
                 if window.frame != target, attempt < 3 {
                     fill(attempt: attempt + 1)
                 } else {
                     preferences.didFillSettingsWindow = true
+                    if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+                    keyObserver = nil
                 }
             }
         }
