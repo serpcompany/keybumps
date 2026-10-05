@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The checks run through `eventually`, which shellcheck cannot follow.
 # shellcheck disable=SC2329
-# Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; the
+# Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; every
+# plugin page in the pages sitemap responds, canonical to itself and linked from /plugins/; the
 # trailing-slash and legacy redirects take one 308 hop; /download/ sends a 302 to the current DMG,
 # which the Download buttons link to directly; search-engine rules and analytics match the
 # environment (only production may be indexed or load GTM, which it does on /, /thanks/, and
@@ -123,21 +124,61 @@ robots_header_is() {
 }
 
 # Pages end in a slash and files never do (SERP URL trailing-slash standard).
-for path in / /pricing/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
+for path in / /plugins/ /pricing/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
   /legal/privacy/ /legal/terms/ /legal/refunds/ /legal/dmca/ /legal/affiliate-disclosure/ \
   /sitemap/ /robots.txt /sitemap-index.xml /sitemaps/pages.xml; do
   eventually "200 $path" status_is "$base$path" 200 "${smoke[@]}"
 done
 
-# The other form redirects in one hop. Shipped app builds link to /pricing, and Polar checkout
-# and receipts may link to /thanks and /license. /download goes to /download/, which then
-# redirects to the DMG (checked below).
+# The other form redirects in one hop. Shipped app builds link to /pricing, builds with
+# Settings › Plugins' Browse on keybumps.app button link to /plugins, and Polar checkout and
+# receipts may link to /thanks and /license. /download goes to /download/, which then redirects to
+# the DMG (checked below).
 expect_redirect() {
   eventually "308 $1 -> $2" status_is "$base$1" "308 $base$2" "${smoke[@]}"
 }
-for page in /pricing /download /license /thanks /support /legal/dmca; do
+for page in /pricing /plugins /download /license /thanks /support /legal/dmca; do
   expect_redirect "$page" "$page/"
 done
+
+# Every plugin has a page, /plugins/<slug>/, listed in the pages sitemap and linked from /plugins/.
+# Each one returns 200 with its own canonical URL, and its unslashed form takes one 308. A slug with
+# no plugin is the 404 (dynamicParams = false).
+plugin_paths=()
+read_plugin_paths() {
+  plugin_paths=()
+  local path
+  while IFS= read -r path; do
+    [ -n "$path" ] && plugin_paths+=("$path")
+  done < <(grep -oE '<loc>https://keybumps\.app/plugins/[a-z-]+/</loc>' <<<"$(fetch /sitemaps/pages.xml)" |
+    sed -E 's#^<loc>https://keybumps\.app(.*)</loc>$#\1#' || true)
+  if [ "${#plugin_paths[@]}" -lt 8 ]; then
+    why="want 8+ plugin pages in /sitemaps/pages.xml, got ${#plugin_paths[@]}"
+    return 1
+  fi
+}
+eventually 'pages sitemap lists every plugin page' read_plugin_paths
+# plugin_page_ok <path>: 200, canonical to itself, and linked from /plugins/.
+plugins_page=''
+plugin_page_ok() {
+  local body
+  body="$(fetch "$1")"
+  if ! grep -qF "<link rel=\"canonical\" href=\"https://keybumps.app$1\"/>" <<<"$body"; then
+    why="no canonical link to https://keybumps.app$1"
+    return 1
+  fi
+  [ -n "$plugins_page" ] || plugins_page="$(fetch /plugins/)"
+  grep -qF "href=\"$1\"" <<<"$plugins_page" || {
+    why="/plugins/ doesn't link to $1"
+    return 1
+  }
+}
+for path in "${plugin_paths[@]}"; do
+  eventually "200 $path" status_is "$base$path" 200 "${smoke[@]}"
+  eventually "$path is canonical and linked from /plugins/" plugin_page_ok "$path"
+  expect_redirect "${path%/}" "$path"
+done
+eventually '404 /plugins/<unknown slug>/' status_is "$base/plugins/no-such-plugin/" 404 "${smoke[@]}"
 expect_redirect /robots.txt/ /robots.txt
 expect_redirect /sitemaps/pages.xml/ /sitemaps/pages.xml
 
@@ -260,7 +301,8 @@ og_on() {
     return 1
   fi
 }
-for path in /pricing/ /license/ /thanks/ /about/ /legal/privacy/ /sitemap/; do
+for path in /plugins/ /plugins/timer/ /pricing/ /license/ /thanks/ /about/ /legal/privacy/ \
+  /sitemap/; do
   eventually "og:image on $path" og_on "$path"
 done
 

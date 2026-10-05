@@ -12,6 +12,7 @@ export function SiteHeader() {
         </Link>
         <nav className="nav-links">
           <Link href="/#features">Features</Link>
+          <Link href="/plugins/">Plugins</Link>
           <Link href="/pricing/">Pricing</Link>
           <Link href="/#faq">FAQ</Link>
           <DownloadLink className="btn btn-sm">Download</DownloadLink>

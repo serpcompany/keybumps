@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { pageFor, type SitePagePath } from './pages'
+import { type Plugin, pluginPath } from './plugins'
 import { site } from './site'
 
 /**
@@ -75,5 +76,27 @@ export function pageMetadata(path: SitePagePath): Metadata {
     description: page.description,
     alternates: { canonical: path },
     openGraph: { ...defaultOpenGraph, url: path }
+  }
+}
+
+/** A plugin page's title: "Timer plugin", which the layout's template ends in " — Keybumps". */
+export function pluginPageTitle(plugin: Plugin): string {
+  return `${plugin.name} plugin`
+}
+
+/** A plugin page's description, for search results and link previews. */
+export function pluginPageDescription(plugin: Plugin): string {
+  return `${plugin.summary} An official Keybumps plugin for macOS, included with the app.`
+}
+
+/** Title, description, canonical URL, and Open Graph for a plugin's page, /plugins/<slug>/. */
+export function pluginMetadata(plugin: Plugin): Metadata {
+  const path = pluginPath(plugin.slug)
+  const title = pluginPageTitle(plugin)
+  return {
+    title,
+    description: pluginPageDescription(plugin),
+    alternates: { canonical: path },
+    openGraph: { ...defaultOpenGraph, url: path, title: `${title} — ${site.name}` }
   }
 }

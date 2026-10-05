@@ -7,6 +7,7 @@ export function SiteFooter() {
       <div className="container footer-inner">
         <span>© {new Date().getFullYear()} SERP. Keybumps is a macOS app.</span>
         <nav>
+          <Link href="/plugins/">Plugins</Link>
           <Link href="/pricing/">Pricing</Link>
           <DownloadLink>Download</DownloadLink>
           <Link href="/about/">About</Link>

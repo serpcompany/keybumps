@@ -1,3 +1,4 @@
+import { pluginPath, plugins } from './plugins'
 import { PRICE } from './site'
 
 export type SitePage = {
@@ -17,6 +18,12 @@ export const sitePages = [
     title: 'Home',
     description:
       'Quick search, clipboard history, screenshots, on-device dictation, window management, and shortcut coaching in one native macOS app.'
+  },
+  {
+    path: '/plugins/',
+    title: 'Plugins',
+    description:
+      'Every Keybumps plugin, official and built by Keybumps, with its Command Palette tab, shortcuts, and the macOS permissions it needs.'
   },
   {
     path: '/pricing/',
@@ -61,6 +68,16 @@ export const sitePages = [
 ] as const satisfies readonly SitePage[]
 
 export type SitePagePath = (typeof sitePages)[number]['path']
+
+/** Each plugin's page, /plugins/<slug>/, generated from src/lib/plugins.ts. */
+export const pluginPages: readonly SitePage[] = plugins.map(plugin => ({
+  path: pluginPath(plugin.slug),
+  title: plugin.name,
+  description: plugin.summary
+}))
+
+/** Every indexable page, for the sitemaps: the static pages, then each plugin's page. */
+export const indexablePages: readonly SitePage[] = [...sitePages, ...pluginPages]
 
 export const legalPages = sitePages.filter(
   page => page.path.startsWith('/legal/') && page.path !== '/legal/'

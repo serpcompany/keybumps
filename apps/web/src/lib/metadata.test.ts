@@ -8,10 +8,12 @@ import {
   openGraphImage,
   openGraphWithoutImage,
   pageMetadata,
+  pluginMetadata,
   rootLayoutMetadata,
   sensitiveUrlLayoutMetadata
 } from './metadata'
 import { sitePages } from './pages'
+import { pluginPath, plugins } from './plugins'
 
 /**
  * The Open Graph a page ends up with: Next.js replaces the layout's `openGraph` when the page
@@ -35,6 +37,21 @@ describe('page metadata', () => {
       expectSharedOpenGraph(metadata, rootLayoutMetadata, page.path)
       expect(metadata.openGraph, page.path).toMatchObject({ url: page.path })
       expect(metadata.alternates?.canonical, page.path).toBe(page.path)
+    }
+  })
+
+  it('gives every plugin page its own title, canonical URL, and Open Graph title', () => {
+    for (const plugin of plugins) {
+      const path = pluginPath(plugin.slug)
+      const metadata = pluginMetadata(plugin)
+      expectSharedOpenGraph(metadata, rootLayoutMetadata, path)
+      expect(metadata.title, path).toBe(`${plugin.name} plugin`)
+      expect(metadata.description, path).toContain(plugin.summary)
+      expect(metadata.alternates?.canonical, path).toBe(path)
+      expect(metadata.openGraph, path).toMatchObject({
+        url: path,
+        title: `${plugin.name} plugin — Keybumps`
+      })
     }
   })
 
