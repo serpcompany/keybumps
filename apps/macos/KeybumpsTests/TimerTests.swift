@@ -380,6 +380,31 @@ struct TimerModuleTests {
         #expect(fixture.alerts.raised.last?.title == "Eggs finished")
     }
 
+    @Test("A timer restarted or deleted from the open Timers tab leaves the alarm, which stops once none are left")
+    func alarmFollowsTheTab() throws {
+        let fixture = ModuleFixture(timersTabIsShowing: true)
+        defer { fixture.tearDown() }
+        fixture.preferences.setCapability(.timer, enabled: true)
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        let content = try #require(fixture.module.paletteContent)
+        fixture.store.start(duration: 60, name: "Tea")
+        fixture.store.start(duration: 60, name: "Eggs")
+        fixture.clock.advance(60)
+        fixture.scheduler.fire()
+        #expect(fixture.alerts.raised.last?.title == "2 timers finished")
+
+        // Return on Tea restarts it: the alarm is Eggs's alone.
+        let tea = try #require(fixture.store.displayed.firstIndex { $0.name == "Tea" })
+        content.activate(row: tea, query: "", withCommand: false, palette: fixture.actions)
+        #expect(fixture.alerts.raised.last?.title == "Eggs finished")
+        #expect(fixture.alerts.stops == 0)
+
+        // Delete on Eggs: nothing left, so it stops.
+        let eggs = try #require(fixture.store.displayed.firstIndex { $0.name == "Eggs" })
+        #expect(content.delete(row: eggs, query: ""))
+        #expect(fixture.alerts.stops == 1)
+    }
+
     @Test("Repeat runs the timer again and stops the alarm")
     func repeatTimer() throws {
         let fixture = ModuleFixture()
@@ -707,6 +732,105 @@ struct TimerMenuBarTests {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         #expect(preferences.timerShowsMenuBarCountdown)
         #expect(preferences.timerListsTimersInMenu)
+    }
+}
+
+// MARK: - The production alarm's ringing
+
+@MainActor
+@Suite("Timer: the alarm's ringing")
+struct TimerAlarmRingingTests {
+    static let ringing = TimerAlarm(title: "Tea finished", detail: "5 min · ended at 3:47 PM", rings: true, canRepeat: true)
+
+    @Test("With the notch free, it rings at once and keeps ringing until stopped")
+    func ringsUntilStopped() {
+        let notch = FakeNotch()
+        var rings = 0
+        let alerts = SystemTimerAlerts(notch: notch, playSound: { rings += 1 }, presentsCard: false)
+        defer { alerts.stop() }
+        alerts.raise(Self.ringing, onStop: {}, onRepeat: {})
+        #expect(rings == 1)
+        #expect(alerts.isRinging)
+        alerts.ringTick()
+        #expect(rings == 2)
+
+        // Another timer ending while it rings doesn't start a second ringing.
+        alerts.raise(Self.ringing, onStop: {}, onRepeat: {})
+        #expect(rings == 2)
+
+        alerts.stop()
+        alerts.ringTick()
+        #expect(rings == 2)
+        #expect(!alerts.isRinging)
+    }
+
+    @Test("During Dictation it waits, rings once Dictation lets go, and never rings while it holds the notch")
+    func waitsForDictation() {
+        let notch = FakeNotch()
+        notch.isSuppressed = true
+        var rings = 0
+        let alerts = SystemTimerAlerts(notch: notch, playSound: { rings += 1 }, presentsCard: false)
+        defer { alerts.stop() }
+        alerts.raise(Self.ringing, onStop: {}, onRepeat: {})
+        #expect(rings == 0)
+
+        notch.release()
+        #expect(rings == 1)
+
+        // A new recording started while it rings hears nothing.
+        notch.isSuppressed = true
+        alerts.ringTick()
+        #expect(rings == 1)
+        notch.isSuppressed = false
+        alerts.ringTick()
+        #expect(rings == 2)
+    }
+
+    @Test("Stopped while it waits for Dictation, it never rings")
+    func stopWhileWaiting() {
+        let notch = FakeNotch()
+        notch.isSuppressed = true
+        var rings = 0
+        let alerts = SystemTimerAlerts(notch: notch, playSound: { rings += 1 }, presentsCard: false)
+        alerts.raise(Self.ringing, onStop: {}, onRepeat: {})
+        alerts.stop()
+        notch.release()
+        #expect(rings == 0)
+        #expect(notch.cancels == 1)
+    }
+
+    @Test("A quiet alarm doesn't ring")
+    func quiet() {
+        let notch = FakeNotch()
+        var rings = 0
+        let alerts = SystemTimerAlerts(notch: notch, playSound: { rings += 1 }, presentsCard: false)
+        defer { alerts.stop() }
+        alerts.raise(TimerAlarm(title: "Tea finished", detail: "", rings: false, canRepeat: true), onStop: {}, onRepeat: {})
+        #expect(rings == 0)
+        #expect(alerts.isRaised)
+    }
+}
+
+@MainActor
+private final class FakeNotch: NotchWaiting {
+    var isSuppressed = false
+    private(set) var cancels = 0
+    private var waiting: ((TimeInterval) -> Void)?
+
+    func whenNotchFree(from source: String, _ action: @escaping (TimeInterval) -> Void) {
+        if isSuppressed { waiting = action } else { action(0) }
+    }
+
+    func cancelWaiting(from source: String) {
+        cancels += 1
+        waiting = nil
+    }
+
+    func release() {
+        isSuppressed = false
+        let action = waiting
+        waiting = nil
+        action?(10)
     }
 }
 

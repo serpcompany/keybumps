@@ -27,51 +27,92 @@ protocol TimerAlerting: AnyObject {
     func stop()
 }
 
+/// What holds the notch while Dictation records, so the alarm's sound and announcement wait for
+/// it. `PaletteHUD` in the app; tests replace it.
+@MainActor
+protocol NotchWaiting: AnyObject {
+    var isSuppressed: Bool { get }
+    func whenNotchFree(from source: String, _ action: @escaping (_ waited: TimeInterval) -> Void)
+    func cancelWaiting(from source: String)
+}
+
+extension PaletteHUD: NotchWaiting {}
+
 /// The production alarm: a floating card at the top of the screen, and the system Glass sound
-/// every few seconds, so there's no audio file to ship.
+/// every few seconds, so there's no audio file to ship. Neither the ringing nor the VoiceOver
+/// announcement plays while Dictation holds the notch, so neither reaches its microphone.
 @MainActor
 final class SystemTimerAlerts: TimerAlerting {
     static let notchSource = "timer"
     /// Time between rings.
     static let ringInterval: TimeInterval = 2.5
+    /// What VoiceOver adds, since the card never takes keyboard focus.
+    static let howToStop = "Click Stop, or open Timers, to stop it."
 
+    private let notch: any NotchWaiting
+    private let playSound: () -> Void
+    private let presentsCard: Bool
     private var panel: NSPanel?
     private var ringing: DispatchSourceTimer?
-    private let sound = NSSound(named: NSSound.Name("Glass"))
+    /// Whether an alarm is up, from `raise` until `stop()`.
+    private(set) var isRaised = false
+    private(set) var isRinging = false
+
+    /// `presentsCard` false keeps tests from making a window.
+    init(notch: (any NotchWaiting)? = nil, playSound: (() -> Void)? = nil, presentsCard: Bool = true) {
+        self.notch = notch ?? PaletteHUD.shared
+        let sound = NSSound(named: NSSound.Name("Glass"))
+        self.playSound = playSound ?? {
+            sound?.stop()
+            sound?.play()
+        }
+        self.presentsCard = presentsCard
+    }
 
     func raise(_ alarm: TimerAlarm, onStop: @escaping () -> Void, onRepeat: @escaping () -> Void) {
-        show(alarm, onStop: onStop, onRepeat: onRepeat)
-        NSAccessibility.post(
-            element: NSApp as Any,
-            notification: .announcementRequested,
-            userInfo: [.announcement: "\(alarm.title). \(alarm.detail)", .priority: NSAccessibilityPriorityLevel.high.rawValue]
-        )
-        guard alarm.rings, ringing == nil else { return }
-        PaletteHUD.shared.whenNotchFree(from: Self.notchSource) { [weak self] _ in self?.startRinging() }
+        isRaised = true
+        if presentsCard { show(alarm, onStop: onStop, onRepeat: onRepeat) }
+        let rings = alarm.rings
+        notch.whenNotchFree(from: Self.notchSource) { [weak self] _ in
+            guard let self, self.isRaised else { return }
+            NSAccessibility.post(
+                element: NSApp as Any,
+                notification: .announcementRequested,
+                userInfo: [
+                    .announcement: "\(alarm.title). \(alarm.detail). \(Self.howToStop)",
+                    .priority: NSAccessibilityPriorityLevel.high.rawValue,
+                ]
+            )
+            if rings { self.startRinging() }
+        }
     }
 
     func stop() {
-        PaletteHUD.shared.cancelWaiting(from: Self.notchSource)
+        isRaised = false
+        isRinging = false
+        notch.cancelWaiting(from: Self.notchSource)
         ringing?.cancel()
         ringing = nil
-        sound?.stop()
         panel?.orderOut(nil)
         panel?.contentView = nil
     }
 
     private func startRinging() {
-        // The card may have been stopped while Dictation held the notch.
-        guard ringing == nil, panel?.isVisible == true else { return }
+        guard isRaised, !isRinging else { return }
+        isRinging = true
+        ringTick()
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: Self.ringInterval)
-        timer.setEventHandler { [weak self] in
-            MainActor.assumeIsolated {
-                self?.sound?.stop()
-                self?.sound?.play()
-            }
-        }
+        timer.schedule(deadline: .now() + Self.ringInterval, repeating: Self.ringInterval)
+        timer.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.ringTick() } }
         timer.resume()
         ringing = timer
+    }
+
+    /// One ring, skipped while Dictation holds the notch: a recording started during the alarm
+    /// never hears it.
+    func ringTick() {
+        guard isRinging, !notch.isSuppressed else { return }
+        playSound()
     }
 
     private func show(_ alarm: TimerAlarm, onStop: @escaping () -> Void, onRepeat: @escaping () -> Void) {
@@ -101,6 +142,8 @@ final class SystemTimerAlerts: TimerAlerting {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
+        // ⌘H, Hide Others, and the Dock's Hide hide Keybumps' windows; the alarm stays.
+        panel.canHide = false
         panel.identifier = NSUserInterfaceItemIdentifier("timerAlarm")
         return panel
     }
@@ -160,6 +203,6 @@ private struct TimerAlarmCard: View {
         .padding(16)
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Timer alarm")
+        .accessibilityLabel("Timer alarm. \(SystemTimerAlerts.howToStop)")
     }
 }

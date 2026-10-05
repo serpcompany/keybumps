@@ -106,7 +106,10 @@ final class TimerModule: CapabilityModule {
         timersTab = TimerPaletteContent(store: store, preferences: preferences, notices: notices)
         timersTab.shown = { [weak self] in self?.timersShown() }
         store.onFinish = { [weak self] finishes in self?.timersFinished(finishes) }
-        store.onChange = { [weak self] in self?.refreshMenuBar() }
+        store.onChange = { [weak self] in
+            self?.pruneAlarm()
+            self?.refreshMenuBar()
+        }
     }
 
     func apply(_ context: CapabilityContext) {
@@ -139,11 +142,11 @@ final class TimerModule: CapabilityModule {
     }
 
     private func stop() {
-        store.deactivate()
-        attention.clear()
-        alerts.stop()
         alarmed = []
         alarmRings = false
+        alerts.stop()
+        store.deactivate()
+        attention.clear()
         nextTick?.cancel()
         nextTick = nil
         menuBar.clear()
@@ -254,6 +257,21 @@ final class TimerModule: CapabilityModule {
         alerts.stop()
         store.markFinishesSeen()
         attention.clear()
+    }
+
+    /// Keeps the alarm to timers that are still finished: one restarted or deleted from the Timers
+    /// tab leaves it, and the alarm stops once none are left.
+    private func pruneAlarm() {
+        guard !alarmed.isEmpty else { return }
+        let finished = alarmed.filter { id in store.items.first { $0.id == id }?.isFinished == true }
+        guard finished != alarmed else { return }
+        alarmed = finished
+        if alarmed.isEmpty {
+            alarmRings = false
+            alerts.stop()
+        } else {
+            raiseAlarm(adding: [], rings: false)
+        }
     }
 
     private func repeatAlarmed() {
