@@ -50,6 +50,8 @@ xcodebuild -exportArchive \
   -exportOptionsPlist "$export_options"
 
 app_path="$output_directory/export/Keybumps.app"
+# What's New shows the notes the app carries (#225): exactly this release's.
+cmp -s "$app_path/Contents/Resources/WhatsNew.md" "$release_notes" || { print -u2 "the app doesn't carry this release's notes (Contents/Resources/WhatsNew.md)"; exit 70; }
 # KEYBUMPS_SKIP_NOTARIZATION=1 is an owner-authorized interim mode for when notarization is
 # unavailable: the app stays Developer ID-signed and strictly verified, but is not notarized, so
 # Gatekeeper asks customers to allow it on first open.

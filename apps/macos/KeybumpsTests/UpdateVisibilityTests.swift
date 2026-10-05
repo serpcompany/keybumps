@@ -283,6 +283,8 @@ struct WhatsNewTests {
         let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let script = try String(contentsOf: app.appendingPathComponent("scripts/build-update-release.sh"), encoding: .utf8)
         #expect(script.contains(#"KEYBUMPS_RELEASE_NOTES="$release_notes""#))
+        #expect(script.contains(#"cmp -s "$app_path/Contents/Resources/WhatsNew.md" "$release_notes""#),
+                "Compared with the source notes, before generate_appcast changes its copy")
         let project = try String(contentsOf: app.appendingPathComponent("project.yml"), encoding: .utf8)
         #expect(project.contains("WhatsNew.md"))
         #expect(WhatsNew.notesResourceName == "WhatsNew")
