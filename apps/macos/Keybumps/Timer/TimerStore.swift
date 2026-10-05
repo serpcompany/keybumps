@@ -52,6 +52,8 @@ final class TimerStore {
     private(set) var items: [TimerItem] = []
     /// Called with the timers that just ended, oldest end first.
     @ObservationIgnored var onFinish: ([TimerFinish]) -> Void = { _ in }
+    /// Called after every change to the timers.
+    @ObservationIgnored var onChange: () -> Void = {}
 
     private let storageURL: URL?
     private let fileManager: FileManager
@@ -229,6 +231,7 @@ final class TimerStore {
     /// them is logged.
     private func commit(_ next: [TimerItem]) {
         items = next
+        onChange()
         guard let storageURL else { return }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

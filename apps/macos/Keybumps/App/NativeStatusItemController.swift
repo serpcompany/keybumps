@@ -104,6 +104,11 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     private var checkForUpdatesAction: () -> Void = {}
     private var restartToUpdateAction: () -> Void = {}
     private var attention: MenuBarAttention?
+    private var status: MenuBarStatus?
+    /// The menu while it's open, and its capability items by ID, so they update in place.
+    private var openMenu: NSMenu?
+    private var statusMenuItems: [(id: String, item: NSMenuItem)] = []
+    private var statusActions: [String: @MainActor () -> Void] = [:]
 
     init(router: MainWindowRouter? = nil) {
         self.router = router ?? .shared
@@ -139,6 +144,11 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         self.attention = attention
     }
 
+    /// The text beside the icon and the menu's capability sections (`MenuBarStatus`).
+    func configureStatus(_ status: MenuBarStatus) {
+        self.status = status
+    }
+
     func install() {
         guard statusItem == nil else { return }
 
@@ -166,25 +176,72 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
 
     /// Shows or hides the red dot on the menu bar icon, and names its reasons for VoiceOver. Called
     /// whenever `MenuBarAttention` changes.
-    func refreshAttentionDot() {
-        guard let button = statusItem?.button else { return }
+    /// Redraws the menu bar item: the text beside the icon, the red dot on the icon, and their
+    /// VoiceOver name; and, while the menu is open, its capability items. Called whenever
+    /// `MenuBarAttention` or `MenuBarStatus` changes.
+    func refreshMenuBarItem() {
+        guard let item = statusItem, let button = item.button else { return }
+        if let title = status?.title {
+            item.length = NSStatusItem.variableLength
+            button.imagePosition = .imageLeading
+            button.attributedTitle = NSAttributedString(string: " \(title)", attributes: [
+                // Digits keep one width, so the item doesn't jiggle as it counts down.
+                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+            ])
+        } else {
+            item.length = NSStatusItem.squareLength
+            button.imagePosition = .imageOnly
+            button.title = ""
+        }
+        let productName = ReleaseLane.current.productName
+        let label = [attention?.accessibilityLabel(productName: productName) ?? productName, status?.spokenTitle]
+        button.setAccessibilityLabel(label.compactMap { $0 }.joined(separator: ", "))
+        refreshDot(on: button)
+        refreshOpenMenu()
+    }
+
+    private func refreshDot(on button: NSStatusBarButton) {
         let identifier = NSUserInterfaceItemIdentifier("attentionDot")
         let badge = button.subviews.first { $0.identifier == identifier }
-        let productName = ReleaseLane.current.productName
-        button.setAccessibilityLabel(attention?.accessibilityLabel(productName: productName) ?? productName)
         guard attention?.showsDot == true else {
             badge?.removeFromSuperview()
             return
         }
-        guard badge == nil else { return }
-        // The button's coordinates are flipped: y 1 is its top edge.
-        let dot = NSView(frame: NSRect(x: button.bounds.maxX - 8, y: 1, width: 7, height: 7))
-        dot.identifier = identifier
-        dot.wantsLayer = true
-        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
-        dot.layer?.cornerRadius = 3.5
-        dot.autoresizingMask = [.minXMargin, .maxYMargin]
-        button.addSubview(dot)
+        let dot = badge ?? {
+            let dot = NSView()
+            dot.identifier = identifier
+            dot.wantsLayer = true
+            dot.layer?.backgroundColor = NSColor.systemRed.cgColor
+            dot.layer?.cornerRadius = 3.5
+            button.addSubview(dot)
+            return dot
+        }()
+        // On the icon's top-right corner, also while text follows it. The button's coordinates
+        // are flipped: y 1 is its top edge.
+        button.layoutSubtreeIfNeeded()
+        let icon = button.cell?.imageRect(forBounds: button.bounds) ?? button.bounds
+        dot.frame = NSRect(x: min(icon.maxX, button.bounds.maxX) - 6, y: 1, width: 7, height: 7)
+    }
+
+    /// While the menu is open, a timer ticking updates its item in place; items coming or going
+    /// rebuild the menu.
+    private func refreshOpenMenu() {
+        guard let openMenu else { return }
+        let sections = status?.sections ?? []
+        let items = sections.flatMap { $0 }
+        guard items.map(\.id) == statusMenuItems.map(\.id) else {
+            populate(openMenu)
+            return
+        }
+        for (new, shown) in zip(items, statusMenuItems) where shown.item.title != new.title {
+            shown.item.title = new.title
+            statusActions[new.id] = new.action
+        }
+    }
+
+    @objc private func runStatusItem(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        statusActions[id]?()
     }
 
     /// Raycast's menu: open the app (with its hotkey), then About, updates, and Settings, then Quit.
@@ -197,6 +254,20 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
             restart.target = self
             restart.isEnabled = true
             restart.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(.separator())
+        }
+        // Capabilities' sections, such as running timers.
+        statusMenuItems = []
+        statusActions = [:]
+        for section in status?.sections ?? [] {
+            for statusItem in section {
+                let item = menu.addItem(withTitle: statusItem.title, action: #selector(runStatusItem(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = statusItem.id
+                item.image = statusItem.systemImage.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+                statusMenuItems.append((statusItem.id, item))
+                statusActions[statusItem.id] = statusItem.action
+            }
             menu.addItem(.separator())
         }
         let open = menu.addItem(withTitle: "Open Keybumps", action: #selector(toggleQuickSearch), keyEquivalent: "")
@@ -224,6 +295,11 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         quickSearchWasVisibleWhenMenuOpened = quickSearchIsVisible()
+        openMenu = menu
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        if openMenu === menu { openMenu = nil }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

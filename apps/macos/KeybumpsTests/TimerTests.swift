@@ -570,6 +570,107 @@ struct TimerModuleTests {
     }
 }
 
+// MARK: - The menu bar
+
+@MainActor
+@Suite("Timer: the menu bar")
+struct TimerMenuBarTests {
+    @Test("The soonest running timer shows beside the icon, with how many more run, and ticks each second")
+    func countdown() {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        #expect(fixture.menuBarStatus.title == nil, "Nothing runs")
+
+        fixture.store.start(duration: 2700, name: "Laundry")
+        fixture.store.start(duration: 300, name: "Tea")
+        #expect(fixture.menuBarStatus.title == "5:00 +1")
+        #expect(fixture.menuBarStatus.spokenTitle == "Tea, \(TimerText.spokenLength(300)) left, and 1 more timer")
+
+        fixture.clock.advance(1.01)
+        fixture.ticker.fire()
+        #expect(fixture.menuBarStatus.title == "4:59 +1")
+    }
+
+    @Test("Nothing ticks while no timer runs")
+    func noTicksWhenIdle() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        let tea = fixture.store.start(duration: 300, name: "Tea")
+        #expect(!fixture.ticker.pendingDates.isEmpty)
+
+        fixture.store.togglePause(tea.id)
+        #expect(fixture.ticker.pendingDates.isEmpty)
+        #expect(fixture.menuBarStatus.title == nil, "Only running timers count down")
+    }
+
+    @Test("The Keybumps menu lists running, paused, and unseen finished timers, then Open Timers")
+    func menuItems() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        #expect(fixture.menuBarStatus.sections.isEmpty, "No timers, no section")
+
+        let done = fixture.store.start(duration: 60, name: "Eggs")
+        fixture.clock.advance(60)
+        fixture.scheduler.fire()
+        let paused = fixture.store.start(duration: 900, name: "Standup")
+        fixture.store.togglePause(paused.id)
+        fixture.store.start(duration: 300, name: "Tea")
+
+        let titles = fixture.menuBarStatus.sections.first?.map(\.title)
+        #expect(titles == ["Eggs — finished", "Tea — 5:00", "Standup — 15:00, paused", "Open Timers"])
+
+        // Clicking a running timer pauses it; a finished one, or Open Timers, opens the tab.
+        let items = try #require(fixture.menuBarStatus.sections.first)
+        items[1].action()
+        #expect(fixture.store.items.first { $0.name == "Tea" }?.isRunning == false)
+        items[0].action()
+        items[3].action()
+        #expect(fixture.tabShows == 2)
+
+        // Once seen, a finished timer leaves the menu.
+        fixture.store.markFinishesSeen()
+        #expect(fixture.menuBarStatus.sections.first?.map(\.id).contains(done.id.uuidString) == false)
+    }
+
+    @Test("Each can be turned off in Settings, and turning Timer off clears both")
+    func switches() {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        let context = fixture.context(enabled: [.timer])
+        fixture.module.apply(context)
+        fixture.store.start(duration: 300, name: "Tea")
+
+        fixture.preferences.timerShowsMenuBarCountdown = false
+        fixture.module.apply(context)
+        #expect(fixture.menuBarStatus.title == nil)
+        #expect(!fixture.menuBarStatus.sections.isEmpty)
+
+        fixture.preferences.timerListsTimersInMenu = false
+        fixture.module.apply(context)
+        #expect(fixture.menuBarStatus.sections.isEmpty)
+        #expect(fixture.ticker.pendingDates.isEmpty, "Nothing to update")
+
+        fixture.preferences.timerShowsMenuBarCountdown = true
+        fixture.preferences.timerListsTimersInMenu = true
+        fixture.module.apply(context)
+        #expect(fixture.menuBarStatus.title != nil)
+        fixture.module.deactivate(context)
+        #expect(fixture.menuBarStatus.title == nil)
+        #expect(fixture.menuBarStatus.sections.isEmpty)
+        #expect(fixture.ticker.pendingDates.isEmpty)
+    }
+
+    @Test("Both are on by default")
+    func defaults() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        #expect(preferences.timerShowsMenuBarCountdown)
+        #expect(preferences.timerListsTimersInMenu)
+    }
+}
+
 // MARK: - Notices that wait for the notch
 
 @MainActor
@@ -738,6 +839,12 @@ private final class ModuleFixture {
     let alerts = RecordingTimerAlerts()
     let notices = RecordingTimerNotices()
     let attention = MenuBarAttention()
+    let menuBarStatus = MenuBarStatus()
+    /// The module's once-a-second menu bar wake-ups.
+    let ticker = ManualTimerScheduler()
+    private final class Counter { var count = 0 }
+    private let tabShowCounter = Counter()
+    var tabShows: Int { tabShowCounter.count }
     let store: TimerStore
     let palette: CommandPaletteController
     let module: TimerModule
@@ -791,9 +898,12 @@ private final class ModuleFixture {
             store: store,
             preferences: preferences,
             attention: CapabilityMenuBarAttention(attention: attention, capability: .timer),
+            menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .timer),
             alerts: alerts,
             notices: notices,
-            timersTabIsShowing: { timersTabIsShowing }
+            timersTabIsShowing: { timersTabIsShowing },
+            showTimersTab: { [tabShowCounter] in tabShowCounter.count += 1 },
+            ticker: ticker
         )
     }
 

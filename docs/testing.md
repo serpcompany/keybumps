@@ -66,7 +66,7 @@ Permission-gated and system-level features are faked in automated tests, never g
 
 Give boolean flags an explicit `YES`. In CI, adding AppKit arguments (`-NSAutomaticWindowAnimationsEnabled NO -ApplePersistenceIgnoreState YES`) after a bare flag stopped the main window from appearing, so the smoke suite doesn't pass them.
 
-Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, `palette.settings` (the palette's Settings button), `quickSearch.command.<command>` (a Quick Search command row: `keybumpsSettings`, or a capability command's `Capability` ID such as `dictation`), `quickSearch.noRecentItems` (the empty search with no Recent Items to show), `palette.snippets.new` and `snippets.*` (the Snippets tab and editor), `palette.timers.new` and `palette.timers.row` (the Timers tab's rows), `timer.sound` (Timer's Play a sound switch), and the `commandPalette` and `screenshotEditor` windows.
+Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `settings.detail.<section>`, `capability.toggle.<capability>`, `palette.tab.<tab>`, `palette.settings` (the palette's Settings button), `quickSearch.command.<command>` (a Quick Search command row: `keybumpsSettings`, or a capability command's `Capability` ID such as `dictation`), `quickSearch.noRecentItems` (the empty search with no Recent Items to show), `palette.snippets.new` and `snippets.*` (the Snippets tab and editor), `palette.timers.new` and `palette.timers.row` (the Timers tab's rows), `timer.sound`, `timer.menuBarCountdown`, and `timer.menuList` (Timer's switches), and the `commandPalette` and `screenshotEditor` windows.
 
 ## CI
 

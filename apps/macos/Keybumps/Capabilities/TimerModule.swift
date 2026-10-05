@@ -78,8 +78,10 @@ struct InertTimerAlerts: TimerAlerting {
 }
 
 /// Owns the Timers tab, its optional Open Timers shortcut, and the timers' ends: a notch notice,
-/// a sound unless it's off, and the menu bar dot until the Timers tab shows. It runs nothing while
-/// no timer runs: `TimerStore` schedules one wake-up, for the soonest end.
+/// a sound unless it's off, and the menu bar dot until the Timers tab shows. While a timer runs it
+/// also shows the soonest beside the menu bar icon and lists the timers in the Keybumps menu (each
+/// can be turned off), updating them once a second. It runs nothing while no timer runs:
+/// `TimerStore` schedules one wake-up, for the soonest end.
 @MainActor
 final class TimerModule: CapabilityModule {
     /// A timer that ended at most this long ago finishes as usual, with its sound: about the gap an
@@ -94,19 +96,31 @@ final class TimerModule: CapabilityModule {
     private let preferences: AppPreferences
     private let attention: CapabilityMenuBarAttention
     private let alerts: any TimerAlerting
+    private let menuBar: CapabilityMenuBarStatus
     /// Whether the palette is showing the Timers tab; tests replace it.
     private let timersTabIsShowing: () -> Bool
+    /// Opens the palette on the Timers tab; tests replace it.
+    private let showTimersTab: () -> Void
+    /// Wakes the module once a second while a timer runs, to update the menu bar.
+    private let ticker: any TimerScheduling
+    private var nextTick: (any TimerScheduledAction)?
 
     init(
         palette: CommandPaletteController,
         store: TimerStore,
         preferences: AppPreferences,
         attention: CapabilityMenuBarAttention,
+        menuBar: CapabilityMenuBarStatus,
         alerts: any TimerAlerting,
         notices: any PaletteNoticePresenting = PaletteHUD.shared,
-        timersTabIsShowing: (() -> Bool)? = nil
+        timersTabIsShowing: (() -> Bool)? = nil,
+        showTimersTab: (() -> Void)? = nil,
+        ticker: (any TimerScheduling)? = nil
     ) {
         self.timersTabIsShowing = timersTabIsShowing ?? { [weak palette] in palette?.isDisplaying(.timers) ?? false }
+        self.showTimersTab = showTimersTab ?? { [weak palette] in palette?.show(.timers) }
+        self.ticker = ticker ?? WallClockTimerScheduler()
+        self.menuBar = menuBar
         self.palette = palette
         self.store = store
         self.preferences = preferences
@@ -115,6 +129,7 @@ final class TimerModule: CapabilityModule {
         timersTab = TimerPaletteContent(store: store, preferences: preferences, notices: notices)
         timersTab.shown = { [weak self] in self?.timersShown() }
         store.onFinish = { [weak self] finishes in self?.timersFinished(finishes) }
+        store.onChange = { [weak self] in self?.refreshMenuBar() }
     }
 
     func apply(_ context: CapabilityContext) {
@@ -126,6 +141,7 @@ final class TimerModule: CapabilityModule {
             palette?.toggle(.timers)
         }
         if context.isEnabled(capability) {
+            defer { refreshMenuBar() }
             guard !store.isActive else { return }
             store.activate()
             // A finish not yet seen before a relaunch keeps its dot.
@@ -145,6 +161,73 @@ final class TimerModule: CapabilityModule {
         store.deactivate()
         attention.clear()
         alerts.cancelWaitingAnnouncement()
+        nextTick?.cancel()
+        nextTick = nil
+        menuBar.clear()
+    }
+
+    // MARK: Menu bar
+
+    /// Shows the soonest running timer beside the menu bar icon and lists the timers in the
+    /// Keybumps menu, each unless turned off, and wakes again when the soonest shows a new second.
+    private func refreshMenuBar() {
+        nextTick?.cancel()
+        nextTick = nil
+        guard store.isActive else {
+            menuBar.clear()
+            return
+        }
+        let now = store.now()
+        let countdown = preferences.timerShowsMenuBarCountdown ? Self.countdown(of: store.displayed, now: now) : nil
+        menuBar.setTitle(countdown?.title, spoken: countdown?.spoken)
+        menuBar.setItems(preferences.timerListsTimersInMenu ? menuItems(now: now) : [])
+
+        let showsTime = preferences.timerShowsMenuBarCountdown || preferences.timerListsTimersInMenu
+        guard showsTime, let soonest = store.displayed.first(where: \.isRunning) else { return }
+        // The clock rounds up, so the shown second changes as the time left crosses a whole second.
+        let remaining = soonest.remaining(at: now)
+        let untilNextSecond = remaining - remaining.rounded(.down)
+        let wait = untilNextSecond > 0.001 ? untilNextSecond : 1
+        nextTick = ticker.schedule(at: now.addingTimeInterval(wait + 0.01)) { [weak self] in self?.refreshMenuBar() }
+    }
+
+    /// What the menu bar shows beside the icon: the soonest running timer's time left, and how many
+    /// more run (`3:12 +2`). Nil while none runs.
+    static func countdown(of timers: [TimerItem], now: Date) -> (title: String, spoken: String)? {
+        let running = timers.filter(\.isRunning)
+        guard let soonest = running.first else { return nil }
+        let others = running.count - 1
+        let remaining = soonest.remaining(at: now)
+        let title = TimerText.clock(remaining) + (others > 0 ? " +\(others)" : "")
+        var spoken = "\(soonest.title), \(TimerText.spokenLength(remaining)) left"
+        if others > 0 { spoken += ", and \(others) more \(others == 1 ? "timer" : "timers")" }
+        return (title, spoken)
+    }
+
+    /// The Keybumps menu's Timers section: running and paused timers, finished ones not yet seen,
+    /// and Open Timers. Clicking a timer pauses or resumes it; a finished one opens the Timers tab.
+    private func menuItems(now: Date) -> [MenuBarItem] {
+        let timers = store.displayed.filter { item in
+            if case .finished(_, let seen) = item.state { return !seen }
+            return true
+        }
+        guard !timers.isEmpty else { return [] }
+        let store = store
+        let showTimersTab = showTimersTab
+        let rows = timers.map { item in
+            switch item.state {
+            case .running:
+                MenuBarItem(id: item.id.uuidString, title: "\(item.title) — \(TimerText.clock(item.remaining(at: now)))",
+                            systemImage: "timer", action: { store.togglePause(item.id) })
+            case .paused(let remaining):
+                MenuBarItem(id: item.id.uuidString, title: "\(item.title) — \(TimerText.clock(remaining)), paused",
+                            systemImage: "pause.circle", action: { store.togglePause(item.id) })
+            case .finished:
+                MenuBarItem(id: item.id.uuidString, title: "\(item.title) — finished",
+                            systemImage: "checkmark.circle", action: showTimersTab)
+            }
+        }
+        return rows + [MenuBarItem(id: "openTimers", title: "Open Timers", systemImage: "list.bullet", action: showTimersTab)]
     }
 
     private func timersShown() {

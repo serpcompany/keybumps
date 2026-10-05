@@ -130,8 +130,10 @@ enum AppShellLaunch {
             restartWhenSafe: model.restartToUpdate
         )
         NativeStatusItemController.shared.configureAttention(model.menuBarAttention)
+        NativeStatusItemController.shared.configureStatus(model.menuBarStatus)
         NativeStatusItemController.shared.install()
-        model.menuBarAttention.onChange = { NativeStatusItemController.shared.refreshAttentionDot() }
-        NativeStatusItemController.shared.refreshAttentionDot()
+        model.menuBarAttention.onChange = { NativeStatusItemController.shared.refreshMenuBarItem() }
+        model.menuBarStatus.onChange = { NativeStatusItemController.shared.refreshMenuBarItem() }
+        NativeStatusItemController.shared.refreshMenuBarItem()
     }
 }
