@@ -63,12 +63,12 @@ struct PluginsSettingsView: View {
         SettingsPage {
             HStack(spacing: 8) {
                 SettingsSearchField(text: $query, prompt: "Search plugins…", identifier: "plugins.search")
-                Button { openURL(PluginStore.url) } label: {
-                    Label("Store", systemImage: "arrow.up.right")
+                Button { openURL(PluginLinks.website) } label: {
+                    Label("Browse on keybumps.app", systemImage: "arrow.up.right")
                         .labelStyle(.titleAndIcon)
                 }
-                .help("Browse plugins on keybumps.app, in your browser")
-                .accessibilityIdentifier("plugins.openStore")
+                .help("Opens keybumps.app/plugins in your browser")
+                .accessibilityIdentifier("plugins.browseWebsite")
             }
             if sections.isEmpty {
                 SettingsNote("No plugins match.")

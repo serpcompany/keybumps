@@ -288,9 +288,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .settings(let section):
             dismiss()
             openSettings(section)
-        case .website(let url):
-            dismiss()
-            _ = openURL(url)
         }
     }
 
@@ -1362,8 +1359,8 @@ private struct QuickSearchCommandRow: View {
         case .capability(let capability):
             SettingsIconTile(systemImage: capability.systemImage, tint: capability.descriptor.iconTint, size: 24)
                 .accessibilityHidden(true)
-        case .store:
-            SettingsIconTile(systemImage: PluginStore.systemImage, tint: .indigo, size: 24)
+        case .plugins:
+            SettingsIconTile(systemImage: SettingsSection.plugins.icon, tint: .indigo, size: 24)
                 .accessibilityHidden(true)
         }
     }

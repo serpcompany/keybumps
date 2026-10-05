@@ -118,7 +118,7 @@ struct QuickSearchCommandTests {
         // Capability commands whose names or keywords start with "s" follow too (#182).
         #expect(items("s") == [
             .result(safari), .result(systemSettings), .result(keybumpsApp),
-            .command(settings), .command(.store), .command(.capability(.screenshotTools)), .command(.capability(.dictation)),
+            .command(settings), .command(.capability(.screenshotTools)), .command(.capability(.dictation)),
             .command(.capability(.windowManagement)), .command(.capability(.keyboardShortcutter)),
             .command(.capability(.snippets)),
         ])

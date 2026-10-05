@@ -18,9 +18,9 @@ struct CapabilityCommandTests {
 
     // MARK: Names
 
-    @Test("Keybumps Settings and the Store come first, then one command per capability except Quick Search, in registry order")
+    @Test("Keybumps Settings and Plugins come first, then one command per capability except Quick Search, in registry order")
     func commands() {
-        #expect(QuickSearchCommand.allCases == [.keybumpsSettings, .store, clipboard, screenshots, dictation, windows, coach, snippets, timer])
+        #expect(QuickSearchCommand.allCases == [.keybumpsSettings, .plugins, clipboard, screenshots, dictation, windows, coach, snippets, timer])
     }
 
     @Test("A capability has a command exactly when its descriptor declares search keywords")
@@ -35,12 +35,12 @@ struct CapabilityCommandTests {
     @Test("Each command carries its capability's name, not its tab label, and the Command kind")
     func names() {
         #expect(QuickSearchCommand.allCases.map(\.title) == [
-            "Keybumps Settings", "Store", "Clipboard History", "Screenshot Tools", "Dictation", "Window Manager", "Shortcut Coach",
+            "Keybumps Settings", "Plugins", "Clipboard History", "Screenshot Tools", "Dictation", "Window Manager", "Shortcut Coach",
             "Snippets", "Timer",
         ])
         #expect(QuickSearchCommand.allCases.allSatisfy { $0.kindLabel == "Command" })
         #expect(QuickSearchCommand.allCases.map(\.id) == [
-            "keybumpsSettings", "store", "clipboardHistory", "screenshotTools", "dictation", "windowManagement", "keyboardShortcutter",
+            "keybumpsSettings", "plugins", "clipboardHistory", "screenshotTools", "dictation", "windowManagement", "keyboardShortcutter",
             "snippets", "timer",
         ])
     }

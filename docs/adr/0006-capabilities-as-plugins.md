@@ -1,4 +1,4 @@
-# 0006: Capabilities are Keybumps's plugins: a default set, added ones, and an official-only Store
+# 0006: Capabilities are Keybumps's plugins: a default set, added ones, and an official-only plugin list
 
 Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands.
 
@@ -22,11 +22,11 @@ That model needs a runtime for outside code, an isolation and permission model, 
    - is listed in its own Settings group, below the default ones.
 
    Timer is the first.
-4. **An official-only Store, modeled on Raycast (#239).** The owner's call: build the Raycast shape now, listing only official plugins built by Keybumps.
+4. **An official-only plugin list, modeled on Raycast's Store (#239).** The owner's call: build the Raycast shape now, listing only official plugins built by Keybumps.
    - **Plugin manifests:** each capability declares its name, summary, icon, category, commands, the permissions it needs, and its preferences as typed settings. Its preferences are stored under the plugin's own name.
    - **One settings template:** the shell draws every plugin's Settings page from its manifest in a fixed order: header, Commands, permissions, preferences. A plugin's genuinely custom parts, such as the Snippets library, go in one slot below.
    - **Settings › Plugins:** like Raycast's Extensions list, a searchable page of every plugin with its palette tab, shortcut, and switch. Each plugin keeps its own row in the Settings sidebar, one column as before, and a row on the Plugins page opens it.
-   - **The Store:** the plugin directory on keybumps.app at `/plugins`, opened in the browser from Quick Search's Store command or the Store button in Settings › Plugins. It lists every official plugin by category, each shown as "Official · by Keybumps". Every plugin ships in the app, so the Store only shows them; Settings › Plugins turns them on and off. The owner chose the website over a Store inside the Command Palette (2026-10-06).
+   - **Plugins on keybumps.app:** the website's Plugins page at `/plugins`, with a page for each plugin, which Settings › Plugins links to ("Browse on keybumps.app"). It lists every official plugin by category, each shown as "Official · by Keybumps". Every plugin ships in the app, so the website only shows them; Settings › Plugins turns them on and off, and Quick Search's Plugins command opens it. On 2026-10-06 the owner chose the website over a Store inside the Command Palette, and the name Plugins over Store.
    - **Not yet:** Keybumps never downloads or loads code. Every plugin listed ships inside the app.
 5. **Revisit with a new ADR** if capabilities should update separately from the app, or other people should write them. That ADR has to settle:
    - how the code runs (a manifest and a script runtime, or signed bundles);
@@ -37,11 +37,11 @@ That model needs a runtime for outside code, an isolation and permission model, 
 
 ## Consequences
 
-- Adding a capability takes an app release, and only Keybumps writes them. Its manifest is the part a third-party plugin would one day provide, so the settings template won't need to change if that day comes. The website's Store keeps its own copy of each manifest's facts (`apps/web/src/lib/plugins.ts`).
+- Adding a capability takes an app release, and only Keybumps writes them. Its manifest is the part a third-party plugin would one day provide, so the settings template won't need to change if that day comes. The website's Plugins page keeps its own copy of each manifest's facts (`apps/web/src/lib/plugins.ts`).
 - Each new capability's PR, or its release, also:
   - adds its terms to `CONTEXT.md`;
   - writes its What's New lines in `docs/releases/`;
-  - adds it to the website's feature grid and its Store page (`apps/web/src/lib/plugins.ts`), and to the privacy page if it keeps anything;
+  - adds it to the website's feature grid and its Plugins page (`apps/web/src/lib/plugins.ts`), and to the privacy page if it keeps anything;
   - adds a donor ledger entry and a `LICENSE.*` if it adapts outside code;
   - adds a UI smoke test that opens its tab or page.
 - The shell seams Timer needed now serve every capability: a module's own palette tab (`CapabilityPaletteContent`), the menu bar dot (`MenuBarAttention`), text and menu sections on the menu bar item (`MenuBarStatus`), and waiting for the notch (`PaletteHUD.whenNotchFree`).
