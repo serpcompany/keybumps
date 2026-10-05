@@ -75,8 +75,8 @@ struct UpdateReminderTests {
         #expect(fixture.presenter.shown.count == 1, "No second prompt while the restart happens")
     }
 
-    @Test("It closes when nothing is waiting or restarting stops being safe, and stays away while the palette is open")
-    func closesAndWaits() {
+    @Test("An open prompt stays put while restarting is briefly unsafe; only a new one waits")
+    func staysPut() {
         let fixture = ReminderFixture(snapshot: Self.ready)
         fixture.paletteIsOpen = true
         fixture.reminder.evaluate()
@@ -86,15 +86,59 @@ struct UpdateReminderTests {
         fixture.reminder.evaluate()
         #expect(fixture.presenter.isShowing)
         fixture.isSafe = false
+        fixture.paletteIsOpen = true
         fixture.reminder.evaluate()
-        #expect(!fixture.presenter.isShowing, "Dictation started: Restart Now couldn't work now")
-        fixture.isSafe = true
-        fixture.reminder.evaluate()
-        #expect(fixture.presenter.shown.count == 2, "Back once it's safe; closing it wasn't a Later")
+        #expect(fixture.presenter.isShowing, "A window drag or the palette doesn't close or move it")
+        #expect(fixture.presenter.shown.count == 1)
 
         fixture.snapshot = Self.idle
         fixture.reminder.evaluate()
         #expect(!fixture.presenter.isShowing, "Nothing left to restart for")
+    }
+
+    @Test("Restart Now while restarting isn't safe restarts as soon as it is")
+    func restartWhenSafe() {
+        let fixture = ReminderFixture(snapshot: Self.ready)
+        fixture.reminder.evaluate()
+        fixture.isSafe = false
+        fixture.presenter.chooseRestart()
+        #expect(fixture.restarts == 0)
+        #expect(!fixture.presenter.isShowing)
+        fixture.reminder.evaluate()
+        #expect(fixture.restarts == 0, "Still recording")
+        fixture.isSafe = true
+        fixture.reminder.evaluate()
+        #expect(fixture.restarts == 1)
+        fixture.reminder.evaluate()
+        #expect(fixture.restarts == 1, "Once")
+    }
+
+    @Test("A waiting update reaches the prompt and the red dot through the app model")
+    func appModelWiring() {
+        let fake = FakeUpdateController()
+        let presenter = RecordingPromptPresenter()
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+            presenceController: UpdaterTestPresenceController(),
+            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+            updater: fake,
+            updatePrompt: presenter
+        )
+        var badgeRefreshes = 0
+        model.onUpdateSnapshotChange = { badgeRefreshes += 1 }
+
+        fake.emit(.readyToRestart(version: "0.0.3-beta.14"), canRestart: true)
+        #expect(badgeRefreshes == 1)
+        #expect(presenter.shown == ["0.0.3-beta.14"])
+        presenter.chooseRestart()
+        #expect(fake.restartCount == 1)
+    }
+
+    @Test("Update previews work only in QA and Debug builds")
+    func previewsOnlyOutsidePublicBuilds() {
+        #expect(UpdatePreview.isAllowed(version: "0.0.3-dev.issue225"))
+        #expect(!UpdatePreview.isAllowed(version: "0.0.3-beta.14") || UpdatePreview.isDebugBuild)
     }
 
     @Test("The prompt says which version is waiting, or just that an update is")

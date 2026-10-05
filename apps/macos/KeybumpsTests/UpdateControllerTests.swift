@@ -2,24 +2,24 @@ import AppKit
 import XCTest
 @testable import Keybumps
 
-private final class UpdaterTestEventPersistence: EventPersistence {
+final class UpdaterTestEventPersistence: EventPersistence {
     func load() throws -> [CoachingEvent] { [] }
     func save(_ events: [CoachingEvent]) throws {}
 }
 
 @MainActor
-private struct UpdaterTestPresenceController: AppPresenceControlling {
+struct UpdaterTestPresenceController: AppPresenceControlling {
     func apply(showInDockAndSwitcher: Bool) {}
 }
 
-private final class UpdaterTestPointerMonitor: PointerEventMonitoring {
+final class UpdaterTestPointerMonitor: PointerEventMonitoring {
     var onSample: ((PointerSample) -> Void)?
     var onTapRecovered: (() -> Void)?
     func start() -> Bool { false }
     func stop() {}
 }
 
-private struct UpdaterTestPermissions: DetectorPermissionProviding {
+struct UpdaterTestPermissions: DetectorPermissionProviding {
     let isAccessibilityTrusted = false
     let isInputMonitoringAuthorized = false
     func requestAccessibility() {}
@@ -27,7 +27,7 @@ private struct UpdaterTestPermissions: DetectorPermissionProviding {
 }
 
 @MainActor
-private final class FakeUpdateController: UpdateControlling {
+final class FakeUpdateController: UpdateControlling {
     private(set) var snapshot = UpdateSnapshot(status: .idle, automaticallyChecks: true, canCheck: false, canRestart: false)
     var onChange: ((UpdateSnapshot) -> Void)?
     private(set) var startCount = 0

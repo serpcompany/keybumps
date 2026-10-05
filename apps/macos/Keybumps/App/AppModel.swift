@@ -339,6 +339,17 @@ final class AppModel {
         updateReminder.start()
         updateReminder.evaluate()
         showWhatsNewIfNeeded()
+        previewUpdateWindowsIfAsked()
+    }
+
+    /// QA and Debug builds only: shows both update windows (`UpdatePreview`).
+    private func previewUpdateWindowsIfAsked() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        guard UpdatePreview.isAllowed(version: version),
+              ProcessInfo.processInfo.arguments.contains(UpdatePreview.argument) else { return }
+        if let notes = WhatsNew.bundledNotes() { whatsNew.show(ReleaseNotesDocument(markdown: notes)) }
+        let prompt = updateReminder.presenter
+        prompt.show(version: "\(version) (preview)", restart: { prompt.close() }, later: { prompt.close() })
     }
 
     /// After an update, shows that version's release notes once (#225), then records the version.
@@ -346,7 +357,8 @@ final class AppModel {
         currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
         notes: String? = WhatsNew.bundledNotes()
     ) {
-        let shows = notes != nil && WhatsNew.shouldShow(
+        // QA candidates carry notes for the preview but don't show them on every new candidate.
+        let shows = notes != nil && !currentVersion.contains("-dev.") && WhatsNew.shouldShow(
             currentVersion: currentVersion,
             lastLaunchedVersion: preferences.lastLaunchedVersion,
             completedOnboarding: preferences.didCompleteOnboarding,

@@ -19,9 +19,9 @@ enum UpdatePromptText {
 
 /// Asks to restart for a downloaded update, so nobody has to remember to (#225): as soon as an
 /// update is ready and restarting is safe (`UpdateInstallationSafetyPolicy`, so never during
-/// Dictation or an unsaved screenshot edit) and the Command Palette is closed, then again an hour
-/// after each Later, every hour until the restart. It closes itself while those stop holding, and it
-/// never restarts on its own.
+/// Dictation, an unsaved screenshot edit, or a window being moved) and the Command Palette is
+/// closed, then again an hour after each Later, every hour until the restart. Restart Now clicked
+/// while restarting isn't safe restarts as soon as it is. It never restarts unasked.
 @MainActor
 final class UpdateReminder {
     static let interval: TimeInterval = 60 * 60
@@ -29,13 +29,15 @@ final class UpdateReminder {
     private let snapshot: () -> UpdateSnapshot
     private let isSafe: () -> Bool
     private let restart: () -> Void
-    private let presenter: any UpdatePromptPresenting
+    let presenter: any UpdatePromptPresenting
     private let now: () -> Date
     private var laterAt: Date?
     private var laterVersion: String?
     private var timer: Timer?
-    /// While true, the prompt waits: the Command Palette is open, so it never takes its keys.
+    /// While true, no new prompt appears: the Command Palette is open.
     var isSuppressed: () -> Bool = { false }
+    /// Restart Now was clicked while restarting wasn't safe.
+    private var restartRequested = false
 
     init(
         snapshot: @escaping () -> UpdateSnapshot,
@@ -73,12 +75,22 @@ final class UpdateReminder {
     func evaluate() {
         let current = snapshot()
         let version = current.status.pendingVersion
-        guard current.canRestart, isSafe(), !isSuppressed() else {
-            // Restart Now couldn't work now, or the palette needs the keys: it comes back, not as a Later.
+        guard current.canRestart else {
+            restartRequested = false
             if presenter.isShowing { presenter.close() }
             return
         }
-        guard !presenter.isShowing else { return }
+        // Restart Now was clicked while restarting wasn't safe: restart as soon as it is.
+        if restartRequested {
+            if isSafe() {
+                restartRequested = false
+                restart()
+            }
+            return
+        }
+        // An open prompt stays where the user put it. Moments that aren't safe (Dictation, a window
+        // being dragged or snapped) or the open palette only keep a new one from appearing.
+        guard !presenter.isShowing, isSafe(), !isSuppressed() else { return }
         if let laterAt, laterVersion == version, now().timeIntervalSince(laterAt) < Self.interval { return }
         presenter.show(
             version: version,
@@ -88,7 +100,11 @@ final class UpdateReminder {
                 laterAt = now()
                 laterVersion = version
                 presenter.close()
-                restart()
+                if isSafe() {
+                    restart()
+                } else {
+                    restartRequested = true
+                }
             },
             later: { [weak self] in
                 guard let self else { return }
@@ -124,6 +140,8 @@ final class UpdatePromptWindowController: NSObject, UpdatePromptPresenting, NSWi
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
+        // ⌘H and Hide Others hide Keybumps' windows; this one stays.
+        panel.canHide = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
         panel.delegate = self
@@ -184,5 +202,24 @@ struct UpdatePromptView: View {
         }
         .padding(20)
         .frame(width: 420)
+    }
+}
+
+/// Shows the restart prompt and What's New on demand, so they can be checked before a release
+/// ships them: only in QA candidates (`-dev.` versions) and Debug builds, launched with
+/// `-KBPreviewUpdates YES`. The prompt's buttons only close it.
+enum UpdatePreview {
+    static let argument = "-KBPreviewUpdates"
+
+    static var isDebugBuild: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
+    static func isAllowed(version: String) -> Bool {
+        isDebugBuild || version.contains("-dev.")
     }
 }

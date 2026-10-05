@@ -59,12 +59,15 @@ candidate_version="${baseline_version%%-*}-dev.issue$issue"
 output="$candidates_dir/$candidate_build"
 mkdir -p "$output"
 
+# The newest release's notes, for the update preview (`-KBPreviewUpdates YES`, UpdatePreview).
+latest_notes=$(ls "$app_root"/../../docs/releases/v*.md | sort -V | tail -1)
 print "Building $candidate_version ($candidate_build) from $branch @ $short_commit"
 xcodegen generate >/dev/null
 xcodebuild -quiet -project Keybumps.xcodeproj -scheme Keybumps-Release -configuration Release \
   -archivePath "$output/Keybumps.xcarchive" \
   MARKETING_VERSION="$candidate_version" CURRENT_PROJECT_VERSION="$candidate_build" \
-  KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" archive
+  KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" \
+  KEYBUMPS_RELEASE_NOTES="$latest_notes" archive
 xcodebuild -quiet -exportArchive \
   -archivePath "$output/Keybumps.xcarchive" \
   -exportPath "$output/export" \
