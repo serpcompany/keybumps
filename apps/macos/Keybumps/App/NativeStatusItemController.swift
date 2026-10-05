@@ -103,6 +103,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     }
     private var checkForUpdatesAction: () -> Void = {}
     private var restartToUpdateAction: () -> Void = {}
+    private var attention: MenuBarAttention?
 
     init(router: MainWindowRouter? = nil) {
         self.router = router ?? .shared
@@ -133,6 +134,11 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         restartToUpdateAction = restartWhenSafe
     }
 
+    /// The red dot's source: updates and capability modules set their reasons on it.
+    func configureAttention(_ attention: MenuBarAttention) {
+        self.attention = attention
+    }
+
     func install() {
         guard statusItem == nil else { return }
 
@@ -158,19 +164,16 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         return menu
     }
 
-    /// Whether the menu bar icon shows the red dot: an update is waiting for a restart (#225).
-    static func showsUpdateBadge(_ snapshot: UpdateSnapshot) -> Bool {
-        snapshot.canRestart
-    }
-
-    /// Shows or hides the red dot on the menu bar icon. Called whenever the update state changes.
-    func refreshUpdateBadge() {
+    /// Shows or hides the red dot on the menu bar icon, and names its reasons for VoiceOver. Called
+    /// whenever `MenuBarAttention` changes.
+    func refreshAttentionDot() {
         guard let button = statusItem?.button else { return }
-        let identifier = NSUserInterfaceItemIdentifier("updateBadge")
+        let identifier = NSUserInterfaceItemIdentifier("attentionDot")
         let badge = button.subviews.first { $0.identifier == identifier }
-        guard Self.showsUpdateBadge(updateSnapshot()) else {
+        let productName = ReleaseLane.current.productName
+        button.setAccessibilityLabel(attention?.accessibilityLabel(productName: productName) ?? productName)
+        guard attention?.showsDot == true else {
             badge?.removeFromSuperview()
-            button.setAccessibilityLabel(ReleaseLane.current.productName)
             return
         }
         guard badge == nil else { return }
@@ -182,7 +185,6 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         dot.layer?.cornerRadius = 3.5
         dot.autoresizingMask = [.minXMargin, .maxYMargin]
         button.addSubview(dot)
-        button.setAccessibilityLabel("\(ReleaseLane.current.productName), update ready")
     }
 
     /// Raycast's menu: open the app (with its hotkey), then About, updates, and Settings, then Quit.

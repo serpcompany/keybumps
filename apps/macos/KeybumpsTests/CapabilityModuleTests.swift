@@ -26,6 +26,16 @@ struct CapabilityModuleTests {
         }
     }
 
+    @Test("Shortcut Coach's module supplies the Hotkeys rows, and the app gives them to the palette")
+    func hotkeysRowsComeFromTheModule() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+
+        #expect(Array(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter])
+        #expect(harness.model.capabilities.module(for: .keyboardShortcutter)?.paletteContent?.tab == .keyboardShortcutter)
+        #expect(Array(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter])
+    }
+
     // MARK: Licensing gate (ADR 0002)
 
     @Test("Locked runs no capability, and activating starts them")

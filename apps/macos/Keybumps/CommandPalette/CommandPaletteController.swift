@@ -78,41 +78,21 @@ struct CommandPaletteTabLabel: Equatable {
     let name: String
 }
 
-enum KeyboardShortcutterHistoryContent: Equatable {
-    case disabled
-    case empty
-    case entries([CoachingEvent])
-
-    static func resolve(
-        events: [CoachingEvent],
-        query rawQuery: String,
-        isEnabled: Bool
-    ) -> KeyboardShortcutterHistoryContent {
-        guard isEnabled else { return .disabled }
-        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = query.isEmpty ? events : events.filter {
-            $0.actionTitle.localizedCaseInsensitiveContains(query)
-                || $0.applicationName.localizedCaseInsensitiveContains(query)
-                || $0.shortcut.localizedCaseInsensitiveContains(query)
-        }
-        return matches.isEmpty ? .empty : .entries(matches)
-    }
-
-    var entries: [CoachingEvent] {
-        guard case .entries(let entries) = self else { return [] }
-        return entries
-    }
-}
-
 @MainActor
 @Observable
 final class CommandPaletteState {
     private(set) var tab: CommandPaletteTab = .search
     var historyQuery = "" {
         // Snippets re-ranks as you type, so a new search starts on its top match, as Quick Search's
-        // does. The other history tabs only filter.
-        didSet { if tab == .snippets, historyQuery != oldValue { selection = 0 } }
+        // does, and so does any module tab that asks. The other history tabs only filter.
+        didSet {
+            if tab == .snippets || tabsResettingSelectionWhileTyping.contains(tab), historyQuery != oldValue {
+                selection = 0
+            }
+        }
     }
+    /// The module-supplied tabs whose rows re-rank as you type.
+    var tabsResettingSelectionWhileTyping: Set<CommandPaletteTab> = []
     var selection = 0
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
@@ -151,7 +131,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
     private let dictationService: DictationService
-    private let inbox: InboxStore
     private let preferences: AppPreferences
     private let snippets: SnippetStore
     /// The paste step Dictation also uses; the palette's copies write `pasteboard` directly.
@@ -159,6 +138,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let pasteboard: NSPasteboard
     /// Internal so tests can set the tab, search, and selection without showing the panel.
     let state = CommandPaletteState()
+    /// The tabs whose rows their capability modules supply (`CapabilityRegistry.paletteContents`).
+    /// Every key and footer action on those tabs goes to their content, never to a case here. The
+    /// shell sets it once, before the palette first shows.
+    var tabContents: [CommandPaletteTab: any CapabilityPaletteContent] = [:] {
+        didSet {
+            assert(panel == nil, "Set the palette's tab contents before it first shows")
+            state.tabsResettingSelectionWhileTyping = Set(tabContents.values.filter(\.resetsSelectionWhileTyping).map(\.tab))
+        }
+    }
     private var panel: NSPanel?
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
@@ -191,7 +179,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         clipboard: ClipboardHistoryService,
         dictationHistory: DictationHistoryService,
         dictationService: DictationService,
-        inbox: InboxStore,
         preferences: AppPreferences,
         snippets: SnippetStore,
         paster: any TextPasting = InertTextPaster(),
@@ -206,7 +193,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         self.clipboard = clipboard
         self.dictationHistory = dictationHistory
         self.dictationService = dictationService
-        self.inbox = inbox
         self.preferences = preferences
         self.snippets = snippets
         self.paster = paster
@@ -254,6 +240,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         if state.snippetPendingDeletion != nil { isPresentingConfirmation = false }
         state.select(tab)
         search.query = ""
+        tabContents[tab]?.didShow(palette: contentActions)
     }
 
     func dismiss() {
@@ -325,9 +312,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 clipboard: clipboard,
                 dictationHistory: dictationHistory,
                 dictationService: dictationService,
-                inbox: inbox,
                 preferences: preferences,
                 snippets: snippets,
+                tabContents: tabContents,
+                contentActions: contentActions,
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
@@ -371,6 +359,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func selectTab(_ tab: CommandPaletteTab) {
         state.select(tab)
         search.query = ""
+        tabContents[tab]?.didShow(palette: contentActions)
         DispatchQueue.main.async { [weak self] in
             self?.focusInput()
         }
@@ -495,8 +484,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The rows of the open tab, when its module supplies them.
+    private var tabContent: (any CapabilityPaletteContent)? { tabContents[state.tab] }
+
+    /// What a module tab's rows can ask of the palette.
+    private var contentActions: PaletteContentActions {
+        PaletteContentActions(
+            dismiss: { [weak self] in self?.dismiss() },
+            selectRow: { [weak self] row in self?.state.selection = row }
+        )
+    }
+
     private var itemCount: Int {
-        switch state.tab {
+        if let tabContent { return tabContent.rowCount(query: state.historyQuery) }
+        return switch state.tab {
         case .search:
             search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? search.displayedRecentItems.count
@@ -505,12 +506,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             filteredClipboard.count
         case .dictation:
             filteredDictations.count
-        case .keyboardShortcutter:
-            filteredKeyboardShortcutter.count
         case .screenshots:
             screenshotContent.entries.count
         case .snippets:
             snippetContent.entries.count
+        default:
+            // Module tabs answer above.
+            0
         }
     }
 
@@ -521,6 +523,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Deletes the highlighted row in the tabs where Delete removes items.
     private func deleteSelection() -> Bool {
         let index = state.selection
+        if let tabContent {
+            guard tabContent.delete(row: index, query: state.historyQuery) else { return false }
+            state.selection = min(index, max(0, itemCount - 1))
+            return true
+        }
         switch state.tab {
         case .search:
             guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -542,7 +549,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard entries.indices.contains(index) else { return false }
             requestSnippetDeletion(entries[index])
             return true
-        case .keyboardShortcutter:
+        default:
+            // Module tabs answer above.
             return false
         }
         state.selection = min(index, max(0, itemCount - 1))
@@ -576,19 +584,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         )
     }
 
-    private var filteredKeyboardShortcutter: [CoachingEvent] {
-        keyboardShortcutterContent.entries
-    }
-
-    private var keyboardShortcutterContent: KeyboardShortcutterHistoryContent {
-        KeyboardShortcutterHistoryContent.resolve(
-            events: inbox.events,
-            query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.keyboardShortcutter)
-        )
-    }
-
     private func activateSelection(reveal: Bool) {
+        if let tabContent {
+            tabContent.activate(row: state.selection, query: state.historyQuery, withCommand: reveal, palette: contentActions)
+            return
+        }
         switch state.tab {
         case .search:
             if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -613,8 +613,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let text = filteredDictations[state.selection].text
             guard !text.isEmpty else { return }
             copy(text, suppressClipboardHistory: true)
-        case .keyboardShortcutter:
-            break
         case .screenshots:
             let entries = screenshotContent.entries
             guard entries.indices.contains(state.selection) else { return }
@@ -624,6 +622,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let entries = snippetContent.entries
             guard entries.indices.contains(state.selection) else { return }
             reveal ? pasteSnippet(entries[state.selection]) : copySnippet(entries[state.selection])
+        default:
+            // Module tabs answer above.
+            break
         }
     }
 
@@ -830,9 +831,10 @@ private struct CommandPaletteView: View {
     @Bindable var clipboard: ClipboardHistoryService
     @Bindable var dictationHistory: DictationHistoryService
     @Bindable var dictationService: DictationService
-    @Bindable var inbox: InboxStore
     @Bindable var preferences: AppPreferences
     @Bindable var snippets: SnippetStore
+    let tabContents: [CommandPaletteTab: any CapabilityPaletteContent]
+    let contentActions: PaletteContentActions
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
@@ -872,6 +874,7 @@ private struct CommandPaletteView: View {
                     PaletteFooter(
                         tab: state.tab,
                         selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
+                        contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
                         openSettings: { runCommand(.keybumpsSettings) }
                     )
                 }
@@ -904,6 +907,21 @@ private struct CommandPaletteView: View {
 
     @ViewBuilder
     private var content: some View {
+        if let tabContent = tabContents[state.tab] {
+            tabContent.makeView(PaletteContentContext(
+                query: state.historyQuery,
+                selection: state.selection,
+                actions: contentActions,
+                confirmationPresentationChanged: confirmationPresentationChanged
+            ))
+        } else {
+            builtInContent
+        }
+    }
+
+    /// The tabs the palette still draws itself.
+    @ViewBuilder
+    private var builtInContent: some View {
         switch state.tab {
         case .search:
             SearchResultsView(
@@ -944,14 +962,6 @@ private struct CommandPaletteView: View {
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
-        case .keyboardShortcutter:
-            KeyboardShortcutterResultsView(
-                content: keyboardShortcutterContent,
-                selection: state.selection,
-                select: { state.selection = $0 },
-                clear: inbox.clear,
-                confirmationPresentationChanged: confirmationPresentationChanged
-            )
         case .screenshots:
             switch screenshotContent {
             case .disabled:
@@ -989,6 +999,9 @@ private struct CommandPaletteView: View {
                 pendingDeletion: $state.snippetPendingDeletion,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
+        default:
+            // Module tabs are drawn by their content, above.
+            EmptyView()
         }
     }
 
@@ -1010,13 +1023,6 @@ private struct CommandPaletteView: View {
         DictationPaletteResults.filter(dictationHistory.entries, query: state.historyQuery)
     }
 
-    private var keyboardShortcutterContent: KeyboardShortcutterHistoryContent {
-        KeyboardShortcutterHistoryContent.resolve(
-            events: inbox.events,
-            query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.keyboardShortcutter)
-        )
-    }
 }
 
 private struct PaletteTabBar: View {
@@ -1060,58 +1066,6 @@ private struct PaletteTabBar: View {
         .padding(.bottom, 6)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Palette tabs")
-    }
-}
-
-private struct KeyboardShortcutterResultsView: View {
-    let content: KeyboardShortcutterHistoryContent
-    let selection: Int
-    let select: (Int) -> Void
-    let clear: () -> Void
-    let confirmationPresentationChanged: (Bool) -> Void
-
-    var body: some View {
-        PaletteResultsContainer {
-            switch content {
-            case .disabled:
-                PaletteEmptyState(title: "Shortcut Coach is turned off", systemImage: "keyboard")
-            case .empty:
-                PaletteEmptyState(title: "No matching hotkeys", systemImage: "keyboard")
-            case .entries(let entries):
-                VStack(spacing: 0) {
-                    HStack {
-                        PaletteSectionHeader("Recent")
-                        Spacer()
-                        ClearAllButton(
-                            confirmationTitle: "Clear Shortcut Coach history?",
-                            confirmationMessage: "This permanently removes all saved Shortcut Coach events.",
-                            disabled: entries.isEmpty,
-                            confirmationPresentationChanged: confirmationPresentationChanged,
-                            clear: clear
-                        )
-                        .buttonStyle(PalettePillButtonStyle())
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
-                    .padding(.bottom, 6)
-
-                    List(Array(entries.enumerated()), id: \.element.id) { index, event in
-                        Button { select(index) } label: {
-                            CoachingEventRow(event: event)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 7)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .listRowInsets(.init())
-                        .listRowSeparator(.hidden)
-                        .paletteRowBackground(isSelected: index == selection)
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                }
-            }
-        }
     }
 }
 
@@ -1888,16 +1842,33 @@ struct PaletteEmptyState: View {
     }
 }
 
+extension PaletteFooterActions {
+    /// What the footer names: a module tab's actions for its selected row, else Quick Search's
+    /// highlighted row's (a snippet copies and pastes), else the tab's registered titles.
+    static func resolve(tab: CommandPaletteTab, searchItem: QuickSearchItem?, content: PaletteFooterActions?) -> PaletteFooterActions {
+        if let content { return content }
+        return PaletteFooterActions(
+            primary: searchItem?.primaryActionTitle ?? tab.primaryActionTitle,
+            secondary: searchItem?.secondaryActionTitle ?? tab.secondaryActionTitle
+        )
+    }
+}
+
 /// Raycast's footer: a round Settings button at the bottom left, and a floating pill at the bottom
 /// right with the tab's actions and their keys.
 private struct PaletteFooter: View {
     let tab: CommandPaletteTab
     /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
     let selectedSearchItem: QuickSearchItem?
+    /// A module tab's actions for its selected row; they replace the tab's registered titles.
+    let contentActions: PaletteFooterActions?
     let openSettings: () -> Void
 
-    private var primaryActionTitle: String? { selectedSearchItem?.primaryActionTitle ?? tab.primaryActionTitle }
-    private var secondaryActionTitle: String? { selectedSearchItem?.secondaryActionTitle ?? tab.secondaryActionTitle }
+    private var actions: PaletteFooterActions {
+        PaletteFooterActions.resolve(tab: tab, searchItem: selectedSearchItem, content: contentActions)
+    }
+    private var primaryActionTitle: String? { actions.primary }
+    private var secondaryActionTitle: String? { actions.secondary }
 
     var body: some View {
         HStack {

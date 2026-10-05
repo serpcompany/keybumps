@@ -129,8 +129,9 @@ enum AppShellLaunch {
             checkNow: model.checkForUpdates,
             restartWhenSafe: model.restartToUpdate
         )
+        NativeStatusItemController.shared.configureAttention(model.menuBarAttention)
         NativeStatusItemController.shared.install()
-        model.onUpdateSnapshotChange = { NativeStatusItemController.shared.refreshUpdateBadge() }
-        NativeStatusItemController.shared.refreshUpdateBadge()
+        model.menuBarAttention.onChange = { NativeStatusItemController.shared.refreshAttentionDot() }
+        NativeStatusItemController.shared.refreshAttentionDot()
     }
 }
