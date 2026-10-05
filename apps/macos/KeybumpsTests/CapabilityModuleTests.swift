@@ -26,6 +26,37 @@ struct CapabilityModuleTests {
         }
     }
 
+    @Test("Shortcut Coach's module supplies the Hotkeys rows, and the app gives them to the palette")
+    func hotkeysRowsComeFromTheModule() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+
+        #expect(Array(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter])
+        #expect(harness.model.capabilities.module(for: .keyboardShortcutter)?.paletteContent?.tab == .keyboardShortcutter)
+        #expect(Array(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter])
+    }
+
+    @Test("Every palette tab is drawn by the palette or supplied by its module, never neither or both")
+    func everyTabHasRows() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+
+        let supplied = Set(harness.model.commandPalette.tabContents.keys)
+        #expect(supplied.isDisjoint(with: CommandPaletteTab.drawnByPalette))
+        #expect(supplied.union(CommandPaletteTab.drawnByPalette) == Set(CommandPaletteTab.allCases))
+    }
+
+    @Test("Turning a capability off clears its menu bar dot")
+    func turningOffClearsDot() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+
+        CapabilityMenuBarAttention(attention: harness.model.menuBarAttention, capability: .snippets).show(saying: "snippets need you")
+        harness.model.setCapability(.snippets, enabled: false)
+        #expect(!harness.model.menuBarAttention.showsDot)
+    }
+
     // MARK: Licensing gate (ADR 0002)
 
     @Test("Locked runs no capability, and activating starts them")
@@ -45,7 +76,10 @@ struct CapabilityModuleTests {
         #expect(!harness.backend.registered.isEmpty)
         #expect(harness.clipboard.isMonitoring)
 
+        // Locked leaves nothing to open that would clear a capability's dot, so it goes too.
+        CapabilityMenuBarAttention(attention: harness.model.menuBarAttention, capability: .snippets).show(saying: "snippets need you")
         await licensing.deactivate()
+        #expect(!harness.model.menuBarAttention.showsDot)
         #expect(harness.backend.registered.isEmpty)
         #expect(!harness.clipboard.isMonitoring)
     }

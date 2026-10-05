@@ -1092,7 +1092,6 @@ struct SnippetPaletteKeyTests {
     }
 }
 
-
 @MainActor
 @Suite("Snippets: in Quick Search")
 struct SnippetQuickSearchTests {
@@ -1282,7 +1281,6 @@ private final class PaletteFixture {
                 paster: InertTextPaster(),
                 allowsSystemAccess: false
             ),
-            inbox: InboxStore(persistence: NoEventPersistence()),
             preferences: preferences,
             snippets: snippets,
             paster: paster,
@@ -1388,7 +1386,3 @@ private final class FolderFileManager: FileManager {
     }
 }
 
-private struct NoEventPersistence: EventPersistence {
-    func load() throws -> [CoachingEvent] { [] }
-    func save(_ events: [CoachingEvent]) throws {}
-}

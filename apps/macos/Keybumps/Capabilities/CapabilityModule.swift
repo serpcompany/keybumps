@@ -112,12 +112,16 @@ protocol CapabilityModule: AnyObject {
     /// Settings attention the module reports for its own page, including setup that isn't a
     /// TCC permission (for example Screenshot Tools' Requires Clipboard History).
     func attentionCount(_ context: CapabilityContext) -> Int
+    /// The rows of the module's palette tab, when the module supplies them itself rather than
+    /// through a case in `CommandPaletteController`.
+    var paletteContent: (any CapabilityPaletteContent)? { get }
 }
 
 extension CapabilityModule {
     var capability: Capability { descriptor.capability }
     func permissionsDidRefresh(_ context: CapabilityContext) {}
     func attentionCount(_ context: CapabilityContext) -> Int { 0 }
+    var paletteContent: (any CapabilityPaletteContent)? { nil }
 }
 
 /// What the shell hands a module each time it applies, deactivates, or refreshes it.
@@ -188,6 +192,8 @@ struct CapabilityUpdateSafety {
 final class CapabilityRegistry {
     let modules: [any CapabilityModule]
     private let byCapability: [Capability: any CapabilityModule]
+    /// The palette tabs whose rows their modules supply, for `CommandPaletteController`.
+    let paletteContents: [CommandPaletteTab: any CapabilityPaletteContent]
 
     init(modules: [any CapabilityModule]) {
         precondition(
@@ -196,6 +202,15 @@ final class CapabilityRegistry {
         )
         self.modules = modules
         byCapability = Dictionary(uniqueKeysWithValues: modules.map { ($0.capability, $0) })
+        paletteContents = Dictionary(uniqueKeysWithValues: modules.compactMap { module in
+            module.paletteContent.map { content in
+                precondition(
+                    content.tab == module.descriptor.paletteTab?.tab,
+                    "\(module.capability) supplies rows for a tab it doesn't register"
+                )
+                return (content.tab, content)
+            }
+        })
     }
 
     func module(for capability: Capability) -> (any CapabilityModule)? {

@@ -30,14 +30,17 @@ extension CapabilityDescriptor {
     )
 }
 
-/// Owns the manual-action detector. Its Settings attention is its own missing permissions.
+/// Owns the manual-action detector and the Hotkeys tab's rows. Its Settings attention is its own
+/// missing permissions.
 @MainActor
 final class KeyboardShortcutterModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.keyboardShortcutter
     private let detector: ManualActionDetector
+    let paletteContent: (any CapabilityPaletteContent)?
 
-    init(detector: ManualActionDetector) {
+    init(detector: ManualActionDetector, inbox: InboxStore, preferences: AppPreferences) {
         self.detector = detector
+        paletteContent = KeyboardShortcutterPaletteContent(inbox: inbox, preferences: preferences)
     }
 
     func apply(_ context: CapabilityContext) {

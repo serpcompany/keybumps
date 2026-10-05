@@ -153,14 +153,36 @@ struct UpdateReminderTests {
             updater: fake,
             updatePrompt: presenter
         )
-        var badgeRefreshes = 0
-        model.onUpdateSnapshotChange = { badgeRefreshes += 1 }
+        var dotRefreshes = 0
+        model.menuBarAttention.onChange = { dotRefreshes += 1 }
+        #expect(!model.menuBarAttention.showsDot)
 
         fake.emit(.readyToRestart(version: "0.0.3-beta.14"), canRestart: true)
-        #expect(badgeRefreshes == 1)
+        #expect(dotRefreshes == 1)
+        #expect(model.menuBarAttention.showsDot)
+        #expect(model.menuBarAttention.accessibilityLabel(productName: "Keybumps") == "Keybumps, update ready")
+
+        fake.emit(.idle, canRestart: false)
+        #expect(!model.menuBarAttention.showsDot, "The dot goes once nothing waits")
+        #expect(model.menuBarAttention.accessibilityLabel(productName: "Keybumps") == "Keybumps")
         #expect(presenter.shown == ["0.0.3-beta.14"])
         presenter.chooseRestart()
         #expect(fake.restartCount == 1)
+    }
+
+    @Test("An update already waiting at launch shows the dot")
+    func dotAtLaunch() {
+        let fake = FakeUpdateController()
+        fake.emit(.readyToRestart(version: "0.0.3-beta.14"), canRestart: true)
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+            presenceController: UpdaterTestPresenceController(),
+            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+            updater: fake,
+            updatePrompt: RecordingPromptPresenter()
+        )
+        #expect(model.menuBarAttention.showsDot)
     }
 
     @Test("Update previews work only in QA and Debug builds")
@@ -189,11 +211,11 @@ struct UpdateMenuBarTests {
         let menu = controller.makeMenu()
         #expect(menu.items.first?.title == "Restart to Update")
         #expect(menu.items.filter { $0.title == "Restart to Update" }.count == 1)
-        #expect(NativeStatusItemController.showsUpdateBadge(UpdateReminderTests.ready))
+        #expect(MenuBarAttention.updateIsWaiting(UpdateReminderTests.ready))
 
         controller.configureUpdater(snapshot: { UpdateReminderTests.idle }, checkNow: {}, restartWhenSafe: {})
         #expect(controller.makeMenu().items.first?.title == "Open Keybumps")
-        #expect(!NativeStatusItemController.showsUpdateBadge(UpdateReminderTests.idle))
+        #expect(!MenuBarAttention.updateIsWaiting(UpdateReminderTests.idle))
     }
 
     @Test("Keybumps checks for updates every hour, Sparkle's shortest interval")

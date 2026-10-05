@@ -86,14 +86,14 @@ final class AppModel {
     private(set) var updateSnapshot: UpdateSnapshot {
         didSet {
             updateReminder.evaluate()
-            onUpdateSnapshotChange()
+            refreshUpdateAttention()
         }
     }
     /// Asks to restart while an update waits (#225).
     let updateReminder: UpdateReminder
     private let whatsNew: any WhatsNewPresenting
-    /// The status item's red dot follows the update state.
-    @ObservationIgnored var onUpdateSnapshotChange: () -> Void = {}
+    /// The menu bar icon's red dot: a waiting update, or a capability with something waiting.
+    @ObservationIgnored let menuBarAttention = MenuBarAttention()
     private(set) var licenseSnapshot: LicenseSnapshot
     private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
         manualRecovery: "Checking the Quick Search shortcut…"
@@ -251,7 +251,6 @@ final class AppModel {
             clipboard: clipboard,
             dictationHistory: dictationHistory,
             dictationService: dictation,
-            inbox: inbox,
             preferences: preferences,
             snippets: snippets,
             paster: textPaster,
@@ -309,9 +308,10 @@ final class AppModel {
                 windows: windows,
                 updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .windowManagement)
             ),
-            KeyboardShortcutterModule(detector: detector),
+            KeyboardShortcutterModule(detector: detector, inbox: inbox, preferences: preferences),
             SnippetsModule(palette: commandPalette, snippets: snippets, expansion: keywordExpansion)
         ])
+        commandPalette.tabContents = capabilities.paletteContents
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         commandPalette.offerPasteSetup = { [weak self] in self?.offerSnippetPasteSetup() }
@@ -319,6 +319,15 @@ final class AppModel {
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
         refreshDetectorState()
+        refreshUpdateAttention()
+    }
+
+    private func refreshUpdateAttention() {
+        if MenuBarAttention.updateIsWaiting(updateSnapshot) {
+            menuBarAttention.show(.updateReady, saying: "update ready")
+        } else {
+            menuBarAttention.clear(.updateReady)
+        }
     }
 
     /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screenshot Tools
@@ -392,7 +401,10 @@ final class AppModel {
         if !snapshot.isEntitled {
             // Locked: stop every capability's resources and shortcuts, and close the palette.
             let context = capabilityContext
-            for capability in preferences.enabledCapabilities { capabilities.deactivate(capability, context: context) }
+            for capability in preferences.enabledCapabilities {
+                capabilities.deactivate(capability, context: context)
+                menuBarAttention.clear(.capability(capability))
+            }
             commandPalette.dismiss()
         }
         applyCapabilities()
@@ -448,6 +460,8 @@ final class AppModel {
     func setCapability(_ capability: Capability, enabled: Bool) {
         if !enabled {
             capabilities.deactivate(capability, context: capabilityContext)
+            // Nothing is left to open that would clear a turned-off capability's dot.
+            menuBarAttention.clear(.capability(capability))
             // Setup for a capability that's now off would prompt for nothing.
             if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
             if capability == .dictation { dismissDictationSetupCards() }
