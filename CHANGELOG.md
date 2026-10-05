@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.16](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.15...v0.0.3-beta.16) (2026-10-05)
+
+
+### Features
+
+* a turned-off plugin's Settings page says so, with a Turn On button ([#255](https://github.com/serpcompany/keybumps/issues/255)) ([3d7f0f2](https://github.com/serpcompany/keybumps/commit/3d7f0f23342dfd8ad1a5f0fb0c6d3cf5948ca8fe))
+
 ## [0.0.3-beta.15](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.14...v0.0.3-beta.15) (2026-10-05)
 
 
