@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.14](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.13...v0.0.3-beta.14) (2026-10-05)
+
+
+### Features
+
+* make updates hard to miss with a restart prompt, a red dot, and What's New ([#226](https://github.com/serpcompany/keybumps/issues/226)) ([873e696](https://github.com/serpcompany/keybumps/commit/873e696fb860c90e5ed6360a53832b3ce1b7375b))
+
 ## [0.0.3-beta.13](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.12...v0.0.3-beta.13) (2026-10-02)
 
 
