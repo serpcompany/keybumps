@@ -54,13 +54,22 @@ enum PluginsTable {
 /// ones, with its palette tab, its shortcut, and its switch. Clicking one opens its own page, which
 /// has its own row in the sidebar.
 struct PluginsSettingsView: View {
+    @Environment(\.openURL) private var openURL
     let open: (SettingsSection) -> Void
     @State private var query = ""
 
     var body: some View {
         let sections = PluginsTable.sections(matching: query)
         SettingsPage {
-            SettingsSearchField(text: $query, prompt: "Search plugins…", identifier: "plugins.search")
+            HStack(spacing: 8) {
+                SettingsSearchField(text: $query, prompt: "Search plugins…", identifier: "plugins.search")
+                Button { openURL(PluginStore.url) } label: {
+                    Label("Store", systemImage: "arrow.up.right")
+                        .labelStyle(.titleAndIcon)
+                }
+                .help("Browse plugins on keybumps.app, in your browser")
+                .accessibilityIdentifier("plugins.openStore")
+            }
             if sections.isEmpty {
                 SettingsNote("No plugins match.")
             }

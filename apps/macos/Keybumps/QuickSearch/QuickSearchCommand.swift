@@ -1,29 +1,33 @@
 import Foundation
 
 /// A Keybumps action that Quick Search offers beside apps, files, and folders, as Alfred offers its
-/// preferences and Raycast its commands: Keybumps Settings, and one per capability that goes to it.
+/// preferences and Raycast its commands: Keybumps Settings, the Store, and one per capability that
+/// goes to it.
 enum QuickSearchCommand: Hashable, Identifiable {
     /// Opens Settings, as the status menu's Settings… and Command-comma do.
     case keybumpsSettings
     /// Goes to a capability, named as its Settings page is: its Command Palette tab while it's turned
     /// on, otherwise its Settings page (`destination(enabledCapabilities:)`).
     case capability(Capability)
+    /// Opens the Store, the plugin directory on keybumps.app, in the browser.
+    case store
 
-    /// Every command, in the order equally good matches are listed: Keybumps Settings, then the
-    /// capabilities in registry order whose descriptors declare `searchKeywords` (all but Quick
+    /// Every command, in the order equally good matches are listed: Keybumps Settings, the Store,
+    /// then the capabilities in registry order whose descriptors declare `searchKeywords` (all but Quick
     /// Search, whose tab lists the commands).
-    static let allCases: [QuickSearchCommand] = [.keybumpsSettings]
+    static let allCases: [QuickSearchCommand] = [.keybumpsSettings, .store]
         + CapabilityCatalog.descriptors
             .filter { $0.searchKeywords != nil }
             .map { .capability($0.capability) }
 
-    /// A stable token: `keybumpsSettings`, or the capability's ID. It names the row's accessibility
+    /// A stable token: `keybumpsSettings`, `store`, or the capability's ID. It names the row's accessibility
     /// identifier and is the key for its learned usage (`command:<id>` in `application-usage.json`),
     /// so renaming it silently resets what Quick Search has learned about the command.
     var id: String {
         switch self {
         case .keybumpsSettings: "keybumpsSettings"
         case .capability(let capability): capability.rawValue
+        case .store: "store"
         }
     }
 
@@ -31,6 +35,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
         switch self {
         case .keybumpsSettings: "\(ReleaseLane.current.productName) Settings"
         case .capability(let capability): capability.title
+        case .store: "Store"
         }
     }
 
@@ -42,7 +47,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
     var shortcut: String? {
         switch self {
         case .keybumpsSettings: "⌘,"
-        case .capability: nil
+        case .capability, .store: nil
         }
     }
 
@@ -50,7 +55,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
     var commandKey: String? {
         switch self {
         case .keybumpsSettings: ","
-        case .capability: nil
+        case .capability, .store: nil
         }
     }
 
@@ -60,6 +65,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
         switch self {
         case .keybumpsSettings: ["preferences", "prefs"]
         case .capability(let capability): capability.descriptor.searchKeywords ?? []
+        case .store: ["plugins", "plugin", "extensions", "marketplace"]
         }
     }
 
@@ -124,6 +130,8 @@ extension QuickSearchCommand {
         case paletteTab(CommandPaletteTab)
         /// Settings on this page, or where it was left when nil. The palette closes first.
         case settings(SettingsSection?)
+        /// A page on the website, in the browser. The palette closes first.
+        case website(URL)
 
         /// What running it does, for the row's tooltip and VoiceOver hint.
         var hint: String {
@@ -131,6 +139,7 @@ extension QuickSearchCommand {
             case .paletteTab(let tab): "Shows the \(tab.title) tab"
             case .settings(let section?): "Opens \(section.rawValue) in Settings"
             case .settings(nil): "Opens Settings"
+            case .website: "Opens keybumps.app in your browser"
             }
         }
     }
@@ -142,6 +151,8 @@ extension QuickSearchCommand {
         switch self {
         case .keybumpsSettings:
             return .settings(nil)
+        case .store:
+            return .website(PluginStore.url)
         case .capability(let capability):
             let descriptor = capability.descriptor
             if enabledCapabilities.contains(capability), let tab = descriptor.paletteTab?.tab {

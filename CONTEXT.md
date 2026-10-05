@@ -19,7 +19,7 @@ What a capability declares about itself, so the shell draws its Settings page, i
 _Avoid_: Plist, config, schema
 
 **Store**:
-Where people browse plugins and get or remove them, in the Command Palette. For now it lists only official plugins, built by Keybumps; getting one turns it on, and removing one turns it off and keeps its data.
+The plugin directory on keybumps.app (`/plugins`), which the app opens in the browser from Settings › Plugins and from Quick Search's Store command. For now it lists only official plugins, built by Keybumps, which all ship in the app; Settings › Plugins turns each on and off.
 _Avoid_: Marketplace, gallery, app store
 
 **Capability Module**:
@@ -53,7 +53,7 @@ Finding and opening local applications, files, and folders, finding snippets by 
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:
-A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, or a capability command.
+A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, the Store, or a capability command.
 _Avoid_: Workflow, extension command
 
 **Capability command**:

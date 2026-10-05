@@ -9,6 +9,14 @@ enum PluginCategory: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The Store: the plugin directory on the website, which lists every plugin from its manifest. Every
+/// plugin ships in the app for now (ADR 0006), so the Store only shows them; Settings › Plugins turns
+/// them on and off.
+enum PluginStore {
+    static let url = URL(string: "https://keybumps.app/plugins")!
+    static let systemImage = "puzzlepiece.extension"
+}
+
 /// Who makes a plugin. For now every plugin is official, built by Keybumps (ADR 0006).
 enum PluginPublisher: Equatable {
     case keybumps

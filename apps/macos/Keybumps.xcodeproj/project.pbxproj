@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		011D4C30FD4FF1168AD3B32B /* UnitTestHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44D821EC6664B978596FDDFD /* UnitTestHostTests.swift */; };
+		04DF9BBEC015D963764B0F32 /* StoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F99732B6166048EC0AD8604 /* StoreTests.swift */; };
 		056730D3FDC7666D9EDAAB12 /* ClipboardHistoryModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900FCF32F9541FA9168E58D6 /* ClipboardHistoryModule.swift */; };
 		07A73572B424F72C67920D5E /* SettingsSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EFF247943688DF74FDFBFD /* SettingsSidebarTests.swift */; };
 		081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */; };
@@ -304,6 +305,7 @@
 		87C6CF0FD29B2DDEE1F0148D /* ClipboardRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardRowTests.swift; sourceTree = "<group>"; };
 		8BB4AB69EB04679F31DBE660 /* KeyboardShortcutterPaletteContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutterPaletteContent.swift; sourceTree = "<group>"; };
 		8D99F0722FE7F7F683012428 /* QuickSearchModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchModule.swift; sourceTree = "<group>"; };
+		8F99732B6166048EC0AD8604 /* StoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreTests.swift; sourceTree = "<group>"; };
 		90063321A15E6192126FE5C0 /* DictationIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationIndicatorController.swift; sourceTree = "<group>"; };
 		900FCF32F9541FA9168E58D6 /* ClipboardHistoryModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistoryModule.swift; sourceTree = "<group>"; };
 		9198187F33359DFFA13F0C5D /* KeybumpsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybumpsApp.swift; sourceTree = "<group>"; };
@@ -569,6 +571,7 @@
 				CF128185C76235C3DC5BD990 /* SnippetTableTests.swift */,
 				D79624FBD3E3BEA3C4AB778B /* SnippetTests.swift */,
 				6496418091377710D1C553EB /* StandardWindowControlTests.swift */,
+				8F99732B6166048EC0AD8604 /* StoreTests.swift */,
 				67D2FDD963A216AD438C86AB /* TimerTests.swift */,
 				93D393A41EEB1085BE3348CE /* UITestLaunchConfigurationTests.swift */,
 				E42DD01A15CB36C8078F4480 /* UnitTestDataIsolationTests.swift */,
@@ -1139,6 +1142,7 @@
 				1E1B2D9A09673DB405A160D7 /* SnippetTableTests.swift in Sources */,
 				DB997FBA3D0CD7910E51103E /* SnippetTests.swift in Sources */,
 				0A2691072FFA6F40A5F31531 /* StandardWindowControlTests.swift in Sources */,
+				04DF9BBEC015D963764B0F32 /* StoreTests.swift in Sources */,
 				EBA73790D98D6A9646920F70 /* TimerTests.swift in Sources */,
 				5FE963A695D02FA354BB3D5E /* UITestLaunchConfigurationTests.swift in Sources */,
 				FB1DFB36C02CFB3A5029B0D3 /* UnitTestDataIsolationTests.swift in Sources */,

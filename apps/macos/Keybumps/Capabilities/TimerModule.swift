@@ -22,7 +22,7 @@ extension CapabilityDescriptor {
         settingsPage: CapabilitySettingsPage(
             section: .timer,
             summary: "Count down from a duration and get told when it ends.",
-            disableExplanation: "Turning this off cancels running timers and releases its global shortcut.",
+            disableExplanation: "Turning this off cancels and clears your timers and releases its global shortcut.",
             content: { AnyView(PluginSettingsPage(capability: .timer)) }
         ),
         criticalOperations: [],
