@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.0.3-beta.15](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.14...v0.0.3-beta.15) (2026-10-05)
+
+
+### Features
+
+* add Timer, a capability for countdowns in the Command Palette ([#232](https://github.com/serpcompany/keybumps/issues/232)) ([7e14600](https://github.com/serpcompany/keybumps/commit/7e14600c28f973c1c4c3fae06ebd957cedefea93))
+* plugin manifests and one settings template, starting with Timer ([#240](https://github.com/serpcompany/keybumps/issues/240)) ([eb1c3ec](https://github.com/serpcompany/keybumps/commit/eb1c3ec6f990f48b6637b73441eddf4908c6356b))
+* plugin manifests can declare optional permissions and ship off ([#251](https://github.com/serpcompany/keybumps/issues/251)) ([5fd4561](https://github.com/serpcompany/keybumps/commit/5fd4561291b4c0a208a2a9a0310e37c275f7f958))
+* plugin tabs can be grids, and can copy and paste through the palette ([#250](https://github.com/serpcompany/keybumps/issues/250)) ([491eee4](https://github.com/serpcompany/keybumps/commit/491eee4f3ddf06b48a03bb2d811ffba3e873e851))
+* Plugins in Quick Search, and Settings › Plugins links to keybumps.app/plugins ([#242](https://github.com/serpcompany/keybumps/issues/242)) ([0df1d69](https://github.com/serpcompany/keybumps/commit/0df1d69a93344f0c466d5c77dc9e2dd34f046cf2))
+* ring a timer alarm on screen until it's stopped ([#236](https://github.com/serpcompany/keybumps/issues/236)) ([c19b798](https://github.com/serpcompany/keybumps/commit/c19b798c7d3f725cd07a1ddd5e8052bc2641059b))
+* Settings › Plugins, a page listing every plugin, and Settings opens filling the screen ([#241](https://github.com/serpcompany/keybumps/issues/241)) ([5f8887c](https://github.com/serpcompany/keybumps/commit/5f8887c01629b4dfde93c30ec27f25dd7f1c3525))
+* show running timers in the menu bar and the Keybumps menu ([#234](https://github.com/serpcompany/keybumps/issues/234)) ([7e0e5b9](https://github.com/serpcompany/keybumps/commit/7e0e5b97674823b6756db84aaa3cce98e6817cdf))
+* the Emoji Picker plugin, with an Emoji tab that's a grid to browse and a list to search ([#253](https://github.com/serpcompany/keybumps/issues/253)) ([20859d5](https://github.com/serpcompany/keybumps/commit/20859d5d989a1249cc2817ea439a738393448720))
+* the Emoji Picker's emoji list, generated from pinned Unicode, CLDR, and gemoji data ([#252](https://github.com/serpcompany/keybumps/issues/252)) ([a5a5bda](https://github.com/serpcompany/keybumps/commit/a5a5bda5dc7a46f9e60a961454e6a76c6502fc94))
+
+
+### Improvements
+
+* let capability modules supply their palette tab and the menu bar dot ([#231](https://github.com/serpcompany/keybumps/issues/231)) ([b24baf0](https://github.com/serpcompany/keybumps/commit/b24baf0b962d40747b2aeb04024c9ddd5a028055))
+
 ## [0.0.3-beta.14](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.13...v0.0.3-beta.14) (2026-10-05)
 
 
