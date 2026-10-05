@@ -1149,11 +1149,13 @@ struct CapabilityOffBanner: View {
             }
             .padding(.horizontal, SettingsTheme.rowInset + 3)
             .padding(.vertical, 12)
-            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous)
-                    .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
-            )
+            // The fill and border are both behind the row: a border overlaid on top took the Turn
+            // On button's clicks.
+            .background {
+                let shape = RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous)
+                shape.fill(Color.orange.opacity(0.12))
+                    .overlay(shape.strokeBorder(Color.orange.opacity(0.35), lineWidth: 1))
+            }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("capability.offBanner.\(capability.rawValue)")
         }
