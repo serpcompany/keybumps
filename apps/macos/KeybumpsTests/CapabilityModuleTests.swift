@@ -47,6 +47,15 @@ struct CapabilityModuleTests {
         #expect(supplied.union(CommandPaletteTab.drawnByPalette) == Set(CommandPaletteTab.allCases))
     }
 
+    @Test("A plugin page's switch stores its preference through the app model")
+    func setPluginPreference() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+        harness.model.setPluginPreference(.timerMenuBarCountdown, to: .bool(false), for: .timer)
+        #expect(!harness.model.preferences.bool(.timerMenuBarCountdown, for: .timer))
+    }
+
     @Test("Turning a capability off clears its menu bar dot")
     func turningOffClearsDot() {
         let harness = ModuleHarness()

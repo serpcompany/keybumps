@@ -1094,6 +1094,7 @@ private struct PermissionWalkthroughView: View {
 struct CapabilityControl: View {
     let capability: Capability
     var shortcuts: [CapabilityShortcut] = []
+    var byline: String?
 
     var body: some View {
         let descriptor = capability.descriptor
@@ -1101,7 +1102,8 @@ struct CapabilityControl: View {
             systemImage: descriptor.systemImage,
             tint: descriptor.iconTint,
             title: descriptor.title,
-            summary: descriptor.settingsPage?.summary ?? ""
+            summary: descriptor.settingsPage?.summary ?? "",
+            byline: byline
         )
         if !shortcuts.isEmpty {
             SettingsGroup("Commands") {

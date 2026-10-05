@@ -86,8 +86,8 @@ final class AppPreferences {
         didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
     }
 
-    /// Plugins' declared preferences (`PluginPreference`) that differ from their defaults, by
-    /// storage key (`plugin.<capability>.<key>`). Read them through `value(of:for:)`.
+    /// Plugins' declared preferences (`PluginPreference`) that were set, by storage key
+    /// (`plugin.<capability>.<key>`). One never set reads as its default through `value(of:for:)`.
     private var pluginValues: [String: PluginPreference.Value] = [:]
 
     /// A plugin's declared preference: what was set, or its default.
@@ -100,7 +100,9 @@ final class AppPreferences {
         return false
     }
 
+    /// Sets a preference `capability` declares, to a value of its kind; anything else is ignored.
     func set(_ value: PluginPreference.Value, of preference: PluginPreference, for capability: Capability) {
+        guard capability.descriptor.preferences.contains(preference), preference.accepts(value) else { return }
         let key = preference.storageKey(for: capability)
         pluginValues[key] = value
         switch value {
@@ -114,15 +116,8 @@ final class AppPreferences {
         for descriptor in CapabilityCatalog.descriptors {
             for preference in descriptor.preferences {
                 let key = preference.storageKey(for: descriptor.capability)
-                switch preference.kind {
-                case .toggle:
-                    if defaults.object(forKey: key) is NSNumber {
-                        pluginValues[key] = .bool(defaults.bool(forKey: key))
-                    }
-                case .choice(let options, _):
-                    if let stored = defaults.string(forKey: key), options.contains(where: { $0.value == stored }) {
-                        pluginValues[key] = .choice(stored)
-                    }
+                if let value = preference.value(fromStored: defaults.object(forKey: key)) {
+                    pluginValues[key] = value
                 }
             }
         }

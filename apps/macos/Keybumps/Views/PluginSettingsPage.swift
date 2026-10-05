@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Any plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
-/// extension's settings: its header, who makes it, its Commands, the permissions it needs, its
+/// A plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
+/// extension's settings: its header with who makes it, its Commands, the permissions it needs, its
 /// declared preferences by group, and last a slot for parts no declaration covers (such as a
-/// library to edit).
+/// library to edit). Timer uses it so far; the other plugins move over one at a time.
 struct PluginSettingsPage<Custom: View>: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
@@ -17,11 +17,7 @@ struct PluginSettingsPage<Custom: View>: View {
     var body: some View {
         let descriptor = capability.descriptor
         SettingsPage {
-            CapabilityControl(capability: capability, shortcuts: descriptor.shortcuts)
-            Text(Self.byline(descriptor))
-                .font(.system(size: SettingsTheme.subtitleSize))
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("plugin.\(capability.rawValue).byline")
+            CapabilityControl(capability: capability, shortcuts: descriptor.shortcuts, byline: Self.byline(descriptor))
             if !descriptor.requiredPermissions.isEmpty {
                 SettingsGroup("Permissions") {
                     ForEach(MacPermission.allCases.filter(descriptor.requiredPermissions.contains), id: \.self) {
@@ -35,6 +31,11 @@ struct PluginSettingsPage<Custom: View>: View {
                 }
             }
             custom
+        }
+        .task {
+            // Permission rows follow System Settings while the page is open, as other pages' do.
+            guard !descriptor.requiredPermissions.isEmpty else { return }
+            await model.monitorSystemPermissionChanges()
         }
     }
 
@@ -88,7 +89,6 @@ private struct PluginPreferenceRow: View {
     private var identifier: String { "plugin.\(capability.rawValue).\(preference.key)" }
 
     private func update(_ value: PluginPreference.Value) {
-        model.preferences.set(value, of: preference, for: capability)
-        model.applyCapabilities()
+        model.setPluginPreference(preference, to: value, for: capability)
     }
 }

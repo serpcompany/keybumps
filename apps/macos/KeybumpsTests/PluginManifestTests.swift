@@ -40,14 +40,20 @@ struct PluginManifestTests {
         #expect(!AppPreferences(defaults: defaults).bool(.timerRings, for: .timer))
     }
 
-    @Test("A stored value of the wrong kind falls back to the default")
-    func wrongKind() {
+    @Test("A switch reads numbers and the strings defaults write and launch arguments give; anything else is the default")
+    func storedSwitches() {
         let defaults = InMemoryDefaults()
         defaults.set("loud", forKey: "plugin.timer.ringsUntilStopped")
         #expect(AppPreferences(defaults: defaults).bool(.timerRings, for: .timer))
+        defaults.set("NO", forKey: "plugin.timer.ringsUntilStopped")
+        #expect(!AppPreferences(defaults: defaults).bool(.timerRings, for: .timer))
+        #expect(PluginPreference.timerRings.value(fromStored: "0") == .bool(false))
+        #expect(PluginPreference.timerRings.value(fromStored: "true") == .bool(true))
+        #expect(PluginPreference.timerRings.value(fromStored: NSNumber(value: 0)) == .bool(false))
+        #expect(PluginPreference.timerRings.value(fromStored: nil) == nil)
     }
 
-    @Test("A choice keeps only one of its options")
+    @Test("A menu keeps only one of its options, stored or set")
     func choices() {
         let choice = PluginPreference(
             key: "size", title: "Size", group: "Look",
@@ -55,5 +61,34 @@ struct PluginManifestTests {
         )
         #expect(choice.defaultValue == .choice("s"))
         #expect(choice.storageKey(for: .timer) == "plugin.timer.size")
+        #expect(choice.value(fromStored: "l") == .choice("l"))
+        #expect(choice.value(fromStored: "x") == nil)
+        #expect(choice.value(fromStored: 5) == nil)
+        #expect(choice.accepts(.choice("l")))
+        #expect(!choice.accepts(.choice("x")))
+        #expect(!choice.accepts(.bool(true)))
+    }
+
+    @Test("Setting a value of the wrong kind, or a preference the plugin doesn't declare, changes nothing")
+    func setRejects() {
+        let defaults = InMemoryDefaults()
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.set(.choice("loud"), of: .timerRings, for: .timer)
+        #expect(preferences.bool(.timerRings, for: .timer))
+        preferences.set(.bool(false), of: .timerRings, for: .snippets)
+        #expect(defaults.object(forKey: "plugin.snippets.ringsUntilStopped") == nil)
+    }
+
+    @Test("Every declared menu's default is one of its options, its options are distinct, and no key collides with the page's own identifiers")
+    func declarationsAreValid() {
+        for descriptor in CapabilityCatalog.descriptors {
+            for preference in descriptor.preferences {
+                #expect(preference.accepts(preference.defaultValue), "\(descriptor.capability).\(preference.key)")
+                if case .choice(let options, _) = preference.kind {
+                    #expect(Set(options.map(\.value)).count == options.count)
+                }
+                #expect(preference.key != "byline")
+            }
+        }
     }
 }

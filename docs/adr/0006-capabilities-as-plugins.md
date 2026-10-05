@@ -47,5 +47,5 @@ That model needs a runtime for outside code, an isolation and permission model, 
 - The shell seams Timer needed now serve every capability: a module's own palette tab (`CapabilityPaletteContent`), the menu bar dot (`MenuBarAttention`), text and menu sections on the menu bar item (`MenuBarStatus`), and waiting for the notch (`PaletteHUD.whenNotchFree`).
 - **Recipe gaps still open**, each a small shared-code edit per capability:
   - a shortcut's details in `CapabilityShortcut`;
-  - settings in `AppPreferences`;
+  - settings outside the manifest: a plugin's declared preferences are stored by name, but the older plugins' settings stay in `AppPreferences` until their pages move to the template;
   - Command-numbers assigned by hand.

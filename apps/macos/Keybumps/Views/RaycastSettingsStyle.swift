@@ -60,6 +60,8 @@ struct SettingsHero: View {
     let tint: Color
     let title: String
     let summary: String
+    /// A plugin's "Official plugin by Keybumps · Productivity", under its summary.
+    var byline: String?
 
     var body: some View {
         VStack(spacing: 6) {
@@ -71,6 +73,12 @@ struct SettingsHero: View {
                 .font(.system(size: SettingsTheme.titleSize))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if let byline {
+                Text(byline)
+                    .font(.system(size: SettingsTheme.subtitleSize))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityIdentifier("settings.hero.byline")
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 28)

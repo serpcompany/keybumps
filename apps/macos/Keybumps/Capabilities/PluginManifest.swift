@@ -60,6 +60,33 @@ struct PluginPreference: Identifiable, Equatable {
     func storageKey(for capability: Capability) -> String {
         "plugin.\(capability.rawValue).\(key)"
     }
+
+    /// Whether `value` is of this preference's kind, and for a menu one of its options.
+    func accepts(_ value: Value) -> Bool {
+        switch (kind, value) {
+        case (.toggle, .bool): true
+        case (.choice(let options, _), .choice(let choice)): options.contains { $0.value == choice }
+        default: false
+        }
+    }
+
+    /// What a stored object reads as, or nil when it doesn't fit, so the default applies. A switch
+    /// takes a number or the strings `defaults write` and launch arguments give (YES/NO, true/false,
+    /// 1/0), as other Bool settings do.
+    func value(fromStored object: Any?) -> Value? {
+        switch kind {
+        case .toggle:
+            if let number = object as? NSNumber { return .bool(number.boolValue) }
+            switch (object as? String)?.lowercased() {
+            case "yes", "true", "1": return .bool(true)
+            case "no", "false", "0": return .bool(false)
+            default: return nil
+            }
+        case .choice:
+            guard let string = object as? String, accepts(.choice(string)) else { return nil }
+            return .choice(string)
+        }
+    }
 }
 
 extension CapabilityDescriptor {
