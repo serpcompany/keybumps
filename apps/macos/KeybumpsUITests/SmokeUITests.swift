@@ -29,11 +29,14 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["search", "clipboard", "screenshotTools", "dictation",
-                        "windows", "keyboardShortcutter", "snippets", "timer", "permissions", "general"] {
+        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
+        // The Plugins page lists every plugin, and a row opens that plugin's page.
+        element("settings.sidebar.plugins").click()
+        element("plugins.row.timer").click()
+        XCTAssertTrue(element("settings.detail.timer").waitForExistence(timeout: 5), "A Plugins row opens its page")
     }
 
     func testEscapeClosesSettings() {

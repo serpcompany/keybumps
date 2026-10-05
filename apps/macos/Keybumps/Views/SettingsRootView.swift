@@ -6,12 +6,13 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
-    case permissions = "Permissions", general = "General", account = "Account"
+    case plugins = "Plugins", permissions = "Permissions", general = "General", account = "Account"
     var id: String { rawValue }
 
-    /// Capability pages in registry order, then the fixed shell destinations.
+    /// Capability pages in registry order, then the fixed shell destinations. Each capability page
+    /// has its own sidebar row, and the Plugins page lists them all.
     static var allCases: [SettingsSection] {
-        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general, .account]
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.plugins, .permissions, .general, .account]
     }
 
     /// The module whose Settings page this is; nil for the shell's Permissions and General.
@@ -24,6 +25,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .permissions: return "hand.raised"
         case .account: return "person.crop.circle"
+        case .plugins: return "puzzlepiece.extension"
         default: return "gearshape"
         }
     }
@@ -74,12 +76,17 @@ extension View {
     }
 }
 
-/// The Settings sidebar, modeled on Raycast's: the account row on top (outside these groups), the
-/// app's own pages, then one row per capability module (Quick Search first, then alphabetical),
-/// filtered by search.
+/// The Settings sidebar: the account row on top (outside these groups); General, Permissions, and
+/// Plugins; then a row per plugin, the default ones (Quick Search first, then by name) and the added
+/// ones in their own group below; filtered by search.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// What VoiceOver says for a row's attention mark.
+    static func attentionLabel(_ count: Int, for section: SettingsSection) -> String {
+        section == .permissions ? "\(count) permission items need attention" : "Needs attention"
     }
 
     static func groups(matching query: String) -> [[SettingsSection]] {
@@ -87,16 +94,9 @@ enum SettingsSidebar {
         let matches: (SettingsSection) -> Bool = {
             trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
         }
-        let app = [SettingsSection.general, .permissions].filter(matches)
-        // Quick Search first, then alphabetical.
-        let capabilities = SettingsSection.allCases.filter { $0.capability != nil && matches($0) }
-            .sorted { lhs, rhs in
-                if (lhs == .search) != (rhs == .search) { return lhs == .search }
-                return lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
-            }
-        // The default capabilities, then the added ones in their own group below.
-        let isDefault: (SettingsSection) -> Bool = { $0.capability.map(CapabilityCatalog.defaultCapabilities.contains) ?? false }
-        return [app, capabilities.filter(isDefault), capabilities.filter { !isDefault($0) }].filter { !$0.isEmpty }
+        let app = [SettingsSection.general, .permissions, .plugins].filter(matches)
+        let plugins = PluginsTable.sections.map { $0.plugins.filter(matches) }
+        return ([app] + plugins).filter { !$0.isEmpty }
     }
 }
 
@@ -152,6 +152,8 @@ struct SettingsRootView: View {
             Group {
                 if let page = visibleSelection.capability?.descriptor.settingsPage {
                     page.content()
+                } else if visibleSelection == .plugins {
+                    PluginsSettingsView { navigation.navigate(to: $0) }
                 } else if visibleSelection == .permissions {
                     PermissionsView()
                 } else if visibleSelection == .account {
@@ -171,6 +173,7 @@ struct SettingsRootView: View {
                     }
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("settings.detail.\(visibleSelection.launchToken)")
         }
         .navigationTitle("Keybumps")
@@ -239,7 +242,7 @@ private struct SettingsSidebarRow: View {
                 if attentionCount > 0 {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundStyle(.red)
-                        .accessibilityLabel("\(attentionCount) permission items need attention")
+                        .accessibilityLabel(SettingsSidebar.attentionLabel(attentionCount, for: section))
                 }
             }
             .frame(minHeight: 32)
@@ -701,11 +704,18 @@ struct WindowSettingsView: View {
         .onDisappear { recorder.cancel() }
     }
 
-    /// The two-column shortcut grid, one card per pair of columns.
+    /// The two-column shortcut grid, one card per pair of columns, or one column when the page is
+    /// too narrow for two without cutting off names.
     private func shortcutColumns(_ leading: [WindowAction], _ trailing: [WindowAction]) -> some View {
-        HStack(alignment: .top, spacing: 28) {
-            shortcutColumn(leading)
-            shortcutColumn(trailing)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 28) {
+                shortcutColumn(leading)
+                shortcutColumn(trailing)
+            }
+            VStack(spacing: 4) {
+                shortcutColumn(leading)
+                shortcutColumn(trailing)
+            }
         }
         .padding(.vertical, 8)
     }
@@ -1113,7 +1123,8 @@ struct CapabilityControl: View {
     }
 }
 
-private struct CapabilityToggle: View {
+/// A plugin's switch: on its page's toolbar, and in its row on the Plugins page.
+struct CapabilityToggle: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
 
@@ -1309,6 +1320,68 @@ final class ShortcutRecorderState {
 
     private func stopMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+    }
+}
+
+/// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
+/// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at.
+struct SettingsWindowFiller: NSViewRepresentable {
+    let preferences: AppPreferences
+
+    func makeNSView(context: Context) -> NSView { FillerView(preferences: preferences) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class FillerView: NSView {
+        private let preferences: AppPreferences
+        private var keyObserver: Any?
+
+        init(preferences: AppPreferences) {
+            self.preferences = preferences
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        deinit {
+            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+            keyObserver = nil
+            guard let window, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
+            // Each time Settings comes forward until it has filled once, so a first open that was
+            // closed straight away fills the next time instead.
+            keyObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.fill(attempt: 1) }
+            }
+            // After this turn, so the frame macOS restores for the window doesn't replace it.
+            DispatchQueue.main.async { [weak self] in self?.fill(attempt: 1) }
+        }
+
+        /// Fills the screen, then checks once the window has settled: if macOS restored a saved
+        /// size over it, fills again, up to three times. Only a fill that held, or the last try,
+        /// counts as the first open. A window that isn't showing is left alone, so this never
+        /// brings a closed Settings window back.
+        private func fill(attempt: Int) {
+            guard let window, window.isVisible, let screen = window.screen ?? NSScreen.main,
+                  !preferences.didFillSettingsWindow else { return }
+            let target = screen.visibleFrame
+            window.setFrame(target, display: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self, let window = self.window, window.isVisible, !preferences.didFillSettingsWindow else { return }
+                if window.frame != target, attempt < 3 {
+                    fill(attempt: attempt + 1)
+                } else {
+                    preferences.didFillSettingsWindow = true
+                    if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+                    keyObserver = nil
+                }
+            }
+        }
     }
 }
 

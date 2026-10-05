@@ -63,6 +63,7 @@
 		5008231D6CAE07EE7F478A25 /* QuickSearchTestIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B4EE6BAF61588E4C4FAB26 /* QuickSearchTestIsolationTests.swift */; };
 		5078335D97D88A0675A7F6B8 /* ShortcutCoachClickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */; };
 		511D2E223129B6595A9E909D /* SnippetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C6EF77E18990B57ED296BA /* SnippetStore.swift */; };
+		542C16333A14D93E7988F34A /* PluginsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5187F8D96AA4D1411822A73 /* PluginsSettingsView.swift */; };
 		54671A719E03B771792B4CAB /* QuickSearchCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */; };
 		55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */; };
 		57ABC6624CE28646EA5FC0FC /* UpdateVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */; };
@@ -365,6 +366,7 @@
 		E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateController.swift; sourceTree = "<group>"; };
 		E42DD01A15CB36C8078F4480 /* UnitTestDataIsolationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitTestDataIsolationTests.swift; sourceTree = "<group>"; };
 		E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationHistoryView.swift; sourceTree = "<group>"; };
+		E5187F8D96AA4D1411822A73 /* PluginsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginsSettingsView.swift; sourceTree = "<group>"; };
 		E61586690B952F46EBCDED78 /* NOTICES.argmax-oss-swift */ = {isa = PBXFileReference; path = "NOTICES.argmax-oss-swift"; sourceTree = "<group>"; };
 		E76CF0BA9E838A59F35DA8C2 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		EBBB83D782A2BF34F2C7854D /* WhisperKitModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitModelDownloader.swift; sourceTree = "<group>"; };
@@ -711,6 +713,7 @@
 				E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */,
 				AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */,
 				29161E585C6565DB6B7E10DC /* PluginSettingsPage.swift */,
+				E5187F8D96AA4D1411822A73 /* PluginsSettingsView.swift */,
 				A4D3540EC3F3F99A6E3B6274 /* RaycastSettingsStyle.swift */,
 				CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */,
 				059D55AF379C93A1EABF75A1 /* SharedViews.swift */,
@@ -1031,6 +1034,7 @@
 				206DA8D31D5B76FFA73479B1 /* PlainTextInput.swift in Sources */,
 				71D006A2CEEFBBD3DADD149D /* PluginManifest.swift in Sources */,
 				196F7631D2965DEC2D452BAF /* PluginSettingsPage.swift in Sources */,
+				542C16333A14D93E7988F34A /* PluginsSettingsView.swift in Sources */,
 				66D4AA5C1B1F31493509DD84 /* PointerEventMonitor.swift in Sources */,
 				12F31F615607750DD9191EC4 /* PolarLicenseProvider.swift in Sources */,
 				80EBAD50A5F6E554E63A4CC4 /* ProductIdentity.swift in Sources */,

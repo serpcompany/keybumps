@@ -15,7 +15,7 @@ What people see a capability called: in Settings › Plugins, the Store, and on 
 _Avoid_: Extension, add-on, app
 
 **Plugin manifest**:
-What a capability declares about itself, so the shell draws its Settings page, its Plugins table row, and its Store listing the same way for every plugin: its name, summary, icon, and category; its commands (palette tab and shortcuts); the permissions it needs; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
+What a capability declares about itself, so the shell draws its Settings page, its row on the Plugins page, and its Store listing the same way for every plugin: its name, summary, icon, and category; its commands (palette tab and shortcuts); the permissions it needs; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
 _Avoid_: Plist, config, schema
 
 **Store**:

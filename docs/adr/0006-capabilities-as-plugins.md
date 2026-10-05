@@ -25,7 +25,7 @@ That model needs a runtime for outside code, an isolation and permission model, 
 4. **An official-only Store, modeled on Raycast (#239).** The owner's call: build the Raycast shape now, listing only official plugins built by Keybumps.
    - **Plugin manifests:** each capability declares its name, summary, icon, category, commands, the permissions it needs, and its preferences as typed settings. Its preferences are stored under the plugin's own name.
    - **One settings template:** the shell draws every plugin's Settings page from its manifest in a fixed order: header, Commands, permissions, preferences. A plugin's genuinely custom parts, such as the Snippets library, go in one slot below.
-   - **Settings › Plugins:** like Raycast's Extensions tab, a searchable table of every plugin with its tab, shortcut, and switch, and the selected plugin's page beside it.
+   - **Settings › Plugins:** like Raycast's Extensions list, a searchable page of every plugin with its palette tab, shortcut, and switch. Each plugin keeps its own row in the Settings sidebar, one column as before, and a row on the Plugins page opens it.
    - **The Store:** a Command Palette view opened from Quick Search (`store`) or Settings. It's a searchable list by category, and each plugin's detail shows it as "Official · by Keybumps". Get turns a plugin on; Remove turns it off and keeps its data.
    - **Not yet:** Keybumps never downloads or loads code. Every plugin listed ships inside the app.
 5. **Revisit with a new ADR** if capabilities should update separately from the app, or other people should write them. That ADR has to settle:

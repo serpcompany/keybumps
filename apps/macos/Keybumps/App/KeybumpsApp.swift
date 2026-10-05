@@ -37,10 +37,17 @@ struct KeybumpsApp: App {
         }
     }
 
+    /// The size Settings takes when macOS has none saved and it has already filled the screen once
+    /// (`SettingsWindowFiller`); never wider than the screen, which macOS doesn't fit a new window's
+    /// width to.
+    private static var defaultWidth: CGFloat {
+        min(1240, max(960, NSScreen.main?.visibleFrame.width ?? 1240))
+    }
+
     var body: some Scene {
         Window(ReleaseLane.current.productName, id: "main") {
             SettingsRootView()
-                .frame(minWidth: 960, idealWidth: 960, minHeight: 720, idealHeight: 944)
+                .frame(minWidth: 960, idealWidth: Self.defaultWidth, minHeight: 720, idealHeight: 944)
                 .environment(model)
                 .task {
                     AppShellLaunch.start(model)
@@ -65,8 +72,9 @@ struct KeybumpsApp: App {
                 }
                 .modifier(MainWindowRoutingModifier(model: model))
                 .background(SettingsEscapeCloser())
+                .background(SettingsWindowFiller(preferences: model.preferences))
         }
-        .defaultSize(width: 960, height: 944)
+        .defaultSize(width: Self.defaultWidth, height: 944)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 OpenMainWindowButton(title: "Settings…")

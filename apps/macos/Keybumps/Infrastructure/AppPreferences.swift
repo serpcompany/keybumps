@@ -23,6 +23,7 @@ final class AppPreferences {
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
         static let lastLaunchedVersion = "lastLaunchedVersion"
+        static let didFillSettingsWindow = "didFillSettingsWindow"
     }
 
     private let defaults: UserDefaults
@@ -49,6 +50,12 @@ final class AppPreferences {
 
     var didCompleteOnboarding: Bool {
         didSet { defaults.set(didCompleteOnboarding, forKey: Key.didCompleteOnboarding) }
+    }
+
+    /// Whether the Settings window has opened filling the screen once. After that, macOS keeps the
+    /// size the person leaves it at.
+    var didFillSettingsWindow: Bool {
+        didSet { defaults.set(didFillSettingsWindow, forKey: Key.didFillSettingsWindow) }
     }
 
     private(set) var capabilityShortcuts: [String: ShortcutBinding] {
@@ -152,6 +159,7 @@ final class AppPreferences {
             .flatMap(DictationTranscriptionEngine.init(rawValue:))
             ?? .appleSpeech
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
+        didFillSettingsWindow = defaults.bool(forKey: Key.didFillSettingsWindow)
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
         showsHotkeysTab = defaults.bool(forKey: Key.showsHotkeysTab)
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
