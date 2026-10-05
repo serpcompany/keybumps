@@ -42,6 +42,10 @@ targets:
         buildPhase: resources
       - path: LICENSE.tock
         buildPhase: resources
+      - path: LICENSE.unicode
+        buildPhase: resources
+      - path: LICENSE.gemoji
+        buildPhase: resources
       - path: LICENSE.argmax-oss-swift
         buildPhase: resources
       - path: NOTICES.argmax-oss-swift

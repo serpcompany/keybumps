@@ -483,6 +483,8 @@ final class KeybumpsFeatureTests: XCTestCase {
             "LICENSE.rectangle",
             "LICENSE.shotnix",
             "LICENSE.tock",
+            "LICENSE.unicode",
+            "LICENSE.gemoji",
             "LICENSE.argmax-oss-swift",
             "NOTICES.argmax-oss-swift",
             "LICENSE.openai-whisper"
