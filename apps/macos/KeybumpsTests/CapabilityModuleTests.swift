@@ -36,6 +36,16 @@ struct CapabilityModuleTests {
         #expect(Array(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter])
     }
 
+    @Test("Every palette tab is drawn by the palette or supplied by its module, never neither or both")
+    func everyTabHasRows() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+
+        let supplied = Set(harness.model.commandPalette.tabContents.keys)
+        #expect(supplied.isDisjoint(with: CommandPaletteTab.drawnByPalette))
+        #expect(supplied.union(CommandPaletteTab.drawnByPalette) == Set(CommandPaletteTab.allCases))
+    }
+
     // MARK: Licensing gate (ADR 0002)
 
     @Test("Locked runs no capability, and activating starts them")

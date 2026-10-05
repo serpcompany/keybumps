@@ -87,6 +87,18 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.content.deletions == [0])
     }
 
+    @Test("A tab's rows can clear the search field")
+    func clearQuery() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.state.historyQuery = "tea 5m"
+        fixture.content.clearsQueryOnActivate = true
+
+        #expect(fixture.palette.handleKeyDown(Self.returnKey) == nil)
+        #expect(fixture.palette.state.historyQuery.isEmpty)
+    }
+
     @Test("Typing goes back to the first row only for rows that ask")
     func typingResetsSelectionWhenAsked() {
         let resetting = ModuleTabFixture(resetsSelectionWhileTyping: true)
@@ -191,6 +203,7 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
     let resetsSelectionWhileTyping: Bool
     var rows = 3
     var refusesDelete = false
+    var clearsQueryOnActivate = false
     private(set) var shows = 0
     private(set) var activations: [Activation] = []
     private(set) var deletions: [Int] = []
@@ -203,6 +216,7 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
 
     func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
         activations.append(Activation(row: row, query: query, withCommand: withCommand))
+        if clearsQueryOnActivate { palette.clearQuery() }
     }
 
     func delete(row: Int, query: String) -> Bool {

@@ -79,6 +79,13 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘6 is ignored")
     }
 
+    func testHotkeysTabShowsShortcutCoachHistory() {
+        // Its rows come from Shortcut Coach's module (`KeyboardShortcutterPaletteContent`).
+        launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])
+        XCTAssertTrue(paletteField("Search hotkeys").waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["No matching hotkeys"].waitForExistence(timeout: 5), "The sandbox history is empty")
+    }
+
     func testSnippetsTabCreatesASnippetInSettings() {
         // Settings is closed before the palette opens, so only ⌘N can bring it back.
         launch(permissions: "granted", ["-KBOpenPalette", "snippets", "-KBCloseSettings", "YES"])

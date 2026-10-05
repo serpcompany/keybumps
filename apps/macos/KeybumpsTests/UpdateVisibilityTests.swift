@@ -161,9 +161,43 @@ struct UpdateReminderTests {
         #expect(dotRefreshes == 1)
         #expect(model.menuBarAttention.showsDot)
         #expect(model.menuBarAttention.accessibilityLabel(productName: "Keybumps") == "Keybumps, update ready")
+
+        fake.emit(.idle, canRestart: false)
+        #expect(!model.menuBarAttention.showsDot, "The dot goes once nothing waits")
+        #expect(model.menuBarAttention.accessibilityLabel(productName: "Keybumps") == "Keybumps")
         #expect(presenter.shown == ["0.0.3-beta.14"])
         presenter.chooseRestart()
         #expect(fake.restartCount == 1)
+    }
+
+    @Test("An update already waiting at launch shows the dot")
+    func dotAtLaunch() {
+        let fake = FakeUpdateController()
+        fake.emit(.readyToRestart(version: "0.0.3-beta.14"), canRestart: true)
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+            presenceController: UpdaterTestPresenceController(),
+            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+            updater: fake,
+            updatePrompt: RecordingPromptPresenter()
+        )
+        #expect(model.menuBarAttention.showsDot)
+    }
+
+    @Test("Turning a capability off clears its dot")
+    func turningOffClearsDot() {
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+            presenceController: UpdaterTestPresenceController(),
+            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+            updater: FakeUpdateController(),
+            updatePrompt: RecordingPromptPresenter()
+        )
+        CapabilityMenuBarAttention(attention: model.menuBarAttention, capability: .snippets).show(saying: "snippets need you")
+        model.setCapability(.snippets, enabled: false)
+        #expect(!model.menuBarAttention.showsDot)
     }
 
     @Test("Update previews work only in QA and Debug builds")

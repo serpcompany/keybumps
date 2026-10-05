@@ -401,7 +401,10 @@ final class AppModel {
         if !snapshot.isEntitled {
             // Locked: stop every capability's resources and shortcuts, and close the palette.
             let context = capabilityContext
-            for capability in preferences.enabledCapabilities { capabilities.deactivate(capability, context: context) }
+            for capability in preferences.enabledCapabilities {
+                capabilities.deactivate(capability, context: context)
+                menuBarAttention.clear(.capability(capability))
+            }
             commandPalette.dismiss()
         }
         applyCapabilities()
@@ -457,6 +460,8 @@ final class AppModel {
     func setCapability(_ capability: Capability, enabled: Bool) {
         if !enabled {
             capabilities.deactivate(capability, context: capabilityContext)
+            // Nothing is left to open that would clear a turned-off capability's dot.
+            menuBarAttention.clear(.capability(capability))
             // Setup for a capability that's now off would prompt for nothing.
             if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
             if capability == .dictation { dismissDictationSetupCards() }

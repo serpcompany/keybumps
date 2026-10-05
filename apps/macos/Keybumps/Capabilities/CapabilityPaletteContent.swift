@@ -56,6 +56,8 @@ struct PaletteContentActions {
     let dismiss: () -> Void
     /// Moves the selection to a row, as a click on it does.
     let selectRow: (Int) -> Void
+    /// Empties the search field, as after a row has used what was typed.
+    let clearQuery: () -> Void
 }
 
 /// What the palette hands a tab's view each time it draws it.

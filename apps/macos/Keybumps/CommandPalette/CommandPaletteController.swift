@@ -22,6 +22,10 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var title: String { registration.name }
     var systemImage: String { registration.systemImage }
     var shortcutLabel: String { "⌘\(registration.commandKey)" }
+
+    /// The tabs `CommandPaletteController` draws itself. Every other tab's rows come from its
+    /// module (`CapabilityPaletteContent`).
+    static let drawnByPalette: Set<CommandPaletteTab> = [.search, .clipboard, .dictation, .screenshots, .snippets]
     var prompt: String { registration.prompt }
 
     /// The tabs in the tab bar. The Hotkeys tab is hidden unless the owner shows it, or it is open.
@@ -143,7 +147,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// shell sets it once, before the palette first shows.
     var tabContents: [CommandPaletteTab: any CapabilityPaletteContent] = [:] {
         didSet {
-            assert(panel == nil, "Set the palette's tab contents before it first shows")
+            precondition(panel == nil, "Set the palette's tab contents before it first shows")
             state.tabsResettingSelectionWhileTyping = Set(tabContents.values.filter(\.resetsSelectionWhileTyping).map(\.tab))
         }
     }
@@ -491,7 +495,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var contentActions: PaletteContentActions {
         PaletteContentActions(
             dismiss: { [weak self] in self?.dismiss() },
-            selectRow: { [weak self] row in self?.state.selection = row }
+            selectRow: { [weak self] row in self?.state.selection = row },
+            clearQuery: { [weak self] in self?.state.historyQuery = "" }
         )
     }
 
@@ -888,12 +893,13 @@ private struct CommandPaletteView: View {
         .clipShape(.rect(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.4), radius: 30, y: 14)
         .defaultFocus($inputFocused, true)
+        // Selecting a tab already starts it on its first row, or the row its content picks when it
+        // shows, so a tab change only moves focus.
         .onChange(of: state.tab) {
-            state.selection = 0
             inputFocused = true
         }
         .onChange(of: search.query) {
-            state.selection = 0
+            if state.tab == .search { state.selection = 0 }
         }
         .onChange(of: search.displayedRecentItems.map(\.id)) {
             guard state.tab == .search,
