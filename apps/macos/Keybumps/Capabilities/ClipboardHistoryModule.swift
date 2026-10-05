@@ -25,7 +25,8 @@ extension CapabilityDescriptor {
             content: { AnyView(ClipboardSettingsView()) }
         ),
         criticalOperations: [],
-        searchKeywords: ["copy", "copied", "paste"]
+        searchKeywords: ["copy", "copied", "paste"],
+        category: .productivity
     )
 }
 

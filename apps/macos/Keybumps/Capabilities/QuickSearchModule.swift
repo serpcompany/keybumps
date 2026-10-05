@@ -26,7 +26,8 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [],
         // No capability command: Quick Search's own tab is where commands are listed.
-        searchKeywords: nil
+        searchKeywords: nil,
+        category: .productivity
     )
 }
 

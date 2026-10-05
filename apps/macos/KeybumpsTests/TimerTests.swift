@@ -302,7 +302,7 @@ struct TimerModuleTests {
     func unnamedAndSilent() {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
-        fixture.preferences.timerPlaysSound = false
+        fixture.preferences.set(.bool(false), of: .timerRings, for: .timer)
         fixture.module.apply(fixture.context(enabled: [.timer]))
         fixture.store.start(duration: 300, name: nil)
 
@@ -352,7 +352,7 @@ struct TimerModuleTests {
         #expect(fixture.alerts.raised.last == TimerAlarm(title: "2 timers finished", detail: "a, b", rings: true, canRepeat: false))
 
         // C ends much later, unstopped: one alarm, still ringing.
-        fixture.preferences.timerPlaysSound = false
+        fixture.preferences.set(.bool(false), of: .timerRings, for: .timer)
         fixture.clock.advance(540)
         fixture.scheduler.fire()
         #expect(fixture.alerts.raised.last == TimerAlarm(title: "3 timers finished", detail: "a, b, c", rings: true, canRepeat: false))
@@ -730,18 +730,18 @@ struct TimerMenuBarTests {
         fixture.module.apply(context)
         fixture.store.start(duration: 300, name: "Tea")
 
-        fixture.preferences.timerShowsMenuBarCountdown = false
+        fixture.preferences.set(.bool(false), of: .timerMenuBarCountdown, for: .timer)
         fixture.module.apply(context)
         #expect(fixture.menuBarStatus.title == nil)
         #expect(!fixture.menuBarStatus.sections.isEmpty)
 
-        fixture.preferences.timerListsTimersInMenu = false
+        fixture.preferences.set(.bool(false), of: .timerMenuList, for: .timer)
         fixture.module.apply(context)
         #expect(fixture.menuBarStatus.sections.isEmpty)
         #expect(fixture.ticker.pendingDates.isEmpty, "Nothing to update")
 
-        fixture.preferences.timerShowsMenuBarCountdown = true
-        fixture.preferences.timerListsTimersInMenu = true
+        fixture.preferences.set(.bool(true), of: .timerMenuBarCountdown, for: .timer)
+        fixture.preferences.set(.bool(true), of: .timerMenuList, for: .timer)
         fixture.module.apply(context)
         #expect(fixture.menuBarStatus.title != nil)
         fixture.module.deactivate(context)
@@ -753,8 +753,8 @@ struct TimerMenuBarTests {
     @Test("Both are on by default")
     func defaults() {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
-        #expect(preferences.timerShowsMenuBarCountdown)
-        #expect(preferences.timerListsTimersInMenu)
+        #expect(preferences.bool(.timerMenuBarCountdown, for: .timer))
+        #expect(preferences.bool(.timerMenuList, for: .timer))
     }
 }
 

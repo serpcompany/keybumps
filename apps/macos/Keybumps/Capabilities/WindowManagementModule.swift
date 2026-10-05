@@ -16,7 +16,8 @@ extension CapabilityDescriptor {
             content: { AnyView(WindowSettingsView()) }
         ),
         criticalOperations: [.windowAction, .windowDrag],
-        searchKeywords: ["windows", "snap", "resize", "tile", "tiling"]
+        searchKeywords: ["windows", "snap", "resize", "tile", "tiling"],
+        category: .productivity
     )
 }
 

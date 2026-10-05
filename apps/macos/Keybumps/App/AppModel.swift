@@ -506,6 +506,13 @@ final class AppModel {
         refreshDetectorState()
     }
 
+    /// Sets a plugin's declared preference from its Settings page, then applies the capabilities
+    /// again, so its module picks it up at once.
+    func setPluginPreference(_ preference: PluginPreference, to value: PluginPreference.Value, for capability: Capability) {
+        preferences.set(value, of: preference, for: capability)
+        applyCapabilities()
+    }
+
     private func handleDictationShortcut() {
         refreshPermissions()
         let missing = missingPermissions(for: .dictation)

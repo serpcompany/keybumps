@@ -25,7 +25,8 @@ extension CapabilityDescriptor {
             content: { AnyView(ScreenshotToolsSettingsView()) }
         ),
         criticalOperations: [.unsavedWork],
-        searchKeywords: ["screenshots", "screenshot", "screen", "capture", "annotate"]
+        searchKeywords: ["screenshots", "screenshot", "screen", "capture", "annotate"],
+        category: .media
     )
 }
 

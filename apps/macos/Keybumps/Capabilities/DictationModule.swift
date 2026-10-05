@@ -28,7 +28,8 @@ extension CapabilityDescriptor {
         criticalOperations: [],
         searchKeywords: [
             "dictate", "voice", "speech", "transcribe", "transcription", "transcript", "recording", "recordings", "history"
-        ]
+        ],
+        category: .writing
     )
 }
 

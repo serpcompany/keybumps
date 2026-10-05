@@ -27,7 +27,8 @@ extension CapabilityDescriptor {
             content: { AnyView(SnippetsSettingsView()) }
         ),
         criticalOperations: [],
-        searchKeywords: ["snippet", "snip"]
+        searchKeywords: ["snippet", "snip"],
+        category: .writing
     )
 }
 

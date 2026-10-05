@@ -26,7 +26,8 @@ extension CapabilityDescriptor {
             content: { AnyView(KeyboardShortcutterSettingsView()) }
         ),
         criticalOperations: [],
-        searchKeywords: ["hotkeys", "hotkey", "shortcuts", "keyboard", "history"]
+        searchKeywords: ["hotkeys", "hotkey", "shortcuts", "keyboard", "history"],
+        category: .productivity
     )
 }
 
