@@ -96,6 +96,34 @@ struct UpdateReminderTests {
         #expect(!fixture.presenter.isShowing, "Nothing left to restart for")
     }
 
+    @Test("A Restart Now that waited too long asks again instead, and one for a gone update is dropped")
+    func restartRequestExpires() {
+        let fixture = ReminderFixture(snapshot: Self.ready)
+        fixture.reminder.evaluate()
+        fixture.isSafe = false
+        fixture.presenter.chooseRestart()
+        fixture.now += 121
+        fixture.isSafe = true
+        fixture.reminder.evaluate()
+        #expect(fixture.restarts == 0, "Not long after the click, such as when a long Dictation ends")
+        #expect(fixture.presenter.shown.count == 2, "It asks again")
+
+        fixture.presenter.chooseLater()
+        fixture.isSafe = false
+        fixture.now += 60 * 60
+        fixture.reminder.evaluate()
+        fixture.isSafe = true
+        fixture.reminder.evaluate()
+        fixture.isSafe = false
+        fixture.presenter.chooseRestart()
+        fixture.snapshot = Self.idle
+        fixture.reminder.evaluate()
+        fixture.snapshot = Self.ready
+        fixture.isSafe = true
+        fixture.reminder.evaluate()
+        #expect(fixture.restarts == 0, "The update went away, so the click is forgotten")
+    }
+
     @Test("Restart Now while restarting isn't safe restarts as soon as it is")
     func restartWhenSafe() {
         let fixture = ReminderFixture(snapshot: Self.ready)
@@ -137,8 +165,9 @@ struct UpdateReminderTests {
 
     @Test("Update previews work only in QA and Debug builds")
     func previewsOnlyOutsidePublicBuilds() {
-        #expect(UpdatePreview.isAllowed(version: "0.0.3-dev.issue225"))
-        #expect(!UpdatePreview.isAllowed(version: "0.0.3-beta.14") || UpdatePreview.isDebugBuild)
+        #expect(UpdatePreview.isAllowed(version: "0.0.3-dev.issue225", isDebugBuild: false))
+        #expect(!UpdatePreview.isAllowed(version: "0.0.3-beta.14", isDebugBuild: false))
+        #expect(UpdatePreview.isAllowed(version: "0.0.3-beta.14", isDebugBuild: true))
     }
 
     @Test("The prompt says which version is waiting, or just that an update is")

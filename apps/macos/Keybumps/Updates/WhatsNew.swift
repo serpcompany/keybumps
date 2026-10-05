@@ -3,8 +3,8 @@ import SwiftUI
 
 /// What's New (#225): after an update installs, a window shows that version's release notes once.
 /// Release builds carry their `docs/releases/v<version>.md` as `WhatsNew.md` (`project.yml`,
-/// `build-update-release.sh`), so it works offline; a build without it (Debug, QA candidates) shows
-/// nothing. A fresh install shows onboarding instead.
+/// `build-update-release.sh`), so it works offline. Debug builds carry none, and QA candidates carry
+/// notes only for `UpdatePreview`. A fresh install shows onboarding instead.
 enum WhatsNew {
     static let notesResourceName = "WhatsNew"
 

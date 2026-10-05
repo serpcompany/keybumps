@@ -346,7 +346,7 @@ final class AppModel {
     private func previewUpdateWindowsIfAsked() {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         guard UpdatePreview.isAllowed(version: version),
-              ProcessInfo.processInfo.arguments.contains(UpdatePreview.argument) else { return }
+              UpdatePreview.isRequested else { return }
         if let notes = WhatsNew.bundledNotes() { whatsNew.show(ReleaseNotesDocument(markdown: notes)) }
         let prompt = updateReminder.presenter
         prompt.show(version: "\(version) (preview)", restart: { prompt.close() }, later: { prompt.close() })
@@ -357,8 +357,10 @@ final class AppModel {
         currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
         notes: String? = WhatsNew.bundledNotes()
     ) {
-        // QA candidates carry notes for the preview but don't show them on every new candidate.
-        let shows = notes != nil && !currentVersion.contains("-dev.") && WhatsNew.shouldShow(
+        // QA candidates carry notes only for the preview: they never show What's New or record a
+        // version, so going back to a release afterwards doesn't show its notes again.
+        guard !currentVersion.contains("-dev.") else { return }
+        let shows = notes != nil && WhatsNew.shouldShow(
             currentVersion: currentVersion,
             lastLaunchedVersion: preferences.lastLaunchedVersion,
             completedOnboarding: preferences.didCompleteOnboarding,

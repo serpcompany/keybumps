@@ -21,7 +21,8 @@ enum UpdatePromptText {
 /// update is ready and restarting is safe (`UpdateInstallationSafetyPolicy`, so never during
 /// Dictation, an unsaved screenshot edit, or a window being moved) and the Command Palette is
 /// closed, then again an hour after each Later, every hour until the restart. Restart Now clicked
-/// while restarting isn't safe restarts as soon as it is. It never restarts unasked.
+/// while restarting isn't safe restarts once it is, within two minutes, or else asks again. It never
+/// restarts unasked.
 @MainActor
 final class UpdateReminder {
     static let interval: TimeInterval = 60 * 60
@@ -36,8 +37,12 @@ final class UpdateReminder {
     private var timer: Timer?
     /// While true, no new prompt appears: the Command Palette is open.
     var isSuppressed: () -> Bool = { false }
-    /// Restart Now was clicked while restarting wasn't safe.
-    private var restartRequested = false
+    /// When Restart Now was clicked while restarting wasn't safe, and for which version.
+    private var restartRequestedAt: Date?
+    private var restartRequestedVersion: String?
+    /// How long a Restart Now waits for a safe moment: long enough for a window drag or snap, short
+    /// enough that a restart never comes unexpectedly later (after a long Dictation, say).
+    static let restartRequestWindow: TimeInterval = 120
 
     init(
         snapshot: @escaping () -> UpdateSnapshot,
@@ -76,17 +81,23 @@ final class UpdateReminder {
         let current = snapshot()
         let version = current.status.pendingVersion
         guard current.canRestart else {
-            restartRequested = false
+            restartRequestedAt = nil
             if presenter.isShowing { presenter.close() }
             return
         }
-        // Restart Now was clicked while restarting wasn't safe: restart as soon as it is.
-        if restartRequested {
-            if isSafe() {
-                restartRequested = false
-                restart()
+        // Restart Now was clicked while restarting wasn't safe: restart once it is, within two
+        // minutes, for the same update. After that, ask again instead.
+        if let requestedAt = restartRequestedAt {
+            if restartRequestedVersion != version || now().timeIntervalSince(requestedAt) > Self.restartRequestWindow {
+                restartRequestedAt = nil
+                laterAt = nil
+            } else {
+                if isSafe(), !isSuppressed() {
+                    restartRequestedAt = nil
+                    restart()
+                }
+                return
             }
-            return
         }
         // An open prompt stays where the user put it. Moments that aren't safe (Dictation, a window
         // being dragged or snapped) or the open palette only keep a new one from appearing.
@@ -103,7 +114,8 @@ final class UpdateReminder {
                 if isSafe() {
                     restart()
                 } else {
-                    restartRequested = true
+                    restartRequestedAt = now()
+                    restartRequestedVersion = version
                 }
             },
             later: { [weak self] in
@@ -219,7 +231,12 @@ enum UpdatePreview {
         #endif
     }
 
-    static func isAllowed(version: String) -> Bool {
+    static func isAllowed(version: String, isDebugBuild: Bool = isDebugBuild) -> Bool {
         isDebugBuild || version.contains("-dev.")
+    }
+
+    /// `-KBPreviewUpdates YES` on the command line (the argument domain).
+    static var isRequested: Bool {
+        UserDefaults.standard.bool(forKey: String(argument.dropFirst()))
     }
 }

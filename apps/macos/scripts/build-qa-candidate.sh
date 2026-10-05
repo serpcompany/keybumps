@@ -59,8 +59,9 @@ candidate_version="${baseline_version%%-*}-dev.issue$issue"
 output="$candidates_dir/$candidate_build"
 mkdir -p "$output"
 
-# The newest release's notes, for the update preview (`-KBPreviewUpdates YES`, UpdatePreview).
-latest_notes=$(ls "$app_root"/../../docs/releases/v*.md | sort -V | tail -1)
+# The current release's notes, for the update preview (`-KBPreviewUpdates YES`, UpdatePreview).
+repository_root=$(git -C "$app_root" rev-parse --show-toplevel)
+latest_notes="$repository_root/docs/releases/v$(<"$repository_root/version.txt").md"
 print "Building $candidate_version ($candidate_build) from $branch @ $short_commit"
 xcodegen generate >/dev/null
 xcodebuild -quiet -project Keybumps.xcodeproj -scheme Keybumps-Release -configuration Release \
