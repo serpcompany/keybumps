@@ -116,6 +116,8 @@ extension AppModel {
             // Never shows the restart prompt or What's New.
             updatePrompt: InertUpdatePromptPresenter(),
             whatsNew: InertWhatsNewPresenter(),
+            // A timer's end never plays a sound.
+            timerAlerts: InertTimerAlerts(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
                     preferredLocation: { sandbox.screenshots.path },

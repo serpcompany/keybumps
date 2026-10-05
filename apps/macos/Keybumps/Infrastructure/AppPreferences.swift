@@ -22,6 +22,7 @@ final class AppPreferences {
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
+        static let timerPlaysSound = "timerPlaysSound"
         static let lastLaunchedVersion = "lastLaunchedVersion"
     }
 
@@ -86,6 +87,11 @@ final class AppPreferences {
         didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
     }
 
+    /// Whether a timer's end plays a sound as well as its notch notice. On by default.
+    var timerPlaysSound: Bool {
+        didSet { defaults.set(timerPlaysSound, forKey: Key.timerPlaysSound) }
+    }
+
     /// The version that last launched, so What's New shows once after an update (#225).
     var lastLaunchedVersion: String? {
         didSet { defaults.set(lastLaunchedVersion, forKey: Key.lastLaunchedVersion) }
@@ -121,6 +127,7 @@ final class AppPreferences {
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
+        timerPlaysSound = defaults.object(forKey: Key.timerPlaysSound) == nil || defaults.bool(forKey: Key.timerPlaysSound)
         lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),

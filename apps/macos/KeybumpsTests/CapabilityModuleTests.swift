@@ -15,7 +15,7 @@ struct CapabilityModuleTests {
         defer { harness.tearDown() }
 
         let order: [Capability] = [
-            .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
+            .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer
         ]
         #expect(CapabilityCatalog.descriptors.map(\.capability) == order)
         #expect(harness.model.capabilities.modules.map(\.capability) == order)
@@ -26,14 +26,15 @@ struct CapabilityModuleTests {
         }
     }
 
-    @Test("Shortcut Coach's module supplies the Hotkeys rows, and the app gives them to the palette")
-    func hotkeysRowsComeFromTheModule() {
+    @Test("Shortcut Coach's and Timer's modules supply their tabs' rows, and the app gives them to the palette")
+    func moduleRowsComeFromTheModules() {
         let harness = ModuleHarness()
         defer { harness.tearDown() }
 
-        #expect(Array(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter])
+        #expect(Set(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter, .timers])
         #expect(harness.model.capabilities.module(for: .keyboardShortcutter)?.paletteContent?.tab == .keyboardShortcutter)
-        #expect(Array(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter])
+        #expect(harness.model.capabilities.module(for: .timer)?.paletteContent?.tab == .timers)
+        #expect(Set(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter, .timers])
     }
 
     @Test("Every palette tab is drawn by the palette or supplied by its module, never neither or both")
@@ -99,15 +100,16 @@ struct CapabilityModuleTests {
     @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs
-        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6])
+        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6, 7])
         #expect(Set(tabs.map(\.tab)).count == tabs.count)
-        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets"] {
+        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets", "timers"] {
             #expect(CommandPaletteTab(rawValue: rawValue).map(CommandPaletteTab.allCases.contains) == true)
         }
         #expect(CommandPaletteTab.search.owner == .quickSearch)
         #expect(CommandPaletteTab.keyboardShortcutter.owner == .keyboardShortcutter)
         #expect(CommandPaletteTab.screenshots.owner == .screenshotTools)
         #expect(CommandPaletteTab.snippets.owner == .snippets)
+        #expect(CommandPaletteTab.timers.owner == .timer)
         #expect(CapabilityCatalog.paletteTab(for: .screenshots).tab.dataSource == .clipboardHistory)
         #expect(CapabilityDescriptor.windowManagement.paletteTab == nil)
 
@@ -144,7 +146,8 @@ struct CapabilityModuleTests {
             .dictation: [],
             .windowManagement: [.windowAction, .windowDrag],
             .keyboardShortcutter: [],
-            .snippets: []
+            .snippets: [],
+            .timer: []
         ])
     }
 
@@ -200,7 +203,8 @@ struct CapabilityModuleTests {
     @Test("Preference keys and the known-capabilities migration are unchanged")
     func preferenceKeysAndKnownCapabilitiesMigration() {
         #expect(Capability.allCases.map(\.rawValue) == [
-            "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools", "snippets"
+            "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools", "snippets",
+            "timer",
         ])
         #expect(Capability.originalCapabilities == [
             .quickSearch, .clipboardHistory, .dictation, .windowManagement, .keyboardShortcutter
@@ -208,26 +212,27 @@ struct CapabilityModuleTests {
 
         let defaults = InMemoryDefaults()
 
-        // An install from before per-capability tracking gets Screenshot Tools and Snippets once.
+        // An install from before per-capability tracking gets Screenshot Tools, Snippets, and Timer once.
         defaults.set(["dictation", "quickSearch"], forKey: "enabledCapabilities")
         let upgraded = AppPreferences(defaults: defaults)
-        #expect(upgraded.enabledCapabilities == [.dictation, .quickSearch, .screenshotTools, .snippets])
-        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["dictation", "quickSearch", "screenshotTools", "snippets"])
+        #expect(upgraded.enabledCapabilities == [.dictation, .quickSearch, .screenshotTools, .snippets, .timer])
+        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["dictation", "quickSearch", "screenshotTools", "snippets", "timer"])
         #expect(defaults.stringArray(forKey: "knownCapabilities") == Capability.allCases.map(\.rawValue).sorted())
 
         // Once known, the owner's choice is respected.
         upgraded.setCapability(.screenshotTools, enabled: false)
         upgraded.setCapability(.snippets, enabled: false)
+        upgraded.setCapability(.timer, enabled: false)
         #expect(AppPreferences(defaults: defaults).enabledCapabilities == [.dictation, .quickSearch])
 
-        // An install that already knew Screenshot Tools, but not Snippets, gets only Snippets.
+        // An install that already knew Screenshot Tools, but not Snippets or Timer, gets only those.
         let screenshotsKnown = InMemoryDefaults()
         screenshotsKnown.set(["quickSearch"], forKey: "enabledCapabilities")
         screenshotsKnown.set(
             ["clipboardHistory", "dictation", "keyboardShortcutter", "quickSearch", "screenshotTools", "windowManagement"],
             forKey: "knownCapabilities"
         )
-        #expect(AppPreferences(defaults: screenshotsKnown).enabledCapabilities == [.quickSearch, .snippets])
+        #expect(AppPreferences(defaults: screenshotsKnown).enabledCapabilities == [.quickSearch, .snippets, .timer])
     }
 
     @Test("Open Snippets starts unassigned, on new installs and upgrades, and registers once the owner sets it")
@@ -281,6 +286,13 @@ private final class ModuleHarness {
         displayName: "⌃⌥⇧S"
     )
 
+    /// A binding for the Open Timers shortcut, which also starts unassigned.
+    static let timerBinding = ShortcutBinding(
+        keyCode: UInt32(kVK_ANSI_T),
+        modifiers: UInt32(controlKey | optionKey | shiftKey),
+        displayName: "⌃⌥⇧T"
+    )
+
     init(
         licensing: (any LicenseControlling)? = nil,
         assignsSnippetsShortcut: Bool = true,
@@ -296,6 +308,7 @@ private final class ModuleHarness {
         if assignsSnippetsShortcut {
             preferences.setCapabilityShortcut(Self.snippetsBinding, for: .snippets)
         }
+        preferences.setCapabilityShortcut(Self.timerBinding, for: .timer)
 
         clipboard = TrackingClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
@@ -327,6 +340,7 @@ private final class ModuleHarness {
             ),
             spotlightShortcutResolver: InertSpotlightShortcutResolver(),
             clipboard: clipboard,
+            timers: TimerStore(storageURL: root.appendingPathComponent(TimerStore.fileName)),
             dictationHistory: DictationHistoryService(
                 recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
             ),
@@ -347,6 +361,7 @@ private final class ModuleHarness {
         )
     }
 
+
     func tearDown() {
         model.screenshotTools.stop()
         clipboard.stop()
@@ -363,6 +378,7 @@ private final class ModuleHarness {
         case .screenshotTools: Set(CapabilityShortcut.allCases.filter { $0.capability == .screenshotTools }.map(\.ownerID))
         case .keyboardShortcutter: []
         case .snippets: [CapabilityShortcut.snippets.ownerID]
+        case .timer: [CapabilityShortcut.timer.ownerID]
         }
     }
 
@@ -381,6 +397,8 @@ private final class ModuleHarness {
         case .windowManagement: windows.isDragSnapping
         case .keyboardShortcutter: model.detectorStatus == .monitoring
         case .screenshotTools: isWatchingScreenshots
+        case .timer:
+            model.timers.isActive && model.shortcuts.activeOwners.isSuperset(of: Self.ownedShortcuts(for: capability))
         }
     }
 }

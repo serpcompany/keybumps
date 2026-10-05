@@ -196,6 +196,8 @@ final class PaletteHUD: CoachTipPresenting {
     /// other notices are dropped rather than drawn over it, and one already showing is hidden. It is
     /// weak, so an owner that goes away can never leave notices suppressed.
     private weak var notchOwner: AnyObject?
+    /// A notice that must not be lost, waiting for the notch (`showWhenNotchFree`).
+    private var waitingNotice: (() -> Void)?
 
     var isSuppressed: Bool { notchOwner != nil }
 
@@ -207,7 +209,20 @@ final class PaletteHUD: CoachTipPresenting {
 
     /// Gives the notch back, if `owner` still holds it.
     func releaseNotch(from owner: AnyObject) {
-        if notchOwner === owner { notchOwner = nil }
+        guard notchOwner === owner else { return }
+        notchOwner = nil
+        let waiting = waitingNotice
+        waitingNotice = nil
+        waiting?()
+    }
+
+    /// A notice that must not be lost, such as a timer ending: shown now, or, while another surface
+    /// holds the notch, as soon as it gives the notch back. A newer one replaces one still waiting.
+    func showWhenNotchFree(_ message: String, systemImage: String, tint: Color, duration: TimeInterval) {
+        let show: () -> Void = { [weak self] in
+            self?.show(message, systemImage: systemImage, tint: tint, duration: duration)
+        }
+        if isSuppressed { waitingNotice = show } else { show() }
     }
 
     func show(

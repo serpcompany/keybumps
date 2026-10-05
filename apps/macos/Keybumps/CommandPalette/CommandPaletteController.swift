@@ -10,6 +10,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case keyboardShortcutter
     case screenshots
     case snippets
+    case timers
 
     var id: String { rawValue }
 
