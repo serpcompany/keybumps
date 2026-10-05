@@ -37,11 +37,11 @@ That model needs a runtime for outside code, an isolation and permission model, 
 
 ## Consequences
 
-- Adding a capability takes an app release, and only Keybumps writes them. Its manifest is the part a third-party plugin would one day provide, so the Store and the settings template won't need to change if that day comes.
+- Adding a capability takes an app release, and only Keybumps writes them. Its manifest is the part a third-party plugin would one day provide, so the settings template won't need to change if that day comes. The website's Store keeps its own copy of each manifest's facts (`apps/web/src/lib/plugins.ts`).
 - Each new capability's PR, or its release, also:
   - adds its terms to `CONTEXT.md`;
   - writes its What's New lines in `docs/releases/`;
-  - adds it to the website's feature grid, and to the privacy page if it keeps anything;
+  - adds it to the website's feature grid and its Store page (`apps/web/src/lib/plugins.ts`), and to the privacy page if it keeps anything;
   - adds a donor ledger entry and a `LICENSE.*` if it adapts outside code;
   - adds a UI smoke test that opens its tab or page.
 - The shell seams Timer needed now serve every capability: a module's own palette tab (`CapabilityPaletteContent`), the menu bar dot (`MenuBarAttention`), text and menu sections on the menu bar item (`MenuBarStatus`), and waiting for the notch (`PaletteHUD.whenNotchFree`).

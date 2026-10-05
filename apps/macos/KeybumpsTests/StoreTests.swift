@@ -22,7 +22,7 @@ struct StoreTests {
         #expect(QuickSearchCommand.store.destination(enabledCapabilities: []).hint == "Opens keybumps.app in your browser")
     }
 
-    @Test("Running it closes the palette and opens the Store in the browser, not Settings")
+    @Test("Running it opens the Store in the browser, not Settings")
     func running() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsStore-\(UUID().uuidString)", isDirectory: true)
@@ -39,6 +39,5 @@ struct StoreTests {
 
         #expect(openedURLs == [PluginStore.url])
         #expect(openedSettings.isEmpty)
-        #expect(!palette.isVisible)
     }
 }

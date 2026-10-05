@@ -9,9 +9,9 @@ enum PluginCategory: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// The Store: the plugin directory on the website, which lists every plugin from its manifest. Every
-/// plugin ships in the app for now (ADR 0006), so the Store only shows them; Settings › Plugins turns
-/// them on and off.
+/// The Store: the plugin directory on the website, which keeps its own copy of each plugin's manifest
+/// facts (`apps/web/src/lib/plugins.ts`). Every plugin ships in the app for now (ADR 0006), so the
+/// Store only shows them; Settings › Plugins turns them on and off.
 enum PluginStore {
     static let url = URL(string: "https://keybumps.app/plugins")!
     static let systemImage = "puzzlepiece.extension"
