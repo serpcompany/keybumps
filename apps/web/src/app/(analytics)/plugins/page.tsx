@@ -1,161 +1,136 @@
+import { Layers, Tag } from 'lucide-react'
+import Link from 'next/link'
+import { KeybumpsAvatar } from '@/components/keybumps-avatar'
+import { PluginBrowser, type PluginBrowserEntry } from '@/components/plugin-browser'
 import { PluginIcon } from '@/components/plugin-icon'
 import { pageMetadata } from '@/lib/metadata'
+import { linkPrefetch } from '@/lib/pages'
 import {
+  commandCount,
   type Plugin,
-  permissionNames,
   pluginCategories,
   pluginFor,
+  pluginPath,
   plugins,
-  pluginsIn
+  searchTerms
 } from '@/lib/plugins'
 
 export const metadata = pageMetadata('/plugins/')
 
-/**
- * The category filter is a radio group that site.css reads with :has(), so it needs no client
- * code. Each value is a category in lowercase, matching the cards' data-category.
- */
+/** The filter tabs under the search. Category values match `PluginBrowserEntry.category`. */
 const filters = [
-  { value: 'all', label: 'All', count: plugins.length },
-  ...pluginCategories.map(category => ({
-    value: category.toLowerCase(),
-    label: category,
-    count: pluginsIn(category).length
-  }))
+  { value: 'all', label: 'All Plugins' },
+  { value: 'new', label: 'New' },
+  ...pluginCategories.map(category => ({ value: category.toLowerCase(), label: category }))
 ]
 
 /**
- * The Store: every plugin, from the app's plugin manifests (src/lib/plugins.ts). The app opens it
- * from Settings › Plugins and Quick Search's Store command, at https://keybumps.app/plugins.
+ * The floating icons above the title: two staggered rows, the middle tiles largest and brightest.
+ * Each is [slug, size in pixels, opacity].
+ */
+const heroIcons: readonly (readonly [string, number, number])[][] = [
+  [
+    ['snippets', 52, 0.35],
+    ['quick-search', 68, 0.75],
+    ['timer', 80, 1],
+    ['window-manager', 60, 0.5]
+  ],
+  [
+    ['clipboard-history', 60, 0.5],
+    ['dictation', 80, 1],
+    ['screenshot-tools', 68, 0.75],
+    ['shortcut-coach', 52, 0.35]
+  ]
+]
+
+/**
+ * /plugins/: every plugin, from the app's plugin manifests (src/lib/plugins.ts), each linking to
+ * its own page. The app links here from Settings › Plugins (Browse on keybumps.app). The search
+ * and the filter tabs are the only client code (src/components/plugin-browser.tsx).
  */
 export default function PluginsPage() {
+  const entries: PluginBrowserEntry[] = plugins.map(plugin => ({
+    slug: plugin.slug,
+    category: plugin.category.toLowerCase(),
+    isNew: Boolean(plugin.isNew),
+    terms: searchTerms(plugin),
+    card: <PluginCard plugin={plugin} />
+  }))
+
   return (
     <main className="plugins">
-      <section className="hero plugins-hero">
-        <div className="container hero-inner">
-          <span className="pill">
-            <span className="dot" /> Store · {plugins.length} plugins
-          </span>
-          <h1>Plugins</h1>
-          <p className="lede">
-            Every plugin is official, built by Keybumps, and ships in the app. Turn each one on or
-            off in Settings › Plugins.
-          </p>
-        </div>
-      </section>
-
-      <section className="section plugins-list" aria-labelledby="plugins-heading">
-        <div className="container">
-          <h2 id="plugins-heading" className="sr-only">
-            Every plugin
-          </h2>
-          <fieldset className="plugin-filter">
-            <legend className="sr-only">Show plugins in</legend>
-            {filters.map(filter => (
-              <span key={filter.value}>
-                <input
-                  type="radio"
-                  name="category"
-                  id={`category-${filter.value}`}
-                  value={filter.value}
-                  defaultChecked={filter.value === 'all'}
-                  className="sr-only"
-                />
-                <label htmlFor={`category-${filter.value}`}>
-                  {filter.label} <span className="count">{filter.count}</span>
-                </label>
-              </span>
-            ))}
-          </fieldset>
-          <ul className="grid plugin-grid">
-            {plugins.map(plugin => (
-              <li key={plugin.slug} id={plugin.slug} data-category={plugin.category.toLowerCase()}>
-                <PluginCard plugin={plugin} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      <PluginBrowser
+        hero={<Hero />}
+        filters={filters}
+        entries={entries}
+        heading="Plugins"
+        subtitle="Every plugin is included with Keybumps. Open one to see its commands and what it keeps on your Mac."
+      />
     </main>
   )
 }
 
-function PluginCard({ plugin }: { plugin: Plugin }) {
+function Hero() {
   return (
-    <article className="card plugin-card">
-      <div className="plugin-head">
-        <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} />
-        <div className="plugin-title">
-          <h3>
-            {plugin.name}
-            {plugin.isNew && (
-              <>
-                {' '}
-                <span className="plugin-new">New</span>
-              </>
-            )}
-          </h3>
-          <p className="plugin-by">Official · by Keybumps</p>
-        </div>
-        <span className="plugin-category">{plugin.category}</span>
-      </div>
-      <p>{plugin.summary}</p>
-      <dl className="plugin-facts">
-        <div>
-          <dt>Palette tab</dt>
-          <dd>
-            {plugin.paletteTab ? (
-              <>
-                {plugin.paletteTab.name} <kbd>⌘{plugin.paletteTab.commandKey}</kbd>
-                {plugin.paletteTab.hiddenUnless && (
-                  <span className="plugin-note">
-                    Hidden until you turn on “{plugin.paletteTab.hiddenUnless}”.
-                  </span>
-                )}
-              </>
-            ) : (
-              'None'
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>{plugin.shortcuts.length > 1 ? 'Shortcuts' : 'Shortcut'}</dt>
-          <dd>
-            {plugin.shortcuts.length === 0 ? (
-              'None'
-            ) : (
-              <ul className="plugin-shortcuts">
-                {plugin.shortcuts.map(shortcut => (
-                  <li key={shortcut.title}>
-                    {shortcut.title}{' '}
-                    {shortcut.keys ? (
-                      <kbd>{shortcut.keys}</kbd>
-                    ) : (
-                      <span className="plugin-note-inline">not set by default</span>
-                    )}
-                  </li>
-                ))}
-                {plugin.moreShortcuts ? <li>and {plugin.moreShortcuts} more</li> : null}
-              </ul>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Permissions</dt>
-          <dd>
-            {permissionNames(plugin.permissions) || 'None'}
-            {plugin.optionalPermissions && (
-              <span className="plugin-note">Optional: {plugin.optionalPermissions}</span>
-            )}
-          </dd>
-        </div>
-        {plugin.requires.length > 0 && (
-          <div>
-            <dt>Requires</dt>
-            <dd>{plugin.requires.map(slug => pluginFor(slug).name).join(', ')}</dd>
+    <>
+      <div className="hero-icons" aria-hidden="true">
+        {heroIcons.map(row => (
+          <div key={row[0][0]} className="hero-icons-row">
+            {row.map(([slug, size, opacity], index) => {
+              const plugin = pluginFor(slug)
+              return (
+                <span
+                  key={slug}
+                  className="hero-icon"
+                  style={{ opacity, animationDelay: `${index * -1.3}s` }}
+                >
+                  <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={size} />
+                </span>
+              )
+            })}
           </div>
+        ))}
+      </div>
+      <h1>Plugins</h1>
+      <p className="plugins-lede">
+        Every plugin is official, built by Keybumps, and ships in the app.
+        <br className="wide-only" /> Turn each one on or off in Settings › Plugins.
+      </p>
+    </>
+  )
+}
+
+function PluginCard({ plugin }: { plugin: Plugin }) {
+  const commands = commandCount(plugin)
+  const path = pluginPath(plugin.slug)
+  return (
+    <Link href={path} prefetch={linkPrefetch(path)} className="plugin-card">
+      <span className="plugin-card-top">
+        <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={24} />
+        <h3>{plugin.name}</h3>
+        {plugin.isNew && <span className="badge-new">New</span>}
+        <span className="pill-included">Included</span>
+      </span>
+      <p className="plugin-card-summary">{plugin.summary}</p>
+      <span className="plugin-card-meta">
+        <span className="plugin-author">
+          <KeybumpsAvatar />
+          Keybumps
+        </span>
+        <span>
+          <Layers aria-hidden="true" size={14} />
+          {commands} {commands === 1 ? 'command' : 'commands'}
+        </span>
+        {plugin.paletteTab && (
+          <span title={`Its Command Palette tab, ${plugin.paletteTab.name}`}>
+            <kbd>⌘{plugin.paletteTab.commandKey}</kbd>
+          </span>
         )}
-      </dl>
-    </article>
+        <span className="meta-category">
+          <Tag aria-hidden="true" size={14} />
+          {plugin.category}
+        </span>
+      </span>
+    </Link>
   )
 }

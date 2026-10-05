@@ -1,3 +1,4 @@
+import { pluginPath, plugins } from './plugins'
 import { PRICE } from './site'
 
 export type SitePage = {
@@ -67,6 +68,16 @@ export const sitePages = [
 ] as const satisfies readonly SitePage[]
 
 export type SitePagePath = (typeof sitePages)[number]['path']
+
+/** Each plugin's page, /plugins/<slug>/, generated from src/lib/plugins.ts. */
+export const pluginPages: readonly SitePage[] = plugins.map(plugin => ({
+  path: pluginPath(plugin.slug),
+  title: plugin.name,
+  description: plugin.summary
+}))
+
+/** Every indexable page, for the sitemaps: the static pages, then each plugin's page. */
+export const indexablePages: readonly SitePage[] = [...sitePages, ...pluginPages]
 
 export const legalPages = sitePages.filter(
   page => page.path.startsWith('/legal/') && page.path !== '/legal/'

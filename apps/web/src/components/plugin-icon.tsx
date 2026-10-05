@@ -26,19 +26,25 @@ const icons: Record<PluginSystemImage, LucideIcon> = {
 
 /**
  * A plugin's icon as the app's Settings draws it (`SettingsIconTile`): a white symbol on a rounded
- * square filled with its tint.
+ * square filled with its tint. `size` is the tile's width in pixels; the symbol and the corner
+ * radius scale with it.
  */
 export function PluginIcon({
   systemImage,
-  tint
+  tint,
+  size = 44,
+  className
 }: {
   systemImage: PluginSystemImage
   tint: IconTint
+  size?: number
+  className?: string
 }) {
   const Icon = icons[systemImage]
+  const style = { '--tint': iconTints[tint], '--size': `${size}px` } as CSSProperties
   return (
-    <span className="plugin-icon" style={{ '--tint': iconTints[tint] } as CSSProperties}>
-      <Icon aria-hidden="true" size={22} strokeWidth={2.25} />
+    <span className={className ? `plugin-icon ${className}` : 'plugin-icon'} style={style}>
+      <Icon aria-hidden="true" size={Math.round(size * 0.5)} strokeWidth={size < 32 ? 2.5 : 2.25} />
     </span>
   )
 }

@@ -59,7 +59,7 @@ describe('site redirects', () => {
 
   it('adds the trailing slash to pages and removes it from files, in one hop', () => {
     expect(resolve(production, { path: '/pricing' })).toBe('/pricing/')
-    // The app's Store button and Quick Search command open https://keybumps.app/plugins.
+    // The app's Settings › Plugins (Browse on keybumps.app) opens https://keybumps.app/plugins.
     expect(resolve(production, { path: '/plugins' })).toBe('/plugins/')
     expect(resolve(production, { path: '/legal/dmca' })).toBe('/legal/dmca/')
     // Old /download links take this one hop, then src/app/download/route.ts sends the DMG.
