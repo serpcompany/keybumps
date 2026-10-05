@@ -60,7 +60,7 @@ Repository secrets (Settings → Secrets and variables → Actions). The owner c
 
 | Secret | Contents |
 | --- | --- |
-| `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a `.p12` exported from Keychain Access containing the **Developer ID Application: … (W3GXL2NQQP)** certificate and its private key (`base64 -i cert.p12 \| pbcopy`) |
+| `DEVELOPER_ID_CERTIFICATE_P12` | Base64 of a `.p12` exported from Keychain Access containing the **Developer ID Application: … (W3GXL2NQQP)** certificate (team: ADR 0005) and its private key (`base64 -i cert.p12 \| pbcopy`) |
 | `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The `.p12` export password |
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | App Store Connect API key used by `asc notarization`; `ASC_PRIVATE_KEY` is the full `.p8` contents |
 | `SPARKLE_PRIVATE_KEY` | The Sparkle EdDSA private key (`generate_keys --account <account> -x key.txt` on the Mac that holds it; delete the file afterwards) |
