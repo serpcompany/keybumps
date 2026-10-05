@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 // Re-read the release pointer at most every five minutes.
 export const revalidate = 300
 
-const FEATURES = [
+const FEATURES: { title: string; keys?: string; body: string }[] = [
   {
     title: 'Quick Search',
     keys: '⌘1',
@@ -30,17 +30,26 @@ const FEATURES = [
   {
     title: 'On-device Dictation',
     keys: '⌥Space',
-    body: 'Talk and your words land at the cursor. Transcribed locally with Whisper — audio never leaves your Mac.'
+    body: 'Talk and your words land at the cursor. Transcribed on your Mac by Apple speech recognition or a Whisper model — audio never leaves your Mac.'
   },
   {
     title: 'Window Manager',
-    keys: '⌃⌥←',
+    keys: '⌃⌥⌘←',
     body: 'Snap windows to halves, thirds, and corners with shortcuts you choose.'
   },
   {
     title: 'Shortcut Coach',
-    keys: '⌘5',
     body: 'Notices when you reach for the mouse and nudges you toward the shortcut that does it faster.'
+  },
+  {
+    title: 'Snippets',
+    keys: '⌘5',
+    body: 'Save text you reuse, then copy or paste it from the palette — or turn on keywords and type them anywhere.'
+  },
+  {
+    title: 'Timer',
+    keys: '⌘6',
+    body: 'Type 5m or tea 25 and press Return. The countdown sits in the menu bar, and an alarm rings until you stop it.'
   }
 ]
 
@@ -74,7 +83,7 @@ export default async function Home() {
             <span className="dot" /> Public beta · v{release.version}
           </span>
           <h1>
-            Six Mac utilities.
+            Eight Mac utilities.
             <br />
             <span className="accent">One keyboard shortcut away.</span>
           </h1>
@@ -111,7 +120,7 @@ export default async function Home() {
               <article key={f.title} className="card">
                 <div className="card-head">
                   <h3>{f.title}</h3>
-                  <kbd>{f.keys}</kbd>
+                  {f.keys && <kbd>{f.keys}</kbd>}
                 </div>
                 <p>{f.body}</p>
               </article>
@@ -130,7 +139,7 @@ export default async function Home() {
               time.
             </p>
             <ul className="checks">
-              <li>Speech-to-text runs locally with Whisper</li>
+              <li>Speech-to-text runs on your Mac</li>
               <li>No cloud sync — nothing to breach</li>
               <li>Redact and blur screenshots before you share</li>
               <li>Developer ID–signed, auto-updating releases</li>

@@ -8,7 +8,7 @@ export const CHECKOUT_URL: string | null =
 /** Polar customer portal: purchases, license keys, and freeing a Mac. */
 export const CUSTOMER_PORTAL_URL = 'https://polar.sh/serp/portal'
 
-export const LEGAL_UPDATED = 'September 29, 2026'
+export const LEGAL_UPDATED = 'October 6, 2026'
 
 export const site = {
   name: 'Keybumps',
