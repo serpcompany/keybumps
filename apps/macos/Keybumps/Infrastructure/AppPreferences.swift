@@ -22,6 +22,7 @@ final class AppPreferences {
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
+        static let lastLaunchedVersion = "lastLaunchedVersion"
     }
 
     private let defaults: UserDefaults
@@ -85,6 +86,11 @@ final class AppPreferences {
         didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
     }
 
+    /// The version that last launched, so What's New shows once after an update (#225).
+    var lastLaunchedVersion: String? {
+        didSet { defaults.set(lastLaunchedVersion, forKey: Key.lastLaunchedVersion) }
+    }
+
     init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
         self.defaults = defaults
         if let raw = defaults.array(forKey: Key.enabledCapabilities) as? [String] {
@@ -115,6 +121,7 @@ final class AppPreferences {
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
+        lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

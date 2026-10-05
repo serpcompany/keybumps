@@ -83,7 +83,17 @@ final class AppModel {
             if !newValue { dismissPermissionRelaunchPrompt() }
         }
     }
-    private(set) var updateSnapshot: UpdateSnapshot
+    private(set) var updateSnapshot: UpdateSnapshot {
+        didSet {
+            updateReminder.evaluate()
+            onUpdateSnapshotChange()
+        }
+    }
+    /// Asks to restart while an update waits (#225).
+    let updateReminder: UpdateReminder
+    private let whatsNew: any WhatsNewPresenting
+    /// The status item's red dot follows the update state.
+    @ObservationIgnored var onUpdateSnapshotChange: () -> Void = {}
     private(set) var licenseSnapshot: LicenseSnapshot
     private(set) var quickSearchShortcutConflictStatus: SpotlightShortcutConflictStatus = .unavailable(
         manualRecovery: "Checking the Quick Search shortcut…"
@@ -144,6 +154,8 @@ final class AppModel {
         snippets injectedSnippets: SnippetStore? = nil,
         textPaster injectedTextPaster: (any TextPasting)? = nil,
         keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
+        updatePrompt injectedUpdatePrompt: (any UpdatePromptPresenting)? = nil,
+        whatsNew injectedWhatsNew: (any WhatsNewPresenting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -170,6 +182,14 @@ final class AppModel {
         let updater = injectedUpdater ?? UpdateControllerFactory.makeDefault(safetyPolicy: updateSafetyPolicy)
         self.updater = updater
         self.updateSnapshot = updater.snapshot
+        // Unit tests never show these windows.
+        self.updateReminder = UpdateReminder(
+            snapshot: { updater.snapshot },
+            isSafe: { updateSafetyPolicy.isSafeToInstall },
+            restart: { updater.restartWhenSafe() },
+            presenter: injectedUpdatePrompt ?? (UnitTestHost.isActive ? InertUpdatePromptPresenter() : UpdatePromptWindowController())
+        )
+        self.whatsNew = injectedWhatsNew ?? (UnitTestHost.isActive ? InertWhatsNewPresenter() : WhatsNewWindowController())
         #if DEBUG
         // Unit tests and injected compositions run entitled unless they pass a license state.
         let licensing = injectedLicensing ?? FixedLicenseController()
@@ -314,6 +334,24 @@ final class AppModel {
         if preferences.didCompleteOnboarding && isLicensed { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
         updater.start()
+        updateReminder.start()
+        updateReminder.evaluate()
+        showWhatsNewIfNeeded()
+    }
+
+    /// After an update, shows that version's release notes once (#225), then records the version.
+    func showWhatsNewIfNeeded(
+        currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+        notes: String? = WhatsNew.bundledNotes()
+    ) {
+        defer { preferences.lastLaunchedVersion = currentVersion }
+        guard let notes, WhatsNew.shouldShow(
+            currentVersion: currentVersion,
+            lastLaunchedVersion: preferences.lastLaunchedVersion,
+            completedOnboarding: preferences.didCompleteOnboarding,
+            hasNotes: true
+        ) else { return }
+        whatsNew.show(ReleaseNotesDocument(markdown: notes))
     }
 
     func checkForUpdates() { updater.checkNow() }

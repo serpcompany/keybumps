@@ -11,6 +11,7 @@
 		056730D3FDC7666D9EDAAB12 /* ClipboardHistoryModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900FCF32F9541FA9168E58D6 /* ClipboardHistoryModule.swift */; };
 		07A73572B424F72C67920D5E /* SettingsSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EFF247943688DF74FDFBFD /* SettingsSidebarTests.swift */; };
 		081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */; };
+		086C97A2D77C73E96872A323 /* UpdateReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DE541948E34E30A0C55C182 /* UpdateReminder.swift */; };
 		08CD04A3227F0212590B40CA /* ScreenshotToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E7B7D46F1D67D729594D6F /* ScreenshotToolsTests.swift */; };
 		098879181087D6A890F705C8 /* DictationAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */; };
 		0995B7DD6F2FBCEF958946B3 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ECDF1BD3B90804BF35BDC11 /* AppModel.swift */; };
@@ -58,6 +59,7 @@
 		511D2E223129B6595A9E909D /* SnippetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C6EF77E18990B57ED296BA /* SnippetStore.swift */; };
 		54671A719E03B771792B4CAB /* QuickSearchCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */; };
 		55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */; };
+		57ABC6624CE28646EA5FC0FC /* UpdateVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */; };
 		58CCB0AF49FFC5BA0289F8C1 /* WindowAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08E29668587A361DF1D41AC /* WindowAction.swift */; };
 		58DF94D7D131F11A8D5D15F0 /* QuitConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 523C2D07125B9545845933E3 /* QuitConfirmationTests.swift */; };
 		5D29894075C352B646141A29 /* FinderTrashDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18BF5E21B6787A034888698 /* FinderTrashDetectionTests.swift */; };
@@ -82,6 +84,7 @@
 		7C5C620EDEABCBCF01BA1DE3 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */; };
 		7CE0B6A945403834D41BBF7E /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A7837F25296045EA5F5984 /* SmokeUITests.swift */; };
 		80EBAD50A5F6E554E63A4CC4 /* ProductIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 997F4D090D8DCBF03DAFC78E /* ProductIdentity.swift */; };
+		839ADB854B9177E47955376F /* WhatsNew.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */; };
 		84156585EA619D8BBFB145F3 /* chrome-green-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B4BE38E7AF2268494DAE9E2 /* chrome-green-captured-sanitized-trace.json */; };
 		85868CCFFF8CE1C0294CBE42 /* GlobalShortcutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */; };
 		8B2FB2733D9B215CF944C82F /* LicenseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C47406BD2F59E7F87C682AC /* LicenseStore.swift */; };
@@ -189,6 +192,7 @@
 		0C53D92EB611917B9E44212C /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
 		0CF1124EE4DF4E49757D9D27 /* ScreenshotEditorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorPresenter.swift; sourceTree = "<group>"; };
 		0D902CBDDE33CE519C755A20 /* DictationPastePermissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPastePermissionTests.swift; sourceTree = "<group>"; };
+		0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateVisibilityTests.swift; sourceTree = "<group>"; };
 		0DDA1A771CE7B3C3B0604583 /* KeyboardShortcutterModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutterModule.swift; sourceTree = "<group>"; };
 		0DE45651B92E0DC8A3EB8BA3 /* ScreenshotCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotCapture.swift; sourceTree = "<group>"; };
 		0E3876F476BDB8700F4B5B28 /* ClipboardSourceApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardSourceApp.swift; sourceTree = "<group>"; };
@@ -208,6 +212,7 @@
 		2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCoachClickTests.swift; sourceTree = "<group>"; };
 		2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D3F2FAE3A7C9B0141825814 /* Keybumps.icon */ = {isa = PBXFileReference; path = Keybumps.icon; sourceTree = "<group>"; };
+		2DE541948E34E30A0C55C182 /* UpdateReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateReminder.swift; sourceTree = "<group>"; };
 		30C6EF77E18990B57ED296BA /* SnippetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetStore.swift; sourceTree = "<group>"; };
 		30DE951EC0090D0062C95E4D /* ClickTargetProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClickTargetProbe.swift; sourceTree = "<group>"; };
 		323E102DD6374B05A2E71420 /* fixture.zip */ = {isa = PBXFileReference; lastKnownFileType = archive.zip; path = fixture.zip; sourceTree = "<group>"; };
@@ -305,6 +310,7 @@
 		C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
 		C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
 		C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybumpsFeatureTests.swift; sourceTree = "<group>"; };
+		CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNew.swift; sourceTree = "<group>"; };
 		CD492B963F2E1C378C206508 /* DictationWarmRuntimeBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationWarmRuntimeBenchmarkTests.swift; sourceTree = "<group>"; };
 		CF128185C76235C3DC5BD990 /* SnippetTableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetTableTests.swift; sourceTree = "<group>"; };
 		CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
@@ -521,6 +527,7 @@
 				44D821EC6664B978596FDDFD /* UnitTestHostTests.swift */,
 				3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */,
 				54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */,
+				0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */,
 				E5DBE0291391003CE7E8D960 /* Fixtures */,
 			);
 			path = KeybumpsTests;
@@ -714,6 +721,8 @@
 			children = (
 				E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */,
 				C13C5DD5F845097BB1BA796D /* UpdateController.swift */,
+				2DE541948E34E30A0C55C182 /* UpdateReminder.swift */,
+				CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */,
 			);
 			path = Updates;
 			sourceTree = "<group>";
@@ -727,6 +736,7 @@
 			buildPhases = (
 				49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */,
 				5DDC946BDE8BD0352EA7CF7B /* Sources */,
+				30D8FFE289BDD277CC33F913 /* Bundle this release's notes for What's New */,
 				A2D5E4A89A5E4E8D2261929C /* Resources */,
 				24CE05F3D0E70230042F6542 /* Frameworks */,
 			);
@@ -863,6 +873,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		30D8FFE289BDD277CC33F913 /* Bundle this release's notes for What's New */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle this release's notes for What's New";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -n \"${KEYBUMPS_RELEASE_NOTES:-}\" ] && [ -f \"$KEYBUMPS_RELEASE_NOTES\" ]; then\n  cp \"$KEYBUMPS_RELEASE_NOTES\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/WhatsNew.md\"\nfi\n";
+		};
 		49DA0DF487740720142DDCD6 /* Validate Keybumps release configuration */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -973,6 +1002,8 @@
 				9734A54C9861F9F4935CCB1A /* UITestLaunchConfiguration.swift in Sources */,
 				3DE0285ABEBA4DBB8627DD25 /* UnitTestHost.swift in Sources */,
 				952BFAC50F37CBE088DC6D6F /* UpdateController.swift in Sources */,
+				086C97A2D77C73E96872A323 /* UpdateReminder.swift in Sources */,
+				839ADB854B9177E47955376F /* WhatsNew.swift in Sources */,
 				DABB2A6E562093C2FD0213E6 /* WhisperKitCompletedAudioTranscriber.swift in Sources */,
 				105F1C13F817F48FC866DF69 /* WhisperKitModelDownloader.swift in Sources */,
 				58CCB0AF49FFC5BA0289F8C1 /* WindowAction.swift in Sources */,
@@ -1030,6 +1061,7 @@
 				011D4C30FD4FF1168AD3B32B /* UnitTestHostTests.swift in Sources */,
 				F2C72DC369FD3FDD4586E311 /* UpdateControllerTests.swift in Sources */,
 				98D0993E91F7EFD2B0E346D1 /* UpdateReleaseScriptTests.swift in Sources */,
+				57ABC6624CE28646EA5FC0FC /* UpdateVisibilityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

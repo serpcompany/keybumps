@@ -158,9 +158,44 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         return menu
     }
 
+    /// Whether the menu bar icon shows the red dot: an update is waiting for a restart (#225).
+    static func showsUpdateBadge(_ snapshot: UpdateSnapshot) -> Bool {
+        snapshot.canRestart
+    }
+
+    /// Shows or hides the red dot on the menu bar icon. Called whenever the update state changes.
+    func refreshUpdateBadge() {
+        guard let button = statusItem?.button else { return }
+        let identifier = NSUserInterfaceItemIdentifier("updateBadge")
+        let badge = button.subviews.first { $0.identifier == identifier }
+        guard Self.showsUpdateBadge(updateSnapshot()) else {
+            badge?.removeFromSuperview()
+            button.setAccessibilityLabel(ReleaseLane.current.productName)
+            return
+        }
+        guard badge == nil else { return }
+        let dot = NSView(frame: NSRect(x: button.bounds.maxX - 8, y: button.bounds.maxY - 8, width: 7, height: 7))
+        dot.identifier = identifier
+        dot.wantsLayer = true
+        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        dot.layer?.cornerRadius = 3.5
+        dot.autoresizingMask = [.minXMargin, .minYMargin]
+        button.addSubview(dot)
+        button.setAccessibilityLabel("\(ReleaseLane.current.productName), update ready")
+    }
+
     /// Raycast's menu: open the app (with its hotkey), then About, updates, and Settings, then Quit.
+    /// While an update waits, Restart to Update comes first.
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let snapshot = updateSnapshot()
+        if snapshot.canRestart {
+            let restart = menu.addItem(withTitle: "Restart to Update", action: #selector(restartToUpdate), keyEquivalent: "")
+            restart.target = self
+            restart.isEnabled = true
+            restart.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(.separator())
+        }
         let open = menu.addItem(withTitle: "Open Keybumps", action: #selector(toggleQuickSearch), keyEquivalent: "")
         open.target = self
         open.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
@@ -170,15 +205,9 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: "About Keybumps", action: #selector(showAbout), keyEquivalent: "").target = self
-        let snapshot = updateSnapshot()
         let updates = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
         updates.isEnabled = snapshot.canCheck
-        if snapshot.canRestart {
-            let restart = menu.addItem(withTitle: "Restart to Update", action: #selector(restartToUpdate), keyEquivalent: "")
-            restart.target = self
-            restart.isEnabled = true
-        }
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)

@@ -112,6 +112,7 @@ struct UpdateMenuBarTests {
 
 // MARK: - What's New
 
+@MainActor
 @Suite("Updates: What's New")
 struct WhatsNewTests {
     @Test("It shows once after an update, never after a fresh install, and only with notes")

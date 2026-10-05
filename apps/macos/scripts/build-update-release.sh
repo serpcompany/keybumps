@@ -42,7 +42,8 @@ xcodegen generate
 xcodebuild -project Keybumps.xcodeproj -scheme Keybumps-Release -configuration Release \
   -archivePath "$output_directory/archive/Keybumps.xcarchive" \
   MARKETING_VERSION="$release_version" CURRENT_PROJECT_VERSION="$release_build" \
-  KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" $signing_settings archive
+  KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" \
+  KEYBUMPS_RELEASE_NOTES="$release_notes" $signing_settings archive
 xcodebuild -exportArchive \
   -archivePath "$output_directory/archive/Keybumps.xcarchive" \
   -exportPath "$output_directory/export" \

@@ -28,6 +28,14 @@ enum UpdateStatus: Equatable {
         }
     }
 
+    /// The version waiting to install, while one is.
+    var pendingVersion: String? {
+        switch self {
+        case .downloaded(let version), .readyToRestart(let version), .deferred(let version): version
+        default: nil
+        }
+    }
+
 }
 
 struct UpdateSnapshot: Equatable {

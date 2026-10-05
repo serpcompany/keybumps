@@ -113,6 +113,9 @@ extension AppModel {
             textPaster: InertTextPaster(),
             // Never listens to the keyboard.
             keyTypingMonitor: InertKeyTypingMonitor(),
+            // Never shows the restart prompt or What's New.
+            updatePrompt: InertUpdatePromptPresenter(),
+            whatsNew: InertWhatsNewPresenter(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
                     preferredLocation: { sandbox.screenshots.path },
