@@ -55,7 +55,8 @@ enum TimerDurationParser {
         // "tea for 5m", "5m for tea": the joining word isn't part of the name.
         while let last = words.last?.lowercased(), connectingWords.contains(last) { words.removeLast() }
         while let first = words.first?.lowercased(), connectingWords.contains(first) { words.removeFirst() }
-        let name = words.joined(separator: " ")
+        // "tea, 5m": a comma that set the duration apart isn't part of the name.
+        let name = words.joined(separator: " ").trimmingCharacters(in: CharacterSet(charactersIn: ",").union(.whitespaces))
         return name.isEmpty ? nil : name
     }
 
@@ -64,8 +65,16 @@ enum TimerDurationParser {
     /// Seconds in lowercased `text`, which holds only a duration. The arithmetic is in `Double`, so
     /// no length of digits can overflow; anything past `maximumDuration` is simply too long.
     static func seconds(in text: String) -> TimeInterval? {
-        let text = text.replacingOccurrences(of: ",", with: ".")
+        let text = normalizingCommas(text)
         return colonSeconds(in: text) ?? compositeSeconds(in: text) ?? numberSeconds(in: text)
+    }
+
+    /// A comma between a digit and one or two more digits is a decimal point (`1,5h`); any other
+    /// comma is punctuation or a thousands separator (`1h, 30m`, `1,000s`) and is dropped.
+    private static func normalizingCommas(_ text: String) -> String {
+        guard text.contains(",") else { return text }
+        let decimal = text.replacingOccurrences(of: #"(\d),(\d{1,2})(?!\d)"#, with: "$1.$2", options: .regularExpression)
+        return decimal.replacingOccurrences(of: ",", with: "")
     }
 
     /// `5:00` is minutes and seconds; `1:30:00` adds hours. Parts after the first stay under 60.

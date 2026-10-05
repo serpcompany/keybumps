@@ -33,6 +33,11 @@ struct TimerDurationParserTests {
             ("2,5", 150, nil),
             ("1h0m", 3600, nil),
             ("2m 0s", 120, nil),
+            ("1h, 30m", 5400, nil),
+            ("5m, tea", 300, "tea"),
+            ("5 min, tea", 300, "tea"),
+            ("tea, 5m", 300, "tea"),
+            ("1,000s", 1000, nil),
         ] as [(String, TimeInterval, String?)]
     )
     func readsDurations(input: String, seconds: TimeInterval, name: String?) {
@@ -242,6 +247,18 @@ struct TimerStoreTests {
         #expect(fixture.finishes.isEmpty)
     }
 
+    @Test("A damaged timers file can't crash the app: impossible timers are dropped")
+    func damagedFile() throws {
+        let fixture = StoreFixture()
+        defer { fixture.tearDown() }
+        let good = fixture.makeStore()
+        good.start(duration: 300, name: "tea")
+        var json = try String(contentsOf: fixture.storageURL, encoding: .utf8)
+        json = json.replacingOccurrences(of: "\"duration\":300", with: "\"duration\":1e300")
+        try json.write(to: fixture.storageURL, atomically: true, encoding: .utf8)
+        #expect(fixture.makeStore().items.isEmpty)
+    }
+
     @Test("The timers file is readable only by you, and an unreadable one starts empty")
     func storage() throws {
         let fixture = StoreFixture()
@@ -449,20 +466,57 @@ struct TimerModuleTests {
 
     @Test("A timer finishing while the tab is open keeps the highlight on the timer it was on")
     func selectionSurvivesAFinish() throws {
-        let fixture = ModuleFixture()
+        let fixture = ModuleFixture(timersTabIsShowing: true)
         defer { fixture.tearDown() }
         fixture.preferences.setCapability(.timer, enabled: true)
         fixture.module.apply(fixture.context(enabled: [.timer]))
-        let content = try #require(fixture.module.paletteContent as? TimerPaletteContent)
+        let content = try #require(fixture.module.paletteContent)
+        let old = fixture.store.start(duration: 30, name: "old")
+        fixture.clock.advance(30)
+        fixture.scheduler.fire()
         fixture.store.start(duration: 60, name: "eggs")
         fixture.store.start(duration: 600, name: "pasta")
-        _ = content.makeView(PaletteContentContext(query: "", selection: 1, actions: fixture.actions, confirmationPresentationChanged: { _ in }))
+        #expect(fixture.store.displayed.map(\.name) == ["old", "eggs", "pasta"])
+        // The highlight is on the old finished timer when Eggs finishes above it.
+        _ = content.makeView(PaletteContentContext(query: "", selection: 0, actions: fixture.actions, confirmationPresentationChanged: { _ in }))
 
         fixture.clock.advance(60)
+        fixture.scheduler.fire()
+        #expect(fixture.store.displayed.map(\.name) == ["eggs", "old", "pasta"])
+        #expect(fixture.selectedRows.last == 1, "Still on the old timer")
+        #expect(!fixture.attention.showsDot, "Seen in the open tab")
+        _ = old
+    }
+
+    @Test("A notice that waited for Dictation past the grace is quiet, says when, and plays no sound")
+    func waitedPastGrace() {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.alerts.waited = TimerModule.onTimeGrace + 1
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        fixture.store.start(duration: 300, name: "Tea")
+        let end = fixture.clock.now.addingTimeInterval(300)
+
+        fixture.clock.advance(300)
+        fixture.scheduler.fire()
+        #expect(fixture.alerts.notices == [.init(message: "Tea ended \(TimerText.when(end, now: fixture.clock.now))", quiet: true)])
+        #expect(fixture.alerts.sounds == 0)
+    }
+
+    @Test("After a relaunch with several unseen finishes, VoiceOver says timers, plural")
+    func pluralRelaunchDot() {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        fixture.store.start(duration: 60, name: "a")
+        fixture.store.start(duration: 90, name: "b")
+        fixture.clock.advance(90)
         fixture.store.checkDue()
-        content.keepSelectionOnSameTimer()
-        #expect(fixture.store.displayed.map(\.name) == ["eggs", "pasta"])
-        #expect(fixture.selectedRows.last == 1, "Still on pasta")
+
+        let relaunched = ModuleFixture(sharing: fixture)
+        defer { relaunched.tearDown() }
+        relaunched.module.apply(relaunched.context(enabled: [.timer]))
+        #expect(relaunched.attention.accessibilityLabel(productName: "Keybumps") == "Keybumps, timers finished")
     }
 
     @Test("A finish not yet seen before a relaunch keeps its dot")
@@ -521,43 +575,54 @@ struct TimerModuleTests {
 @MainActor
 @Suite("Notch notices that wait for the notch")
 struct NotchWaitTests {
-    @Test("While another surface holds the notch, the notice and its sound wait, then show once")
-    func waitsThenShows() {
-        let hud = PaletteHUD()
-        defer { hud.dismiss() }
-        let dictation = NSObject()
-        var shown = 0
-        hud.claimNotch(for: dictation)
-        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
-        #expect(shown == 0)
-
-        hud.releaseNotch(from: dictation)
-        #expect(shown == 1)
-        hud.claimNotch(for: dictation)
-        hud.releaseNotch(from: dictation)
-        #expect(shown == 1, "Shown once")
+    private static func notice(_ shown: @escaping () -> Void) -> (TimeInterval) -> WaitingNotice {
+        { _ in WaitingNotice(message: "Tea finished", systemImage: "timer", tint: .orange, duration: 0.1, whenShown: shown) }
     }
 
-    @Test("A waiting notice can be dropped, and one that waited too long is never shown")
-    func cancelAndStale() {
+    @Test("While another surface holds the notch, however long, the notice and its sound wait, then show once, knowing how long they waited")
+    func waitsThenShows() {
         let hud = PaletteHUD()
         defer { hud.dismiss() }
         var now = Date(timeIntervalSinceReferenceDate: 800_000_000)
         hud.now = { now }
         let dictation = NSObject()
         var shown = 0
+        var waited: TimeInterval?
+        hud.claimNotch(for: dictation)
+        hud.showWhenNotchFree(from: "timer") { wait in
+            waited = wait
+            return WaitingNotice(message: "Tea finished", systemImage: "timer", tint: .orange, duration: 0.1, whenShown: { shown += 1 })
+        }
+        #expect(shown == 0)
+
+        now = now.addingTimeInterval(45 * 60)
+        hud.releaseNotch(from: dictation)
+        #expect(shown == 1)
+        #expect(waited == TimeInterval(45 * 60))
+        hud.claimNotch(for: dictation)
+        hud.releaseNotch(from: dictation)
+        #expect(shown == 1, "Shown once")
+    }
+
+    @Test("A waiting notice is dropped only by the surface that queued it")
+    func cancelBySource() {
+        let hud = PaletteHUD()
+        defer { hud.dismiss() }
+        let dictation = NSObject()
+        var shown = 0
 
         hud.claimNotch(for: dictation)
-        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
-        hud.cancelWaitingNotice()
+        hud.showWhenNotchFree(from: "timer", Self.notice { shown += 1 })
+        hud.cancelWaitingNotice(from: "someone else")
+        hud.cancelWaitingNotice(from: "timer")
         hud.releaseNotch(from: dictation)
         #expect(shown == 0)
 
         hud.claimNotch(for: dictation)
-        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
-        now = now.addingTimeInterval(PaletteHUD.longestNoticeWait + 1)
+        hud.showWhenNotchFree(from: "timer", Self.notice { shown += 1 })
+        hud.cancelWaitingNotice(from: "someone else")
         hud.releaseNotch(from: dictation)
-        #expect(shown == 0)
+        #expect(shown == 1)
     }
 
     @Test("With the notch free, it shows at once")
@@ -565,7 +630,7 @@ struct NotchWaitTests {
         let hud = PaletteHUD()
         defer { hud.dismiss() }
         var shown = 0
-        hud.showWhenNotchFree("Tea finished", systemImage: "timer", tint: .orange, duration: 0.1) { shown += 1 }
+        hud.showWhenNotchFree(from: "timer", Self.notice { shown += 1 })
         #expect(shown == 1)
     }
 }
@@ -636,10 +701,13 @@ private final class RecordingTimerAlerts: TimerAlerting {
     private(set) var notices: [Notice] = []
     private(set) var sounds = 0
     private(set) var cancels = 0
+    /// How long each announcement waits for the notch before it shows.
+    var waited: TimeInterval = 0
 
-    func announce(_ message: String, quiet: Bool, withSound: Bool) {
-        notices.append(Notice(message: message, quiet: quiet))
-        if withSound { sounds += 1 }
+    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement) {
+        let shown = announcement(waited)
+        notices.append(Notice(message: shown.message, quiet: shown.quiet))
+        if shown.withSound { sounds += 1 }
     }
 
     func cancelWaitingAnnouncement() { cancels += 1 }
@@ -690,7 +758,7 @@ private final class ModuleFixture {
 
     let timersURL: URL
 
-    init(timersURL: URL? = nil, clock: TestClock? = nil) {
+    init(timersURL: URL? = nil, clock: TestClock? = nil, timersTabIsShowing: Bool = false) {
         let root = folder.url
         let clock = clock ?? TestClock()
         self.clock = clock
@@ -724,7 +792,8 @@ private final class ModuleFixture {
             preferences: preferences,
             attention: CapabilityMenuBarAttention(attention: attention, capability: .timer),
             alerts: alerts,
-            notices: notices
+            notices: notices,
+            timersTabIsShowing: { timersTabIsShowing }
         )
     }
 

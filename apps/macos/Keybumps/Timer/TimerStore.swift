@@ -79,7 +79,11 @@ final class TimerStore {
     }
 
     static func makeDefault() -> TimerStore {
-        TimerStore(storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName))
+        TimerStore(
+            storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName),
+            // Unit tests never hear the Mac wake.
+            notifications: UnitTestHost.isActive ? NotificationCenter() : nil
+        )
     }
 
     // MARK: Running
@@ -173,8 +177,10 @@ final class TimerStore {
         return changed
     }
 
-    var hasUnseenFinish: Bool {
-        items.contains { if case .finished(_, false) = $0.state { true } else { false } }
+    var hasUnseenFinish: Bool { unseenFinishCount > 0 }
+
+    var unseenFinishCount: Int {
+        items.filter { if case .finished(_, false) = $0.state { true } else { false } }.count
     }
 
     // MARK: Order
@@ -231,10 +237,10 @@ final class TimerStore {
         }
     }
 
-    /// Reads the saved timers. A missing or unreadable file starts with none: timers are short-lived,
-    /// so there's nothing worth keeping a copy of.
+    /// Reads the saved timers. A missing or unreadable file starts with none, and a timer with an
+    /// impossible length is dropped: timers are short-lived, so there's nothing worth keeping.
     private func load() {
         guard let storageURL, let data = try? Data(contentsOf: storageURL) else { return }
-        items = (try? JSONDecoder().decode([TimerItem].self, from: data)) ?? []
+        items = ((try? JSONDecoder().decode([TimerItem].self, from: data)) ?? []).filter(\.isPlausible)
     }
 }

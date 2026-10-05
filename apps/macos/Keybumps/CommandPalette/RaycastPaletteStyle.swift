@@ -179,6 +179,16 @@ extension PaletteHUD: PaletteNoticePresenting {
     }
 }
 
+/// A notice waiting for the notch (`PaletteHUD.showWhenNotchFree`), built when it shows.
+struct WaitingNotice {
+    let message: String
+    let systemImage: String
+    let tint: Color
+    let duration: TimeInterval
+    /// Runs as it shows, such as a sound.
+    var whenShown: (() -> Void)?
+}
+
 /// A brief notice such as "Copied to Clipboard" that grows out of the notch: the message sits
 /// left of the notch and an icon (or a shortcut's keycaps) right of it, on black that blends with
 /// the notch. Screens without a notch show the same black tab hanging from the top of the menu bar.
@@ -197,11 +207,8 @@ final class PaletteHUD: CoachTipPresenting {
     /// weak, so an owner that goes away can never leave notices suppressed.
     private weak var notchOwner: AnyObject?
     /// A notice that must not be lost, waiting for the notch (`showWhenNotchFree`), and since when.
-    private var waitingNotice: (show: () -> Void, since: Date)?
-    /// A waiting notice older than this is dropped rather than shown late, as when the surface that
-    /// held the notch went away without giving it back.
-    static let longestNoticeWait: TimeInterval = 15 * 60
-    /// The clock for that wait; tests replace it.
+    private var waitingNotice: (source: String, since: Date, show: (TimeInterval) -> Void)?
+    /// The clock for how long a notice waited; tests replace it.
     var now: () -> Date = Date.init
 
     var isSuppressed: Bool { notchOwner != nil }
@@ -218,35 +225,32 @@ final class PaletteHUD: CoachTipPresenting {
         notchOwner = nil
         let waiting = waitingNotice
         waitingNotice = nil
-        if let waiting, now().timeIntervalSince(waiting.since) <= Self.longestNoticeWait { waiting.show() }
+        if let waiting { waiting.show(now().timeIntervalSince(waiting.since)) }
     }
 
     /// A notice that must not be lost, such as a timer ending: shown now, or, while another surface
-    /// holds the notch, as soon as it gives the notch back. `whenShown` runs with it, so a sound
-    /// waits too rather than playing into Dictation's microphone. A newer one replaces one still
-    /// waiting.
-    func showWhenNotchFree(
-        _ message: String,
-        systemImage: String,
-        tint: Color,
-        duration: TimeInterval,
-        whenShown: (() -> Void)? = nil
-    ) {
-        let show: () -> Void = { [weak self] in
-            self?.show(message, systemImage: systemImage, tint: tint, duration: duration)
-            whenShown?()
+    /// holds the notch (Dictation, however long it records), as soon as it gives the notch back.
+    /// `notice` builds it when it shows, from how long it waited, so a late one can say so. Whatever
+    /// it does when shown, such as a sound, waits too rather than reaching Dictation's microphone.
+    /// A newer one replaces one still waiting, and one left waiting by a surface that went away
+    /// without giving the notch back shows with the next.
+    func showWhenNotchFree(from source: String, _ notice: @escaping (_ waited: TimeInterval) -> WaitingNotice) {
+        let show: (TimeInterval) -> Void = { [weak self] waited in
+            let notice = notice(waited)
+            self?.show(notice.message, systemImage: notice.systemImage, tint: notice.tint, duration: notice.duration)
+            notice.whenShown?()
         }
         if isSuppressed {
-            waitingNotice = (show, now())
+            waitingNotice = (source, now(), show)
         } else {
             waitingNotice = nil
-            show()
+            show(0)
         }
     }
 
-    /// Drops a notice still waiting for the notch, as when what it announced is gone.
-    func cancelWaitingNotice() {
-        waitingNotice = nil
+    /// Drops `source`'s notice if it is still waiting, as when what it announced is gone.
+    func cancelWaitingNotice(from source: String) {
+        if waitingNotice?.source == source { waitingNotice = nil }
     }
 
     func show(

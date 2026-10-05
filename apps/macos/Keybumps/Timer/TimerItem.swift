@@ -38,6 +38,17 @@ struct TimerItem: Codable, Equatable, Identifiable {
         return false
     }
 
+    /// Whether a saved timer could have been started here: a length up to Timer's limit, and
+    /// a paused remainder within it. A damaged file can hold anything.
+    var isPlausible: Bool {
+        guard duration.isFinite, duration >= 1, duration <= TimerDurationParser.maximumDuration else { return false }
+        switch state {
+        case .running(let endsAt): return endsAt.timeIntervalSinceReferenceDate.isFinite
+        case .paused(let remaining): return remaining.isFinite && remaining >= 0 && remaining <= duration
+        case .finished(let at, _): return at.timeIntervalSinceReferenceDate.isFinite
+        }
+    }
+
     /// The row's and the notice's name: the typed name, or the length ("5 min timer").
     var title: String {
         name ?? "\(TimerText.length(duration)) timer"

@@ -157,7 +157,9 @@ private struct TimerPaletteResults: View {
                 PaletteEmptyState(title: "Timers start once Keybumps is set up", systemImage: "timer")
             } else {
                 // The time comes from the store's clock; the timeline only asks for a redraw.
-                TimelineView(.animation(minimumInterval: 1, paused: !store.items.contains(where: \.isRunning))) { _ in
+                // It also runs while typing, so the new-timer row's end time stays current.
+                let ticks = store.items.contains(where: \.isRunning) || !query.trimmingCharacters(in: .whitespaces).isEmpty
+                TimelineView(.animation(minimumInterval: 1, paused: !ticks)) { _ in
                     let rows = TimerPaletteRow.resolve(query: query, timers: store.displayed)
                     if rows.isEmpty {
                         PaletteEmptyState(title: "Type a duration, like 5m or tea 25, and press Return", systemImage: "timer")

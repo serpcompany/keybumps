@@ -30,13 +30,21 @@ extension CapabilityDescriptor {
     )
 }
 
+/// What a timer's end says, and whether it plays the sound. A quiet one is for timers that ended a
+/// while ago.
+struct TimerAnnouncement: Equatable {
+    let message: String
+    let quiet: Bool
+    let withSound: Bool
+}
+
 /// How a timer's end reaches you. Unit tests and the UI-test composition record instead.
 @MainActor
 protocol TimerAlerting {
-    /// A notch notice, with a sound when `withSound`. While Dictation holds the notch both wait,
-    /// rather than the notice being dropped or the sound reaching its microphone. A quiet notice is
-    /// for a timer that ended a while ago.
-    func announce(_ message: String, quiet: Bool, withSound: Bool)
+    /// A notch notice, with a sound when the announcement says so. While Dictation holds the notch
+    /// both wait, however long it records, rather than the notice being dropped or the sound
+    /// reaching its microphone; `announcement` gets how long they waited, so a late one says so.
+    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement)
     /// Drops an announcement still waiting, as when Timer is turned off.
     func cancelWaitingAnnouncement()
 }
@@ -44,23 +52,28 @@ protocol TimerAlerting {
 /// The production alerts: `PaletteHUD`'s notch notice and a system sound, so there's no audio
 /// file to ship.
 struct SystemTimerAlerts: TimerAlerting {
-    func announce(_ message: String, quiet: Bool, withSound: Bool) {
-        PaletteHUD.shared.showWhenNotchFree(
-            message,
-            systemImage: "timer",
-            tint: quiet ? .gray : .orange,
-            duration: 4,
-            whenShown: withSound ? { NSSound(named: NSSound.Name("Glass"))?.play() } : nil
-        )
+    static let noticeSource = "timer"
+
+    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement) {
+        PaletteHUD.shared.showWhenNotchFree(from: Self.noticeSource) { waited in
+            let announcement = announcement(waited)
+            return WaitingNotice(
+                message: announcement.message,
+                systemImage: "timer",
+                tint: announcement.quiet ? .gray : .orange,
+                duration: 4,
+                whenShown: announcement.withSound ? { NSSound(named: NSSound.Name("Glass"))?.play() } : nil
+            )
+        }
     }
 
     func cancelWaitingAnnouncement() {
-        PaletteHUD.shared.cancelWaitingNotice()
+        PaletteHUD.shared.cancelWaitingNotice(from: Self.noticeSource)
     }
 }
 
 struct InertTimerAlerts: TimerAlerting {
-    func announce(_ message: String, quiet: Bool, withSound: Bool) {}
+    func announce(_ announcement: @escaping (_ waited: TimeInterval) -> TimerAnnouncement) {}
     func cancelWaitingAnnouncement() {}
 }
 
@@ -81,6 +94,8 @@ final class TimerModule: CapabilityModule {
     private let preferences: AppPreferences
     private let attention: CapabilityMenuBarAttention
     private let alerts: any TimerAlerting
+    /// Whether the palette is showing the Timers tab; tests replace it.
+    private let timersTabIsShowing: () -> Bool
 
     init(
         palette: CommandPaletteController,
@@ -88,8 +103,10 @@ final class TimerModule: CapabilityModule {
         preferences: AppPreferences,
         attention: CapabilityMenuBarAttention,
         alerts: any TimerAlerting,
-        notices: any PaletteNoticePresenting = PaletteHUD.shared
+        notices: any PaletteNoticePresenting = PaletteHUD.shared,
+        timersTabIsShowing: (() -> Bool)? = nil
     ) {
+        self.timersTabIsShowing = timersTabIsShowing ?? { [weak palette] in palette?.isDisplaying(.timers) ?? false }
         self.palette = palette
         self.store = store
         self.preferences = preferences
@@ -112,9 +129,7 @@ final class TimerModule: CapabilityModule {
             guard !store.isActive else { return }
             store.activate()
             // A finish not yet seen before a relaunch keeps its dot.
-            if store.hasUnseenFinish, !palette.isDisplaying(.timers) {
-                attention.show(saying: "timer finished")
-            }
+            if store.hasUnseenFinish, !timersTabIsShowing() { showDot() }
         } else if store.isActive {
             // Locked: nothing runs, so the timers stop too.
             stop()
@@ -137,25 +152,39 @@ final class TimerModule: CapabilityModule {
         attention.clear()
     }
 
+    private func showDot() {
+        attention.show(saying: store.unseenFinishCount > 1 ? "timers finished" : "timer finished")
+    }
+
     private func timersFinished(_ finishes: [TimerFinish]) {
-        guard let first = finishes.first else { return }
-        let onTime = finishes.contains { $0.lateness <= Self.onTimeGrace }
-        let message: String
-        if finishes.count > 1 {
-            message = onTime ? "\(finishes.count) timers finished" : "\(finishes.count) timers ended"
-        } else if onTime {
-            message = "\(first.item.title) finished"
-        } else {
-            message = "\(first.item.title) ended \(TimerText.when(Self.endDate(of: first.item), now: store.now()))"
+        guard !finishes.isEmpty else { return }
+        let now = store.now
+        let playsSound = preferences.timerPlaysSound
+        alerts.announce { waited in
+            Self.announcement(for: finishes, waited: waited, playsSound: playsSound, now: now())
         }
-        alerts.announce(message, quiet: !onTime, withSound: onTime && preferences.timerPlaysSound)
-        if palette.isDisplaying(.timers) {
+        if timersTabIsShowing() {
             store.markFinishesSeen()
             // The finished timer moved to the top; keep the highlight on the timer it was on.
             timersTab.keepSelectionOnSameTimer()
         } else {
-            attention.show(saying: finishes.count > 1 ? "timers finished" : "timer finished")
+            showDot()
         }
+    }
+
+    /// What ending timers say once the notice shows, `waited` after they were noticed: a finish
+    /// still within `onTimeGrace` then plays the sound; anything later is quiet and says when.
+    static func announcement(for finishes: [TimerFinish], waited: TimeInterval, playsSound: Bool, now: Date) -> TimerAnnouncement {
+        let onTime = finishes.contains { $0.lateness + waited <= onTimeGrace }
+        let message: String
+        if finishes.count > 1 {
+            message = onTime ? "\(finishes.count) timers finished" : "\(finishes.count) timers ended"
+        } else if onTime {
+            message = "\(finishes[0].item.title) finished"
+        } else {
+            message = "\(finishes[0].item.title) ended \(TimerText.when(endDate(of: finishes[0].item), now: now))"
+        }
+        return TimerAnnouncement(message: message, quiet: !onTime, withSound: onTime && playsSound)
     }
 
     private static func endDate(of item: TimerItem) -> Date {
