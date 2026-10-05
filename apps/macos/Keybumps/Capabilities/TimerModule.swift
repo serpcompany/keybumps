@@ -81,6 +81,8 @@ final class TimerModule: CapabilityModule {
     private var alarmed: [UUID] = []
     /// Whether one of them just ended, so the alarm rings.
     private var alarmRings = false
+    /// The alarm last shown, so an unchanged one isn't raised, and announced, again.
+    private var shownAlarm: TimerAlarm?
 
     init(
         palette: CommandPaletteController,
@@ -144,6 +146,7 @@ final class TimerModule: CapabilityModule {
     private func stop() {
         alarmed = []
         alarmRings = false
+        shownAlarm = nil
         alerts.stop()
         store.deactivate()
         attention.clear()
@@ -244,8 +247,11 @@ final class TimerModule: CapabilityModule {
     private func raiseAlarm(adding ids: [UUID], rings: Bool) {
         alarmed += ids.filter { !alarmed.contains($0) }
         alarmRings = alarmRings || rings
+        // Oldest end first, however they were added.
         let timers = alarmed.compactMap { id in store.items.first { $0.id == id } }
-        guard let alarm = Self.alarm(for: timers, rings: alarmRings, now: store.now()) else { return }
+            .sorted { Self.endDate(of: $0) < Self.endDate(of: $1) }
+        guard let alarm = Self.alarm(for: timers, rings: alarmRings, now: store.now()), alarm != shownAlarm else { return }
+        shownAlarm = alarm
         alerts.raise(alarm, onStop: { [weak self] in self?.acknowledge() }, onRepeat: { [weak self] in self?.repeatAlarmed() })
     }
 
@@ -254,6 +260,7 @@ final class TimerModule: CapabilityModule {
     private func acknowledge() {
         alarmed = []
         alarmRings = false
+        shownAlarm = nil
         alerts.stop()
         store.markFinishesSeen()
         attention.clear()
@@ -268,6 +275,7 @@ final class TimerModule: CapabilityModule {
         alarmed = finished
         if alarmed.isEmpty {
             alarmRings = false
+            shownAlarm = nil
             alerts.stop()
         } else {
             raiseAlarm(adding: [], rings: false)

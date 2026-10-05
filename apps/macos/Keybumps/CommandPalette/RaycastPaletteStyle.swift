@@ -207,7 +207,11 @@ final class PaletteHUD: CoachTipPresenting {
     func claimNotch(for owner: AnyObject) {
         notchOwner = owner
         dismiss()
+        onClaim?()
     }
+
+    /// Runs whenever a surface claims the notch, so a sound playing then can stop at once.
+    var onClaim: (() -> Void)?
 
     /// Gives the notch back, if `owner` still holds it.
     func releaseNotch(from owner: AnyObject) {

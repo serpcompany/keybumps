@@ -118,6 +118,9 @@ class DictationIndicatorController {
         panel.level = .popUpMenu
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // A status indicator: ⌘H and Hide Others leave it, so it still shows, and holds the notch,
+        // while Keybumps is hidden.
+        panel.canHide = false
         panel.isReleasedWhenClosed = false
         panel.identifier = NSUserInterfaceItemIdentifier("dictationNotch")
         return panel

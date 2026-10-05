@@ -32,6 +32,8 @@ protocol TimerAlerting: AnyObject {
 @MainActor
 protocol NotchWaiting: AnyObject {
     var isSuppressed: Bool { get }
+    /// Runs whenever Dictation claims the notch.
+    var onClaim: (() -> Void)? { get set }
     func whenNotchFree(from source: String, _ action: @escaping (_ waited: TimeInterval) -> Void)
     func cancelWaiting(from source: String)
 }
@@ -51,6 +53,7 @@ final class SystemTimerAlerts: TimerAlerting {
 
     private let notch: any NotchWaiting
     private let playSound: () -> Void
+    private let stopSound: () -> Void
     private let presentsCard: Bool
     private var panel: NSPanel?
     private var ringing: DispatchSourceTimer?
@@ -59,14 +62,22 @@ final class SystemTimerAlerts: TimerAlerting {
     private(set) var isRinging = false
 
     /// `presentsCard` false keeps tests from making a window.
-    init(notch: (any NotchWaiting)? = nil, playSound: (() -> Void)? = nil, presentsCard: Bool = true) {
+    init(
+        notch: (any NotchWaiting)? = nil,
+        playSound: (() -> Void)? = nil,
+        stopSound: (() -> Void)? = nil,
+        presentsCard: Bool = true
+    ) {
         self.notch = notch ?? PaletteHUD.shared
         let sound = NSSound(named: NSSound.Name("Glass"))
         self.playSound = playSound ?? {
             sound?.stop()
             sound?.play()
         }
+        self.stopSound = stopSound ?? { sound?.stop() }
         self.presentsCard = presentsCard
+        // A ring still sounding when Dictation starts stops at once, so its microphone never hears it.
+        self.notch.onClaim = { [weak self] in self?.stopSound() }
     }
 
     func raise(_ alarm: TimerAlarm, onStop: @escaping () -> Void, onRepeat: @escaping () -> Void) {
@@ -93,6 +104,7 @@ final class SystemTimerAlerts: TimerAlerting {
         notch.cancelWaiting(from: Self.notchSource)
         ringing?.cancel()
         ringing = nil
+        stopSound()
         panel?.orderOut(nil)
         panel?.contentView = nil
     }

@@ -595,6 +595,29 @@ struct TimerModuleTests {
         #expect(relaunched.alerts.raised.last?.rings == false, "It already rang before the relaunch")
     }
 
+    @Test("After a relaunch, the alarm lists unseen finishes oldest first, and never repeats an unchanged alarm")
+    func relaunchAlarmOrder() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        fixture.store.start(duration: 60, name: "Tea")
+        fixture.store.start(duration: 600, name: "Eggs")
+        fixture.clock.advance(60)
+        fixture.scheduler.fire()
+
+        // Keybumps quits; Eggs ends while it's closed.
+        fixture.clock.advance(3600)
+        let relaunched = ModuleFixture(sharing: fixture)
+        defer { relaunched.tearDown() }
+        relaunched.module.apply(relaunched.context(enabled: [.timer]))
+        #expect(relaunched.alerts.raised.last == TimerAlarm(title: "2 timers finished", detail: "Tea, Eggs", rings: false, canRepeat: false))
+        let raises = relaunched.alerts.raised.count
+
+        // Nothing changes when the timers do but the alarm doesn't.
+        relaunched.store.start(duration: 300, name: "Pasta")
+        #expect(relaunched.alerts.raised.count == raises)
+    }
+
     @Test("Turning Timer off stops the alarm")
     func turningOffStopsTheAlarm() {
         let fixture = ModuleFixture()
@@ -786,6 +809,25 @@ struct TimerAlarmRingingTests {
         #expect(rings == 2)
     }
 
+    @Test("Stop silences a ring that's sounding, and so does Dictation starting")
+    func silencesTheRingInProgress() {
+        let notch = FakeNotch()
+        var sounding = false
+        let alerts = SystemTimerAlerts(notch: notch, playSound: { sounding = true }, stopSound: { sounding = false }, presentsCard: false)
+        defer { alerts.stop() }
+        alerts.raise(Self.ringing, onStop: {}, onRepeat: {})
+        #expect(sounding)
+
+        notch.claim()
+        #expect(!sounding, "Dictation's microphone never hears the ring that was playing")
+        notch.release()
+        alerts.ringTick()
+        #expect(sounding)
+
+        alerts.stop()
+        #expect(!sounding)
+    }
+
     @Test("Stopped while it waits for Dictation, it never rings")
     func stopWhileWaiting() {
         let notch = FakeNotch()
@@ -814,6 +856,13 @@ struct TimerAlarmRingingTests {
 @MainActor
 private final class FakeNotch: NotchWaiting {
     var isSuppressed = false
+    var onClaim: (() -> Void)?
+
+    /// Dictation starts recording.
+    func claim() {
+        isSuppressed = true
+        onClaim?()
+    }
     private(set) var cancels = 0
     private var waiting: ((TimeInterval) -> Void)?
 
