@@ -164,7 +164,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// menu's route.
     var openSettings: (SettingsSection?) -> Void = { _ in }
     /// Opens a Quick Search result's URL; tests replace it so they never open anything.
-    var openURL: (URL) -> Bool = { NSWorkspace.shared.open($0) }
+    /// Never opens anything under the unit-test host, so no test can launch an app or the browser.
+    var openURL: (URL) -> Bool = { UnitTestHost.isActive ? false : NSWorkspace.shared.open($0) }
     /// Whether ⌘V can reach another app, which needs Accessibility. The shell re-reads it from
     /// macOS on every paste; without it, pasting a snippet copies it instead.
     var canPaste: () -> Bool = { false }
@@ -1357,6 +1358,9 @@ private struct QuickSearchCommandRow: View {
                 .resizable()
         case .capability(let capability):
             SettingsIconTile(systemImage: capability.systemImage, tint: capability.descriptor.iconTint, size: 24)
+                .accessibilityHidden(true)
+        case .plugins:
+            SettingsIconTile(systemImage: SettingsSection.plugins.icon, tint: .indigo, size: 24)
                 .accessibilityHidden(true)
         }
     }

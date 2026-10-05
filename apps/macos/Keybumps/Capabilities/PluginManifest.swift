@@ -9,6 +9,13 @@ enum PluginCategory: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The website's Plugins page, which Settings › Plugins links to. It lists every plugin from its own
+/// copy of the manifests' facts (`apps/web/src/lib/plugins.ts`). Every plugin ships in the app for
+/// now (ADR 0006), so the page only shows them; Settings › Plugins turns them on and off.
+enum PluginLinks {
+    static let website = URL(string: "https://keybumps.app/plugins")!
+}
+
 /// Who makes a plugin. For now every plugin is official, built by Keybumps (ADR 0006).
 enum PluginPublisher: Equatable {
     case keybumps

@@ -7,20 +7,20 @@ Keybumps is one installed native macOS companion made of independently enabled c
 ### App shell
 
 **Capability**:
-A user-enabled area of Keybumps that delivers one coherent outcome and owns its own resources and shortcuts. People see it as a **plugin**. Code and docs say capability for the module and what it does, and plugin for what it declares to people: its manifest (`PluginManifest.swift`), its preferences (stored as `plugin.<capability>.<key>`), its Settings page (`PluginSettingsPage`), and its Store listing (ADR 0006).
+A user-enabled area of Keybumps that delivers one coherent outcome and owns its own resources and shortcuts. People see it as a **plugin**. Code and docs say capability for the module and what it does, and plugin for what it declares to people: its manifest (`PluginManifest.swift`), its preferences (stored as `plugin.<capability>.<key>`), its Settings page (`PluginSettingsPage`), and its listing on the website (ADR 0006).
 _Avoid_: Mini-app, embedded app, feature, extension
 
 **Plugin**:
-What people see a capability called: in Settings › Plugins, the Store, and on the website.
+What people see a capability called: in Settings › Plugins, in Quick Search, and on the website's Plugins page.
 _Avoid_: Extension, add-on, app
 
 **Plugin manifest**:
-What a capability declares about itself, so the shell draws its Settings page, its row on the Plugins page, and its Store listing the same way for every plugin: its name, summary, icon, and category; its commands (palette tab and shortcuts); the permissions it needs; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
+What a capability declares about itself, so the shell draws its Settings page, its row on the Plugins page, and its listing on the website the same way for every plugin: its name, summary, icon, and category; its commands (palette tab and shortcuts); the permissions it needs; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
 _Avoid_: Plist, config, schema
 
-**Store**:
-Where people browse plugins and get or remove them, in the Command Palette. For now it lists only official plugins, built by Keybumps; getting one turns it on, and removing one turns it off and keeps its data.
-_Avoid_: Marketplace, gallery, app store
+**Plugins page**:
+Two places with one name. In the app, Settings › Plugins lists every plugin with its switch; Quick Search's Plugins command opens it. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
+_Avoid_: Store, marketplace, gallery
 
 **Capability Module**:
 The internal, first-party unit that implements one Capability for the app shell.
@@ -53,7 +53,7 @@ Finding and opening local applications, files, and folders, finding snippets by 
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:
-A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, or a capability command.
+A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, Plugins, or a capability command.
 _Avoid_: Workflow, extension command
 
 **Capability command**:
