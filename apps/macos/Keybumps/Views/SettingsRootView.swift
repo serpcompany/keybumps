@@ -1334,6 +1334,38 @@ final class ShortcutRecorderState {
 
 /// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
 /// a hotkey field that is recording, a sheet or alert, or a text field with text in it.
+/// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
+/// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at.
+struct SettingsWindowFiller: NSViewRepresentable {
+    let preferences: AppPreferences
+
+    func makeNSView(context: Context) -> NSView { FillerView(preferences: preferences) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class FillerView: NSView {
+        private let preferences: AppPreferences
+
+        init(preferences: AppPreferences) {
+            self.preferences = preferences
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
+            // After this turn, so the frame macOS restores for the window doesn't replace it.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let window, let screen = window.screen ?? NSScreen.main,
+                      !preferences.didFillSettingsWindow else { return }
+                window.setFrame(screen.visibleFrame, display: true)
+                preferences.didFillSettingsWindow = true
+            }
+        }
+    }
+}
+
 struct SettingsEscapeCloser: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { EscapeView() }
     func updateNSView(_ nsView: NSView, context: Context) {}

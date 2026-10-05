@@ -71,6 +71,7 @@ struct KeybumpsApp: App {
                 }
                 .modifier(MainWindowRoutingModifier(model: model))
                 .background(SettingsEscapeCloser())
+                .background(SettingsWindowFiller(preferences: model.preferences))
         }
         .defaultSize(width: Self.defaultWidth, height: 944)
         .commands {

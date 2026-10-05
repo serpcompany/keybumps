@@ -47,6 +47,8 @@ struct InMemoryDefaultsTests {
         preferences.dictationLanguage = "fr-FR"
         preferences.dictationDurationLimit = .tenMinutes
         preferences.didCompleteOnboarding = true
+        #expect(!preferences.didFillSettingsWindow, "Settings fills the screen the first time it opens")
+        preferences.didFillSettingsWindow = true
         preferences.setCapabilityShortcut(nil, for: .clipboardHistory)
         preferences.setWindowShortcut(nil, for: .left)
 
@@ -57,6 +59,7 @@ struct InMemoryDefaultsTests {
         #expect(reloaded.dictationLanguage == "fr-FR")
         #expect(reloaded.dictationDurationLimit == .tenMinutes)
         #expect(reloaded.didCompleteOnboarding)
+        #expect(reloaded.didFillSettingsWindow, "and only the first time")
         #expect(reloaded.capabilityShortcut(for: .clipboardHistory) == nil)
         #expect(reloaded.windowShortcut(for: .left) == nil)
         #expect(defaults.leakedDomain == nil)
