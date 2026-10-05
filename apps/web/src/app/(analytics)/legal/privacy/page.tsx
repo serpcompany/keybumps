@@ -36,6 +36,14 @@ export default function PrivacyPage() {
           them.
         </li>
         <li>
+          <strong>Snippets</strong> are stored on your Mac; the text of a snippet you mark sensitive
+          is kept in your Mac’s Keychain.
+        </li>
+        <li>
+          <strong>Timers</strong>, with any names you give them, are stored on your Mac until you
+          delete them.
+        </li>
+        <li>
           <strong>Quick Search, Window Manager, and Shortcut Coach</strong> work from information
           already on your Mac and keep their settings and history locally.
         </li>

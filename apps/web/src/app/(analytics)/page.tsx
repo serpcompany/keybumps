@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 // Re-read the release pointer at most every five minutes.
 export const revalidate = 300
 
-const FEATURES = [
+const FEATURES: { title: string; keys?: string; body: string }[] = [
   {
     title: 'Quick Search',
     keys: '⌘1',
@@ -39,8 +39,17 @@ const FEATURES = [
   },
   {
     title: 'Shortcut Coach',
-    keys: '⌘5',
     body: 'Notices when you reach for the mouse and nudges you toward the shortcut that does it faster.'
+  },
+  {
+    title: 'Snippets',
+    keys: '⌘5',
+    body: 'Save text you reuse, then copy or paste it from the palette — or turn on keywords and type them anywhere.'
+  },
+  {
+    title: 'Timer',
+    keys: '⌘6',
+    body: 'Type 5m or tea 25 and press Return. The countdown sits in the menu bar, and an alarm rings until you stop it.'
   }
 ]
 
@@ -111,7 +120,7 @@ export default async function Home() {
               <article key={f.title} className="card">
                 <div className="card-head">
                   <h3>{f.title}</h3>
-                  <kbd>{f.keys}</kbd>
+                  {f.keys && <kbd>{f.keys}</kbd>}
                 </div>
                 <p>{f.body}</p>
               </article>
