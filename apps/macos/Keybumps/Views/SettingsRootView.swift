@@ -94,7 +94,9 @@ enum SettingsSidebar {
                 if (lhs == .search) != (rhs == .search) { return lhs == .search }
                 return lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
             }
-        return [app, capabilities].filter { !$0.isEmpty }
+        // The default capabilities, then the added ones in their own group below.
+        let isDefault: (SettingsSection) -> Bool = { $0.capability.map(CapabilityCatalog.defaultCapabilities.contains) ?? false }
+        return [app, capabilities.filter(isDefault), capabilities.filter { !isDefault($0) }].filter { !$0.isEmpty }
     }
 }
 

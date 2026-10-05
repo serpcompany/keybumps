@@ -62,6 +62,13 @@ enum CapabilityCatalog {
         .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer
     ]
 
+    /// The default capabilities: the feature set Keybumps was locked at (#205). Every capability
+    /// added since, starting with Timer, is an added capability, which Settings lists in its own
+    /// group below them.
+    static let defaultCapabilities: Set<Capability> = [
+        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
+    ]
+
     private static let byCapability = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.capability, $0) })
 
     private static let byPaletteTab = Dictionary(uniqueKeysWithValues: descriptors.compactMap { descriptor in
