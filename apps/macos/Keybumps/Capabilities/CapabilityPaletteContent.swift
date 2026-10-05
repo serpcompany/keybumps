@@ -56,7 +56,9 @@ struct PaletteContentActions {
     let dismiss: () -> Void
     /// Moves the selection to a row, as a click on it does.
     let selectRow: (Int) -> Void
-    /// Empties the search field, as after a row has used what was typed.
+    /// Empties the search field, as after a row has used what was typed. On a tab whose rows reset
+    /// the selection while typing, it also moves the selection back to the first row, so select a
+    /// row after clearing, not before.
     let clearQuery: () -> Void
 }
 

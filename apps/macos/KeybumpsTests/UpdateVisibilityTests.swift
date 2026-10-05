@@ -185,21 +185,6 @@ struct UpdateReminderTests {
         #expect(model.menuBarAttention.showsDot)
     }
 
-    @Test("Turning a capability off clears its dot")
-    func turningOffClearsDot() {
-        let model = AppModel(
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
-            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
-            presenceController: UpdaterTestPresenceController(),
-            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
-            updater: FakeUpdateController(),
-            updatePrompt: RecordingPromptPresenter()
-        )
-        CapabilityMenuBarAttention(attention: model.menuBarAttention, capability: .snippets).show(saying: "snippets need you")
-        model.setCapability(.snippets, enabled: false)
-        #expect(!model.menuBarAttention.showsDot)
-    }
-
     @Test("Update previews work only in QA and Debug builds")
     func previewsOnlyOutsidePublicBuilds() {
         #expect(UpdatePreview.isAllowed(version: "0.0.3-dev.issue225", isDebugBuild: false))

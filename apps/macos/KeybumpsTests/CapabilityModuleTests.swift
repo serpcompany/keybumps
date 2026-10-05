@@ -46,6 +46,17 @@ struct CapabilityModuleTests {
         #expect(supplied.union(CommandPaletteTab.drawnByPalette) == Set(CommandPaletteTab.allCases))
     }
 
+    @Test("Turning a capability off clears its menu bar dot")
+    func turningOffClearsDot() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+
+        CapabilityMenuBarAttention(attention: harness.model.menuBarAttention, capability: .snippets).show(saying: "snippets need you")
+        harness.model.setCapability(.snippets, enabled: false)
+        #expect(!harness.model.menuBarAttention.showsDot)
+    }
+
     // MARK: Licensing gate (ADR 0002)
 
     @Test("Locked runs no capability, and activating starts them")
@@ -65,7 +76,10 @@ struct CapabilityModuleTests {
         #expect(!harness.backend.registered.isEmpty)
         #expect(harness.clipboard.isMonitoring)
 
+        // Locked leaves nothing to open that would clear a capability's dot, so it goes too.
+        CapabilityMenuBarAttention(attention: harness.model.menuBarAttention, capability: .snippets).show(saying: "snippets need you")
         await licensing.deactivate()
+        #expect(!harness.model.menuBarAttention.showsDot)
         #expect(harness.backend.registered.isEmpty)
         #expect(!harness.clipboard.isMonitoring)
     }
