@@ -46,7 +46,7 @@ struct EmojiCatalogTests {
         #expect(shaking.version == "15.1")
     }
 
-    @Test("No duplicates, no components or loose tone modifiers, and every emoji has a name and an alias")
+    @Test("No duplicates, no loose tone modifiers, and every emoji has a name and an alias")
     func wellFormed() {
         let glyphs = catalog.emoji.map(\.glyph)
         #expect(Set(glyphs).count == glyphs.count)
@@ -62,6 +62,7 @@ struct EmojiCatalogTests {
     func malformed() {
         #expect(throws: EmojiCatalog.LoadError.self) { try EmojiCatalog(data: Data(#"{"groups":["A"],"emoji":[["😀","x",[],[],0,"1.0"]],"sources":{}}"#.utf8)) }
         #expect(throws: EmojiCatalog.LoadError.self) { try EmojiCatalog(data: Data(#"{"groups":["A"],"emoji":[["😀","x",[],["x"],3,"1.0"]],"sources":{}}"#.utf8)) }
+        #expect(throws: EmojiCatalog.LoadError.self) { try EmojiCatalog(data: Data(#"{"groups":["A"],"emoji":[["😀","x",[],["x"],0,"1.0","not tones"]],"sources":{}}"#.utf8)) }
         #expect(throws: (any Error).self) { try EmojiCatalog(data: Data("not json".utf8)) }
     }
 }

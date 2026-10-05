@@ -5,8 +5,9 @@
 //
 //   swift scripts/generate-emoji-data.swift [cache-directory]
 //
-// Run from apps/macos. Sources are downloaded into the cache directory (default: a temporary
-// folder) unless already there, and each must match its pinned SHA-256.
+// Run from anywhere. Sources are downloaded into the cache directory (default: a temporary folder)
+// unless already there, and each must match its pinned SHA-256. It fails rather than write a list
+// with a skin tone it couldn't place.
 //
 // - Unicode emoji-test.txt, Emoji 17.0 (Unicode-3.0): the list, its order, groups, the version
 //   each emoji was added, and skin-tone sequences.
@@ -44,18 +45,26 @@ func fail(_ message: String) -> Never {
 
 let arguments = CommandLine.arguments.dropFirst()
 let cache = URL(fileURLWithPath: arguments.first ?? NSTemporaryDirectory() + "keybumps-emoji-sources", isDirectory: true)
-let output = URL(fileURLWithPath: "Keybumps/EmojiPicker/emoji.json")
+// apps/macos, from this script's own path.
+let appFolder = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.deletingLastPathComponent().deletingLastPathComponent()
+let output = appFolder.appendingPathComponent("Keybumps/EmojiPicker/emoji.json")
 try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
 
 func load(_ source: Source) -> Data {
     let local = cache.appendingPathComponent(source.file)
     if !FileManager.default.fileExists(atPath: local.path) {
+        // Download beside it, then move it in, so a broken download never stays in the cache.
+        let partial = local.appendingPathExtension("partial")
+        try? FileManager.default.removeItem(at: partial)
         let curl = Process()
         curl.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
-        curl.arguments = ["--fail", "--silent", "--show-error", "--location", "--output", local.path, source.url]
+        curl.arguments = ["--fail", "--silent", "--show-error", "--location", "--output", partial.path, source.url]
         try? curl.run()
         curl.waitUntilExit()
-        guard curl.terminationStatus == 0 else { fail("couldn't download \(source.url)") }
+        guard curl.terminationStatus == 0, (try? FileManager.default.moveItem(at: partial, to: local)) != nil else {
+            try? FileManager.default.removeItem(at: partial)
+            fail("couldn't download \(source.url)")
+        }
     }
     guard let data = try? Data(contentsOf: local) else { fail("couldn't read \(local.path)") }
     let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -131,6 +140,9 @@ for (emoji, tone) in toned {
     }
     entries[index].tones[tone - 1] = emoji
 }
+guard orphanTones == 0 else { fail("\(orphanTones) toned sequences have no base emoji; check the grouping") }
+let partialTones = entries.filter { tones in let count = tones.tones.compactMap { $0 }.count; return count > 0 && count < 5 }
+guard partialTones.isEmpty else { fail("\(partialTones.count) emoji have only some of their five tones, such as \(partialTones[0].emoji)") }
 
 // 2. CLDR: names (type="tts") and keywords, for base and derived sequences.
 final class AnnotationReader: NSObject, XMLParserDelegate {

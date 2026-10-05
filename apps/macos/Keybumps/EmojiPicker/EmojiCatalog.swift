@@ -11,7 +11,8 @@ struct Emoji: Hashable, Sendable {
     let aliases: [String]
     /// Its index in `EmojiCatalog.groups`.
     let group: Int
-    /// The Emoji version that added it, such as "15.1".
+    /// The Emoji version that added it, such as "15.1". Some of its skin-tone forms can be newer;
+    /// the Emoji tab checks each form can be drawn (`EmojiLibrary`).
     let version: String
     /// Its skin-tone forms, light to dark, when it has them: five, or none. A two-person emoji's
     /// forms give both people the same tone.
@@ -56,8 +57,11 @@ struct EmojiCatalog: Sendable {
                   let aliases = record[3] as? [String], !aliases.isEmpty,
                   let group = record[4] as? Int, groups.indices.contains(group),
                   let version = record[5] as? String else { throw LoadError.malformed }
-            let tones = record.count == 7 ? (record[6] as? [String] ?? []) : []
-            guard tones.isEmpty || tones.count == 5 else { throw LoadError.malformed }
+            var tones: [String] = []
+            if record.count == 7 {
+                guard let given = record[6] as? [String], given.count == 5 else { throw LoadError.malformed }
+                tones = given
+            }
             return Emoji(glyph: glyph, name: name, keywords: keywords, aliases: aliases, group: group, version: version, tones: tones)
         }
     }
