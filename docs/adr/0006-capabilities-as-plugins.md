@@ -1,6 +1,6 @@
-# 0006: Capabilities are Keybumps's plugins: a default set, then added ones
+# 0006: Capabilities are Keybumps's plugins: a default set, added ones, and an official-only Store
 
-Status: Accepted (2026-10-06). Tracked by #205, #233, and #235. The third-party extensions non-goal in `AGENTS.md` stands.
+Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands.
 
 ## Context
 
@@ -22,11 +22,12 @@ That model needs a runtime for outside code, an isolation and permission model, 
    - is listed in its own Settings group, below the default ones.
 
    Timer is the first.
-4. **No marketplace.** Keybumps never downloads or loads code for a capability. People find capabilities through:
-   - the Settings sidebar;
-   - Quick Search's capability commands;
-   - What's New after an update;
-   - the website's feature grid.
+4. **An official-only Store, modeled on Raycast (#239).** The owner's call: build the Raycast shape now, listing only official plugins built by Keybumps.
+   - **Plugin manifests:** each capability declares its name, summary, icon, category, commands, the permissions it needs, and its preferences as typed settings. Its preferences are stored under the plugin's own name.
+   - **One settings template:** the shell draws every plugin's Settings page from its manifest in a fixed order: header, Commands, permissions, preferences. A plugin's genuinely custom parts, such as the Snippets library, go in one slot below.
+   - **Settings › Plugins:** like Raycast's Extensions tab, a searchable table of every plugin with its tab, shortcut, and switch, and the selected plugin's page beside it.
+   - **The Store:** a Command Palette view opened from Quick Search (`store`) or Settings. It's a searchable list by category, and each plugin's detail shows it as "Official · by Keybumps". Get turns a plugin on; Remove turns it off and keeps its data.
+   - **Not yet:** Keybumps never downloads or loads code. Every plugin listed ships inside the app.
 5. **Revisit with a new ADR** if capabilities should update separately from the app, or other people should write them. That ADR has to settle:
    - how the code runs (a manifest and a script runtime, or signed bundles);
    - how it's kept away from user content such as Clipboard History, transcripts and snippets;
@@ -36,7 +37,7 @@ That model needs a runtime for outside code, an isolation and permission model, 
 
 ## Consequences
 
-- Adding a capability takes an app release, and only Keybumps writes them.
+- Adding a capability takes an app release, and only Keybumps writes them. Its manifest is the part a third-party plugin would one day provide, so the Store and the settings template won't need to change if that day comes.
 - Each new capability's PR, or its release, also:
   - adds its terms to `CONTEXT.md`;
   - writes its What's New lines in `docs/releases/`;
