@@ -38,7 +38,7 @@ export const openGraphWithoutImage = {
 export const siteMetadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
-    default: 'Keybumps — Six Mac utilities, one shortcut away',
+    default: 'Keybumps — Eight Mac utilities, one shortcut away',
     template: `%s — ${site.name}`
   },
   description: site.description

@@ -30,11 +30,11 @@ const FEATURES: { title: string; keys?: string; body: string }[] = [
   {
     title: 'On-device Dictation',
     keys: '⌥Space',
-    body: 'Talk and your words land at the cursor. Transcribed locally with Whisper — audio never leaves your Mac.'
+    body: 'Talk and your words land at the cursor. Transcribed on your Mac by Apple speech recognition or a Whisper model — audio never leaves your Mac.'
   },
   {
     title: 'Window Manager',
-    keys: '⌃⌥←',
+    keys: '⌃⌥⌘←',
     body: 'Snap windows to halves, thirds, and corners with shortcuts you choose.'
   },
   {
@@ -83,7 +83,7 @@ export default async function Home() {
             <span className="dot" /> Public beta · v{release.version}
           </span>
           <h1>
-            Six Mac utilities.
+            Eight Mac utilities.
             <br />
             <span className="accent">One keyboard shortcut away.</span>
           </h1>
@@ -139,7 +139,7 @@ export default async function Home() {
               time.
             </p>
             <ul className="checks">
-              <li>Speech-to-text runs locally with Whisper</li>
+              <li>Speech-to-text runs on your Mac</li>
               <li>No cloud sync — nothing to breach</li>
               <li>Redact and blur screenshots before you share</li>
               <li>Developer ID–signed, auto-updating releases</li>
