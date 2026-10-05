@@ -158,7 +158,9 @@ final class UpdateReleaseScriptTests: XCTestCase {
             server.waitUntilExit()
         }
         var becameReady = false
-        for _ in 0..<30 {
+        // Up to 15 seconds: the first /usr/bin/python3 launch on a CI runner can take several.
+        for _ in 0..<150 {
+            guard server.isRunning else { break }
             let health = try run(
                 URL(fileURLWithPath: "/usr/bin/curl"),
                 ["--fail", "--silent", "http://127.0.0.1:18765/appcast.xml"]
