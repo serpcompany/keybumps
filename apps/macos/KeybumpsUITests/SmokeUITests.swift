@@ -29,9 +29,13 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["search", "clipboard", "screenshotTools", "dictation",
-                        "windows", "keyboardShortcutter", "snippets", "timer", "permissions", "general"] {
+        for section in ["permissions", "general", "plugins"] {
             element("settings.sidebar.\(section)").click()
+            XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
+        }
+        // Every plugin's page opens from the Plugins table, as in Raycast's settings.
+        for section in ["search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer"] {
+            element("plugins.row.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
     }

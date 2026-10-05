@@ -3,24 +3,34 @@ import Testing
 
 @Suite("Settings sidebar")
 struct SettingsSidebarTests {
-    @Test("App pages come first, then Quick Search and the other default capabilities alphabetically, then added ones")
-    func groupsAppPagesThenCapabilities() {
-        let groups = SettingsSidebar.groups(matching: "")
-        #expect(groups == [
-            [.general, .permissions],
-            [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows],
-            [.timer]
-        ])
-        // The account row sits above the groups, as in Raycast.
-        #expect(Set(groups.flatMap { $0 }) == Set(SettingsSection.allCases).subtracting([.account]))
+    @Test("General and Permissions come first, then Plugins, as in Raycast's settings")
+    func groupsAppPagesThenPlugins() {
+        #expect(SettingsSidebar.groups(matching: "") == [[.general, .permissions], [.plugins]])
+        // Every plugin page shows inside Plugins.
+        let pluginPagesAreInPlugins = SettingsSection.allCases.filter { $0.capability != nil }.allSatisfy(\.isInPlugins)
+        #expect(pluginPagesAreInPlugins)
+        #expect(SettingsSection.plugins.isInPlugins)
+        #expect(!SettingsSection.general.isInPlugins)
     }
 
-    @Test("Search filters pages by name and drops empty groups")
+    @Test("Search finds pages and plugins by name and drops empty groups")
     func searchFiltersByName() {
         #expect(SettingsSidebar.groups(matching: "  clip ") == [[.clipboard]])
         #expect(SettingsSidebar.groups(matching: "PERM") == [[.permissions]])
         #expect(SettingsSidebar.groups(matching: "zzz").isEmpty)
         #expect(SettingsSidebar.groups(matching: "tim") == [[.timer]])
+        #expect(SettingsSidebar.groups(matching: "plug") == [[.plugins]])
+    }
+
+    @Test("The Plugins table lists the default plugins, Quick Search first, then added ones, and filters by name or keyword")
+    func pluginsTable() {
+        #expect(PluginsTable.sections == [
+            .init(title: "Default", plugins: [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows]),
+            .init(title: "Added", plugins: [.timer]),
+        ])
+        #expect(PluginsTable.sections(matching: "countdown") == [.init(title: "Added", plugins: [.timer])])
+        #expect(PluginsTable.sections(matching: "DICT").map(\.plugins) == [[.dictation]])
+        #expect(PluginsTable.sections(matching: "zzz").isEmpty)
     }
 
     @Test("The default capabilities are the seven Keybumps was locked at; anything newer is added")

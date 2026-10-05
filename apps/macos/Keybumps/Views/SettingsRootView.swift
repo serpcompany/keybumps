@@ -6,13 +6,17 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
-    case permissions = "Permissions", general = "General", account = "Account"
+    case plugins = "Plugins", permissions = "Permissions", general = "General", account = "Account"
     var id: String { rawValue }
 
-    /// Capability pages in registry order, then the fixed shell destinations.
+    /// Capability pages in registry order, then the fixed shell destinations. A capability page
+    /// shows inside Plugins, with its plugin selected.
     static var allCases: [SettingsSection] {
-        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.permissions, .general, .account]
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.plugins, .permissions, .general, .account]
     }
+
+    /// Whether it's shown in Settings › Plugins: the table, or a plugin selected in it.
+    var isInPlugins: Bool { self == .plugins || capability != nil }
 
     /// The module whose Settings page this is; nil for the shell's Permissions and General.
     var capability: Capability? {
@@ -24,6 +28,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .permissions: return "hand.raised"
         case .account: return "person.crop.circle"
+        case .plugins: return "puzzlepiece.extension"
         default: return "gearshape"
         }
     }
@@ -82,21 +87,17 @@ enum SettingsSidebar {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// General and Permissions, then Plugins, which lists every plugin, as Raycast's settings do.
+    /// Searching also finds a plugin by name, so its page is one click away.
     static func groups(matching query: String) -> [[SettingsSection]] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches: (SettingsSection) -> Bool = {
             trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
         }
         let app = [SettingsSection.general, .permissions].filter(matches)
-        // Quick Search first, then alphabetical.
-        let capabilities = SettingsSection.allCases.filter { $0.capability != nil && matches($0) }
-            .sorted { lhs, rhs in
-                if (lhs == .search) != (rhs == .search) { return lhs == .search }
-                return lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
-            }
-        // The default capabilities, then the added ones in their own group below.
-        let isDefault: (SettingsSection) -> Bool = { $0.capability.map(CapabilityCatalog.defaultCapabilities.contains) ?? false }
-        return [app, capabilities.filter(isDefault), capabilities.filter { !isDefault($0) }].filter { !$0.isEmpty }
+        guard isSearching(query) else { return [app, [.plugins]] }
+        let plugins = PluginsTable.sections.flatMap { $0.plugins }.filter(matches)
+        return [app, plugins + [SettingsSection.plugins].filter(matches)].filter { !$0.isEmpty }
     }
 }
 
@@ -128,7 +129,8 @@ struct SettingsRootView: View {
                                 ForEach(group) { section in
                                     SettingsSidebarRow(
                                         section: section,
-                                        isSelected: visibleSelection == section,
+                                        isSelected: visibleSelection == section
+                                            || (section == .plugins && visibleSelection.capability != nil && !SettingsSidebar.isSearching(query)),
                                         attentionCount: model.settingsAttentionCount(for: section)
                                     ) {
                                         navigation.navigate(to: section)
@@ -150,8 +152,8 @@ struct SettingsRootView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
             Group {
-                if let page = visibleSelection.capability?.descriptor.settingsPage {
-                    page.content()
+                if visibleSelection.isInPlugins {
+                    PluginsSettingsView(selection: visibleSelection) { navigation.navigate(to: $0) }
                 } else if visibleSelection == .permissions {
                     PermissionsView()
                 } else if visibleSelection == .account {
@@ -217,6 +219,9 @@ struct SettingsRootView: View {
 extension AppModel {
     func settingsAttentionCount(for section: SettingsSection) -> Int {
         if section == .permissions { return missingPermissionCount }
+        if section == .plugins {
+            return SettingsSection.allCases.filter { $0.capability != nil }.reduce(0) { $0 + settingsAttentionCount(for: $1) }
+        }
         guard let capability = section.capability else { return 0 }
         return capabilities.attentionCount(for: capability, context: capabilityContext)
     }
