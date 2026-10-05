@@ -22,9 +22,6 @@ final class AppPreferences {
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
-        static let timerPlaysSound = "timerPlaysSound"
-        static let timerShowsMenuBarCountdown = "timerShowsMenuBarCountdown"
-        static let timerListsTimersInMenu = "timerListsTimersInMenu"
         static let lastLaunchedVersion = "lastLaunchedVersion"
     }
 
@@ -89,19 +86,46 @@ final class AppPreferences {
         didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
     }
 
-    /// Whether a timer's alarm rings until it's stopped, rather than showing silently. On by default.
-    var timerPlaysSound: Bool {
-        didSet { defaults.set(timerPlaysSound, forKey: Key.timerPlaysSound) }
+    /// Plugins' declared preferences (`PluginPreference`) that differ from their defaults, by
+    /// storage key (`plugin.<capability>.<key>`). Read them through `value(of:for:)`.
+    private var pluginValues: [String: PluginPreference.Value] = [:]
+
+    /// A plugin's declared preference: what was set, or its default.
+    func value(of preference: PluginPreference, for capability: Capability) -> PluginPreference.Value {
+        pluginValues[preference.storageKey(for: capability)] ?? preference.defaultValue
     }
 
-    /// Whether the menu bar item shows the soonest running timer beside its icon. On by default.
-    var timerShowsMenuBarCountdown: Bool {
-        didSet { defaults.set(timerShowsMenuBarCountdown, forKey: Key.timerShowsMenuBarCountdown) }
+    func bool(_ preference: PluginPreference, for capability: Capability) -> Bool {
+        if case .bool(let value) = value(of: preference, for: capability) { return value }
+        return false
     }
 
-    /// Whether the Keybumps menu lists the timers at its top. On by default.
-    var timerListsTimersInMenu: Bool {
-        didSet { defaults.set(timerListsTimersInMenu, forKey: Key.timerListsTimersInMenu) }
+    func set(_ value: PluginPreference.Value, of preference: PluginPreference, for capability: Capability) {
+        let key = preference.storageKey(for: capability)
+        pluginValues[key] = value
+        switch value {
+        case .bool(let bool): defaults.set(bool, forKey: key)
+        case .choice(let choice): defaults.set(choice, forKey: key)
+        }
+    }
+
+    /// Reads every declared preference that was set, ignoring a stored value of the wrong kind.
+    private func loadPluginValues() {
+        for descriptor in CapabilityCatalog.descriptors {
+            for preference in descriptor.preferences {
+                let key = preference.storageKey(for: descriptor.capability)
+                switch preference.kind {
+                case .toggle:
+                    if defaults.object(forKey: key) is NSNumber {
+                        pluginValues[key] = .bool(defaults.bool(forKey: key))
+                    }
+                case .choice(let options, _):
+                    if let stored = defaults.string(forKey: key), options.contains(where: { $0.value == stored }) {
+                        pluginValues[key] = .choice(stored)
+                    }
+                }
+            }
+        }
     }
 
     /// The version that last launched, so What's New shows once after an update (#225).
@@ -139,11 +163,6 @@ final class AppPreferences {
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
-        timerPlaysSound = defaults.object(forKey: Key.timerPlaysSound) == nil || defaults.bool(forKey: Key.timerPlaysSound)
-        timerShowsMenuBarCountdown = defaults.object(forKey: Key.timerShowsMenuBarCountdown) == nil
-            || defaults.bool(forKey: Key.timerShowsMenuBarCountdown)
-        timerListsTimersInMenu = defaults.object(forKey: Key.timerListsTimersInMenu) == nil
-            || defaults.bool(forKey: Key.timerListsTimersInMenu)
         lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
@@ -192,6 +211,7 @@ final class AppPreferences {
             defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher)
         }
         normalizeShortcutConflictsFavoringExistingWindowBindings()
+        loadPluginValues()
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {

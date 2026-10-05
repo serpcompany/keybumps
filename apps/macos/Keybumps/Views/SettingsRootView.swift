@@ -1183,7 +1183,7 @@ private struct CapabilityShortcutEditor: View {
     }
 }
 
-private struct PermissionRow: View {
+struct PermissionRow: View {
     @Environment(AppModel.self) private var model
     let permission: MacPermission
 

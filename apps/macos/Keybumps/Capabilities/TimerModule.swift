@@ -23,10 +23,36 @@ extension CapabilityDescriptor {
             section: .timer,
             summary: "Count down from a duration and get told when it ends.",
             disableExplanation: "Turning this off cancels running timers and releases its global shortcut.",
-            content: { AnyView(TimerSettingsView()) }
+            content: { AnyView(PluginSettingsPage(capability: .timer)) }
         ),
         criticalOperations: [],
-        searchKeywords: ["timers", "countdown"]
+        searchKeywords: ["timers", "countdown"],
+        category: .productivity,
+        preferences: [.timerRings, .timerMenuBarCountdown, .timerMenuList]
+    )
+}
+
+extension PluginPreference {
+    static let timerRings = PluginPreference(
+        key: "ringsUntilStopped",
+        title: "Ring until you stop it",
+        subtitle: "Keybumps always shows an alarm that stays on screen until you click Stop or open the Timers tab. Turn this off for a silent alarm.",
+        group: "When a timer ends",
+        kind: .toggle(default: true)
+    )
+    static let timerMenuBarCountdown = PluginPreference(
+        key: "showsMenuBarCountdown",
+        title: "Show the countdown",
+        subtitle: "While a timer runs, the time left on the soonest one shows beside the Keybumps icon.",
+        group: "Menu bar",
+        kind: .toggle(default: true)
+    )
+    static let timerMenuList = PluginPreference(
+        key: "listsTimersInMenu",
+        title: "List timers in the Keybumps menu",
+        subtitle: "Click one there to pause or resume it.",
+        group: "Menu bar",
+        kind: .toggle(default: true)
     )
 }
 
@@ -167,14 +193,14 @@ final class TimerModule: CapabilityModule {
             return
         }
         let now = store.now()
-        let countdown = preferences.timerShowsMenuBarCountdown ? Self.countdown(of: store.displayed, now: now) : nil
+        let countdown = preferences.bool(.timerMenuBarCountdown, for: .timer) ? Self.countdown(of: store.displayed, now: now) : nil
         menuBar.set(
             title: countdown?.title,
             spoken: countdown?.spoken,
-            items: preferences.timerListsTimersInMenu ? menuItems(now: now) : []
+            items: preferences.bool(.timerMenuList, for: .timer) ? menuItems(now: now) : []
         )
 
-        let showsTime = preferences.timerShowsMenuBarCountdown || preferences.timerListsTimersInMenu
+        let showsTime = preferences.bool(.timerMenuBarCountdown, for: .timer) || preferences.bool(.timerMenuList, for: .timer)
         guard showsTime, let soonest = store.displayed.first(where: \.isRunning) else { return }
         // The clock rounds up, so the shown second changes as the time left crosses a whole second.
         let remaining = soonest.remaining(at: now)
@@ -240,7 +266,7 @@ final class TimerModule: CapabilityModule {
             showDot()
         }
         let onTime = finishes.contains { $0.lateness <= Self.onTimeGrace }
-        raiseAlarm(adding: finishes.map(\.item.id), rings: onTime && preferences.timerPlaysSound)
+        raiseAlarm(adding: finishes.map(\.item.id), rings: onTime && preferences.bool(.timerRings, for: .timer))
     }
 
     /// Shows the alarm for every timer it holds, adding `ids`; it rings once any of them rang.

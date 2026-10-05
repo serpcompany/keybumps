@@ -25,6 +25,11 @@ struct CapabilityDescriptor: Identifiable {
     /// means no capability command; an empty list means one found by its title alone. A keyword
     /// ranks the command after the apps, so it never hides an app with that name.
     let searchKeywords: [String]?
+    /// Its plugin manifest's Store category.
+    let category: PluginCategory
+    var publisher: PluginPublisher = .keybumps
+    /// Its declared settings, which its Settings page draws and `AppPreferences` stores.
+    var preferences: [PluginPreference] = []
 
     var id: Capability { capability }
 }
