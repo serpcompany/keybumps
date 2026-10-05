@@ -61,7 +61,7 @@ struct CapabilitySettingsPage {
 
 /// Every registered module's descriptor.
 enum CapabilityCatalog {
-    /// Registry order. It is the Settings sidebar order and the order modules apply in; a module
+    /// Registry order. It is the order modules apply in and Quick Search lists their commands; a module
     /// follows every module it depends on, so a dependency is settled before its dependents read it.
     static let descriptors: [CapabilityDescriptor] = [
         .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer

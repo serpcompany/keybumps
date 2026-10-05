@@ -37,18 +37,24 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsNavigationHistory: Equatable {
-    private(set) var selection: SettingsSection
+    /// Never `.plugins` itself: Plugins always shows a plugin, the one last shown or else the first.
+    private(set) var selection: SettingsSection {
+        didSet { if selection.capability != nil { lastPlugin = selection } }
+    }
     private(set) var backStack: [SettingsSection] = []
     private(set) var forwardStack: [SettingsSection] = []
+    private var lastPlugin: SettingsSection?
 
     init(selection: SettingsSection = .permissions) {
-        self.selection = selection
+        self.selection = PluginsTable.landingPage(for: selection, after: nil)
+        if self.selection.capability != nil { lastPlugin = self.selection }
     }
 
     var canGoBack: Bool { !backStack.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }
 
     mutating func navigate(to section: SettingsSection) {
+        let section = PluginsTable.landingPage(for: section, after: lastPlugin)
         guard section != selection else { return }
         backStack.append(selection)
         forwardStack = []
@@ -80,11 +86,19 @@ extension View {
 }
 
 /// The Settings sidebar, modeled on Raycast's: the account row on top (outside these groups), the
-/// app's own pages, then one row per capability module (Quick Search first, then alphabetical),
-/// filtered by search.
+/// app's own pages, then Plugins, filtered by search.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// What VoiceOver says for a row's attention mark.
+    static func attentionLabel(_ count: Int, for section: SettingsSection) -> String {
+        switch section {
+        case .permissions: "\(count) permission items need attention"
+        case .plugins: count == 1 ? "1 plugin needs attention" : "\(count) plugins need attention"
+        default: "Needs attention"
+        }
     }
 
     /// General and Permissions, then Plugins, which lists every plugin, as Raycast's settings do.
@@ -163,16 +177,7 @@ struct SettingsRootView: View {
                 }
             }
             .environment(model)
-            .toolbar {
-                if #available(macOS 26.0, *) {
-                    ToolbarSpacer(.flexible)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    if let capability = visibleSelection.capability {
-                        CapabilityToggle(capability: capability)
-                    }
-                }
-            }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("settings.detail.\(visibleSelection.launchToken)")
         }
         .navigationTitle("Keybumps")
@@ -219,8 +224,9 @@ struct SettingsRootView: View {
 extension AppModel {
     func settingsAttentionCount(for section: SettingsSection) -> Int {
         if section == .permissions { return missingPermissionCount }
+        // How many plugins need attention, not how many things do.
         if section == .plugins {
-            return SettingsSection.allCases.filter { $0.capability != nil }.reduce(0) { $0 + settingsAttentionCount(for: $1) }
+            return SettingsSection.allCases.filter { $0.capability != nil && settingsAttentionCount(for: $0) > 0 }.count
         }
         guard let capability = section.capability else { return 0 }
         return capabilities.attentionCount(for: capability, context: capabilityContext)
@@ -244,7 +250,7 @@ private struct SettingsSidebarRow: View {
                 if attentionCount > 0 {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundStyle(.red)
-                        .accessibilityLabel("\(attentionCount) permission items need attention")
+                        .accessibilityLabel(SettingsSidebar.attentionLabel(attentionCount, for: section))
                 }
             }
             .frame(minHeight: 32)
@@ -706,11 +712,18 @@ struct WindowSettingsView: View {
         .onDisappear { recorder.cancel() }
     }
 
-    /// The two-column shortcut grid, one card per pair of columns.
+    /// The two-column shortcut grid, one card per pair of columns, or one column when the page is
+    /// too narrow for two without cutting off names.
     private func shortcutColumns(_ leading: [WindowAction], _ trailing: [WindowAction]) -> some View {
-        HStack(alignment: .top, spacing: 28) {
-            shortcutColumn(leading)
-            shortcutColumn(trailing)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 28) {
+                shortcutColumn(leading)
+                shortcutColumn(trailing)
+            }
+            VStack(spacing: 4) {
+                shortcutColumn(leading)
+                shortcutColumn(trailing)
+            }
         }
         .padding(.vertical, 8)
     }
@@ -1118,13 +1131,15 @@ struct CapabilityControl: View {
     }
 }
 
-private struct CapabilityToggle: View {
+/// A plugin's switch, in its Plugins table row.
+struct CapabilityToggle: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
 
     var body: some View {
         Toggle("Enable \(capability.title)", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
-            .settingsCompactSwitch()
+            .toggleStyle(.switch)
+            .controlSize(.mini)
             .labelsHidden()
             .help(capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
             .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")

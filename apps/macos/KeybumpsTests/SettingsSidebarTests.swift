@@ -41,6 +41,33 @@ struct SettingsSidebarTests {
         #expect(!CapabilityCatalog.defaultCapabilities.contains(.timer))
     }
 
+    @Test("Plugins opens on the plugin last shown, else the first, never on an empty page")
+    func pluginsLandsOnAPlugin() {
+        var navigation = SettingsNavigationHistory()
+        navigation.navigate(to: .plugins)
+        #expect(navigation.selection == .search)
+
+        navigation.navigate(to: .timer)
+        navigation.navigate(to: .general)
+        navigation.navigate(to: .plugins)
+        #expect(navigation.selection == .timer)
+        // Choosing Plugins again while it shows a plugin keeps that plugin.
+        navigation.navigate(to: .plugins)
+        #expect(navigation.selection == .timer)
+        navigation.goBack()
+        #expect(navigation.selection == .general)
+
+        #expect(SettingsNavigationHistory(selection: .plugins).selection == .search)
+    }
+
+    @Test("VoiceOver counts permissions on Permissions and plugins on Plugins")
+    func attentionLabels() {
+        #expect(SettingsSidebar.attentionLabel(2, for: .permissions) == "2 permission items need attention")
+        #expect(SettingsSidebar.attentionLabel(1, for: .plugins) == "1 plugin needs attention")
+        #expect(SettingsSidebar.attentionLabel(3, for: .plugins) == "3 plugins need attention")
+        #expect(SettingsSidebar.attentionLabel(1, for: .screenshotTools) == "Needs attention")
+    }
+
     @Test("Forward returns through screens left with Back, and a new visit clears it")
     func forwardHistory() {
         var navigation = SettingsNavigationHistory()

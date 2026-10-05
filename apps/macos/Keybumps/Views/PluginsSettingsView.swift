@@ -21,6 +21,13 @@ enum PluginsTable {
         ].filter { !$0.plugins.isEmpty }
     }
 
+    /// The page a request for `section` shows: for Plugins itself, the plugin last shown, else the
+    /// first in the table; any other page as is.
+    static func landingPage(for section: SettingsSection, after last: SettingsSection?) -> SettingsSection {
+        guard section == .plugins else { return section }
+        return last ?? sections.first?.plugins.first ?? .search
+    }
+
     /// The sections, keeping plugins whose name or Quick Search keywords contain `query`.
     static func sections(matching query: String) -> [Section] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -37,21 +44,20 @@ enum PluginsTable {
 }
 
 /// Settings › Plugins, like Raycast's Extensions tab: a searchable table of every plugin with its
-/// switch, and the selected plugin's page beside it. Opening Plugins selects the
-/// first plugin.
+/// switch, and the selected plugin's page beside it. Opening Plugins selects a plugin
+/// (`PluginsTable.landingPage`), so a plugin is always selected.
 struct PluginsSettingsView: View {
     @Environment(AppModel.self) private var model
     let selection: SettingsSection
     let select: (SettingsSection) -> Void
     @State private var query = ""
 
-    private var selected: SettingsSection {
-        selection.capability != nil ? selection : (PluginsTable.sections.first?.plugins.first ?? .search)
-    }
+    private var selected: SettingsSection { PluginsTable.landingPage(for: selection, after: nil) }
 
     var body: some View {
         HStack(spacing: 0) {
-            // Narrow, so each plugin's page keeps at least the width it had as its own sidebar page.
+            // Wide enough for every plugin's name; at the default window width each plugin's page
+            // keeps the width it had as its own sidebar page.
             table
                 .frame(width: 260)
                 .background(SettingsTheme.sidebarBackground)
@@ -62,6 +68,11 @@ struct PluginsSettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        // A plugin opened from elsewhere, such as its Quick Search command, shows in the table even
+        // if the search would hide it.
+        .onChange(of: selected) {
+            if !PluginsTable.sections(matching: query).contains(where: { $0.plugins.contains(selected) }) { query = "" }
         }
     }
 
@@ -78,6 +89,7 @@ struct PluginsSettingsView: View {
                                 .font(.system(size: SettingsTheme.subtitleSize, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
+                                .accessibilityAddTraits(.isHeader)
                             ForEach(section.plugins) { page in
                                 PluginsTableRow(page: page, isSelected: page == selected) { select(page) }
                             }
@@ -93,7 +105,7 @@ struct PluginsSettingsView: View {
 }
 
 /// A plugin's row: its icon and name (selecting it shows its page), whether it needs attention, and
-/// its switch.
+/// its switch, the only one for the plugin, as in Raycast's table.
 private struct PluginsTableRow: View {
     @Environment(AppModel.self) private var model
     let page: SettingsSection
@@ -123,10 +135,7 @@ private struct PluginsTableRow: View {
                 }
                 .buttonStyle(SettingsSidebarButtonStyle(isSelected: isSelected))
                 .accessibilityIdentifier("plugins.row.\(page.launchToken)")
-                Toggle("Turn \(descriptor.title) on or off", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
-                    .settingsCompactSwitch()
-                    .labelsHidden()
-                    .accessibilityIdentifier("plugins.toggle.\(capability.rawValue)")
+                CapabilityToggle(capability: capability)
             }
             .padding(.trailing, 6)
         }
