@@ -66,7 +66,8 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.dictation.durationLimit").exists)
 
         language.click()
-        let first = app.menuItems.element(boundBy: 0)
+        // The pop-up's own items; `app.menuItems` would also match the menu bar's.
+        let first = language.menuItems.element(boundBy: 0)
         XCTAssertTrue(first.waitForExistence(timeout: 5), "The language dropdown opens its menu")
         let title = first.title
         first.click()
