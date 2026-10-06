@@ -13,7 +13,7 @@ export const LEGAL_UPDATED = 'October 6, 2026'
 export const site = {
   name: 'Keybumps',
   description:
-    'Quick search, clipboard history, screenshots, on-device dictation, window management, and shortcut coaching in one native macOS app.',
+    'Search, clipboard history, screenshots, on-device dictation, and more Mac utilities in one keyboard-first native macOS app.',
   url: 'https://keybumps.app',
   supportEmail: SUPPORT_EMAIL
 } as const
