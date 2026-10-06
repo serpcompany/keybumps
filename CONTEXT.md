@@ -46,6 +46,10 @@ _Avoid_: Plugin, extension, add-on
 The Keybumps window where capabilities are turned on and configured. Quick Search and the Command Palette offer it as Keybumps Settings.
 _Avoid_: Preferences, Settings panel
 
+**Crash report**:
+What Keybumps sends its developers through Sentry when it crashes or freezes, unless the person turned it off: versions, the Mac's model, which plugins are on, and stack traces, never user content (ADR 0007).
+_Avoid_: Telemetry, analytics, tracking
+
 ### Capabilities
 
 **Quick Search**:

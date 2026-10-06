@@ -14,7 +14,7 @@ Across the repo, including the website, use `CONTEXT.md` terminology, preserve t
 - [`docs/development-workflow.md`](docs/development-workflow.md): Follow this branch, local-build, installed-artifact, manual-QA, and promotion cycle for all product work.
   Hand the owner work through `apps/macos/scripts/build-qa-candidate.sh <issue>` after your own first pass.
 - [`docs/testing.md`](docs/testing.md): Test frameworks, snapshot fixtures, testability seams, and CI runner decisions. New tests use Swift Testing.
-- User content and processing stay local: no accounts, sync, analytics, cloud transcription, or hosted history.
+- User content and processing stay local: no accounts, sync, analytics, cloud transcription, or hosted history. Crash and problem reports go to Sentry, scrubbed of user content ([ADR 0007](docs/adr/0007-crash-reports-to-sentry.md)).
 - Non-goals: App Store distribution, Intel or pre-macOS-14.2 support, third-party extensions, AI rewriting, meeting/system-audio capture, web search, and workflows.
 - A build is not proof of OS integration. Report build, deterministic tests, UI, signed runtime, installed artifact, and owner acceptance separately.
 

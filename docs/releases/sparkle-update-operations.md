@@ -65,6 +65,7 @@ Repository secrets (Settings → Secrets and variables → Actions). The owner c
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | App Store Connect API key used by `asc notarization`; `ASC_PRIVATE_KEY` is the full `.p8` contents |
 | `SPARKLE_PRIVATE_KEY` | The Sparkle EdDSA private key (`generate_keys --account <account> -x key.txt` on the Mac that holds it; delete the file afterwards) |
 | `CLOUDFLARE_R2_TOKEN` | Cloudflare API token with Workers R2 Storage: Edit on `keybumps-updates` (see [`cloudflare.md`](cloudflare.md)) |
+| `SENTRY_AUTH_TOKEN` | Optional. A Sentry organization auth token for `serpcompany` that can upload debug files, so crash reports name Keybumps's code (ADR 0007). Without it, or if the upload fails, the release still ships with a warning. `build-qa-candidate.sh` uploads QA candidates' symbols too when it's set in your shell |
 
 **Check release credentials** (`.github/workflows/release-credentials.yml`) is a read-only workflow that lists which secrets are set and verifies the R2 token can read `keybumps-updates`. Both workflows use the `release` GitHub environment, where the owner can require approval before any run.
 

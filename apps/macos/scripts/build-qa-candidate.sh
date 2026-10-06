@@ -78,6 +78,13 @@ xcodebuild -quiet -exportArchive \
   -archivePath "$output/Keybumps.xcarchive" \
   -exportPath "$output/export" \
   -exportOptionsPlist "$app_root/scripts/ExportOptions-DeveloperID-Manual.plist"
+# QA candidates send crash reports too (ADR 0007); with a Sentry token in the shell, upload their
+# debug symbols so those reports name Keybumps's code. Never fatal.
+if [[ -n "${SENTRY_AUTH_TOKEN:-}" ]]; then
+  npx --yes @sentry/cli@3.8.0 debug-files upload --org serpcompany --project keybumps-mac \
+    "$output/Keybumps.xcarchive/dSYMs" >/dev/null \
+    || print -u2 "warning: uploading this candidate's debug symbols to Sentry failed"
+fi
 candidate_app="$output/export/Keybumps.app"
 
 codesign --verify --deep --strict "$candidate_app"

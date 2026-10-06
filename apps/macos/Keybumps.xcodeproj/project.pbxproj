@@ -84,6 +84,8 @@
 		66D4AA5C1B1F31493509DD84 /* PointerEventMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96B2E873B85F38F428D7E33E /* PointerEventMonitor.swift */; };
 		6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5341E18161C5048290122F /* CoachingEvent.swift */; };
 		681404F189B53CE2AFBE85F2 /* CapabilityCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7EB00B5645500C8BA99C799 /* CapabilityCommandTests.swift */; };
+		68E753403AD91111BDDD954C /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = EBC857D91C931460A9978025 /* Sentry */; };
+		696DF1F1E60BADA4CDCFA17D /* CrashReporting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79043FFAEE9F229D4C3376F9 /* CrashReporting.swift */; };
 		6982BCBBA9213F7F0E4D9805 /* SnippetImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50556BFC52088CFDE4E7F2D8 /* SnippetImport.swift */; };
 		69D9ACEE4E0642D8CB042CD8 /* ScreenshotToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C85AC05704376F0356083E /* ScreenshotToolsService.swift */; };
 		6A9CD25220129616C6F0A833 /* DictationTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E9573AD23AF63BB1C065C /* DictationTranscriptionEngine.swift */; };
@@ -108,8 +110,10 @@
 		85868CCFFF8CE1C0294CBE42 /* GlobalShortcutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */; };
 		86BB57587481ECAD2AFDD92F /* TimerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF95B166919DD786B7F8E68 /* TimerModule.swift */; };
 		8B2FB2733D9B215CF944C82F /* LicenseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C47406BD2F59E7F87C682AC /* LicenseStore.swift */; };
+		8BA4C720C033CA64F6066D5E /* LICENSE.sentry-cocoa in Resources */ = {isa = PBXBuildFile; fileRef = AB401D8E7A0C608C48B0D380 /* LICENSE.sentry-cocoa */; };
 		8C21790C7031D23EE928A323 /* PasteboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6088743D694CB89ED371F73 /* PasteboardSnapshot.swift */; };
 		8D12A7B05C292CF6905EB8D7 /* InMemoryDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26EB5CBFC50DDF739E755BC /* InMemoryDefaults.swift */; };
+		8D5B8D1F08592B677B3CC12D /* CrashReportingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D5212663FD6590769EE0DC /* CrashReportingTests.swift */; };
 		8E6D9E41D6E65369ECDDE7CC /* SnippetsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5673FADC7F9739F8A73755C1 /* SnippetsSettingsView.swift */; };
 		8FD80A923E357790F894A93C /* SharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059D55AF379C93A1EABF75A1 /* SharedViews.swift */; };
 		8FDF0BF1D3FEF7336E60D22B /* EntitlementsSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DD01BC4E67AC750F7DCB3E6 /* EntitlementsSourceTests.swift */; };
@@ -314,6 +318,7 @@
 		6F476718EE4062D15AF818F5 /* UnitTestHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitTestHost.swift; sourceTree = "<group>"; };
 		743638B35EF5149ECD4B72CE /* Keybumps.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Keybumps.entitlements; sourceTree = "<group>"; };
 		76645A043DE2214E303541A5 /* KeywordExpansionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeywordExpansionTests.swift; sourceTree = "<group>"; };
+		79043FFAEE9F229D4C3376F9 /* CrashReporting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporting.swift; sourceTree = "<group>"; };
 		79A769F22A9F51BA885B76F1 /* DictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationService.swift; sourceTree = "<group>"; };
 		7C144E78DC41A2DF2C4FCA0C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7D8898653639A2B580518571 /* QuickSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchService.swift; sourceTree = "<group>"; };
@@ -350,6 +355,7 @@
 		A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationAudioPlayer.swift; sourceTree = "<group>"; };
 		A9E51DAD29FE4265EDDF9389 /* PluginManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManifest.swift; sourceTree = "<group>"; };
 		AA9C2CC21396F16E615BBC8D /* PalettePasteRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePasteRoute.swift; sourceTree = "<group>"; };
+		AB401D8E7A0C608C48B0D380 /* LICENSE.sentry-cocoa */ = {isa = PBXFileReference; path = "LICENSE.sentry-cocoa"; sourceTree = "<group>"; };
 		ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionDetectionTests.swift; sourceTree = "<group>"; };
 		AD2D4D253FCAFCBC20E1EB93 /* TimerPaletteContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerPaletteContent.swift; sourceTree = "<group>"; };
 		AF01C9054488E9432E476309 /* ChromeActionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeActionAdapter.swift; sourceTree = "<group>"; };
@@ -369,6 +375,7 @@
 		C530DAE49C425F656DAF0256 /* ScreenshotClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotClipboardTests.swift; sourceTree = "<group>"; };
 		C58C75BA38A2AB150043D3EA /* PublicModelDownloadIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicModelDownloadIntegrationTests.swift; sourceTree = "<group>"; };
 		C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualActionDetector.swift; sourceTree = "<group>"; };
+		C7D5212663FD6590769EE0DC /* CrashReportingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportingTests.swift; sourceTree = "<group>"; };
 		C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
 		C9D1462BF5CB236B53AD1B69 /* KeybumpsFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybumpsFeatureTests.swift; sourceTree = "<group>"; };
 		CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNew.swift; sourceTree = "<group>"; };
@@ -420,6 +427,7 @@
 			files = (
 				397B0338C0A8428140BDE535 /* Sparkle in Frameworks */,
 				CAF0D8445DF2139E92F3C873 /* WhisperKit in Frameworks */,
+				68E753403AD91111BDDD954C /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -474,6 +482,7 @@
 				C25826572D9CE3C26F71D97D /* LICENSE.gemoji */,
 				5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */,
 				3FB67EE4BA86CA81A301871D /* LICENSE.rectangle */,
+				AB401D8E7A0C608C48B0D380 /* LICENSE.sentry-cocoa */,
 				A660F126D44D431EBC8A7A20 /* LICENSE.shotnix */,
 				9B64C58F078669CE75E71281 /* LICENSE.tock */,
 				E77DA4F512B8AB702043230A /* LICENSE.unicode */,
@@ -493,6 +502,7 @@
 				7FFEC5D41739BD997D5CC761 /* Clipboard */,
 				1317B9E0CBA43161CCF7E650 /* CommandPalette */,
 				05C8E0D38AB8DCFDF398F263 /* Detection */,
+				37FB1E1E59C3FD658401C6B3 /* Diagnostics */,
 				BCE24287CDFBC62010E9921E /* Dictation */,
 				1C2873FDBF5FD973FF3E2809 /* Domain */,
 				47BD9ED45980FE365DE53862 /* EmojiPicker */,
@@ -566,6 +576,7 @@
 				ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */,
 				87C6CF0FD29B2DDEE1F0148D /* ClipboardRowTests.swift */,
 				9C119BDA7395267890BE2C29 /* ClipboardSourceAppTests.swift */,
+				C7D5212663FD6590769EE0DC /* CrashReportingTests.swift */,
 				54D92B135B7669762A245EC5 /* DictationNotchTests.swift */,
 				0D902CBDDE33CE519C755A20 /* DictationPastePermissionTests.swift */,
 				CD492B963F2E1C378C206508 /* DictationWarmRuntimeBenchmarkTests.swift */,
@@ -615,6 +626,14 @@
 				E5DBE0291391003CE7E8D960 /* Fixtures */,
 			);
 			path = KeybumpsTests;
+			sourceTree = "<group>";
+		};
+		37FB1E1E59C3FD658401C6B3 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				79043FFAEE9F229D4C3376F9 /* CrashReporting.swift */,
+			);
+			path = Diagnostics;
 			sourceTree = "<group>";
 		};
 		47BD9ED45980FE365DE53862 /* EmojiPicker */ = {
@@ -863,6 +882,7 @@
 			packageProductDependencies = (
 				4180293288B6BA15C922987B /* Sparkle */,
 				B51FAB2B198D5DDDE9DB256B /* WhisperKit */,
+				EBC857D91C931460A9978025 /* Sentry */,
 			);
 			productName = Keybumps;
 			productReference = 1FD52164D0E4BEB3C625179B /* Keybumps.app */;
@@ -941,6 +961,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5751A8D569E73477D958B211 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+				3EA1F186D7786679C688CD84 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				68EF14751C0BC7F6B784AC67 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -981,6 +1002,7 @@
 				75788A95567690D7F805DAB7 /* LICENSE.gemoji in Resources */,
 				197955C758CB29FF6F4DCA14 /* LICENSE.openai-whisper in Resources */,
 				C49099D24923B8A7C3627B9F /* LICENSE.rectangle in Resources */,
+				8BA4C720C033CA64F6066D5E /* LICENSE.sentry-cocoa in Resources */,
 				91F074E383122DC99C8BF05C /* LICENSE.shotnix in Resources */,
 				9ADC7208F8F6BFECC9D7EE38 /* LICENSE.tock in Resources */,
 				DA6481ADC8A9E29EC587CC91 /* LICENSE.unicode in Resources */,
@@ -1056,6 +1078,7 @@
 				6740877430246CD1F8A8C0BB /* CoachingEvent.swift in Sources */,
 				081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */,
 				36234F90E23764E2A39CAF58 /* CompletedAudioTranscriber.swift in Sources */,
+				696DF1F1E60BADA4CDCFA17D /* CrashReporting.swift in Sources */,
 				A56B77F4681B7E49B9909FA1 /* DetectionAccessibility.swift in Sources */,
 				098879181087D6A890F705C8 /* DictationAudioPlayer.swift in Sources */,
 				780135D18A3D6C288C8DC1DD /* DictationHistoryService.swift in Sources */,
@@ -1164,6 +1187,7 @@
 				168EB2F837DEC3518377B4C2 /* ChromeActionDetectionTests.swift in Sources */,
 				39D7E051AF2C9C5ED3C074B1 /* ClipboardRowTests.swift in Sources */,
 				984A9DA0A6E99B01D56FEA67 /* ClipboardSourceAppTests.swift in Sources */,
+				8D5B8D1F08592B677B3CC12D /* CrashReportingTests.swift in Sources */,
 				ABD55C5FE6CE7B1634E4A14B /* DictationNotchTests.swift in Sources */,
 				0C15879E4F18BB707A454577 /* DictationPastePermissionTests.swift in Sources */,
 				713E9A8F6D1DC841FE032B7B /* DictationWarmRuntimeBenchmarkTests.swift in Sources */,
@@ -1371,6 +1395,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				KEYBUMPS_CRASH_REPORTS_DSN = "";
 				KEYBUMPS_UPDATE_FEED_URL = "";
 				KEYBUMPS_UPDATE_PUBLIC_KEY = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
@@ -1476,6 +1501,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				KEYBUMPS_CRASH_REPORTS_DSN = "https://9041bf71456c1490b110d9ca240ef35a@o4505803284873216.ingest.us.sentry.io/4512206336950272";
 				KEYBUMPS_UPDATE_FEED_URL = "";
 				KEYBUMPS_UPDATE_PUBLIC_KEY = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
@@ -1532,6 +1558,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		3EA1F186D7786679C688CD84 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = exactVersion;
+				version = 9.30.0;
+			};
+		};
 		5751A8D569E73477D958B211 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift.git";
@@ -1560,6 +1594,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5751A8D569E73477D958B211 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = WhisperKit;
+		};
+		EBC857D91C931460A9978025 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3EA1F186D7786679C688CD84 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

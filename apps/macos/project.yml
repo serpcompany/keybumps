@@ -16,6 +16,11 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     KEYBUMPS_UPDATE_FEED_URL: ""
     KEYBUMPS_UPDATE_PUBLIC_KEY: ""
+    # Where crash reports go (ADR 0007). Empty, so off, everywhere but Release builds.
+    KEYBUMPS_CRASH_REPORTS_DSN: ""
+  configs:
+    Release:
+      KEYBUMPS_CRASH_REPORTS_DSN: "https://9041bf71456c1490b110d9ca240ef35a@o4505803284873216.ingest.us.sentry.io/4512206336950272"
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
@@ -23,6 +28,9 @@ packages:
   ArgmaxOSS:
     url: https://github.com/argmaxinc/argmax-oss-swift.git
     exactVersion: 1.1.0
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    exactVersion: 9.30.0
 targets:
   Keybumps:
     type: application
@@ -52,6 +60,8 @@ targets:
         buildPhase: resources
       - path: LICENSE.openai-whisper
         buildPhase: resources
+      - path: LICENSE.sentry-cocoa
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps
@@ -74,6 +84,7 @@ targets:
       - package: Sparkle
       - package: ArgmaxOSS
         product: WhisperKit
+      - package: Sentry
     postCompileScripts:
       - name: Bundle this release's notes for What's New
         # build-update-release.sh and build-qa-candidate.sh pass KEYBUMPS_RELEASE_NOTES; other builds carry none (#225).

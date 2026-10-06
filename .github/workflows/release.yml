@@ -58,6 +58,7 @@ env:
   SPARKLE_ACCOUNT: keybumps-release
   CLOUDFLARE_ACCOUNT_ID: cec5f04e1d18bcc65f2be0aefb04f059
   WRANGLER_VERSION: 4.142.0
+  SENTRY_CLI_VERSION: 3.8.0
 
 jobs:
   unit-tests:
@@ -137,6 +138,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::Invalid version: $VERSION"; exit 1; }
+          # -dev. marks a QA candidate: it reports as qa and accepts -KBTestCrash (ADR 0007).
+          [[ "$VERSION" != *-dev.* ]] || { echo "::error::-dev. versions are reserved for QA candidates: $VERSION"; exit 1; }
           [ -f "docs/releases/v${VERSION}.md" ] || { echo "::error::Missing docs/releases/v${VERSION}.md"; exit 1; }
           # Read the live feed from R2 directly: Bot Fight Mode blocks CI runners on the public host.
           previous=$(wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe | xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="version"])' -)
@@ -198,6 +201,21 @@ jobs:
       - name: Remove Sparkle key file
         if: always()
         run: rm -f "$RUNNER_TEMP/sparkle-private-key"
+
+      # Crash reports name Keybumps's code only with this build's debug symbols (ADR 0007). A
+      # release still ships without them: a missing token or a failed upload is a warning.
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "::warning::SENTRY_AUTH_TOKEN is not set: crash reports from this release won't be symbolicated."
+            exit 0
+          fi
+          npx --yes "@sentry/cli@${SENTRY_CLI_VERSION}" debug-files upload \
+            --org serpcompany --project keybumps-mac \
+            "$RUNNER_TEMP/release/archive/Keybumps.xcarchive/dSYMs" \
+            || echo "::warning::Uploading debug symbols to Sentry failed: crash reports from this release won't be symbolicated."
 
       - name: Preview publication
         run: |

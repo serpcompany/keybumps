@@ -364,6 +364,7 @@ final class AppModel {
         licensing.start()
         if preferences.didCompleteOnboarding && isLicensed { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
+        CrashReporter.recordPlugins(preferences.enabledCapabilities)
         updater.start()
         updateReminder.start()
         updateReminder.evaluate()
@@ -490,6 +491,14 @@ final class AppModel {
         }
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
+        CrashReporter.recordPlugins(preferences.enabledCapabilities)
+    }
+
+    /// Settings › General's crash reports switch (ADR 0007): takes effect at once.
+    func setSendsCrashReports(_ enabled: Bool) {
+        preferences.sendsCrashReports = enabled
+        CrashReporter.setEnabled(enabled)
+        CrashReporter.recordPlugins(preferences.enabledCapabilities)
     }
 
     /// What every capability module receives when the shell applies, deactivates, or refreshes it.
