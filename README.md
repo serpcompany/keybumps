@@ -4,11 +4,13 @@ Keybumps is a native macOS utility combining local Quick Search, bounded text-an
 
 Screenshot Tools takes screenshots with its own hotkeys (⇧⌘2 every screen, ⇧⌘3 every screen then edit, ⇧⌘4 a selected area; it needs Screen Recording and temporarily takes over macOS's own ⇧⌘3/⇧⌘4), and adds those and macOS's ⇧⌘5 screenshots to Clipboard History and the ⌘3 Screenshots grid. New screenshots also go on the clipboard unless that's turned off in Screenshot Tools settings or you've copied something since the screenshot was saved; ⇧⌘3 copies only when you Save, so an unredacted shot never lands there. In the ⌘3 grid, Return copies a screenshot, as in the Clipboard tab, and ⌘Return (or ⌘E on any image) opens a lightweight editor with blur, redact, arrow, draw, and text; Save (Return) copies the flattened image and saves `<name> (edited).png` beside the original, and Cancel (Esc) discards it.
 
-Automatic Dictation insertion and reuse from Dictation History are excluded from Clipboard History even though macOS pasteboard transport is used to deliver the text. An explicit user Copy remains normal clipboard activity.
+Clipboard writes Keybumps makes for you stay out of Clipboard History: Dictation insertion, transcript copies from the Dictation tab, copies from the Snippets and Emoji tabs, ⌘Return pastes, keyword expansion, the copy made when a paste can't go through, and putting your clipboard back afterwards. A copy you make yourself, in any app, is normal clipboard activity.
 
 Each completed dictation is stored locally under `~/Documents/Keybumps/recordings/<timestamp>/` with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
 
 On macOS 15 or newer, each expanded history card can open Keybumps's on-device translation panel for immediate target-language selection, translated-text copying, and optional spoken playback using an installed macOS voice without changing the original transcript.
+
+Keybumps sends crash and freeze reports to its developers through Sentry, never with user content, and Settings › General turns them off. Report a Problem… (Help menu, menu bar menu, Settings › General) sends a description the person writes, with the Mac's details ([ADR 0007](docs/adr/0007-crash-reports-to-sentry.md)).
 
 Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. Keybumps transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session.
 
@@ -39,11 +41,11 @@ apps/macos/scripts/build-qa-candidate.sh <issue-number>
 apps/macos/scripts/restore-previous-keybumps.sh   # roll back
 ```
 
-The local preview does not present fake commerce or update controls. Production licensing, signed updates, notarization, and customer packaging remain release gates.
+Releases are Developer ID-signed and notarized, licensed with Polar license keys ([ADR 0002](docs/adr/0002-polar-native-license-keys.md)), and updated through Sparkle ([update operations](docs/releases/sparkle-update-operations.md)). QA candidates are never notarized or published.
 
 ## Website
 
-`apps/web/` holds the keybumps.app website (Next.js on Cloudflare Workers through OpenNext). It is separate from the Mac app, with its own pnpm project, CI (`.github/workflows/web.yml`), and agent instructions (`apps/web/AGENTS.md`). Release-please skips a commit only if every file it touches is under `apps/web/`, so website PRs change only `apps/web/**`; a needed root change goes in a separate `chore:`, `docs:`, or `ci:` PR. Run `pnpm install && pnpm check` from `apps/web/`; see `apps/web/README.md`.
+`apps/web/` holds the keybumps.app website (Next.js on Cloudflare Workers through OpenNext). It is separate from the Mac app, with its own pnpm project, CI (`.github/workflows/web.yml` checks pull requests, and `web-deploy.yml` deploys after merge), and agent instructions (`apps/web/AGENTS.md`). Release-please skips a commit only if every file it touches is under `apps/web/`, so website PRs change only `apps/web/**`; a needed root change goes in a separate `chore:`, `docs:`, or `ci:` PR. Run `pnpm install && pnpm check` from `apps/web/`; see `apps/web/README.md`.
 
 ## Attribution
 
