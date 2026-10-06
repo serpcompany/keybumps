@@ -38,8 +38,89 @@ import Testing
         #expect(manager.state(for: .whisperCppTurbo) == .installed)
         let folder = try #require(manager.installedModelFolder(for: .whisperCppTurbo))
         #expect(WhisperCppModel.installedFile(in: folder)?.lastPathComponent == "ggml-large-v3-turbo-q5_0.bin")
-        // A WhisperKit model folder isn't mistaken for a whisper.cpp one.
-        #expect(WhisperCppModel.installedFile(in: root) == nil)
+    }
+
+    @Test func aWhisperKitModelFolderIsNotMistakenForAWhisperCppOne() throws {
+        let folder = temporaryFolder("KeybumpsWhisperKitShaped")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for component in DictationTranscriptionEngine.whisperTurboCompressed.requiredModelFiles {
+            try FileManager.default.createDirectory(
+                at: folder.appendingPathComponent(component, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+
+        #expect(WhisperCppModel.installedFile(in: folder) == nil)
+    }
+
+    @Test func aDamagedGgmlFileFailsToLoadThroughTheWhisperCppRuntime() async throws {
+        let folder = temporaryFolder("KeybumpsWhisperCppDamaged")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data("not a ggml model".utf8).write(to: folder.appendingPathComponent(WhisperCppModel.turbo.fileName))
+
+        do {
+            _ = try await DictationTranscriptionCoordinator.loadInstalledWhisperRuntime(modelFolder: folder)
+            Issue.record("A damaged model shouldn't load.")
+        } catch {
+            // Code 7 comes from `WhisperCppRuntime.load`, so the folder was routed to whisper.cpp.
+            #expect((error as NSError).domain == "Keybumps.Dictation")
+            #expect((error as NSError).code == 7)
+        }
+    }
+
+    @Test func anEmptyRecordingNeverReachesWhisperCpp() async throws {
+        let root = temporaryFolder("KeybumpsWhisperCppEmpty")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("empty.wav")
+        try writeTone(to: url, sampleRate: 48_000, channels: 1, seconds: 0)
+        let runtime = FakeWhisperCppRuntime()
+        let transcriber = WhisperCppCompletedAudioTranscriber(runtime: runtime)
+
+        do {
+            _ = try await transcriber.transcribe(audioURL: url, language: "en-US", recordedDuration: 0)
+            Issue.record("An empty recording should fail.")
+        } catch {
+            #expect((error as NSError).code == 1)
+        }
+        #expect(runtime.calls == 0)
+    }
+
+    @Test func aCancelDuringAudioConversionStopsBeforeWhisperCpp() async throws {
+        let runtime = FakeWhisperCppRuntime()
+        let gate = LoaderGate()
+        let transcriber = WhisperCppCompletedAudioTranscriber(runtime: runtime) { _ in
+            await gate.wait()
+            return [Float](repeating: 0.1, count: 16_000)
+        }
+        let transcription = Task { @MainActor in
+            try await transcriber.transcribe(audioURL: URL(fileURLWithPath: "/dev/null"), language: "en-US", recordedDuration: 1)
+        }
+        await gate.waitUntilWaiting()
+
+        transcriber.cancel()
+        gate.release()
+
+        await #expect(throws: CancellationError.self) { try await transcription.value }
+        #expect(runtime.calls == 0)
+    }
+
+    @Test func aCancelWhileIdleDoesNotAbortTheNextTranscription() async throws {
+        let runtime = FakeWhisperCppRuntime()
+        let transcriber = WhisperCppCompletedAudioTranscriber(runtime: runtime) { _ in
+            [Float](repeating: 0.1, count: 16_000)
+        }
+
+        transcriber.cancel()
+        let transcript = try await transcriber.transcribe(
+            audioURL: URL(fileURLWithPath: "/dev/null"),
+            language: "ja-JP",
+            recordedDuration: 1
+        )
+
+        #expect(transcript == "fake transcript")
+        #expect(runtime.calls == 1)
+        #expect(runtime.lastLanguage == "ja")
+        #expect(runtime.lastAbortWasSet == false)
     }
 
     @Test func aFolderWithoutTheGgmlFileIsNotInstalled() async throws {
@@ -60,6 +141,7 @@ import Testing
 
     @Test func theRouterSendsGgmlModelsToWhisperCppAndTheRestToWhisperKit() async throws {
         let base = temporaryFolder("KeybumpsDownloadRouter")
+        defer { try? FileManager.default.removeItem(at: base) }
         var calls: [String] = []
         let router = DictationModelDownloadRouter(
             whisperKit: FakeDownloader { identifier, base in calls.append("kit \(identifier)"); return base },
@@ -146,6 +228,17 @@ import Testing
         #expect(peak > 0.2 && peak <= 1.0)
     }
 
+    @Test func soundOnlyOnTheSecondChannelIsStillHeard() throws {
+        let root = temporaryFolder("KeybumpsWhisperCppChannel")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("second-channel.wav")
+        try writeTone(to: url, sampleRate: 48_000, channels: 2, seconds: 1, silentChannels: [0])
+
+        let samples = try WhisperCppAudio.samples(from: url)
+
+        #expect((samples.map(abs).max() ?? 0) > 0.1, "A microphone on input 2 must not become silence")
+    }
+
     @Test func aRealModelTranscribesWhenOneIsProvided() async throws {
         let environment = ProcessInfo.processInfo.environment
         guard let modelPath = environment["KEYBUMPS_WHISPER_CPP_MODEL"],
@@ -202,20 +295,32 @@ import Testing
         return (model, source)
     }
 
-    private func writeTone(to url: URL, sampleRate: Double, channels: AVAudioChannelCount, seconds: Double) throws {
+    private func writeTone(
+        to url: URL,
+        sampleRate: Double,
+        channels: AVAudioChannelCount,
+        seconds: Double,
+        silentChannels: Set<Int> = []
+    ) throws {
         let format = try #require(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
             channels: channels,
             interleaved: false
         ))
+        guard seconds > 0 else {
+            // A recording stopped before any audio arrived: a WAV with a header and no frames.
+            _ = try AVAudioFile(forWriting: url, settings: format.settings)
+            return
+        }
         let frames = AVAudioFrameCount(sampleRate * seconds)
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
         buffer.frameLength = frames
         for channel in 0..<Int(channels) {
             let data = try #require(buffer.floatChannelData?[channel])
+            let amplitude: Float = silentChannels.contains(channel) ? 0 : 0.5
             for frame in 0..<Int(frames) {
-                data[frame] = 0.5 * sinf(2 * .pi * 440 * Float(frame) / Float(sampleRate))
+                data[frame] = amplitude * sinf(2 * .pi * 440 * Float(frame) / Float(sampleRate))
             }
         }
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
@@ -237,5 +342,52 @@ private struct FakeDownloader: DictationModelDownloading {
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         try body(identifier, downloadBase)
+    }
+}
+
+private final class FakeWhisperCppRuntime: WhisperCppTranscribing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls = 0
+    private var _lastLanguage: String?
+    private var _lastAbortWasSet: Bool?
+
+    var calls: Int { lock.withLock { _calls } }
+    var lastLanguage: String? { lock.withLock { _lastLanguage } }
+    var lastAbortWasSet: Bool? { lock.withLock { _lastAbortWasSet } }
+
+    func transcribe(samples: [Float], language: String, abort: WhisperCppAbortFlag) async throws -> String {
+        lock.withLock {
+            _calls += 1
+            _lastLanguage = language
+            _lastAbortWasSet = abort.isSet
+        }
+        return "fake transcript"
+    }
+
+    func free() async {}
+}
+
+/// Holds a sample loader until released, and says when it's waiting.
+@MainActor
+private final class LoaderGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var waitingContinuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            waitingContinuation?.resume()
+            waitingContinuation = nil
+        }
+    }
+
+    func waitUntilWaiting() async {
+        guard continuation == nil else { return }
+        await withCheckedContinuation { waitingContinuation = $0 }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
     }
 }

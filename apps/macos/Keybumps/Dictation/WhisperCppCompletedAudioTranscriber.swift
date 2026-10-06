@@ -6,11 +6,24 @@ import whisper
 /// (`*-encoder.mlmodelc`) beside it, so the Neural Engine is never used.
 @MainActor
 final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscribing {
-    private let runtime: WhisperCppRuntime
+    typealias SampleLoader = @Sendable (URL) async throws -> [Float]
+
+    private let runtime: any WhisperCppTranscribing
+    private let loadSamples: SampleLoader
+    /// The abort flag of the transcription in progress, so a cancel reaches only that call.
+    private var activeCall: WhisperCppAbortFlag?
     private(set) var partialTranscript = ""
 
-    private init(runtime: WhisperCppRuntime) {
+    init(
+        runtime: any WhisperCppTranscribing,
+        loadSamples: @escaping SampleLoader = { url in
+            try await Task.detached(priority: .userInitiated) {
+                try WhisperCppAudio.samples(from: url)
+            }.value
+        }
+    ) {
         self.runtime = runtime
+        self.loadSamples = loadSamples
     }
 
     static func load(modelFile: URL) async throws -> WhisperCppCompletedAudioTranscriber {
@@ -19,7 +32,8 @@ final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         // with the recording, rather than in the person's first transcription.
         _ = try? await runtime.transcribe(
             samples: [Float](repeating: 0, count: Int(WhisperCppAudio.sampleRate)),
-            language: "en"
+            language: "en",
+            abort: WhisperCppAbortFlag()
         )
         return WhisperCppCompletedAudioTranscriber(runtime: runtime)
     }
@@ -30,25 +44,25 @@ final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         recordedDuration: TimeInterval
     ) async throws -> String {
         partialTranscript = ""
-        let samples = try await Task.detached(priority: .userInitiated) {
-            try WhisperCppAudio.samples(from: audioURL)
-        }.value
+        let call = WhisperCppAbortFlag()
+        activeCall = call
+        defer { if activeCall === call { activeCall = nil } }
+
+        let samples = try await loadSamples(audioURL)
+        if call.isSet { throw CancellationError() }
+        // whisper.cpp keeps the previous call's audio features and decodes them again when it's
+        // given no samples, so an empty recording must never reach it.
+        guard !samples.isEmpty else { throw Self.noSpeech }
         let languageCode = Locale(identifier: language).language.languageCode?.identifier ?? "auto"
-        let transcript = try await runtime.transcribe(samples: samples, language: languageCode)
+        let transcript = try await runtime.transcribe(samples: samples, language: languageCode, abort: call)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !transcript.isEmpty else {
-            throw NSError(
-                domain: "Keybumps.Dictation",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "No speech was detected."]
-            )
-        }
+        guard !transcript.isEmpty else { throw Self.noSpeech }
         partialTranscript = transcript
         return transcript
     }
 
     func cancel() {
-        runtime.abort()
+        activeCall?.isSet = true
     }
 
     func unload() -> Task<Void, Never> {
@@ -56,15 +70,26 @@ final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         let runtime = runtime
         return Task { await runtime.free() }
     }
+
+    private static let noSpeech = NSError(
+        domain: "Keybumps.Dictation",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "No speech was detected."]
+    )
+}
+
+/// A loaded whisper.cpp model; a seam so tests can stand in for the real one.
+protocol WhisperCppTranscribing: AnyObject, Sendable {
+    func transcribe(samples: [Float], language: String, abort: WhisperCppAbortFlag) async throws -> String
+    func free() async
 }
 
 /// Owns one whisper.cpp context. Every call into whisper.cpp runs on one serial queue, so a
 /// transcription and an unload never overlap.
-final class WhisperCppRuntime: @unchecked Sendable {
+final class WhisperCppRuntime: WhisperCppTranscribing, @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.serp.keybumps.whisper-cpp", qos: .userInitiated)
     /// Touched only on `queue`.
     private var context: OpaquePointer?
-    private let abortFlag = WhisperCppAbortFlag()
 
     private static let silenceLogs: Void = {
         // whisper.cpp logs to stderr by default; Keybumps keeps its logs structural.
@@ -92,11 +117,12 @@ final class WhisperCppRuntime: @unchecked Sendable {
         return runtime
     }
 
-    /// Greedy decoding over full 30-second windows, without timestamps.
-    func transcribe(samples: [Float], language: String) async throws -> String {
-        abortFlag.isSet = false
-        return try await run { [self] in
-            guard let context else { throw CancellationError() }
+    /// Greedy decoding over full 30-second windows, without timestamps. Setting `abort` stops it
+    /// with `CancellationError`.
+    func transcribe(samples: [Float], language: String, abort abortFlag: WhisperCppAbortFlag) async throws -> String {
+        try await run { [self] in
+            guard let context, !abortFlag.isSet else { throw CancellationError() }
+            guard !samples.isEmpty else { return "" }
             var parameters = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
             parameters.n_threads = Int32(min(4, max(1, ProcessInfo.processInfo.activeProcessorCount)))
             parameters.no_timestamps = true
@@ -128,11 +154,6 @@ final class WhisperCppRuntime: @unchecked Sendable {
                 .map { String(cString: whisper_full_get_segment_text(context, $0)) }
                 .joined()
         }
-    }
-
-    /// Stops a transcription that's running; it ends with `CancellationError`.
-    func abort() {
-        abortFlag.isSet = true
     }
 
     func free() async {
@@ -175,6 +196,9 @@ enum WhisperCppAudio {
         ), let converter = AVAudioConverter(from: source, to: target) else {
             throw CocoaError(.fileReadCorruptFile)
         }
+        // Mix every input channel into the one whisper.cpp hears; without this the converter keeps
+        // only channel 0, which is silent when the microphone is on another input.
+        converter.downmix = true
         let inputCapacity: AVAudioFrameCount = 16_384
         let outputCapacity = AVAudioFrameCount(Double(inputCapacity) * sampleRate / source.sampleRate) + 1_024
         guard let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: inputCapacity),
@@ -184,14 +208,23 @@ enum WhisperCppAudio {
         var samples: [Float] = []
         samples.reserveCapacity(Int(Double(file.length) * sampleRate / source.sampleRate) + 1)
         var reachedEnd = false
+        var readError: Error?
         while true {
             var conversionError: NSError?
             let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
                 if !reachedEnd {
-                    do {
-                        try file.read(into: input, frameCount: inputCapacity)
-                    } catch {
+                    // The end is known from the position: reading past it throws an end-of-file
+                    // error, so any error from a read before the end is a real one.
+                    let remaining = file.length - file.framePosition
+                    if remaining <= 0 {
                         input.frameLength = 0
+                    } else {
+                        do {
+                            try file.read(into: input, frameCount: min(inputCapacity, AVAudioFrameCount(remaining)))
+                        } catch {
+                            readError = error
+                            input.frameLength = 0
+                        }
                     }
                     reachedEnd = input.frameLength == 0
                 }
@@ -202,6 +235,7 @@ enum WhisperCppAudio {
                 inputStatus.pointee = .haveData
                 return input
             }
+            if let readError { throw readError }
             if let conversionError { throw conversionError }
             if output.frameLength > 0, let channel = output.floatChannelData?[0] {
                 samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))

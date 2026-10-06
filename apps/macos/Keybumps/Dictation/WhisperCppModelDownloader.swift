@@ -119,6 +119,7 @@ private enum ModelFileDownload {
         to destination: URL,
         progress: @escaping @Sendable (_ written: Int64, _ expected: Int64) -> Void
     ) async throws {
+        try Task.checkCancellation()
         let delegate = Delegate(destination: destination, progress: progress)
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
@@ -127,7 +128,7 @@ private enum ModelFileDownload {
         let task = session.downloadTask(with: source)
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                delegate.continuation = continuation
+                delegate.install(continuation)
                 task.resume()
             }
         } onCancel: {
@@ -138,9 +139,32 @@ private enum ModelFileDownload {
     private final class Delegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
         let destination: URL
         let progress: @Sendable (Int64, Int64) -> Void
+        private let lock = NSLock()
+        // Guarded by `lock`: a cancel before the task starts can finish it before the
+        // continuation is installed, so whichever comes second resumes it.
+        private var continuation: CheckedContinuation<Void, Error>?
+        private var result: Result<Void, Error>?
         // Touched only on the session's serial delegate queue.
-        var continuation: CheckedContinuation<Void, Error>?
         private var failure: Error?
+
+        func install(_ continuation: CheckedContinuation<Void, Error>) {
+            let ready: Result<Void, Error>? = lock.withLock {
+                if let result { return result }
+                self.continuation = continuation
+                return nil
+            }
+            if let ready { continuation.resume(with: ready) }
+        }
+
+        private func finish(_ outcome: Result<Void, Error>) {
+            let waiting: CheckedContinuation<Void, Error>? = lock.withLock {
+                guard result == nil else { return nil }
+                result = outcome
+                defer { continuation = nil }
+                return continuation
+            }
+            waiting?.resume(with: outcome)
+        }
 
         init(destination: URL, progress: @escaping @Sendable (Int64, Int64) -> Void) {
             self.destination = destination
@@ -176,14 +200,12 @@ private enum ModelFileDownload {
         }
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-            let continuation = continuation
-            self.continuation = nil
             if let error = error as? URLError, error.code == .cancelled {
-                continuation?.resume(throwing: CancellationError())
+                finish(.failure(CancellationError()))
             } else if let error = error ?? failure {
-                continuation?.resume(throwing: error)
+                finish(.failure(error))
             } else {
-                continuation?.resume()
+                finish(.success(()))
             }
         }
     }
