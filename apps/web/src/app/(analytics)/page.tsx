@@ -6,6 +6,7 @@ import { PricingCard } from '@/components/pricing-card'
 import { getCurrentRelease } from '@/lib/latest-release'
 import { linkPrefetch } from '@/lib/pages'
 import { cardShortcut, pluginPath, plugins } from '@/lib/plugins'
+import { pricing } from '@/lib/pricing'
 import { PaletteDemo } from './palette-demo'
 
 export const metadata: Metadata = {
@@ -134,8 +135,10 @@ export default async function Home() {
 
       <section id="pricing" className="section">
         <div className="container">
-          <h2>One price. Yours to keep.</h2>
-          <p className="section-lede">No subscription, no account. Try it risk-free for 30 days.</p>
+          <h2>{pricing.model.headline}</h2>
+          <p className="section-lede">
+            {pricing.model.summary} Try it risk-free for {pricing.refundDays} days.
+          </p>
           <PricingCard />
         </div>
       </section>

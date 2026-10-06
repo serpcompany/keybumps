@@ -68,7 +68,7 @@ export default function PrivacyPage() {
           <strong>License activation.</strong> When you activate, check, or deactivate your license,
           the app sends your license key and a one-way hash of your Mac’s hardware identifier (the
           identifier itself never leaves your Mac) to Polar, which issues and manages Keybumps
-          license keys. This enforces the one-Mac limit and lets refunded licenses be revoked.
+          license keys. This enforces the license’s Mac limit and lets refunded licenses be revoked.
         </li>
       </ul>
 

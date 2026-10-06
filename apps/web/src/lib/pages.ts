@@ -1,5 +1,6 @@
 import { pluginPath, plugins } from './plugins'
-import { PRICE, site } from './site'
+import { pricing } from './pricing'
+import { site } from './site'
 
 export type SitePage = {
   path: string
@@ -27,7 +28,7 @@ export const sitePages = [
   {
     path: '/pricing/',
     title: 'Pricing',
-    description: `Keybumps is a ${PRICE} one-time purchase for one Mac, with a 30-day money-back guarantee.`
+    description: `${pricing.model.description}, with a ${pricing.guarantee}.`
   },
   {
     path: '/license/',
@@ -51,7 +52,7 @@ export const sitePages = [
   {
     path: '/legal/refunds/',
     title: 'Refund Policy',
-    description: 'Keybumps comes with a 30-day money-back guarantee.'
+    description: `Keybumps comes with a ${pricing.guarantee}.`
   },
   {
     path: '/legal/dmca/',
