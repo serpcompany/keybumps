@@ -54,8 +54,8 @@ struct TypedKeyTests {
     }
 
     /// A key-down event that can't pick up modifier keys someone is physically holding while the
-    /// tests run (#295): an event from no source takes on the live modifiers, such as ⌥ held for
-    /// Dictation's ⌥Space, and then reads as a shortcut.
+    /// tests run (#295): an event from no source takes on the live modifiers, and with ⌘ or ⌃
+    /// held (such as for one of Keybumps' ⌘ shortcuts) it reads as a shortcut.
     private func keyDown(_ code: Int) throws -> CGEvent {
         let event = try #require(CGEvent(
             keyboardEventSource: CGEventSource(stateID: .privateState),
