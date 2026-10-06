@@ -48,8 +48,13 @@ enum CrashReportScrubber {
 
     private static let rules: [(NSRegularExpression, String)] = [
         // Cocoa puts a file's name in quotes, which depend on the language: “Q3 plan.txt”
-        // (English, Japanese), „Q3 plan.txt“ (German), „…” (Polish), ”…” (Swedish), « … » (French).
-        (#"[“„”«‹][^“”„«»‹›\n]*[”“»›]"#, "“<name>”"),
+        // (English, Japanese), „…“ (German), „…” (Polish), ”…” (Swedish), « … » (French),
+        // »…« (Slovenian), 「…」 (Traditional Chinese), ״…״ (Hebrew), "…" (Arabic). Korean and
+        // Dutch use single quotes, which can't be told from apostrophes, so those names stay.
+        (#"[“„”«‹»]\s?[^“”„«»‹›\n]*\s?[”“»›«]"#, "“<name>”"),
+        (#"「[^」\n]*」"#, "“<name>”"),
+        (#"״[^״\n]*״"#, "“<name>”"),
+        (#""[^"\n]*""#, "“<name>”"),
         // A URL or path runs to the end of the line or the next double quote: losing the rest of
         // a message is better than leaking a file name.
         (#"[A-Za-z][A-Za-z0-9+.\-]*://[^"# + end + "]*", "<url>"),
@@ -237,5 +242,5 @@ enum CrashReportTest {
 }
 
 enum CrashReportingCopy {
-    static let settingsNote = "When Keybumps crashes or freezes, it sends a report to its developers through Sentry: the Keybumps and macOS versions, your Mac's model, which plugins are on, and where in Keybumps's code it happened. Reports never include your clipboard, snippets, transcripts, recordings, screenshots, searches, or file names."
+    static let settingsNote = "When Keybumps crashes or freezes, it sends a report to its developers through Sentry: the Keybumps and macOS versions, your Mac's model, which plugins are on, and where in Keybumps's code it happened. Reports never include your clipboard, snippets, transcripts, recordings, screenshots, or searches, and Keybumps removes file paths and names from them."
 }

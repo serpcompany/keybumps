@@ -64,7 +64,7 @@ struct CrashReportingTests {
         let scrub = CrashReportScrubber.scrub as (String) -> String
         #expect(scrub("can't open /Users/pat/Documents/Q3 plan.txt") == "can't open <path>")
         #expect(scrub("can't open /Users/pat/Documents/Pat's Q3 plan.txt") == "can't open <path>")
-        #expect(scrub("missing \"/Volumes/Backup/photo.png\" here") == "missing \"<path>\" here")
+        #expect(scrub("missing \"/Volumes/Backup/photo.png\" here") == "missing “<name>” here")
         #expect(scrub("saved to ~/Desktop/notes.md") == "saved to <path>")
         #expect(scrub("loading https://example.com/a?q=secret") == "loading <url>")
         #expect(scrub("smb://server/share/Pat Q3.txt") == "<url>")
@@ -80,6 +80,11 @@ struct CrashReportingTests {
         #expect(scrub("Plik „Q3 plan.txt” jest") == "Plik “<name>” jest")
         #expect(scrub("Filen ”Q3 plan.txt” saknas") == "Filen “<name>” saknas")
         #expect(scrub("Le fichier « Q3 plan.txt » manque") == "Le fichier “<name>” manque")
+        // Slovenian, Traditional Chinese, Hebrew, and Arabic.
+        #expect(scrub("Datoteka »Q3 plan.txt« manjka") == "Datoteka “<name>” manjka")
+        #expect(scrub("檔案「Q3 plan.txt」無法打開") == "檔案“<name>”無法打開")
+        #expect(scrub("הקובץ ״Q3 plan.txt״ חסר") == "הקובץ “<name>” חסר")
+        #expect(scrub("الملف \"Q3 plan.txt\" مفقود") == "الملف “<name>” مفقود")
     }
 
     @Test func onlyQACandidatesCanCrashOnPurpose() {

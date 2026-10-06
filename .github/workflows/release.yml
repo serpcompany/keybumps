@@ -138,6 +138,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::Invalid version: $VERSION"; exit 1; }
+          # -dev. marks a QA candidate: it reports as qa and accepts -KBTestCrash (ADR 0007).
+          [[ "$VERSION" != *-dev.* ]] || { echo "::error::-dev. versions are reserved for QA candidates: $VERSION"; exit 1; }
           [ -f "docs/releases/v${VERSION}.md" ] || { echo "::error::Missing docs/releases/v${VERSION}.md"; exit 1; }
           # Read the live feed from R2 directly: Bot Fight Mode blocks CI runners on the public host.
           previous=$(wrangler r2 object get keybumps-updates/appcast.xml --remote --pipe | xmllint --xpath 'string(//*[local-name()="item"][1]/*[local-name()="version"])' -)
