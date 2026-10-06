@@ -20,6 +20,10 @@ struct DictationRecordingMetadata: Codable, Equatable {
     let appVersion: String
     let transcriptionError: String?
     let state: DictationRecordingState?
+    /// Seconds from the end of a dictation's recording to its saved transcript; History retries
+    /// leave it out. Timing only. A `var` with a default, so callers can omit it and it still
+    /// decodes (a `let` with a default never would).
+    var processingTime: TimeInterval? = nil
 }
 
 struct PendingDictationRecording: Equatable {
@@ -164,7 +168,8 @@ final class DictationHistoryService {
         text: String,
         language: String,
         duration: TimeInterval,
-        transcriptionError: String? = nil
+        transcriptionError: String? = nil,
+        processingTime: TimeInterval? = nil
     ) throws -> DictationHistoryEntry {
         let transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty || transcriptionError != nil else {
@@ -183,7 +188,8 @@ final class DictationHistoryService {
             audioFile: recording.audioURL.lastPathComponent,
             appVersion: appVersion,
             transcriptionError: transcriptionError,
-            state: transcriptionError == nil ? .completed : .failed
+            state: transcriptionError == nil ? .completed : .failed,
+            processingTime: processingTime.map { max(0, $0) }
         )
         try persist(metadata, in: recording.directoryURL)
         activeRecordingIDs.remove(recording.id)
