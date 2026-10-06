@@ -83,6 +83,9 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.dictation").waitForExistence(timeout: 20))
         let window = app.windows.containing(.any, identifier: "settings.detail.dictation").firstMatch
         XCTAssertTrue(window.exists)
+        let dockBar = XCUIApplication(bundleIdentifier: "com.apple.dock").children(matching: .any).firstMatch
+        let dockFrame = { dockBar.exists ? "\(dockBar.frame)" : "not found" }
+        let atStart = "Settings \(window.frame), visible \(Self.visibleFrames()), Dock \(dockFrame())"
 
         // Read again on every check: the Dock can change size while the test waits, as icons come
         // and go on a 1024pt-wide screen.
@@ -90,11 +93,12 @@ final class SmokeUITests: XCTestCase {
             let frame = window.frame
             return Self.visibleFrames().contains { $0.insetBy(dx: -1, dy: -1).contains(frame) }
         }
-        // The fill happens just after the window appears.
+        // The fill happens just after the window appears, and again once the Dock has settled.
         let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 10) == .completed
-        let dockBar = XCUIApplication(bundleIdentifier: "com.apple.dock").children(matching: .any).firstMatch
-        let dock = dockBar.exists ? "\(dockBar.frame)" : "not found"
-        XCTAssertTrue(settled, "Settings \(window.frame) lies within a screen's visible frame \(Self.visibleFrames()); Dock \(dock)")
+        XCTAssertTrue(
+            settled,
+            "Settings \(window.frame) lies within a screen's visible frame \(Self.visibleFrames()); Dock \(dockFrame()). At the start: \(atStart)"
+        )
     }
 
     /// Each screen's visible frame (the part the menu bar and Dock leave) in XCUITest's coordinates,

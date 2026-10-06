@@ -1447,6 +1447,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
     final class FillerView: NSView {
         private let preferences: AppPreferences
         private var observers: [Any] = []
+        private var workspaceObservers: [Any] = []
 
         init(preferences: AppPreferences) {
             self.preferences = preferences
@@ -1457,12 +1458,15 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
         deinit {
             observers.forEach(NotificationCenter.default.removeObserver)
+            workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             observers.forEach(NotificationCenter.default.removeObserver)
+            workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
             observers = []
+            workspaceObservers = []
             guard let window, !UnitTestHost.isActive else { return }
             // Each time Settings comes forward or changes screen. Until it has filled once, this
             // fills, so a first open that was closed straight away fills the next time instead.
@@ -1472,14 +1476,25 @@ struct SettingsWindowFiller: NSViewRepresentable {
                 })
             }
             // The screen's visible frame changing under a window that stays key, such as the Dock
-            // growing or moving.
+            // moving or the resolution changing.
             observers.append(NotificationCenter.default.addObserver(
                 forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.fillOrFit() }
             })
-            // After this turn, so the frame macOS restores for the window doesn't replace it.
+            // A full Dock resizes as apps open and quit, without that notification: once its icons
+            // have settled, fit again (#294, seen on CI's 1024pt-wide screen).
+            for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+                workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.fillOrFit() }
+                })
+            }
+            // After this turn, so the frame macOS restores for the window doesn't replace it. Then
+            // again shortly after, as the Dock may still be resizing for an app that just quit.
             DispatchQueue.main.async { [weak self] in self?.fillOrFit() }
+            for delay in [1.0, 3.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.fillOrFit() }
+            }
         }
 
         private func fillOrFit() {
