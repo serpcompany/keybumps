@@ -102,7 +102,8 @@ struct CrashReportingTests {
 
     @Test func urlsAndAddressesGluedToOtherTextAreStillFound() {
         #expect(CrashReportScrubber.scrub("Error 404https://example.com/x") == "Error 404<url>")
-        #expect(CrashReportScrubber.scrub("1.https://example.com and -https://example.org") == "1.<url>")
+        #expect(CrashReportScrubber.scrub("1.https://example.com") == "1.<url>")
+        #expect(CrashReportScrubber.scrub("-https://example.org") == "-<url>")
         #expect(CrashReportScrubber.scrub("(https://example.com)") == "(<url>")
         #expect(CrashReportScrubber.scrub("pat@example.com-jo@example.org") == "<email><email>")
     }
