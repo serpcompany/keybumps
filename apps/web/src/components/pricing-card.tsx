@@ -3,7 +3,7 @@ import { DownloadLink } from '@/components/download-link'
 import { CHECKOUT_URL, PRICE } from '@/lib/site'
 
 const INCLUDED = [
-  'All eight plugins: Search, Clipboard, Screenshots, Dictation, Windows, Shortcut Coach, Snippets, Timer',
+  'Every plugin, including the ones future updates add',
   'License for 1 Mac — move it to a new Mac any time',
   'All future updates included',
   'Everything runs on-device — no account needed',
