@@ -26,14 +26,16 @@ const filters = [
 
 /**
  * The floating icons above the title: two staggered rows, the middle tiles largest and brightest.
+ * Every plugin appears once; `plugins.test.ts` doesn't check this, so add a new plugin here too.
  * Each is [slug, size in pixels, opacity].
  */
 const heroIcons: readonly (readonly [string, number, number])[][] = [
   [
     ['snippets', 52, 0.35],
     ['quick-search', 68, 0.75],
-    ['timer', 80, 1],
-    ['window-manager', 60, 0.5]
+    ['emoji-picker', 80, 1],
+    ['timer', 68, 0.75],
+    ['window-manager', 52, 0.35]
   ],
   [
     ['clipboard-history', 60, 0.5],

@@ -46,6 +46,10 @@ export default function PrivacyPage() {
           delete them.
         </li>
         <li>
+          <strong>Emoji Picker</strong> keeps your recently used emoji on your Mac. Turning off
+          Remember recently used emoji in its settings clears them.
+        </li>
+        <li>
           <strong>Quick Search, Window Manager, and Shortcut Coach</strong> work from information
           already on your Mac and keep their settings and history locally.
         </li>

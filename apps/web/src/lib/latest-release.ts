@@ -14,10 +14,10 @@ export type LatestRelease = {
  * in-app licensing: a buyer who gets it installs this build.
  */
 export const FALLBACK_RELEASE: LatestRelease = {
-  version: '0.0.3-beta.8',
-  build: 4013,
-  dmgURL: 'https://updates.keybumps.app/releases/4013/Keybumps-0.0.3-beta.8.dmg',
-  sha256: '762e359dd7d3eaa03ff9ed9ab6e822497c174e738312ee24bc642dbb920eb91a'
+  version: '0.0.3-beta.16',
+  build: 4021,
+  dmgURL: 'https://updates.keybumps.app/releases/4021/Keybumps-0.0.3-beta.16.dmg',
+  sha256: '4094ce58e5e058cfde616f76d4ab1c3a8a6509a4a6658eac0c015a3dbb067e63'
 }
 
 /** Accepts only a well-formed pointer whose DMG lives on the release origin. */
