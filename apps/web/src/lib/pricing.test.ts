@@ -21,6 +21,12 @@ function strings(value: unknown): string[] {
   return []
 }
 
+/** `word`, or its plural, standing alone: "1 mac" skips "m1 mac", and "one mac" skips "one machine". */
+function wholeWord(word: string) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}s?(?![\\p{L}\\p{N}])`, 'u')
+}
+
 describe('pricing', () => {
   it('words the Macs a license covers for labels and sentences', () => {
     expect(pricing.macsLabel).toBe(`${pricing.macs} Mac${pricing.macs === 1 ? '' : 's'}`)
@@ -59,7 +65,7 @@ describe('pricing', () => {
       .flatMap(file => {
         const text = readFileSync(file, 'utf8').toLowerCase()
         return written
-          .filter(word => text.includes(word))
+          .filter(word => wholeWord(word).test(text))
           .map(word => `${relative(src, file)}: ${word}`)
       })
     expect(found.filter(offender => !allowed.has(offender))).toEqual([])
