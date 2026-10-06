@@ -116,6 +116,7 @@
 		84156585EA619D8BBFB145F3 /* chrome-green-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B4BE38E7AF2268494DAE9E2 /* chrome-green-captured-sanitized-trace.json */; };
 		85868CCFFF8CE1C0294CBE42 /* GlobalShortcutCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */; };
 		86BB57587481ECAD2AFDD92F /* TimerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF95B166919DD786B7F8E68 /* TimerModule.swift */; };
+		8721399217327FB6AC88A9C7 /* SettingsWindowSizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871AF8C0588E11286AF93050 /* SettingsWindowSizeTests.swift */; };
 		8B2FB2733D9B215CF944C82F /* LicenseStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C47406BD2F59E7F87C682AC /* LicenseStore.swift */; };
 		8BA4C720C033CA64F6066D5E /* LICENSE.sentry-cocoa in Resources */ = {isa = PBXBuildFile; fileRef = AB401D8E7A0C608C48B0D380 /* LICENSE.sentry-cocoa */; };
 		8C21790C7031D23EE928A323 /* PasteboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6088743D694CB89ED371F73 /* PasteboardSnapshot.swift */; };
@@ -340,6 +341,7 @@
 		8225D646846A30ACE4D44904 /* TimerItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerItem.swift; sourceTree = "<group>"; };
 		823E92CD42198870BE19775A /* KeybumpsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		82A74EE27B85AA3D9E80FB0F /* WindowManagementModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManagementModule.swift; sourceTree = "<group>"; };
+		871AF8C0588E11286AF93050 /* SettingsWindowSizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowSizeTests.swift; sourceTree = "<group>"; };
 		8729D2BD9FDC2AF5A2FB6456 /* PermissionPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionPrompts.swift; sourceTree = "<group>"; };
 		87C6CF0FD29B2DDEE1F0148D /* ClipboardRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardRowTests.swift; sourceTree = "<group>"; };
 		8911EFAF34F7DE8F47661381 /* emoji.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = emoji.json; sourceTree = "<group>"; };
@@ -632,6 +634,7 @@
 				97EC39D6B2BEB686F101C4A9 /* ScreenshotEditorTests.swift */,
 				C0E7B7D46F1D67D729594D6F /* ScreenshotToolsTests.swift */,
 				52EFF247943688DF74FDFBFD /* SettingsSidebarTests.swift */,
+				871AF8C0588E11286AF93050 /* SettingsWindowSizeTests.swift */,
 				2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */,
 				1ECE6B9E14DFA9ECBBE25EF8 /* SnippetImportTests.swift */,
 				CF128185C76235C3DC5BD990 /* SnippetTableTests.swift */,
@@ -1263,6 +1266,7 @@
 				4484A3EEE07C1E235F2E433F /* ScreenshotEditorTests.swift in Sources */,
 				08CD04A3227F0212590B40CA /* ScreenshotToolsTests.swift in Sources */,
 				07A73572B424F72C67920D5E /* SettingsSidebarTests.swift in Sources */,
+				8721399217327FB6AC88A9C7 /* SettingsWindowSizeTests.swift in Sources */,
 				5078335D97D88A0675A7F6B8 /* ShortcutCoachClickTests.swift in Sources */,
 				D6100F1569ACF6BE6203DF22 /* SnippetImportTests.swift in Sources */,
 				1E1B2D9A09673DB405A160D7 /* SnippetTableTests.swift in Sources */,

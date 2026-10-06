@@ -1403,6 +1403,34 @@ final class ShortcutRecorderState {
     }
 }
 
+/// The Settings window's content sizes for a screen's visible frame, the part the menu bar and Dock
+/// leave. On a screen smaller than the usual sizes, both shrink to fit, leaving room for the title
+/// bar and toolbar, so the window never reaches under the Dock (#294). Nil (no screen) gives the
+/// usual sizes.
+enum SettingsWindowSize {
+    static let usualMinimum = CGSize(width: 960, height: 720)
+    static let usualDefault = CGSize(width: 1240, height: 944)
+    /// At least what the title bar and toolbar add above the content.
+    static let chromeHeight: CGFloat = 60
+
+    static func minimumContentSize(fitting visible: CGSize?) -> CGSize {
+        guard let visible else { return usualMinimum }
+        return CGSize(
+            width: min(usualMinimum.width, visible.width),
+            height: min(usualMinimum.height, max(0, visible.height - chromeHeight))
+        )
+    }
+
+    static func defaultContentSize(fitting visible: CGSize?) -> CGSize {
+        guard let visible else { return usualDefault }
+        let minimum = minimumContentSize(fitting: visible)
+        return CGSize(
+            width: max(minimum.width, min(usualDefault.width, visible.width)),
+            height: max(minimum.height, min(usualDefault.height, visible.height - chromeHeight))
+        )
+    }
+}
+
 /// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
 /// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at.
 struct SettingsWindowFiller: NSViewRepresentable {

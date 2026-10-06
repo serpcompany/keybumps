@@ -57,8 +57,8 @@ final class SmokeUITests: XCTestCase {
     }
 
     /// #286: Dictation's dropdowns open and change the setting. It drives Recognition language,
-    /// which is near the top: on CI's 1024×768 screen the Settings window reaches under the Dock,
-    /// so the last row (Recording length, the same `SettingsDropdown`) can't be clicked there.
+    /// which is near the top, so no scrolling is needed; the last row (Recording length) is the
+    /// same `SettingsDropdown`. Before #294, CI's 1024×768 screen put that row under the Dock.
     func testDictationDropdownsOpenAndChangeTheSetting() {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
         let language = element("settings.dictation.language")
