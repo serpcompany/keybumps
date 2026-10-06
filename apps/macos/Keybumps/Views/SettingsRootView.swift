@@ -526,7 +526,7 @@ struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
         SettingsPage {
-            CapabilityControl(capability: .dictation, shortcuts: [.dictation])
+            CapabilityControl(capability: .dictation, shortcuts: [.dictation, .cancelDictation])
             let missingPermissions = model.missingPermissions(for: .dictation)
             if model.preferences.enabledCapabilities.contains(.dictation), !missingPermissions.isEmpty {
                 SettingsGroup("Setup required") {
@@ -1229,7 +1229,7 @@ private struct CapabilityShortcutEditor: View {
         Group {
             HStack(spacing: 8) {
                 SettingsIconTile(systemImage: shortcut.capability.systemImage, tint: shortcut.capability.descriptor.iconTint, size: 16)
-                Text(shortcut.title)
+                SettingsRowLabel(title: shortcut.title, subtitle: shortcut.detail)
                 Spacer(minLength: 12)
                 SettingsHotkeyField(
                     shortcut: binding,
