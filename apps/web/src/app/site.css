@@ -186,8 +186,18 @@ kbd {
   display: none;
 }
 
+/* The wide menu hangs from the header's container, not its button, so it never runs off screen. */
+.nav-inner {
+  position: relative;
+}
+
+.nav-item-wide {
+  position: static;
+}
+
 .nav-panel-wide {
-  width: min(820px, calc(100vw - 48px));
+  left: 20px;
+  width: min(820px, calc(100% - 40px));
 }
 
 .nav-groups {
@@ -776,6 +786,11 @@ kbd {
   gap: 32px 24px;
   padding-top: 48px;
   padding-bottom: 40px;
+}
+
+/* The link groups are one landmark, laid out as columns of the grid. */
+.footer-nav {
+  display: contents;
 }
 
 .footer-brand {

@@ -59,20 +59,22 @@ export function SiteFooter() {
           <p>Mac utilities, one keyboard shortcut away.</p>
           <DownloadLink className="btn btn-sm">Download for macOS</DownloadLink>
         </div>
-        {footerGroups.map(group => (
-          <nav key={group.title} aria-label={group.title} className="footer-group">
-            <h2>{group.title}</h2>
-            <ul>
-              {group.links.map(link => (
-                <li key={link.href}>
-                  <Link href={link.href} prefetch={linkPrefetch(link.href)}>
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ))}
+        <nav aria-label="Footer" className="footer-nav">
+          {footerGroups.map(group => (
+            <div key={group.title} className="footer-group">
+              <h2>{group.title}</h2>
+              <ul>
+                {group.links.map(link => (
+                  <li key={link.href}>
+                    <Link href={link.href} prefetch={linkPrefetch(link.href)}>
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
       </div>
       <div className="container footer-base">
         <span>© {new Date().getFullYear()} SERP. Keybumps is a macOS app.</span>

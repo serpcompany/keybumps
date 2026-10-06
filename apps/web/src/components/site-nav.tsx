@@ -3,7 +3,7 @@
 import { Menu, X } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type FocusEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { linkPrefetch } from '@/lib/pages'
 
 export type NavLink = {
@@ -20,36 +20,51 @@ export type NavMenu =
       groups: readonly { title?: string; links: readonly NavLink[] }[]
       /** A last link under the groups, such as "All plugins". */
       more?: NavLink
+      /** Spans the header's width instead of hanging from its button. */
       wide?: boolean
     }
 
+const panelId = (label: string) => `nav-panel-${label.toLowerCase().replace(/\W+/g, '-')}`
+
 /**
  * The header's menus (src/components/site-header.tsx builds them). A menu opens on click, or on
- * hover with a pointer that can hover, and closes on Escape, a click outside, or a link click.
- * Below 900px the menus fold into one panel behind a menu button.
+ * hover with a pointer that can hover, and closes on Escape (focus returns to its button), when
+ * focus or the pointer leaves it, on a click outside, and on any link click. Below 900px the menus
+ * fold into one panel behind a menu button.
  */
 export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; download: ReactNode }) {
   const [open, setOpen] = useState<string | null>(null)
   const [panel, setPanel] = useState(false)
   const nav = useRef<HTMLElement>(null)
+  const burger = useRef<HTMLButtonElement>(null)
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
+  // A menu the pointer just opened stays open when the same pointer then clicks its button.
+  const hoverOpened = useRef<string | null>(null)
   const pathname = usePathname()
+  // The latest open state, for the document listeners below.
+  const state = useRef({ open, panel })
+  state.current = { open, panel }
 
-  // A link click that changes the page closes everything.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on each new pathname.
-  useEffect(() => {
+  const closeAll = useCallback(() => {
     setOpen(null)
     setPanel(false)
-  }, [pathname])
+    hoverOpened.current = null
+  }, [])
+
+  // Navigating away (including the Back button) closes everything.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on each new pathname.
+  useEffect(closeAll, [pathname, closeAll])
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setOpen(null)
-        setPanel(false)
-      }
+      if (event.key !== 'Escape') return
+      const menu = state.current.open
+      if (menu) buttons.current.get(menu)?.focus()
+      else if (state.current.panel) burger.current?.focus()
+      closeAll()
     }
     function onPointer(event: PointerEvent) {
-      if (nav.current && !nav.current.contains(event.target as Node)) setOpen(null)
+      if (nav.current && !nav.current.contains(event.target as Node)) closeAll()
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onPointer)
@@ -57,45 +72,81 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('pointerdown', onPointer)
     }
-  }, [])
+  }, [closeAll])
 
   const canHover = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches
+
+  function leaveFocus(label: string) {
+    return (event: FocusEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        setOpen(current => (current === label ? null : current))
+      }
+    }
+  }
 
   return (
     <nav
       ref={nav}
       className="site-nav"
       aria-label="Main"
-      onPointerLeave={() => canHover() && setOpen(null)}
+      onPointerLeave={() => {
+        if (canHover()) {
+          setOpen(null)
+          hoverOpened.current = null
+        }
+      }}
     >
       <ul className="nav-menus">
         {menus.map(menu =>
           'href' in menu ? (
             <li key={menu.label}>
-              <Link href={menu.href} prefetch={linkPrefetch(menu.href)} className="nav-top">
+              <Link
+                href={menu.href}
+                prefetch={linkPrefetch(menu.href)}
+                className="nav-top"
+                onClick={closeAll}
+              >
                 {menu.label}
               </Link>
             </li>
           ) : (
             <li
               key={menu.label}
-              className="nav-item"
-              onPointerEnter={() => canHover() && setOpen(menu.label)}
+              className={menu.wide ? 'nav-item nav-item-wide' : 'nav-item'}
+              onPointerEnter={() => {
+                if (canHover() && open !== menu.label) {
+                  setOpen(menu.label)
+                  hoverOpened.current = menu.label
+                }
+              }}
+              onBlur={leaveFocus(menu.label)}
             >
               <button
                 type="button"
                 className="nav-top"
+                ref={button => {
+                  if (button) buttons.current.set(menu.label, button)
+                  else buttons.current.delete(menu.label)
+                }}
                 aria-expanded={open === menu.label}
-                onClick={() => setOpen(open === menu.label ? null : menu.label)}
+                aria-controls={panelId(menu.label)}
+                onClick={() => {
+                  if (hoverOpened.current === menu.label) {
+                    hoverOpened.current = null
+                    return
+                  }
+                  setOpen(open === menu.label ? null : menu.label)
+                }}
               >
                 {menu.label}
                 <span className="nav-chevron" aria-hidden="true" />
               </button>
               <div
+                id={panelId(menu.label)}
                 className={menu.wide ? 'nav-panel nav-panel-wide' : 'nav-panel'}
                 hidden={open !== menu.label}
               >
-                <MenuGroups menu={menu} />
+                <MenuGroups menu={menu} onNavigate={closeAll} />
               </div>
             </li>
           )
@@ -105,9 +156,10 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
         {download}
         <button
           type="button"
+          ref={burger}
           className="nav-burger"
           aria-expanded={panel}
-          aria-controls="nav-sheet"
+          aria-controls={panel ? 'nav-sheet' : undefined}
           onClick={() => setPanel(!panel)}
         >
           {panel ? <X aria-hidden="true" size={20} /> : <Menu aria-hidden="true" size={20} />}
@@ -124,13 +176,14 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
                 href={menu.href}
                 prefetch={linkPrefetch(menu.href)}
                 className="nav-sheet-top"
+                onClick={closeAll}
               >
                 {menu.label}
               </Link>
             ) : (
               <div key={menu.label} className="nav-sheet-group">
                 <p className="nav-sheet-label">{menu.label}</p>
-                <MenuGroups menu={menu} />
+                <MenuGroups menu={menu} onNavigate={closeAll} />
               </div>
             )
           )}
@@ -140,7 +193,13 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
   )
 }
 
-function MenuGroups({ menu }: { menu: Extract<NavMenu, { groups: unknown }> }) {
+function MenuGroups({
+  menu,
+  onNavigate
+}: {
+  menu: Extract<NavMenu, { groups: unknown }>
+  onNavigate: () => void
+}) {
   return (
     <>
       <div className="nav-groups">
@@ -150,7 +209,12 @@ function MenuGroups({ menu }: { menu: Extract<NavMenu, { groups: unknown }> }) {
             <ul>
               {group.links.map(link => (
                 <li key={link.href}>
-                  <Link href={link.href} prefetch={linkPrefetch(link.href)} className="nav-link">
+                  <Link
+                    href={link.href}
+                    prefetch={linkPrefetch(link.href)}
+                    className="nav-link"
+                    onClick={onNavigate}
+                  >
                     {link.icon}
                     <span className="nav-link-text">
                       <span className="nav-link-label">{link.label}</span>
@@ -166,7 +230,12 @@ function MenuGroups({ menu }: { menu: Extract<NavMenu, { groups: unknown }> }) {
         ))}
       </div>
       {menu.more && (
-        <Link href={menu.more.href} prefetch={linkPrefetch(menu.more.href)} className="nav-more">
+        <Link
+          href={menu.more.href}
+          prefetch={linkPrefetch(menu.more.href)}
+          className="nav-more"
+          onClick={onNavigate}
+        >
           {menu.more.label} →
         </Link>
       )}
