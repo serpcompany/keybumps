@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PageShell } from '@/components/page-shell'
 import { pageMetadata } from '@/lib/metadata'
+import { pricing } from '@/lib/pricing'
 import { SUPPORT_EMAIL } from '@/lib/site'
 
 export const metadata = pageMetadata('/legal/terms/')
@@ -16,10 +17,10 @@ export default function TermsPage() {
 
       <h2>1. The app</h2>
       <p>
-        Keybumps is a macOS utility for search, clipboard history, screenshots, dictation, window
-        management, and shortcut coaching. It requires a Mac with Apple silicon running a supported
-        version of macOS. Some features need macOS permissions such as Accessibility, Screen
-        Recording, or Microphone, which you can grant or revoke at any time.
+        Keybumps is a macOS app that brings search, clipboard history, screenshots, dictation, and
+        other utilities together as plugins you can turn on or off. It requires a Mac with Apple
+        silicon running a supported version of macOS. Some features need macOS permissions such as
+        Accessibility, Screen Recording, or Microphone, which you can grant or revoke at any time.
       </p>
 
       <h2>2. Purchases</h2>
@@ -32,8 +33,8 @@ export default function TermsPage() {
       <h2>3. License</h2>
       <p>
         When you buy Keybumps we grant you a personal, non-exclusive, non-transferable license to
-        install and use it on the number of Macs stated at purchase (currently one). A one-time
-        license does not expire. It includes all future updates to Keybumps.
+        install and use it on the number of Macs stated at purchase (currently {pricing.macsInWords}
+        ). {pricing.model.terms}
       </p>
       <p>
         The app activates your license online and checks in occasionally to keep it current. You may
@@ -54,7 +55,7 @@ export default function TermsPage() {
 
       <h2>5. Refunds</h2>
       <p>
-        Purchases come with a 30-day money-back guarantee. See the{' '}
+        Purchases come with a {pricing.guarantee}. See the{' '}
         <Link href="/legal/refunds/">Refund Policy</Link>. A refunded, charged-back, or disputed
         purchase revokes its license.
       </p>

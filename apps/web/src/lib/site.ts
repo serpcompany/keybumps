@@ -1,5 +1,4 @@
 export const SUPPORT_EMAIL = 'support@keybumps.app'
-export const PRICE = '$49'
 
 /** Polar checkout link. When it is null, the buy button downloads the current DMG instead. */
 export const CHECKOUT_URL: string | null =

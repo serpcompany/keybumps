@@ -1,15 +1,13 @@
 import Link from 'next/link'
 import { PricingCard } from '@/components/pricing-card'
 import { pageMetadata } from '@/lib/metadata'
-import { PRICE, SUPPORT_EMAIL } from '@/lib/site'
+import { pricing } from '@/lib/pricing'
+import { SUPPORT_EMAIL } from '@/lib/site'
 
 export const metadata = pageMetadata('/pricing/')
 
 const QUESTIONS = [
-  {
-    q: 'Is this a subscription?',
-    a: `No. You pay ${PRICE} once and the license is yours to keep. It includes all future updates.`
-  },
+  pricing.model.question,
   {
     q: 'How do I activate it?',
     a: 'After checkout you receive a license key by email. Paste it into Keybumps → Settings → License. Activation needs an internet connection once; after that Keybumps checks in occasionally to keep the license current.'
@@ -34,7 +32,7 @@ export default function PricingPage() {
       <section className="section first">
         <div className="container">
           <h2>Simple pricing</h2>
-          <p className="section-lede">One app, one price. No subscription, no account.</p>
+          <p className="section-lede">{pricing.model.summary}</p>
           <PricingCard />
         </div>
       </section>
