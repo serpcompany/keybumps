@@ -58,9 +58,13 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
-      const menu = state.current.open
-      if (menu) buttons.current.get(menu)?.focus()
-      else if (state.current.panel) burger.current?.focus()
+      // Focus goes back to the button only if it was inside the nav, so Escape elsewhere on the
+      // page doesn't move it.
+      if (nav.current?.contains(document.activeElement)) {
+        const menu = state.current.open
+        if (menu) buttons.current.get(menu)?.focus()
+        else if (state.current.panel) burger.current?.focus()
+      }
       closeAll()
     }
     function onPointer(event: PointerEvent) {
@@ -78,8 +82,12 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
 
   function leaveFocus(label: string) {
     return (event: FocusEvent<HTMLElement>) => {
-      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      // Only focus that moves to another element counts: a click on blank space, or Safari not
+      // focusing a clicked link, leaves relatedTarget null and must not close the menu.
+      const next = event.relatedTarget
+      if (next instanceof Node && !event.currentTarget.contains(next)) {
         setOpen(current => (current === label ? null : current))
+        if (hoverOpened.current === label) hoverOpened.current = null
       }
     }
   }

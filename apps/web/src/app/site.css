@@ -97,6 +97,8 @@ kbd {
 .site-nav {
   display: flex;
   flex: 1;
+  /* Full header height, so the pointer never leaves the nav between a button and its panel. */
+  align-self: stretch;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -782,15 +784,16 @@ kbd {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 5fr);
   gap: 32px 24px;
   padding-top: 48px;
   padding-bottom: 40px;
 }
 
-/* The link groups are one landmark, laid out as columns of the grid. */
 .footer-nav {
-  display: contents;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 32px 24px;
 }
 
 .footer-brand {
@@ -838,15 +841,15 @@ kbd {
 
 @media (max-width: 900px) {
   .footer-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
-  .footer-brand {
-    grid-column: 1 / -1;
+  .footer-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 520px) {
-  .footer-grid {
+  .footer-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
