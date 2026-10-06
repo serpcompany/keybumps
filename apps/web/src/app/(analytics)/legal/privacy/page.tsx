@@ -96,10 +96,10 @@ export default function PrivacyPage() {
         <li>the Keybumps and macOS versions, and which Keybumps plugins are on;</li>
         <li>
           technical details about your Mac and its state at the time, such as its model, processor
-          type, memory in use, and whether Low Power Mode is on;
+          type, memory in use, whether Low Power Mode is on, and when Keybumps was opened;
         </li>
         <li>
-          a random identifier Sentry creates for your copy of Keybumps, so we can tell how many Macs
+          a random identifier Keybumps creates for itself on your Mac, so we can tell how many Macs
           a problem affects;
         </li>
         <li>
@@ -111,8 +111,8 @@ export default function PrivacyPage() {
         Keybumps never adds your clipboard contents, snippets, transcripts, recordings, screenshots,
         searches, or window or document titles to a report. It removes file paths, file names,
         links, and email addresses from error messages before a report leaves your Mac. In a problem
-        report, it removes file paths, links, and email addresses from what you write and sends the
-        rest as you wrote it, so leave out anything you’d rather not share.
+        report, it removes file paths, links, and email addresses from what you write and otherwise
+        sends it, so leave out anything you’d rather not share.
       </p>
       <p>
         If you add your email to a problem report, we can see it alongside other reports from the
