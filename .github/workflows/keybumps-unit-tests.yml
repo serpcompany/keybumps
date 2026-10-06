@@ -53,9 +53,11 @@ jobs:
 
       - name: Cache Swift packages
         uses: actions/cache@v4
+        # Local packages' binary targets (whisper.cpp) aren't in Package.resolved, so their
+        # Package.swift is part of the key too.
         with:
           path: ${{ env.APP_DIR == '.' && '.spm' || format('{0}/.spm', env.APP_DIR) }}
-          key: spm-${{ runner.os }}-${{ hashFiles(env.APP_DIR == '.' && 'Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved' || format('{0}/Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', env.APP_DIR)) }}
+          key: spm-${{ runner.os }}-${{ hashFiles(env.APP_DIR == '.' && 'Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved' || format('{0}/Keybumps.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', env.APP_DIR), env.APP_DIR == '.' && 'Packages/*/Package.swift' || format('{0}/Packages/*/Package.swift', env.APP_DIR)) }}
 
       - name: Build for testing
         run: |
