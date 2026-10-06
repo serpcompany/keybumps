@@ -112,7 +112,42 @@ import Testing
         await fixture.loads.wait(for: 2)
         fixture.scheduler.fireLatest()
         await fixture.runtime(2).unloads.wait(for: 1)
+        await unloadGate.waitForWaiters(2)
         unloadGate.release()
+    }
+
+    @Test func aModelChangeWhileTheJoinedLoadWaitsForAnUnloadLoadsAgainInsteadOfCancelling() async throws {
+        let unloadGate = Gate()
+        let fixture = try await Fixture(unloadGate: unloadGate)
+        defer { fixture.remove() }
+        _ = try await fixture.transcribe()
+        fixture.coordinator.selectedModelDidChange()
+        await unloadGate.waitForWaiters(1)
+
+        fixture.coordinator.prepare(language: "en-US")
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        await Task.yield()
+        fixture.coordinator.selectedModelDidChange()
+        unloadGate.release()
+
+        #expect(try await transcription.value == "load 2")
+    }
+
+    @Test func aSwitchToAppleSpeechDuringAJoinedLoadTranscribesWithAppleSpeech() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+
+        fixture.coordinator.prepare(language: "en-US")
+        await fixture.loads.wait(for: 1)
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        await Task.yield()
+        fixture.selection.engine = .appleSpeech
+        fixture.coordinator.selectedModelDidChange()
+        fixture.gate.release()
+
+        #expect(try await transcription.value == "apple")
+        await fixture.runtime(1).unloads.wait(for: 1)
+        #expect(fixture.loads.count == 1)
     }
 
     @Test func aModelChangeDuringAJoinedLoadUsesTheNewSelectionNotTheUnloadingModel() async throws {
@@ -254,6 +289,7 @@ private final class Fixture {
     let scheduler: PreloadIdleScheduler
     let gate: Gate
     let loads: Counter
+    let selection: Selection
     let coordinator: DictationTranscriptionCoordinator
     private var runtimes: [Int: PreloadRuntime] = [:]
 
@@ -274,8 +310,10 @@ private final class Fixture {
         self.gate = gate
         self.loads = loads
         let registry = RuntimeRegistry()
+        let selection = Selection(engine: engine)
+        self.selection = selection
         coordinator = DictationTranscriptionCoordinator(
-            selectedEngine: { engine },
+            selectedEngine: { selection.engine },
             modelManager: manager,
             appleTranscriber: PreloadRuntime(transcript: "apple", unloadGate: nil),
             whisperFactory: { _ in
@@ -297,9 +335,14 @@ private final class Fixture {
     private let registry: RuntimeRegistry
 
     /// Load `number`'s runtime, once that load has returned it.
-    func runtime(_ number: Int) async -> PreloadRuntime {
+    func runtime(_ number: Int, sourceLocation: SourceLocation = #_sourceLocation) async -> PreloadRuntime {
         while registry.runtimes[number] == nil {
-            await registry.registrations.wait(for: registry.registrations.count + 1)
+            guard await registry.registrations.wait(
+                for: registry.registrations.count + 1,
+                sourceLocation: sourceLocation
+            ) else {
+                return PreloadRuntime(transcript: "missing", unloadGate: nil)
+            }
         }
         return registry.runtimes[number]!
     }
@@ -316,6 +359,12 @@ private final class Fixture {
 }
 
 @MainActor
+private final class Selection {
+    var engine: DictationTranscriptionEngine
+    init(engine: DictationTranscriptionEngine) { self.engine = engine }
+}
+
+@MainActor
 private final class RuntimeRegistry {
     let registrations = Counter()
     var runtimes: [Int: PreloadRuntime] = [:] {
@@ -323,22 +372,34 @@ private final class RuntimeRegistry {
     }
 }
 
-/// Counts events and lets a test wait for a count without polling.
+/// Counts events and lets a test wait for a count without polling. A wait that isn't met within
+/// five seconds records a failure and returns false, so a broken test fails instead of hanging.
 @MainActor
 private final class Counter {
     private(set) var count = 0
-    private var waiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
+    private var waiters: [(id: UUID, target: Int, continuation: CheckedContinuation<Bool, Never>)] = []
 
     func increment() {
         count += 1
         let ready = waiters.filter { $0.target <= count }
         waiters.removeAll { $0.target <= count }
-        ready.forEach { $0.continuation.resume() }
+        ready.forEach { $0.continuation.resume(returning: true) }
     }
 
-    func wait(for target: Int) async {
-        guard count < target else { return }
-        await withCheckedContinuation { waiters.append((target, $0)) }
+    @discardableResult
+    func wait(for target: Int, sourceLocation: SourceLocation = #_sourceLocation) async -> Bool {
+        guard count < target else { return true }
+        let id = UUID()
+        return await withCheckedContinuation { continuation in
+            waiters.append((id, target, continuation))
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, let index = self.waiters.firstIndex(where: { $0.id == id }) else { return }
+                let waiter = self.waiters.remove(at: index)
+                Issue.record("Timed out waiting for a count of \(target); it's \(self.count).", sourceLocation: sourceLocation)
+                waiter.continuation.resume(returning: false)
+            }
+        }
     }
 }
 
@@ -354,7 +415,9 @@ private final class Gate {
         }
     }
 
-    func waitForWaiters(_ count: Int) async { await waiting.wait(for: count) }
+    func waitForWaiters(_ count: Int, sourceLocation: SourceLocation = #_sourceLocation) async {
+        await waiting.wait(for: count, sourceLocation: sourceLocation)
+    }
 
     func release() {
         let pending = continuations

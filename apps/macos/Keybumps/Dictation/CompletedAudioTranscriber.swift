@@ -340,7 +340,12 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
                 continue
             }
         }
-        throw CancellationError()
+        // Not a cancel: Dictation keeps the recording as a failed entry that can be retried.
+        throw NSError(
+            domain: "Keybumps.Dictation",
+            code: 9,
+            userInfo: [NSLocalizedDescriptionKey: "The transcription model changed while it was loading."]
+        )
     }
 
     /// Joins the load already running for `modelFolder`, or starts one. A new load is registered
