@@ -5,9 +5,11 @@ name: Keybumps unit tests
 on:
   pull_request:
     branches: [main]
-    # Filters can't use APP_DIR; keep them in step with it. The tests read nothing outside it.
+    # Filters can't use APP_DIR; keep them in step with it. Outside it, the tests read only the
+    # release notes (UpdateVisibilityTests parses every docs/releases/v*.md).
     paths:
       - apps/macos/**
+      - docs/releases/**
       - .github/workflows/keybumps-unit-tests.yml
   workflow_call:
   workflow_dispatch:

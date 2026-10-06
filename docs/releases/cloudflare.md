@@ -13,8 +13,9 @@ Keybumps's public web presence runs on the **SERP** Cloudflare account (`cec5f04
 
 | Key | Content type | Cache-Control | Notes |
 | --- | --- | --- | --- |
-| `releases/<build>/Keybumps-<version>.zip` (+ `.sha256`) | `application/zip` | `public, max-age=31536000, immutable` | Sparkle update archive |
-| `releases/<build>/Keybumps-<version>.dmg` (+ `.sha256`) | `application/x-apple-diskimage` | immutable | Customer download |
+| `releases/<build>/Keybumps-<version>.zip` | `application/zip` | `public, max-age=31536000, immutable` | Sparkle update archive |
+| `releases/<build>/Keybumps-<version>.dmg` | `application/x-apple-diskimage` | immutable | Customer download |
+| `releases/<build>/Keybumps-<version>.{zip,dmg}.sha256` | `text/plain; charset=utf-8` | immutable | Checksum sidecars |
 | `releases/<build>/Keybumps-<version>.md` | `text/markdown; charset=utf-8` | immutable | Linked release notes |
 | `appcast.xml` | `application/xml; charset=utf-8` | `public, max-age=60, must-revalidate` | Production Sparkle feed (pointer) |
 | `staging/appcast.xml` | same as above | same | Staging Sparkle feed (pointer) |
