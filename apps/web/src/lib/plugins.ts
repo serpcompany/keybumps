@@ -618,7 +618,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can I turn off the alarm sound?',
-        a: 'Yes. Turn off ringing in Settings › Timer. It applies to every timer, and the alarm still shows on screen.'
+        a: 'Yes. Turn off Ring until you stop it in Settings › Timer. It applies to every timer, and the alarm still shows on screen.'
       },
       {
         q: 'Will it ring while I’m dictating?',

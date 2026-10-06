@@ -228,12 +228,23 @@ export function PluginDetail({
 
 /** Three facts under the overview: how it opens, its palette tab, and its permissions. */
 function AtAGlance({ plugin }: { plugin: Plugin }) {
-  const hotkey = plugin.shortcuts.find(shortcut => shortcut.keys)?.keys
+  const assigned = plugin.shortcuts.filter(shortcut => shortcut.keys)
+  const hotkey = assigned[0]?.keys
   // A plugin with shortcuts that start unassigned can be given one; one without shortcuts can't.
   const noHotkey = plugin.shortcuts.length > 0 ? 'Not set by default' : 'None'
   const tab = plugin.paletteTab
   const items: { label: string; value: ReactNode }[] = [
-    { label: 'Shortcut', value: hotkey ? <Keycaps keys={hotkey} /> : noHotkey },
+    {
+      label: assigned.length > 1 ? 'Shortcuts' : 'Shortcut',
+      value: hotkey ? (
+        <span className="glance-tab">
+          {assigned.length > 1 && `${assigned.length} by default, such as`}
+          <Keycaps keys={hotkey} />
+        </span>
+      ) : (
+        noHotkey
+      )
+    },
     {
       label: 'Command Palette tab',
       value: tab ? (
@@ -247,10 +258,18 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
     },
     {
       label: 'macOS permissions',
-      value:
-        plugin.permissions.length > 0
-          ? plugin.permissions.map(item => item.permission).join(', ')
-          : 'None needed'
+      value: (
+        <span className="glance-tab">
+          {plugin.permissions.length > 0
+            ? plugin.permissions.map(item => item.permission).join(', ')
+            : 'None needed'}
+          {plugin.optionalPermissions && (
+            <span className="glance-note">
+              Optional: {plugin.optionalPermissions.map(item => item.permission).join(', ')}
+            </span>
+          )}
+        </span>
+      )
     }
   ]
   return (

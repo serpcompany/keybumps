@@ -326,6 +326,12 @@ describe('plugin page at a glance', () => {
     expect(glance('snippets')).toContain('<dd>Not set by default</dd>')
   })
 
+  it('counts default shortcuts when there are several, and names optional permissions', () => {
+    expect(glance('window-manager')).toContain('29 by default, such as')
+    expect(glance('clipboard-history')).not.toContain('by default, such as')
+    expect(glance('snippets')).toContain('Optional: Accessibility, Input Monitoring')
+  })
+
   it('says when a Command Palette tab is hidden until turned on', () => {
     expect(glance('shortcut-coach')).toContain('once you turn it on')
     expect(glance('clipboard-history')).not.toContain('once you turn it on')
