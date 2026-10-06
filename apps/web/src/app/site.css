@@ -286,7 +286,8 @@ kbd {
 
 .nav-sheet {
   position: absolute;
-  top: 100%;
+  /* Below the header's bottom border, not over it. */
+  top: calc(100% + 1px);
   right: 0;
   left: 0;
   z-index: 20;

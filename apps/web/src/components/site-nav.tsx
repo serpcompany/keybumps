@@ -37,6 +37,7 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
   const [panel, setPanel] = useState(false)
   const nav = useRef<HTMLElement>(null)
   const burger = useRef<HTMLButtonElement>(null)
+  const sheet = useRef<HTMLDivElement>(null)
   const buttons = useRef(new Map<string, HTMLButtonElement>())
   // A menu the pointer just opened stays open when the same pointer then clicks its button.
   const hoverOpened = useRef<string | null>(null)
@@ -60,15 +61,18 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
       if (event.key !== 'Escape') return
       // Focus goes back to the button only if it was inside the nav, so Escape elsewhere on the
       // page doesn't move it.
-      if (nav.current?.contains(document.activeElement)) {
-        const menu = state.current.open
-        if (menu) buttons.current.get(menu)?.focus()
-        else if (state.current.panel) burger.current?.focus()
-      }
+      const focused = document.activeElement
+      const menu = state.current.open
+      const menuItem = menu ? buttons.current.get(menu)?.parentElement : null
+      if (menu && menuItem?.contains(focused)) buttons.current.get(menu)?.focus()
+      else if (state.current.panel && sheet.current?.contains(focused)) burger.current?.focus()
       closeAll()
     }
     function onPointer(event: PointerEvent) {
-      if (nav.current && !nav.current.contains(event.target as Node)) closeAll()
+      const target = event.target as Node
+      if (!nav.current?.contains(target)) closeAll()
+      // A press on the header between the menus (not on a menu or its button) closes them too.
+      else if (!(target instanceof Element && target.closest('.nav-item'))) setOpen(null)
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onPointer)
@@ -176,7 +180,7 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
       </div>
       {/* Rendered only while open, so the header never carries a second copy of every link. */}
       {panel && (
-        <div id="nav-sheet" className="nav-sheet">
+        <div id="nav-sheet" ref={sheet} className="nav-sheet">
           {menus.map(menu =>
             'href' in menu ? (
               <Link
