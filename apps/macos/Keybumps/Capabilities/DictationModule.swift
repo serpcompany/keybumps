@@ -90,6 +90,7 @@ final class DictationModule: CapabilityModule {
         // Cancel Dictation is registered only while Dictation is cancellable, and re-registered
         // only when its binding or Dictation's on/off state changes.
         let binding = context.preferences.capabilityShortcut(for: .cancelDictation)
+        indicator.cancelShortcut = binding?.displayName
         let enabled = context.isEnabled(capability)
         if binding != cancelBinding || enabled != isEnabled {
             cancelBinding = binding

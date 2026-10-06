@@ -204,6 +204,8 @@ enum KeyboardShortcutRegistry {
         )
     }
 
+    private static let displayNameAliases = ["Escape": "⎋", "Esc": "⎋"]
+
     static func resolve(displayString: String) -> CanonicalKeyboardShortcut? {
         guard !displayString.isEmpty else { return nil }
         var remainder = displayString
@@ -216,6 +218,9 @@ enum KeyboardShortcutRegistry {
         }
         remainder = remainder.trimmingCharacters(in: .whitespaces)
         guard !remainder.isEmpty else { return nil }
+        // Names a binding may carry instead of the key's symbol, such as Cancel Dictation's
+        // default "Escape" (#292).
+        remainder = displayNameAliases[remainder] ?? remainder
 
         if let definition = definitions.first(where: {
             $0.key.renderedSymbol == remainder || $0.key.officialName == remainder

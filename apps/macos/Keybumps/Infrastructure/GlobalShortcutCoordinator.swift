@@ -305,6 +305,9 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Whether the shortcut works from anywhere, rather than only at certain times (`detail`).
+    var worksEverywhere: Bool { detail == nil }
+
     /// A note under the title, for a shortcut that works only at certain times.
     var detail: String? {
         switch self {

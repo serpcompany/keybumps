@@ -16,6 +16,28 @@ import Testing
         #expect(CapabilityDescriptor.dictation.shortcuts == [.dictation, .cancelDictation])
     }
 
+    @Test func theDefaultCancelShortcutShowsAsTheEscapeKeycap() {
+        let name = DefaultShortcut.cancelDictation.displayName
+        #expect(KeyboardShortcutRegistry.keycapTokens(for: name) == ["⎋"])
+        #expect(KeyboardShortcutRegistry.keycapTokens(for: "Esc") == ["⎋"])
+        #expect(KeyboardShortcutRegistry.accessibilityDescription(for: name)?.contains("Escape") == true)
+    }
+
+    @Test func voiceOverNamesTheCancelShortcutInUseOrNone() {
+        #expect(DictationNotchView.recordingLabel(finish: "⌥ Space", cancel: "Escape")
+            .hasSuffix("or Escape (Esc) to cancel."))
+        #expect(!DictationNotchView.recordingLabel(finish: "⌥ Space", cancel: nil).contains("cancel"))
+        #expect(DictationNotchView.recordingLabel(finish: nil, cancel: nil) == "Dictation recording.")
+    }
+
+    @Test func thePluginsTableDoesNotShowEscapeAsDictationsShortcut() {
+        let text = PluginsTable.shortcutText(for: .dictation) { shortcut in
+            shortcut == .cancelDictation ? DefaultShortcut.cancelDictation : nil
+        }
+
+        #expect(text == "")
+    }
+
     @Test func anExistingInstallGetsEscapeForCancelDictation() throws {
         let defaults = InMemoryDefaults()
         // Saved before Cancel Dictation existed: only the original shortcuts are known.
