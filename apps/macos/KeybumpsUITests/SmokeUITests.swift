@@ -56,6 +56,22 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(element("problemReport.send").isEnabled)
     }
 
+    /// #286: Dictation's dropdowns open and change the setting.
+    func testDictationDropdownsOpenAndChangeTheSetting() {
+        launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
+        let limit = element("settings.dictation.durationLimit")
+        XCTAssertTrue(limit.waitForExistence(timeout: 20))
+
+        limit.click()
+        let noLimit = app.menuItems["No limit"]
+        XCTAssertTrue(noLimit.waitForExistence(timeout: 5), "The recording-length dropdown opens its menu")
+        noLimit.click()
+        XCTAssertEqual(limit.value as? String, "No limit")
+        // The language dropdown is the same `SettingsDropdown`; CI runners may have no on-device
+        // speech languages to list, so it isn't opened here.
+        XCTAssertTrue(element("settings.dictation.language").exists)
+    }
+
     func testEscapeClosesSettings() {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         let detail = element("settings.detail.general")
