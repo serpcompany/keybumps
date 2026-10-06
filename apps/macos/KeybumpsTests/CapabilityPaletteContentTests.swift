@@ -137,6 +137,36 @@ struct CapabilityPaletteContentTests {
         fixture.palette.selectOnOpening(.keyboardShortcutter)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
         #expect(fixture.palette.state.tab == .timers, "An empty grid doesn't trap Left and Right")
+
+        // Right on the last item goes to the next tab. The fake rows stand in for the Clipboard tab here.
+        fixture.content.rows = 6
+        fixture.palette.tabContents[.clipboard] = fixture.content
+        fixture.palette.selectOnOpening(.clipboard)
+        fixture.palette.state.selection = 5
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.tab == .screenshots)
+    }
+
+    @Test("In the Screenshots grid, Left and Right move between screenshots, then on to the tabs beside it")
+    func screenshotsGridEdgesSwitchTabs() throws {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        for name in ["First.png", "Second.png"] {
+            let url = fixture.folder.url.appendingPathComponent(name)
+            try ModuleTabFixture.png(seed: name).write(to: url)
+            #expect(fixture.clipboard.ingestImageFile(at: url))
+        }
+        fixture.palette.selectOnOpening(.screenshots)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.tab == .screenshots)
+        #expect(fixture.palette.state.selection == 1)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.tab == .dictation, "Right on the last screenshot goes to the next tab")
+
+        fixture.palette.selectOnOpening(.screenshots)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .clipboard, "Left on the first screenshot goes to the tab before")
     }
 
     @Test("An empty Screenshots grid passes Left and Right on to the tabs beside it")
@@ -256,11 +286,12 @@ private final class ModuleTabFixture {
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsModuleTab-\(UUID().uuidString)"))
     let content: RecordingPaletteContent
     let search: QuickSearchModel
+    let clipboard: ClipboardHistoryService
     let palette: CommandPaletteController
 
     init(resetsSelectionWhileTyping: Bool = false) {
         let root = folder.url
-        let clipboard = ClipboardHistoryService(
+        clipboard = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
             pasteboard: pasteboard,
             mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true),
@@ -292,6 +323,12 @@ private final class ModuleTabFixture {
     func tearDown() {
         pasteboard.releaseGlobally()
         folder.remove()
+    }
+
+    /// A 1×1 PNG with `seed` appended, so each file is a different image.
+    static func png(seed: String) -> Data {
+        Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!
+            + Data(seed.utf8)
     }
 }
 

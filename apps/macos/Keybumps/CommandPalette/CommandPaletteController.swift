@@ -484,7 +484,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             // With text in the search field, Left and Right move the caret. Otherwise they move
             // through the screenshot grid, or switch to the tab beside this one: from a list, from an
             // empty grid, or from the grid's first (Left) or last (Right) screenshot.
-            guard activeQuery.isEmpty, !isComposingText, !isSelectingOtherText,
+            guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
             if state.tab == .screenshots, (0..<itemCount).contains(state.selection + offset) {
@@ -593,13 +593,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func switchTab(by offset: Int) {
         guard let tab = CommandPaletteTab.adjacent(to: state.tab, offset: offset, in: visibleTabs) else { return }
         selectTab(tab)
-    }
-
-    /// Whether the focus is in selectable text other than the search field, such as a Dictation
-    /// transcript, where Left and Right move through the text.
-    private var isSelectingOtherText: Bool {
-        guard let textView = panel?.firstResponder as? NSTextView else { return false }
-        return !textView.isFieldEditor
     }
 
     /// Whether an input method (Japanese, Chinese, and so on) is composing in the search field,
@@ -984,7 +977,12 @@ private struct CommandPaletteView: View {
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
                         tab: state.tab,
-                        isGrid: state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
+                        // An empty grid hands Left and Right to the tabs, as a list does.
+                        isGrid: state.tab == .screenshots
+                            ? !screenshotContent.entries.isEmpty
+                            : tabContents[state.tab].map {
+                                $0.isGrid(query: state.historyQuery) && $0.rowCount(query: state.historyQuery) > 0
+                            } == true,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
                         selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
                         contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
