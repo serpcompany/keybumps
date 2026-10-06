@@ -401,3 +401,62 @@ struct ClipboardTabClearTests {
         url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
 }
+
+@MainActor
+@Suite("Copying a Clipboard History item")
+struct ClipboardRestoreTests {
+    private typealias Fixture = ScreenshotClipboardTests.Fixture
+
+    @Test("An image whose stored copy can't be read copies nothing and leaves the clipboard as it was")
+    func unreadableImageLeavesTheClipboardAlone() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot()))
+        let image = try #require(fixture.clipboard.entries.first)
+        try FileManager.default.removeItem(at: try #require(image.imageURL))
+        let shot = try fixture.screenshot("Untyped.png")
+        let untyped = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: shot.path)
+        let emptyFile = fixture.root.appendingPathComponent("Empty.png")
+        try Data().write(to: emptyFile)
+        let empty = ClipboardEntry(
+            id: UUID(),
+            text: "",
+            capturedAt: Date(),
+            kind: .image,
+            mediaPath: emptyFile.path,
+            mediaPasteboardType: NSPasteboard.PasteboardType.png.rawValue
+        )
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.setString("made-up clipboard text", forType: .string)
+        let changeCount = fixture.pasteboard.changeCount
+
+        #expect(!fixture.clipboard.restore(image), "its media file is gone")
+        #expect(!fixture.clipboard.restore(untyped), "it has no pasteboard type")
+        #expect(!fixture.clipboard.restore(empty), "its media file is empty")
+
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up clipboard text")
+        #expect(fixture.pasteboard.changeCount == changeCount)
+        // The copy made before the failed restores still reaches Clipboard History.
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.first?.text == "made-up clipboard text")
+    }
+
+    @Test("Text and a readable image still go on the clipboard")
+    func textAndReadableImagesRestore() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let shot = try fixture.screenshot()
+        #expect(fixture.clipboard.ingestImageFile(at: shot))
+        let image = try #require(fixture.clipboard.entries.first)
+        fixture.clipboard.ingestForTesting("copied text")
+        let text = try #require(fixture.clipboard.entries.first)
+
+        #expect(fixture.clipboard.restore(image))
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: shot)))
+        #expect(fixture.pasteboard.string(forType: .string) == nil)
+
+        #expect(fixture.clipboard.restore(text))
+        #expect(fixture.pasteboard.string(forType: .string) == "copied text")
+        #expect(fixture.pasteboard.data(forType: .png) == nil)
+    }
+}

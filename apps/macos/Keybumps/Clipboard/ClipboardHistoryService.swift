@@ -195,18 +195,21 @@ class ClipboardHistoryService {
 
     /// Puts `entry` back on the pasteboard. A restore the user asked for counts as a copy for
     /// `pasteboardChanged(since:)`; Screenshot Tools' automatic copy passes `countsAsCopy: false`,
-    /// so one screenshot's copy never stops a newer screenshot from being copied.
+    /// so one screenshot's copy never stops a newer screenshot from being copied. An image whose
+    /// stored copy can't be read returns false and leaves the pasteboard as it was.
     @discardableResult
     func restore(_ entry: ClipboardEntry, countsAsCopy: Bool = true) -> Bool {
-        pasteboard.clearContents()
         let restored: Bool
         switch entry.kind {
         case .text:
+            pasteboard.clearContents()
             restored = pasteboard.setString(entry.text, forType: .string)
         case .image:
+            // Read the stored copy before clearing, so a missing or empty file never empties the clipboard.
             guard let imageURL = entry.imageURL,
                   let typeName = entry.mediaPasteboardType,
-                  let data = try? Data(contentsOf: imageURL) else { return false }
+                  let data = try? Data(contentsOf: imageURL), !data.isEmpty else { return false }
+            pasteboard.clearContents()
             restored = pasteboard.setData(data, forType: NSPasteboard.PasteboardType(typeName))
         }
         guard restored else { return false }
