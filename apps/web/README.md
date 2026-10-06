@@ -1,12 +1,13 @@
 # keybumps.app
 
-The product landing page for `keybumps.app`.
+The `keybumps.app` website: the product home page, the Plugins pages, pricing, and the legal and support pages.
 
 ## Public URLs
 
 Pages end in a trailing slash and files never do ([SERP URL trailing-slash standard](docs/agents/web.md#canonical-urls-and-hosts)); the other form redirects with one 308.
 
-- `https://keybumps.app/` — one-page product lander (brand assets copied from `serpcompany/keybumps` `brand/`).
+- `https://keybumps.app/` — the product home page (brand assets copied from `serpcompany/keybumps` `brand/`). Its features grid is built from `src/lib/plugins.ts`.
+- `https://keybumps.app/plugins/` and `/plugins/<slug>/` — every plugin, and a page for each, from `src/lib/plugins.ts`. The app links to `/plugins/`.
 - `https://keybumps.app/pricing/` and `/legal/terms/`, `/legal/privacy/`, `/legal/refunds/` — pricing and legal pages needed for Polar checkout review. The old `/terms`, `/privacy`, and `/refunds` URLs redirect to them. Price, pricing model, and checkout link live in `src/lib/pricing.ts`; `pricing.checkoutUrl` is the Polar checkout link behind the buy button (set it to `null` to make it download the current DMG instead). The legal "last updated" date is `LEGAL_UPDATED` in `src/lib/site.ts`.
 - `https://keybumps.app/thanks/` — Polar checkout success page (set it as the checkout link's success URL). `https://keybumps.app/license/` — where to find the license key (Polar receipt and customer portal, `CUSTOMER_PORTAL_URL` in `src/lib/site.ts`).
 - `https://keybumps.app/download/` — stable download link for old links, READMEs, and emails. It has no page: it answers with a temporary 302 (never cached) to the latest macOS DMG, signed with Developer ID. `/download` reaches it with one 308.

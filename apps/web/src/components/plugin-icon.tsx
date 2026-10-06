@@ -6,6 +6,7 @@ import {
   Keyboard,
   type LucideIcon,
   Search,
+  Smile,
   TextQuote,
   Timer
 } from 'lucide-react'
@@ -21,7 +22,8 @@ const icons: Record<PluginSystemImage, LucideIcon> = {
   'rectangle.split.2x1': Columns2,
   keyboard: Keyboard,
   'text.quote': TextQuote,
-  timer: Timer
+  timer: Timer,
+  'face.smiling': Smile
 }
 
 /**

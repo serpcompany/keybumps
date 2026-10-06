@@ -48,7 +48,8 @@ export const iconTints = {
   blue: '#0a84ff',
   teal: '#6ac4dc',
   gray: '#98989d',
-  green: '#32d74b'
+  green: '#32d74b',
+  yellow: '#ffd60a'
 } as const
 export type IconTint = keyof typeof iconTints
 
@@ -62,6 +63,7 @@ export type PluginSystemImage =
   | 'keyboard'
   | 'text.quote'
   | 'timer'
+  | 'face.smiling'
 
 export type PluginShortcut = {
   title: string
@@ -351,7 +353,7 @@ export const plugins: readonly Plugin[] = [
     keywords: ['hotkeys', 'hotkey', 'shortcuts', 'keyboard', 'history'],
     paletteTab: {
       name: 'Hotkeys',
-      commandKey: 7,
+      commandKey: 8,
       hiddenUnless: 'Show Hotkeys tab in the Command Palette'
     },
     shortcuts: [],
@@ -439,7 +441,6 @@ export const plugins: readonly Plugin[] = [
     permissions: [],
     requires: [],
     isDefault: false,
-    isNew: true,
     overview: [
       'Timer counts down from a duration you type. Open the Timers tab of the Command Palette, type 5m, 1h30m, or tea 25, and press Return.',
       'While a timer runs, the soonest one counts down beside the Keybumps icon in the menu bar. When it ends, an alarm stays on screen and rings until you click Stop or Repeat, or open the Timers tab. Timer is the first plugin added to Keybumps.'
@@ -455,6 +456,44 @@ export const plugins: readonly Plugin[] = [
       'Turn off the ringing, the menu bar countdown, or the menu list in Settings'
     ],
     keeps: ['Timers, with any names you give them, are kept on this Mac until you delete them.']
+  },
+  {
+    slug: 'emoji-picker',
+    capability: 'emojiPicker',
+    name: 'Emoji Picker',
+    summary: 'Find any emoji by name and paste it where you’re typing.',
+    category: 'Writing',
+    systemImage: 'face.smiling',
+    tint: 'yellow',
+    keywords: ['emoji', 'emojis', 'smiley'],
+    paletteTab: { name: 'Emoji', commandKey: 7 },
+    shortcuts: [{ title: 'Open Emoji Picker', keys: null }],
+    permissions: [],
+    optionalPermissions: [
+      {
+        permission: 'Accessibility',
+        reason:
+          'Lets ⌘Return paste the emoji into the app you’re using. Without it, ⌘Return copies the emoji instead.'
+      }
+    ],
+    requires: [],
+    isDefault: false,
+    isNew: true,
+    overview: [
+      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of the Command Palette with ⌘7 and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
+      'Return copies the emoji, and ⌘Return pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
+    ],
+    features: [
+      'Every emoji up to Emoji 17.0 that your Mac can draw, in Unicode’s groups, with CLDR names and keywords and gemoji’s :shortcodes:',
+      'Search by name, keyword, or :shortcode:, with exact matches first',
+      'Browse a grid of your recent emoji, then every group, while the search is empty',
+      'Return or a double-click copies the emoji; ⌘Return pastes it and puts your clipboard back',
+      'A skin tone setting that applies to every emoji that has one, including two-person emoji',
+      'Optional Open Emoji Picker shortcut, unassigned until you set one'
+    ],
+    keeps: [
+      'Your 24 most recently used emoji are kept on this Mac. Turning off Remember recently used emoji in its Settings page clears them.'
+    ]
   }
 ]
 
