@@ -129,6 +129,17 @@ struct CapabilityModuleTests {
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .emoji, enabled: enabled).contains(.emoji))
     }
 
+    @Test("Left and Right go to the tab beside this one in the bar, skipping plugins that are off")
+    func adjacentTabsSkipOffPlugins() {
+        let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled)
+        #expect(CommandPaletteTab.adjacent(to: .search, offset: 1, in: tabs) == .dictation)
+        #expect(CommandPaletteTab.adjacent(to: .dictation, offset: -1, in: tabs) == .search)
+        #expect(CommandPaletteTab.adjacent(to: .search, offset: -1, in: tabs) == nil, "No wrap at the first tab")
+        #expect(CommandPaletteTab.adjacent(to: .timers, offset: 1, in: tabs) == nil, "No wrap at the last tab")
+        #expect(CommandPaletteTab.adjacent(to: .emoji, offset: 1, in: tabs) == nil, "A tab not in the bar has no neighbor")
+    }
+
     @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs

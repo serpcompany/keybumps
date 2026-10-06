@@ -64,7 +64,9 @@ struct CapabilityPaletteContentTests {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
         fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.state.historyQuery = "made-up"
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil, "A list leaves Right to the caret")
+        fixture.palette.state.historyQuery = ""
 
         fixture.content.isGrid = true
         fixture.content.rows = 6
@@ -86,6 +88,26 @@ struct CapabilityPaletteContentTests {
         // Typing turns the grid into a list: Right goes back to the search field's caret.
         fixture.palette.state.historyQuery = "made-up"
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil)
+    }
+
+    @Test("With the search field empty, Left and Right switch to the tab beside this one, stopping at the ends")
+    func arrowsSwitchTabs() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.search)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .search, "Left at the first tab stays put")
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.tab == .clipboard)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .search)
+
+        // With Command (or Shift, Option, Control), or text to edit, they stay with the search field.
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow, command: true)) != nil)
+        fixture.search.query = "made-up"
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil)
+        #expect(fixture.palette.state.tab == .search)
     }
 
     @Test("A tab's rows can copy through the palette, kept out of Clipboard History")
@@ -191,6 +213,7 @@ private final class ModuleTabFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsModuleTab-\(UUID().uuidString)"))
     let content: RecordingPaletteContent
+    let search: QuickSearchModel
     let palette: CommandPaletteController
 
     init(resetsSelectionWhileTyping: Bool = false) {
@@ -204,6 +227,7 @@ private final class ModuleTabFixture {
         let dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
+        search = QuickSearchModel.forTests(in: root)
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -217,7 +241,7 @@ private final class ModuleTabFixture {
             snippets: folder.makeStore(),
             pasteboard: pasteboard,
             notices: SilentNotices(),
-            search: QuickSearchModel.forTests(in: root)
+            search: search
         )
         content = RecordingPaletteContent(resetsSelectionWhileTyping: resetsSelectionWhileTyping)
         palette.tabContents = [.keyboardShortcutter: content]

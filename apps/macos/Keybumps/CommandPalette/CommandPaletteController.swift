@@ -51,6 +51,12 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         tabs.first { characters == String($0.registration.commandKey) }
     }
 
+    /// The tab Left or Right switches to: the one beside `tab` in the tab bar, stopping at either end.
+    static func adjacent(to tab: CommandPaletteTab, offset: Int, in tabs: [CommandPaletteTab]) -> CommandPaletteTab? {
+        guard let index = tabs.firstIndex(of: tab), tabs.indices.contains(index + offset) else { return nil }
+        return tabs[index + offset]
+    }
+
     var labelPresentation: CommandPaletteTabLabel {
         CommandPaletteTabLabel(shortcut: shortcutLabel, name: title)
     }
@@ -428,8 +434,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard !isPresentingConfirmation else { return event }
 
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
-            let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
-            if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: tabs) {
+            if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
                 selectTab(tab)
                 return nil
             }
@@ -469,9 +474,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             moveSelection(state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
             return nil
         case 123, 124:
-            // Left and Right move through the screenshot grid; elsewhere they move the caret.
-            guard state.tab == .screenshots, activeQuery.isEmpty else { return event }
-            moveSelection(event.keyCode == 124 ? 1 : -1)
+            // With text in the search field, Left and Right move the caret. Otherwise they move
+            // through the screenshot grid, or switch to the tab beside this one.
+            guard activeQuery.isEmpty, !isComposingText,
+                  event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
+            let offset = event.keyCode == 124 ? 1 : -1
+            if state.tab == .screenshots {
+                moveSelection(offset)
+            } else if let tab = CommandPaletteTab.adjacent(to: state.tab, offset: offset, in: visibleTabs) {
+                selectTab(tab)
+            }
             return nil
         case 36:
             activateSelection(reveal: event.modifierFlags.contains(.command))
@@ -562,6 +574,17 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             // Module tabs answer above.
             0
         }
+    }
+
+    /// The tabs in the tab bar, which Command-number and Left and Right switch between.
+    private var visibleTabs: [CommandPaletteTab] {
+        CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
+    }
+
+    /// Whether an input method (Japanese, Chinese, and so on) is composing in the search field,
+    /// where Left and Right move between the parts being converted.
+    private var isComposingText: Bool {
+        (panel?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
     }
 
     private var activeQuery: String {
@@ -1952,6 +1975,9 @@ private struct PaletteFooter: View {
             Spacer()
             HStack(spacing: 14) {
                 hint("Select", keys: isGrid ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
+                if !isGrid {
+                    hint("Change Tab", keys: ["←", "→"], isPrimary: false)
+                }
                 if let primaryActionTitle {
                     hint(primaryActionTitle, keys: ["↵"], isPrimary: true)
                 }
