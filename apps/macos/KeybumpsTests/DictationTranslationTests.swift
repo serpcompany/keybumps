@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Foundation
+import NaturalLanguage
 import Testing
 @testable import Keybumps
 
@@ -42,6 +43,69 @@ struct DictationTranslationTests {
         #expect(Self.source("OK", recordedWith: "fr-FR") == "fr-FR")
     }
 
+    @Test("A guess replaces the setting from 0.8 confidence; undetermined or missing guesses never do")
+    func confidenceThreshold() {
+        func source(_ guess: NLLanguage?, _ confidence: Double, recordedWith recorded: String = "en-US") -> String {
+            DictationTranslationPolicy.sourceLanguageIdentifier(
+                guess: guess, confidence: confidence, recordedLanguageIdentifier: recorded
+            )
+        }
+        #expect(DictationTranslationPolicy.sourceDetectionConfidence == 0.8)
+        #expect(source(.spanish, 0.79) == "en-US")
+        #expect(source(.spanish, 0.8) == "es")
+        #expect(source(.spanish, 1) == "es")
+        #expect(source(.undetermined, 1) == "en-US")
+        #expect(source(nil, 0) == "en-US")
+        #expect(source(.english, 1) == "en-US", "The setting's own language keeps its region")
+        #expect(source(.simplifiedChinese, 1, recordedWith: "zh-CN") == "zh-CN", "Same script")
+        #expect(source(.simplifiedChinese, 1, recordedWith: "zh-TW") == "zh-Hans", "Another script")
+    }
+
+    @Test("A language Translation can't start from falls back to the setting; with neither, nothing is offered")
+    func untranslatableLanguageFallsBack() async {
+        let swedish = "Kan du påminna mig om att köpa bröd och mjölk i eftermiddag?"
+        #expect(Self.source(swedish) == "sv")
+        var asked: [String] = []
+        let offeredFromEnglish = await DictationTranslationPolicy.translatableSource(
+            for: swedish, recordedLanguageIdentifier: "en-US"
+        ) { source in
+            asked.append(source)
+            return source == "en-US" ? Self.supported : []
+        }
+        #expect(asked == ["sv", "en-US"])
+        #expect(offeredFromEnglish?.source == "en-US")
+        #expect(offeredFromEnglish?.targets == Self.supported)
+
+        asked = []
+        let nothing = await DictationTranslationPolicy.translatableSource(
+            for: swedish, recordedLanguageIdentifier: "en-US"
+        ) { source in
+            asked.append(source)
+            return []
+        }
+        #expect(nothing == nil)
+        #expect(asked == ["sv", "en-US"])
+
+        asked = []
+        let fromSpanish = await DictationTranslationPolicy.translatableSource(
+            for: Self.spanish, recordedLanguageIdentifier: "en-US"
+        ) { source in
+            asked.append(source)
+            return Self.supported
+        }
+        #expect(fromSpanish?.source == "es")
+        #expect(asked == ["es"], "A translatable language isn't second-guessed")
+
+        asked = []
+        _ = await DictationTranslationPolicy.translatableSource(
+            for: Self.english, recordedLanguageIdentifier: "en-US"
+        ) { source in
+            asked.append(source)
+            return []
+        }
+        #expect(asked == ["en-US"], "The setting is asked once")
+    }
+
     @Test("Spanish or Japanese text recorded with the setting on English offers English; English text doesn't")
     func offersEnglishForOtherLanguages() {
         #expect(Self.targets(Self.spanish).contains("en"))
@@ -71,28 +135,98 @@ struct DictationTranslationTests {
         )
     }
 
-    @Test("A hold keeps the palette open against outside clicks, as a confirmation does")
+    @Test("A hold keeps the palette open against Keybumps's other windows, as a confirmation does")
     func dismissalPolicy() {
         #expect(CommandPaletteDismissalPolicy.shouldDismiss())
         #expect(!CommandPaletteDismissalPolicy.shouldDismiss(isHeldOpen: true))
         #expect(!CommandPaletteDismissalPolicy.shouldDismiss(isPresentingConfirmation: true))
         #expect(!CommandPaletteDismissalPolicy.shouldDismiss(isPresentingConfirmation: true, isHeldOpen: true))
+
+        #expect(!CommandPaletteDismissalPolicy.shouldDismissOnResignKey(
+            isPresentingConfirmation: false, isHeldOpen: true, keyWentToOwnWindow: true
+        ))
+        #expect(CommandPaletteDismissalPolicy.shouldDismissOnResignKey(
+            isPresentingConfirmation: false, isHeldOpen: true, keyWentToOwnWindow: false
+        ), "A hold never keeps it over another app")
+        #expect(CommandPaletteDismissalPolicy.shouldDismissOnResignKey(
+            isPresentingConfirmation: false, isHeldOpen: false, keyWentToOwnWindow: true
+        ))
+        #expect(!CommandPaletteDismissalPolicy.shouldDismissOnResignKey(
+            isPresentingConfirmation: true, isHeldOpen: false, keyWentToOwnWindow: false
+        ))
     }
 
-    @Test("Losing key focus doesn't close a held palette; once every hold lets go, it does")
+    @Test("The palette's keys handle keys sent to the panel or to no window, never another window's")
+    func keyRouting() {
+        let panel = Self.window()
+        let prompt = Self.window()
+        #expect(CommandPaletteDismissalPolicy.palettesKey(eventWindow: panel, panel: panel))
+        #expect(CommandPaletteDismissalPolicy.palettesKey(eventWindow: nil, panel: panel))
+        #expect(!CommandPaletteDismissalPolicy.palettesKey(eventWindow: prompt, panel: panel))
+        #expect(!CommandPaletteDismissalPolicy.palettesKey(eventWindow: prompt, panel: nil))
+    }
+
+    @Test("Keys typed into another Keybumps window pass through untouched")
+    func keysForAnotherWindowPassThrough() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let prompt = Self.window()
+        try #require(prompt.windowNumber > 0)
+        fixture.palette.holdOpen(true, by: UUID())
+
+        for keyCode in [kVK_Return, kVK_Escape, kVK_DownArrow, kVK_Delete] {
+            let event = Self.key(keyCode, windowNumber: prompt.windowNumber)
+            try #require(event.window === prompt)
+            #expect(fixture.palette.handleKeyDown(event) === event)
+        }
+        #expect(fixture.palette.isHeldOpen, "Escape and Return for the prompt didn't close the palette")
+        #expect(fixture.palette.state.closings == 0)
+    }
+
+    @Test("Losing key focus to a Keybumps window doesn't close a held palette; to another app it does")
+    func resignKey() {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+        let prompt = Self.window()
+
+        palette.holdOpen(true, by: UUID())
+        palette.resignedKey(to: prompt)
+        #expect(palette.isHeldOpen, "Not dismissed, which would let every hold go")
+        #expect(palette.state.closings == 0)
+
+        palette.resignedKey(to: nil)
+        #expect(!palette.isHeldOpen)
+        #expect(palette.state.closings == 1)
+
+        palette.resignedKey(to: prompt)
+        #expect(palette.state.closings == 2, "Unheld, any loss of key focus closes it")
+    }
+
+    @Test("Switching to another app closes a held palette; Keybumps coming forward doesn't")
+    func appSwitch() {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+
+        palette.holdOpen(true, by: UUID())
+        palette.didActivateApp(processIdentifier: ProcessInfo.processInfo.processIdentifier)
+        #expect(palette.isHeldOpen)
+        palette.didActivateApp(processIdentifier: 1)
+        #expect(!palette.isHeldOpen)
+        #expect(palette.state.closings == 1)
+    }
+
+    @Test("Every holder must let go; closing the palette lets them all go and counts the closing")
     func holdAndRelease() {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         let palette = fixture.palette
         let translation = UUID()
         let other = UUID()
-        let resignKey = Notification(name: NSWindow.didResignKeyNotification)
 
         palette.holdOpen(true, by: translation)
         palette.holdOpen(true, by: other)
-        palette.windowDidResignKey(resignKey)
-        #expect(palette.isHeldOpen, "Not dismissed, which would let every hold go")
-
         palette.holdOpen(false, by: translation)
         palette.holdOpen(false, by: translation)
         #expect(palette.isHeldOpen, "Another holder still holds it")
@@ -102,6 +236,7 @@ struct DictationTranslationTests {
         palette.holdOpen(true, by: translation)
         palette.dismiss()
         #expect(!palette.isHeldOpen, "Closing the palette lets every hold go")
+        #expect(palette.state.closings == 1, "So a translation still waiting stops")
         palette.holdOpen(false, by: translation)
         #expect(!palette.isHeldOpen, "A late release after closing is harmless")
     }
@@ -117,9 +252,12 @@ struct DictationTranslationTests {
         #expect(fixture.palette.isHeldOpen)
         hold(translation, false)
         #expect(!fixture.palette.isHeldOpen)
+        fixture.palette.dismiss()
+        #expect(hold.closings == 1)
 
         CommandPaletteHold()(translation, true)
         #expect(!fixture.palette.isHeldOpen)
+        #expect(CommandPaletteHold().closings == 0)
         #expect(hold == CommandPaletteHold(palette: fixture.palette))
         #expect(hold != CommandPaletteHold())
     }
@@ -128,15 +266,28 @@ struct DictationTranslationTests {
     func escapeClosesAHeldPalette() {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
-        let escape = NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
-            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
-            isARepeat: false, keyCode: UInt16(kVK_Escape)
-        )!
 
         fixture.palette.holdOpen(true, by: UUID())
-        #expect(fixture.palette.handleKeyDown(escape) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Escape)) == nil)
         #expect(!fixture.palette.isHeldOpen, "Escape dismissed the palette, letting the hold go")
+    }
+
+    /// A window that is never shown.
+    static func window() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    static func key(_ keyCode: Int, windowNumber: Int = 0) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: windowNumber,
+            context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false,
+            keyCode: UInt16(keyCode)
+        )!
     }
 }
 
