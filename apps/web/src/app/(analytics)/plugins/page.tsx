@@ -105,12 +105,12 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
   const path = pluginPath(plugin.slug)
   return (
     <Link href={path} prefetch={linkPrefetch(path)} className="plugin-card">
-      <span className="plugin-card-top">
+      <div className="plugin-card-top">
         <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={24} />
         <h3>{plugin.name}</h3>
         {plugin.isNew && <span className="badge-new">New</span>}
         <span className="pill-included">Included</span>
-      </span>
+      </div>
       <p className="plugin-card-summary">{plugin.summary}</p>
       <span className="plugin-card-meta">
         <span className="plugin-author">

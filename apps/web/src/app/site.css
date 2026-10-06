@@ -898,6 +898,7 @@ kbd {
   background: var(--surface-2);
 }
 
+.card:focus-visible,
 .plugin-card:focus-visible,
 .filter-tabs button:focus-visible,
 .plugin-tabs a:focus-visible,

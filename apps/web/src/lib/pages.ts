@@ -1,5 +1,5 @@
 import { pluginPath, plugins } from './plugins'
-import { PRICE } from './site'
+import { PRICE, site } from './site'
 
 export type SitePage = {
   path: string
@@ -16,8 +16,7 @@ export const sitePages = [
   {
     path: '/',
     title: 'Home',
-    description:
-      'Quick search, clipboard history, screenshots, on-device dictation, window management, and shortcut coaching in one native macOS app.'
+    description: site.description
   },
   {
     path: '/plugins/',

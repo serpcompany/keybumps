@@ -6,7 +6,7 @@ const INCLUDED = [
   'Every plugin, including the ones future updates add',
   'License for 1 Mac — move it to a new Mac any time',
   'All future updates included',
-  'Everything runs on-device — no account needed',
+  'No account and no cloud sync',
   '30-day money-back guarantee'
 ]
 

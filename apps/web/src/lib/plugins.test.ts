@@ -10,6 +10,7 @@ import { PluginPage } from '@/components/plugin-page'
 import { pluginMetadata } from './metadata'
 import { indexablePages, sitePages } from './pages'
 import {
+  cardShortcut,
   commandCount,
   iconTints,
   keycaps,
@@ -50,6 +51,35 @@ function otherPluginLinks(html: string): string[] {
   const list = html.split('class="other-plugins"')[1]?.split('</ul>')[0] ?? ''
   return [...list.matchAll(/href="([^"]+)"/g)].map(match => match[1])
 }
+
+describe('cardShortcut', () => {
+  it('shows a default hotkey first, as one that works from any app', () => {
+    expect(cardShortcut(pluginFor('quick-search'))).toEqual({
+      keys: '⌘ Space',
+      label: 'Open Quick Search, from any app'
+    })
+  })
+
+  it('names the plugin when the hotkey’s title doesn’t', () => {
+    expect(cardShortcut(pluginFor('window-manager'))?.label).toBe(
+      'Window Manager: Left, from any app'
+    )
+    expect(cardShortcut(pluginFor('screenshot-tools'))?.label).toBe(
+      'Screenshot Screen, from any app'
+    )
+  })
+
+  it('falls back to the Command Palette tab when no hotkey is assigned', () => {
+    expect(cardShortcut(pluginFor('snippets'))).toEqual({
+      keys: '⌘5',
+      label: 'Its Command Palette tab, Snippets'
+    })
+  })
+
+  it('shows nothing for a tab hidden until a setting shows it', () => {
+    expect(cardShortcut(pluginFor('shortcut-coach'))).toBeNull()
+  })
+})
 
 describe('plugins', () => {
   it('gives each plugin a unique slug, usable in a URL', () => {

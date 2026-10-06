@@ -8,8 +8,8 @@ export default function AboutPage() {
     <PageShell title="About">
       <p>
         Keybumps is a native macOS app from SERP. It brings quick search, clipboard history,
-        screenshots, dictation, window management, and shortcut coaching into one keyboard-first
-        app, and it runs on your Mac with no account.
+        screenshots, dictation, and more Mac utilities into one keyboard-first app, and it runs on
+        your Mac with no account.
       </p>
     </PageShell>
   )

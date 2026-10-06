@@ -5,7 +5,7 @@ import { PluginIcon } from '@/components/plugin-icon'
 import { PricingCard } from '@/components/pricing-card'
 import { getCurrentRelease } from '@/lib/latest-release'
 import { linkPrefetch } from '@/lib/pages'
-import { type Plugin, pluginPath, plugins } from '@/lib/plugins'
+import { cardShortcut, pluginPath, plugins } from '@/lib/plugins'
 import { PaletteDemo } from './palette-demo'
 
 export const metadata: Metadata = {
@@ -14,14 +14,6 @@ export const metadata: Metadata = {
 
 // Re-read the release pointer at most every five minutes.
 export const revalidate = 300
-
-/** A card's shortcut: its first default hotkey, or else the Command Palette tab that opens it. */
-function cardKeys(plugin: Plugin): string | null {
-  const hotkey = plugin.shortcuts.find(shortcut => shortcut.keys)?.keys
-  if (hotkey) return hotkey
-  const tab = plugin.paletteTab
-  return tab && !tab.hiddenUnless ? `⌘${tab.commandKey}` : null
-}
 
 const FAQ = [
   {
@@ -59,8 +51,8 @@ export default async function Home() {
           </h1>
           <p className="lede">
             Keybumps puts search, clipboard history, screenshots, dictation, and the rest of the
-            utilities you’d install one by one into a single native macOS app — fast, private, and
-            entirely on-device.
+            utilities you’d install one by one into a single native macOS app. It’s fast and
+            private, and what you copy, capture, and dictate stays on your Mac.
           </p>
           <div className="cta-row">
             <a href={release.dmgURL} className="btn btn-lg">
@@ -88,15 +80,20 @@ export default async function Home() {
           <div className="grid">
             {plugins.map(plugin => {
               const path = pluginPath(plugin.slug)
-              const keys = cardKeys(plugin)
+              const shortcut = cardShortcut(plugin)
               return (
                 <Link key={plugin.slug} href={path} prefetch={linkPrefetch(path)} className="card">
                   <div className="card-head">
-                    <span className="card-title">
+                    <div className="card-title">
                       <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={22} />
                       <h3>{plugin.name}</h3>
-                    </span>
-                    {keys && <kbd>{keys}</kbd>}
+                    </div>
+                    {shortcut && (
+                      <kbd title={shortcut.label}>
+                        {shortcut.keys}
+                        <span className="sr-only">, {shortcut.label}</span>
+                      </kbd>
+                    )}
                   </div>
                   <p>{plugin.summary}</p>
                 </Link>
