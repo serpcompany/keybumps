@@ -283,6 +283,7 @@ final class DictationService {
             try audioEngine.start()
             setPhase(.recording)
             scheduleDurationLimit()
+            transcriber.prepare(language: selectedLanguage)
         } catch { cleanup(); fail("The microphone could not start.") }
     }
 
@@ -315,6 +316,7 @@ final class DictationService {
         lastError = nil
         do {
             try history.markTranscribing(entry, language: language)
+            let startedAt = Date()
             let transcript = try await transcribeCompletedAudio(
                 at: audioURL,
                 language: language,
@@ -323,7 +325,8 @@ final class DictationService {
             _ = try history.completeTranscription(
                 of: entry,
                 text: transcript,
-                language: language
+                language: language,
+                processingTime: Date().timeIntervalSince(startedAt)
             )
         } catch is CancellationError {
             _ = try? history.completeTranscription(
@@ -354,6 +357,7 @@ final class DictationService {
         durationTimer?.invalidate()
         durationTimer = nil
         stopAudio()
+        let stoppedAt = Date()
         do {
             guard let recording else { throw CocoaError(.fileNoSuchFile) }
             try history.markTranscribing(
@@ -372,7 +376,8 @@ final class DictationService {
                 recording,
                 text: transcript,
                 language: selectedLanguage,
-                duration: duration
+                duration: duration,
+                processingTime: Date().timeIntervalSince(stoppedAt)
             )
             activeRecording = nil
             recordingStartedAt = nil

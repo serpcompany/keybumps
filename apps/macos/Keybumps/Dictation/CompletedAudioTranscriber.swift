@@ -11,7 +11,16 @@ protocol CompletedAudioTranscribing: AnyObject {
         recordedDuration: TimeInterval
     ) async throws -> String
 
+    /// Gets ready for a dictation that has started recording, such as by loading a model, so the
+    /// wait after the recording stops is shorter. It must not block, and failures are left for
+    /// `transcribe` to report.
+    func prepare(language: String)
+
     func cancel()
+}
+
+extension CompletedAudioTranscribing {
+    func prepare(language: String) {}
 }
 
 @MainActor
@@ -203,26 +212,14 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
-        let engine = selectedEngine()
         let transcriber: any CompletedAudioTranscribing
 
-        if engine.requiresDownload,
-           engine.supports(language: language),
-           let modelFolder = modelManager.installedModelFolder(for: engine) {
+        if let modelFolder = installedWhisperModelFolder(language: language) {
             if let cachedWhisper,
                cachedWhisper.modelFolder.standardizedFileURL == modelFolder.standardizedFileURL {
                 transcriber = cachedWhisper.transcriber
             } else {
-                let standardizedFolder = modelFolder.standardizedFileURL
-                let cachedModelChanged = cachedWhisper.map {
-                    $0.modelFolder.standardizedFileURL != standardizedFolder
-                } ?? false
-                let pendingModelChanged = pendingWhisper.map {
-                    $0.modelFolder.standardizedFileURL != standardizedFolder
-                } ?? false
-                if cachedModelChanged || pendingModelChanged {
-                    evictWhisperRuntime()
-                }
+                evictWhisperRuntimeIfModelChanged(to: modelFolder)
                 transcriber = try await loadWhisper(modelFolder: modelFolder)
             }
         } else {
@@ -253,8 +250,35 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         }
     }
 
+    /// Starts loading the selected Whisper model while the person is still talking, so the
+    /// transcription that follows joins the load instead of starting it. The idle unload waits
+    /// until the recording ends in a transcription or a cancel.
+    func prepare(language: String) {
+        guard let modelFolder = installedWhisperModelFolder(language: language) else { return }
+        idleCancellation?.cancel()
+        idleCancellation = nil
+        let standardizedFolder = modelFolder.standardizedFileURL
+        if cachedWhisper?.modelFolder.standardizedFileURL == standardizedFolder
+            || pendingWhisper?.modelFolder.standardizedFileURL == standardizedFolder {
+            return
+        }
+        evictWhisperRuntimeIfModelChanged(to: modelFolder)
+        Task { [weak self] in
+            // A failed load is cleared in `loadWhisper`, and `transcribe` loads again and reports it.
+            _ = try? await self?.loadWhisper(modelFolder: modelFolder)
+        }
+    }
+
     func cancel() {
-        activeTranscriber?.cancel()
+        if let activeTranscriber {
+            activeTranscriber.cancel()
+            return
+        }
+        // A recording that loaded a model and then ended without a transcription still unloads it
+        // after the idle timeout.
+        if (cachedWhisper != nil || pendingWhisper != nil), idleCancellation == nil {
+            scheduleIdleEviction()
+        }
     }
 
     func selectedModelDidChange() {
@@ -284,6 +308,25 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
             if let cachedUnload { await cachedUnload.value }
         }
         unloadingWhisper = (UUID(), unloadTask)
+    }
+
+    private func installedWhisperModelFolder(language: String) -> URL? {
+        let engine = selectedEngine()
+        guard engine.requiresDownload, engine.supports(language: language) else { return nil }
+        return modelManager.installedModelFolder(for: engine)
+    }
+
+    private func evictWhisperRuntimeIfModelChanged(to modelFolder: URL) {
+        let standardizedFolder = modelFolder.standardizedFileURL
+        let cachedModelChanged = cachedWhisper.map {
+            $0.modelFolder.standardizedFileURL != standardizedFolder
+        } ?? false
+        let pendingModelChanged = pendingWhisper.map {
+            $0.modelFolder.standardizedFileURL != standardizedFolder
+        } ?? false
+        if cachedModelChanged || pendingModelChanged {
+            evictWhisperRuntime()
+        }
     }
 
     private func scheduleIdleEviction() {
