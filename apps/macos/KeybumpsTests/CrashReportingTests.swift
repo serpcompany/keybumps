@@ -15,9 +15,29 @@ struct CrashReportingTests {
         #expect(CrashReportingPolicy.destination(info: ["KBCrashReportsDSN": dsn], isUnitTestHost: true) == nil)
     }
 
-    @Test func theUnitTestHostNeverStartsReporting() {
-        CrashReporter.setEnabled(true)
-        #expect(!CrashReporter.isRunning)
+    @Test func reportingIsConfiguredForCrashesAndFreezesOnly() throws {
+        let options = Options()
+        CrashReporter.configure(options, dsn: dsn, environment: "qa")
+        #expect(options.environment == "qa")
+        #expect(!options.sendDefaultPii)
+        #expect(!options.enableAutoSessionTracking)
+        #expect(options.shutdownTimeInterval == 0)
+        #expect(!options.enableAutoBreadcrumbTracking)
+        #expect(!options.enableNetworkBreadcrumbs)
+        #expect(!options.enableNetworkTracking)
+        #expect(!options.enableCaptureFailedRequests)
+        #expect(!options.enableAutoPerformanceTracing)
+        #expect(!options.enableFileIOTracing)
+        #expect(!options.enableCoreDataTracing)
+        #expect(options.tracesSampleRate == nil)
+        #expect(options.enableCrashHandler)
+
+        let beforeSend = try #require(options.beforeSend)
+        let event = Event()
+        event.serverName = "Pat's MacBook Pro"
+        #expect(beforeSend(event)?.serverName == nil)
+        let beforeBreadcrumb = try #require(options.beforeBreadcrumb)
+        #expect(beforeBreadcrumb(Breadcrumb(level: .info, category: "ui.click")) == nil)
     }
 
     @Test func qaCandidatesReportApartFromReleases() {
@@ -39,14 +59,16 @@ struct CrashReportingTests {
     @Test func scrubbingRemovesPathsURLsAndEmails() {
         let scrub = CrashReportScrubber.scrub as (String) -> String
         #expect(scrub("can't open /Users/pat/Documents/Q3 plan.txt") == "can't open <path>")
-        #expect(scrub("missing '/Volumes/Backup/photo.png' here") == "missing '<path>' here")
+        #expect(scrub("can't open /Users/pat/Documents/Pat's Q3 plan.txt") == "can't open <path>")
+        #expect(scrub("missing \"/Volumes/Backup/photo.png\" here") == "missing \"<path>\" here")
         #expect(scrub("saved to ~/Desktop/notes.md") == "saved to <path>")
-        #expect(scrub("loading https://example.com/a?q=secret failed") == "loading <url> failed")
+        #expect(scrub("loading https://example.com/a?q=secret") == "loading <url>")
+        #expect(scrub("smb://server/share/Pat Q3.txt") == "<url>")
         #expect(scrub("file:///Users/pat/a.txt") == "<url>")
         #expect(scrub("sent by pat.lee@example.com today") == "sent by <email> today")
         // Cocoa quotes file names with curly quotes.
-        #expect(scrub("The file “Q3 plan.txt” couldn’t be opened") == "The file “Q3 plan.txt” couldn’t be opened")
-        #expect(scrub("“/Users/pat/Q3 plan.txt” is locked") == "“<path>” is locked")
+        #expect(scrub("The file “Q3 plan.txt” couldn’t be opened") == "The file “<name>” couldn’t be opened")
+        #expect(scrub("“/Users/pat/Pat’s notes.txt” is locked") == "“<name>” is locked")
         #expect(scrub("wrote /private/var/folders/x1/T/draft.txt") == "wrote <path>")
         #expect(scrub("wrote /tmp/draft.txt") == "wrote <path>")
     }

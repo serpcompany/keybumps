@@ -42,15 +42,17 @@ enum CrashReportingPolicy {
 /// folder, on another volume, or in a temporary folder; URLs; and email addresses. Stack frames,
 /// versions, and error categories pass through.
 enum CrashReportScrubber {
-    /// Where a path or URL ends: a line break, a quote (straight or curly), or an angle bracket.
-    private static let end = #"\n"'“”‘’<>"#
+    /// Where a path or URL ends: a line break, a double quote (straight or curly), or an angle
+    /// bracket. Not at a space or an apostrophe, which file names contain ("Pat's Q3 plan.txt").
+    private static let end = #"\n"“”<>"#
 
     private static let rules: [(NSRegularExpression, String)] = [
-        // A URL runs to the next space or quote.
-        (#"[A-Za-z][A-Za-z0-9+.\-]*://[^\s"# + end + "]*", "<url>"),
+        // Cocoa puts a file's name in curly quotes: “Q3 plan.txt” couldn’t be opened.
+        (#"“[^”\n]*”"#, "“<name>”"),
+        // A URL or path runs to the end of the line or the next double quote: losing the rest of
+        // a message is better than leaking a file name.
+        (#"[A-Za-z][A-Za-z0-9+.\-]*://[^"# + end + "]*", "<url>"),
         (#"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#, "<email>"),
-        // A path can contain spaces, so it runs to the end of the line or the next quote: losing
-        // the rest of a message is better than leaking a file name.
         (#"(?:/Users|/Volumes|/private|/tmp|/var/folders)/[^"# + end + "]*", "<path>"),
         (#"~/[^"# + end + "]*", "<path>"),
     ].map { pattern, replacement in
@@ -165,31 +167,35 @@ enum CrashReporter {
               let dsn = CrashReportingPolicy.destination(info: bundle.infoDictionary, isUnitTestHost: UnitTestHost.isActive)
         else { return }
         let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        SentrySDK.start { options in
-            options.dsn = dsn
-            options.environment = CrashReportingPolicy.environment(version: version)
-            options.sendDefaultPii = false
-            // No session records: they'd report every launch and how long Keybumps ran, which is
-            // usage, not a crash.
-            options.enableAutoSessionTracking = false
-            // Turning reports off never waits on the network: whatever is queued stays on disk.
-            options.shutdownTimeInterval = 0
-            // Crashes and freezes only: no automatic breadcrumbs, network capture, or tracing, any
-            // of which could carry user content. (Screenshots and view hierarchy are iOS-only.)
-            options.enableAutoBreadcrumbTracking = false
-            options.enableNetworkBreadcrumbs = false
-            options.enableNetworkTracking = false
-            options.enableCaptureFailedRequests = false
-            options.enableAutoPerformanceTracing = false
-            options.enableFileIOTracing = false
-            options.enableCoreDataTracing = false
-            options.tracesSampleRate = nil
-            options.beforeBreadcrumb = { breadcrumb in
-                CrashReportingPolicy.keepsBreadcrumb(category: breadcrumb.category) ? breadcrumb : nil
-            }
-            options.beforeSend = { CrashReportScrubber.scrub($0) }
-        }
+        SentrySDK.start { configure($0, dsn: dsn, environment: CrashReportingPolicy.environment(version: version)) }
         isRunning = true
+    }
+
+    /// Every option the privacy promise rests on, in one place `CrashReportingTests` checks.
+    nonisolated static func configure(_ options: Options, dsn: String, environment: String) {
+        options.dsn = dsn
+        options.environment = environment
+        options.sendDefaultPii = false
+        // No session records: they'd report every launch and how long Keybumps ran, which is
+        // usage, not a crash.
+        options.enableAutoSessionTracking = false
+        // Turning reports off doesn't wait on the network. A report already queued while they
+        // were on may still go out.
+        options.shutdownTimeInterval = 0
+        // Crashes and freezes only: no automatic breadcrumbs, network capture, or tracing, any
+        // of which could carry user content. (Screenshots and view hierarchy are iOS-only.)
+        options.enableAutoBreadcrumbTracking = false
+        options.enableNetworkBreadcrumbs = false
+        options.enableNetworkTracking = false
+        options.enableCaptureFailedRequests = false
+        options.enableAutoPerformanceTracing = false
+        options.enableFileIOTracing = false
+        options.enableCoreDataTracing = false
+        options.tracesSampleRate = nil
+        options.beforeBreadcrumb = { breadcrumb in
+            CrashReportingPolicy.keepsBreadcrumb(category: breadcrumb.category) ? breadcrumb : nil
+        }
+        options.beforeSend = { CrashReportScrubber.scrub($0) }
     }
 
     private static func stop() {
