@@ -59,9 +59,11 @@ import Testing
 
         #expect(try AVAudioFile(forReading: crashed).length == 10_240)
         let after = try Data(contentsOf: crashed)
+        let dataChunk = try #require(before.range(of: Data("data".utf8))).lowerBound
+        let dataSizeField = (dataChunk + 4)..<(dataChunk + 8)
         let changed = (0..<before.count).filter { before[$0] != after[$0] }
         #expect(after.count == before.count)
-        #expect(changed.allSatisfy { (4..<8).contains($0) || (4_092..<4_096).contains($0) })
+        #expect(changed.allSatisfy { (4..<8).contains($0) || dataSizeField.contains($0) })
     }
 
     @Test func aWAVWhoseHeaderIsAlreadyRightIsLeftUntouched() throws {
@@ -127,10 +129,44 @@ import Testing
         #expect(recoveredOrphan.duration == 0.2)
     }
 
-    /// An entry recovered before this fix kept the empty header; retrying it repairs the header
-    /// before the audio reaches the transcriber.
+    /// A History refresh while this service is recording leaves the live file and its
+    /// `recording` state alone: the writer still owns the header.
     @MainActor
-    @Test func retryingAnInterruptedEntryRepairsItsHeaderFirst() async throws {
+    @Test func aRefreshDuringARecordingLeavesTheLiveFileAlone() throws {
+        let folder = try RecordingFolder()
+        defer { folder.remove() }
+        let history = DictationHistoryService(recordingsDirectoryURL: folder.root)
+        let pending = try history.prepareRecording(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            language: "en-US"
+        )
+        let live = SyntheticWAV.sine(frames: 1_600, riffSize: 0, dataSize: 0)
+        try live.write(to: pending.audioURL)
+        let metadataURL = pending.directoryURL.appendingPathComponent("meta.json")
+        let metadataBefore = try Data(contentsOf: metadataURL)
+
+        history.refresh()
+
+        #expect(try Data(contentsOf: pending.audioURL) == live)
+        #expect(try Data(contentsOf: metadataURL) == metadataBefore)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        #expect(try decoder.decode(DictationRecordingMetadata.self, from: metadataBefore).state == .recording)
+        #expect(history.entries.isEmpty)
+    }
+
+    /// An entry an earlier build recovered kept the empty header and a duration of 0, and if it
+    /// was retried there it's now `failed`. Retrying it repairs the header and saves the real
+    /// duration before the audio reaches the transcriber.
+    @MainActor
+    @Test(arguments: [
+        (DictationRecordingState.interrupted, "Recording was interrupted before transcription finished."),
+        (DictationRecordingState.failed, "No speech was detected"),
+    ])
+    func retryingAnEntryAnEarlierBuildRecoveredRepairsItsHeaderFirst(
+        _ state: DictationRecordingState,
+        _ transcriptionError: String
+    ) async throws {
         let folder = try RecordingFolder()
         defer { folder.remove() }
         let directory = folder.root.appendingPathComponent("1700000000", isDirectory: true)
@@ -147,19 +183,51 @@ import Testing
             result: "",
             audioFile: "output.wav",
             appVersion: "test",
-            transcriptionError: "Recording was interrupted before transcription finished.",
-            state: .interrupted
+            transcriptionError: transcriptionError,
+            state: state
         )).write(to: directory.appendingPathComponent("meta.json"))
         let history = DictationHistoryService(recordingsDirectoryURL: folder.root)
         let entry = try #require(history.entries.first)
+        #expect(entry.state == state)
+        #expect(entry.canTranscribe)
         let transcriber = FrameCountingTranscriber()
         let dictation = DictationService(language: "en-US", history: history, transcriber: transcriber)
 
         await dictation.transcribe(entry)
 
         #expect(transcriber.framesRead == [1_600])
+        #expect(transcriber.recordedDurations == [0.1])
         #expect(history.entries.first?.state == .completed)
         #expect(history.entries.first?.text == "1600 frames")
+        #expect(history.entries.first?.duration == 0.1)
+        let reloaded = DictationHistoryService(recordingsDirectoryURL: folder.root).entries.first
+        #expect(reloaded?.duration == 0.1)
+    }
+
+    /// A closed recording with the right duration is retried as it is.
+    @MainActor
+    @Test func preparingARetryLeavesAClosedRecordingAndItsDurationAlone() throws {
+        let folder = try RecordingFolder()
+        defer { folder.remove() }
+        let history = DictationHistoryService(recordingsDirectoryURL: folder.root)
+        let pending = try history.prepareRecording(capturedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let closed = SyntheticWAV.sine(frames: 1_600)
+        try closed.write(to: pending.audioURL)
+        let entry = try history.completeRecording(
+            pending,
+            text: "",
+            language: "en-US",
+            duration: 0.1,
+            transcriptionError: "No speech was detected"
+        )
+        let metadataURL = pending.directoryURL.appendingPathComponent("meta.json")
+        let metadataBefore = try Data(contentsOf: metadataURL)
+
+        let prepared = history.prepareRetry(entry)
+
+        #expect(prepared == entry)
+        #expect(try Data(contentsOf: pending.audioURL) == closed)
+        #expect(try Data(contentsOf: metadataURL) == metadataBefore)
     }
 }
 
@@ -262,11 +330,13 @@ private struct RecordingFolder {
 @MainActor
 private final class FrameCountingTranscriber: CompletedAudioTranscribing {
     private(set) var framesRead: [AVAudioFramePosition] = []
+    private(set) var recordedDurations: [TimeInterval] = []
     var partialTranscript: String { "" }
 
     func transcribe(audioURL: URL, language: String, recordedDuration: TimeInterval) async throws -> String {
         let frames = (try? AVAudioFile(forReading: audioURL))?.length ?? 0
         framesRead.append(frames)
+        recordedDurations.append(recordedDuration)
         return "\(frames) frames"
     }
 

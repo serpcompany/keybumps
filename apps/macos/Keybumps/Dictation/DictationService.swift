@@ -330,11 +330,10 @@ final class DictationService {
               entry.canTranscribe,
               let audioURL = entry.audioURL else { return }
 
+        let entry = history.prepareRetry(entry)
         let language = entry.language == "und" ? selectedLanguage : entry.language
         retryingEntryID = entry.id
         lastError = nil
-        // An entry recovered before #293 can still have the empty header its interrupted recording left.
-        if entry.state == .interrupted { WAVHeaderRepair.repairFile(at: audioURL) }
         do {
             try history.markTranscribing(entry, language: language)
             let transcript = try await transcribeCompletedAudio(
