@@ -542,6 +542,7 @@ struct DictationSettingsView: View {
                         selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) }),
                         options: model.dictation.availableLanguages.map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
                     )
+                    .accessibilityIdentifier("settings.dictation.language")
                 }
             }
             DictationTranscriptionEngineSection()
@@ -555,6 +556,7 @@ struct DictationSettingsView: View {
                         ),
                         options: DictationDurationLimit.allCases.map { ($0, $0.title) }
                     )
+                    .accessibilityIdentifier("settings.dictation.durationLimit")
                     .disabled(model.dictation.phase == .recording || model.dictation.phase == .transcribing)
                 } label: {
                     SettingsRowLabel(

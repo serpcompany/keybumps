@@ -56,6 +56,24 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(element("problemReport.send").isEnabled)
     }
 
+    /// #286: Dictation's dropdowns open and change the setting. It drives Recognition language,
+    /// which is near the top: on CI's 1024×768 screen the Settings window reaches under the Dock,
+    /// so the last row (Recording length, the same `SettingsDropdown`) can't be clicked there.
+    func testDictationDropdownsOpenAndChangeTheSetting() {
+        launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
+        let language = element("settings.dictation.language")
+        XCTAssertTrue(language.waitForExistence(timeout: 20))
+        XCTAssertTrue(element("settings.dictation.durationLimit").exists)
+
+        language.click()
+        // The pop-up's own items; `app.menuItems` would also match the menu bar's.
+        let first = language.menuItems.element(boundBy: 0)
+        XCTAssertTrue(first.waitForExistence(timeout: 5), "The language dropdown opens its menu")
+        let title = first.title
+        first.click()
+        XCTAssertEqual(language.value as? String, title, "Picking a language changes the setting")
+    }
+
     func testEscapeClosesSettings() {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         let detail = element("settings.detail.general")

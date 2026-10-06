@@ -227,28 +227,23 @@ struct SettingsButtonStyle: ButtonStyle {
     }
 }
 
-/// Raycast's borderless dropdown: the selected value and a small chevron.
+/// A native pop-up menu. It used to be a `Menu` wrapping an inline `Picker`, which stopped
+/// opening under the page's custom button style (#286); a menu-style `Picker` is a real pop-up
+/// button that button styles don't touch.
 struct SettingsDropdown<Value: Hashable>: View {
     let title: String
     @Binding var selection: Value
     let options: [(value: Value, label: String)]
 
     var body: some View {
-        Menu {
-            Picker(title, selection: $selection) {
-                ForEach(options, id: \.value) { option in
-                    Text(option.label).tag(option.value)
-                }
+        Picker(title, selection: $selection) {
+            ForEach(options, id: \.value) { option in
+                Text(option.label).tag(option.value)
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
-        } label: {
-            Text(options.first { $0.value == selection }?.label ?? "")
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.visible)
+        .pickerStyle(.menu)
+        .labelsHidden()
         .fixedSize()
-        .accessibilityLabel(title)
     }
 }
 
