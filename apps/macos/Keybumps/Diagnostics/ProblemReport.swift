@@ -59,6 +59,9 @@ extension ProblemReportDiagnostics {
 /// A problem someone describes in Report a Problem…, sent as an ordinary Sentry event so it passes
 /// `CrashReportScrubber` like every other report. (Sentry's user-feedback API skips that hook.)
 struct ProblemReport {
+    /// Marks a problem report, so the scrubber treats its message as the person's own words.
+    static let tag = (key: "report", value: "problem")
+
     var description: String
     var contactEmail: String
     var diagnostics: ProblemReportDiagnostics
@@ -70,10 +73,14 @@ struct ProblemReport {
     func event() -> Event {
         let event = Event(level: .info)
         event.message = SentryMessage(formatted: description.trimmingCharacters(in: .whitespacesAndNewlines))
-        event.tags = ["report": "problem"]
+        event.tags = [Self.tag.key: Self.tag.value]
         // Each report is its own issue: two people's descriptions never share a cause by wording.
         event.fingerprint = ["problem-report", event.eventId.sentryIdString]
-        var report: [String: Any] = ["crash_reports": diagnostics.sendsCrashReports ? "on" : "off"]
+        // Every line the person saw, so what they were shown is what's sent.
+        var report: [String: Any] = [
+            "crash_reports": diagnostics.sendsCrashReports ? "on" : "off",
+            "details": diagnostics.lines,
+        ]
         let email = contactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         if !email.isEmpty { report["contact"] = email }
         event.context = [
@@ -86,6 +93,7 @@ struct ProblemReport {
 
 enum ProblemReportCopy {
     static let note = "Keybumps sends your report to its developers through Sentry. It removes file paths, links, and email addresses from what you write, so add your email above if you'd like a reply."
+    static let alsoAdded = "Sentry also adds technical details about this Mac's state, such as memory in use and Low Power Mode."
     static let unavailable = "This build of Keybumps can't send reports. Email support@keybumps.app instead."
     static let sent = "Thanks. Your report is on its way."
 }
@@ -191,6 +199,12 @@ struct ProblemReportView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("problemReport.included")
+            Text(ProblemReportCopy.alsoAdded)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
         }
         HStack {
             Spacer()

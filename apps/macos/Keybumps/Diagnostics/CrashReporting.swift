@@ -47,7 +47,7 @@ enum CrashReportScrubber {
     /// bracket. Not at a space or an apostrophe, which file names contain ("Pat's Q3 plan.txt").
     private static let end = #"\n"“”<>"#
 
-    private static let rules: [(NSRegularExpression, String)] = [
+    private static let quotedNameRules: [(NSRegularExpression, String)] = compile([
         // Cocoa puts a file's name in quotes, which depend on the language: “Q3 plan.txt”
         // (English, Japanese), „…“ (German), „…” (Polish), ”…” (Swedish), « … » (French),
         // »…« (Slovenian), 「…」 (Traditional Chinese), ״…״ (Hebrew), "…" (Arabic). Korean and
@@ -56,22 +56,39 @@ enum CrashReportScrubber {
         (#"「[^」\n]*」"#, "“<name>”"),
         (#"״[^״\n]*״"#, "“<name>”"),
         (#""[^"\n]*""#, "“<name>”"),
+    ])
+
+    private static let pathRules: [(NSRegularExpression, String)] = compile([
         // A URL or path runs to the end of the line or the next double quote: losing the rest of
         // a message is better than leaking a file name.
         (#"[A-Za-z][A-Za-z0-9+.\-]*://[^"# + end + "]*", "<url>"),
         (#"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#, "<email>"),
         (#"(?:/Users|/Volumes|/private|/tmp|/var/folders)/[^"# + end + "]*", "<path>"),
         (#"~/[^"# + end + "]*", "<path>"),
-    ].map { pattern, replacement in
-        // The patterns are constants; a typo fails every scrubber test.
-        (try! NSRegularExpression(pattern: pattern), replacement)
+    ])
+
+    private static func compile(_ rules: [(String, String)]) -> [(NSRegularExpression, String)] {
+        rules.map { pattern, replacement in
+            // The patterns are constants; a typo fails every scrubber test.
+            (try! NSRegularExpression(pattern: pattern), replacement)
+        }
     }
 
-    static func scrub(_ text: String) -> String {
+    private static func apply(_ rules: [(NSRegularExpression, String)], to text: String) -> String {
         rules.reduce(text) { text, rule in
             let range = NSRange(text.startIndex..., in: text)
             return rule.0.stringByReplacingMatches(in: text, range: range, withTemplate: rule.1)
         }
+    }
+
+    static func scrub(_ text: String) -> String {
+        apply(pathRules, to: apply(quotedNameRules, to: text))
+    }
+
+    /// What a person writes in a problem report: paths, URLs, and email addresses go, but quoted
+    /// text stays, since it's their words (“Language” doesn't open), not a name Cocoa quoted.
+    static func scrubWritten(_ text: String) -> String {
+        apply(pathRules, to: text)
     }
 
     static func scrub(_ text: String?) -> String? {
@@ -108,7 +125,8 @@ enum CrashReportScrubber {
         // Sentry's random install identifier, and nothing else.
         event.user = event.user?.userId.map { User(userId: $0) }
         if let message = event.message {
-            event.message = SentryMessage(formatted: scrub(message.formatted))
+            let isWritten = event.tags?[ProblemReport.tag.key] == ProblemReport.tag.value
+            event.message = SentryMessage(formatted: isWritten ? scrubWritten(message.formatted) : scrub(message.formatted))
         }
         event.exceptions?.forEach { exception in
             exception.value = scrub(exception.value)
@@ -156,6 +174,8 @@ enum CrashReporter {
     private static var mode = Mode.off
     /// Problem reports still being sent while Sentry runs only for them.
     private static var reportsInFlight = 0
+    /// Reports were turned on while a problem report was still sending; they start once it's gone.
+    private static var startsWhenSent = false
 
     /// Whether crashes and freezes are being reported.
     static var isRunning: Bool { mode == .reporting }
@@ -190,6 +210,7 @@ enum CrashReporter {
                 configure(options, dsn: dsn, environment: currentEnvironment())
                 options.enableCrashHandler = false
                 options.enableAppHangTracking = false
+                options.cacheDirectoryPath = sendOnlyCacheDirectory(base: options.cacheDirectoryPath)
             }
             mode = .sendingOnly
         }
@@ -197,7 +218,7 @@ enum CrashReporter {
         SentrySDK.capture(event: report.event())
         guard mode == .sendingOnly else { return true }
         reportsInFlight += 1
-        // Closing at once would leave the report on disk until reports are next turned on.
+        // Closing at once would leave the report in its queue until the next problem report.
         Task.detached(priority: .utility) {
             SentrySDK.flush(timeout: 15)
             await MainActor.run { finishSendingOnly() }
@@ -210,6 +231,16 @@ enum CrashReporter {
         guard mode == .sendingOnly, reportsInFlight == 0 else { return }
         SentrySDK.close()
         mode = .off
+        if startsWhenSent {
+            startsWhenSent = false
+            start()
+        }
+    }
+
+    /// Sentry's queue while it runs only to send problem reports: apart from its usual queue, so a
+    /// crash report queued before reports were turned off never goes out with a problem report.
+    nonisolated static func sendOnlyCacheDirectory(base: String) -> String {
+        (base as NSString).appendingPathComponent("Keybumps problem reports")
     }
 
     private static func destination(bundle: Bundle = .main) -> String? {
@@ -222,8 +253,10 @@ enum CrashReporter {
 
     private static func start() {
         guard mode != .reporting, let dsn = destination() else { return }
-        // A report still sending stays queued on disk, and the full start sends it.
-        if mode == .sendingOnly { SentrySDK.close() }
+        if mode == .sendingOnly {
+            startsWhenSent = true
+            return
+        }
         let environment = currentEnvironment()
         SentrySDK.start { configure($0, dsn: dsn, environment: environment) }
         mode = .reporting
@@ -265,6 +298,7 @@ enum CrashReporter {
     }
 
     private static func stop() {
+        startsWhenSent = false
         guard mode == .reporting else { return }
         SentrySDK.close()
         mode = .off

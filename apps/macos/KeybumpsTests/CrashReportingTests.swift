@@ -199,6 +199,8 @@ struct ProblemReportTests {
         #expect(event.context?["report"]?["contact"] as? String == "pat@example.com")
         #expect(event.context?["report"]?["crash_reports"] as? String == "off")
         #expect(event.context?["permissions"]?["Microphone"] as? String == "Denied")
+        // Everything the window showed, chip and memory included, which Sentry doesn't send itself.
+        #expect(event.context?["report"]?["details"] as? [String] == diagnostics.lines)
 
         let anonymous = ProblemReport(description: "x", contactEmail: "", diagnostics: diagnostics).event()
         #expect(anonymous.context?["report"]?["contact"] == nil)
@@ -215,6 +217,23 @@ struct ProblemReportTests {
         #expect(scrubbed.message?.formatted == "Opening <url>\nSo does <path>")
         #expect(scrubbed.context?["report"]?["contact"] as? String == "pat@example.com")
         #expect(scrubbed.context?["permissions"]?["Accessibility"] as? String == "Granted")
+    }
+
+    @Test func quotedWordsInAReportStayButQuotedNamesInACrashGo() {
+        let written = "The “Language” menu doesn't open in /Users/pat/Notes"
+        let report = ProblemReport(description: written, contactEmail: "", diagnostics: diagnostics).event()
+        #expect(CrashReportScrubber.scrub(report).message?.formatted == "The “Language” menu doesn't open in <path>")
+
+        let crash = Event(level: .error)
+        crash.message = SentryMessage(formatted: written)
+        #expect(CrashReportScrubber.scrub(crash).message?.formatted == "The “<name>” menu doesn't open in <path>")
+    }
+
+    @Test func problemReportsSentWithReportsOffQueueApartFromCrashReports() {
+        let base = "/Users/pat/Library/Caches"
+        let queue = CrashReporter.sendOnlyCacheDirectory(base: base)
+        #expect(queue != base)
+        #expect(queue.hasPrefix(base + "/"))
     }
 
     @Test func aBuildWithNoDestinationCantSendReports() {
