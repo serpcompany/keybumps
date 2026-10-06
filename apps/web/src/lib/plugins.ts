@@ -13,7 +13,8 @@
  * - `apps/macos/Keybumps/Capabilities/PluginManifest.swift`: `PluginCategory`, and the publisher
  *   (every plugin is official, by Keybumps).
  * - `apps/macos/Keybumps/Infrastructure/GlobalShortcutCoordinator.swift`: the `CapabilityShortcut`
- *   titles and default bindings (`DefaultShortcut`), and Dictation's Escape.
+ *   titles and default bindings (`DefaultShortcut`), and Dictation's Escape. A shortcut that
+ *   doesn't work from any app (`worksEverywhere` false) copies its `detail` into `note`.
  * - `apps/macos/Keybumps/Capabilities/CapabilityModule.swift`: `CapabilityCatalog.descriptors`
  *   (the order) and `CapabilityCatalog.defaultCapabilities`.
  * - `apps/macos/Keybumps/WindowManagement/WindowAction.swift`: Window Manager's 30 window
@@ -71,7 +72,7 @@ export type PluginShortcut = {
   title: string
   /** The default binding as the app shows it, or null when it starts unassigned. */
   keys: string | null
-  /** When it works, for a shortcut that doesn't work from any app (`worksEverywhere`). */
+  /** When it works, from `CapabilityShortcut.detail`, for one that doesn't work from any app. */
   note?: string
 }
 

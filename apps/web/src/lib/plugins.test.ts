@@ -348,8 +348,18 @@ describe('Dictation shortcuts', () => {
         note: 'Only while Dictation is recording or transcribing'
       }
     ])
-    expect(renderPage(pluginFor('dictation'))).toContain(
-      'Only while Dictation is recording or transcribing'
-    )
+    const html = renderPage(pluginFor('dictation'))
+    expect(html).toContain('Only while Dictation is recording or transcribing')
+    expect(html).toContain('Start &amp; Stop Dictation')
+    expect(html).toContain('<kbd>Escape</kbd>')
+    // Cancel Dictation doesn't work from any app, so the page doesn't say they all do.
+    expect(html).not.toContain('shortcuts from any app')
+    expect(commandCount(pluginFor('dictation'))).toBe(3)
+    expect(cardShortcut(pluginFor('dictation'))?.label).toBe('Start & Stop Dictation, from any app')
+  })
+
+  it('counts only shortcuts that work from any app in at a glance', () => {
+    const glance = renderPage(pluginFor('dictation')).split('class="at-a-glance"')[1] ?? ''
+    expect(glance).not.toContain('by default, such as')
   })
 })
