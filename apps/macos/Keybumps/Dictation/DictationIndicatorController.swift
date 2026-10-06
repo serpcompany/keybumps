@@ -48,6 +48,12 @@ class DictationIndicatorController {
         }
     }
 
+    /// Cancel Dictation's shortcut, which VoiceOver names while recording; nil when it's cleared.
+    var cancelShortcut: String? {
+        get { state.cancelShortcut }
+        set { state.cancelShortcut = newValue }
+    }
+
     /// The Dictation shortcut, shown while recording as the key that finishes it.
     var finishShortcut: String? {
         get { state.finishShortcut }
@@ -134,6 +140,7 @@ final class DictationNotchState {
     var level: Float = 0
     var recordingStartedAt = Date()
     var finishShortcut: String?
+    var cancelShortcut: String? = DefaultShortcut.cancelDictation.displayName
     var geometry = DictationNotchGeometry(notchWidth: 0, notchHeight: 32, isFailure: false, finishKeysWidth: 0)
 }
 
@@ -271,7 +278,7 @@ struct DictationNotchView: View {
         case .recording:
             HStack(spacing: 8) {
                 LevelBars(state: state, reduceMotion: reduceMotion)
-                // The key that finishes the recording (Escape cancels, so it is not shown here).
+                // The key that finishes the recording (the Cancel Dictation shortcut cancels, so it isn't shown here).
                 if let shortcut = state.finishShortcut {
                     HStack(spacing: 2) {
                         ForEach(ShortcutKeycapPresentation(shortcut: shortcut).keys, id: \.self) { key in
@@ -293,12 +300,22 @@ struct DictationNotchView: View {
         }
     }
 
+    /// What VoiceOver reads while recording: the keys that finish and cancel it, when set.
+    static func recordingLabel(finish: String?, cancel: String?) -> String {
+        let finishKeys = finish.flatMap(KeyboardShortcutRegistry.accessibilityDescription(for:))
+        let cancelKeys = cancel.flatMap(KeyboardShortcutRegistry.accessibilityDescription(for:))
+        switch (finishKeys, cancelKeys) {
+        case let (finish?, cancel?): return "Dictation recording. Press \(finish) to finish, or \(cancel) to cancel."
+        case let (finish?, nil): return "Dictation recording. Press \(finish) to finish."
+        case let (nil, cancel?): return "Dictation recording. Press \(cancel) to cancel."
+        case (nil, nil): return "Dictation recording."
+        }
+    }
+
     private var accessibilityLabel: String {
         switch state.phase {
         case .recording:
-            state.finishShortcut.flatMap(KeyboardShortcutRegistry.accessibilityDescription(for:))
-                .map { "Dictation recording. Press \($0) to finish, or Escape to cancel." }
-                ?? "Dictation recording. Press Escape to cancel."
+            Self.recordingLabel(finish: state.finishShortcut, cancel: state.cancelShortcut)
         case .failed(let message): "Dictation failed. \(message)"
         default: "Dictation \(state.phase.label.lowercased())"
         }

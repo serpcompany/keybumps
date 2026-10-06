@@ -48,7 +48,7 @@ enum DictationEscapeRegistration {
     }
 }
 
-/// Owns the Dictation shortcut, the cancellable-phase Escape shortcut, the recording indicator,
+/// Owns the Dictation shortcut, the cancellable-phase Cancel Dictation shortcut, the recording indicator,
 /// and Dictation's phase report to update-installation safety.
 @MainActor
 final class DictationModule: CapabilityModule {
@@ -59,6 +59,11 @@ final class DictationModule: CapabilityModule {
     private let updateSafety: CapabilityUpdateSafety
     /// Set by the shell, which routes the shortcut to Dictation or to its permission setup.
     var onShortcut: (() -> Void)?
+    /// Cancel Dictation's binding from preferences; Esc unless the owner changed or cleared it.
+    private var cancelBinding: ShortcutBinding? = DefaultShortcut.cancelDictation
+    /// The last phase Dictation reported, for re-registering Cancel when its binding changes.
+    private var phase: DictationPhase = .idle
+    private var isEnabled = true
 
     init(
         dictation: DictationService,
@@ -72,6 +77,7 @@ final class DictationModule: CapabilityModule {
         self.updateSafety = updateSafety
         dictation.onPhaseChange = { [weak self] phase in
             guard let self else { return }
+            self.phase = phase
             self.indicator.update(phase)
             self.updateEscapeRegistration(for: phase)
             self.updateSafety.update(dictationPhase: phase)
@@ -81,6 +87,16 @@ final class DictationModule: CapabilityModule {
 
     func apply(_ context: CapabilityContext) {
         indicator.finishShortcut = context.preferences.capabilityShortcut(for: .dictation)?.displayName
+        // Cancel Dictation is registered only while Dictation is cancellable, and re-registered
+        // only when its binding or Dictation's on/off state changes.
+        let binding = context.preferences.capabilityShortcut(for: .cancelDictation)
+        indicator.cancelShortcut = binding?.displayName
+        let enabled = context.isEnabled(capability)
+        if binding != cancelBinding || enabled != isEnabled {
+            cancelBinding = binding
+            isEnabled = enabled
+            updateEscapeRegistration(for: phase)
+        }
         context.configureShortcut(
             owner: CapabilityShortcut.dictation.ownerID,
             for: capability,
@@ -91,18 +107,19 @@ final class DictationModule: CapabilityModule {
     }
 
     func deactivate(_ context: CapabilityContext) {
+        isEnabled = false
         dictation.cancel()
         shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
     }
 
     private func updateEscapeRegistration(for phase: DictationPhase) {
-        guard DictationEscapeRegistration.shouldRegister(for: phase) else {
+        guard isEnabled, DictationEscapeRegistration.shouldRegister(for: phase), let cancelBinding else {
             shortcuts.unregister(owner: DictationEscapeRegistration.ownerID)
             return
         }
         shortcuts.register(
             owner: DictationEscapeRegistration.ownerID,
-            binding: DefaultShortcut.cancelDictation
+            binding: cancelBinding
         ) { [weak dictation] in
             dictation?.cancel()
         }

@@ -261,6 +261,9 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case quickSearch
     case clipboardHistory
     case dictation
+    /// Registered only while Dictation is recording or transcribing (`DictationModule`), so its
+    /// key, Esc by default, works normally everywhere else.
+    case cancelDictation
     case screenshotScreen
     case screenshotScreenAndEdit
     case screenshotArea
@@ -279,7 +282,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .quickSearch: .quickSearch
         case .clipboardHistory: .clipboardHistory
-        case .dictation: .dictation
+        case .dictation, .cancelDictation: .dictation
         case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea: .screenshotTools
         case .snippets: .snippets
         case .timer: .timer
@@ -291,7 +294,8 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .quickSearch: "Open Quick Search"
         case .clipboardHistory: "Open Clipboard History"
-        case .dictation: "Start or stop Dictation"
+        case .dictation: "Start & Stop Dictation"
+        case .cancelDictation: "Cancel Dictation"
         case .screenshotScreen: "Screenshot Screen"
         case .screenshotScreenAndEdit: "Screenshot Screen and Edit"
         case .screenshotArea: "Screenshot Area"
@@ -301,12 +305,25 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Whether the shortcut works from anywhere. Cancel Dictation works only while Dictation is
+    /// recording or transcribing, which `detail` says in Settings.
+    var worksEverywhere: Bool { self != .cancelDictation }
+
+    /// A note under the title, for a shortcut that works only at certain times.
+    var detail: String? {
+        switch self {
+        case .cancelDictation: "Only while Dictation is recording or transcribing"
+        default: nil
+        }
+    }
+
     /// The binding a new install starts with; nil for a shortcut that starts unassigned.
     var defaultBinding: ShortcutBinding? {
         switch self {
         case .quickSearch: DefaultShortcut.quickSearch
         case .clipboardHistory: DefaultShortcut.clipboard
         case .dictation: DefaultShortcut.dictation
+        case .cancelDictation: DefaultShortcut.cancelDictation
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea

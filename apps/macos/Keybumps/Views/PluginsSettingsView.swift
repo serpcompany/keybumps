@@ -30,7 +30,7 @@ enum PluginsTable {
 
     /// A plugin's first assigned shortcut, and how many more it has, such as "⇧⌘2 +2".
     static func shortcutText(for descriptor: CapabilityDescriptor, binding: (CapabilityShortcut) -> ShortcutBinding?) -> String {
-        let assigned = descriptor.shortcuts.compactMap { binding($0)?.displayName }
+        let assigned = descriptor.shortcuts.filter(\.worksEverywhere).compactMap { binding($0)?.displayName }
         guard let first = assigned.first else { return "" }
         return assigned.count > 1 ? "\(first) +\(assigned.count - 1)" : first
     }
