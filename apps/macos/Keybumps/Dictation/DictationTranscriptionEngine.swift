@@ -26,7 +26,7 @@ enum DictationTranscriptionEngine: String, Codable, CaseIterable, Identifiable, 
         case .whisperMediumEnglish: "English only · About 1.5 GB"
         case .whisperMediumMultilingual: "English and Japanese · About 1.5 GB"
         case .whisperTurboCompressed: "English and Japanese · About 627 MB"
-        case .whisperCppTurbo: "English and Japanese · About 574 MB · Fastest"
+        case .whisperCppTurbo: "English and Japanese · About 574 MB"
         }
     }
 
@@ -51,6 +51,9 @@ enum DictationTranscriptionEngine: String, Codable, CaseIterable, Identifiable, 
     }
 
     var requiresDownload: Bool { modelIdentifier != nil }
+
+    /// The model Settings marks Recommended: the fastest, and as accurate as any (ADR 0008).
+    var isRecommended: Bool { self == .whisperCppTurbo }
 
     func supports(language identifier: String) -> Bool {
         guard self == .whisperMediumEnglish else { return true }

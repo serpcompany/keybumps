@@ -387,3 +387,21 @@ struct SettingsSidebarButtonStyle: ButtonStyle {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
+
+/// A small capsule label beside a Settings row's title, such as "Recommended".
+struct SettingsBadge: View {
+    private let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.accentColor.opacity(0.16)))
+    }
+}

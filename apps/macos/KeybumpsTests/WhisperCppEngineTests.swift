@@ -18,6 +18,11 @@ import Testing
         #expect(WhisperCppModel.turbo.source.absoluteString.contains("5359861c739e955e79d9a303bcbc70fb988958b1"))
     }
 
+    @Test func onlyTheFastTurboIsMarkedRecommended() {
+        #expect(DictationTranscriptionEngine.allCases.filter(\.isRecommended) == [.whisperCppTurbo])
+        #expect(DictationTranscriptionEngine.whisperCppTurbo.detail == "English and Japanese · About 574 MB")
+    }
+
     @Test func theModelManagerInstallsAFolderHoldingTheGgmlFile() async throws {
         let root = temporaryFolder("KeybumpsWhisperCppInstall")
         defer { try? FileManager.default.removeItem(at: root) }

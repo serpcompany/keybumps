@@ -600,7 +600,13 @@ private struct DictationTranscriptionEngineRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(engine.title)
+                HStack(spacing: 6) {
+                    Text(engine.title)
+                    if engine.isRecommended {
+                        SettingsBadge("Recommended")
+                            .accessibilityIdentifier("dictationEngine.recommended")
+                    }
+                }
                 Text(isCompatible ? engine.detail : "English language selection required")
                     .font(.system(size: SettingsTheme.subtitleSize))
                     .foregroundStyle(isCompatible ? Color.secondary : Color.orange)
