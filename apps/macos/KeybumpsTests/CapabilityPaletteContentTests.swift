@@ -11,8 +11,14 @@ import Testing
 @Suite("Capability modules: palette tab rows")
 struct CapabilityPaletteContentTests {
     static func key(_ keyCode: Int, _ characters: String = "", command: Bool = false) -> NSEvent {
-        NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: command ? [.command] : [],
+        key(keyCode, characters, modifiers: command ? [.command] : [])
+    }
+
+    /// Arrow keys carry the function and numeric-pad flags, as real ones do.
+    static func key(_ keyCode: Int, _ characters: String = "", modifiers: NSEvent.ModifierFlags) -> NSEvent {
+        let isArrow = [kVK_LeftArrow, kVK_RightArrow, kVK_DownArrow, kVK_UpArrow].contains(keyCode)
+        return NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: isArrow ? modifiers.union([.function, .numericPad]) : modifiers,
             timestamp: 0, windowNumber: 0, context: nil, characters: characters,
             charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode)
         )!
@@ -103,11 +109,47 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
         #expect(fixture.palette.state.tab == .search)
 
-        // With Command (or Shift, Option, Control), or text to edit, they stay with the search field.
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow, command: true)) != nil)
+        // With Shift, Option, Command, or Control, or text to edit, they stay with the search field.
+        for modifier: NSEvent.ModifierFlags in [.shift, .option, .command, .control] {
+            #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow, modifiers: modifier)) != nil)
+        }
         fixture.search.query = "made-up"
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil)
         #expect(fixture.palette.state.tab == .search)
+    }
+
+    @Test("In a grid, Left on the first item, Right on the last, or either key in an empty grid switches tabs")
+    func gridEdgesSwitchTabs() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 6
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.tab == .keyboardShortcutter, "Right inside the grid moves the selection")
+        #expect(fixture.palette.state.selection == 1)
+        fixture.palette.state.selection = 0
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .timers, "Left on the first item goes to the tab before; Emoji is off")
+
+        fixture.content.rows = 0
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .timers, "An empty grid doesn't trap Left and Right")
+    }
+
+    @Test("An empty Screenshots grid passes Left and Right on to the tabs beside it")
+    func emptyScreenshotsSwitchesTabs() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.screenshots)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.tab == .dictation)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .screenshots)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .clipboard)
     }
 
     @Test("A tab's rows can copy through the palette, kept out of Clipboard History")

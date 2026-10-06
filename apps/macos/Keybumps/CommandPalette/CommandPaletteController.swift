@@ -451,14 +451,21 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         }
 
-        // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control they
-        // stay with the search field.
+        // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control, or
+        // while an input method is composing, they stay with the search field. Left on the first
+        // item and Right on the last (or in an empty grid) switch tabs, as in a list.
         if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
-           event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
+           !isComposingText, event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
             if !(0..<itemCount).contains(state.selection) {
-                state.selection = 0
+                if itemCount == 0, move == .left || move == .right {
+                    switchTab(by: move == .right ? 1 : -1)
+                } else {
+                    state.selection = 0
+                }
             } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
+            } else if move == .left || move == .right {
+                switchTab(by: move == .right ? 1 : -1)
             }
             return nil
         }
@@ -475,14 +482,15 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             return nil
         case 123, 124:
             // With text in the search field, Left and Right move the caret. Otherwise they move
-            // through the screenshot grid, or switch to the tab beside this one.
-            guard activeQuery.isEmpty, !isComposingText,
+            // through the screenshot grid, or switch to the tab beside this one: from a list, from an
+            // empty grid, or from the grid's first (Left) or last (Right) screenshot.
+            guard activeQuery.isEmpty, !isComposingText, !isSelectingOtherText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
-            if state.tab == .screenshots {
-                moveSelection(offset)
-            } else if let tab = CommandPaletteTab.adjacent(to: state.tab, offset: offset, in: visibleTabs) {
-                selectTab(tab)
+            if state.tab == .screenshots, (0..<itemCount).contains(state.selection + offset) {
+                state.selection += offset
+            } else {
+                switchTab(by: offset)
             }
             return nil
         case 36:
@@ -579,6 +587,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The tabs in the tab bar, which Command-number and Left and Right switch between.
     private var visibleTabs: [CommandPaletteTab] {
         CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
+    }
+
+    /// Switches to the tab beside this one in the tab bar, if there is one.
+    private func switchTab(by offset: Int) {
+        guard let tab = CommandPaletteTab.adjacent(to: state.tab, offset: offset, in: visibleTabs) else { return }
+        selectTab(tab)
+    }
+
+    /// Whether the focus is in selectable text other than the search field, such as a Dictation
+    /// transcript, where Left and Right move through the text.
+    private var isSelectingOtherText: Bool {
+        guard let textView = panel?.firstResponder as? NSTextView else { return false }
+        return !textView.isFieldEditor
     }
 
     /// Whether an input method (Japanese, Chinese, and so on) is composing in the search field,
@@ -964,6 +985,7 @@ private struct CommandPaletteView: View {
                     PaletteFooter(
                         tab: state.tab,
                         isGrid: state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
+                        isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
                         selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
                         contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
                         openSettings: { runCommand(.keybumpsSettings) }
@@ -1957,6 +1979,8 @@ private struct PaletteFooter: View {
     let tab: CommandPaletteTab
     /// Whether Left and Right move the selection too.
     let isGrid: Bool
+    /// Whether the search field is empty, so Left and Right switch tabs rather than move the caret.
+    let isSearchEmpty: Bool
     /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
     let selectedSearchItem: QuickSearchItem?
     /// A module tab's actions for its selected row; they replace the tab's registered titles.
@@ -1975,7 +1999,7 @@ private struct PaletteFooter: View {
             Spacer()
             HStack(spacing: 14) {
                 hint("Select", keys: isGrid ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
-                if !isGrid {
+                if !isGrid, isSearchEmpty {
                     hint("Change Tab", keys: ["←", "→"], isPrimary: false)
                 }
                 if let primaryActionTitle {
