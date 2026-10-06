@@ -48,7 +48,7 @@ enum DictationEscapeRegistration {
     }
 }
 
-/// Owns the Dictation shortcut, the cancellable-phase Escape shortcut, the recording indicator,
+/// Owns the Dictation shortcut, the cancellable-phase Cancel Dictation shortcut, the recording indicator,
 /// and Dictation's phase report to update-installation safety.
 @MainActor
 final class DictationModule: CapabilityModule {

@@ -305,8 +305,9 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Whether the shortcut works from anywhere, rather than only at certain times (`detail`).
-    var worksEverywhere: Bool { detail == nil }
+    /// Whether the shortcut works from anywhere. Cancel Dictation works only while Dictation is
+    /// recording or transcribing, which `detail` says in Settings.
+    var worksEverywhere: Bool { self != .cancelDictation }
 
     /// A note under the title, for a shortcut that works only at certain times.
     var detail: String? {

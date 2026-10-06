@@ -278,7 +278,7 @@ struct DictationNotchView: View {
         case .recording:
             HStack(spacing: 8) {
                 LevelBars(state: state, reduceMotion: reduceMotion)
-                // The key that finishes the recording (Escape cancels, so it is not shown here).
+                // The key that finishes the recording (the Cancel Dictation shortcut cancels, so it isn't shown here).
                 if let shortcut = state.finishShortcut {
                     HStack(spacing: 2) {
                         ForEach(ShortcutKeycapPresentation(shortcut: shortcut).keys, id: \.self) { key in
