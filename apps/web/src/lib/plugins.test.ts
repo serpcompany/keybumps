@@ -60,6 +60,15 @@ describe('cardShortcut', () => {
     })
   })
 
+  it('names the plugin when the hotkey’s title doesn’t', () => {
+    expect(cardShortcut(pluginFor('window-manager'))?.label).toBe(
+      'Window Manager: Left, from any app'
+    )
+    expect(cardShortcut(pluginFor('screenshot-tools'))?.label).toBe(
+      'Screenshot Screen, from any app'
+    )
+  })
+
   it('falls back to the Command Palette tab when no hotkey is assigned', () => {
     expect(cardShortcut(pluginFor('snippets'))).toEqual({
       keys: '⌘5',

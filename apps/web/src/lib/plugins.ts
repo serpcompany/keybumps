@@ -486,20 +486,25 @@ export function otherPlugins(slug: string, count = 3): Plugin[] {
   )
 }
 
-/** Its commands: its palette tab, if it has one, and its shortcuts. */
 /**
- * The key a home page card shows, with a tooltip saying what kind it is: its first default hotkey,
+ * The key a home page card shows, with a label saying what kind it is: its first default hotkey,
  * which works from any app, or else the Command-number of its Command Palette tab. Null when it has
  * neither, or its tab is hidden until a setting shows it.
  */
 export function cardShortcut(plugin: Plugin): { keys: string; label: string } | null {
   const hotkey = plugin.shortcuts.find(shortcut => shortcut.keys)
-  if (hotkey?.keys) return { keys: hotkey.keys, label: `${hotkey.title}, from any app` }
+  if (hotkey?.keys) {
+    // Some titles assume they're read on the plugin's own page, such as Window Manager's "Left".
+    const named = plugin.name.split(' ').some(word => hotkey.title.includes(word))
+    const what = named ? hotkey.title : `${plugin.name}: ${hotkey.title}`
+    return { keys: hotkey.keys, label: `${what}, from any app` }
+  }
   const tab = plugin.paletteTab
   if (!tab || tab.hiddenUnless) return null
   return { keys: `⌘${tab.commandKey}`, label: `Its Command Palette tab, ${tab.name}` }
 }
 
+/** Its commands: its palette tab, if it has one, and its shortcuts. */
 export function commandCount(plugin: Plugin): number {
   return (plugin.paletteTab ? 1 : 0) + plugin.shortcuts.length
 }

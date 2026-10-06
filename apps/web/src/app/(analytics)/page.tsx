@@ -51,8 +51,8 @@ export default async function Home() {
           </h1>
           <p className="lede">
             Keybumps puts search, clipboard history, screenshots, dictation, and the rest of the
-            utilities you’d install one by one into a single native macOS app — fast, private, and
-            your data stays on your Mac.
+            utilities you’d install one by one into a single native macOS app. It’s fast and
+            private, and what you copy, capture, and dictate stays on your Mac.
           </p>
           <div className="cta-row">
             <a href={release.dmgURL} className="btn btn-lg">
@@ -88,7 +88,12 @@ export default async function Home() {
                       <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={22} />
                       <h3>{plugin.name}</h3>
                     </div>
-                    {shortcut && <kbd title={shortcut.label}>{shortcut.keys}</kbd>}
+                    {shortcut && (
+                      <kbd title={shortcut.label}>
+                        {shortcut.keys}
+                        <span className="sr-only">, {shortcut.label}</span>
+                      </kbd>
+                    )}
                   </div>
                   <p>{plugin.summary}</p>
                 </Link>
