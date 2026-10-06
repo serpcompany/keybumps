@@ -207,6 +207,85 @@ import Testing
         #expect(fixture.loads.count == 2)
     }
 
+    @Test func aCancelEndsATranscriptionWaitingForItsModelAndKeepsTheLoad() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+        let ended = Counter()
+
+        fixture.coordinator.prepare(language: "en-US")
+        await fixture.loads.wait(for: 1)
+        let transcription = Task { @MainActor in
+            defer { ended.increment() }
+            return try await fixture.transcribe()
+        }
+        // The main actor runs jobs in order, so one yield lets the transcription join the load.
+        await Task.yield()
+        fixture.coordinator.cancel()
+
+        // It ends while the model is still loading, not when the load finishes.
+        await ended.wait(for: 1)
+        #expect(fixture.loads.count == 1)
+        fixture.gate.release()
+        await #expect(throws: CancellationError.self) { try await transcription.value }
+        #expect(await fixture.runtime(1).transcribeCount == 0)
+
+        // The next dictation uses the model the cancelled one was waiting for.
+        fixture.coordinator.prepare(language: "en-US")
+        #expect(try await fixture.transcribe() == "load 1")
+        #expect(fixture.loads.count == 1)
+    }
+
+    @Test func aCancelThatMissesTheWaitStillStopsTheTranscriptionOnceTheModelLoads() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+
+        fixture.coordinator.prepare(language: "en-US")
+        await fixture.loads.wait(for: 1)
+        // The cancel runs just before the transcription starts waiting, so there's no wait to end,
+        // as when it lands after the load finished but before the transcription resumed.
+        fixture.selection.onNextRead = { fixture.coordinator.cancel() }
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        // The main actor runs jobs in order, so one yield lets the transcription join the load.
+        await Task.yield()
+        fixture.gate.release()
+
+        await #expect(throws: CancellationError.self) { try await transcription.value }
+        #expect(await fixture.runtime(1).transcribeCount == 0)
+        #expect(fixture.scheduler.scheduledCount == 1)
+    }
+
+    @Test func aModelLoadedForACancelledTranscriptionStillUnloadsWhenIdle() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.remove() }
+
+        // No recording prepared it, as with History Retry, so the cancel finds nothing to unload.
+        fixture.selection.onNextRead = { fixture.coordinator.cancel() }
+        await #expect(throws: CancellationError.self) { try await fixture.transcribe() }
+
+        #expect(fixture.scheduler.scheduledCount == 1)
+        fixture.scheduler.fireLatest()
+        await fixture.runtime(1).unloads.wait(for: 1)
+        #expect(await fixture.runtime(1).transcribeCount == 0)
+    }
+
+    @Test func aCancelThatMissesTheWaitStartsNoNewLoadAfterAnEviction() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+
+        fixture.coordinator.prepare(language: "en-US")
+        await fixture.loads.wait(for: 1)
+        fixture.selection.onNextRead = { fixture.coordinator.cancel() }
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        // The main actor runs jobs in order, so one yield lets the transcription join the load.
+        await Task.yield()
+        fixture.coordinator.selectedModelDidChange()
+        fixture.gate.release()
+
+        await #expect(throws: CancellationError.self) { try await transcription.value }
+        #expect(fixture.loads.count == 1)
+        await fixture.runtime(1).unloads.wait(for: 1)
+    }
+
     @Test func cancellingWithNothingLoadedSchedulesNothing() async throws {
         let fixture = try await Fixture()
         defer { fixture.remove() }
@@ -302,6 +381,178 @@ import Testing
     }
 }
 
+/// #281: Escape while a stopped dictation waits for its model cancels that wait, and the next
+/// dictation's recording is never touched by the stop that was cancelled.
+@MainActor
+@Suite struct DictationCancelDuringModelLoadTests {
+    @Test func escapeDuringTheModelLoadLeavesTheNextDictationAlone() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+        let dictation = try DictationSession(transcriber: fixture.coordinator)
+        defer { dictation.remove() }
+
+        let first = try dictation.recording()
+        dictation.service.beginSessionWithoutMicrophone(recording: first)
+        await fixture.loads.wait(for: 1)
+        dictation.service.toggle()
+        await dictation.phaseChanges.wait(for: 2)
+        try #require(dictation.service.phase == .transcribing)
+
+        dictation.service.cancel()
+        let second = try dictation.recording()
+        dictation.service.beginSessionWithoutMicrophone(recording: second)
+        fixture.gate.release()
+        _ = await fixture.runtime(1)
+        try #require(dictation.service.phase == .recording)
+
+        dictation.service.toggle()
+        await dictation.phaseChanges.wait(for: 7)
+
+        #expect(dictation.phases == [
+            .recording, .transcribing, .idle,
+            .recording, .transcribing, .inserting,
+            .failed(DictationInsertionError.unavailableInSession.localizedDescription),
+        ])
+        #expect(!FileManager.default.fileExists(atPath: first.directoryURL.path))
+        #expect(dictation.history.entries.map(\.id) == [second.id])
+        #expect(dictation.history.entries.first?.state == .completed)
+        #expect(dictation.history.entries.first?.text == "load 1")
+        // The cancelled stop never transcribed; the next dictation used the model it waited for.
+        #expect(await fixture.runtime(1).transcribeCount == 1)
+        #expect(fixture.loads.count == 1)
+    }
+
+    /// The bug's failure case, with a transcriber that ignores the cancel, as the coordinator's did
+    /// while a model loaded: the cancelled stop's transcription returns or fails after the next
+    /// dictation has started.
+    @Test(arguments: [true, false])
+    func aCancelledStopThatFinishesLateLeavesTheNextRecordingAlone(transcriptionSucceeds: Bool) async throws {
+        let transcriber = CancelIgnoringTranscriber(succeeds: transcriptionSucceeds)
+        let dictation = try DictationSession(transcriber: transcriber)
+        defer { dictation.remove() }
+
+        dictation.service.beginSessionWithoutMicrophone(recording: try dictation.recording())
+        dictation.service.toggle()
+        await transcriber.gate.waitForWaiters(1)
+        dictation.service.cancel()
+        let second = try dictation.recording()
+        dictation.service.beginSessionWithoutMicrophone(recording: second)
+
+        transcriber.gate.release()
+        // The cancelled stop runs to its end in the same main-actor job that counts its return.
+        await transcriber.returns.wait(for: 1)
+
+        #expect(dictation.service.phase == .recording)
+        #expect(dictation.service.lastError == nil)
+        #expect(dictation.service.recoveredTranscript == nil)
+        #expect(dictation.history.entries.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: second.audioURL.path))
+        dictation.service.cancel()
+    }
+
+    @Test func twoStopsOfOneRecordingTranscribeItOnce() async throws {
+        let transcriber = CancelIgnoringTranscriber(succeeds: true)
+        let dictation = try DictationSession(transcriber: transcriber)
+        defer { dictation.remove() }
+
+        dictation.service.beginSessionWithoutMicrophone(recording: try dictation.recording())
+        // The shortcut and the duration limit, in the same turn of the main actor.
+        dictation.service.toggle()
+        dictation.service.toggle()
+        await transcriber.gate.waitForWaiters(1)
+        for _ in 0..<20 { await Task.yield() }
+
+        #expect(transcriber.calls == 1)
+        transcriber.gate.release()
+        await transcriber.returns.wait(for: 1)
+        dictation.service.cancel()
+    }
+}
+
+/// A `DictationService` in its own folder whose sessions start without the microphone, recording
+/// every phase it enters. Its paste step is inert and it has no system access, so a finished
+/// transcript ends in "Insertion is unavailable".
+@MainActor
+private final class DictationSession {
+    let root: URL
+    let history: DictationHistoryService
+    let service: DictationService
+    let phaseChanges = Counter()
+    private(set) var phases: [DictationPhase] = []
+    private var recordings = 0
+
+    init(transcriber: any CompletedAudioTranscribing) throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsDictationCancel-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        history = DictationHistoryService(
+            recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true),
+            appVersion: "test"
+        )
+        service = DictationService(
+            language: "en-US",
+            durationLimit: .unlimited,
+            fileManager: FolderRootedFileManager(root: root),
+            history: history,
+            transcriber: transcriber,
+            allowsSystemAccess: false
+        )
+        service.onPhaseChange = { [weak self] phase in
+            self?.phases.append(phase)
+            self?.phaseChanges.increment()
+        }
+    }
+
+    /// A new recording with made-up audio, as the microphone would have written it. Each is a
+    /// second after the last, so it never reuses the folder of one that was discarded.
+    func recording() throws -> PendingDictationRecording {
+        recordings += 1
+        let recording = try history.prepareRecording(
+            capturedAt: Date(timeIntervalSince1970: 1_790_000_000 + TimeInterval(recordings)),
+            language: "en-US"
+        )
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: recording.audioURL)
+        return recording
+    }
+
+    func remove() { try? FileManager.default.removeItem(at: root) }
+}
+
+private final class FolderRootedFileManager: FileManager {
+    private let root: URL
+
+    init(root: URL) {
+        self.root = root
+        super.init()
+    }
+
+    override func urls(for directory: FileManager.SearchPathDirectory, in domainMask: FileManager.SearchPathDomainMask) -> [URL] {
+        [root.appendingPathComponent("\(directory.rawValue)", isDirectory: true)]
+    }
+}
+
+/// Waits for `gate`, then returns a made-up transcript or fails, whatever `cancel()` said.
+@MainActor
+private final class CancelIgnoringTranscriber: CompletedAudioTranscribing {
+    let gate = Gate()
+    let returns = Counter()
+    private let succeeds: Bool
+    private(set) var calls = 0
+    var partialTranscript: String { "" }
+
+    init(succeeds: Bool) { self.succeeds = succeeds }
+
+    func transcribe(audioURL: URL, language: String, recordedDuration: TimeInterval) async throws -> String {
+        calls += 1
+        await gate.wait()
+        returns.increment()
+        guard succeeds else { throw CocoaError(.fileReadCorruptFile) }
+        return "made-up words"
+    }
+
+    func cancel() {}
+}
+
 /// A coordinator over a fake installed model. Load N returns `runtime(N)`, whose transcript is
 /// "load N"; loads listed in `gatedLoads` wait for `gate`, and those in `failingLoads` throw.
 @MainActor
@@ -334,7 +585,7 @@ private final class Fixture {
         let selection = Selection(engine: engine)
         self.selection = selection
         coordinator = DictationTranscriptionCoordinator(
-            selectedEngine: { selection.engine },
+            selectedEngine: { selection.read() },
             modelManager: manager,
             appleTranscriber: PreloadRuntime(transcript: "apple", unloadGate: nil),
             whisperFactory: { _ in
@@ -382,7 +633,17 @@ private final class Fixture {
 @MainActor
 private final class Selection {
     var engine: DictationTranscriptionEngine
+    /// Runs once, the next time the coordinator reads the selection.
+    var onNextRead: (() -> Void)?
+
     init(engine: DictationTranscriptionEngine) { self.engine = engine }
+
+    func read() -> DictationTranscriptionEngine {
+        let action = onNextRead
+        onNextRead = nil
+        action?()
+        return engine
+    }
 }
 
 @MainActor
