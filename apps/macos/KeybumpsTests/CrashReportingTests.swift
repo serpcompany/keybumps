@@ -45,6 +45,8 @@ struct CrashReportingTests {
         let event = Event()
         event.serverName = "Pat's MacBook Pro"
         #expect(beforeSend(event)?.serverName == nil)
+        // Keybumps' ID even on an event that reached Sentry with no user, so Sentry's own never goes.
+        #expect(beforeSend(Event())?.user?.userId == "install-id")
         let beforeBreadcrumb = try #require(options.beforeBreadcrumb)
         #expect(beforeBreadcrumb(Breadcrumb(level: .info, category: "ui.click")) == nil)
     }
@@ -73,6 +75,26 @@ struct CrashReportingTests {
 
         defaults.set("not a uuid", forKey: CrashReportingPolicy.installIDKey)
         #expect(CrashReportingPolicy.installID(defaults: defaults) != "not a uuid")
+    }
+
+    @Test func queuedReportsMoveToTheSamePlaceInAnotherFolder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("Problem reports")
+        let target = root.appendingPathComponent("Sentry")
+        let queued = source.appendingPathComponent("io.sentry/abc123/envelopes")
+        try FileManager.default.createDirectory(at: queued, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: queued.appendingPathComponent("1.envelope"))
+
+        CrashReportingPolicy.moveQueuedReports(from: source.path, to: target.path)
+        #expect(!CrashReportingPolicy.hasQueuedReports(in: source.path))
+        #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent("io.sentry/abc123/envelopes/1.envelope").path))
+    }
+
+    @Test func emailAddressesInAnyScriptAreFound() {
+        #expect(CrashReportScrubber.scrub("Write to o'brien@example.com or josé@example.es") == "Write to <email> or <email>")
+        #expect(ProblemReport(description: "x", contactEmail: "josé@example.es", diagnostics: ProblemReportTests.sample).contact == "josé@example.es")
+        #expect(ProblemReport(description: "x", contactEmail: "o'brien@example.com", diagnostics: ProblemReportTests.sample).canSend)
     }
 
     @Test func aQueuedReportIsFoundInSentrysEnvelopesFolder() throws {
@@ -207,6 +229,16 @@ struct CrashReportingTests {
 
 @MainActor
 struct ProblemReportTests {
+    static let sample = ProblemReportDiagnostics(
+        appVersion: "Keybumps 0.0.3 (4022)",
+        macOSVersion: "15.1 (Build 24B83)",
+        macModel: "Mac15,9",
+        chip: "Apple M3 Max",
+        memoryGB: 128,
+        pluginsOn: [],
+        permissions: [],
+        sendsCrashReports: true
+    )
     private let diagnostics = ProblemReportDiagnostics(
         appVersion: "Keybumps 0.0.3 (4022)",
         macOSVersion: "15.1 (Build 24B83)",

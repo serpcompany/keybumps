@@ -66,7 +66,7 @@ struct ProblemReport {
     var contactEmail: String
     var diagnostics: ProblemReportDiagnostics
 
-    private static let emailPattern = try! NSRegularExpression(pattern: #"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#)
+    private static let emailPattern = try! NSRegularExpression(pattern: "^" + CrashReportingPolicy.emailPattern + "$")
 
     /// The email the person typed, only if it is one: the field skips the scrubber, so nothing
     /// else typed there is sent.

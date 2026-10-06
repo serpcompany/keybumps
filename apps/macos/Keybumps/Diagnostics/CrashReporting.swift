@@ -45,6 +45,10 @@ enum CrashReportingPolicy {
         (cacheDirectory as NSString).appendingPathComponent("Problem reports")
     }
 
+    /// An email address, in any script ("josé@…", "o'brien@…"): what the scrubber removes from free
+    /// text, and the only thing a problem report's contact field may hold.
+    static let emailPattern = #"[\p{L}\p{N}._%+'\-]+@[\p{L}\p{N}.\-]+\.\p{L}{2,}"#
+
     static let installIDKey = "crashReportsInstallID"
 
     /// A random identifier Keybumps creates once and keeps, so reports from one copy can be told
@@ -65,6 +69,23 @@ enum CrashReportingPolicy {
             return true
         }
         return false
+    }
+
+    /// Moves reports waiting in one Sentry folder's queue to the same place in another's. Both
+    /// queues use the same destination, so the relative path (`io.sentry/<hash>/envelopes/…`) is
+    /// the same, and Sentry running on the target folder sends them, retrying when the network
+    /// returns.
+    static func moveQueuedReports(from source: String, to target: String, fileManager: FileManager = .default) {
+        guard let paths = fileManager.enumerator(atPath: source) else { return }
+        for case let path as String in paths
+        where ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent == "envelopes" {
+            let destination = (target as NSString).appendingPathComponent(path)
+            try? fileManager.createDirectory(
+                atPath: (destination as NSString).deletingLastPathComponent,
+                withIntermediateDirectories: true
+            )
+            try? fileManager.moveItem(atPath: (source as NSString).appendingPathComponent(path), toPath: destination)
+        }
     }
 
     /// Only breadcrumbs Keybumps leaves itself, which hold stages and categories, never content.
@@ -96,7 +117,7 @@ enum CrashReportScrubber {
         // A URL or path runs to the end of the line or the next double quote: losing the rest of
         // a message is better than leaking a file name.
         (#"[A-Za-z][A-Za-z0-9+.\-]*://[^"# + end + "]*", "<url>"),
-        (#"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#, "<email>"),
+        (CrashReportingPolicy.emailPattern, "<email>"),
         (#"(?:/Users|/Volumes|/private|/tmp|/var/folders)/[^"# + end + "]*", "<path>"),
         (#"~/[^"# + end + "]*", "<path>"),
     ])
@@ -282,11 +303,15 @@ enum CrashReporter {
     static var isRunning: Bool { machine.mode == .reporting }
 
     /// Called first thing at launch, so a crash during startup is caught too. A problem report an
-    /// earlier send couldn't deliver goes first, and reporting starts once it's sent.
+    /// earlier send couldn't deliver joins the crash-report queue when reports are on; with them
+    /// off, Sentry starts just to send it.
     static func startIfAllowed(defaults: UserDefaults = .standard) {
         guard destination() != nil else { return }
-        if CrashReportingPolicy.hasQueuedReports(in: sendOnlyDirectory) { apply(machine.drain()) }
-        if AppPreferences.sendsCrashReports(in: defaults) { apply(machine.turnOn()) }
+        if AppPreferences.sendsCrashReports(in: defaults) {
+            apply(machine.turnOn())
+        } else if CrashReportingPolicy.hasQueuedReports(in: sendOnlyDirectory) {
+            apply(machine.drain())
+        }
     }
 
     static func setEnabled(_ enabled: Bool) {
@@ -319,6 +344,10 @@ enum CrashReporter {
             switch action {
             case .startReporting, .startSendingOnly:
                 guard let dsn = destination() else { return }
+                if action == .startReporting {
+                    // A problem report still waiting goes with the crash reports, retried until sent.
+                    CrashReportingPolicy.moveQueuedReports(from: sendOnlyDirectory, to: mainDirectory)
+                }
                 let environment = currentEnvironment()
                 let installID = CrashReportingPolicy.installID(defaults: .standard)
                 let sendingOnly = action == .startSendingOnly
@@ -345,9 +374,13 @@ enum CrashReporter {
         }
     }
 
-    private static var sendOnlyDirectory: String {
+    private static var mainDirectory: String {
         let caches = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first ?? NSTemporaryDirectory()
-        return CrashReportingPolicy.sendOnlyDirectory(in: CrashReportingPolicy.cacheDirectory(caches: caches, bundleID: bundleID))
+        return CrashReportingPolicy.cacheDirectory(caches: caches, bundleID: bundleID)
+    }
+
+    private static var sendOnlyDirectory: String {
+        CrashReportingPolicy.sendOnlyDirectory(in: mainDirectory)
     }
 
     private static func destination(bundle: Bundle = .main) -> String? {
@@ -369,7 +402,8 @@ enum CrashReporter {
         options.dsn = dsn
         options.environment = environment
         options.cacheDirectoryPath = CrashReportingPolicy.cacheDirectory(caches: options.cacheDirectoryPath, bundleID: bundleID)
-        // Keybumps' own identifier, so Sentry never reads or writes one of its own.
+        // Keybumps' own identifier on every report. Sentry still keeps an `INSTALLATION` file of its
+        // own in the folder, but never sends it: the user is set here and again in `beforeSend`.
         options.initialScope = { scope in
             scope.setUser(User(userId: installID))
             return scope
@@ -402,7 +436,11 @@ enum CrashReporter {
         options.beforeBreadcrumb = { breadcrumb in
             CrashReportingPolicy.keepsBreadcrumb(category: breadcrumb.category) ? breadcrumb : nil
         }
-        options.beforeSend = { CrashReportScrubber.scrub($0) }
+        options.beforeSend = { event in
+            let scrubbed = CrashReportScrubber.scrub(event)
+            scrubbed.user = User(userId: installID)
+            return scrubbed
+        }
     }
 
     /// Sentry running only to send problem reports, with reports off: no crash handler, no freeze

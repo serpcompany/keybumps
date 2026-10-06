@@ -51,6 +51,8 @@ final class SmokeUITests: XCTestCase {
         // build, which has nowhere to send reports.
         description.click()
         description.typeText("Dropdowns don't open")
+        let typed = (description.value as? String) ?? (description.textViews.firstMatch.value as? String) ?? ""
+        XCTAssertTrue(typed.contains("Dropdowns"), "The description took the typing")
         XCTAssertFalse(element("problemReport.send").isEnabled)
     }
 
