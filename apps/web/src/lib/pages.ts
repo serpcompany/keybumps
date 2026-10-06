@@ -42,7 +42,8 @@ export const sitePages = [
   {
     path: '/legal/privacy/',
     title: 'Privacy Policy',
-    description: 'How Keybumps handles your information. Short version: it stays on your Mac.'
+    description:
+      'How Keybumps handles your information. Short version: what you do in Keybumps stays on your Mac.'
   },
   {
     path: '/legal/terms/',

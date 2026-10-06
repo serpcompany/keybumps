@@ -17,7 +17,9 @@ export default function PrivacyPage() {
       <p>
         What you do in Keybumps stays on your Mac. The app has no advertising, no analytics, no
         account, and no cloud sync. We never receive your searches, clipboard contents, screenshots,
-        recordings, or transcripts.
+        recordings, or transcripts. If Keybumps crashes or freezes, it sends us a crash report
+        without any of those, and you can turn crash reports off. If you report a problem, it sends
+        what you write.
       </p>
 
       <h2>Information stored on your Mac</h2>
@@ -70,7 +72,55 @@ export default function PrivacyPage() {
           identifier itself never leaves your Mac) to Polar, which issues and manages Keybumps
           license keys. This enforces the license’s Mac limit and lets refunded licenses be revoked.
         </li>
+        <li>
+          <strong>Crash and problem reports</strong>, described next.
+        </li>
       </ul>
+
+      <h2>Crash and problem reports</h2>
+      <p>
+        When Keybumps crashes or freezes, it sends a crash report to Sentry, a service that collects
+        crash reports for us, so we can find and fix the cause. Crash reports are on by default. To
+        stop sending them, turn off <strong>Send crash reports</strong> in Keybumps Settings ›
+        General.
+      </p>
+      <p>
+        <strong>Report a Problem…</strong>, in the Help menu, the menu bar menu, and Settings ›
+        General, sends what you write to Sentry, with your email address if you add one for a reply.
+        Before you send, it shows you the main details it adds. It sends a problem report even when
+        crash reports are off, because you chose to send it.
+      </p>
+      <p>A report includes:</p>
+      <ul>
+        <li>for a crash or freeze, where in Keybumps’ code it happened;</li>
+        <li>the Keybumps and macOS versions, and which Keybumps plugins are on;</li>
+        <li>
+          technical details about your Mac and its state at the time, such as its model, processor
+          type, memory in use, whether Low Power Mode is on, and when Keybumps was opened;
+        </li>
+        <li>
+          a random identifier Keybumps creates for itself on your Mac, so we can tell how many Macs
+          a problem affects;
+        </li>
+        <li>
+          for a problem report, what you write, and which permissions Keybumps has, such as
+          Accessibility.
+        </li>
+      </ul>
+      <p>
+        Keybumps never adds your clipboard contents, snippets, transcripts, recordings, screenshots,
+        searches, or window or document titles to a report. It removes file paths, file names,
+        links, and email addresses from error messages before a report leaves your Mac. In a problem
+        report, it removes file paths, links, and email addresses from what you write and otherwise
+        sends it, so leave out anything you’d rather not share.
+      </p>
+      <p>
+        If you add your email to a problem report, we can see it alongside other reports from the
+        same copy of Keybumps. Nothing is sent when nothing goes wrong: there’s no report when you
+        open Keybumps, and none about how long you use it. Sentry receives your IP address with each
+        report, as with any web request, but we’ve set it not to store the address or the location
+        it suggests. Sentry stores reports in the United States and handles them on our behalf.
+      </p>
 
       <h2>Purchases</h2>
       <p>
@@ -96,16 +146,18 @@ export default function PrivacyPage() {
 
       <h2>Email</h2>
       <p>
-        If you email us, we keep the conversation to help you. Polar sends your receipt and license
-        key. We don’t sell or share your email address.
+        If you email us, or add your email to a problem report, we keep the conversation to help
+        you. Polar sends your receipt and license key. We don’t sell your email address or share it
+        beyond the services named on this page.
       </p>
 
       <h2>Retention and your rights</h2>
       <p>
         We keep purchase and license records for as long as your license is active and as required
-        for tax and accounting. You can ask us to access, correct, or delete the information we hold
-        about you by emailing {email}. Data stored on your Mac is under your control and is removed
-        when you delete it or uninstall Keybumps and its folders.
+        for tax and accounting, and crash and problem reports only as long as we need them to fix
+        problems. You can ask us to access, correct, or delete the information we hold about you by
+        emailing {email}. Data stored on your Mac is under your control and is removed when you
+        delete it or uninstall Keybumps and its folders.
       </p>
 
       <h2>Children</h2>

@@ -22,10 +22,6 @@ const FAQ = [
     a: 'An Apple Silicon Mac running macOS 14.2 or later. Translation of dictations needs macOS 15.'
   },
   {
-    q: 'Does my data leave my Mac?',
-    a: 'No. Search, clipboard history, screenshots, and dictation transcripts are stored and processed locally. Keybumps only contacts our servers to check for updates and validate your license.'
-  },
-  {
     q: 'Can I turn off the parts I don’t use?',
     a: 'Yes. Turn each plugin on or off in Settings › Plugins. Turning one off stops its shortcuts and background work.'
   },
