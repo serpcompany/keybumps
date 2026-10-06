@@ -204,6 +204,72 @@ import Testing
         #expect(reloaded?.duration == 0.1)
     }
 
+    /// A second line of defense behind `DictationService.transcribe`'s own checks: preparing a
+    /// retry for a recording this service is still writing touches neither its file nor `meta.json`.
+    @MainActor
+    @Test func preparingARetryLeavesALiveRecordingAlone() throws {
+        let folder = try RecordingFolder()
+        defer { folder.remove() }
+        let history = DictationHistoryService(recordingsDirectoryURL: folder.root)
+        let pending = try history.prepareRecording(
+            capturedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            language: "en-US"
+        )
+        let live = SyntheticWAV.sine(frames: 1_600, riffSize: 0, dataSize: 0)
+        try live.write(to: pending.audioURL)
+        let metadataURL = pending.directoryURL.appendingPathComponent("meta.json")
+        let metadataBefore = try Data(contentsOf: metadataURL)
+        let entry = DictationHistoryEntry(
+            metadata: DictationRecordingMetadata(
+                id: pending.id,
+                datetime: pending.capturedAt,
+                duration: 0,
+                languageSelected: "en-US",
+                result: "",
+                audioFile: pending.audioURL.lastPathComponent,
+                appVersion: "test",
+                transcriptionError: "Recording was interrupted before transcription finished.",
+                state: .interrupted
+            ),
+            directoryURL: pending.directoryURL,
+            audioURL: pending.audioURL
+        )
+
+        let prepared = history.prepareRetry(entry)
+
+        #expect(prepared == entry)
+        #expect(try Data(contentsOf: pending.audioURL) == live)
+        #expect(try Data(contentsOf: metadataURL) == metadataBefore)
+    }
+
+    /// A header that's already right but a saved duration of 0: the duration is read again and
+    /// saved, and the audio file isn't written.
+    @MainActor
+    @Test func preparingARetryReadsADurationOf0AgainWithoutRewritingAGoodHeader() throws {
+        let folder = try RecordingFolder()
+        defer { folder.remove() }
+        let history = DictationHistoryService(recordingsDirectoryURL: folder.root)
+        let pending = try history.prepareRecording(capturedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let closed = SyntheticWAV.sine(frames: 1_600)
+        try closed.write(to: pending.audioURL)
+        let entry = try history.completeRecording(
+            pending,
+            text: "",
+            language: "en-US",
+            duration: 0,
+            transcriptionError: "No speech was detected"
+        )
+
+        let prepared = history.prepareRetry(entry)
+
+        #expect(prepared.duration == 0.1)
+        #expect(prepared.state == .failed)
+        #expect(try Data(contentsOf: pending.audioURL) == closed)
+        let reloaded = DictationHistoryService(recordingsDirectoryURL: folder.root).entries.first
+        #expect(reloaded?.duration == 0.1)
+        #expect(reloaded?.state == .failed)
+    }
+
     /// A closed recording with the right duration is retried as it is.
     @MainActor
     @Test func preparingARetryLeavesAClosedRecordingAndItsDurationAlone() throws {
