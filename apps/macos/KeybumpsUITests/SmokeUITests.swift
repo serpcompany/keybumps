@@ -47,7 +47,10 @@ final class SmokeUITests: XCTestCase {
         let description = element("problemReport.description")
         XCTAssertTrue(description.waitForExistence(timeout: 5), "Report a Problem opens its window")
         XCTAssertTrue(element("problemReport.included").exists, "It shows what's attached")
-        // UI tests run a Debug build, which has nowhere to send reports.
+        // With a description, only the destination can keep Send off: UI tests run a Debug
+        // build, which has nowhere to send reports.
+        description.click()
+        description.typeText("Dropdowns don't open")
         XCTAssertFalse(element("problemReport.send").isEnabled)
     }
 

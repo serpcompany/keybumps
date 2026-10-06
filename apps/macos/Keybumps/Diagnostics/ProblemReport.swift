@@ -66,8 +66,23 @@ struct ProblemReport {
     var contactEmail: String
     var diagnostics: ProblemReportDiagnostics
 
+    private static let emailPattern = try! NSRegularExpression(pattern: #"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#)
+
+    /// The email the person typed, only if it is one: the field skips the scrubber, so nothing
+    /// else typed there is sent.
+    var contact: String? {
+        let email = contactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let range = NSRange(email.startIndex..., in: email)
+        return Self.emailPattern.firstMatch(in: email, range: range) == nil ? nil : email
+    }
+
+    /// Empty, or an email address.
+    var contactIsValid: Bool {
+        contactEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || contact != nil
+    }
+
     var canSend: Bool {
-        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && contactIsValid
     }
 
     func event() -> Event {
@@ -81,8 +96,7 @@ struct ProblemReport {
             "crash_reports": diagnostics.sendsCrashReports ? "on" : "off",
             "details": diagnostics.lines,
         ]
-        let email = contactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !email.isEmpty { report["contact"] = email }
+        if let contact { report["contact"] = contact }
         event.context = [
             "report": report,
             "permissions": Dictionary(uniqueKeysWithValues: diagnostics.permissions.map { ($0.name, $0.state) }),
@@ -94,6 +108,7 @@ struct ProblemReport {
 enum ProblemReportCopy {
     static let note = "Keybumps sends your report to its developers through Sentry. It removes file paths, links, and email addresses from what you write, so add your email above if you'd like a reply."
     static let alsoAdded = "Sentry also adds technical details about this Mac's state, such as memory in use and Low Power Mode."
+    static let invalidEmail = "Enter an email address, or leave this empty."
     static let unavailable = "This build of Keybumps can't send reports. Email support@keybumps.app instead."
     static let sent = "Thanks. Your report is on its way."
 }
@@ -189,6 +204,12 @@ struct ProblemReportView: View {
         TextField("Your email (optional, for a reply)", text: $email)
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("problemReport.email")
+        if !report.contactIsValid {
+            Text(ProblemReportCopy.invalidEmail)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .accessibilityIdentifier("problemReport.invalidEmail")
+        }
         Text(canSend ? ProblemReportCopy.note : ProblemReportCopy.unavailable)
             .font(.callout)
             .foregroundStyle(.secondary)

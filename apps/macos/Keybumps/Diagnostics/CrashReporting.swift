@@ -33,6 +33,40 @@ enum CrashReportingPolicy {
         "device": ["locale", "timezone"],
     ]
 
+    /// Sentry's folder, Keybumps' own. Sentry's default is the Caches folder itself, which every
+    /// unsandboxed app shares, along with the install identifier Sentry keeps there.
+    static func cacheDirectory(caches: String, bundleID: String) -> String {
+        ((caches as NSString).appendingPathComponent(bundleID) as NSString).appendingPathComponent("Sentry")
+    }
+
+    /// Sentry's queue while it runs only to send problem reports: apart from its usual queue, so a
+    /// crash report queued before reports were turned off never goes out with a problem report.
+    static func sendOnlyDirectory(in cacheDirectory: String) -> String {
+        (cacheDirectory as NSString).appendingPathComponent("Problem reports")
+    }
+
+    static let installIDKey = "crashReportsInstallID"
+
+    /// A random identifier Keybumps creates once and keeps, so reports from one copy can be told
+    /// apart from another's, whether Sentry runs for crashes or only for a problem report.
+    static func installID(defaults: UserDefaults) -> String {
+        if let id = defaults.string(forKey: installIDKey), UUID(uuidString: id) != nil { return id }
+        let id = UUID().uuidString
+        defaults.set(id, forKey: installIDKey)
+        return id
+    }
+
+    /// Whether a Sentry folder holds a report it couldn't deliver yet. Sentry queues each one as a
+    /// file in `io.sentry/<hash>/envelopes`.
+    static func hasQueuedReports(in directory: String, fileManager: FileManager = .default) -> Bool {
+        guard let paths = fileManager.enumerator(atPath: directory) else { return false }
+        for case let path as String in paths
+        where ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent == "envelopes" {
+            return true
+        }
+        return false
+    }
+
     /// Only breadcrumbs Keybumps leaves itself, which hold stages and categories, never content.
     static func keepsBreadcrumb(category: String) -> Bool {
         category.hasPrefix("keybumps.")
@@ -164,36 +198,106 @@ enum CrashReportScrubber {
     }
 }
 
+/// CrashReporter's modes, and what each event asks of Sentry, apart from Sentry so tests can play
+/// every order of events.
+struct CrashReporterMachine: Equatable {
+    enum Mode: Equatable { case off, reporting, sendingOnly }
+    enum Action: Equatable { case startReporting, startSendingOnly, capture, flush, close }
+
+    private(set) var mode = Mode.off
+    /// Flushes still running while Sentry runs only to send problem reports.
+    private(set) var inFlight = 0
+    /// Reports were turned on while problem reports were sending; they start once those are sent.
+    private(set) var startsWhenSent = false
+
+    mutating func turnOn() -> [Action] {
+        switch mode {
+        case .reporting:
+            return []
+        case .sendingOnly:
+            startsWhenSent = true
+            return []
+        case .off:
+            mode = .reporting
+            return [.startReporting]
+        }
+    }
+
+    mutating func turnOff() -> [Action] {
+        startsWhenSent = false
+        guard mode == .reporting else { return [] }
+        mode = .off
+        return [.close]
+    }
+
+    /// A problem report the person sends. With reports off, Sentry starts just to send it.
+    mutating func send() -> [Action] {
+        switch mode {
+        case .reporting:
+            return [.capture]
+        case .sendingOnly:
+            inFlight += 1
+            return [.capture, .flush]
+        case .off:
+            mode = .sendingOnly
+            inFlight = 1
+            return [.startSendingOnly, .capture, .flush]
+        }
+    }
+
+    /// Problem reports an earlier send couldn't deliver, found at launch before reporting starts.
+    mutating func drain() -> [Action] {
+        guard mode == .off else { return [] }
+        mode = .sendingOnly
+        inFlight = 1
+        return [.startSendingOnly, .flush]
+    }
+
+    mutating func flushed() -> [Action] {
+        inFlight -= 1
+        guard mode == .sendingOnly, inFlight == 0 else { return [] }
+        guard startsWhenSent else {
+            mode = .off
+            return [.close]
+        }
+        startsWhenSent = false
+        mode = .reporting
+        return [.close, .startReporting]
+    }
+}
+
 /// Sends crashes, freezes, and problem reports to Sentry (ADR 0007). Crashes and freezes go only
 /// when the build carries a destination and the person hasn't turned reports off in Settings ›
 /// General. A problem report someone writes goes either way: with reports off, Sentry runs just
 /// long enough to send it, with crash and freeze reporting off.
 @MainActor
 enum CrashReporter {
-    private enum Mode { case off, reporting, sendingOnly }
-    private static var mode = Mode.off
-    /// Problem reports still being sent while Sentry runs only for them.
-    private static var reportsInFlight = 0
-    /// Reports were turned on while a problem report was still sending; they start once it's gone.
-    private static var startsWhenSent = false
+    private static var machine = CrashReporterMachine()
+    /// Which plugins are on, kept so a new start of Sentry reports them too.
+    private static var pluginNames: [String] = []
+
+    nonisolated static let bundleID = Bundle.main.bundleIdentifier ?? "com.serp.keybumps"
 
     /// Whether crashes and freezes are being reported.
-    static var isRunning: Bool { mode == .reporting }
+    static var isRunning: Bool { machine.mode == .reporting }
 
-    /// Called first thing at launch, so a crash during startup is caught too.
+    /// Called first thing at launch, so a crash during startup is caught too. A problem report an
+    /// earlier send couldn't deliver goes first, and reporting starts once it's sent.
     static func startIfAllowed(defaults: UserDefaults = .standard) {
-        guard AppPreferences.sendsCrashReports(in: defaults) else { return }
-        start()
+        guard destination() != nil else { return }
+        if CrashReportingPolicy.hasQueuedReports(in: sendOnlyDirectory) { apply(machine.drain()) }
+        if AppPreferences.sendsCrashReports(in: defaults) { apply(machine.turnOn()) }
     }
 
     static func setEnabled(_ enabled: Bool) {
-        enabled ? start() : stop()
+        apply(enabled ? machine.turnOn() : machine.turnOff())
     }
 
     /// Which plugins are on, by name, so a report says what was running.
     static func recordPlugins(_ capabilities: Set<Capability>) {
-        guard mode != .off else { return }
-        let names = capabilities.map(\.rawValue).sorted()
+        pluginNames = capabilities.map(\.rawValue).sorted()
+        guard machine.mode != .off else { return }
+        let names = pluginNames
         SentrySDK.configureScope { $0.setContext(value: ["on": names], key: "plugins") }
     }
 
@@ -204,43 +308,46 @@ enum CrashReporter {
 
     /// Sends a problem report. Returns false when this build has nowhere to send it.
     static func send(_ report: ProblemReport, plugins: Set<Capability>) -> Bool {
-        guard let dsn = destination() else { return false }
-        if mode == .off {
-            SentrySDK.start { options in
-                configure(options, dsn: dsn, environment: currentEnvironment())
-                options.enableCrashHandler = false
-                options.enableAppHangTracking = false
-                options.cacheDirectoryPath = sendOnlyCacheDirectory(base: options.cacheDirectoryPath)
-            }
-            mode = .sendingOnly
-        }
-        recordPlugins(plugins)
-        SentrySDK.capture(event: report.event())
-        guard mode == .sendingOnly else { return true }
-        reportsInFlight += 1
-        // Closing at once would leave the report in its queue until the next problem report.
-        Task.detached(priority: .utility) {
-            SentrySDK.flush(timeout: 15)
-            await MainActor.run { finishSendingOnly() }
-        }
+        guard destination() != nil else { return false }
+        pluginNames = plugins.map(\.rawValue).sorted()
+        apply(machine.send(), event: report.event())
         return true
     }
 
-    private static func finishSendingOnly() {
-        reportsInFlight -= 1
-        guard mode == .sendingOnly, reportsInFlight == 0 else { return }
-        SentrySDK.close()
-        mode = .off
-        if startsWhenSent {
-            startsWhenSent = false
-            start()
+    private static func apply(_ actions: [CrashReporterMachine.Action], event: Event? = nil) {
+        for action in actions {
+            switch action {
+            case .startReporting, .startSendingOnly:
+                guard let dsn = destination() else { return }
+                let environment = currentEnvironment()
+                let installID = CrashReportingPolicy.installID(defaults: .standard)
+                let sendingOnly = action == .startSendingOnly
+                SentrySDK.start { options in
+                    if sendingOnly {
+                        configureSendingOnly(options, dsn: dsn, environment: environment, installID: installID)
+                    } else {
+                        configure(options, dsn: dsn, environment: environment, installID: installID)
+                    }
+                }
+                let names = pluginNames
+                SentrySDK.configureScope { $0.setContext(value: ["on": names], key: "plugins") }
+            case .capture:
+                if let event { SentrySDK.capture(event: event) }
+            case .flush:
+                // Closing at once would leave the report queued until Sentry next runs to send one.
+                Task.detached(priority: .utility) {
+                    SentrySDK.flush(timeout: 15)
+                    await MainActor.run { apply(machine.flushed()) }
+                }
+            case .close:
+                SentrySDK.close()
+            }
         }
     }
 
-    /// Sentry's queue while it runs only to send problem reports: apart from its usual queue, so a
-    /// crash report queued before reports were turned off never goes out with a problem report.
-    nonisolated static func sendOnlyCacheDirectory(base: String) -> String {
-        (base as NSString).appendingPathComponent("Keybumps problem reports")
+    private static var sendOnlyDirectory: String {
+        let caches = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first ?? NSTemporaryDirectory()
+        return CrashReportingPolicy.sendOnlyDirectory(in: CrashReportingPolicy.cacheDirectory(caches: caches, bundleID: bundleID))
     }
 
     private static func destination(bundle: Bundle = .main) -> String? {
@@ -251,21 +358,22 @@ enum CrashReporter {
         CrashReportingPolicy.environment(version: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
     }
 
-    private static func start() {
-        guard mode != .reporting, let dsn = destination() else { return }
-        if mode == .sendingOnly {
-            startsWhenSent = true
-            return
-        }
-        let environment = currentEnvironment()
-        SentrySDK.start { configure($0, dsn: dsn, environment: environment) }
-        mode = .reporting
-    }
-
     /// Every option the privacy promise rests on, in one place `CrashReportingTests` checks.
-    nonisolated static func configure(_ options: Options, dsn: String, environment: String) {
+    nonisolated static func configure(
+        _ options: Options,
+        dsn: String,
+        environment: String,
+        installID: String,
+        bundleID: String = CrashReporter.bundleID
+    ) {
         options.dsn = dsn
         options.environment = environment
+        options.cacheDirectoryPath = CrashReportingPolicy.cacheDirectory(caches: options.cacheDirectoryPath, bundleID: bundleID)
+        // Keybumps' own identifier, so Sentry never reads or writes one of its own.
+        options.initialScope = { scope in
+            scope.setUser(User(userId: installID))
+            return scope
+        }
         options.sendDefaultPii = false
         options.enableCrashHandler = true
         // Freezes of two seconds or more.
@@ -297,11 +405,19 @@ enum CrashReporter {
         options.beforeSend = { CrashReportScrubber.scrub($0) }
     }
 
-    private static func stop() {
-        startsWhenSent = false
-        guard mode == .reporting else { return }
-        SentrySDK.close()
-        mode = .off
+    /// Sentry running only to send problem reports, with reports off: no crash handler, no freeze
+    /// tracking, and its own queue.
+    nonisolated static func configureSendingOnly(
+        _ options: Options,
+        dsn: String,
+        environment: String,
+        installID: String,
+        bundleID: String = CrashReporter.bundleID
+    ) {
+        configure(options, dsn: dsn, environment: environment, installID: installID, bundleID: bundleID)
+        options.enableCrashHandler = false
+        options.enableAppHangTracking = false
+        options.cacheDirectoryPath = CrashReportingPolicy.sendOnlyDirectory(in: options.cacheDirectoryPath)
     }
 }
 
