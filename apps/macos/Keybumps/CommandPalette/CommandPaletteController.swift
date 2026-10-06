@@ -246,8 +246,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         installOutsideMonitors()
         panel.hideDuringUnitTests()
         panel.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async { [weak self, weak panel] in
             self?.focusInput()
+            // macOS shapes a clear window's shadow from its content when it last computed it, not
+            // as SwiftUI draws. Reshape it from the rounded palette once it has drawn (#309).
+            panel?.invalidateShadow()
         }
     }
 
@@ -951,7 +954,9 @@ private struct CommandPaletteView: View {
         }
         .compositingGroup()
         .clipShape(.rect(cornerRadius: PaletteTheme.cornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.4), radius: 30, y: 14)
+        // No SwiftUI shadow: the view fills the window, so one could only draw in the corners
+        // outside the rounded shape, cut off square at the window's edge (#309). The window's own
+        // shadow (`hasShadow`) follows the rounded shape.
         .defaultFocus($inputFocused, true)
         // Selecting a tab already starts it on its first row, or the row its content picks when it
         // shows, so a tab change only moves focus.
