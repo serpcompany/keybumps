@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.3-beta.18](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.17...v0.0.3-beta.18) (2026-10-06)
+
+
+### Features
+
+* Cancel Dictation is a command in Settings (default Esc), and Dictation's shortcut is named Start & Stop Dictation ([#292](https://github.com/serpcompany/keybumps/issues/292)) ([bc9ace3](https://github.com/serpcompany/keybumps/commit/bc9ace3c742073e7c5026bde88807c5b89d31d3d))
+* Dictation's Large v3 Turbo (Fast) runs on whisper.cpp on the GPU, about 3 times faster with no Neural Engine recompile ([#283](https://github.com/serpcompany/keybumps/issues/283)) ([59f14aa](https://github.com/serpcompany/keybumps/commit/59f14aa9ae90bb9e9973ac9d7e1c8b544f09b58d))
+
+
+### Fixes
+
+* the dropdowns in Settings › Dictation open again, as native pop-up menus ([#287](https://github.com/serpcompany/keybumps/issues/287)) ([2c957c4](https://github.com/serpcompany/keybumps/commit/2c957c4ed4732246ff62fd1acef9739bedcaa8d7))
+
+
+### Improvements
+
+* Dictation starts loading the Whisper model when recording starts, and saves each transcription's wait ([#280](https://github.com/serpcompany/keybumps/issues/280)) ([b3f998f](https://github.com/serpcompany/keybumps/commit/b3f998f42c5b4f84dde0022e7b652937f9dfa0c4))
+
 ## [0.0.3-beta.17](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.16...v0.0.3-beta.17) (2026-10-06)
 
 
