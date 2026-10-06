@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Smoke suite for #70. Every launch uses faked permissions, disabled global hot keys, a fresh
@@ -72,6 +73,30 @@ final class SmokeUITests: XCTestCase {
         let title = first.title
         first.click()
         XCTAssertEqual(language.value as? String, title, "Picking a language changes the setting")
+    }
+
+    /// #294: Settings opens within the space the menu bar and Dock leave. CI's 1024×768 screen is
+    /// shorter than the window's old minimum, so there it reached under the Dock. Each UI-test
+    /// launch has fresh defaults, so this is the first-open fill.
+    func testSettingsWindowFitsAboveTheDock() {
+        launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
+        XCTAssertTrue(element("settings.detail.dictation").waitForExistence(timeout: 20))
+        let window = app.windows.containing(.any, identifier: "settings.detail.dictation").firstMatch
+        XCTAssertTrue(window.exists)
+
+        // XCUITest frames start at the primary screen's top-left corner; AppKit's at its bottom-left.
+        guard let primary = NSScreen.screens.first else { return XCTFail("No screen") }
+        let visibleFrames = NSScreen.screens.map { screen in
+            let visible = screen.visibleFrame
+            return CGRect(x: visible.minX, y: primary.frame.maxY - visible.maxY, width: visible.width, height: visible.height)
+        }
+        let fits = NSPredicate { _, _ in
+            let frame = window.frame
+            return visibleFrames.contains { $0.insetBy(dx: -1, dy: -1).contains(frame) }
+        }
+        // The fill happens just after the window appears.
+        let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 5) == .completed
+        XCTAssertTrue(settled, "Settings \(window.frame) lies within a screen's visible frame \(visibleFrames)")
     }
 
     func testEscapeClosesSettings() {

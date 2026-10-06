@@ -1403,36 +1403,37 @@ final class ShortcutRecorderState {
     }
 }
 
-/// The Settings window's content sizes for a screen's visible frame, the part the menu bar and Dock
-/// leave. On a screen smaller than the usual sizes, both shrink to fit, leaving room for the title
-/// bar and toolbar, so the window never reaches under the Dock (#294). Nil (no screen) gives the
-/// usual sizes.
-enum SettingsWindowSize {
-    static let usualMinimum = CGSize(width: 960, height: 720)
-    static let usualDefault = CGSize(width: 1240, height: 944)
-    /// At least what the title bar and toolbar add above the content.
-    static let chromeHeight: CGFloat = 60
+/// The Settings window's sizes, and how it is kept on its screen (#294).
+enum SettingsWindowFrame {
+    /// Low enough for small screens: on CI's 1024×768 screen the space above the Dock is about
+    /// 690pt, which the old 720pt minimum, with its title bar and toolbar, didn't fit. The pages
+    /// scroll, so the height is the onboarding sheet's (760×520).
+    static let minimumContentSize = CGSize(width: 960, height: 520)
+    /// What Settings asks for when macOS has nothing saved; `SettingsWindowFiller` fits it to the
+    /// screen once it shows.
+    static let defaultContentSize = CGSize(width: 1240, height: 944)
 
-    static func minimumContentSize(fitting visible: CGSize?) -> CGSize {
-        guard let visible else { return usualMinimum }
-        return CGSize(
-            width: min(usualMinimum.width, visible.width),
-            height: min(usualMinimum.height, max(0, visible.height - chromeHeight))
-        )
-    }
-
-    static func defaultContentSize(fitting visible: CGSize?) -> CGSize {
-        guard let visible else { return usualDefault }
-        let minimum = minimumContentSize(fitting: visible)
-        return CGSize(
-            width: max(minimum.width, min(usualDefault.width, visible.width)),
-            height: max(minimum.height, min(usualDefault.height, visible.height - chromeHeight))
+    /// A window frame that is wider or taller than its screen's visible frame (the part the menu
+    /// bar and Dock leave), shrunk to that frame and moved inside it. Nil when the frame is no
+    /// larger than the visible frame, wherever it sits: where a window that fits goes is the
+    /// person's choice.
+    static func fitted(_ frame: CGRect, in visible: CGRect) -> CGRect? {
+        guard frame.width > visible.width || frame.height > visible.height else { return nil }
+        let width = min(frame.width, visible.width)
+        let height = min(frame.height, visible.height)
+        return CGRect(
+            x: min(max(frame.minX, visible.minX), visible.maxX - width),
+            y: min(max(frame.minY, visible.minY), visible.maxY - height),
+            width: width,
+            height: height
         )
     }
 }
 
 /// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
-/// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at.
+/// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at,
+/// but whenever the window comes forward or moves to another screen, a window larger than its
+/// screen's visible frame is shrunk to fit, so it never reaches under the Dock (#294).
 struct SettingsWindowFiller: NSViewRepresentable {
     let preferences: AppPreferences
 
@@ -1441,7 +1442,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
     final class FillerView: NSView {
         private let preferences: AppPreferences
-        private var keyObserver: Any?
+        private var observers: [Any] = []
 
         init(preferences: AppPreferences) {
             self.preferences = preferences
@@ -1451,23 +1452,31 @@ struct SettingsWindowFiller: NSViewRepresentable {
         required init?(coder: NSCoder) { nil }
 
         deinit {
-            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+            observers.forEach(NotificationCenter.default.removeObserver)
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
-            keyObserver = nil
-            guard let window, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
-            // Each time Settings comes forward until it has filled once, so a first open that was
-            // closed straight away fills the next time instead.
-            keyObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.fill(attempt: 1) }
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            guard let window, !UnitTestHost.isActive else { return }
+            // Each time Settings comes forward or changes screen. Until it has filled once, this
+            // fills, so a first open that was closed straight away fills the next time instead.
+            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didChangeScreenNotification] {
+                observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.fillOrFit() }
+                })
             }
             // After this turn, so the frame macOS restores for the window doesn't replace it.
-            DispatchQueue.main.async { [weak self] in self?.fill(attempt: 1) }
+            DispatchQueue.main.async { [weak self] in self?.fillOrFit() }
+        }
+
+        private func fillOrFit() {
+            if preferences.didFillSettingsWindow {
+                fitToScreen()
+            } else {
+                fill(attempt: 1)
+            }
         }
 
         /// Fills the screen, then checks once the window has settled: if macOS restored a saved
@@ -1485,9 +1494,23 @@ struct SettingsWindowFiller: NSViewRepresentable {
                     fill(attempt: attempt + 1)
                 } else {
                     preferences.didFillSettingsWindow = true
-                    if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
-                    keyObserver = nil
+                    fitToScreen()
                 }
+            }
+        }
+
+        /// Shrinks a window larger than its screen's visible frame to fit, such as a frame saved
+        /// on a larger screen or before #294. Waits while a mouse button is down, so a window being
+        /// dragged to another screen is fitted once it is let go. Full screen is left alone.
+        private func fitToScreen() {
+            guard let window, window.isVisible, !window.styleMask.contains(.fullScreen),
+                  let screen = window.screen else { return }
+            guard NSEvent.pressedMouseButtons == 0 else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.fitToScreen() }
+                return
+            }
+            if let fitted = SettingsWindowFrame.fitted(window.frame, in: screen.visibleFrame) {
+                window.setFrame(fitted, display: true)
             }
         }
     }

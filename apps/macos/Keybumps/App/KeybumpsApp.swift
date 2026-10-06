@@ -40,25 +40,14 @@ struct KeybumpsApp: App {
         }
     }
 
-    /// The size Settings takes when macOS has none saved and it has already filled the screen once
-    /// (`SettingsWindowFiller`); never larger than the screen, which macOS doesn't fit a new window's
-    /// width to.
-    private static var defaultSize: CGSize {
-        SettingsWindowSize.defaultContentSize(fitting: NSScreen.main?.visibleFrame.size)
-    }
-
-    /// Never taller or wider than the space the menu bar and Dock leave, so the window always ends
-    /// above the Dock (#294).
-    private static var minimumSize: CGSize {
-        SettingsWindowSize.minimumContentSize(fitting: NSScreen.main?.visibleFrame.size)
-    }
-
     var body: some Scene {
         Window(ReleaseLane.current.productName, id: "main") {
             SettingsRootView()
                 .frame(
-                    minWidth: Self.minimumSize.width, idealWidth: Self.defaultSize.width,
-                    minHeight: Self.minimumSize.height, idealHeight: Self.defaultSize.height
+                    minWidth: SettingsWindowFrame.minimumContentSize.width,
+                    idealWidth: SettingsWindowFrame.defaultContentSize.width,
+                    minHeight: SettingsWindowFrame.minimumContentSize.height,
+                    idealHeight: SettingsWindowFrame.defaultContentSize.height
                 )
                 .environment(model)
                 .task {
@@ -86,7 +75,7 @@ struct KeybumpsApp: App {
                 .background(SettingsEscapeCloser())
                 .background(SettingsWindowFiller(preferences: model.preferences))
         }
-        .defaultSize(Self.defaultSize)
+        .defaultSize(SettingsWindowFrame.defaultContentSize)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 OpenMainWindowButton(title: "Settings…")
