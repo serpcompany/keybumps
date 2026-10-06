@@ -30,7 +30,8 @@ function renderPage(plugin: Plugin): string {
   return renderToStaticMarkup(
     createElement(PluginDetail, {
       plugin,
-      download: createElement('a', { href: '#download' }, 'Download Keybumps')
+      download: createElement('a', { href: '#download' }, 'Download Keybumps'),
+      closingDownload: createElement('a', { href: '#download' }, 'Download for macOS')
     })
   )
 }
@@ -275,5 +276,64 @@ describe('plugin pages', () => {
     expect(paths.slice(0, sitePages.length)).toEqual(sitePages.map(page => page.path))
     expect(paths.slice(sitePages.length)).toEqual(plugins.map(plugin => pluginPath(plugin.slug)))
     expect(new Set(paths).size).toBe(paths.length)
+  })
+})
+
+describe('plugin page guides', () => {
+  it('gives every plugin three how-to steps and at least three questions', () => {
+    for (const plugin of plugins) {
+      expect(plugin.howTo, plugin.slug).toHaveLength(3)
+      expect(plugin.faq.length, plugin.slug).toBeGreaterThanOrEqual(3)
+      expect(new Set(plugin.faq.map(item => item.q)).size, plugin.slug).toBe(plugin.faq.length)
+    }
+  })
+
+  it('keeps engine and model names out of the guides', () => {
+    const text = plugins.flatMap(plugin => [
+      ...plugin.howTo.map(step => step.text),
+      ...plugin.faq.flatMap(item => [item.q, item.a])
+    ])
+    expect(text.filter(line => /whisper|apple speech|model/i.test(line))).toEqual([])
+  })
+
+  it('renders the breadcrumb, steps, and questions with their structured data', () => {
+    for (const plugin of plugins) {
+      const html = renderPage(plugin)
+      const data = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map(
+        match => JSON.parse(match[1])
+      )
+      expect(data.map(item => item['@type']).sort(), plugin.slug).toEqual([
+        'BreadcrumbList',
+        'FAQPage'
+      ])
+      const faq = data.find(item => item['@type'] === 'FAQPage')
+      expect(faq.mainEntity.map((item: { name: string }) => item.name)).toEqual(
+        plugin.faq.map(item => item.q)
+      )
+      expect(html).toContain('aria-label="Breadcrumb"')
+      expect(html).toContain('id="how-to"')
+      expect(html).toContain('id="questions"')
+    }
+  })
+})
+
+describe('plugin page at a glance', () => {
+  const glance = (slug: string) =>
+    renderPage(pluginFor(slug)).split('class="at-a-glance"')[1]?.split('</dl>')[0] ?? ''
+
+  it('says None for a plugin without shortcuts, and Not set by default for an unassigned one', () => {
+    expect(glance('shortcut-coach')).toContain('<dd>None</dd>')
+    expect(glance('snippets')).toContain('<dd>Not set by default</dd>')
+  })
+
+  it('counts default shortcuts when there are several, and names optional permissions', () => {
+    expect(glance('window-manager')).toContain('29 by default, such as')
+    expect(glance('clipboard-history')).not.toContain('by default, such as')
+    expect(glance('snippets')).toContain('Optional: Accessibility, Input Monitoring')
+  })
+
+  it('says when a Command Palette tab is hidden until turned on', () => {
+    expect(glance('shortcut-coach')).toContain('once you turn it on')
+    expect(glance('clipboard-history')).not.toContain('once you turn it on')
   })
 })

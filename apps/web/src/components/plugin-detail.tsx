@@ -1,6 +1,9 @@
 import { BadgeCheck, Cpu, HardDrive, Laptop, Package, Tag } from 'lucide-react'
 import Link from 'next/link'
 import type { CSSProperties, ReactNode } from 'react'
+import { Breadcrumbs } from '@/components/breadcrumbs'
+import { CtaBand } from '@/components/cta-band'
+import { Faq } from '@/components/faq'
 import { KeybumpsAvatar } from '@/components/keybumps-avatar'
 import { PluginIcon } from '@/components/plugin-icon'
 import { linkPrefetch } from '@/lib/pages'
@@ -16,13 +19,31 @@ import {
 
 /**
  * A plugin's page, /plugins/<slug>/: a header in its tint, then its overview, features, commands,
- * and permissions beside a sidebar of facts and other plugins. `download` is the Download button,
- * which the page renders on the server with the current DMG (`DownloadLink`).
+ * and permissions beside a sidebar of facts and other plugins. `download` and `closingDownload` are
+ * the Download buttons in the header and the closing call to action, which the page renders on the
+ * server with the current DMG (`DownloadLink`).
  */
-export function PluginDetail({ plugin, download }: { plugin: Plugin; download: ReactNode }) {
+export function PluginDetail({
+  plugin,
+  download,
+  closingDownload
+}: {
+  plugin: Plugin
+  download: ReactNode
+  closingDownload: ReactNode
+}) {
   return (
     <main className="plugin-page" style={{ '--tint': iconTints[plugin.tint] } as CSSProperties}>
       <section className="plugin-page-hero">
+        <div className="plugins-wrap">
+          <Breadcrumbs
+            trail={[
+              { label: 'Home', href: '/' },
+              { label: 'Plugins', href: '/plugins/' },
+              { label: plugin.name, href: pluginPath(plugin.slug) }
+            ]}
+          />
+        </div>
         <div className="plugins-wrap plugin-page-hero-inner">
           <div className="plugin-identity">
             <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={72} />
@@ -62,7 +83,10 @@ export function PluginDetail({ plugin, download }: { plugin: Plugin; download: R
         <nav className="plugin-tabs-row" aria-label="On this page">
           <span className="plugin-tabs">
             <a href="#overview">Overview</a>
+            <a href="#how-to">How to use it</a>
             <a href="#commands">Commands</a>
+            <a href="#privacy">Privacy</a>
+            <a href="#questions">Questions</a>
           </span>
         </nav>
 
@@ -75,7 +99,23 @@ export function PluginDetail({ plugin, download }: { plugin: Plugin; download: R
               {plugin.overview.map(paragraph => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
-              <h2 className="plugin-subheading">Key features</h2>
+              <AtAGlance plugin={plugin} />
+            </section>
+
+            <section id="how-to" aria-labelledby="how-to-heading">
+              <h2 id="how-to-heading">How to use it</h2>
+              <ol className="how-to">
+                {plugin.howTo.map(step => (
+                  <li key={step.text}>
+                    <span>{step.text}</span>
+                    {step.keys && <Keycaps keys={step.keys} />}
+                  </li>
+                ))}
+              </ol>
+            </section>
+
+            <section aria-labelledby="features-heading">
+              <h2 id="features-heading">Key features</h2>
               <ul className="feature-list">
                 {plugin.features.map(feature => (
                   <li key={feature}>{feature}</li>
@@ -100,6 +140,11 @@ export function PluginDetail({ plugin, download }: { plugin: Plugin; download: R
                   <p key={line}>{line}</p>
                 ))}
               </div>
+            </section>
+
+            <section id="questions" aria-labelledby="questions-heading">
+              <h2 id="questions-heading">Questions</h2>
+              <Faq questions={plugin.faq} />
             </section>
           </div>
 
@@ -172,8 +217,70 @@ export function PluginDetail({ plugin, download }: { plugin: Plugin; download: R
             </div>
           </aside>
         </div>
+
+        <div className="plugin-cta">
+          <CtaBand title={`Get ${plugin.name} with Keybumps.`} action={closingDownload} />
+        </div>
       </div>
     </main>
+  )
+}
+
+/** Three facts under the overview: how it opens, its palette tab, and its permissions. */
+function AtAGlance({ plugin }: { plugin: Plugin }) {
+  const assigned = plugin.shortcuts.filter(shortcut => shortcut.keys)
+  const hotkey = assigned[0]?.keys
+  // A plugin with shortcuts that start unassigned can be given one; one without shortcuts can't.
+  const noHotkey = plugin.shortcuts.length > 0 ? 'Not set by default' : 'None'
+  const tab = plugin.paletteTab
+  const items: { label: string; value: ReactNode }[] = [
+    {
+      label: assigned.length > 1 ? 'Shortcuts' : 'Shortcut',
+      value: hotkey ? (
+        <span className="glance-tab">
+          {assigned.length > 1 && `${assigned.length} by default, such as`}
+          <Keycaps keys={hotkey} />
+        </span>
+      ) : (
+        noHotkey
+      )
+    },
+    {
+      label: 'Command Palette tab',
+      value: tab ? (
+        <span className="glance-tab">
+          {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />
+          {tab.hiddenUnless && <span className="glance-note">once you turn it on</span>}
+        </span>
+      ) : (
+        'None'
+      )
+    },
+    {
+      label: 'macOS permissions',
+      value: (
+        <span className="glance-tab">
+          {plugin.permissions.length > 0
+            ? plugin.permissions.map(item => item.permission).join(', ')
+            : 'None needed'}
+          {plugin.optionalPermissions && (
+            <span className="glance-note">
+              Optional: {plugin.optionalPermissions.map(item => item.permission).join(', ')}
+            </span>
+          )}
+        </span>
+      )
+    }
+  ]
+  return (
+    <dl className="at-a-glance">
+      {items.map(item => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
