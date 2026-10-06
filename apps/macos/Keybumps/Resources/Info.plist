@@ -24,6 +24,8 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>KBCrashReportsDSN</key>
+    <string>$(KEYBUMPS_CRASH_REPORTS_DSN)</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>

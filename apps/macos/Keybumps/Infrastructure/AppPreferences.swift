@@ -24,6 +24,7 @@ final class AppPreferences {
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
         static let lastLaunchedVersion = "lastLaunchedVersion"
         static let didFillSettingsWindow = "didFillSettingsWindow"
+        static let sendsCrashReports = "sendsCrashReports"
     }
 
     private let defaults: UserDefaults
@@ -91,6 +92,16 @@ final class AppPreferences {
     /// auto-expansion, ADR 0004). Off by default.
     var expandsSnippetKeywords: Bool {
         didSet { defaults.set(expandsSnippetKeywords, forKey: Key.expandsSnippetKeywords) }
+    }
+
+    /// Whether crashes and freezes are reported to Keybumps's developers (ADR 0007). On by default.
+    var sendsCrashReports: Bool {
+        didSet { defaults.set(sendsCrashReports, forKey: Key.sendsCrashReports) }
+    }
+
+    /// The same setting, read at launch before anything else is set up.
+    static func sendsCrashReports(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: Key.sendsCrashReports) == nil || defaults.bool(forKey: Key.sendsCrashReports)
     }
 
     /// Plugins' declared preferences (`PluginPreference`) that were set, by storage key
@@ -175,6 +186,7 @@ final class AppPreferences {
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
+        sendsCrashReports = Self.sendsCrashReports(in: defaults)
         lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),

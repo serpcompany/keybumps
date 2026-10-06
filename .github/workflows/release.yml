@@ -58,6 +58,7 @@ env:
   SPARKLE_ACCOUNT: keybumps-release
   CLOUDFLARE_ACCOUNT_ID: cec5f04e1d18bcc65f2be0aefb04f059
   WRANGLER_VERSION: 4.142.0
+  SENTRY_CLI_VERSION: 3.8.0
 
 jobs:
   unit-tests:
@@ -198,6 +199,20 @@ jobs:
       - name: Remove Sparkle key file
         if: always()
         run: rm -f "$RUNNER_TEMP/sparkle-private-key"
+
+      # Crash reports name Keybumps's code only with this build's debug symbols (ADR 0007). A
+      # release without SENTRY_AUTH_TOKEN still ships; its crash reports are just unsymbolicated.
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "::warning::SENTRY_AUTH_TOKEN is not set: crash reports from this release won't be symbolicated."
+            exit 0
+          fi
+          npx --yes "@sentry/cli@${SENTRY_CLI_VERSION}" debug-files upload \
+            --org serpcompany --project keybumps-mac \
+            "$RUNNER_TEMP/release/archive/Keybumps.xcarchive/dSYMs"
 
       - name: Preview publication
         run: |

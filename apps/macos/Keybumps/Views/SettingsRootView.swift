@@ -940,6 +940,14 @@ private struct GeneralView: View {
                     SettingsNote("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
                 }
             }
+            SettingsGroup("Crash reports") {
+                Toggle("Send crash reports", isOn: Binding(
+                    get: { model.preferences.sendsCrashReports },
+                    set: model.setSendsCrashReports
+                ))
+                .accessibilityIdentifier("settings.general.sendsCrashReports")
+                SettingsNote(CrashReportingCopy.settingsNote)
+            }
         }.navigationTitle("General")
     }
 }

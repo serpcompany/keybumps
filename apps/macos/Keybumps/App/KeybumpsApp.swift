@@ -15,6 +15,7 @@ enum KeybumpsMain {
             return
         }
         launchedApp = true
+        CrashReporter.startIfAllowed()
         KeybumpsApp.main()
     }
 }
