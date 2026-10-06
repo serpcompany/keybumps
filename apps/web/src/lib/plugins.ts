@@ -118,7 +118,14 @@ export type Plugin = {
   features: readonly string[]
   /** What it keeps, and where: all of it on this Mac. */
   keeps: readonly string[]
+  /** Its page's How to use it: three steps, each with the keys it uses, if any. */
+  howTo: readonly PluginStep[]
+  /** Its page's Questions, also its FAQPage structured data. */
+  faq: readonly PluginQuestion[]
 }
+
+export type PluginStep = { text: string; keys?: string }
+export type PluginQuestion = { q: string; a: string }
 
 /** Every plugin, in `CapabilityCatalog.descriptors` order. */
 export const plugins: readonly Plugin[] = [
@@ -147,6 +154,25 @@ export const plugins: readonly Plugin[] = [
       'Finds snippets by keyword and name; a keyword typed in full comes first',
       'Type a plugin’s name to go to it, or open Keybumps Settings',
       'If Spotlight uses ⌘ Space, Keybumps turns off only Spotlight’s shortcut; Spotlight search stays available'
+    ],
+    howTo: [
+      { text: 'Press ⌘ Space from any app.', keys: '⌘ Space' },
+      { text: 'Type a few letters of an app, file, folder, or snippet.' },
+      { text: 'Press Return to open it.', keys: '↩' }
+    ],
+    faq: [
+      {
+        q: 'What if Spotlight already uses ⌘ Space?',
+        a: 'Keybumps turns off only Spotlight’s shortcut. Spotlight search stays available.'
+      },
+      {
+        q: 'Can it find my snippets?',
+        a: 'Yes. It finds snippets by keyword and by name, and a keyword typed in full comes first.'
+      },
+      {
+        q: 'Does it learn what I open?',
+        a: 'Apps and commands you pick more often rank higher, weighed against how well they match. While the search is empty, it lists what you last opened from it.'
+      }
     ],
     keeps: [
       'Recent Items, and how often you pick each app or command, stay on this Mac. That count only ranks results, and no search is kept.'
@@ -177,6 +203,23 @@ export const plugins: readonly Plugin[] = [
       'Copying an image file in Finder keeps the image, not its icon',
       'Delete removes the highlighted item, and each copy confirms with a notice at the notch',
       'Text that Dictation inserts stays out, so the history holds only what you copied'
+    ],
+    howTo: [
+      { text: 'Copy text or an image the way you always do.', keys: '⌘C' },
+      { text: 'Open the Clipboard tab from any app.', keys: '⇧⌘ Space' },
+      { text: 'Type to search, then press Return to copy it again.', keys: '↩' }
+    ],
+    faq: [
+      { q: 'How much does it keep?', a: 'Your 50 most recent copied text and image items.' },
+      {
+        q: 'Can I paste a screenshot from it?',
+        a: 'Yes. Screenshots you take with Screenshot Tools land in Clipboard History, ready to paste.'
+      },
+      {
+        q: 'Does dictated text end up in it?',
+        a: 'No. Text that Dictation inserts stays out, so the history holds only what you copied.'
+      },
+      { q: 'Can I remove an item?', a: 'Yes. Highlight it and press Delete.' }
     ],
     keeps: [
       'Your history stays on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes.',
@@ -218,6 +261,29 @@ export const plugins: readonly Plugin[] = [
       'Screenshot Screen and Edit copies only when you Save, so an unredacted shot never lands on the clipboard',
       'In the Screenshots tab, Return copies a screenshot and ⌘Return opens it in the editor; ⌘E edits any image in Clipboard History',
       'While it’s on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS’s own, and gives them back when you turn it off'
+    ],
+    howTo: [
+      { text: 'Press ⇧⌘4 and select an area, or ⇧⌘2 for every screen.', keys: '⇧⌘4' },
+      {
+        text: 'Open the Command Palette and press ⌘3 for the Screenshots tab.',
+        keys: '⌘3'
+      },
+      { text: 'Press ⌘Return to mark it up, then Return to save and copy it.', keys: '⌘↩' }
+    ],
+    faq: [
+      {
+        q: 'Does it replace the macOS screenshot shortcuts?',
+        a: 'While it’s on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS’s own, and gives them back when you turn it off.'
+      },
+      { q: 'What can I add to a screenshot?', a: 'Blur, redact, arrows, drawing, and text.' },
+      {
+        q: 'Can an unredacted screenshot reach my clipboard?',
+        a: 'Not with Screenshot Screen and Edit (⇧⌘3): it copies only when you Save.'
+      },
+      {
+        q: 'Where are screenshots saved?',
+        a: 'Where macOS saves screenshots. An edited copy is saved beside the original.'
+      }
     ],
     keeps: [
       'Screenshots are saved where macOS saves screenshots, and edited copies beside the original. Clipboard History keeps them on this Mac.'
@@ -273,6 +339,30 @@ export const plugins: readonly Plugin[] = [
       'Transcribes the whole recording after you stop, so a pause never cuts it short',
       'Dictation History: search, play back, copy, reveal in Finder, and delete recordings',
       'On macOS 15 or later, translate a transcript on this Mac and hear it in an installed macOS voice'
+    ],
+    howTo: [
+      { text: 'Put your cursor where the text should go.' },
+      { text: 'Press ⌥ Space and talk.', keys: '⌥ Space' },
+      { text: 'Press ⌥ Space again. Your words appear where your cursor was.', keys: '⌥ Space' }
+    ],
+    faq: [
+      {
+        q: 'How long can I talk?',
+        a: 'Five minutes by default. Choose 10, 15, 30, or 60 minutes, or no limit, in Settings › Dictation.'
+      },
+      {
+        q: 'What if I pause?',
+        a: 'Keep going. It writes everything down after you stop, so a pause never cuts you off.'
+      },
+      {
+        q: 'Can I find something I said before?',
+        a: 'Yes. Dictation History, the Dictation tab of the Command Palette, keeps each recording and its text to search, play back, and copy.'
+      },
+      { q: 'Can I cancel a dictation?', a: 'Press Escape while it’s recording or writing.' },
+      {
+        q: 'Can it translate what I said?',
+        a: 'Yes, on macOS 15 or later: translate a transcript and hear it read aloud.'
+      }
     ],
     keeps: [
       'Recordings and transcripts are kept in ~/Documents/Keybumps/recordings on this Mac, where you can open or delete them.',
@@ -340,6 +430,22 @@ export const plugins: readonly Plugin[] = [
       'Drag a window to the top edge to maximize it, a side to fill that half, or a corner to fill that quarter',
       'Change any shortcut in Settings, or Restore Defaults'
     ],
+    howTo: [
+      { text: 'Click the window you want to move.' },
+      { text: 'Press a shortcut, such as ⌃⌥⌘← for the left half.', keys: '⌃⌥⌘←' },
+      { text: 'Or drag the window to the top, a side, or a corner of the screen to snap it.' }
+    ],
+    faq: [
+      {
+        q: 'Which layouts can it make?',
+        a: 'Halves, corners, thirds, sixths, and fourths of the screen, plus maximize, center, and moving to the next or previous display: 30 commands in all.'
+      },
+      {
+        q: 'Can I change the shortcuts?',
+        a: 'Yes. All but one of the commands start with a shortcut, and you can change any of them in Settings › Window Manager.'
+      },
+      { q: 'Why does it need Accessibility?', a: 'To move and resize other apps’ windows.' }
+    ],
     keeps: [
       'Window Manager works with the windows already on your screen and keeps only its shortcuts, in Keybumps’s settings on this Mac.'
     ]
@@ -384,6 +490,24 @@ export const plugins: readonly Plugin[] = [
       'Send Test Suggestion in Settings shows what a tip looks like',
       'A legend of the keyboard symbols in Settings'
     ],
+    howTo: [
+      { text: 'Turn it on and allow the permissions it asks for.' },
+      {
+        text: 'Work as usual. When you do something by hand that has a shortcut, the shortcut drops down from the notch.'
+      },
+      { text: 'Look back at what it noticed in the Hotkeys tab, once you turn the tab on.' }
+    ],
+    faq: [
+      {
+        q: 'What does it notice?',
+        a: 'Supported actions you do by hand that have a keyboard shortcut, such as choosing a menu command with the mouse.'
+      },
+      {
+        q: 'Can I see what a tip looks like?',
+        a: 'Yes. Send Test Suggestion in its Settings page shows one.'
+      },
+      { q: 'Can I clear its history?', a: 'Yes. View, filter, and clear it in the Hotkeys tab.' }
+    ],
     keeps: ['Its history of detected actions stays on this Mac until you clear it.']
   },
   {
@@ -425,6 +549,28 @@ export const plugins: readonly Plugin[] = [
       'Import an Alfred snippets export',
       'Sort snippets by column, and select several to delete them or mark them sensitive together'
     ],
+    howTo: [
+      { text: 'Save text you reuse with a name and, if you like, a keyword such as ;ship.' },
+      { text: 'Open the Command Palette and press ⌘5 for the Snippets tab.', keys: '⌘5' },
+      {
+        text: 'Press Return to copy a snippet, or ⌘Return to paste it into the app you’re using.',
+        keys: '↩'
+      }
+    ],
+    faq: [
+      {
+        q: 'Can I type a keyword to insert a snippet?',
+        a: 'Yes. Turn on keyword expansion and typing a keyword in any app replaces it with its snippet, then gives you your clipboard back. It never expands in password fields or in Keybumps itself.'
+      },
+      {
+        q: 'What is a sensitive snippet?',
+        a: 'One whose text stays hidden in the Command Palette and Settings and out of search.'
+      },
+      {
+        q: 'Can I bring my snippets from Alfred?',
+        a: 'Yes. Keybumps imports an Alfred snippets export.'
+      }
+    ],
     keeps: [
       'Snippets are kept on this Mac only. A sensitive snippet’s text is kept in your Mac’s Keychain instead of the snippets file.'
     ]
@@ -456,6 +602,22 @@ export const plugins: readonly Plugin[] = [
       'Never rings while you’re dictating',
       'Timers keep counting through sleep and restarts',
       'Turn off the ringing, the menu bar countdown, or the menu list in Settings'
+    ],
+    howTo: [
+      { text: 'Open the Command Palette and press ⌘6 for the Timers tab.', keys: '⌘6' },
+      { text: 'Type a duration, such as 5m, 1h30m, or tea 25, and press Return.', keys: '↩' },
+      { text: 'Watch it count down in the menu bar. When it ends, click Stop or Repeat.' }
+    ],
+    faq: [
+      {
+        q: 'Does it keep counting if my Mac sleeps?',
+        a: 'Yes. Timers keep counting through sleep and restarts.'
+      },
+      { q: 'Can I make a timer silent?', a: 'Yes. Turn off the ringing in Settings › Timer.' },
+      {
+        q: 'Will it ring while I’m dictating?',
+        a: 'No. A timer never rings while you’re dictating.'
+      }
     ],
     keeps: ['Timers, with any names you give them, are kept on this Mac until you delete them.']
   },
@@ -492,6 +654,25 @@ export const plugins: readonly Plugin[] = [
       'Return or a double-click copies the emoji; ⌘Return pastes it and puts your clipboard back',
       'A skin tone setting that applies to every emoji that has one, including two-person emoji',
       'Optional Open Emoji Picker shortcut, unassigned until you set one'
+    ],
+    howTo: [
+      { text: 'Turn it on in Settings › Plugins.' },
+      { text: 'Open the Command Palette and press ⌘7 for the Emoji tab.', keys: '⌘7' },
+      {
+        text: 'Type a name, a keyword, or a :shortcode:, then press Return to copy it or ⌘Return to paste it.',
+        keys: '↩'
+      }
+    ],
+    faq: [
+      { q: 'Why can’t I find it?', a: 'It ships turned off. Turn it on in Settings › Plugins.' },
+      {
+        q: 'Can I set a skin tone?',
+        a: 'Yes. Set it once and it applies to every emoji that has one, including two-person emoji.'
+      },
+      {
+        q: 'Can it have its own shortcut?',
+        a: 'Yes. Open Emoji Picker starts unassigned; set it in Settings › Emoji Picker.'
+      }
     ],
     keeps: [
       'Your 24 most recently used emoji are kept on this Mac. Turning off Remember recently used emoji in its Settings page clears them.'

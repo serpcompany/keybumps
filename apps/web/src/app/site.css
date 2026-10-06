@@ -1352,6 +1352,62 @@ kbd {
   gap: 10px;
 }
 
+/* Breadcrumbs: src/components/breadcrumbs.tsx */
+.crumbs {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 28px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  list-style: none;
+}
+
+.crumbs li + li::before {
+  content: "›";
+  margin-right: 6px;
+  opacity: 0.6;
+}
+
+.crumbs a:hover {
+  color: var(--text);
+}
+
+.crumbs [aria-current="page"] {
+  color: var(--text);
+}
+
+/* CTA band: src/components/cta-band.tsx */
+.cta-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--kb-radius-lg);
+  background:
+    radial-gradient(
+      ellipse 70% 140% at 0% 0%,
+      color-mix(in srgb, var(--tint, var(--lavender)) 16%, transparent),
+      transparent 70%
+    ),
+    var(--surface);
+}
+
+.cta-band h2 {
+  font-size: 1.5rem;
+}
+
+.cta-band p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
 /* /plugins/<slug>/: tabs, body, and sidebar */
 .plugin-tabs-row {
   padding-bottom: 20px;
@@ -1360,6 +1416,10 @@ kbd {
 
 .plugin-tabs {
   display: inline-flex;
+  /* Five tabs don't fit a phone: they scroll sideways inside the row instead of the page. */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: 4px;
   padding: 5px;
   border: 1px solid var(--border);
@@ -1368,6 +1428,8 @@ kbd {
 }
 
 .plugin-tabs a {
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 7px 16px;
   border-radius: var(--kb-radius-sm);
   color: var(--text-muted);
@@ -1381,15 +1443,21 @@ kbd {
   color: var(--text);
 }
 
-/* Overview is current until the Commands anchor is the target. */
+/* Overview is current until another section's anchor is the target. */
 .plugin-tabs a:first-child,
-body:has(#commands:target) .plugin-tabs a[href="#commands"] {
+body:has(#how-to:target) .plugin-tabs a[href="#how-to"],
+body:has(#commands:target) .plugin-tabs a[href="#commands"],
+body:has(#privacy:target) .plugin-tabs a[href="#privacy"],
+body:has(#questions:target) .plugin-tabs a[href="#questions"] {
   background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 1px var(--border-strong);
   color: var(--text);
 }
 
-body:has(#commands:target) .plugin-tabs a:first-child {
+body:has(#how-to:target) .plugin-tabs a:first-child,
+body:has(#commands:target) .plugin-tabs a:first-child,
+body:has(#privacy:target) .plugin-tabs a:first-child,
+body:has(#questions:target) .plugin-tabs a:first-child {
   background: transparent;
   box-shadow: none;
   color: var(--text-muted);
@@ -1398,7 +1466,7 @@ body:has(#commands:target) .plugin-tabs a:first-child {
 .plugin-body {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  padding-bottom: 104px;
+  padding-bottom: 56px;
 }
 
 .plugin-main {
@@ -1825,5 +1893,103 @@ body:has(#commands:target) .plugin-tabs a:first-child {
   .card {
     animation: none;
     transition: none;
+  }
+}
+
+/* /plugins/<slug>/: at a glance, how to use it, and the closing call to action */
+.at-a-glance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 28px 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--kb-radius-md);
+  background: var(--surface);
+}
+
+.at-a-glance > div {
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.at-a-glance > div + div {
+  border-left: 1px solid var(--border);
+}
+
+.at-a-glance dt {
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.at-a-glance dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.glance-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.how-to {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  counter-reset: step;
+  list-style: none;
+}
+
+.how-to li {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--kb-radius-md);
+  background: var(--surface);
+  color: #d6d3dc;
+  font-size: 0.92rem;
+  counter-increment: step;
+}
+
+.how-to li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--lavender-soft);
+  color: var(--lavender);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.how-to .keycaps {
+  margin-top: auto;
+}
+
+.plugin-main .faq {
+  margin-top: 0;
+}
+
+.plugin-cta {
+  padding-bottom: 88px;
+}
+
+@media (max-width: 720px) {
+  .at-a-glance,
+  .how-to {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .at-a-glance > div + div {
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 }

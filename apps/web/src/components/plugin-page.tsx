@@ -12,6 +12,7 @@ export function PluginPage({ slug }: { slug: string }) {
     <PluginDetail
       plugin={pluginFor(slug)}
       download={<DownloadLink className="btn">Download Keybumps</DownloadLink>}
+      closingDownload={<DownloadLink className="btn btn-lg">Download for macOS</DownloadLink>}
     />
   )
 }

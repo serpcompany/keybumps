@@ -30,7 +30,8 @@ function renderPage(plugin: Plugin): string {
   return renderToStaticMarkup(
     createElement(PluginDetail, {
       plugin,
-      download: createElement('a', { href: '#download' }, 'Download Keybumps')
+      download: createElement('a', { href: '#download' }, 'Download Keybumps'),
+      closingDownload: createElement('a', { href: '#download' }, 'Download for macOS')
     })
   )
 }
@@ -275,5 +276,43 @@ describe('plugin pages', () => {
     expect(paths.slice(0, sitePages.length)).toEqual(sitePages.map(page => page.path))
     expect(paths.slice(sitePages.length)).toEqual(plugins.map(plugin => pluginPath(plugin.slug)))
     expect(new Set(paths).size).toBe(paths.length)
+  })
+})
+
+describe('plugin page guides', () => {
+  it('gives every plugin three how-to steps and at least three questions', () => {
+    for (const plugin of plugins) {
+      expect(plugin.howTo, plugin.slug).toHaveLength(3)
+      expect(plugin.faq.length, plugin.slug).toBeGreaterThanOrEqual(3)
+      expect(new Set(plugin.faq.map(item => item.q)).size, plugin.slug).toBe(plugin.faq.length)
+    }
+  })
+
+  it('keeps engine and model names out of the guides', () => {
+    const text = plugins.flatMap(plugin => [
+      ...plugin.howTo.map(step => step.text),
+      ...plugin.faq.flatMap(item => [item.q, item.a])
+    ])
+    expect(text.filter(line => /whisper|apple speech|model/i.test(line))).toEqual([])
+  })
+
+  it('renders the breadcrumb, steps, and questions with their structured data', () => {
+    for (const plugin of plugins) {
+      const html = renderPage(plugin)
+      const data = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map(
+        match => JSON.parse(match[1])
+      )
+      expect(data.map(item => item['@type']).sort(), plugin.slug).toEqual([
+        'BreadcrumbList',
+        'FAQPage'
+      ])
+      const faq = data.find(item => item['@type'] === 'FAQPage')
+      expect(faq.mainEntity.map((item: { name: string }) => item.name)).toEqual(
+        plugin.faq.map(item => item.q)
+      )
+      expect(html).toContain('aria-label="Breadcrumb"')
+      expect(html).toContain('id="how-to"')
+      expect(html).toContain('id="questions"')
+    }
   })
 })
