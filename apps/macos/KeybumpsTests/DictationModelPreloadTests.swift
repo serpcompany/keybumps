@@ -169,6 +169,27 @@ import Testing
         #expect(fixture.loads.count == 2)
     }
 
+    @Test func aModelThatKeepsChangingFailsTheTranscriptionWithoutCancelling() async throws {
+        let fixture = try await Fixture(gatedLoads: [1, 2, 3, 4])
+        defer { fixture.remove() }
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        for load in 1...4 {
+            await fixture.gate.waitForWaiters(load)
+            fixture.coordinator.selectedModelDidChange()
+            fixture.gate.release()
+        }
+
+        // `#expect(throws: NSError.self)` would also match a cancel, so check the error itself.
+        do {
+            _ = try await transcription.value
+            Issue.record("The transcription should fail.")
+        } catch {
+            #expect(!(error is CancellationError))
+            #expect((error as NSError).domain == "Keybumps.Dictation")
+        }
+        #expect(fixture.loads.count == 4)
+    }
+
     @Test func aJoinedLoadThatFailsReportsItAndTheNextTranscriptionLoadsAgain() async throws {
         let fixture = try await Fixture(gatedLoads: [1], failingLoads: [1])
         defer { fixture.remove() }
