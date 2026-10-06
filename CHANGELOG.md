@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.3-beta.17](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.16...v0.0.3-beta.17) (2026-10-06)
+
+
+### Features
+
+* Keybumps reports crashes and freezes to its developers, with an off switch in Settings › General ([#259](https://github.com/serpcompany/keybumps/issues/259)) ([1078ca1](https://github.com/serpcompany/keybumps/commit/1078ca1f9de0b515675ccb9aefa6756485626ae1))
+* Report a Problem… sends what went wrong, with this Mac's details, from the Help menu, the menu bar, and Settings ([#265](https://github.com/serpcompany/keybumps/issues/265)) ([440bbbe](https://github.com/serpcompany/keybumps/commit/440bbbe105545fb461b6f7521ec9cd59797ce5ae))
+
+
+### Fixes
+
+* problem report scrubbing stays fast on long text, and finds email addresses with combining marks ([#270](https://github.com/serpcompany/keybumps/issues/270)) ([a6045bf](https://github.com/serpcompany/keybumps/commit/a6045bf9f1c4e7eb75db1e4e6b2e9e5016a70ade))
+
 ## [0.0.3-beta.16](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.15...v0.0.3-beta.16) (2026-10-05)
 
 
