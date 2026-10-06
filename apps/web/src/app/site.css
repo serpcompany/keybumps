@@ -2415,28 +2415,6 @@ body:has(#questions:target) .plugin-tabs a:first-child {
   right: 2px;
 }
 
-.segments-mock {
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--kb-radius-sm);
-  font-size: 0.75rem;
-}
-
-.segments-mock span {
-  padding: 3px 9px;
-  color: var(--text-muted);
-}
-
-.segments-mock span + span {
-  border-left: 1px solid var(--border-strong);
-}
-
-.segments-mock .on {
-  background: var(--lavender-soft);
-  color: var(--text);
-}
-
 @media (max-width: 860px) {
   .home-steps,
   .use-cases,

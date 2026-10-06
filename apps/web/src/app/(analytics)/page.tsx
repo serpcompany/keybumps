@@ -67,7 +67,10 @@ const featured: readonly {
       'Every recording kept in Dictation History to search, replay, and copy',
       'Translate what you said and hear it read aloud (macOS 15 or later)'
     ],
-    options: { label: 'Recording limit', values: ['5 min', '10', '15', '30', '60', 'No limit'] },
+    options: {
+      label: 'Maximum recording length',
+      values: ['5 minutes', '10', '15', '30', '60', 'No limit']
+    },
     visual: <DictationVisual />
   },
   {
@@ -89,7 +92,7 @@ const featured: readonly {
     lede: 'Take a screenshot, cover what shouldn’t be seen, and paste it anywhere.',
     features: [
       'Blur, redact, arrows, drawing, and text',
-      'Every screen, then edit (⇧⌘3) copies only when you save, so nothing unredacted reaches the clipboard',
+      'Screenshot Screen and Edit (⇧⌘3) copies only when you save, so nothing unredacted reaches the clipboard',
       'Your screenshots in a grid of large thumbnails in their own tab'
     ],
     options: {
@@ -140,7 +143,7 @@ const useCases: readonly { title: string; text: string; plugins: readonly string
   }
 ]
 
-/** Real settings, drawn as the controls you'd find in Keybumps Settings. */
+/** Real settings, with their names from Keybumps Settings, drawn like its controls. */
 const settings: readonly { title: string; text: string; control: ReactNode }[] = [
   {
     title: 'Only the plugins you want',
@@ -170,7 +173,7 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
   {
     title: 'Emoji skin tone',
     text: 'Set it once and it applies to every emoji that has one.',
-    control: <Segments values={['✋', '✋🏻', '✋🏼', '✋🏽', '✋🏾', '✋🏿']} on="✋🏽" />
+    control: <Dropdown value="Medium" />
   },
   {
     title: 'Copy new screenshots to the clipboard',
@@ -270,7 +273,8 @@ export default async function Home() {
             <li>
               <h3>Jump to a tab</h3>
               <p>
-                Clipboard, Screenshots, Dictation, Snippets, Timers, and Emoji, once you turn it on.
+                Clipboard, Screenshots, Dictation, Snippets, Timers, and Emoji once you turn on
+                Emoji Picker.
               </p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
@@ -454,16 +458,4 @@ function Toggle({ on, label }: { on: boolean; label: string }) {
 
 function Dropdown({ value }: { value: string }) {
   return <span className="dropdown-mock">{value}</span>
-}
-
-function Segments({ values, on }: { values: readonly string[]; on: string }) {
-  return (
-    <span className="segments-mock">
-      {values.map(value => (
-        <span key={value} className={value === on ? 'on' : undefined}>
-          {value}
-        </span>
-      ))}
-    </span>
-  )
 }
