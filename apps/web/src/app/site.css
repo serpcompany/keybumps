@@ -411,6 +411,12 @@ kbd {
   margin-bottom: 10px;
 }
 
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .card h3 {
   font-size: 1.1rem;
 }

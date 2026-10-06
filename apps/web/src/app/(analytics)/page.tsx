@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
+import { PluginIcon } from '@/components/plugin-icon'
 import { PricingCard } from '@/components/pricing-card'
 import { getCurrentRelease } from '@/lib/latest-release'
+import { linkPrefetch } from '@/lib/pages'
+import { type Plugin, pluginPath, plugins } from '@/lib/plugins'
 import { PaletteDemo } from './palette-demo'
 
 export const metadata: Metadata = {
@@ -11,47 +15,13 @@ export const metadata: Metadata = {
 // Re-read the release pointer at most every five minutes.
 export const revalidate = 300
 
-const FEATURES: { title: string; keys?: string; body: string }[] = [
-  {
-    title: 'Quick Search',
-    keys: '⌘1',
-    body: 'Find apps, files, and folders on your Mac from one keyboard-first palette.'
-  },
-  {
-    title: 'Clipboard History',
-    keys: '⌘2',
-    body: 'Your last fifty copies — text and images, with previews. Delete what you don’t want kept.'
-  },
-  {
-    title: 'Screenshot Tools',
-    keys: '⇧⌘4',
-    body: 'Capture an area or every screen, then blur, redact, draw, and annotate before you paste.'
-  },
-  {
-    title: 'On-device Dictation',
-    keys: '⌥Space',
-    body: 'Talk and your words land at the cursor. Transcribed on your Mac by Apple speech recognition or a Whisper model — audio never leaves your Mac.'
-  },
-  {
-    title: 'Window Manager',
-    keys: '⌃⌥⌘←',
-    body: 'Snap windows to halves, thirds, and corners with shortcuts you choose.'
-  },
-  {
-    title: 'Shortcut Coach',
-    body: 'Notices when you reach for the mouse and nudges you toward the shortcut that does it faster.'
-  },
-  {
-    title: 'Snippets',
-    keys: '⌘5',
-    body: 'Save text you reuse, then copy or paste it from the palette — or turn on keywords and type them anywhere.'
-  },
-  {
-    title: 'Timer',
-    keys: '⌘6',
-    body: 'Type 5m or tea 25 and press Return. The countdown sits in the menu bar, and an alarm rings until you stop it.'
-  }
-]
+/** A card's shortcut: its first default hotkey, or else the Command Palette tab that opens it. */
+function cardKeys(plugin: Plugin): string | null {
+  const hotkey = plugin.shortcuts.find(shortcut => shortcut.keys)?.keys
+  if (hotkey) return hotkey
+  const tab = plugin.paletteTab
+  return tab && !tab.hiddenUnless ? `⌘${tab.commandKey}` : null
+}
 
 const FAQ = [
   {
@@ -64,7 +34,7 @@ const FAQ = [
   },
   {
     q: 'Can I turn off the parts I don’t use?',
-    a: 'Yes. Each capability is enabled independently, and turning one off stops its shortcuts and background work.'
+    a: 'Yes. Turn each plugin on or off in Settings › Plugins. Turning one off stops its shortcuts and background work.'
   },
   {
     q: 'Is it signed?',
@@ -83,14 +53,14 @@ export default async function Home() {
             <span className="dot" /> Public beta · v{release.version}
           </span>
           <h1>
-            Eight Mac utilities.
+            Everything you reach for.
             <br />
             <span className="accent">One keyboard shortcut away.</span>
           </h1>
           <p className="lede">
-            Keybumps brings search, clipboard history, screenshots, dictation, window management,
-            and shortcut coaching into a single native macOS app — fast, private, and entirely
-            on-device.
+            Keybumps puts search, clipboard history, screenshots, dictation, and the rest of the
+            utilities you’d install one by one into a single native macOS app — fast, private, and
+            entirely on-device.
           </p>
           <div className="cta-row">
             <a href={release.dmgURL} className="btn btn-lg">
@@ -112,19 +82,26 @@ export default async function Home() {
         <div className="container">
           <h2>Replace a menu bar full of apps</h2>
           <p className="section-lede">
-            Every capability shares one Command Palette and one set of settings. Enable only what
-            you need.
+            Every plugin shares one Command Palette and one set of settings. Turn on only what you
+            need.
           </p>
           <div className="grid">
-            {FEATURES.map(f => (
-              <article key={f.title} className="card">
-                <div className="card-head">
-                  <h3>{f.title}</h3>
-                  {f.keys && <kbd>{f.keys}</kbd>}
-                </div>
-                <p>{f.body}</p>
-              </article>
-            ))}
+            {plugins.map(plugin => {
+              const path = pluginPath(plugin.slug)
+              const keys = cardKeys(plugin)
+              return (
+                <Link key={plugin.slug} href={path} prefetch={linkPrefetch(path)} className="card">
+                  <div className="card-head">
+                    <span className="card-title">
+                      <PluginIcon systemImage={plugin.systemImage} tint={plugin.tint} size={22} />
+                      <h3>{plugin.name}</h3>
+                    </span>
+                    {keys && <kbd>{keys}</kbd>}
+                  </div>
+                  <p>{plugin.summary}</p>
+                </Link>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -185,9 +162,7 @@ export default async function Home() {
           <div className="final-cta">
             <Image src="/brand/app-icon.png" alt="" width={88} height={88} />
             <h2>Give your keys a bump.</h2>
-            <p className="section-lede">
-              Download the Keybumps beta and try every capability today.
-            </p>
+            <p className="section-lede">Download the Keybumps beta and try every plugin today.</p>
             <a href={release.dmgURL} className="btn btn-lg">
               Download Keybumps {release.version}
             </a>
