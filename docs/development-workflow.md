@@ -78,5 +78,5 @@ Computer-use or other screen control drives the owner's real mouse, keyboard, an
 ## 6. Publish only when requested
 
 - A local manual-QA build is not a public beta or Sparkle release.
-- Before merging a release PR, add `docs/releases/v<version>.md`: the What's New notes people see. Without it, the release generates notes from the changelog.
+- Before merging a release PR, merge `docs/releases/v<version>.md` (the What's New notes people see) to `main` in its own `docs:` PR. Release-please rewrites its own branch, so a file committed there can be lost. Without it, the release generates notes from the changelog.
 - Releases are cut by merging the release-please `release: Keybumps <version>` PR, which tags, builds, notarizes, and publishes to staging; production waits for owner approval on the `production` environment. See the release operations document. Never tag or publish by hand without explicit owner authorization.

@@ -73,7 +73,7 @@ Accessibility identifiers used by the suite are `settings.sidebar.<section>`, `s
 
 - **Runner:** GitHub-hosted `macos-26` (arm64), pinning Xcode with `xcode-select`. Evaluate the `xcode-27` image labels separately before moving. macOS minutes cost about 10× Linux, so jobs set `timeout-minutes`.
 - **When CI runs tests (owner decision, 2026-09-28):** on every pull request that touches app code (about 2 minutes of wall-clock time; the org's Enterprise plan includes 50,000 Actions minutes a month, and macOS counts 10×), and before every release build. No nightly schedule.
-  - **App code** is `apps/macos/**`. Both workflows' `paths:` filters name that folder and the workflow file itself, and their steps run in it (`APP_DIR` in each workflow; `release.yml` has its own). The tests read only it and the release notes in `docs/releases/` (`UpdateVisibilityTests` parses every real file), so the unit-test filter names `docs/releases/**` too.
+  - **App code** is `apps/macos/**`. Both workflows' `paths:` filters name that folder and the workflow file itself, and their steps run in it (`APP_DIR` in each workflow; `release.yml` has its own). The tests read only it and the release notes in `docs/releases/` (`UpdateVisibilityTests` parses every real file), so the unit-test filter names `docs/releases/v*.md` too.
   - **Release gate:** `release.yml` (Release Keybumps, from release-please or run manually) calls `keybumps-unit-tests.yml` and `keybumps-ui-tests.yml` first. The build, notarization, and publish jobs need both to pass.
   - **On demand:** either workflow can also be run from Actions (`workflow_dispatch`).
   - **Unit job:** the full `KeybumpsTests` suite with `CODE_SIGNING_ALLOWED=NO`, output through `xcbeautify` (preinstalled), and `-resultBundlePath` with the `.xcresult` uploaded on failure.
@@ -97,7 +97,7 @@ For changes that touch capability wiring or system integration, the hand-off inc
 6. A denied permission shows System Settings recovery.
 7. Toggling a capability off and on in Settings stops and restores it.
 8. Quit and relaunch keeps settings and histories.
-9. On a QA candidate, `-KBTestCrash YES` and `-KBTestFreeze YES` reach Sentry (`keybumps-mac`, environment `qa`); with Send crash reports off, nothing arrives. Report a Problem… sends a report that arrives with its details.
+9. On a QA candidate, `-KBTestCrash YES` (then relaunch, since the report is sent on the next launch) and `-KBTestFreeze YES` reach Sentry (`keybumps-mac`, environment `qa`); with Send crash reports off, nothing arrives. Report a Problem… sends a report that arrives with its details.
 
 ## Sources
 

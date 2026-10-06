@@ -41,7 +41,7 @@ That model needs a runtime for outside code, an isolation and permission model, 
 - Each new capability's PR, or its release, also:
   - adds its terms to `CONTEXT.md`;
   - writes its What's New lines in `docs/releases/`;
-  - adds an entry to `apps/web/src/lib/plugins.ts` and its `src/app/(analytics)/plugins/<slug>/` route, which feed both the Plugins page and the home page's grid, in a website PR that merges after the release that ships it, and adds it to the privacy page if it keeps anything;
+  - adds an entry to `apps/web/src/lib/plugins.ts` and its `src/app/(analytics)/plugins/<slug>/` route, which feed both the Plugins page and the home page's grid, in a website PR that merges after the release that ships it; if it keeps anything, the privacy page says so before that release;
   - adds a donor ledger entry and a `LICENSE.*` if it adapts outside code;
   - adds a UI smoke test that opens its tab or page.
 - The shell seams Timer needed now serve every capability: a module's own palette tab (`CapabilityPaletteContent`), the menu bar dot (`MenuBarAttention`), text and menu sections on the menu bar item (`MenuBarStatus`), and waiting for the notch (`PaletteHUD.whenNotchFree`).

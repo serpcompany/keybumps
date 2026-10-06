@@ -9,7 +9,7 @@ on:
     # release notes (UpdateVisibilityTests parses every docs/releases/v*.md).
     paths:
       - apps/macos/**
-      - docs/releases/**
+      - docs/releases/v*.md
       - .github/workflows/keybumps-unit-tests.yml
   workflow_call:
   workflow_dispatch:
