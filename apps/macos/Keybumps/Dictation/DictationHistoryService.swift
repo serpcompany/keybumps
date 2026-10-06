@@ -281,7 +281,6 @@ final class DictationHistoryService {
     private func loadOrRecoverEntry(from directoryURL: URL) -> DictationHistoryEntry? {
         let metadataURL = directoryURL.appendingPathComponent("meta.json")
         let audioURL = directoryURL.appendingPathComponent("output.wav")
-        let audioDuration = playableAudioDuration(at: audioURL)
 
         if let data = try? Data(contentsOf: metadataURL) {
             let decoder = JSONDecoder()
@@ -293,10 +292,12 @@ final class DictationHistoryService {
                 if activeRecordingIDs.contains(metadata.id) {
                     return entries.first(where: { $0.id == metadata.id })
                 }
+                // Recording stopped without closing the file, so its header may still say it's empty.
+                WAVHeaderRepair.repairFile(at: audioURL)
                 metadata = interruptedMetadata(
                     id: metadata.id,
                     capturedAt: metadata.datetime,
-                    duration: audioDuration ?? metadata.duration,
+                    duration: playableAudioDuration(at: audioURL) ?? metadata.duration,
                     language: metadata.languageSelected,
                     audioFile: metadata.audioFile
                 )
@@ -310,7 +311,8 @@ final class DictationHistoryService {
             )
         }
 
-        guard let audioDuration else { return nil }
+        WAVHeaderRepair.repairFile(at: audioURL)
+        guard let audioDuration = playableAudioDuration(at: audioURL) else { return nil }
         let id = directoryURL.lastPathComponent
         let capturedAt = id.split(separator: "-").first
             .flatMap { TimeInterval($0) }
