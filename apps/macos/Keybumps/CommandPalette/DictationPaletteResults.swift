@@ -208,7 +208,7 @@ private struct DictationPaletteDetail: View {
                 if showsTranslation, #available(macOS 15.0, *) {
                     LocalDictationTranslationView(
                         sourceText: entry.text,
-                        sourceLanguageIdentifier: entry.language,
+                        recordedLanguageIdentifier: entry.language,
                         close: { showsTranslation = false }
                     )
                 }

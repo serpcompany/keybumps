@@ -29,6 +29,7 @@
 		12F31F615607750DD9191EC4 /* PolarLicenseProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */; };
 		161A262BE3EB96DB9C2DAB51 /* WindowManagementModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A74EE27B85AA3D9E80FB0F /* WindowManagementModule.swift */; };
 		168EB2F837DEC3518377B4C2 /* ChromeActionDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */; };
+		1900D81A8210C857860AE13D /* DictationTranslationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6764E3032BB803A72829A5 /* DictationTranslationTests.swift */; };
 		196F7631D2965DEC2D452BAF /* PluginSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29161E585C6565DB6B7E10DC /* PluginSettingsPage.swift */; };
 		197955C758CB29FF6F4DCA14 /* LICENSE.openai-whisper in Resources */ = {isa = PBXBuildFile; fileRef = 5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */; };
 		1A1112634F9877A12C8E3B19 /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */; };
@@ -314,6 +315,7 @@
 		572DC6E9C68A567BE460ED2F /* MainWindowRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowRoutingTests.swift; sourceTree = "<group>"; };
 		57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		58C85AC05704376F0356083E /* ScreenshotToolsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotToolsService.swift; sourceTree = "<group>"; };
+		5C6764E3032BB803A72829A5 /* DictationTranslationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTranslationTests.swift; sourceTree = "<group>"; };
 		5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */ = {isa = PBXFileReference; path = "LICENSE.openai-whisper"; sourceTree = "<group>"; };
 		60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutCoordinator.swift; sourceTree = "<group>"; };
@@ -611,6 +613,7 @@
 				18BAB4932910BA478ABCC6D8 /* DictationModelPreloadTests.swift */,
 				54D92B135B7669762A245EC5 /* DictationNotchTests.swift */,
 				0D902CBDDE33CE519C755A20 /* DictationPastePermissionTests.swift */,
+				5C6764E3032BB803A72829A5 /* DictationTranslationTests.swift */,
 				CD492B963F2E1C378C206508 /* DictationWarmRuntimeBenchmarkTests.swift */,
 				6A000B204BFAE9C8AA9114E0 /* EmojiCatalogTests.swift */,
 				407EBDABF81402A19EE518A6 /* EmojiPickerTests.swift */,
@@ -1248,6 +1251,7 @@
 				49C559BBA608BD9BF01C73EE /* DictationModelPreloadTests.swift in Sources */,
 				ABD55C5FE6CE7B1634E4A14B /* DictationNotchTests.swift in Sources */,
 				0C15879E4F18BB707A454577 /* DictationPastePermissionTests.swift in Sources */,
+				1900D81A8210C857860AE13D /* DictationTranslationTests.swift in Sources */,
 				713E9A8F6D1DC841FE032B7B /* DictationWarmRuntimeBenchmarkTests.swift in Sources */,
 				0AE3DF53D548CBA5527B70D8 /* EmojiCatalogTests.swift in Sources */,
 				D4DEEBF4171345BD5B6CA972 /* EmojiPickerTests.swift in Sources */,

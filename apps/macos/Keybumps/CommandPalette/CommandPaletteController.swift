@@ -162,10 +162,38 @@ final class CommandPalettePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Whether the palette closes when it stops being key or a click lands outside it. Escape closes it
+/// either way.
 enum CommandPaletteDismissalPolicy {
-    static func shouldDismiss(isPresentingConfirmation: Bool) -> Bool {
-        !isPresentingConfirmation
+    /// - Parameters:
+    ///   - isPresentingConfirmation: A confirmation alert shows; it takes the palette's keys too.
+    ///   - isHeldOpen: Something in the palette holds it open (`holdCommandPaletteOpen`), such as a
+    ///     translation whose system download prompt is a window of its own (#321).
+    static func shouldDismiss(isPresentingConfirmation: Bool = false, isHeldOpen: Bool = false) -> Bool {
+        !isPresentingConfirmation && !isHeldOpen
     }
+}
+
+/// Holds the Command Palette open against outside clicks once it's called with `true` for an ID,
+/// until it's called with `false` for that ID or the palette closes. Outside the palette it does
+/// nothing. Equal for the same palette, so the environment value doesn't redraw its readers.
+struct CommandPaletteHold: Equatable {
+    private weak var palette: CommandPaletteController?
+
+    init(palette: CommandPaletteController? = nil) {
+        self.palette = palette
+    }
+
+    @MainActor
+    func callAsFunction(_ holder: UUID, _ isHeld: Bool) {
+        palette?.holdOpen(isHeld, by: holder)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
+}
+
+extension EnvironmentValues {
+    @Entry var holdCommandPaletteOpen = CommandPaletteHold()
 }
 
 @MainActor
@@ -196,6 +224,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
     private var isPresentingConfirmation = false
+    /// Who holds the palette open against outside clicks (`holdCommandPaletteOpen`). Closing the
+    /// palette lets them all go, so a hold never outlasts one showing.
+    private var openHolds: Set<UUID> = []
+    var isHeldOpen: Bool { !openHolds.isEmpty }
     private let notices: any PaletteNoticePresenting
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
@@ -302,7 +334,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     func dismiss() {
         panel?.orderOut(nil)
         isPresentingConfirmation = false
+        openHolds.removeAll()
         removeMonitors()
+    }
+
+    /// Holds the palette open against outside clicks for `holder`, or lets it go. The palette's
+    /// views reach it through `holdCommandPaletteOpen`.
+    func holdOpen(_ isHeld: Bool, by holder: UUID) {
+        if isHeld { openHolds.insert(holder) } else { openHolds.remove(holder) }
     }
 
     func dismiss(ifDisplaying tab: CommandPaletteTab) {
@@ -343,7 +382,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         if CommandPaletteDismissalPolicy.shouldDismiss(
-            isPresentingConfirmation: isPresentingConfirmation
+            isPresentingConfirmation: isPresentingConfirmation,
+            isHeldOpen: isHeldOpen
         ) {
             dismiss()
         }
@@ -401,6 +441,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
+            .environment(\.holdCommandPaletteOpen, CommandPaletteHold(palette: self))
             .uiTestAnimationsDisabled()
         )
         panel.setContentSize(size)
@@ -552,13 +593,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func installOutsideMonitors() {
         removeOutsideMonitors()
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
-            Task { @MainActor in self?.dismiss() }
+            Task { @MainActor in
+                guard let self,
+                      CommandPaletteDismissalPolicy.shouldDismiss(isHeldOpen: self.isHeldOpen) else { return }
+                self.dismiss()
+            }
         }
         localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self else { return event }
             if event.window !== self.panel,
                CommandPaletteDismissalPolicy.shouldDismiss(
-                   isPresentingConfirmation: self.isPresentingConfirmation
+                   isPresentingConfirmation: self.isPresentingConfirmation,
+                   isHeldOpen: self.isHeldOpen
                ) {
                 self.dismiss()
             }

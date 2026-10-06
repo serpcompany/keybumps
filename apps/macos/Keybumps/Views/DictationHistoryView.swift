@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import NaturalLanguage
 import SwiftUI
 import Translation
 
@@ -140,12 +141,48 @@ enum DictationTranslationPolicy {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// How sure `NLLanguageRecognizer` must be before its guess replaces the recorded language.
+    /// Short words that several languages share score below it ("OK", "Hola", "Bonjour", and "Ciao"
+    /// score 0.3 to 0.7), while a sentence, or a Chinese or Japanese word of two characters, scores
+    /// 0.8 or more.
+    static let sourceDetectionConfidence = 0.8
+    /// The fewest characters worth a guess: one says too little. It stays low because two Japanese
+    /// characters are already a certain guess; the confidence screens out the rest.
+    static let sourceDetectionMinimumLength = 2
+
+    /// The language to translate from: the one the text is written in. A recording's language is the
+    /// Dictation language setting it was recorded with, not what was spoken (#321). Keeps the recorded
+    /// language when the text is in it (so its region stays, as in `pt-BR`), or when the guess is
+    /// unsure.
+    static func sourceLanguageIdentifier(for text: String, recordedLanguageIdentifier: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= sourceDetectionMinimumLength else { return recordedLanguageIdentifier }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(trimmed)
+        guard let (language, confidence) = recognizer.languageHypotheses(withMaximum: 1).first,
+              language != .undetermined,
+              confidence >= sourceDetectionConfidence else { return recordedLanguageIdentifier }
+        let detected = Locale.Language(identifier: language.rawValue)
+        let recorded = Locale.Language(identifier: recordedLanguageIdentifier)
+        let sameLanguage = detected.languageCode == recorded.languageCode
+            && Locale.Language(identifier: detected.maximalIdentifier).script
+                == Locale.Language(identifier: recorded.maximalIdentifier).script
+        return sameLanguage ? recordedLanguageIdentifier : language.rawValue
+    }
+
+    /// The languages Translate offers: every supported one but the source's.
+    static func targets(from supported: [Locale.Language], sourceIdentifier: String) -> [Locale.Language] {
+        let source = Locale.Language(identifier: sourceIdentifier)
+        return supported.filter { !$0.isEquivalent(to: source) }
+    }
+
+    /// English, or Japanese when the text is in English.
     static func preferredTargetIdentifier(
         sourceIdentifier: String,
         supportedIdentifiers: [String]
     ) -> String? {
         let source = Locale.Language(identifier: sourceIdentifier)
-        let preferred = source.languageCode?.identifier == "ja" ? "en" : "ja"
+        let preferred = source.languageCode?.identifier == "en" ? "ja" : "en"
         return supportedIdentifiers.first(where: {
             Locale.Language(identifier: $0).languageCode?.identifier == preferred
         }) ?? supportedIdentifiers.first
@@ -286,7 +323,7 @@ struct DictationHistoryCard: View {
                         if #available(macOS 15.0, *) {
                             LocalDictationTranslationView(
                                 sourceText: entry.text,
-                                sourceLanguageIdentifier: entry.language,
+                                recordedLanguageIdentifier: entry.language,
                                 close: { showsTranslation = false }
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -416,9 +453,13 @@ struct ClearAllButton: View {
 @available(macOS 15.0, *)
 struct LocalDictationTranslationView: View {
     let sourceText: String
-    let sourceLanguageIdentifier: String
+    /// The Dictation language setting the recording was made with. Translation starts from
+    /// `sourceLanguageIdentifier`, the language the text is in.
+    let recordedLanguageIdentifier: String
     let close: () -> Void
 
+    @Environment(\.holdCommandPaletteOpen) private var holdPaletteOpen
+    @State private var holdID = UUID()
     @State private var supportedTargets: [Locale.Language] = []
     @State private var targetIdentifier = ""
     @State private var translatedText: String?
@@ -525,11 +566,15 @@ struct LocalDictationTranslationView: View {
         .background(.black.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
         .task { await loadSupportedTargets() }
         .onChange(of: targetIdentifier) { _, _ in speechPlayer.clear() }
-        .onDisappear { speechPlayer.clear() }
+        .onDisappear {
+            speechPlayer.clear()
+            holdPaletteOpen(holdID, false)
+        }
         .translationTask(configuration) { session in
             do {
                 try await session.prepareTranslation()
                 let response = try await session.translate(sourceText)
+                holdPaletteOpen(holdID, false)
                 translatedText = response.targetText
                 errorMessage = nil
                 await speechPlayer.prepare(
@@ -537,6 +582,7 @@ struct LocalDictationTranslationView: View {
                     languageIdentifier: targetIdentifier
                 )
             } catch {
+                holdPaletteOpen(holdID, false)
                 speechPlayer.clear()
                 errorMessage = "Translation could not be completed. Check that the selected language model is available."
             }
@@ -547,6 +593,9 @@ struct LocalDictationTranslationView: View {
     private func triggerTranslation() {
         guard !targetIdentifier.isEmpty else { return }
         speechPlayer.clear()
+        // A language's first translation shows the system's download prompt, a window of its own.
+        // Until the translation is done, a click on it mustn't close the palette (#321).
+        holdPaletteOpen(holdID, true)
         isTranslating = true
         translatedText = nil
         errorMessage = nil
@@ -559,12 +608,20 @@ struct LocalDictationTranslationView: View {
         }
     }
 
+    private var sourceLanguageIdentifier: String {
+        DictationTranslationPolicy.sourceLanguageIdentifier(
+            for: sourceText,
+            recordedLanguageIdentifier: recordedLanguageIdentifier
+        )
+    }
+
     private func loadSupportedTargets() async {
+        let sourceLanguageIdentifier = sourceLanguageIdentifier
         let source = Locale.Language(identifier: sourceLanguageIdentifier)
         let availability = LanguageAvailability()
         let supported = await availability.supportedLanguages
         var compatible: [Locale.Language] = []
-        for language in supported where !language.isEquivalent(to: source) {
+        for language in DictationTranslationPolicy.targets(from: supported, sourceIdentifier: sourceLanguageIdentifier) {
             let status = await availability.status(from: source, to: language)
             if status != .unsupported { compatible.append(language) }
         }
