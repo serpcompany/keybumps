@@ -201,7 +201,7 @@ jobs:
         run: rm -f "$RUNNER_TEMP/sparkle-private-key"
 
       # Crash reports name Keybumps's code only with this build's debug symbols (ADR 0007). A
-      # release without SENTRY_AUTH_TOKEN still ships; its crash reports are just unsymbolicated.
+      # release still ships without them: a missing token or a failed upload is a warning.
       - name: Upload debug symbols to Sentry
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -212,7 +212,8 @@ jobs:
           fi
           npx --yes "@sentry/cli@${SENTRY_CLI_VERSION}" debug-files upload \
             --org serpcompany --project keybumps-mac \
-            "$RUNNER_TEMP/release/archive/Keybumps.xcarchive/dSYMs"
+            "$RUNNER_TEMP/release/archive/Keybumps.xcarchive/dSYMs" \
+            || echo "::warning::Uploading debug symbols to Sentry failed: crash reports from this release won't be symbolicated."
 
       - name: Preview publication
         run: |

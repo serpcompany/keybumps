@@ -20,12 +20,9 @@ struct CrashReportingTests {
         #expect(!CrashReporter.isRunning)
     }
 
-    @Test func eachBuildReportsToItsOwnEnvironment() {
-        let production = "https://updates.keybumps.app/appcast.xml"
-        let staging = "https://updates.keybumps.app/staging/appcast.xml"
-        #expect(CrashReportingPolicy.environment(version: "0.0.3-beta.16", feedURL: production) == "production")
-        #expect(CrashReportingPolicy.environment(version: "0.0.3-beta.16", feedURL: staging) == "staging")
-        #expect(CrashReportingPolicy.environment(version: "0.0.3-dev.issue258", feedURL: production) == "qa")
+    @Test func qaCandidatesReportApartFromReleases() {
+        #expect(CrashReportingPolicy.environment(version: "0.0.3-beta.16") == "production")
+        #expect(CrashReportingPolicy.environment(version: "0.0.3-dev.issue258") == "qa")
     }
 
     @Test func crashReportsAreOnUntilTurnedOff() {
@@ -47,6 +44,16 @@ struct CrashReportingTests {
         #expect(scrub("loading https://example.com/a?q=secret failed") == "loading <url> failed")
         #expect(scrub("file:///Users/pat/a.txt") == "<url>")
         #expect(scrub("sent by pat.lee@example.com today") == "sent by <email> today")
+        // Cocoa quotes file names with curly quotes.
+        #expect(scrub("The file “Q3 plan.txt” couldn’t be opened") == "The file “Q3 plan.txt” couldn’t be opened")
+        #expect(scrub("“/Users/pat/Q3 plan.txt” is locked") == "“<path>” is locked")
+        #expect(scrub("wrote /private/var/folders/x1/T/draft.txt") == "wrote <path>")
+        #expect(scrub("wrote /tmp/draft.txt") == "wrote <path>")
+    }
+
+    @Test func aBinaryInAHomeFolderKeepsItsName() {
+        #expect(CrashReportScrubber.scrubImagePath("/Users/pat/Downloads/Keybumps.app/Contents/MacOS/Keybumps") == "<path>/Keybumps")
+        #expect(CrashReportScrubber.scrubImagePath("/Applications/Keybumps.app/Contents/MacOS/Keybumps") == "/Applications/Keybumps.app/Contents/MacOS/Keybumps")
     }
 
     @Test func scrubbingKeepsWhatDiagnosesACrash() {
@@ -81,7 +88,15 @@ struct CrashReportingTests {
             Breadcrumb(level: .info, category: "ui.click"),
             Breadcrumb(level: .info, category: "keybumps.dictation"),
         ]
-        event.context = ["os": ["name": "macOS"], "culture": ["timezone": "Asia/Tokyo"], "plugins": ["on": ["timer"]]]
+        exception.mechanism = Mechanism(type: "nsexception")
+        exception.mechanism?.data = ["crash_info_messages": ["can't read /Users/pat/notes.txt"]]
+        event.context = [
+            "os": ["name": "macOS"],
+            "app": ["app_version": "1.0", "device_app_hash": "abc123"],
+            "device": ["model": "Mac15,3", "locale": "ja_JP"],
+            "culture": ["timezone": "Asia/Tokyo"],
+            "plugins": ["on": ["timer"]],
+        ]
 
         let scrubbed = CrashReportScrubber.scrub(event)
 
@@ -93,10 +108,15 @@ struct CrashReportingTests {
         let scrubbedException = try #require(scrubbed.exceptions?.first)
         #expect(scrubbedException.value == "bad URL <url>")
         #expect(scrubbedException.type == "NSInvalidArgumentException")
-        #expect(scrubbedException.stacktrace?.frames.first?.package == "<path>")
+        #expect(scrubbedException.stacktrace?.frames.first?.package == "<path>/Keybumps")
+        #expect(scrubbedException.mechanism?.data?["crash_info_messages"] as? [String] == ["can't read <path>"])
         #expect(scrubbedException.stacktrace?.frames.first?.contextLine == nil)
-        #expect(scrubbed.debugMeta?.first?.codeFile == "<path>")
+        #expect(scrubbed.debugMeta?.first?.codeFile == "<path>/Keybumps")
         #expect(scrubbed.breadcrumbs?.map(\.category) == ["keybumps.dictation"])
-        #expect(Set(scrubbed.context.map { Array($0.keys) } ?? []) == ["os", "plugins"])
+        #expect(Set(scrubbed.context.map { Array($0.keys) } ?? []) == ["os", "app", "device", "plugins"])
+        #expect(scrubbed.context?["app"]?["device_app_hash"] == nil)
+        #expect(scrubbed.context?["app"]?["app_version"] as? String == "1.0")
+        #expect(scrubbed.context?["device"]?["locale"] == nil)
+        #expect(scrubbed.context?["device"]?["model"] as? String == "Mac15,3")
     }
 }

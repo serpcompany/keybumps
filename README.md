@@ -54,3 +54,5 @@ Screenshot Tools redaction and markup rendering is adapted from the MIT-licensed
 Timer's duration parsing is adapted from the MIT-licensed Tock project. See `apps/macos/LICENSE.tock` and `docs/provenance/donor-ledger.md`. The Emoji Picker's emoji, names, and keywords come from Unicode and CLDR, and its `:shortcode:` aliases from GitHub's gemoji; see `apps/macos/LICENSE.unicode`, `apps/macos/LICENSE.gemoji`, and the donor ledger.
 
 Local Whisper transcription uses the MIT-licensed Argmax OSS Swift/WhisperKit package and OpenAI Whisper model family. See `apps/macos/LICENSE.argmax-oss-swift`, `apps/macos/NOTICES.argmax-oss-swift`, and `apps/macos/LICENSE.openai-whisper`.
+
+Crash reports use the MIT-licensed Sentry Cocoa SDK. See `apps/macos/LICENSE.sentry-cocoa`.

@@ -15,16 +15,22 @@ enum CrashReportingPolicy {
         return dsn
     }
 
-    /// QA candidates, staging builds, and public releases report separately.
-    static func environment(version: String, feedURL: String?) -> String {
-        if version.contains("-dev.") { return "qa" }
-        if feedURL?.contains("/staging/") == true { return "staging" }
-        return "production"
+    /// QA candidates report apart from public releases. (CI publishes one build to both update
+    /// channels, so a build can't tell staging from production.)
+    static func environment(version: String) -> String {
+        version.contains("-dev.") ? "qa" : "production"
     }
 
     /// Contexts a report keeps: the app, the Mac's model and macOS, and which plugins are on.
-    /// Everything else Sentry attaches, such as locale and time zone, is dropped.
+    /// Everything else Sentry attaches, such as culture (locale, time zone), is dropped.
     static let keptContexts: Set<String> = ["app", "device", "os", "runtime", "trace", "plugins"]
+
+    /// Fields dropped from kept contexts: `device_app_hash` is derived from the Mac's network
+    /// address, so it's a fixed hardware identifier; locale says where someone is.
+    static let droppedContextFields: [String: Set<String>] = [
+        "app": ["device_app_hash"],
+        "device": ["locale", "timezone"],
+    ]
 
     /// Only breadcrumbs Keybumps leaves itself, which hold stages and categories, never content.
     static func keepsBreadcrumb(category: String) -> Bool {
@@ -33,17 +39,20 @@ enum CrashReportingPolicy {
 }
 
 /// Removes what a crash report must never carry (ADR 0007) from its free text: paths in a home
-/// folder or on another volume, URLs, and email addresses. Stack frames, versions, and error
-/// categories pass through.
+/// folder, on another volume, or in a temporary folder; URLs; and email addresses. Stack frames,
+/// versions, and error categories pass through.
 enum CrashReportScrubber {
+    /// Where a path or URL ends: a line break, a quote (straight or curly), or an angle bracket.
+    private static let end = #"\n"'“”‘’<>"#
+
     private static let rules: [(NSRegularExpression, String)] = [
         // A URL runs to the next space or quote.
-        (#"[A-Za-z][A-Za-z0-9+.\-]*://[^\s"'<>]*"#, "<url>"),
+        (#"[A-Za-z][A-Za-z0-9+.\-]*://[^\s"# + end + "]*", "<url>"),
         (#"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"#, "<email>"),
         // A path can contain spaces, so it runs to the end of the line or the next quote: losing
         // the rest of a message is better than leaking a file name.
-        (#"(?:/Users|/Volumes)/[^\n"'<>]*"#, "<path>"),
-        (#"~/[^\n"'<>]*"#, "<path>"),
+        (#"(?:/Users|/Volumes|/private|/tmp|/var/folders)/[^"# + end + "]*", "<path>"),
+        (#"~/[^"# + end + "]*", "<path>"),
     ].map { pattern, replacement in
         // The patterns are constants; a typo fails every scrubber test.
         (try! NSRegularExpression(pattern: pattern), replacement)
@@ -60,6 +69,26 @@ enum CrashReportScrubber {
         text.map { scrub($0) }
     }
 
+    /// A binary's path keeps its file name, which is Keybumps's or a system library's, so a
+    /// copy run from a home folder still shows which binary a frame is in.
+    static func scrubImagePath(_ path: String?) -> String? {
+        guard let path else { return nil }
+        let scrubbed = scrub(path)
+        guard scrubbed != path else { return path }
+        return "<path>/" + (path as NSString).lastPathComponent
+    }
+
+    /// Strings anywhere in a value, such as the raw Swift runtime messages Sentry keeps in an
+    /// exception's mechanism data.
+    static func scrubValue(_ value: Any) -> Any {
+        switch value {
+        case let text as String: return scrub(text)
+        case let list as [Any]: return list.map(scrubValue)
+        case let dictionary as [String: Any]: return dictionary.mapValues(scrubValue)
+        default: return value
+        }
+    }
+
     /// Applies the policy to an event just before Sentry sends it, crashes from an earlier run
     /// included.
     static func scrub(_ event: Event) -> Event {
@@ -67,26 +96,38 @@ enum CrashReportScrubber {
         event.request = nil
         event.extra = nil
         event.error = nil
-        // The random install identifier Sentry counts crash-free users with, and nothing else.
+        // Sentry's random install identifier, and nothing else.
         event.user = event.user?.userId.map { User(userId: $0) }
         if let message = event.message {
             event.message = SentryMessage(formatted: scrub(message.formatted))
         }
         event.exceptions?.forEach { exception in
             exception.value = scrub(exception.value)
+            if let mechanism = exception.mechanism {
+                mechanism.desc = scrub(mechanism.desc)
+                mechanism.data = mechanism.data?.mapValues(scrubValue)
+            }
             scrubFrames(exception.stacktrace)
         }
         event.threads?.forEach { scrubFrames($0.stacktrace) }
         scrubFrames(event.stacktrace)
-        event.debugMeta?.forEach { $0.codeFile = scrub($0.codeFile) }
+        event.debugMeta?.forEach { $0.codeFile = scrubImagePath($0.codeFile) }
         event.breadcrumbs = event.breadcrumbs?.filter { CrashReportingPolicy.keepsBreadcrumb(category: $0.category) }
-        event.context = event.context?.filter { CrashReportingPolicy.keptContexts.contains($0.key) }
+        event.context = event.context.map(scrubContexts)
         return event
+    }
+
+    static func scrubContexts(_ contexts: [String: [String: Any]]) -> [String: [String: Any]] {
+        contexts.reduce(into: [:]) { kept, entry in
+            guard CrashReportingPolicy.keptContexts.contains(entry.key) else { return }
+            let dropped = CrashReportingPolicy.droppedContextFields[entry.key] ?? []
+            kept[entry.key] = entry.value.filter { !dropped.contains($0.key) }
+        }
     }
 
     private static func scrubFrames(_ stacktrace: SentryStacktrace?) {
         stacktrace?.frames.forEach { frame in
-            frame.package = scrub(frame.package)
+            frame.package = scrubImagePath(frame.package)
             frame.fileName = scrub(frame.fileName)
             frame.contextLine = nil
             frame.preContext = nil
@@ -124,11 +165,15 @@ enum CrashReporter {
               let dsn = CrashReportingPolicy.destination(info: bundle.infoDictionary, isUnitTestHost: UnitTestHost.isActive)
         else { return }
         let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let feedURL = bundle.object(forInfoDictionaryKey: "SUFeedURL") as? String
         SentrySDK.start { options in
             options.dsn = dsn
-            options.environment = CrashReportingPolicy.environment(version: version, feedURL: feedURL)
+            options.environment = CrashReportingPolicy.environment(version: version)
             options.sendDefaultPii = false
+            // No session records: they'd report every launch and how long Keybumps ran, which is
+            // usage, not a crash.
+            options.enableAutoSessionTracking = false
+            // Turning reports off never waits on the network: whatever is queued stays on disk.
+            options.shutdownTimeInterval = 0
             // Crashes and freezes only: no automatic breadcrumbs, network capture, or tracing, any
             // of which could carry user content. (Screenshots and view hierarchy are iOS-only.)
             options.enableAutoBreadcrumbTracking = false
