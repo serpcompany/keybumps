@@ -174,6 +174,9 @@ final class DictationService {
     private var audioFile: AVAudioFile?
     private var activeRecording: PendingDictationRecording?
     private var recordingStartedAt: Date?
+    /// Changes when a dictation session starts or is cancelled, so a stop still waiting on its
+    /// transcription can tell that the state now belongs to another session (#281).
+    private var session = 0
     @ObservationIgnored private var durationTimer: Timer?
     /// The last transcript kept for recovery; read by the unit-test isolation guard.
     let recoveryURL: URL
@@ -281,14 +284,30 @@ final class DictationService {
         audioEngine.prepare()
         do {
             try audioEngine.start()
-            setPhase(.recording)
-            scheduleDurationLimit()
-            transcriber.prepare(language: selectedLanguage)
+            beginSession()
         } catch { cleanup(); fail("The microphone could not start.") }
+    }
+
+    /// Starts a session for `recording` as `start()` does once the microphone is writing to it,
+    /// but without the microphone. Internal so tests can follow a session through a cancel and
+    /// the next session (#281); it does nothing outside the unit-test host.
+    func beginSessionWithoutMicrophone(recording: PendingDictationRecording) {
+        guard UnitTestHost.isActive, phase == .idle || isFailed, retryingEntryID == nil else { return }
+        activeRecording = recording
+        recordingStartedAt = recording.capturedAt
+        beginSession()
+    }
+
+    private func beginSession() {
+        session += 1
+        setPhase(.recording)
+        scheduleDurationLimit()
+        transcriber.prepare(language: selectedLanguage)
     }
 
     func cancel() {
         guard phase != .idle || retryingEntryID != nil else { return }
+        session += 1
         transcriber.cancel()
         cleanup()
         setPhase(.idle)
@@ -349,6 +368,9 @@ final class DictationService {
     private var isFailed: Bool { if case .failed = phase { true } else { false } }
 
     private func stopAndInsert() async {
+        // The shortcut and the duration limit can both stop the same recording.
+        guard phase == .recording else { return }
+        let session = self.session
         setPhase(.transcribing)
         let recording = activeRecording
         let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
@@ -368,6 +390,7 @@ final class DictationService {
                 language: selectedLanguage,
                 recordedDuration: duration
             )
+            guard session == self.session else { return }
             try transcript.write(to: recoveryURL, atomically: true, encoding: .utf8)
             recoveredTranscript = transcript
             try history.completeRecording(
@@ -381,11 +404,14 @@ final class DictationService {
             recordingStartedAt = nil
             setPhase(.inserting)
             try await insert(transcript)
+            guard session == self.session else { return }
             cleanup()
             setPhase(.idle)
-        } catch is CancellationError {
-            cleanup(); setPhase(.idle)
         } catch {
+            // Cancelled or replaced while it waited: the cancel discarded this recording, and
+            // what's active now belongs to another session.
+            guard session == self.session else { return }
+            if error is CancellationError { cleanup(); setPhase(.idle); return }
             if let recording = activeRecording {
                 _ = try? history.completeRecording(
                     recording,

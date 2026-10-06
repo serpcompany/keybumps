@@ -184,6 +184,11 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     private var pendingWhisper: WhisperLoad?
     private var unloadingWhisper: (token: UUID, task: Task<Void, Never>)?
     private var idleCancellation: (any DictationRuntimeIdleCancellation)?
+    /// Transcriptions waiting for their Whisper runtime to load. `cancel()` ends these waits.
+    private var runtimeWaits: [UUID: CheckedContinuation<any UnloadableCompletedAudioTranscribing, Error>] = [:]
+    /// How many times `cancel()` has run, so a transcription whose runtime loaded just before a
+    /// cancel stops too.
+    private var cancellations = 0
 
     var partialTranscript: String { activeTranscriber?.partialTranscript ?? "" }
 
@@ -217,7 +222,10 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
+        let cancellationsBefore = cancellations
         let transcriber = try await resolveTranscriber(language: language)
+        // The runtime loaded, but a cancel ran before this transcription resumed.
+        guard cancellations == cancellationsBefore else { throw CancellationError() }
         let isWhisper = transcriber is any UnloadableCompletedAudioTranscribing
         if isWhisper {
             idleCancellation?.cancel()
@@ -261,10 +269,16 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     }
 
     func cancel() {
+        cancellations += 1
         if let activeTranscriber {
             activeTranscriber.cancel()
             return
         }
+        // A transcription still waiting for its model stops now. The load keeps running, so the
+        // next dictation can use it.
+        let waits = runtimeWaits.values
+        runtimeWaits.removeAll()
+        waits.forEach { $0.resume(throwing: CancellationError()) }
         // A recording that loaded a model and then ended without a transcription still unloads it
         // after the idle timeout.
         if (cachedWhisper != nil || pendingWhisper != nil), idleCancellation == nil {
@@ -329,7 +343,8 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     }
 
     /// The selected engine's transcriber. A model change or deletion while this waits for a load
-    /// evicts that load, so the selection is resolved again rather than used while it unloads.
+    /// evicts that load, so the selection is resolved again rather than used while it unloads. A
+    /// cancel ends the wait.
     private func resolveTranscriber(language: String) async throws -> any CompletedAudioTranscribing {
         for _ in 0..<4 {
             guard let modelFolder = installedWhisperModelFolder(language: language) else {
@@ -344,7 +359,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
             }
             evictWhisperRuntimeIfModelChanged(to: modelFolder)
             do {
-                return try await awaitWhisperLoad(whisperLoad(modelFolder: modelFolder))
+                return try await awaitWhisperLoadUntilCancelled(whisperLoad(modelFolder: modelFolder))
             } catch is WhisperLoadEvicted {
                 continue
             }
@@ -400,6 +415,30 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         if load.isEvicted { throw WhisperLoadEvicted() }
         let loaded = try result.get()
         // Another waiter cached it first; an eviction since then unloads it.
+        guard cachedWhisper?.transcriber === loaded else { throw WhisperLoadEvicted() }
+        return loaded
+    }
+
+    /// Waits for `load` for a transcription, as `awaitWhisperLoad` does, except that `cancel()`
+    /// ends the wait with `CancellationError` (#281). The load still finishes and caches its
+    /// runtime, which the cancel's idle unload covers.
+    private func awaitWhisperLoadUntilCancelled(
+        _ load: WhisperLoad
+    ) async throws -> any UnloadableCompletedAudioTranscribing {
+        let id = UUID()
+        let loaded = try await withCheckedThrowingContinuation { continuation in
+            runtimeWaits[id] = continuation
+            Task { @MainActor in
+                let result: Result<any UnloadableCompletedAudioTranscribing, Error>
+                do {
+                    result = .success(try await self.awaitWhisperLoad(load))
+                } catch {
+                    result = .failure(error)
+                }
+                self.runtimeWaits.removeValue(forKey: id)?.resume(with: result)
+            }
+        }
+        // An eviction while this waited to resume unloads that runtime.
         guard cachedWhisper?.transcriber === loaded else { throw WhisperLoadEvicted() }
         return loaded
     }
