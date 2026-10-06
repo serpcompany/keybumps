@@ -72,7 +72,10 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
       const target = event.target as Node
       if (!nav.current?.contains(target)) closeAll()
       // A press on the header between the menus (not on a menu or its button) closes them too.
-      else if (!(target instanceof Element && target.closest('.nav-item'))) setOpen(null)
+      else if (!(target instanceof Element && target.closest('.nav-item'))) {
+        setOpen(null)
+        hoverOpened.current = null
+      }
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onPointer)
@@ -164,7 +167,13 @@ export function SiteNav({ menus, download }: { menus: readonly NavMenu[]; downlo
           )
         )}
       </ul>
-      <div className="nav-actions">
+      {/* Download starts a file, not a navigation, so it closes the menus itself. */}
+      <div
+        className="nav-actions"
+        onClickCapture={event => {
+          if ((event.target as Element).closest('a')) closeAll()
+        }}
+      >
         {download}
         <button
           type="button"
