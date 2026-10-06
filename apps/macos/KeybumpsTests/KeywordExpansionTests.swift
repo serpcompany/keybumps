@@ -40,17 +40,30 @@ struct TypedKeyTests {
 
     @Test("A key event's code, characters, flags, and Keybumps' marker are read as the tap sees them")
     func readsEvents() throws {
-        let typed = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_S), keyDown: true))
+        let typed = try keyDown(kVK_ANSI_S)
         typed.keyboardSetUnicodeString(stringLength: 1, unicodeString: Array("s".utf16))
         #expect(KeyTypingMonitor.typedKey(from: typed) == .characters("s"))
 
         typed.flags = .maskCommand
         #expect(KeyTypingMonitor.typedKey(from: typed) == .reset)
 
-        let own = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_S), keyDown: true))
+        let own = try keyDown(kVK_ANSI_S)
         own.keyboardSetUnicodeString(stringLength: 1, unicodeString: Array("s".utf16))
         own.setIntegerValueField(.eventSourceUserData, value: SystemTextPaster.syntheticEventMarker)
         #expect(KeyTypingMonitor.typedKey(from: own) == .reset)
+    }
+
+    /// A key-down event that can't pick up modifier keys someone is physically holding while the
+    /// tests run (#295): an event from no source takes on the live modifiers, such as ⌥ held for
+    /// Dictation's ⌥Space, and then reads as a shortcut.
+    private func keyDown(_ code: Int) throws -> CGEvent {
+        let event = try #require(CGEvent(
+            keyboardEventSource: CGEventSource(stateID: .privateState),
+            virtualKey: CGKeyCode(code),
+            keyDown: true
+        ))
+        event.flags = []
+        return event
     }
 
     @Test("A key that reaches Keybumps late is never expanded, since more typing may have landed first")
@@ -60,7 +73,7 @@ struct TypedKeyTests {
         #expect(!KeyTypingMonitor.isLate(eventUptime: 0, now: 10.2), "A key posted with no timestamp counts as on time")
 
         // A real event's timestamp is read on the same clock as system uptime.
-        let event = try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_ANSI_S), keyDown: true))
+        let event = try keyDown(kVK_ANSI_S)
         event.timestamp = CGEventTimestamp(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
         let read = try #require(KeyTypingMonitor.uptime(of: event))
         #expect(abs(read - ProcessInfo.processInfo.systemUptime) < 0.05)
