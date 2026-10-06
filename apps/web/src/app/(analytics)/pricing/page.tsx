@@ -32,7 +32,7 @@ export default function PricingPage() {
       <section className="section first">
         <div className="container">
           <h2>Simple pricing</h2>
-          <p className="section-lede">{pricing.model.summary}</p>
+          <p className="section-lede">{pricing.model.pageLede}</p>
           <PricingCard />
         </div>
       </section>

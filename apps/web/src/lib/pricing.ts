@@ -1,10 +1,13 @@
 /**
  * What Keybumps costs and what a purchase includes: the one place to change when trying a different
  * price or pricing model. The pricing card, the home page's pricing section, /pricing/, the page
- * descriptions, and the terms and refund policy all read from here.
+ * descriptions, and the terms, refund policy, and privacy policy all read from here, and
+ * `pricing.test.ts` fails if any of it is written out anywhere else.
  *
- * `macs`, `refundDays`, and `model.terms` are terms of sale: changing them changes the terms and
- * refund policy, so update `LEGAL_UPDATED` in ./site in the same change.
+ * Terms of sale: `macs`, `macsInWords`, `refundDays`, `guarantee`, and `model.terms` appear on the
+ * legal pages, so changing one changes them. `pricing.test.ts` pins these with `LEGAL_UPDATED` (in
+ * ./site), so it fails until the date moves too. A model with renewals, such as a subscription,
+ * also needs new terms written for it: renewal, cancellation, and what happens when it lapses.
  */
 
 const price = '$49'
@@ -22,7 +25,15 @@ const macsText = `${macsInWords} Mac${plural}`
 
 export const pricing = {
   price,
+  /** After the price, such as "/month"; empty for a one-time purchase. */
+  period: '',
   currency: 'USD',
+  /** Polar's checkout for this price. When it's null, the buy button downloads the current DMG. */
+  checkoutUrl: 'https://buy.polar.sh/polar_cl_NgKwENo1kvvLio6Xl27IFyoWpAoqf73sN8mRX03RNTj' as
+    | string
+    | null,
+  /** The pricing card's button, before the price. */
+  cta: 'Buy Keybumps',
   macs,
   macsInWords,
   refundDays,
@@ -36,8 +47,10 @@ export const pricing = {
     label: 'One-time purchase',
     /** The home page pricing section's headline. */
     headline: 'One price. Yours to keep.',
-    /** Under the pricing headlines. */
+    /** Under the home page pricing headline, before the guarantee. */
     summary: 'No subscription, no account.',
+    /** Under /pricing/'s headline. */
+    pageLede: 'One app, one price. No subscription, no account.',
     /** On the pricing card's list. */
     updates: 'All future updates included',
     /** /pricing/'s first question. */

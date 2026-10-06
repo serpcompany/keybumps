@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
 import { pricing, pricingIncludes } from '@/lib/pricing'
-import { CHECKOUT_URL } from '@/lib/site'
 
 export function PricingCard() {
   return (
@@ -12,6 +11,7 @@ export function PricingCard() {
       </div>
       <p className="price">
         {pricing.price}
+        {pricing.period}
         <span>
           {' '}
           {pricing.currency} · {pricing.macsLabel}
@@ -22,9 +22,10 @@ export function PricingCard() {
           <li key={item}>{item}</li>
         ))}
       </ul>
-      {CHECKOUT_URL ? (
-        <a href={CHECKOUT_URL} className="btn btn-lg price-cta">
-          Buy Keybumps — {pricing.price}
+      {pricing.checkoutUrl ? (
+        <a href={pricing.checkoutUrl} className="btn btn-lg price-cta">
+          {pricing.cta} — {pricing.price}
+          {pricing.period}
         </a>
       ) : (
         <DownloadLink className="btn btn-lg price-cta">Download Keybumps</DownloadLink>

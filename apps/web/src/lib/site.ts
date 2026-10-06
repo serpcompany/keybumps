@@ -1,9 +1,5 @@
 export const SUPPORT_EMAIL = 'support@keybumps.app'
 
-/** Polar checkout link. When it is null, the buy button downloads the current DMG instead. */
-export const CHECKOUT_URL: string | null =
-  'https://buy.polar.sh/polar_cl_NgKwENo1kvvLio6Xl27IFyoWpAoqf73sN8mRX03RNTj'
-
 /** Polar customer portal: purchases, license keys, and freeing a Mac. */
 export const CUSTOMER_PORTAL_URL = 'https://polar.sh/serp/portal'
 
