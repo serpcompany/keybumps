@@ -100,6 +100,13 @@ struct CrashReportingTests {
         #expect(CrashReportScrubber.scrub("jose\u{0301}@example.es") == "<email>")
     }
 
+    @Test func urlsAndAddressesGluedToOtherTextAreStillFound() {
+        #expect(CrashReportScrubber.scrub("Error 404https://example.com/x") == "Error 404<url>")
+        #expect(CrashReportScrubber.scrub("1.https://example.com and -https://example.org") == "1.<url>")
+        #expect(CrashReportScrubber.scrub("(https://example.com)") == "(<url>")
+        #expect(CrashReportScrubber.scrub("pat@example.com-jo@example.org") == "<email><email>")
+    }
+
     @Test func longTextWithoutAnAddressScrubsQuickly() {
         let token = String(repeating: "a", count: 50_000)
         let paragraph = String(repeating: "漢", count: 50_000)
