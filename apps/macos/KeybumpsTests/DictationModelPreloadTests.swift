@@ -235,6 +235,43 @@ import Testing
         #expect(fixture.loads.count == 1)
     }
 
+    @Test func aCancelThatMissesTheWaitStillStopsTheTranscriptionOnceTheModelLoads() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+
+        fixture.coordinator.prepare(language: "en-US")
+        await fixture.loads.wait(for: 1)
+        // The cancel runs just before the transcription starts waiting, so there's no wait to end,
+        // as when it lands after the load finished but before the transcription resumed.
+        fixture.selection.onNextRead = { fixture.coordinator.cancel() }
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        // The main actor runs jobs in order, so one yield lets the transcription join the load.
+        await Task.yield()
+        fixture.gate.release()
+
+        await #expect(throws: CancellationError.self) { try await transcription.value }
+        #expect(await fixture.runtime(1).transcribeCount == 0)
+        #expect(fixture.scheduler.scheduledCount == 1)
+    }
+
+    @Test func aCancelThatMissesTheWaitStartsNoNewLoadAfterAnEviction() async throws {
+        let fixture = try await Fixture(gatedLoads: [1])
+        defer { fixture.remove() }
+
+        fixture.coordinator.prepare(language: "en-US")
+        await fixture.loads.wait(for: 1)
+        fixture.selection.onNextRead = { fixture.coordinator.cancel() }
+        let transcription = Task { @MainActor in try await fixture.transcribe() }
+        // The main actor runs jobs in order, so one yield lets the transcription join the load.
+        await Task.yield()
+        fixture.coordinator.selectedModelDidChange()
+        fixture.gate.release()
+
+        await #expect(throws: CancellationError.self) { try await transcription.value }
+        #expect(fixture.loads.count == 1)
+        await fixture.runtime(1).unloads.wait(for: 1)
+    }
+
     @Test func cancellingWithNothingLoadedSchedulesNothing() async throws {
         let fixture = try await Fixture()
         defer { fixture.remove() }
@@ -534,7 +571,7 @@ private final class Fixture {
         let selection = Selection(engine: engine)
         self.selection = selection
         coordinator = DictationTranscriptionCoordinator(
-            selectedEngine: { selection.engine },
+            selectedEngine: { selection.read() },
             modelManager: manager,
             appleTranscriber: PreloadRuntime(transcript: "apple", unloadGate: nil),
             whisperFactory: { _ in
@@ -582,7 +619,17 @@ private final class Fixture {
 @MainActor
 private final class Selection {
     var engine: DictationTranscriptionEngine
+    /// Runs once, the next time the coordinator reads the selection.
+    var onNextRead: (() -> Void)?
+
     init(engine: DictationTranscriptionEngine) { self.engine = engine }
+
+    func read() -> DictationTranscriptionEngine {
+        let action = onNextRead
+        onNextRead = nil
+        action?()
+        return engine
+    }
 }
 
 @MainActor

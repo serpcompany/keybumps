@@ -186,8 +186,8 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     private var idleCancellation: (any DictationRuntimeIdleCancellation)?
     /// Transcriptions waiting for their Whisper runtime to load. `cancel()` ends these waits.
     private var runtimeWaits: [UUID: CheckedContinuation<any UnloadableCompletedAudioTranscribing, Error>] = [:]
-    /// How many times `cancel()` has run, so a transcription whose runtime loaded just before a
-    /// cancel stops too.
+    /// How many times `cancel()` has run, so a transcription the cancel found between waits, such as
+    /// one whose runtime loaded just before it, stops too.
     private var cancellations = 0
 
     var partialTranscript: String { activeTranscriber?.partialTranscript ?? "" }
@@ -222,10 +222,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
-        let cancellationsBefore = cancellations
-        let transcriber = try await resolveTranscriber(language: language)
-        // The runtime loaded, but a cancel ran before this transcription resumed.
-        guard cancellations == cancellationsBefore else { throw CancellationError() }
+        let transcriber = try await resolveTranscriber(language: language, cancellationsBefore: cancellations)
         let isWhisper = transcriber is any UnloadableCompletedAudioTranscribing
         if isWhisper {
             idleCancellation?.cancel()
@@ -270,20 +267,16 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
 
     func cancel() {
         cancellations += 1
-        if let activeTranscriber {
-            activeTranscriber.cancel()
-            return
-        }
         // A transcription still waiting for its model stops now. The load keeps running, so the
         // next dictation can use it.
         let waits = runtimeWaits.values
         runtimeWaits.removeAll()
         waits.forEach { $0.resume(throwing: CancellationError()) }
-        // A recording that loaded a model and then ended without a transcription still unloads it
-        // after the idle timeout.
-        if (cachedWhisper != nil || pendingWhisper != nil), idleCancellation == nil {
-            scheduleIdleEviction()
+        if let activeTranscriber {
+            activeTranscriber.cancel()
+            return
         }
+        scheduleIdleEvictionIfUnused()
     }
 
     func selectedModelDidChange() {
@@ -342,11 +335,32 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         }
     }
 
+    /// A recording that loaded a model and then ended without a transcription still unloads it
+    /// after the idle timeout.
+    private func scheduleIdleEvictionIfUnused() {
+        if (cachedWhisper != nil || pendingWhisper != nil), idleCancellation == nil {
+            scheduleIdleEviction()
+        }
+    }
+
+    /// Throws `CancellationError` if `cancel()` ran since `count` was read, so a transcription
+    /// whose runtime loaded just before a cancel, or that is about to start a new load, stops.
+    private func throwIfCancelled(since count: Int) throws {
+        guard cancellations != count else { return }
+        scheduleIdleEvictionIfUnused()
+        throw CancellationError()
+    }
+
     /// The selected engine's transcriber. A model change or deletion while this waits for a load
     /// evicts that load, so the selection is resolved again rather than used while it unloads. A
-    /// cancel ends the wait.
-    private func resolveTranscriber(language: String) async throws -> any CompletedAudioTranscribing {
+    /// cancel ends the wait, and one since `cancellationsBefore` stops it before it starts or joins
+    /// another.
+    private func resolveTranscriber(
+        language: String,
+        cancellationsBefore: Int
+    ) async throws -> any CompletedAudioTranscribing {
         for _ in 0..<4 {
+            try throwIfCancelled(since: cancellationsBefore)
             guard let modelFolder = installedWhisperModelFolder(language: language) else {
                 if cachedWhisper != nil || pendingWhisper != nil {
                     evictWhisperRuntime()
@@ -359,11 +373,15 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
             }
             evictWhisperRuntimeIfModelChanged(to: modelFolder)
             do {
-                return try await awaitWhisperLoadUntilCancelled(whisperLoad(modelFolder: modelFolder))
+                let loaded = try await awaitWhisperLoadUntilCancelled(whisperLoad(modelFolder: modelFolder))
+                // The runtime loaded, but a cancel ran before this transcription resumed.
+                try throwIfCancelled(since: cancellationsBefore)
+                return loaded
             } catch is WhisperLoadEvicted {
                 continue
             }
         }
+        try throwIfCancelled(since: cancellationsBefore)
         // Not a cancel: Dictation keeps the recording as a failed entry that can be retried.
         throw NSError(
             domain: "Keybumps.Dictation",

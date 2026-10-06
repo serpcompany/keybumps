@@ -255,7 +255,6 @@ final class DictationService {
             fail("On-device speech is unavailable for \(selectedLanguage).")
             return
         }
-        lastError = nil
         destination = NSWorkspace.shared.frontmostApplication.map(DictationInsertionTarget.init)
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -300,6 +299,7 @@ final class DictationService {
 
     private func beginSession() {
         session += 1
+        lastError = nil
         setPhase(.recording)
         scheduleDurationLimit()
         transcriber.prepare(language: selectedLanguage)
