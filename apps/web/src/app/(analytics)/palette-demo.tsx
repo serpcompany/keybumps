@@ -62,7 +62,16 @@ export function PaletteDemo() {
   const [tab, setTab] = useState(0)
   const [typed, setTyped] = useState(0)
   const [selected, setSelected] = useState(0)
+  // Once someone picks a tab, the demo stops cycling and stays on their choice.
+  const [picked, setPicked] = useState(false)
   const current = TABS[tab]
+
+  function pick(index: number) {
+    setPicked(true)
+    setTab(index)
+    setTyped(0)
+    setSelected(0)
+  }
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -73,6 +82,7 @@ export function PaletteDemo() {
       const id = setTimeout(() => setTyped(n => n + 1), 110)
       return () => clearTimeout(id)
     }
+    if (picked) return
     if (selected < 2) {
       const id = setTimeout(() => setSelected(n => n + 1), 650)
       return () => clearTimeout(id)
@@ -83,11 +93,11 @@ export function PaletteDemo() {
       setSelected(0)
     }, 1400)
     return () => clearTimeout(id)
-  }, [current, typed, selected])
+  }, [current, typed, selected, picked])
 
   return (
-    <div className="palette" aria-hidden="true">
-      <div className="palette-search">
+    <div className="palette">
+      <div className="palette-search" aria-hidden="true">
         <span className="palette-glass">⌕</span>
         <span>
           {current.query.slice(0, typed)}
@@ -97,12 +107,18 @@ export function PaletteDemo() {
       </div>
       <div className="palette-tabs">
         {TABS.map((t, i) => (
-          <span key={t.key} className={i === tab ? 'active' : undefined}>
+          <button
+            type="button"
+            key={t.key}
+            className={i === tab ? 'active' : undefined}
+            aria-pressed={i === tab}
+            onClick={() => pick(i)}
+          >
             {t.label} <kbd>{t.key}</kbd>
-          </span>
+          </button>
         ))}
       </div>
-      <ul className="palette-rows" key={tab}>
+      <ul className="palette-rows" key={tab} aria-hidden="true">
         {current.rows.map((row, i) => (
           <li key={row.title} className={i === selected ? 'selected' : undefined}>
             <span className="row-icon">{row.icon}</span>
@@ -111,7 +127,7 @@ export function PaletteDemo() {
           </li>
         ))}
       </ul>
-      <div className="palette-footer">
+      <div className="palette-footer" aria-hidden="true">
         <span>
           <kbd>↵</kbd> Open
         </span>
