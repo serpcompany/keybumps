@@ -22,3 +22,4 @@ Across the repo, including the website, use `CONTEXT.md` terminology, preserve t
 ## Website (`apps/web/` and website CI such as `.github/workflows/web*.yml`)
 
 - [`apps/web/AGENTS.md`](apps/web/AGENTS.md): The keybumps.app website. It sets the site's workflow, tests, and evidence; the repo-wide rules above also apply. Website CI files at the root follow these Website rules, not the Mac app rules.
+- [`docs/adding-a-plugin.md`](docs/adding-a-plugin.md) §4: The website steps for a new plugin, and which go before or after its release.
