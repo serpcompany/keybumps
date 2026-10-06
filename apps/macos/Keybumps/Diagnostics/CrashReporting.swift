@@ -47,8 +47,9 @@ enum CrashReportScrubber {
     private static let end = #"\n"“”<>"#
 
     private static let rules: [(NSRegularExpression, String)] = [
-        // Cocoa puts a file's name in curly quotes: “Q3 plan.txt” couldn’t be opened.
-        (#"“[^”\n]*”"#, "“<name>”"),
+        // Cocoa puts a file's name in quotes, which depend on the language: “Q3 plan.txt”
+        // (English, Japanese), „Q3 plan.txt“ (German), „…” (Polish), ”…” (Swedish), « … » (French).
+        (#"[“„”«‹][^“”„«»‹›\n]*[”“»›]"#, "“<name>”"),
         // A URL or path runs to the end of the line or the next double quote: losing the rest of
         // a message is better than leaking a file name.
         (#"[A-Za-z][A-Za-z0-9+.\-]*://[^"# + end + "]*", "<url>"),
@@ -149,6 +150,7 @@ enum CrashReporter {
     static func startIfAllowed(defaults: UserDefaults = .standard) {
         guard AppPreferences.sendsCrashReports(in: defaults) else { return }
         start()
+        if isRunning { CrashReportTest.runIfRequested() }
     }
 
     static func setEnabled(_ enabled: Bool) {
@@ -176,6 +178,14 @@ enum CrashReporter {
         options.dsn = dsn
         options.environment = environment
         options.sendDefaultPii = false
+        options.enableCrashHandler = true
+        // Freezes of two seconds or more.
+        options.enableAppHangTracking = true
+        // Off whatever the SDK's default: an uncaught exception ending the app (ADR 0007, decision
+        // 5), MetricKit's diagnostics, and Sentry's log capture.
+        options.enableUncaughtNSExceptionReporting = false
+        options.enableMetricKit = false
+        options.enableLogs = false
         // No session records: they'd report every launch and how long Keybumps ran, which is
         // usage, not a crash.
         options.enableAutoSessionTracking = false
@@ -202,6 +212,27 @@ enum CrashReporter {
         guard isRunning else { return }
         SentrySDK.close()
         isRunning = false
+    }
+}
+
+/// QA candidates only: `-KBTestCrash YES` crashes Keybumps on purpose a few seconds after launch,
+/// and `-KBTestFreeze YES` freezes it for five seconds, so a candidate proves a real report
+/// reaches Sentry. A crash is sent on the next launch.
+@MainActor
+enum CrashReportTest {
+    static func isAllowed(version: String) -> Bool {
+        version.contains("-dev.")
+    }
+
+    static func runIfRequested(defaults: UserDefaults = .standard, bundle: Bundle = .main) {
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        guard isAllowed(version: version) else { return }
+        if defaults.bool(forKey: "KBTestFreeze") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Thread.sleep(forTimeInterval: 5) }
+        }
+        if defaults.bool(forKey: "KBTestCrash") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { SentrySDK.crash() }
+        }
     }
 }
 

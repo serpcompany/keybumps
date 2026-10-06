@@ -31,6 +31,10 @@ struct CrashReportingTests {
         #expect(!options.enableCoreDataTracing)
         #expect(options.tracesSampleRate == nil)
         #expect(options.enableCrashHandler)
+        #expect(options.enableAppHangTracking)
+        #expect(!options.enableUncaughtNSExceptionReporting)
+        #expect(!options.enableMetricKit)
+        #expect(!options.enableLogs)
 
         let beforeSend = try #require(options.beforeSend)
         let event = Event()
@@ -71,6 +75,16 @@ struct CrashReportingTests {
         #expect(scrub("“/Users/pat/Pat’s notes.txt” is locked") == "“<name>” is locked")
         #expect(scrub("wrote /private/var/folders/x1/T/draft.txt") == "wrote <path>")
         #expect(scrub("wrote /tmp/draft.txt") == "wrote <path>")
+        // Cocoa's quotes in German, Polish, Swedish, and French.
+        #expect(scrub("Die Datei „Q3 plan.txt“ fehlt") == "Die Datei “<name>” fehlt")
+        #expect(scrub("Plik „Q3 plan.txt” jest") == "Plik “<name>” jest")
+        #expect(scrub("Filen ”Q3 plan.txt” saknas") == "Filen “<name>” saknas")
+        #expect(scrub("Le fichier « Q3 plan.txt » manque") == "Le fichier “<name>” manque")
+    }
+
+    @Test func onlyQACandidatesCanCrashOnPurpose() {
+        #expect(CrashReportTest.isAllowed(version: "0.0.3-dev.issue258"))
+        #expect(!CrashReportTest.isAllowed(version: "0.0.3-beta.16"))
     }
 
     @Test func aBinaryInAHomeFolderKeepsItsName() {

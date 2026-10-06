@@ -22,4 +22,5 @@ Raycast, superwhisper, and The Unarchiver all ship Sentry's macOS SDK. SwiftUI h
 
 - `AGENTS.md` allows crash and problem reports to Sentry and still forbids analytics and sending user content.
 - The privacy policy on keybumps.app must say so before the first release that includes this.
+- A QA candidate (and only a QA candidate) crashes on purpose with `-KBTestCrash YES` or freezes with `-KBTestFreeze YES`, so its owner can see a real report arrive.
 - A bug that neither crashes nor freezes, like the dropdowns, still needs a person to report it. That's what Report a Problem is for.
