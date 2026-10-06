@@ -254,6 +254,20 @@ import Testing
         #expect(fixture.scheduler.scheduledCount == 1)
     }
 
+    @Test func aModelLoadedForACancelledTranscriptionStillUnloadsWhenIdle() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.remove() }
+
+        // No recording prepared it, as with History Retry, so the cancel finds nothing to unload.
+        fixture.selection.onNextRead = { fixture.coordinator.cancel() }
+        await #expect(throws: CancellationError.self) { try await fixture.transcribe() }
+
+        #expect(fixture.scheduler.scheduledCount == 1)
+        fixture.scheduler.fireLatest()
+        await fixture.runtime(1).unloads.wait(for: 1)
+        #expect(await fixture.runtime(1).transcribeCount == 0)
+    }
+
     @Test func aCancelThatMissesTheWaitStartsNoNewLoadAfterAnEviction() async throws {
         let fixture = try await Fixture(gatedLoads: [1])
         defer { fixture.remove() }

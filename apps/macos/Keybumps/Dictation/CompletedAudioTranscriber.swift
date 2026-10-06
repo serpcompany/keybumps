@@ -265,6 +265,8 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         }
     }
 
+    /// Stops every transcription in progress or waiting for its model, so call it only when none
+    /// should finish. `DictationService` also calls it as a reset after each dictation and retry.
     func cancel() {
         cancellations += 1
         // A transcription still waiting for its model stops now. The load keeps running, so the
