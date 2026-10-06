@@ -1,13 +1,15 @@
 /**
  * What Keybumps costs and what a purchase includes: the one place to change when trying a different
  * price or pricing model. The pricing card, the home page's pricing section, /pricing/, the page
- * descriptions, and the terms, refund policy, and privacy policy all read from here, and
- * `pricing.test.ts` fails if any of it is written out anywhere else.
+ * descriptions, and the terms and refund policy all read from here, and `pricing.test.ts` fails if
+ * any of it is written out anywhere else. One exception so far: /license/ still says "one Mac"
+ * (#269).
  *
  * Terms of sale: `macs`, `macsInWords`, `refundDays`, `guarantee`, and `model.terms` appear on the
- * legal pages, so changing one changes them. `pricing.test.ts` pins these with `LEGAL_UPDATED` (in
- * ./site), so it fails until the date moves too. A model with renewals, such as a subscription,
- * also needs new terms written for it: renewal, cancellation, and what happens when it lapses.
+ * legal pages, so changing one changes them. `pricing.test.ts` pins these values next to
+ * `LEGAL_UPDATED` (in ./site): it fails until the pinned values are updated, which is the moment to
+ * move the date. A model with renewals, such as a subscription, also needs new terms written for it:
+ * renewal, cancellation, and what happens when it lapses.
  */
 
 const price = '$49'

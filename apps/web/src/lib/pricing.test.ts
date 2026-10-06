@@ -39,8 +39,13 @@ describe('pricing', () => {
       `${pricing.refundDays}-day`,
       `${pricing.refundDays} days`,
       pricing.macsText,
+      pricing.macsLabel,
       `${pricing.macsInWords}-Mac`,
+      'buy.polar.sh',
+      ...(pricing.checkoutUrl ? [pricing.checkoutUrl] : []),
+      // The one-time model's own words. Revisit them with the terms for any other model.
       'one-time',
+      'one time',
       'subscription',
       'yours to keep',
       'future updates',
@@ -49,7 +54,7 @@ describe('pricing', () => {
     // #269: /license/ is a (sensitive-url) page, so it moves with its own leak test.
     const allowed = new Set(['app/(sensitive-url)/license/page.tsx: one mac'])
     const pricingFile = join(src, 'lib', 'pricing.ts')
-    const offenders = sourceFiles(src)
+    const found = sourceFiles(src)
       .filter(file => file !== pricingFile)
       .flatMap(file => {
         const text = readFileSync(file, 'utf8').toLowerCase()
@@ -57,12 +62,13 @@ describe('pricing', () => {
           .filter(word => text.includes(word))
           .map(word => `${relative(src, file)}: ${word}`)
       })
-      .filter(offender => !allowed.has(offender))
-    expect(offenders).toEqual([])
+    expect(found.filter(offender => !allowed.has(offender))).toEqual([])
+    // An allowance that no longer matches is stale: delete it.
+    expect([...allowed].filter(allowance => !found.includes(allowance))).toEqual([])
   })
 
-  // The terms and refund policy show these. Changing one changes those pages, so update this and
-  // LEGAL_UPDATED together.
+  // The terms and refund policy show these. Changing one changes those pages, so updating the
+  // pinned values here is the moment to move LEGAL_UPDATED.
   it('dates the legal pages with the terms of sale they show', () => {
     expect({
       LEGAL_UPDATED,
