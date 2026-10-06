@@ -18,7 +18,8 @@ export default function PrivacyPage() {
         What you do in Keybumps stays on your Mac. The app has no advertising, no analytics, no
         account, and no cloud sync. We never receive your searches, clipboard contents, screenshots,
         recordings, or transcripts. If Keybumps crashes or freezes, it sends us a crash report
-        without any of those, and you can turn crash reports off.
+        without any of those, and you can turn crash reports off. If you report a problem, it sends
+        what you write.
       </p>
 
       <h2>Information stored on your Mac</h2>
@@ -78,36 +79,47 @@ export default function PrivacyPage() {
 
       <h2>Crash and problem reports</h2>
       <p>
-        When Keybumps crashes or freezes, it sends a crash report to Sentry, the service we use to
-        collect them, so we can find and fix the cause. Crash reports are on by default. To stop
-        sending them, turn off <strong>Send crash reports</strong> in Keybumps Settings › General.
+        When Keybumps crashes or freezes, it sends a crash report to Sentry, a service that collects
+        crash reports for us, so we can find and fix the cause. Crash reports are on by default. To
+        stop sending them, turn off <strong>Send crash reports</strong> in Keybumps Settings ›
+        General.
       </p>
       <p>
-        When you use <strong>Report a Problem…</strong>, Keybumps sends what you write to Sentry,
-        with your email address if you add one for a reply. It shows you every detail it attaches
-        before you send, and it sends a problem report even when crash reports are off, because you
-        chose to send it.
+        <strong>Report a Problem…</strong>, in the Help menu, the menu bar menu, and Settings ›
+        General, sends what you write to Sentry, with your email address if you add one for a reply.
+        Before you send, it shows you the main details it adds. It sends a problem report even when
+        crash reports are off, because you chose to send it.
       </p>
       <p>A report includes:</p>
       <ul>
         <li>for a crash or freeze, where in Keybumps’ code it happened;</li>
-        <li>the Keybumps and macOS versions, and your Mac’s model, chip, and memory;</li>
-        <li>which Keybumps plugins are on;</li>
+        <li>the Keybumps and macOS versions, and which Keybumps plugins are on;</li>
+        <li>
+          technical details about your Mac and its state at the time, such as its model, processor
+          type, memory in use, and whether Low Power Mode is on;
+        </li>
         <li>
           a random identifier Sentry creates for your copy of Keybumps, so we can tell how many Macs
           a problem affects;
         </li>
-        <li>for a problem report, which permissions Keybumps has, such as Accessibility.</li>
+        <li>
+          for a problem report, what you write, and which permissions Keybumps has, such as
+          Accessibility.
+        </li>
       </ul>
       <p>
-        Reports never include your clipboard contents, snippets, transcripts, recordings,
-        screenshots, searches, window or document titles, file names, or links. Before a report
-        leaves your Mac, Keybumps removes file paths, links, and email addresses from it, including
-        from what you write, and keeps only the email you give for a reply. Nothing is sent when
-        nothing goes wrong: Keybumps doesn’t report when you open it or how long you use it. Sentry
-        receives your IP address with each report, as with any web request, but we’ve set it not to
-        store the address or the location it suggests. Sentry handles reports under its own privacy
-        policy.
+        Keybumps never adds your clipboard contents, snippets, transcripts, recordings, screenshots,
+        searches, or window or document titles to a report. It removes file paths, file names,
+        links, and email addresses from error messages before a report leaves your Mac. In a problem
+        report, it removes file paths, links, and email addresses from what you write and sends the
+        rest as you wrote it, so leave out anything you’d rather not share.
+      </p>
+      <p>
+        If you add your email to a problem report, we can see it alongside other reports from the
+        same copy of Keybumps. Nothing is sent when nothing goes wrong: there’s no report when you
+        open Keybumps, and none about how long you use it. Sentry receives your IP address with each
+        report, as with any web request, but we’ve set it not to store the address or the location
+        it suggests. Sentry stores reports in the United States and handles them on our behalf.
       </p>
 
       <h2>Purchases</h2>
@@ -135,7 +147,8 @@ export default function PrivacyPage() {
       <h2>Email</h2>
       <p>
         If you email us, or add your email to a problem report, we keep the conversation to help
-        you. Polar sends your receipt and license key. We don’t sell or share your email address.
+        you. Polar sends your receipt and license key. We don’t sell your email address or share it
+        beyond the services named on this page.
       </p>
 
       <h2>Retention and your rights</h2>
