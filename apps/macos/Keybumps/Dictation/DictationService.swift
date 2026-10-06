@@ -330,6 +330,7 @@ final class DictationService {
               entry.canTranscribe,
               let audioURL = entry.audioURL else { return }
 
+        let entry = history.prepareRetry(entry)
         let language = entry.language == "und" ? selectedLanguage : entry.language
         retryingEntryID = entry.id
         lastError = nil

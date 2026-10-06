@@ -70,6 +70,7 @@
 		4F3E2FE9F33B1CF0F9DA36F1 /* RaycastSettingsStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D3540EC3F3F99A6E3B6274 /* RaycastSettingsStyle.swift */; };
 		5008231D6CAE07EE7F478A25 /* QuickSearchTestIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B4EE6BAF61588E4C4FAB26 /* QuickSearchTestIsolationTests.swift */; };
 		5078335D97D88A0675A7F6B8 /* ShortcutCoachClickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */; };
+		50D51089240D1FFB07462408 /* WAVHeaderRepairTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59F298F120874DF78C6CF86 /* WAVHeaderRepairTests.swift */; };
 		511D2E223129B6595A9E909D /* SnippetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C6EF77E18990B57ED296BA /* SnippetStore.swift */; };
 		542C16333A14D93E7988F34A /* PluginsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5187F8D96AA4D1411822A73 /* PluginsSettingsView.swift */; };
 		54671A719E03B771792B4CAB /* QuickSearchCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */; };
@@ -206,6 +207,7 @@
 		FB1DFB36C02CFB3A5029B0D3 /* UnitTestDataIsolationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E42DD01A15CB36C8078F4480 /* UnitTestDataIsolationTests.swift */; };
 		FB1EF3A045635D619E187E8D /* RecentItemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEE31E47A0F652B4E42CD60 /* RecentItemStore.swift */; };
 		FB7D39975763A7647595CBBF /* InMemoryDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DCD9E725F517DA4D5BEE2E /* InMemoryDefaultsTests.swift */; };
+		FD4C24B2FDA01E8D4DE1F177 /* WAVHeaderRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25AB08C470C15C37288B98F /* WAVHeaderRepair.swift */; };
 		FD8E7DB4FEB1D67D4B46E1AD /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = 3BB76ED2E173127B8361F2B8 /* appcast.xml */; };
 		FEE8BAB393C914FFECD752A3 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E50394667FC5D2DE8B5333 /* AppDelegate.swift */; };
 		FF97CDE8A3490AA04F8B76B0 /* ShortcutCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D547C96CB0A8C34AE6C8D05C /* ShortcutCatalog.swift */; };
@@ -358,6 +360,7 @@
 		A030F6D32D510B17A0EA3F2C /* SnippetTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetTable.swift; sourceTree = "<group>"; };
 		A08E29668587A361DF1D41AC /* WindowAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAction.swift; sourceTree = "<group>"; };
 		A18BF5E21B6787A034888698 /* FinderTrashDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashDetectionTests.swift; sourceTree = "<group>"; };
+		A25AB08C470C15C37288B98F /* WAVHeaderRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVHeaderRepair.swift; sourceTree = "<group>"; };
 		A41A122C43A19C05BBC61663 /* QuickSearchSnippetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchSnippetTests.swift; sourceTree = "<group>"; };
 		A4D3540EC3F3F99A6E3B6274 /* RaycastSettingsStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RaycastSettingsStyle.swift; sourceTree = "<group>"; };
 		A5C7331E647E5392C6A9A1A0 /* KeyboardGlyphGuideEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardGlyphGuideEvidenceTests.swift; sourceTree = "<group>"; };
@@ -378,6 +381,7 @@
 		AFF70B9542E1EC86EB3239F6 /* ClipboardRestorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardRestorer.swift; sourceTree = "<group>"; };
 		B19CB2A313982E002E9097B7 /* SnippetsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsModule.swift; sourceTree = "<group>"; };
 		B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
+		B59F298F120874DF78C6CF86 /* WAVHeaderRepairTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVHeaderRepairTests.swift; sourceTree = "<group>"; };
 		B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarLicenseProvider.swift; sourceTree = "<group>"; };
 		BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchCommandTests.swift; sourceTree = "<group>"; };
 		BE478E4BE9C1C339FAA86A04 /* chrome-153-tab-strip.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "chrome-153-tab-strip.json"; sourceTree = "<group>"; };
@@ -644,6 +648,7 @@
 				3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */,
 				54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */,
 				0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */,
+				B59F298F120874DF78C6CF86 /* WAVHeaderRepairTests.swift */,
 				FEA66B12E4521124871A028B /* WhisperCppEngineTests.swift */,
 				E5DBE0291391003CE7E8D960 /* Fixtures */,
 			);
@@ -792,6 +797,7 @@
 				79A769F22A9F51BA885B76F1 /* DictationService.swift */,
 				093E9573AD23AF63BB1C065C /* DictationTranscriptionEngine.swift */,
 				E06540DC321A150343B3C752 /* TranslatedSpeechPlayer.swift */,
+				A25AB08C470C15C37288B98F /* WAVHeaderRepair.swift */,
 				F25D722EBDE50C77E30186B6 /* WhisperCppCompletedAudioTranscriber.swift */,
 				2C671BDDA47BF2B42A1DB1E2 /* WhisperCppModelDownloader.swift */,
 				D46E853B6F0195DE8D0C0031 /* WhisperKitCompletedAudioTranscriber.swift */,
@@ -1202,6 +1208,7 @@
 				3DE0285ABEBA4DBB8627DD25 /* UnitTestHost.swift in Sources */,
 				952BFAC50F37CBE088DC6D6F /* UpdateController.swift in Sources */,
 				086C97A2D77C73E96872A323 /* UpdateReminder.swift in Sources */,
+				FD4C24B2FDA01E8D4DE1F177 /* WAVHeaderRepair.swift in Sources */,
 				839ADB854B9177E47955376F /* WhatsNew.swift in Sources */,
 				4385C3439DE98055F31D79BC /* WhisperCppCompletedAudioTranscriber.swift in Sources */,
 				321986C7116A9F6A31A7FF4A /* WhisperCppModelDownloader.swift in Sources */,
@@ -1275,6 +1282,7 @@
 				F2C72DC369FD3FDD4586E311 /* UpdateControllerTests.swift in Sources */,
 				98D0993E91F7EFD2B0E346D1 /* UpdateReleaseScriptTests.swift in Sources */,
 				57ABC6624CE28646EA5FC0FC /* UpdateVisibilityTests.swift in Sources */,
+				50D51089240D1FFB07462408 /* WAVHeaderRepairTests.swift in Sources */,
 				38D319928497FD8AC4A7FD3E /* WhisperCppEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
