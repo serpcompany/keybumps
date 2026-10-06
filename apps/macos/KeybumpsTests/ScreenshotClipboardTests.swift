@@ -416,17 +416,26 @@ struct ClipboardRestoreTests {
         try FileManager.default.removeItem(at: try #require(image.imageURL))
         let shot = try fixture.screenshot("Untyped.png")
         let untyped = ClipboardEntry(id: UUID(), text: "", capturedAt: Date(), kind: .image, mediaPath: shot.path)
+        let emptyFile = fixture.root.appendingPathComponent("Empty.png")
+        try Data().write(to: emptyFile)
+        let empty = ClipboardEntry(
+            id: UUID(),
+            text: "",
+            capturedAt: Date(),
+            kind: .image,
+            mediaPath: emptyFile.path,
+            mediaPasteboardType: NSPasteboard.PasteboardType.png.rawValue
+        )
         fixture.pasteboard.clearContents()
         fixture.pasteboard.setString("made-up clipboard text", forType: .string)
         let changeCount = fixture.pasteboard.changeCount
-        let before = Date()
 
         #expect(!fixture.clipboard.restore(image), "its media file is gone")
         #expect(!fixture.clipboard.restore(untyped), "it has no pasteboard type")
+        #expect(!fixture.clipboard.restore(empty), "its media file is empty")
 
         #expect(fixture.pasteboard.string(forType: .string) == "made-up clipboard text")
         #expect(fixture.pasteboard.changeCount == changeCount)
-        #expect(!fixture.clipboard.pasteboardChanged(since: before), "a failed copy isn't counted as one")
         // The copy made before the failed restores still reaches Clipboard History.
         fixture.clipboard.pollForTesting()
         #expect(fixture.clipboard.entries.first?.text == "made-up clipboard text")

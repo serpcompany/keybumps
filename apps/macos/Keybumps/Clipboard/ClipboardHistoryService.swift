@@ -205,10 +205,10 @@ class ClipboardHistoryService {
             pasteboard.clearContents()
             restored = pasteboard.setString(entry.text, forType: .string)
         case .image:
-            // Read the stored copy before clearing, so a missing file never empties the clipboard.
+            // Read the stored copy before clearing, so a missing or empty file never empties the clipboard.
             guard let imageURL = entry.imageURL,
                   let typeName = entry.mediaPasteboardType,
-                  let data = try? Data(contentsOf: imageURL) else { return false }
+                  let data = try? Data(contentsOf: imageURL), !data.isEmpty else { return false }
             pasteboard.clearContents()
             restored = pasteboard.setData(data, forType: NSPasteboard.PasteboardType(typeName))
         }
