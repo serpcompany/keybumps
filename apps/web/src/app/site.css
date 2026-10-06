@@ -9,7 +9,11 @@
   --text-muted: #a3a1a8;
   --lavender: #aa9cff;
   --lavender-soft: rgba(170, 156, 255, 0.14);
-  --card-radius: 14px;
+  /* Corner radii: kept small on purpose (#305). */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --card-radius: var(--radius-md);
   color-scheme: dark;
 }
 
@@ -47,7 +51,7 @@ kbd {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.75rem;
   padding: 2px 7px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
   background: var(--surface-2);
   color: var(--text-muted);
@@ -112,7 +116,7 @@ kbd {
   background: var(--text);
   color: var(--ink);
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 10px 18px;
   border: 1px solid transparent;
   transition:
@@ -161,7 +165,7 @@ kbd {
   font-size: 0.8rem;
   color: var(--text-muted);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 5px 12px;
   margin-bottom: 28px;
 }
@@ -227,7 +231,7 @@ kbd {
   text-align: left;
   background: rgba(28, 28, 33, 0.92);
   border: 1px solid var(--border-strong);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   box-shadow:
     0 30px 80px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -279,7 +283,7 @@ kbd {
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   transition: background 0.2s ease;
 }
@@ -306,7 +310,7 @@ kbd {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   animation: rise 0.35s ease both;
   transition: background 0.2s ease;
 }
@@ -331,7 +335,7 @@ kbd {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--lavender);
@@ -471,7 +475,7 @@ kbd {
   align-items: center;
   gap: 20px;
   padding: 48px 24px;
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background:
     radial-gradient(circle at 50% 30%, rgba(170, 156, 255, 0.18), transparent 70%), var(--surface);
@@ -481,7 +485,7 @@ kbd {
   margin: 0;
   font-size: 0.85rem;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: #000;
   border: 1px solid var(--border-strong);
   animation: notch 4s ease-in-out infinite;
@@ -500,7 +504,7 @@ kbd {
 .faq details {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 16px 20px;
 }
 
@@ -533,7 +537,7 @@ kbd {
   text-align: center;
   gap: 8px;
   padding: 64px 24px;
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-strong);
   background:
     radial-gradient(ellipse at top, rgba(170, 156, 255, 0.2), transparent 60%), var(--surface);
@@ -575,7 +579,7 @@ kbd {
   max-width: 460px;
   margin: 0 auto;
   padding: 32px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(170, 156, 255, 0.35);
   background:
     radial-gradient(ellipse at top, rgba(170, 156, 255, 0.16), transparent 60%), var(--surface);
@@ -656,7 +660,7 @@ kbd {
 
 .avatar {
   flex-shrink: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .plugin-author {
@@ -756,7 +760,7 @@ kbd {
   height: 44px;
   padding: 0 10px 0 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-muted);
   transition:
@@ -816,7 +820,7 @@ kbd {
 .filter-tabs button {
   padding: 6px 14px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -886,7 +890,7 @@ kbd {
   min-width: 0;
   padding: 22px 24px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   transition:
     border-color 0.2s ease,
@@ -928,7 +932,7 @@ kbd {
 .badge-new {
   flex-shrink: 0;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--lavender-soft);
   color: var(--lavender);
   font-size: 0.6875rem;
@@ -940,7 +944,7 @@ kbd {
   margin-left: auto;
   padding: 3px 11px;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.04);
   font-size: 0.75rem;
   font-weight: 500;
@@ -1078,13 +1082,13 @@ kbd {
   gap: 4px;
   padding: 5px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
 }
 
 .plugin-tabs a {
   padding: 7px 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: 0.875rem;
   transition:
@@ -1165,7 +1169,7 @@ body:has(#commands:target) .plugin-tabs a:first-child {
   padding: 0;
   list-style: none;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 
@@ -1325,7 +1329,7 @@ body:has(#commands:target) .plugin-tabs a:first-child {
   display: inline-flex;
   padding: 3px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.06);
   font-size: 0.8rem;
 }
@@ -1344,7 +1348,7 @@ body:has(#commands:target) .plugin-tabs a:first-child {
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   transition: background 0.15s ease;
 }
 
