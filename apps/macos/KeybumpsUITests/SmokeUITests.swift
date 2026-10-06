@@ -61,6 +61,12 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
         let limit = element("settings.dictation.durationLimit")
         XCTAssertTrue(limit.waitForExistence(timeout: 20))
+        // It's the last row on the page, below the fold on a small screen such as CI's.
+        let page = element("settings.detail.dictation")
+        for delta in [-200.0, -200, -200, -200, -200, 200, 200, 200, 200, 200] where !limit.isHittable {
+            page.scroll(byDeltaX: 0, deltaY: delta)
+        }
+        XCTAssertTrue(limit.isHittable, "The recording-length dropdown can be scrolled into view")
 
         limit.click()
         let noLimit = app.menuItems["No limit"]
