@@ -1353,6 +1353,7 @@ final class KeybumpsFeatureTests: XCTestCase {
                 "About Keybumps",
                 "Check for Updates…",
                 "Settings…",
+                "Report a Problem…",
                 "Quit Keybumps"
             ]
         )

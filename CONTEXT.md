@@ -50,6 +50,10 @@ _Avoid_: Preferences, Settings panel
 What Keybumps sends its developers through Sentry when it crashes or freezes, unless the person turned it off: versions, the Mac's model, which plugins are on, and stack traces, never user content (ADR 0007).
 _Avoid_: Telemetry, analytics, tracking
 
+**Problem report**:
+What a person sends with Report a Problem…: their description, an optional email for a reply, and the same details a crash report carries plus permission states, all shown before sending (ADR 0007).
+_Avoid_: Feedback, bug report, ticket
+
 ### Capabilities
 
 **Quick Search**:

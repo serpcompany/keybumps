@@ -161,3 +161,64 @@ struct CrashReportingTests {
         #expect(scrubbed.context?["device"]?["model"] as? String == "Mac15,3")
     }
 }
+
+@MainActor
+struct ProblemReportTests {
+    private let diagnostics = ProblemReportDiagnostics(
+        appVersion: "Keybumps 0.0.3 (4022)",
+        macOSVersion: "15.1 (Build 24B83)",
+        macModel: "Mac15,9",
+        chip: "Apple M3 Max",
+        memoryGB: 128,
+        pluginsOn: ["Dictation", "Timer"],
+        permissions: [("Accessibility", "Granted"), ("Microphone", "Denied")],
+        sendsCrashReports: false
+    )
+
+    @Test func thePersonSeesEveryDetailThatIsAttached() {
+        #expect(diagnostics.lines == [
+            "Keybumps 0.0.3 (4022)",
+            "macOS 15.1 (Build 24B83)",
+            "Mac15,9 · Apple M3 Max · 128 GB",
+            "Plugins on: Dictation, Timer",
+            "Permissions: Accessibility granted, Microphone denied",
+            "Crash reports: off",
+        ])
+    }
+
+    @Test func aReportNeedsADescription() {
+        #expect(!ProblemReport(description: "  \n", contactEmail: "", diagnostics: diagnostics).canSend)
+        #expect(ProblemReport(description: "Dropdowns don't open", contactEmail: "", diagnostics: diagnostics).canSend)
+    }
+
+    @Test func aReportIsAnEventThatKeepsTheContactOnlyWhenGiven() throws {
+        let event = ProblemReport(description: " Dropdowns don't open \n", contactEmail: " pat@example.com ", diagnostics: diagnostics).event()
+        #expect(event.level == .info)
+        #expect(event.message?.formatted == "Dropdowns don't open")
+        #expect(event.tags == ["report": "problem"])
+        #expect(event.context?["report"]?["contact"] as? String == "pat@example.com")
+        #expect(event.context?["report"]?["crash_reports"] as? String == "off")
+        #expect(event.context?["permissions"]?["Microphone"] as? String == "Denied")
+
+        let anonymous = ProblemReport(description: "x", contactEmail: "", diagnostics: diagnostics).event()
+        #expect(anonymous.context?["report"]?["contact"] == nil)
+    }
+
+    @Test func aReportIsScrubbedButKeepsItsContactAndPermissions() {
+        let event = ProblemReport(
+            description: "Opening https://example.com/x fails\nSo does /Users/pat/Q3 plan.txt",
+            contactEmail: "pat@example.com",
+            diagnostics: diagnostics
+        ).event()
+        let scrubbed = CrashReportScrubber.scrub(event)
+        // A link or path runs to the end of its line.
+        #expect(scrubbed.message?.formatted == "Opening <url>\nSo does <path>")
+        #expect(scrubbed.context?["report"]?["contact"] as? String == "pat@example.com")
+        #expect(scrubbed.context?["permissions"]?["Accessibility"] as? String == "Granted")
+    }
+
+    @Test func aBuildWithNoDestinationCantSendReports() {
+        #expect(!CrashReporter.canSendProblemReports)
+        #expect(!CrashReporter.send(ProblemReport(description: "x", contactEmail: "", diagnostics: diagnostics), plugins: []))
+    }
+}

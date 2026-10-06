@@ -16,12 +16,12 @@ Raycast, superwhisper, and The Unarchiver all ship Sentry's macOS SDK. SwiftUI h
 4. **What it never carries**, the same list as before: clipboard contents, snippets, transcripts, recordings, screenshots, searches, window or document titles, file names, and URLs. (One known gap: Korean and Dutch macOS quote file names with single quotes, which the scrubber can't tell from apostrophes.) Sentry's automatic breadcrumbs, network capture, and tracing are off. Every event passes `CrashReportScrubber` before it's sent, crashes from an earlier run included. The scrubber removes paths in a home folder, on another volume, or in a temporary folder, URLs, and email addresses from free text, exception data included (a binary's path keeps only its file name), and keeps only the contexts and breadcrumbs the policy names. `CrashReportingTests` holds it to that.
 5. **Uncaught Objective-C exceptions stay as they were.** Sentry's `enableUncaughtNSExceptionReporting` makes macOS end the app on one, where today AppKit logs it and carries on. Revisit if reports show we're missing them.
 6. **Release builds upload debug symbols** to Sentry, so stack traces name Keybumps's code.
-7. **Report a Problem** (#258, next) uses the same destination and the same scrubbing for reports a person writes.
+7. **Report a Problem…** (Help menu, the menu bar menu, and Settings › General) sends what a person writes, with the details from decision 3 plus permission states, and shows them every detail before sending. It goes as an ordinary event, so `CrashReportScrubber` runs on it; Sentry's user-feedback API skips that hook. It sends even with crash reports off, because the person chose to send it: Sentry then runs only for the send, with crash and freeze reporting off. A contact email is kept only when the person types one.
 
 ## Consequences
 
-- The `keybumps-mac` project has **Prevent Storing of IP Addresses** on (Settings › Security & Privacy). Without it, Sentry keeps the sending IP address and works out a city from it, which the app never sends.
+- The `keybumps-mac` project has **Prevent Storing of IP Addresses** on, and the advanced data scrubbing rule `[Remove] [Anything] from [$user.geo.**]` (Settings › Security & Privacy). Sentry works out a city from the sending IP before the IP setting applies, so it takes both; the app never sends either.
 - `AGENTS.md` allows crash and problem reports to Sentry and still forbids analytics and sending user content.
 - The privacy policy on keybumps.app must say so before the first release that includes this.
-- A QA candidate (and only a QA candidate) crashes on purpose with `-KBTestCrash YES` or freezes with `-KBTestFreeze YES`, so its owner can see a real report arrive.
-- A bug that neither crashes nor freezes, like the dropdowns, still needs a person to report it. That's what Report a Problem is for.
+- A QA candidate (and only a QA candidate) crashes on purpose with `-KBTestCrash YES` or freezes with `-KBTestFreeze YES`, whether or not reports are on, so its owner can see a real report arrive and see that none arrives with the switch off.
+- A bug that neither crashes nor freezes, like the dropdowns, still needs a person to report it. Report a Problem covers that.

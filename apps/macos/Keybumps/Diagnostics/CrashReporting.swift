@@ -21,9 +21,10 @@ enum CrashReportingPolicy {
         version.contains("-dev.") ? "qa" : "production"
     }
 
-    /// Contexts a report keeps: the app, the Mac's model and macOS, and which plugins are on.
+    /// Contexts a report keeps: the app, the Mac's model and macOS, which plugins are on, and for a
+    /// problem report, permission states and the contact email the person chose to give.
     /// Everything else Sentry attaches, such as culture (locale, time zone), is dropped.
-    static let keptContexts: Set<String> = ["app", "device", "os", "runtime", "trace", "plugins"]
+    static let keptContexts: Set<String> = ["app", "device", "os", "runtime", "trace", "plugins", "permissions", "report"]
 
     /// Fields dropped from kept contexts: `device_app_hash` is derived from the Mac's network
     /// address, so it's a fixed hardware identifier; locale says where someone is.
@@ -145,17 +146,24 @@ enum CrashReportScrubber {
     }
 }
 
-/// Sends crashes, freezes, and the errors Keybumps reports itself to Sentry (ADR 0007), when the
-/// build carries a destination and the person hasn't turned it off in Settings › General.
+/// Sends crashes, freezes, and problem reports to Sentry (ADR 0007). Crashes and freezes go only
+/// when the build carries a destination and the person hasn't turned reports off in Settings ›
+/// General. A problem report someone writes goes either way: with reports off, Sentry runs just
+/// long enough to send it, with crash and freeze reporting off.
 @MainActor
 enum CrashReporter {
-    private(set) static var isRunning = false
+    private enum Mode { case off, reporting, sendingOnly }
+    private static var mode = Mode.off
+    /// Problem reports still being sent while Sentry runs only for them.
+    private static var reportsInFlight = 0
+
+    /// Whether crashes and freezes are being reported.
+    static var isRunning: Bool { mode == .reporting }
 
     /// Called first thing at launch, so a crash during startup is caught too.
     static func startIfAllowed(defaults: UserDefaults = .standard) {
         guard AppPreferences.sendsCrashReports(in: defaults) else { return }
         start()
-        if isRunning { CrashReportTest.runIfRequested() }
     }
 
     static func setEnabled(_ enabled: Bool) {
@@ -164,18 +172,61 @@ enum CrashReporter {
 
     /// Which plugins are on, by name, so a report says what was running.
     static func recordPlugins(_ capabilities: Set<Capability>) {
-        guard isRunning else { return }
+        guard mode != .off else { return }
         let names = capabilities.map(\.rawValue).sorted()
         SentrySDK.configureScope { $0.setContext(value: ["on": names], key: "plugins") }
     }
 
-    private static func start(bundle: Bundle = .main) {
-        guard !isRunning,
-              let dsn = CrashReportingPolicy.destination(info: bundle.infoDictionary, isUnitTestHost: UnitTestHost.isActive)
-        else { return }
-        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        SentrySDK.start { configure($0, dsn: dsn, environment: CrashReportingPolicy.environment(version: version)) }
-        isRunning = true
+    /// Whether this build can send a problem report at all.
+    static var canSendProblemReports: Bool {
+        destination() != nil
+    }
+
+    /// Sends a problem report. Returns false when this build has nowhere to send it.
+    static func send(_ report: ProblemReport, plugins: Set<Capability>) -> Bool {
+        guard let dsn = destination() else { return false }
+        if mode == .off {
+            SentrySDK.start { options in
+                configure(options, dsn: dsn, environment: currentEnvironment())
+                options.enableCrashHandler = false
+                options.enableAppHangTracking = false
+            }
+            mode = .sendingOnly
+        }
+        recordPlugins(plugins)
+        SentrySDK.capture(event: report.event())
+        guard mode == .sendingOnly else { return true }
+        reportsInFlight += 1
+        // Closing at once would leave the report on disk until reports are next turned on.
+        Task.detached(priority: .utility) {
+            SentrySDK.flush(timeout: 15)
+            await MainActor.run { finishSendingOnly() }
+        }
+        return true
+    }
+
+    private static func finishSendingOnly() {
+        reportsInFlight -= 1
+        guard mode == .sendingOnly, reportsInFlight == 0 else { return }
+        SentrySDK.close()
+        mode = .off
+    }
+
+    private static func destination(bundle: Bundle = .main) -> String? {
+        CrashReportingPolicy.destination(info: bundle.infoDictionary, isUnitTestHost: UnitTestHost.isActive)
+    }
+
+    private static func currentEnvironment(bundle: Bundle = .main) -> String {
+        CrashReportingPolicy.environment(version: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
+    }
+
+    private static func start() {
+        guard mode != .reporting, let dsn = destination() else { return }
+        // A report still sending stays queued on disk, and the full start sends it.
+        if mode == .sendingOnly { SentrySDK.close() }
+        let environment = currentEnvironment()
+        SentrySDK.start { configure($0, dsn: dsn, environment: environment) }
+        mode = .reporting
     }
 
     /// Every option the privacy promise rests on, in one place `CrashReportingTests` checks.
@@ -214,9 +265,9 @@ enum CrashReporter {
     }
 
     private static func stop() {
-        guard isRunning else { return }
+        guard mode == .reporting else { return }
         SentrySDK.close()
-        isRunning = false
+        mode = .off
     }
 }
 

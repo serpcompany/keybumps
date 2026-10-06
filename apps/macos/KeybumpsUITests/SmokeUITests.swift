@@ -39,6 +39,18 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.timer").waitForExistence(timeout: 5), "A Plugins row opens its page")
     }
 
+    func testReportAProblemOpensFromGeneralSettings() {
+        launch(permissions: "granted", ["-KBOpenSettings", "general"])
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
+
+        element("settings.general.reportProblem").click()
+        let description = element("problemReport.description")
+        XCTAssertTrue(description.waitForExistence(timeout: 5), "Report a Problem opens its window")
+        XCTAssertTrue(element("problemReport.included").exists, "It shows what's attached")
+        // UI tests run a Debug build, which has nowhere to send reports.
+        XCTAssertFalse(element("problemReport.send").isEnabled)
+    }
+
     func testEscapeClosesSettings() {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         let detail = element("settings.detail.general")
