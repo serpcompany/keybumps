@@ -270,7 +270,11 @@ function Permissions({ plugin }: { plugin: Plugin }) {
       )}
       {plugin.optionalPermissions && (
         <>
-          <p>It can use these too, but works without them:</p>
+          <p>
+            {plugin.optionalPermissions.length === 1
+              ? 'It can use this too, but works without it:'
+              : 'It can use these too, but works without them:'}
+          </p>
           <PermissionList items={plugin.optionalPermissions} />
         </>
       )}

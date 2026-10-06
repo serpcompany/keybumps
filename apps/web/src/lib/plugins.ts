@@ -6,8 +6,10 @@
  *
  * - `apps/macos/Keybumps/Capabilities/*Module.swift`: each `CapabilityDescriptor`'s title,
  *   Settings page summary, category, `systemImage`, `iconTint`, palette tab, required
- *   permissions, dependencies, and search keywords; Timer's preferences; Snippets' optional
- *   permissions.
+ *   permissions, dependencies, and search keywords; Timer's and Emoji Picker's preferences;
+ *   Snippets' and Emoji Picker's optional permissions.
+ * - `apps/macos/Keybumps/EmojiPicker/*.swift` and `emoji.json` (its `sources`): what the Emoji tab
+ *   offers, searches, and keeps (`EmojiRecents.limit`).
  * - `apps/macos/Keybumps/Capabilities/PluginManifest.swift`: `PluginCategory`, and the publisher
  *   (every plugin is official, by Keybumps).
  * - `apps/macos/Keybumps/Infrastructure/GlobalShortcutCoordinator.swift`: the `CapabilityShortcut`
@@ -484,7 +486,7 @@ export const plugins: readonly Plugin[] = [
       'Return copies the emoji, and ⌘Return pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
-      'Every emoji up to Emoji 17.0 that your Mac can draw, in Unicode’s groups, with CLDR names and keywords and gemoji’s :shortcodes:',
+      'Every emoji up to Emoji 17.0 that your Mac can draw, in Unicode’s groups, with CLDR names and keywords and :shortcodes:',
       'Search by name, keyword, or :shortcode:, with exact matches first',
       'Browse a grid of your recent emoji, then every group, while the search is empty',
       'Return or a double-click copies the emoji; ⌘Return pastes it and puts your clipboard back',
