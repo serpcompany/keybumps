@@ -229,14 +229,17 @@ export function PluginDetail({
 /** Three facts under the overview: how it opens, its palette tab, and its permissions. */
 function AtAGlance({ plugin }: { plugin: Plugin }) {
   const hotkey = plugin.shortcuts.find(shortcut => shortcut.keys)?.keys
+  // A plugin with shortcuts that start unassigned can be given one; one without shortcuts can't.
+  const noHotkey = plugin.shortcuts.length > 0 ? 'Not set by default' : 'None'
   const tab = plugin.paletteTab
   const items: { label: string; value: ReactNode }[] = [
-    { label: 'Shortcut', value: hotkey ? <Keycaps keys={hotkey} /> : 'Not set by default' },
+    { label: 'Shortcut', value: hotkey ? <Keycaps keys={hotkey} /> : noHotkey },
     {
       label: 'Command Palette tab',
       value: tab ? (
         <span className="glance-tab">
           {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />
+          {tab.hiddenUnless && <span className="glance-note">once you turn it on</span>}
         </span>
       ) : (
         'None'

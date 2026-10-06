@@ -316,3 +316,18 @@ describe('plugin page guides', () => {
     }
   })
 })
+
+describe('plugin page at a glance', () => {
+  const glance = (slug: string) =>
+    renderPage(pluginFor(slug)).split('class="at-a-glance"')[1]?.split('</dl>')[0] ?? ''
+
+  it('says None for a plugin without shortcuts, and Not set by default for an unassigned one', () => {
+    expect(glance('shortcut-coach')).toContain('<dd>None</dd>')
+    expect(glance('snippets')).toContain('<dd>Not set by default</dd>')
+  })
+
+  it('says when a Command Palette tab is hidden until turned on', () => {
+    expect(glance('shortcut-coach')).toContain('once you turn it on')
+    expect(glance('clipboard-history')).not.toContain('once you turn it on')
+  })
+})

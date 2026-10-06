@@ -1352,33 +1352,6 @@ kbd {
   gap: 10px;
 }
 
-/* Breadcrumbs: src/components/breadcrumbs.tsx */
-.crumbs {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0 0 28px;
-  padding: 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  list-style: none;
-}
-
-.crumbs li + li::before {
-  content: "›";
-  margin-right: 6px;
-  opacity: 0.6;
-}
-
-.crumbs a:hover {
-  color: var(--text);
-}
-
-.crumbs [aria-current="page"] {
-  color: var(--text);
-}
-
 /* CTA band: src/components/cta-band.tsx */
 .cta-band {
   display: flex;
@@ -1416,10 +1389,11 @@ kbd {
 
 .plugin-tabs {
   display: inline-flex;
-  /* Five tabs don't fit a phone: they scroll sideways inside the row instead of the page. */
+  /* Five tabs don't fit a phone: they scroll sideways inside the row (with a thin scrollbar, so
+     the hidden ones are discoverable) instead of widening the page. */
   max-width: 100%;
   overflow-x: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
   gap: 4px;
   padding: 5px;
   border: 1px solid var(--border);
@@ -1929,8 +1903,15 @@ body:has(#questions:target) .plugin-tabs a:first-child {
 
 .glance-tab {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
+}
+
+.glance-note {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 400;
 }
 
 .how-to {
@@ -1992,4 +1973,31 @@ body:has(#questions:target) .plugin-tabs a:first-child {
     border-top: 1px solid var(--border);
     border-left: 0;
   }
+}
+
+/* Breadcrumbs: src/components/breadcrumbs.tsx */
+.crumbs {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 28px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  list-style: none;
+}
+
+.crumbs li + li::before {
+  content: "›";
+  margin-right: 6px;
+  opacity: 0.6;
+}
+
+.crumbs a:hover {
+  color: var(--text);
+}
+
+.crumbs [aria-current="page"] {
+  color: var(--text);
 }

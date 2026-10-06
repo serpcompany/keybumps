@@ -219,7 +219,10 @@ export const plugins: readonly Plugin[] = [
         q: 'Does dictated text end up in it?',
         a: 'No. Text that Dictation inserts stays out, so the history holds only what you copied.'
       },
-      { q: 'Can I remove an item?', a: 'Yes. Highlight it and press Delete.' }
+      {
+        q: 'Can I remove an item?',
+        a: 'Yes. Highlight it and press Delete, or ⌘Delete while you’re searching.'
+      }
     ],
     keeps: [
       'Your history stays on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes.',
@@ -491,7 +494,7 @@ export const plugins: readonly Plugin[] = [
       'A legend of the keyboard symbols in Settings'
     ],
     howTo: [
-      { text: 'Turn it on and allow the permissions it asks for.' },
+      { text: 'Allow the two permissions it asks for: Accessibility and Input Monitoring.' },
       {
         text: 'Work as usual. When you do something by hand that has a shortcut, the shortcut drops down from the notch.'
       },
@@ -560,7 +563,7 @@ export const plugins: readonly Plugin[] = [
     faq: [
       {
         q: 'Can I type a keyword to insert a snippet?',
-        a: 'Yes. Turn on keyword expansion and typing a keyword in any app replaces it with its snippet, then gives you your clipboard back. It never expands in password fields or in Keybumps itself.'
+        a: 'Yes. Turn on Expand keywords as you type, and typing a keyword in any app replaces it with its snippet, then gives you your clipboard back. It needs Accessibility and Input Monitoring, and never expands in password fields or in Keybumps itself.'
       },
       {
         q: 'What is a sensitive snippet?',
@@ -613,7 +616,10 @@ export const plugins: readonly Plugin[] = [
         q: 'Does it keep counting if my Mac sleeps?',
         a: 'Yes. Timers keep counting through sleep and restarts.'
       },
-      { q: 'Can I make a timer silent?', a: 'Yes. Turn off the ringing in Settings › Timer.' },
+      {
+        q: 'Can I turn off the alarm sound?',
+        a: 'Yes. Turn off ringing in Settings › Timer. It applies to every timer, and the alarm still shows on screen.'
+      },
       {
         q: 'Will it ring while I’m dictating?',
         a: 'No. A timer never rings while you’re dictating.'
