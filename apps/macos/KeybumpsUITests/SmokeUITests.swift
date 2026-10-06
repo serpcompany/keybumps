@@ -84,19 +84,27 @@ final class SmokeUITests: XCTestCase {
         let window = app.windows.containing(.any, identifier: "settings.detail.dictation").firstMatch
         XCTAssertTrue(window.exists)
 
-        // XCUITest frames start at the primary screen's top-left corner; AppKit's at its bottom-left.
-        guard let primary = NSScreen.screens.first else { return XCTFail("No screen") }
-        let visibleFrames = NSScreen.screens.map { screen in
+        // Read again on every check: the Dock can change size while the test waits, as icons come
+        // and go on a 1024pt-wide screen.
+        let fits = NSPredicate { _, _ in
+            let frame = window.frame
+            return Self.visibleFrames().contains { $0.insetBy(dx: -1, dy: -1).contains(frame) }
+        }
+        // The fill happens just after the window appears.
+        let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 10) == .completed
+        let dockBar = XCUIApplication(bundleIdentifier: "com.apple.dock").children(matching: .any).firstMatch
+        let dock = dockBar.exists ? "\(dockBar.frame)" : "not found"
+        XCTAssertTrue(settled, "Settings \(window.frame) lies within a screen's visible frame \(Self.visibleFrames()); Dock \(dock)")
+    }
+
+    /// Each screen's visible frame (the part the menu bar and Dock leave) in XCUITest's coordinates,
+    /// which start at the primary screen's top-left corner; AppKit's start at its bottom-left.
+    private static func visibleFrames() -> [CGRect] {
+        guard let primary = NSScreen.screens.first else { return [] }
+        return NSScreen.screens.map { screen in
             let visible = screen.visibleFrame
             return CGRect(x: visible.minX, y: primary.frame.maxY - visible.maxY, width: visible.width, height: visible.height)
         }
-        let fits = NSPredicate { _, _ in
-            let frame = window.frame
-            return visibleFrames.contains { $0.insetBy(dx: -1, dy: -1).contains(frame) }
-        }
-        // The fill happens just after the window appears.
-        let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 5) == .completed
-        XCTAssertTrue(settled, "Settings \(window.frame) lies within a screen's visible frame \(visibleFrames)")
     }
 
     func testEscapeClosesSettings() {

@@ -5,14 +5,33 @@ import Testing
 /// AppKit screen coordinates: the origin is the primary screen's bottom-left corner.
 @Suite("Settings window frame")
 struct SettingsWindowFrameTests {
-    /// CI's 1024×768 screen: a 25pt menu bar on top and a 54pt Dock at the bottom.
-    private let smallScreen = CGRect(x: 0, y: 54, width: 1024, height: 689)
+    /// CI's 1024×768 screen: a 31pt menu bar on top and a 63pt Dock at the bottom.
+    private let smallScreen = CGRect(x: 0, y: 63, width: 1024, height: 674)
 
     @Test("On a 1024×768 screen, a window reaching under the Dock is shrunk to the visible frame (#294)")
     func shrinksAWindowTallerThanTheSpaceAboveTheDock() {
-        // The kind of frame macOS kept before #294: its top under the menu bar, 772pt tall.
-        let overflowing = CGRect(x: 0, y: -29, width: 1024, height: 772)
+        // A frame macOS kept before #294: its top under the menu bar, 772pt tall.
+        let overflowing = CGRect(x: 0, y: -35, width: 1024, height: 772)
         #expect(SettingsWindowFrame.fitted(overflowing, in: smallScreen) == smallScreen)
+    }
+
+    @Test("A window filled before the Dock grew is shrunk to the new visible frame")
+    func refitsAfterTheDockGrows() {
+        // What CI's UI test saw: filled while the Dock was 60pt, then the Dock grew to 63pt.
+        let filledEarlier = CGRect(x: 0, y: 60, width: 1024, height: 677)
+        #expect(SettingsWindowFrame.fitted(filledEarlier, in: smallScreen) == smallScreen)
+    }
+
+    @Test("When even the minimum doesn't fit, the window keeps its top on the screen and then stays put")
+    func stopsAtTheMinimum() {
+        // A 13-inch MacBook at Larger Text (1024×640), with the same menu bar and Dock.
+        let laptop = CGRect(x: 0, y: 63, width: 1024, height: 546)
+        let minimum = CGSize(width: 960, height: 572)
+        let fitted = SettingsWindowFrame.fitted(CGRect(x: 0, y: 0, width: 1240, height: 944), in: laptop, minimumSize: minimum)
+        #expect(fitted == CGRect(x: 0, y: 37, width: 1024, height: 572))
+        #expect(fitted?.maxY == laptop.maxY)
+        // The next activation leaves it alone instead of shrinking it below its minimum again.
+        #expect(fitted.flatMap { SettingsWindowFrame.fitted($0, in: laptop, minimumSize: minimum) } == nil)
     }
 
     @Test("A frame saved on a large display is shrunk and moved onto a laptop's screen")

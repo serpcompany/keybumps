@@ -1405,35 +1405,39 @@ final class ShortcutRecorderState {
 
 /// The Settings window's sizes, and how it is kept on its screen (#294).
 enum SettingsWindowFrame {
-    /// Low enough for small screens: on CI's 1024×768 screen the space above the Dock is about
-    /// 690pt, which the old 720pt minimum, with its title bar and toolbar, didn't fit. The pages
-    /// scroll, so the height is the onboarding sheet's (760×520).
-    static let minimumContentSize = CGSize(width: 960, height: 520)
+    /// Low enough that the window, with its title bar and toolbar, fits above the Dock on the
+    /// smallest screens: CI's 1024×768 leaves 674pt (a 31pt menu bar and a 63pt Dock), and a 13-inch
+    /// MacBook at Larger Text (1024×640) about 546pt. Every page and the sidebar scroll.
+    static let minimumContentSize = CGSize(width: 960, height: 440)
     /// What Settings asks for when macOS has nothing saved; `SettingsWindowFiller` fits it to the
     /// screen once it shows.
     static let defaultContentSize = CGSize(width: 1240, height: 944)
 
-    /// A window frame that is wider or taller than its screen's visible frame (the part the menu
-    /// bar and Dock leave), shrunk to that frame and moved inside it. Nil when the frame is no
-    /// larger than the visible frame, wherever it sits: where a window that fits goes is the
-    /// person's choice.
-    static func fitted(_ frame: CGRect, in visible: CGRect) -> CGRect? {
+    /// The frame for a window wider or taller than its screen's visible frame (the part the menu
+    /// bar and Dock leave): shrunk to that frame, but not below `minimumSize`, and moved inside it,
+    /// keeping its top edge on the screen when even the minimum doesn't fit. Nil when the window is
+    /// no larger than the visible frame, so its position stays as the person put it, or when it is
+    /// already as small and as far inside as it can be, so it doesn't jump each time.
+    static func fitted(_ frame: CGRect, in visible: CGRect, minimumSize: CGSize = .zero) -> CGRect? {
         guard frame.width > visible.width || frame.height > visible.height else { return nil }
-        let width = min(frame.width, visible.width)
-        let height = min(frame.height, visible.height)
-        return CGRect(
-            x: min(max(frame.minX, visible.minX), visible.maxX - width),
+        let width = max(min(frame.width, visible.width), minimumSize.width)
+        let height = max(min(frame.height, visible.height), minimumSize.height)
+        let fitted = CGRect(
+            x: max(min(frame.minX, visible.maxX - width), visible.minX),
             y: min(max(frame.minY, visible.minY), visible.maxY - height),
             width: width,
             height: height
         )
+        return fitted == frame ? nil : fitted
     }
 }
 
 /// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
 /// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at,
-/// but whenever the window comes forward or moves to another screen, a window larger than its
-/// screen's visible frame is shrunk to fit, so it never reaches under the Dock (#294).
+/// except that a window larger than its screen's visible frame is shrunk to fit whenever it comes
+/// forward, moves to another screen, or the screen changes (the Dock resized or moved, the
+/// resolution changed), so it never reaches under the Dock (#294). Its position is kept where it
+/// can be; a size reaching under the Dock is not.
 struct SettingsWindowFiller: NSViewRepresentable {
     let preferences: AppPreferences
 
@@ -1467,6 +1471,13 @@ struct SettingsWindowFiller: NSViewRepresentable {
                     MainActor.assumeIsolated { self?.fillOrFit() }
                 })
             }
+            // The screen's visible frame changing under a window that stays key, such as the Dock
+            // growing or moving.
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.fillOrFit() }
+            })
             // After this turn, so the frame macOS restores for the window doesn't replace it.
             DispatchQueue.main.async { [weak self] in self?.fillOrFit() }
         }
@@ -1486,11 +1497,11 @@ struct SettingsWindowFiller: NSViewRepresentable {
         private func fill(attempt: Int) {
             guard let window, window.isVisible, let screen = window.screen ?? NSScreen.main,
                   !preferences.didFillSettingsWindow else { return }
-            let target = screen.visibleFrame
-            window.setFrame(target, display: true)
+            window.setFrame(screen.visibleFrame, display: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, let window = self.window, window.isVisible, !preferences.didFillSettingsWindow else { return }
-                if window.frame != target, attempt < 3 {
+                // Against the visible frame now, which the Dock may have changed meanwhile.
+                if window.frame != (window.screen ?? screen).visibleFrame, attempt < 3 {
                     fill(attempt: attempt + 1)
                 } else {
                     preferences.didFillSettingsWindow = true
@@ -1509,7 +1520,13 @@ struct SettingsWindowFiller: NSViewRepresentable {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.fitToScreen() }
                 return
             }
-            if let fitted = SettingsWindowFrame.fitted(window.frame, in: screen.visibleFrame) {
+            // AppKit's own minimum frame for the content's minimum, title bar and toolbar included.
+            let contentMinimum = window.frameRect(forContentRect: NSRect(origin: .zero, size: window.contentMinSize)).size
+            let minimum = CGSize(
+                width: max(window.minSize.width, contentMinimum.width),
+                height: max(window.minSize.height, contentMinimum.height)
+            )
+            if let fitted = SettingsWindowFrame.fitted(window.frame, in: screen.visibleFrame, minimumSize: minimum) {
                 window.setFrame(fitted, display: true)
             }
         }
