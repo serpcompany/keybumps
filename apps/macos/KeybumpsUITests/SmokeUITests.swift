@@ -56,26 +56,21 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(element("problemReport.send").isEnabled)
     }
 
-    /// #286: Dictation's dropdowns open and change the setting.
+    /// #286: Dictation's dropdowns open and change the setting. It drives Recognition language,
+    /// which is near the top: on CI's 1024×768 screen the Settings window reaches under the Dock,
+    /// so the last row (Recording length, the same `SettingsDropdown`) can't be clicked there.
     func testDictationDropdownsOpenAndChangeTheSetting() {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
-        let limit = element("settings.dictation.durationLimit")
-        XCTAssertTrue(limit.waitForExistence(timeout: 20))
-        // It's the last row on the page, below the fold on a small screen such as CI's.
-        let page = element("settings.detail.dictation")
-        for delta in [-200.0, -200, -200, -200, -200, 200, 200, 200, 200, 200] where !limit.isHittable {
-            page.scroll(byDeltaX: 0, deltaY: delta)
-        }
-        XCTAssertTrue(limit.isHittable, "The recording-length dropdown can be scrolled into view")
+        let language = element("settings.dictation.language")
+        XCTAssertTrue(language.waitForExistence(timeout: 20))
+        XCTAssertTrue(element("settings.dictation.durationLimit").exists)
 
-        limit.click()
-        let noLimit = app.menuItems["No limit"]
-        XCTAssertTrue(noLimit.waitForExistence(timeout: 5), "The recording-length dropdown opens its menu")
-        noLimit.click()
-        XCTAssertEqual(limit.value as? String, "No limit")
-        // The language dropdown is the same `SettingsDropdown`; CI runners may have no on-device
-        // speech languages to list, so it isn't opened here.
-        XCTAssertTrue(element("settings.dictation.language").exists)
+        language.click()
+        let first = app.menuItems.element(boundBy: 0)
+        XCTAssertTrue(first.waitForExistence(timeout: 5), "The language dropdown opens its menu")
+        let title = first.title
+        first.click()
+        XCTAssertEqual(language.value as? String, title, "Picking a language changes the setting")
     }
 
     func testEscapeClosesSettings() {
