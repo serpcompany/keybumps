@@ -181,11 +181,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     private let idleTimeout: TimeInterval
     private var activeTranscriber: (any CompletedAudioTranscribing)?
     private var cachedWhisper: (modelFolder: URL, transcriber: any UnloadableCompletedAudioTranscribing)?
-    private var pendingWhisper: (
-        modelFolder: URL,
-        token: UUID,
-        task: Task<any UnloadableCompletedAudioTranscribing, Error>
-    )?
+    private var pendingWhisper: WhisperLoad?
     private var unloadingWhisper: (token: UUID, task: Task<Void, Never>)?
     private var idleCancellation: (any DictationRuntimeIdleCancellation)?
 
@@ -212,23 +208,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
-        let transcriber: any CompletedAudioTranscribing
-
-        if let modelFolder = installedWhisperModelFolder(language: language) {
-            if let cachedWhisper,
-               cachedWhisper.modelFolder.standardizedFileURL == modelFolder.standardizedFileURL {
-                transcriber = cachedWhisper.transcriber
-            } else {
-                evictWhisperRuntimeIfModelChanged(to: modelFolder)
-                transcriber = try await loadWhisper(modelFolder: modelFolder)
-            }
-        } else {
-            if cachedWhisper != nil || pendingWhisper != nil {
-                evictWhisperRuntime()
-            }
-            transcriber = appleTranscriber
-        }
-
+        let transcriber = try await resolveTranscriber(language: language)
         let isWhisper = transcriber is any UnloadableCompletedAudioTranscribing
         if isWhisper {
             idleCancellation?.cancel()
@@ -263,9 +243,11 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
             return
         }
         evictWhisperRuntimeIfModelChanged(to: modelFolder)
+        // Registered before this returns, so a cancel that follows sees it.
+        let load = whisperLoad(modelFolder: modelFolder)
         Task { [weak self] in
-            // A failed load is cleared in `loadWhisper`, and `transcribe` loads again and reports it.
-            _ = try? await self?.loadWhisper(modelFolder: modelFolder)
+            // Caches the runtime. A failed load is cleared, and `transcribe` loads again and reports it.
+            _ = try? await self?.awaitWhisperLoad(load)
         }
     }
 
@@ -295,6 +277,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         let previousUnload = unloadingWhisper?.task
         let pendingLoad = pendingWhisper?.task
         pendingLoad?.cancel()
+        pendingWhisper?.isEvicted = true
         pendingWhisper = nil
         let cachedUnload = cachedWhisper?.transcriber.unload()
         cachedWhisper = nil
@@ -336,57 +319,90 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         }
     }
 
-    private func loadWhisper(modelFolder: URL) async throws -> any UnloadableCompletedAudioTranscribing {
-        let standardizedFolder = modelFolder.standardizedFileURL
+    /// The selected engine's transcriber. A model change or deletion while this waits for a load
+    /// evicts that load, so the selection is resolved again rather than used while it unloads.
+    private func resolveTranscriber(language: String) async throws -> any CompletedAudioTranscribing {
+        for _ in 0..<4 {
+            guard let modelFolder = installedWhisperModelFolder(language: language) else {
+                if cachedWhisper != nil || pendingWhisper != nil {
+                    evictWhisperRuntime()
+                }
+                return appleTranscriber
+            }
+            if let cachedWhisper,
+               cachedWhisper.modelFolder.standardizedFileURL == modelFolder.standardizedFileURL {
+                return cachedWhisper.transcriber
+            }
+            evictWhisperRuntimeIfModelChanged(to: modelFolder)
+            do {
+                return try await awaitWhisperLoad(whisperLoad(modelFolder: modelFolder))
+            } catch is WhisperLoadEvicted {
+                continue
+            }
+        }
+        throw CancellationError()
+    }
+
+    /// Joins the load already running for `modelFolder`, or starts one. A new load is registered
+    /// before this returns and waits for the previous runtime to finish unloading.
+    private func whisperLoad(modelFolder: URL) -> WhisperLoad {
         if let pendingWhisper,
-           pendingWhisper.modelFolder.standardizedFileURL == standardizedFolder {
-            return try await pendingWhisper.task.value
+           pendingWhisper.modelFolder.standardizedFileURL == modelFolder.standardizedFileURL {
+            return pendingWhisper
         }
-
-        if let unloadingWhisper {
-            await unloadingWhisper.task.value
-            if self.unloadingWhisper?.token == unloadingWhisper.token {
-                self.unloadingWhisper = nil
-            }
-            if let cachedWhisper,
-               cachedWhisper.modelFolder.standardizedFileURL == standardizedFolder {
-                return cachedWhisper.transcriber
-            }
-            if let pendingWhisper,
-               pendingWhisper.modelFolder.standardizedFileURL == standardizedFolder {
-                return try await pendingWhisper.task.value
-            }
-        }
-
-        let token = UUID()
+        let previousUnload = unloadingWhisper
         let factory = whisperFactory
-        let task = Task<any UnloadableCompletedAudioTranscribing, Error> {
-            try await factory(modelFolder)
+        let task = Task<any UnloadableCompletedAudioTranscribing, Error> { @MainActor [weak self] in
+            if let previousUnload {
+                await previousUnload.task.value
+                if self?.unloadingWhisper?.token == previousUnload.token {
+                    self?.unloadingWhisper = nil
+                }
+            }
+            try Task.checkCancellation()
+            return try await factory(modelFolder)
         }
-        pendingWhisper = (modelFolder, token, task)
+        let load = WhisperLoad(modelFolder: modelFolder, task: task)
+        pendingWhisper = load
+        return load
+    }
 
+    /// Waits for `load` and caches its runtime. Every waiter, the one that started the load or one
+    /// that joined it, gets `WhisperLoadEvicted` if the load was evicted while it ran; the
+    /// eviction unloads that runtime.
+    private func awaitWhisperLoad(_ load: WhisperLoad) async throws -> any UnloadableCompletedAudioTranscribing {
+        let result: Result<any UnloadableCompletedAudioTranscribing, Error>
         do {
-            let loaded = try await task.value
-            if pendingWhisper?.token == token {
-                pendingWhisper = nil
-                cachedWhisper = (modelFolder, loaded)
-                return loaded
-            }
-            if let cachedWhisper,
-               cachedWhisper.modelFolder.standardizedFileURL == standardizedFolder {
-                return cachedWhisper.transcriber
-            } else if let unloadingWhisper {
-                await unloadingWhisper.task.value
-                throw CancellationError()
-            } else {
-                await loaded.unload().value
-                throw CancellationError()
-            }
+            result = .success(try await load.task.value)
         } catch {
-            if pendingWhisper?.token == token {
-                pendingWhisper = nil
-            }
-            throw error
+            result = .failure(error)
         }
+        if pendingWhisper === load {
+            pendingWhisper = nil
+            if case .success(let loaded) = result {
+                cachedWhisper = (load.modelFolder, loaded)
+            }
+        }
+        if load.isEvicted { throw WhisperLoadEvicted() }
+        let loaded = try result.get()
+        // Another waiter cached it first; an eviction since then unloads it.
+        guard cachedWhisper?.transcriber === loaded else { throw WhisperLoadEvicted() }
+        return loaded
     }
 }
+
+/// One Whisper model load that transcriptions and a recording's `prepare` can share.
+@MainActor
+private final class WhisperLoad {
+    let modelFolder: URL
+    let task: Task<any UnloadableCompletedAudioTranscribing, Error>
+    /// Set when a model change or deletion evicts the load while it runs.
+    var isEvicted = false
+
+    init(modelFolder: URL, task: Task<any UnloadableCompletedAudioTranscribing, Error>) {
+        self.modelFolder = modelFolder
+        self.task = task
+    }
+}
+
+private struct WhisperLoadEvicted: Error {}

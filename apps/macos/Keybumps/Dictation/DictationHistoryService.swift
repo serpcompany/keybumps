@@ -20,8 +20,9 @@ struct DictationRecordingMetadata: Codable, Equatable {
     let appVersion: String
     let transcriptionError: String?
     let state: DictationRecordingState?
-    /// Seconds from the end of the recording (or the start of a retry) to the saved transcript.
-    /// Timing only. It's a `var` so files written before it existed still decode.
+    /// Seconds from the end of a dictation's recording to its saved transcript; History retries
+    /// leave it out. Timing only. A `var` with a default, so callers can omit it and it still
+    /// decodes (a `let` with a default never would).
     var processingTime: TimeInterval? = nil
 }
 
@@ -208,8 +209,7 @@ final class DictationHistoryService {
         of entry: DictationHistoryEntry,
         text: String,
         language: String,
-        transcriptionError: String? = nil,
-        processingTime: TimeInterval? = nil
+        transcriptionError: String? = nil
     ) throws -> DictationHistoryEntry {
         let recording = PendingDictationRecording(
             id: entry.id,
@@ -222,8 +222,7 @@ final class DictationHistoryService {
             text: text,
             language: language,
             duration: entry.duration,
-            transcriptionError: transcriptionError,
-            processingTime: processingTime
+            transcriptionError: transcriptionError
         )
     }
 

@@ -316,7 +316,6 @@ final class DictationService {
         lastError = nil
         do {
             try history.markTranscribing(entry, language: language)
-            let startedAt = Date()
             let transcript = try await transcribeCompletedAudio(
                 at: audioURL,
                 language: language,
@@ -325,8 +324,7 @@ final class DictationService {
             _ = try history.completeTranscription(
                 of: entry,
                 text: transcript,
-                language: language,
-                processingTime: Date().timeIntervalSince(startedAt)
+                language: language
             )
         } catch is CancellationError {
             _ = try? history.completeTranscription(
