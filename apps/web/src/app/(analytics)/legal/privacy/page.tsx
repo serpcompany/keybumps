@@ -17,7 +17,8 @@ export default function PrivacyPage() {
       <p>
         What you do in Keybumps stays on your Mac. The app has no advertising, no analytics, no
         account, and no cloud sync. We never receive your searches, clipboard contents, screenshots,
-        recordings, or transcripts.
+        recordings, or transcripts. If Keybumps crashes or freezes, it sends us a crash report
+        without any of those, and you can turn crash reports off.
       </p>
 
       <h2>Information stored on your Mac</h2>
@@ -70,7 +71,44 @@ export default function PrivacyPage() {
           identifier itself never leaves your Mac) to Polar, which issues and manages Keybumps
           license keys. This enforces the one-Mac limit and lets refunded licenses be revoked.
         </li>
+        <li>
+          <strong>Crash and problem reports</strong>, described next.
+        </li>
       </ul>
+
+      <h2>Crash and problem reports</h2>
+      <p>
+        When Keybumps crashes or freezes, it sends a crash report to Sentry, the service we use to
+        collect them, so we can find and fix the cause. Crash reports are on by default. To stop
+        sending them, turn off <strong>Send crash reports</strong> in Keybumps Settings › General.
+      </p>
+      <p>
+        When you use <strong>Report a Problem…</strong>, Keybumps sends what you write to Sentry,
+        with your email address if you add one for a reply. It shows you every detail it attaches
+        before you send, and it sends a problem report even when crash reports are off, because you
+        chose to send it.
+      </p>
+      <p>A report includes:</p>
+      <ul>
+        <li>for a crash or freeze, where in Keybumps’ code it happened;</li>
+        <li>the Keybumps and macOS versions, and your Mac’s model, chip, and memory;</li>
+        <li>which Keybumps plugins are on;</li>
+        <li>
+          a random identifier Sentry creates for your copy of Keybumps, so we can tell how many Macs
+          a problem affects;
+        </li>
+        <li>for a problem report, which permissions Keybumps has, such as Accessibility.</li>
+      </ul>
+      <p>
+        Reports never include your clipboard contents, snippets, transcripts, recordings,
+        screenshots, searches, window or document titles, file names, or links. Before a report
+        leaves your Mac, Keybumps removes file paths, links, and email addresses from it, including
+        from what you write, and keeps only the email you give for a reply. Nothing is sent when
+        nothing goes wrong: Keybumps doesn’t report when you open it or how long you use it. Sentry
+        receives your IP address with each report, as with any web request, but we’ve set it not to
+        store the address or the location it suggests. Sentry handles reports under its own privacy
+        policy.
+      </p>
 
       <h2>Purchases</h2>
       <p>
@@ -96,16 +134,17 @@ export default function PrivacyPage() {
 
       <h2>Email</h2>
       <p>
-        If you email us, we keep the conversation to help you. Polar sends your receipt and license
-        key. We don’t sell or share your email address.
+        If you email us, or add your email to a problem report, we keep the conversation to help
+        you. Polar sends your receipt and license key. We don’t sell or share your email address.
       </p>
 
       <h2>Retention and your rights</h2>
       <p>
         We keep purchase and license records for as long as your license is active and as required
-        for tax and accounting. You can ask us to access, correct, or delete the information we hold
-        about you by emailing {email}. Data stored on your Mac is under your control and is removed
-        when you delete it or uninstall Keybumps and its folders.
+        for tax and accounting, and crash and problem reports only as long as we need them to fix
+        problems. You can ask us to access, correct, or delete the information we hold about you by
+        emailing {email}. Data stored on your Mac is under your control and is removed when you
+        delete it or uninstall Keybumps and its folders.
       </p>
 
       <h2>Children</h2>
