@@ -50,7 +50,7 @@ const featured: readonly {
     lede: 'Everything you copy, text and images, searchable from one shortcut.',
     features: [
       'Your 50 most recent copies, text and images',
-      'Shows the app each one came from, and the website’s domain',
+      'Shows the app each one came from, and the website’s domain when the browser says',
       'Copy an image file in Finder and get the image, not its icon',
       'Screenshots you take land here, ready to paste'
     ],
@@ -65,7 +65,7 @@ const featured: readonly {
       'A timer and live sound bars at the notch while you speak',
       'Pause to think: it writes everything down after you stop',
       'Every recording kept in Dictation History to search, replay, and copy',
-      'Translate what you said and hear it read aloud (macOS 15)'
+      'Translate what you said and hear it read aloud (macOS 15 or later)'
     ],
     options: { label: 'Recording limit', values: ['5 min', '10', '15', '30', '60', 'No limit'] },
     visual: <DictationVisual />
@@ -78,19 +78,19 @@ const featured: readonly {
       'Halves, corners, thirds, sixths, and fourths',
       'Maximize, center, make smaller or larger, restore',
       'Move a window to the next or previous display',
-      'Drag a window to an edge or corner to snap it'
+      'Drag a window to the top, a side, or a corner to snap it'
     ],
     options: { label: 'Your choice', values: ['30 window commands', 'Change any shortcut'] },
     visual: <WindowsVisual />
   },
   {
     slug: 'screenshot-tools',
-    headline: 'Capture, mark up, and share in seconds.',
+    headline: 'Capture, mark up, and paste in seconds.',
     lede: 'Take a screenshot, cover what shouldn’t be seen, and paste it anywhere.',
     features: [
       'Blur, redact, arrows, drawing, and text',
-      'Capture and edit first, so nothing unredacted reaches the clipboard',
-      'Every screenshot in a grid of large thumbnails in its own tab'
+      'Every screen, then edit (⇧⌘3) copies only when you save, so nothing unredacted reaches the clipboard',
+      'Your screenshots in a grid of large thumbnails in their own tab'
     ],
     options: {
       label: 'Capture',
@@ -101,13 +101,13 @@ const featured: readonly {
   {
     slug: 'snippets',
     headline: 'Type it once. Never again.',
-    lede: 'Save the text you reuse and type a short keyword to drop it in, in any app.',
+    lede: 'Save the text you reuse and paste it from the Command Palette, or turn on keyword expansion and type a short keyword in any app.',
     features: [
-      'Keywords like ;ship expand as you type',
+      'With keyword expansion on, keywords like ;ship expand as you type',
       'Sensitive snippets stay hidden and out of search',
       'Bring your snippets over from Alfred'
     ],
-    options: { label: 'Use them', values: ['Type a keyword', '⌘5 in the palette', 'Quick Search'] },
+    options: { label: 'Use them', values: ['⌘5 in the palette', 'Quick Search', 'Type a keyword'] },
     visual: <SnippetsVisual />
   }
 ]
@@ -120,17 +120,17 @@ const useCases: readonly { title: string; text: string; plugins: readonly string
   },
   {
     title: 'Software development',
-    text: 'Paste the command you ran an hour ago, put the editor and browser side by side, and grab a screenshot of the bug with the secrets blurred.',
+    text: 'Paste the command you copied an hour ago, put the editor and browser side by side, and grab a screenshot of the bug with the secrets blurred.',
     plugins: ['clipboard-history', 'window-manager', 'screenshot-tools']
   },
   {
     title: 'Customer support',
-    text: 'Answer common questions with snippets that expand as you type, and send marked-up screenshots that show exactly where to click.',
+    text: 'Answer common questions with saved snippets, and send marked-up screenshots that show exactly where to click.',
     plugins: ['snippets', 'screenshot-tools', 'emoji-picker']
   },
   {
     title: 'Studying and research',
-    text: 'Dictate notes, keep everything you copied from your sources searchable, and time focused sessions from the menu bar.',
+    text: 'Dictate notes, keep everything you copied from your sources searchable, and time focused sessions with a countdown in the menu bar.',
     plugins: ['dictation', 'clipboard-history', 'timer']
   },
   {
@@ -158,9 +158,9 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
     )
   },
   {
-    title: 'Dictation length',
+    title: 'Maximum recording length',
     text: 'Stop recording after 5 minutes, or give yourself longer.',
-    control: <Segments values={['5', '10', '15', '30', '60', '∞']} on="5" />
+    control: <Dropdown value="5 minutes" />
   },
   {
     title: 'Quiet timers',
@@ -170,12 +170,12 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
   {
     title: 'Emoji skin tone',
     text: 'Set it once and it applies to every emoji that has one.',
-    control: <Segments values={['✋', '✋🏽', '✋🏿']} on="✋🏽" />
+    control: <Segments values={['✋', '✋🏻', '✋🏼', '✋🏽', '✋🏾', '✋🏿']} on="✋🏽" />
   },
   {
-    title: 'Screenshots to the clipboard',
+    title: 'Copy new screenshots to the clipboard',
     text: 'New screenshots can go straight to the clipboard, or not.',
-    control: <Toggle on label="Copy new screenshots" />
+    control: <Toggle on label="Copy new screenshots to the clipboard" />
   }
 ]
 
@@ -185,8 +185,8 @@ const questions = [
     a: 'A launcher, a clipboard manager, a text expander, a dictation app, a window manager, a screenshot editor, a menu bar timer, and an emoji picker. Turn on the ones you want.'
   },
   {
-    q: 'How is it different from Raycast?',
-    a: 'Keybumps is a focused set of plugins we build ourselves, in one native app. Raycast is a launcher with a large store of extensions from other developers, and AI features.'
+    q: 'Can I change the shortcuts?',
+    a: 'Yes. Change any shortcut in Settings. Some start unassigned until you pick one.'
   },
   {
     q: 'Does Dictation work in any app?',
@@ -269,7 +269,9 @@ export default async function Home() {
             </li>
             <li>
               <h3>Jump to a tab</h3>
-              <p>Clipboard, Screenshots, Dictation, Snippets, Timers, Emoji.</p>
+              <p>
+                Clipboard, Screenshots, Dictation, Snippets, Timers, and Emoji, once you turn it on.
+              </p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
                 <kbd>1</kbd>
@@ -293,7 +295,7 @@ export default async function Home() {
         <div className="container">
           <h2>What’s inside</h2>
           <p className="section-lede">
-            Each plugin does one job well. Here’s what the most-used ones can do.
+            Each plugin does one job well. Here’s what five of them can do.
           </p>
           <div className="bands">
             {featured.map((item, index) => {
@@ -448,6 +450,10 @@ function Toggle({ on, label }: { on: boolean; label: string }) {
       {label}
     </span>
   )
+}
+
+function Dropdown({ value }: { value: string }) {
+  return <span className="dropdown-mock">{value}</span>
 }
 
 function Segments({ values, on }: { values: readonly string[]; on: string }) {

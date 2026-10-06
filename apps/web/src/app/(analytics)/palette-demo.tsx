@@ -97,7 +97,7 @@ export function PaletteDemo() {
 
   return (
     <div className="palette">
-      <div className="palette-search">
+      <div className="palette-search" aria-hidden="true">
         <span className="palette-glass">⌕</span>
         <span>
           {current.query.slice(0, typed)}
@@ -118,7 +118,7 @@ export function PaletteDemo() {
           </button>
         ))}
       </div>
-      <ul className="palette-rows" key={tab}>
+      <ul className="palette-rows" key={tab} aria-hidden="true">
         {current.rows.map((row, i) => (
           <li key={row.title} className={i === selected ? 'selected' : undefined}>
             <span className="row-icon">{row.icon}</span>
@@ -127,7 +127,7 @@ export function PaletteDemo() {
           </li>
         ))}
       </ul>
-      <div className="palette-footer">
+      <div className="palette-footer" aria-hidden="true">
         <span>
           <kbd>↵</kbd> Open
         </span>
