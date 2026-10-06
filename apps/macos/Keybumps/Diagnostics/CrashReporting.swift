@@ -45,9 +45,11 @@ enum CrashReportingPolicy {
         (cacheDirectory as NSString).appendingPathComponent("Problem reports")
     }
 
-    /// An email address, in any script ("josé@…", "o'brien@…"): what the scrubber removes from free
-    /// text, and the only thing a problem report's contact field may hold.
-    static let emailPattern = #"[\p{L}\p{N}._%+'\-]+@[\p{L}\p{N}.\-]+\.\p{L}{2,}"#
+    /// An email address, in any script ("josé@…", "o'brien@…", Devanagari with its vowel marks):
+    /// what the scrubber removes from free text, and the only thing a problem report's contact field
+    /// may hold. A match starts only where a run of address characters starts, and the part before
+    /// the @ never backtracks, so a long pasted token or a paragraph of Chinese stays fast.
+    static let emailPattern = #"(?<![\p{L}\p{M}\p{N}._%+'\-])[\p{L}\p{M}\p{N}._%+'\-]++@[\p{L}\p{M}\p{N}.\-]+\.\p{L}[\p{L}\p{M}]+"#
 
     static let installIDKey = "crashReportsInstallID"
 
@@ -116,7 +118,8 @@ enum CrashReportScrubber {
     private static let pathRules: [(NSRegularExpression, String)] = compile([
         // A URL or path runs to the end of the line or the next double quote: losing the rest of
         // a message is better than leaking a file name.
-        (#"[A-Za-z][A-Za-z0-9+.\-]*://[^"# + end + "]*", "<url>"),
+        // Only from the start of a scheme, which never backtracks, so a long run of letters stays fast.
+        (#"(?<![A-Za-z0-9+.\-])[A-Za-z][A-Za-z0-9+.\-]*+://[^"# + end + "]*", "<url>"),
         (CrashReportingPolicy.emailPattern, "<email>"),
         (#"(?:/Users|/Volumes|/private|/tmp|/var/folders)/[^"# + end + "]*", "<path>"),
         (#"~/[^"# + end + "]*", "<path>"),
@@ -177,7 +180,7 @@ enum CrashReportScrubber {
         event.request = nil
         event.extra = nil
         event.error = nil
-        // Sentry's random install identifier, and nothing else.
+        // The install identifier, and nothing else. (`beforeSend` then sets it to Keybumps' own.)
         event.user = event.user?.userId.map { User(userId: $0) }
         if let message = event.message {
             let isWritten = event.tags?[ProblemReport.tag.key] == ProblemReport.tag.value

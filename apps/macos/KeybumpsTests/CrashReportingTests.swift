@@ -95,6 +95,19 @@ struct CrashReportingTests {
         #expect(CrashReportScrubber.scrub("Write to o'brien@example.com or josé@example.es") == "Write to <email> or <email>")
         #expect(ProblemReport(description: "x", contactEmail: "josé@example.es", diagnostics: ProblemReportTests.sample).contact == "josé@example.es")
         #expect(ProblemReport(description: "x", contactEmail: "o'brien@example.com", diagnostics: ProblemReportTests.sample).canSend)
+        // Scripts whose vowels are combining marks, and an accent pasted as a separate mark.
+        #expect(CrashReportScrubber.scrub("राम@उदाहरण.भारत") == "<email>")
+        #expect(CrashReportScrubber.scrub("jose\u{0301}@example.es") == "<email>")
+    }
+
+    @Test func longTextWithoutAnAddressScrubsQuickly() {
+        let token = String(repeating: "a", count: 50_000)
+        let paragraph = String(repeating: "漢", count: 50_000)
+        let start = ContinuousClock.now
+        #expect(CrashReportScrubber.scrubWritten(token) == token)
+        #expect(CrashReportScrubber.scrubWritten(paragraph) == paragraph)
+        // It runs on the main thread when Send is pressed; the old pattern took seconds here.
+        #expect(ContinuousClock.now - start < .seconds(1))
     }
 
     @Test func aQueuedReportIsFoundInSentrysEnvelopesFolder() throws {
