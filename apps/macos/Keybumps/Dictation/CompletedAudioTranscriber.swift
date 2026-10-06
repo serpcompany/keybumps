@@ -198,9 +198,18 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         self.selectedEngine = selectedEngine
         self.modelManager = modelManager
         self.appleTranscriber = appleTranscriber ?? AppleSpeechCompletedAudioTranscriber()
-        self.whisperFactory = whisperFactory ?? { try await WhisperKitCompletedAudioTranscriber.load(modelFolder: $0) }
+        self.whisperFactory = whisperFactory ?? Self.loadInstalledWhisperRuntime
         self.idleScheduler = idleScheduler ?? TaskDictationRuntimeIdleScheduler()
         self.idleTimeout = idleTimeout
+    }
+
+    /// Loads the runtime for the model in `modelFolder`: whisper.cpp for a ggml model file,
+    /// otherwise WhisperKit (ADR 0008).
+    static func loadInstalledWhisperRuntime(modelFolder: URL) async throws -> any UnloadableCompletedAudioTranscribing {
+        if let modelFile = WhisperCppModel.installedFile(in: modelFolder) {
+            return try await WhisperCppCompletedAudioTranscriber.load(modelFile: modelFile)
+        }
+        return try await WhisperKitCompletedAudioTranscriber.load(modelFolder: modelFolder)
     }
 
     func transcribe(

@@ -47,7 +47,7 @@ Permission-gated and system-level features are faked in automated tests, never g
   - `ScreenshotLocationResolver.system` reads no screenshot preference and uses a Desktop in the same folder.
   - `AppModel.defaultSymbolicHotKeyPreferences`, used by the Spotlight shortcut check and the Screenshot Tools takeover unless a composition injects preferences, is inert under that host, so no test can rewrite the owner's `com.apple.symbolichotkeys`.
   - `UnitTestDataIsolationTests` fails if a default goes back to the owner's folders. It checks the resolved paths with `#require` before building any store, so a regression stops the test before anything opens the owner's folders.
-  - Tests still inject their own stores wherever the data matters to the test. The Whisper timing benchmark takes its model folder only from `KEYBUMPS_WHISPER_BENCHMARK_MODEL`. Pass it to the test host as `TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_MODEL=<folder>` on the `xcodebuild` command line (and `TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_AUDIO` for the WAV).
+  - Tests still inject their own stores wherever the data matters to the test. The Whisper timing benchmark takes its model folder only from `KEYBUMPS_WHISPER_BENCHMARK_MODEL`, and the whisper.cpp one its model file from `KEYBUMPS_WHISPER_CPP_MODEL`. Pass them to the test host by setting `TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_MODEL=<folder>` or `TEST_RUNNER_KEYBUMPS_WHISPER_CPP_MODEL=<file>` (and `…_AUDIO` for a non-private WAV) in `xcodebuild`'s environment, before the command; after it they're build settings and don't reach the test host.
 
 ### UI test launch arguments
 

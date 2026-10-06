@@ -31,6 +31,9 @@ packages:
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     exactVersion: 9.30.0
+  # whisper.cpp's release framework, pinned by checksum in the local package (ADR 0008).
+  WhisperCpp:
+    path: Packages/WhisperCpp
 targets:
   Keybumps:
     type: application
@@ -62,6 +65,8 @@ targets:
         buildPhase: resources
       - path: LICENSE.sentry-cocoa
         buildPhase: resources
+      - path: LICENSE.whisper-cpp
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps
@@ -85,6 +90,7 @@ targets:
       - package: ArgmaxOSS
         product: WhisperKit
       - package: Sentry
+      - package: WhisperCpp
     postCompileScripts:
       - name: Bundle this release's notes for What's New
         # build-update-release.sh and build-qa-candidate.sh pass KEYBUMPS_RELEASE_NOTES; other builds carry none (#225).

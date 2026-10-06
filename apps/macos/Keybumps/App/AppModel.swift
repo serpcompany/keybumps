@@ -232,7 +232,10 @@ final class AppModel {
         self.dictationHistory = dictationHistory
         let dictationModelManager = injectedDictationModelManager ?? DictationModelManager(
             modelsRoot: ProductPaths.keybumps().dictationModels,
-            downloader: WhisperKitModelDownloader()
+            downloader: DictationModelDownloadRouter(
+                whisperKit: WhisperKitModelDownloader(),
+                whisperCpp: WhisperCppModelDownloader()
+            )
         )
         self.dictationModels = dictationModelManager
         if dictationModelManager.state(for: preferences.dictationTranscriptionEngine) != .installed

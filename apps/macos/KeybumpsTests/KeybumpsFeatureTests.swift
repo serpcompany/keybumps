@@ -488,7 +488,8 @@ final class KeybumpsFeatureTests: XCTestCase {
             "LICENSE.argmax-oss-swift",
             "NOTICES.argmax-oss-swift",
             "LICENSE.openai-whisper",
-            "LICENSE.sentry-cocoa"
+            "LICENSE.sentry-cocoa",
+            "LICENSE.whisper-cpp"
         ] {
             XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil), resource)
         }

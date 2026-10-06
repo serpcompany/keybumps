@@ -101,17 +101,11 @@ final class DictationModelManager {
               !storedPath.isEmpty else { return nil }
         let folder = URL(fileURLWithPath: storedPath, isDirectory: true)
         guard folder.standardizedFileURL.path.hasPrefix(root(for: engine).standardizedFileURL.path + "/"),
-              requiredModelFiles.allSatisfy({ component in
+              engine.requiredModelFiles.allSatisfy({ component in
                   fileManager.fileExists(atPath: folder.appendingPathComponent(component).path)
               }) else { return nil }
         return folder
     }
-
-    private let requiredModelFiles = [
-        "AudioEncoder.mlmodelc",
-        "MelSpectrogram.mlmodelc",
-        "TextDecoder.mlmodelc"
-    ]
 
     private func root(for engine: DictationTranscriptionEngine) -> URL {
         modelsRoot.appendingPathComponent(engine.rawValue, isDirectory: true)
