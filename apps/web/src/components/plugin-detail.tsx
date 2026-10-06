@@ -228,7 +228,8 @@ export function PluginDetail({
 
 /** Three facts under the overview: how it opens, its palette tab, and its permissions. */
 function AtAGlance({ plugin }: { plugin: Plugin }) {
-  const assigned = plugin.shortcuts.filter(shortcut => shortcut.keys)
+  // Only shortcuts that work from any app say how the plugin opens; Cancel Dictation doesn't.
+  const assigned = plugin.shortcuts.filter(shortcut => shortcut.keys && !shortcut.note)
   const hotkey = assigned[0]?.keys
   // A plugin with shortcuts that start unassigned can be given one; one without shortcuts can't.
   const noHotkey = plugin.shortcuts.length > 0 ? 'Not set by default' : 'None'
@@ -297,14 +298,16 @@ function Keycaps({ keys }: { keys: string }) {
 function Commands({ plugin }: { plugin: Plugin }) {
   const tab = plugin.paletteTab
   const many = plugin.shortcuts.length > 6
+  // A shortcut with a note (Cancel Dictation) works only at certain times, not from any app.
+  const anywhere = plugin.shortcuts.every(shortcut => !shortcut.note)
   return (
     <>
       <p>
         {tab && plugin.shortcuts.length > 0
-          ? `Open its tab in the Command Palette, or use its shortcuts from any app. You can change the shortcuts in Settings › ${plugin.name}.`
+          ? `Open its tab in the Command Palette, or use its shortcuts${anywhere ? ' from any app' : ''}. You can change the shortcuts in Settings › ${plugin.name}.`
           : tab
             ? 'Open its tab in the Command Palette.'
-            : `Its shortcuts work from any app, and you can change any of them in Settings › ${plugin.name}.`}
+            : `Its shortcuts work${anywhere ? ' from any app' : ' as noted below'}, and you can change any of them in Settings › ${plugin.name}.`}
       </p>
       {tab && (
         <ul className="command-list">
@@ -334,7 +337,10 @@ function Commands({ plugin }: { plugin: Plugin }) {
                   : 'command-row'
               }
             >
-              <span className="command-name">{shortcut.title}</span>
+              <span className="command-name">
+                {shortcut.title}
+                {shortcut.note && <span className="command-note">{shortcut.note}</span>}
+              </span>
               {shortcut.keys ? (
                 <Keycaps keys={shortcut.keys} />
               ) : (
