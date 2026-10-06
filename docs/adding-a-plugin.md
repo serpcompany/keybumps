@@ -9,7 +9,7 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
 - **Capability:** a case in `Capability` (`Domain/Capability.swift`).
 - **Descriptor and module:** `Capabilities/<Name>Module.swift` declares its `CapabilityDescriptor` and its `CapabilityModule`.
   - **Basics:** the title, `systemImage`, and `iconTint`; search keywords, the category, and any `PluginPreference`s.
-  - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs, and to the website's copy of those explanations in `plugins.ts`. Optional permissions carry their own reason.
+  - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs. Optional permissions carry their own reason. (The website entry's permission reasons come in §4.)
   - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`.
   - **Palette tab, if any:** the module's `paletteContent` supplies the rows. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7 and Hotkeys moved to ⌘8. Moving Hotkeys also changes:
     - `KeyboardShortcutterModule`'s `commandKey`;
