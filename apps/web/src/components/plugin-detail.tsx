@@ -334,7 +334,10 @@ function Commands({ plugin }: { plugin: Plugin }) {
                   : 'command-row'
               }
             >
-              <span className="command-name">{shortcut.title}</span>
+              <span className="command-name">
+                {shortcut.title}
+                {shortcut.note && <span className="command-note">{shortcut.note}</span>}
+              </span>
               {shortcut.keys ? (
                 <Keycaps keys={shortcut.keys} />
               ) : (

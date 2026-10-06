@@ -337,3 +337,19 @@ describe('plugin page at a glance', () => {
     expect(glance('clipboard-history')).not.toContain('once you turn it on')
   })
 })
+
+describe('Dictation shortcuts', () => {
+  it('match the app: Start & Stop Dictation, and Cancel Dictation only while it records', () => {
+    expect(pluginFor('dictation').shortcuts).toEqual([
+      { title: 'Start & Stop Dictation', keys: '⌥ Space' },
+      {
+        title: 'Cancel Dictation',
+        keys: 'Escape',
+        note: 'Only while Dictation is recording or transcribing'
+      }
+    ])
+    expect(renderPage(pluginFor('dictation'))).toContain(
+      'Only while Dictation is recording or transcribing'
+    )
+  })
+})

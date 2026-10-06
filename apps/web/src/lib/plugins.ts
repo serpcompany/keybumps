@@ -71,6 +71,8 @@ export type PluginShortcut = {
   title: string
   /** The default binding as the app shows it, or null when it starts unassigned. */
   keys: string | null
+  /** When it works, for a shortcut that doesn't work from any app (`worksEverywhere`). */
+  note?: string
 }
 
 /** A macOS permission a plugin uses, and what for, as `MacPermission.explanation` puts it. */
@@ -312,7 +314,14 @@ export const plugins: readonly Plugin[] = [
       'history'
     ],
     paletteTab: { name: 'Dictation', commandKey: 4 },
-    shortcuts: [{ title: 'Start or stop Dictation', keys: '⌥ Space' }],
+    shortcuts: [
+      { title: 'Start & Stop Dictation', keys: '⌥ Space' },
+      {
+        title: 'Cancel Dictation',
+        keys: 'Escape',
+        note: 'Only while Dictation is recording or transcribing'
+      }
+    ],
     permissions: [
       {
         permission: 'Accessibility',
