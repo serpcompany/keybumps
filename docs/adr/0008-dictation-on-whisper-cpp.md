@@ -1,6 +1,6 @@
 # 0008: Dictation transcribes with whisper.cpp on the GPU
 
-Status: Proposed (2026-10-06). Tracked by #279; it also resolves #277.
+Status: Accepted (2026-10-06; the owner approved shipping it in beta.18). Tracked by #279; it also resolves #277. Step 1 is #283.
 
 ## Context
 
