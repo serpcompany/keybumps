@@ -239,6 +239,42 @@ import Testing
         #expect((samples.map(abs).max() ?? 0) > 0.1, "A microphone on input 2 must not become silence")
     }
 
+    @Test func soundOnOneChannelOfAFourChannelInterfaceIsStillHeard() throws {
+        let root = temporaryFolder("KeybumpsWhisperCppFourChannels")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("four-channels.wav")
+        try writeTone(to: url, sampleRate: 48_000, channels: 4, seconds: 1, silentChannels: [0, 1, 3])
+
+        let samples = try WhisperCppAudio.samples(from: url)
+
+        #expect(abs(samples.count - 16_000) <= 160)
+        #expect((samples.map(abs).max() ?? 0) > 0.2, "Apple's converter alone makes 3+ channels silent")
+    }
+
+    @Test func identicalChannelsAreSummedWithoutClipping() throws {
+        let root = temporaryFolder("KeybumpsWhisperCppLoud")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("loud-stereo.wav")
+        try writeTone(to: url, sampleRate: 16_000, channels: 2, seconds: 1, amplitude: 0.9)
+
+        let samples = try WhisperCppAudio.samples(from: url)
+
+        #expect((samples.map(abs).max() ?? 0) <= 1.0)
+    }
+
+    @Test func onlyAFileWithTheGgmlHeaderIsTreatedAsAModel() throws {
+        let root = temporaryFolder("KeybumpsWhisperCppHeader")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = root.appendingPathComponent("model.bin")
+        try Data([0x6c, 0x6d, 0x67, 0x67, 0, 0]).write(to: model)
+        let junk = root.appendingPathComponent("junk.bin")
+        try Data("not a model".utf8).write(to: junk)
+
+        #expect(WhisperCppModel.hasModelHeader(model))
+        #expect(!WhisperCppModel.hasModelHeader(junk))
+        #expect(!WhisperCppModel.hasModelHeader(root.appendingPathComponent("missing.bin")))
+    }
+
     @Test func aRealModelTranscribesWhenOneIsProvided() async throws {
         let environment = ProcessInfo.processInfo.environment
         guard let modelPath = environment["KEYBUMPS_WHISPER_CPP_MODEL"],
@@ -300,14 +336,18 @@ import Testing
         sampleRate: Double,
         channels: AVAudioChannelCount,
         seconds: Double,
-        silentChannels: Set<Int> = []
+        silentChannels: Set<Int> = [],
+        amplitude: Float = 0.5
     ) throws {
-        let format = try #require(AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: channels,
-            interleaved: false
-        ))
+        // More than two channels needs an explicit layout, as an audio interface would report.
+        let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels))
+        let candidate: AVAudioFormat?
+        if channels > 2, let layout {
+            candidate = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, interleaved: false, channelLayout: layout)
+        } else {
+            candidate = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: channels, interleaved: false)
+        }
+        let format = try #require(candidate)
         guard seconds > 0 else {
             // A recording stopped before any audio arrived: a WAV with a header and no frames.
             _ = try AVAudioFile(forWriting: url, settings: format.settings)
@@ -318,9 +358,9 @@ import Testing
         buffer.frameLength = frames
         for channel in 0..<Int(channels) {
             let data = try #require(buffer.floatChannelData?[channel])
-            let amplitude: Float = silentChannels.contains(channel) ? 0 : 0.5
+            let level: Float = silentChannels.contains(channel) ? 0 : amplitude
             for frame in 0..<Int(frames) {
-                data[frame] = amplitude * sinf(2 * .pi * 440 * Float(frame) / Float(sampleRate))
+                data[frame] = level * sinf(2 * .pi * 440 * Float(frame) / Float(sampleRate))
             }
         }
         let file = try AVAudioFile(forWriting: url, settings: format.settings)

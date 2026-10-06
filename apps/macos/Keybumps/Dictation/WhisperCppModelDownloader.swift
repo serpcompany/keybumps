@@ -23,6 +23,14 @@ struct WhisperCppModel: Sendable, Equatable {
         all.first { $0.identifier == identifier }
     }
 
+    /// Whether `file` starts with the ggml magic number whisper.cpp checks (0x67676d6c,
+    /// little-endian: "lmgg").
+    static func hasModelHeader(_ file: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
+        defer { try? handle.close() }
+        return (try? handle.read(upToCount: 4)) == Data([0x6c, 0x6d, 0x67, 0x67])
+    }
+
     /// The model file in `folder`, when the folder holds a whisper.cpp model.
     static func installedFile(in folder: URL, fileManager: FileManager = .default) -> URL? {
         all.lazy

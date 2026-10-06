@@ -399,7 +399,8 @@ struct SettingsBadge: View {
     var body: some View {
         Text(text)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(Color.accentColor)
+            // Primary text stays readable on the tint whatever the accent color is.
+            .foregroundStyle(.primary)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
             .background(Capsule().fill(Color.accentColor.opacity(0.16)))

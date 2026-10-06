@@ -98,19 +98,23 @@ final class WhisperCppRuntime: WhisperCppTranscribing, @unchecked Sendable {
 
     private init() {}
 
+    private static let loadFailure = NSError(
+        domain: "Keybumps.Dictation",
+        code: 7,
+        userInfo: [NSLocalizedDescriptionKey: "The transcription model couldn't be loaded."]
+    )
+
     static func load(modelFile: URL) async throws -> WhisperCppRuntime {
         _ = silenceLogs
+        // A file that isn't a ggml model fails here, before whisper.cpp compiles its GPU shaders.
+        guard WhisperCppModel.hasModelHeader(modelFile) else { throw loadFailure }
         let runtime = WhisperCppRuntime()
         try await runtime.run {
             var parameters = whisper_context_default_params()
             parameters.use_gpu = true
             parameters.flash_attn = true
             guard let context = whisper_init_from_file_with_params(modelFile.path, parameters) else {
-                throw NSError(
-                    domain: "Keybumps.Dictation",
-                    code: 7,
-                    userInfo: [NSLocalizedDescriptionKey: "The transcription model couldn't be loaded."]
-                )
+                throw loadFailure
             }
             runtime.context = context
         }
@@ -188,20 +192,25 @@ enum WhisperCppAudio {
     static func samples(from url: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: url)
         let source = file.processingFormat
-        guard let target = AVAudioFormat(
+        // Channels are summed into one before resampling, as WhisperKit does: Apple's converter
+        // keeps only channel 0 of a stereo file, and outputs silence for 3 or more channels.
+        guard let mono = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: source.sampleRate,
+            channels: 1,
+            interleaved: false
+        ), let target = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
             channels: 1,
             interleaved: false
-        ), let converter = AVAudioConverter(from: source, to: target) else {
+        ), let converter = AVAudioConverter(from: mono, to: target) else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        // Mix every input channel into the one whisper.cpp hears; without this the converter keeps
-        // only channel 0, which is silent when the microphone is on another input.
-        converter.downmix = true
         let inputCapacity: AVAudioFrameCount = 16_384
         let outputCapacity = AVAudioFrameCount(Double(inputCapacity) * sampleRate / source.sampleRate) + 1_024
         guard let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: inputCapacity),
+              let mixed = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: inputCapacity),
               let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outputCapacity) else {
             throw CocoaError(.fileReadCorruptFile)
         }
@@ -232,8 +241,9 @@ enum WhisperCppAudio {
                     inputStatus.pointee = .endOfStream
                     return nil
                 }
+                sumChannels(of: input, into: mixed)
                 inputStatus.pointee = .haveData
-                return input
+                return mixed
             }
             if let readError { throw readError }
             if let conversionError { throw conversionError }
@@ -244,6 +254,24 @@ enum WhisperCppAudio {
                 break
             }
         }
+        // Summing can go past full scale when channels carry the same sound; scale it back.
+        let peak = samples.reduce(Float(0)) { max($0, abs($1)) }
+        if peak > 1 {
+            let scale = 1 / peak
+            for index in samples.indices { samples[index] *= scale }
+        }
         return samples
+    }
+
+    private static func sumChannels(of input: AVAudioPCMBuffer, into mixed: AVAudioPCMBuffer) {
+        let frames = Int(input.frameLength)
+        mixed.frameLength = input.frameLength
+        guard let channels = input.floatChannelData, let destination = mixed.floatChannelData?[0] else { return }
+        let channelCount = Int(input.format.channelCount)
+        for frame in 0..<frames {
+            var sum: Float = 0
+            for channel in 0..<channelCount { sum += channels[channel][frame] }
+            destination[frame] = sum
+        }
     }
 }
