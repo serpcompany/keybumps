@@ -17,8 +17,13 @@ struct CrashReportingTests {
 
     @Test func reportingIsConfiguredForCrashesAndFreezesOnly() throws {
         let options = Options()
-        CrashReporter.configure(options, dsn: dsn, environment: "qa")
+        let caches = options.cacheDirectoryPath
+        CrashReporter.configure(options, dsn: dsn, environment: "qa", installID: "install-id", bundleID: "com.serp.keybumps")
         #expect(options.environment == "qa")
+        // Keybumps' own folder and identifier, never the Caches folder every unsandboxed app shares.
+        #expect(options.cacheDirectoryPath == caches + "/com.serp.keybumps/Sentry")
+        let user = options.initialScope(Scope()).serialize()["user"] as? [String: Any]
+        #expect(user?["id"] as? String == "install-id")
         #expect(!options.sendDefaultPii)
         #expect(!options.enableAutoSessionTracking)
         #expect(options.shutdownTimeInterval == 0)
@@ -40,8 +45,68 @@ struct CrashReportingTests {
         let event = Event()
         event.serverName = "Pat's MacBook Pro"
         #expect(beforeSend(event)?.serverName == nil)
+        // Keybumps' ID even on an event that reached Sentry with no user, so Sentry's own never goes.
+        #expect(beforeSend(Event())?.user?.userId == "install-id")
         let beforeBreadcrumb = try #require(options.beforeBreadcrumb)
         #expect(beforeBreadcrumb(Breadcrumb(level: .info, category: "ui.click")) == nil)
+    }
+
+    @Test func sendingOnlyHasNoCrashHandlerAndItsOwnQueue() {
+        let options = Options()
+        let caches = options.cacheDirectoryPath
+        CrashReporter.configureSendingOnly(options, dsn: dsn, environment: "qa", installID: "install-id", bundleID: "com.serp.keybumps")
+        #expect(!options.enableCrashHandler)
+        #expect(!options.enableAppHangTracking)
+        #expect(options.cacheDirectoryPath == caches + "/com.serp.keybumps/Sentry/Problem reports")
+        // Every other option is the same as for crash reports.
+        #expect(!options.sendDefaultPii)
+        #expect(!options.enableAutoSessionTracking)
+        #expect(!options.enableAutoBreadcrumbTracking)
+        #expect(options.beforeSend != nil)
+        let user = options.initialScope(Scope()).serialize()["user"] as? [String: Any]
+        #expect(user?["id"] as? String == "install-id")
+    }
+
+    @Test func theInstallIDIsCreatedOnceAndKept() {
+        let defaults = InMemoryDefaults()
+        let id = CrashReportingPolicy.installID(defaults: defaults)
+        #expect(UUID(uuidString: id) != nil)
+        #expect(CrashReportingPolicy.installID(defaults: defaults) == id)
+
+        defaults.set("not a uuid", forKey: CrashReportingPolicy.installIDKey)
+        #expect(CrashReportingPolicy.installID(defaults: defaults) != "not a uuid")
+    }
+
+    @Test func queuedReportsMoveToTheSamePlaceInAnotherFolder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("Problem reports")
+        let target = root.appendingPathComponent("Sentry")
+        let queued = source.appendingPathComponent("io.sentry/abc123/envelopes")
+        try FileManager.default.createDirectory(at: queued, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: queued.appendingPathComponent("1.envelope"))
+
+        CrashReportingPolicy.moveQueuedReports(from: source.path, to: target.path)
+        #expect(!CrashReportingPolicy.hasQueuedReports(in: source.path))
+        #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent("io.sentry/abc123/envelopes/1.envelope").path))
+    }
+
+    @Test func emailAddressesInAnyScriptAreFound() {
+        #expect(CrashReportScrubber.scrub("Write to o'brien@example.com or josé@example.es") == "Write to <email> or <email>")
+        #expect(ProblemReport(description: "x", contactEmail: "josé@example.es", diagnostics: ProblemReportTests.sample).contact == "josé@example.es")
+        #expect(ProblemReport(description: "x", contactEmail: "o'brien@example.com", diagnostics: ProblemReportTests.sample).canSend)
+    }
+
+    @Test func aQueuedReportIsFoundInSentrysEnvelopesFolder() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let envelopes = folder.appendingPathComponent("io.sentry/abc123/envelopes")
+        try FileManager.default.createDirectory(at: envelopes, withIntermediateDirectories: true)
+        #expect(!CrashReportingPolicy.hasQueuedReports(in: folder.path))
+
+        try Data("{}".utf8).write(to: envelopes.appendingPathComponent("1.envelope"))
+        #expect(CrashReportingPolicy.hasQueuedReports(in: folder.path))
+        #expect(!CrashReportingPolicy.hasQueuedReports(in: folder.appendingPathComponent("missing").path))
     }
 
     @Test func qaCandidatesReportApartFromReleases() {
@@ -159,5 +224,156 @@ struct CrashReportingTests {
         #expect(scrubbed.context?["app"]?["app_version"] as? String == "1.0")
         #expect(scrubbed.context?["device"]?["locale"] == nil)
         #expect(scrubbed.context?["device"]?["model"] as? String == "Mac15,3")
+    }
+}
+
+@MainActor
+struct ProblemReportTests {
+    static let sample = ProblemReportDiagnostics(
+        appVersion: "Keybumps 0.0.3 (4022)",
+        macOSVersion: "15.1 (Build 24B83)",
+        macModel: "Mac15,9",
+        chip: "Apple M3 Max",
+        memoryGB: 128,
+        pluginsOn: [],
+        permissions: [],
+        sendsCrashReports: true
+    )
+    private let diagnostics = ProblemReportDiagnostics(
+        appVersion: "Keybumps 0.0.3 (4022)",
+        macOSVersion: "15.1 (Build 24B83)",
+        macModel: "Mac15,9",
+        chip: "Apple M3 Max",
+        memoryGB: 128,
+        pluginsOn: ["Dictation", "Timer"],
+        permissions: [("Accessibility", "Granted"), ("Microphone", "Denied")],
+        sendsCrashReports: false
+    )
+
+    @Test func thePersonSeesEveryDetailThatIsAttached() {
+        #expect(diagnostics.lines == [
+            "Keybumps 0.0.3 (4022)",
+            "macOS 15.1 (Build 24B83)",
+            "Mac15,9 · Apple M3 Max · 128 GB",
+            "Plugins on: Dictation, Timer",
+            "Permissions: Accessibility granted, Microphone denied",
+            "Crash reports: off",
+        ])
+    }
+
+    @Test func aReportNeedsADescription() {
+        #expect(!ProblemReport(description: "  \n", contactEmail: "", diagnostics: diagnostics).canSend)
+        #expect(ProblemReport(description: "Dropdowns don't open", contactEmail: "", diagnostics: diagnostics).canSend)
+    }
+
+    @Test func aReportIsAnEventThatKeepsTheContactOnlyWhenGiven() throws {
+        let event = ProblemReport(description: " Dropdowns don't open \n", contactEmail: " pat@example.com ", diagnostics: diagnostics).event()
+        #expect(event.level == .info)
+        #expect(event.message?.formatted == "Dropdowns don't open")
+        #expect(event.tags == ["report": "problem"])
+        #expect(event.context?["report"]?["contact"] as? String == "pat@example.com")
+        #expect(event.context?["report"]?["crash_reports"] as? String == "off")
+        #expect(event.context?["permissions"]?["Microphone"] as? String == "Denied")
+        // Everything the window showed, chip and memory included, which Sentry doesn't send itself.
+        #expect(event.context?["report"]?["details"] as? [String] == diagnostics.lines)
+
+        let anonymous = ProblemReport(description: "x", contactEmail: "", diagnostics: diagnostics).event()
+        #expect(anonymous.context?["report"]?["contact"] == nil)
+    }
+
+    @Test func aReportIsScrubbedButKeepsItsContactAndPermissions() {
+        let event = ProblemReport(
+            description: "Opening https://example.com/x fails\nSo does /Users/pat/Q3 plan.txt",
+            contactEmail: "pat@example.com",
+            diagnostics: diagnostics
+        ).event()
+        let scrubbed = CrashReportScrubber.scrub(event)
+        // A link or path runs to the end of its line.
+        #expect(scrubbed.message?.formatted == "Opening <url>\nSo does <path>")
+        #expect(scrubbed.context?["report"]?["contact"] as? String == "pat@example.com")
+        #expect(scrubbed.context?["permissions"]?["Accessibility"] as? String == "Granted")
+    }
+
+    @Test func quotedWordsInAReportStayButQuotedNamesInACrashGo() {
+        let written = "The “Language” menu doesn't open in /Users/pat/Notes"
+        let report = ProblemReport(description: written, contactEmail: "", diagnostics: diagnostics).event()
+        #expect(CrashReportScrubber.scrub(report).message?.formatted == "The “Language” menu doesn't open in <path>")
+
+        let crash = Event(level: .error)
+        crash.message = SentryMessage(formatted: written)
+        #expect(CrashReportScrubber.scrub(crash).message?.formatted == "The “<name>” menu doesn't open in <path>")
+    }
+
+    @Test func onlyAnEmailAddressIsKeptAsTheContact() {
+        let pasted = ProblemReport(description: "x", contactEmail: "see https://example.com/x", diagnostics: diagnostics)
+        #expect(pasted.contact == nil)
+        #expect(!pasted.contactIsValid)
+        #expect(!pasted.canSend)
+        #expect(pasted.event().context?["report"]?["contact"] == nil)
+
+        #expect(ProblemReport(description: "x", contactEmail: "  ", diagnostics: diagnostics).canSend)
+        #expect(ProblemReport(description: "x", contactEmail: " pat@example.com ", diagnostics: diagnostics).contact == "pat@example.com")
+    }
+
+    @Test func aBuildWithNoDestinationCantSendReports() {
+        #expect(!CrashReporter.canSendProblemReports)
+        #expect(!CrashReporter.send(ProblemReport(description: "x", contactEmail: "", diagnostics: diagnostics), plugins: []))
+    }
+}
+
+/// Every order of events CrashReporter can see, without Sentry.
+struct CrashReporterMachineTests {
+    @Test func aReportSentWithReportsOffStartsSentryJustToSendIt() {
+        var machine = CrashReporterMachine()
+        #expect(machine.send() == [.startSendingOnly, .capture, .flush])
+        #expect(machine.mode == .sendingOnly)
+        #expect(machine.flushed() == [.close])
+        #expect(machine.mode == .off)
+    }
+
+    @Test func turningReportsOnDuringASendWaitsForItToFinish() {
+        var machine = CrashReporterMachine()
+        _ = machine.send()
+        #expect(machine.turnOn() == [])
+        #expect(machine.flushed() == [.close, .startReporting])
+        #expect(machine.mode == .reporting)
+    }
+
+    @Test func turningReportsOnThenOffDuringASendNeverStartsThem() {
+        var machine = CrashReporterMachine()
+        _ = machine.send()
+        _ = machine.turnOn()
+        #expect(machine.turnOff() == [])
+        #expect(machine.flushed() == [.close])
+        #expect(machine.mode == .off)
+    }
+
+    @Test func twoReportsInFlightCloseSentryOnceAfterTheLast() {
+        var machine = CrashReporterMachine()
+        _ = machine.send()
+        #expect(machine.send() == [.capture, .flush])
+        #expect(machine.flushed() == [])
+        #expect(machine.flushed() == [.close])
+    }
+
+    @Test func aReportSentWithReportsOnNeverClosesSentry() {
+        var machine = CrashReporterMachine()
+        #expect(machine.turnOn() == [.startReporting])
+        #expect(machine.send() == [.capture])
+        #expect(machine.mode == .reporting)
+        #expect(machine.turnOff() == [.close])
+    }
+
+    @Test func anUndeliveredReportGoesAtLaunchBeforeReportingStarts() {
+        var machine = CrashReporterMachine()
+        #expect(machine.drain() == [.startSendingOnly, .flush])
+        #expect(machine.turnOn() == [])
+        #expect(machine.flushed() == [.close, .startReporting])
+    }
+
+    @Test func turningReportsOffWhenTheyAreOffDoesNothing() {
+        var machine = CrashReporterMachine()
+        #expect(machine.turnOff() == [])
+        #expect(machine.mode == .off)
     }
 }

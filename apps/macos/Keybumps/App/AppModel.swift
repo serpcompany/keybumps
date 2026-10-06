@@ -94,6 +94,7 @@ final class AppModel {
     /// Asks to restart while an update waits (#225).
     let updateReminder: UpdateReminder
     private let whatsNew: any WhatsNewPresenting
+    let problemReports: any ProblemReportPresenting
     /// The menu bar icon's red dot: a waiting update, or a capability with something waiting.
     @ObservationIgnored let menuBarAttention = MenuBarAttention()
     /// Text beside the menu bar icon and capability sections in its menu, such as running timers.
@@ -160,6 +161,7 @@ final class AppModel {
         keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
         updatePrompt injectedUpdatePrompt: (any UpdatePromptPresenting)? = nil,
         whatsNew injectedWhatsNew: (any WhatsNewPresenting)? = nil,
+        problemReports injectedProblemReports: (any ProblemReportPresenting)? = nil,
         timers injectedTimers: TimerStore? = nil,
         timerAlerts injectedTimerAlerts: (any TimerAlerting)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
@@ -196,6 +198,7 @@ final class AppModel {
             presenter: injectedUpdatePrompt ?? (UnitTestHost.isActive ? InertUpdatePromptPresenter() : UpdatePromptWindowController())
         )
         self.whatsNew = injectedWhatsNew ?? (UnitTestHost.isActive ? InertWhatsNewPresenter() : WhatsNewWindowController())
+        self.problemReports = injectedProblemReports ?? (UnitTestHost.isActive ? InertProblemReportPresenter() : ProblemReportWindowController())
         #if DEBUG
         // Unit tests and injected compositions run entitled unless they pass a license state.
         let licensing = injectedLicensing ?? FixedLicenseController()
@@ -492,6 +495,13 @@ final class AppModel {
         preferences.setCapability(capability, enabled: enabled)
         applyCapabilities()
         CrashReporter.recordPlugins(preferences.enabledCapabilities)
+    }
+
+    /// Report a Problem… (ADR 0007): what the person writes, with this Mac's details attached.
+    func showProblemReport() {
+        problemReports.show(diagnostics: .current(model: self)) { [preferences] report in
+            CrashReporter.send(report, plugins: preferences.enabledCapabilities)
+        }
     }
 
     /// Settings › General's crash reports switch (ADR 0007): takes effect at once.

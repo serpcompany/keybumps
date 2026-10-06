@@ -948,6 +948,17 @@ private struct GeneralView: View {
                 .accessibilityIdentifier("settings.general.sendsCrashReports")
                 SettingsNote(CrashReportingCopy.settingsNote)
             }
+            SettingsGroup("Problems") {
+                LabeledContent {
+                    Button("Report a Problem…") { model.showProblemReport() }
+                        .accessibilityIdentifier("settings.general.reportProblem")
+                } label: {
+                    SettingsRowLabel(
+                        title: "Report a Problem",
+                        subtitle: "Something not working, like a button or menu that doesn't respond? Tell us, and Keybumps attaches your Mac's details."
+                    )
+                }
+            }
         }.navigationTitle("General")
     }
 }

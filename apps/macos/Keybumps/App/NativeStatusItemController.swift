@@ -103,6 +103,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
     }
     private var checkForUpdatesAction: () -> Void = {}
     private var restartToUpdateAction: () -> Void = {}
+    private var reportProblemAction: () -> Void = {}
     private var attention: MenuBarAttention?
     private var status: MenuBarStatus?
     /// The menu while it's open, and its capability items by ID, so they update in place.
@@ -138,6 +139,10 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         updateSnapshot = snapshot
         checkForUpdatesAction = checkNow
         restartToUpdateAction = restartWhenSafe
+    }
+
+    func configureProblemReport(_ action: @escaping () -> Void) {
+        reportProblemAction = action
     }
 
     /// The red dot's source: updates and capability modules set their reasons on it.
@@ -259,7 +264,8 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         statusActions[id]?()
     }
 
-    /// Raycast's menu: open the app (with its hotkey), then About, updates, and Settings, then Quit.
+    /// Raycast's menu: open the app (with its hotkey), then About, updates, Settings, and Report a
+    /// Problem, then Quit.
     /// While an update waits, Restart to Update comes first.
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
@@ -300,6 +306,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        menu.addItem(withTitle: "Report a Problem…", action: #selector(reportProblem), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Keybumps", action: #selector(quit), keyEquivalent: "q").target = self
     }
@@ -343,6 +350,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func checkForUpdates() { checkForUpdatesAction() }
     @objc private func restartToUpdate() { restartToUpdateAction() }
+    @objc private func reportProblem() { reportProblemAction() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 }
 

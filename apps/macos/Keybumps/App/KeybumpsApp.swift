@@ -16,6 +16,8 @@ enum KeybumpsMain {
         }
         launchedApp = true
         CrashReporter.startIfAllowed()
+        // Even with reports off, so a QA candidate can show that nothing is sent.
+        CrashReportTest.runIfRequested()
         KeybumpsApp.main()
     }
 }
@@ -81,6 +83,9 @@ struct KeybumpsApp: App {
                 OpenMainWindowButton(title: "Settings…")
                     .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(replacing: .help) {
+                Button("Report a Problem…") { model.showProblemReport() }
+            }
         }
 
     }
@@ -138,6 +143,7 @@ enum AppShellLaunch {
             checkNow: model.checkForUpdates,
             restartWhenSafe: model.restartToUpdate
         )
+        NativeStatusItemController.shared.configureProblemReport(model.showProblemReport)
         NativeStatusItemController.shared.configureAttention(model.menuBarAttention)
         NativeStatusItemController.shared.configureStatus(model.menuBarStatus)
         NativeStatusItemController.shared.install()
