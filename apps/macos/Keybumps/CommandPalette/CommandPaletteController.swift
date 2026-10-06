@@ -246,8 +246,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         installOutsideMonitors()
         panel.hideDuringUnitTests()
         panel.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async { [weak self, weak panel] in
             self?.focusInput()
+            // macOS shapes a clear window's shadow from its content when it last computed it, not
+            // as SwiftUI draws, so a stale square shadow's light rim showed past the rounded
+            // corners (#309). Reshape it from the rounded palette once it has drawn.
+            panel?.invalidateShadow()
         }
     }
 
