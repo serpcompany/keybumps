@@ -1762,7 +1762,9 @@ struct SettingsWindowFiller: NSViewRepresentable {
 }
 
 /// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
-/// a hotkey field that is recording, a sheet or alert, or a text field with text in it.
+/// a hotkey field that is recording, a sheet or alert, or a text field with text in it. While a
+/// field asks whether to take another action's shortcut, Escape means Cancel instead, even in a
+/// text field with text in it (#334).
 struct SettingsEscapeCloser: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { EscapeView() }
     func updateNSView(_ nsView: NSView, context: Context) {}
