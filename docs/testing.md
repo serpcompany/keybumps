@@ -23,7 +23,7 @@ No automated level substitutes for a higher one.
 ## Wiring and characterization snapshots
 
 - Structured snapshots, such as the capability wiring captured before the #53 refactor, are **hand-rolled Codable JSON fixtures** under `apps/macos/KeybumpsTests/Fixtures`: `JSONEncoder` with `.sortedKeys` and `.prettyPrinted`, compared as text, with the actual output attached (or printed as a diff) on mismatch.
-- Re-recording happens only when `KEYBUMPS_RECORD_SNAPSHOTS=1` is set (`TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` on the `xcodebuild` command line), and a re-record is a reviewed change in the PR.
+- Re-recording happens only when `KEYBUMPS_RECORD_SNAPSHOTS=1` is set (`TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` in `xcodebuild`'s environment, before the command), and a re-record is a reviewed change in the PR.
 - No snapshot dependency for now. If image snapshots are ever needed, `pointfreeco/swift-snapshot-testing` (actively maintained, Swift Testing support) is the preferred library; adopting it is a separate decision.
 
 ## Making the app testable
