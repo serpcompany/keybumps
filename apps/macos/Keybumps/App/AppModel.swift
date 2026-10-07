@@ -283,7 +283,7 @@ final class AppModel {
         // menu's route; a capability's command asks for its page.
         commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
         // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste. It's
-        // optional for Snippets: without it ⌘Return copies and offers the usual permission setup.
+        // optional for pasting from the palette: without it ⌘P copies and offers the usual setup.
         commandPalette.canPaste = {
             permissions.refresh()
             return permissions.accessibilityGranted
@@ -611,14 +611,14 @@ final class AppModel {
         return true
     }
 
-    /// After ⌘Return had to copy for lack of Accessibility: offers the usual Accessibility setup.
+    /// After ⌘P had to copy for lack of Accessibility: offers the usual Accessibility setup.
     private func offerPasteSetup(for plugin: Capability) {
         permissionDragAssistant.showPasteSetup(plugin: plugin.title) { [weak self] in
             Task { await self?.setUpPaste() }
         }
     }
 
-    /// Set Up Paste…, offered after a plugin's ⌘Return had to copy. Like Dictation's card, it opens
+    /// Set Up Paste…, offered after a plugin's ⌘P had to copy. Like Dictation's card, it opens
     /// System Settings over another app, so that opening stays out of the Settings window's
     /// relaunch check.
     func setUpPaste() async {

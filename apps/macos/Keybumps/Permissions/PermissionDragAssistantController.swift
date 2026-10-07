@@ -33,7 +33,7 @@ final class PermissionDragAssistantController {
         case applicationDrag(MacPermission)
         case enableSwitch(MacPermission)
         case dictationSetup([MacPermission])
-        /// Snippets' offer to set up Accessibility after ⌘Return had to copy.
+        /// A plugin's offer to set up Accessibility after ⌘P had to copy.
         case pasteSetup
         case systemSettingsFollowUp(MacPermission)
     }
@@ -106,14 +106,14 @@ final class PermissionDragAssistantController {
         )
     }
 
-    /// After ⌘Return in the Snippets tab copied because Keybumps lacks Accessibility.
-    /// After a plugin's ⌘Return had to copy: Accessibility setup so it pastes next time.
+    /// After a plugin's ⌘P had to copy because Keybumps lacks Accessibility: Accessibility setup so
+    /// it pastes next time.
     func showPasteSetup(plugin: String, onContinue: @escaping () -> Void) {
         showSetup(
             CapabilitySetupOffer(
                 capability: plugin,
                 permissionNames: MacPermission.accessibility.title,
-                instruction: "Set up Accessibility so ⌘Return pastes into the app you’re using.",
+                instruction: "Set up Accessibility so ⌘P pastes into the app you’re using.",
                 buttonTitle: "Set Up Paste…"
             ),
             as: .pasteSetup,

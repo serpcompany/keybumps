@@ -63,7 +63,7 @@ struct SnippetsSettingsView: View {
                     }
                 }
             }
-            // Accessibility is optional: without it, ⌘Return copies instead of pasting. While
+            // Accessibility is optional: without it, ⌘P copies instead of pasting. While
             // auto-expansion is on, its own row above asks for it instead.
             if model.preferences.enabledCapabilities.contains(.snippets), !model.preferences.expandsSnippetKeywords,
                !model.permissions.accessibilityGranted {
@@ -71,11 +71,11 @@ struct SnippetsSettingsView: View {
                     LabeledContent {
                         Button("Allow…") { Task { await model.recoverPermission(.accessibility) } }
                             .disabled(model.permissions.activeRequest != nil)
-                            .accessibilityLabel("Allow Accessibility so ⌘Return pastes")
+                            .accessibilityLabel("Allow Accessibility so ⌘P pastes")
                     } label: {
                         SettingsRowLabel(
-                            title: "⌘Return pastes with Accessibility",
-                            subtitle: "Without it, ⌘Return in the Snippets tab copies the snippet instead of pasting it into the app you’re using. Copying needs no permission."
+                            title: "⌘P pastes with Accessibility",
+                            subtitle: "Without it, ⌘P in the Snippets tab copies the snippet instead of pasting it into the app you’re using. Copying needs no permission."
                         )
                     }
                 }
@@ -112,7 +112,7 @@ struct SnippetsSettingsView: View {
                 } else if store.snippets.isEmpty {
                     SettingsRowLabel(
                         title: "No snippets yet",
-                        subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘Return pastes it."
+                        subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘P pastes it."
                     )
                 } else if rows.isEmpty {
                     SettingsNote("No matching snippets")
