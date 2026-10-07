@@ -471,7 +471,7 @@ struct TranslateTabTests {
 }
 
 @MainActor
-@Suite("Translation: swapping, picking the other language, and reading aloud")
+@Suite("Translation: swapping and picking the other language")
 struct TranslateTabLanguageTests {
     static let english = TranslateTabTests.english
     static let japanese = TranslateTabTests.japanese
@@ -573,14 +573,12 @@ struct TranslateTabLanguageTests {
             palette.selectOnOpening(tab)
             palette.state.historyQuery = Self.english
             #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_T, "t")) != nil, "\(tab) passes ⌘T on")
-            #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_S, "s")) != nil, "\(tab) passes ⌘S on")
         }
         #expect(fixture.translator.calls.count == 3)
-        #expect(fixture.speaker.spoken.isEmpty)
     }
 
-    @Test("⌘S reads the translation aloud in the Translate tab, and stops it")
-    func commandSReadsAloud() async {
+    @Test("Holding ⌘T down swaps once: its repeats are still the tab's, but do nothing")
+    func heldCommandTSwapsOnce() async {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
         let palette = fixture.palette
@@ -589,12 +587,54 @@ struct TranslateTabLanguageTests {
         fixture.tab.update(query: Self.english)
         await fixture.tab.work?.value
 
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_S, "s")) == nil)
-        #expect(fixture.speaker.spoken == [.init(text: "[ja] \(Self.english)", language: "ja")])
-        #expect(fixture.tab.isSpeaking)
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_S, "s")) == nil)
-        #expect(!fixture.tab.isSpeaking)
-        #expect(fixture.speaker.stops == 1)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_T, "t")) == nil)
+        await fixture.tab.work?.value
+        for _ in 0..<5 {
+            #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_T, "t", isARepeat: true)) == nil)
+            await fixture.tab.work?.value
+        }
+        #expect(fixture.translator.calls.count == 2)
+        #expect(fixture.tab.request?.source == "ja", "Swapped once")
+    }
+
+    @Test("In the Translate tab, the palette's own keys still work: ⌘Return pastes, ⌘2 and ⌘8 switch tabs, ⌘, opens Settings")
+    func paletteKeysStillWork() async {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+        var offered: [Capability] = []
+        var opened: [SettingsSection?] = []
+        palette.offerPasteSetup = { offered.append($0) }
+        palette.openSettings = { opened.append($0) }
+        palette.frontmostApp = { PasteTarget(processIdentifier: 4242, isKeybumps: false) }
+        palette.selectOnOpening(.translate)
+        palette.rememberPasteTarget()
+        palette.state.historyQuery = Self.english
+        fixture.tab.update(query: Self.english)
+        await fixture.tab.work?.value
+
+        // Without Accessibility, ⌘Return's paste copies instead and offers setup for Translation.
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_Return, "\r")) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "[ja] \(Self.english)")
+        #expect(offered == [.translation], "⌘Return went to the paste")
+        #expect(fixture.translator.calls.count == 1, "Nothing swapped")
+
+        palette.selectOnOpening(.translate)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_2, "2")) == nil)
+        #expect(palette.state.tab == .clipboard)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_8, "8")) == nil)
+        #expect(palette.state.tab == .translate)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_Comma, ",")) == nil)
+        #expect(opened == [nil])
+    }
+
+    @Test("The palette allows tooltips while Keybumps isn't the active app, so the swap button's ⌘T hint shows")
+    func paletteShowsTooltips() throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        let panel = try #require(fixture.palette.layOutForTesting(.translate))
+        defer { panel.orderOut(nil) }
+        #expect(panel.allowsToolTipsWhenApplicationIsInactive)
     }
 
     @Test("Picking a target for text in my language saves it as Other language and translates again at once")
@@ -657,107 +697,40 @@ struct TranslateTabLanguageTests {
         #expect(translator.calls.last == .init(text: Self.english, source: "en", target: "ja"))
     }
 
-    @Test("Read aloud speaks the translation in its target language; pressing again, or its end, stops it")
-    func readsAloud() async {
-        let speaker = FakeSpeaker()
-        let tab = TranslatePaletteContent(
-            preferences: TranslateTabTests.preferences(), translator: FakeTranslator(), speaker: speaker, wait: { _ in }
-        )
-        tab.toggleSpeaking(query: Self.english)
-        #expect(speaker.spoken.isEmpty, "Nothing translated yet")
+    @Test("After a swap, a pick is for that text only, even when the swapped source is my language")
+    func pickingAfterASwapIsOneOff() async {
+        let translator = FakeTranslator()
+        let preferences = TranslateTabTests.preferences()
+        let tab = TranslateTabTests.tab(translator, preferences: preferences)
 
+        // Japanese text, swapped to read as English: English isn't what it's written in.
         tab.update(query: Self.japanese)
         await tab.work?.value
-        tab.toggleSpeaking(query: Self.japanese)
-        #expect(speaker.spoken == [.init(text: "[en] \(Self.japanese)", language: "en")])
-        #expect(tab.isSpeaking)
-        tab.toggleSpeaking(query: Self.japanese)
-        #expect(!tab.isSpeaking)
-        #expect(speaker.stops == 1)
-
-        tab.toggleSpeaking(query: Self.japanese)
-        #expect(tab.isSpeaking)
-        speaker.finishLatest()
-        #expect(!tab.isSpeaking, "It ended by itself")
-        #expect(speaker.stops == 1)
-
-        // A swapped translation is read in its own language.
         tab.swapLanguages(query: Self.japanese)
         await tab.work?.value
-        tab.toggleSpeaking(query: Self.japanese)
-        #expect(speaker.spoken.last == .init(text: "[ja] \(Self.japanese)", language: "ja"))
-        tab.stopSpeaking()
+        #expect(tab.request == Request(text: Self.japanese, source: "en", target: "ja"))
+        tab.chooseTarget("es", query: Self.japanese)
+        await tab.work?.value
+        #expect(translator.calls.last == .init(text: Self.japanese, source: "en", target: "es"))
+        #expect(preferences.translationLanguagePair == TranslationLanguagePair(mine: "en", other: "ja"))
 
-        // Text typed since: nothing to read until it's translated.
-        tab.toggleSpeaking(query: Self.english)
-        #expect(speaker.spoken.count == 3)
-    }
+        // English text swapped to read as Japanese: a pick is one-off too.
+        tab.update(query: Self.english)
+        await tab.work?.value
+        tab.swapLanguages(query: Self.english)
+        await tab.work?.value
+        tab.chooseTarget("fr", query: Self.english)
+        await tab.work?.value
+        #expect(translator.calls.last == .init(text: Self.english, source: "ja", target: "fr"))
+        #expect(preferences.translationLanguagePair == TranslationLanguagePair(mine: "en", other: "ja"))
 
-    @Test("Reading stops when the text changes, the languages change, the palette closes, or the tab shows again")
-    func readingStops() async {
-        let speaker = FakeSpeaker()
-        let tab = TranslatePaletteContent(
-            preferences: TranslateTabTests.preferences(), translator: FakeTranslator(), speaker: speaker, wait: { _ in }
-        )
-        func translateAndRead(_ text: String) async {
-            tab.update(query: text)
-            await tab.work?.value
-            tab.toggleSpeaking(query: text)
-            #expect(tab.isSpeaking)
-        }
-
-        await translateAndRead(Self.english)
-        tab.update(query: Self.english + "\n")
-        #expect(tab.isSpeaking, "The same text keeps reading")
+        // The next English text is detected again, so a pick for it saves.
         tab.update(query: Self.otherEnglish)
-        #expect(!tab.isSpeaking, "The text changed")
-        #expect(speaker.stops == 1)
-
         await tab.work?.value
-        tab.toggleSpeaking(query: Self.otherEnglish)
-        tab.swapLanguages(query: Self.otherEnglish)
-        #expect(!tab.isSpeaking, "Swapped")
-        await tab.work?.value
-        tab.toggleSpeaking(query: Self.otherEnglish)
         tab.chooseTarget("de", query: Self.otherEnglish)
-        #expect(!tab.isSpeaking, "Another target")
-        #expect(speaker.stops == 3)
-
-        await translateAndRead(Self.japanese)
-        tab.stop()
-        #expect(!tab.isSpeaking, "The palette closed, or the tab changed")
-
-        await translateAndRead(Self.english)
-        let actions = RecordingActions()
-        tab.didShow(palette: actions.actions)
-        #expect(!tab.isSpeaking, "The tab showed again")
-
-        await translateAndRead(Self.english)
-        tab.update(query: "")
-        #expect(!tab.isSpeaking, "The field was emptied")
-        #expect(speaker.stops == 6)
-
-        // A stopped reading's late end doesn't end the next one.
-        await translateAndRead(Self.english)
-        let first = speaker.finishes.count - 1
-        tab.stopSpeaking()
-        tab.toggleSpeaking(query: Self.english)
-        speaker.finish(first)
-        #expect(tab.isSpeaking)
-    }
-
-    @Test("Speech never makes a sound under unit tests; Chinese voices go by region")
-    func speakerUnderTests() {
-        #expect(TextSpeakerFactory.makeDefault() is InertTextSpeaker)
-        #expect(TextSpeakerVoices.voiceLanguage(for: "zh-Hans") == "zh-CN")
-        #expect(TextSpeakerVoices.voiceLanguage(for: "zh-Hant") == "zh-TW")
-        #expect(TextSpeakerVoices.voiceLanguage(for: "zh-HK") == "zh-TW")
-        #expect(TextSpeakerVoices.voiceLanguage(for: "ja") == "ja")
-        #expect(TextSpeakerVoices.voiceLanguage(for: "pt-BR") == "pt-BR")
-
-        var ended = false
-        InertTextSpeaker().speak("Hello", language: "en") { ended = true }
-        #expect(ended, "The inert speaker ends each reading at once")
+        await tab.work?.value
+        #expect(translator.calls.last == .init(text: Self.otherEnglish, source: "en", target: "de"))
+        #expect(preferences.translationLanguagePair == TranslationLanguagePair(mine: "en", other: "de"))
     }
 }
 
@@ -821,48 +794,13 @@ private final class RecordingActions {
     }
 }
 
-/// Records what it was asked to read, and ends a reading only when the test says, even a stopped
-/// one, so a test can deliver a stopped reading's end late. It makes no sound.
-@MainActor
-final class FakeSpeaker: TextSpeaking {
-    struct Reading: Equatable {
-        let text: String
-        let language: String
-    }
-
-    private(set) var spoken: [Reading] = []
-    private(set) var stops = 0
-    /// Each reading's end, in order; nil once it ran.
-    private(set) var finishes: [(@MainActor () -> Void)?] = []
-
-    func speak(_ text: String, language: String, finished: @escaping @MainActor () -> Void) {
-        spoken.append(Reading(text: text, language: language))
-        finishes.append(finished)
-    }
-
-    func stop() {
-        stops += 1
-    }
-
-    func finish(_ index: Int) {
-        guard let finished = finishes[index] else { return }
-        finishes[index] = nil
-        finished()
-    }
-
-    func finishLatest() {
-        if let last = finishes.indices.last { finish(last) }
-    }
-}
-
 /// A palette over a temporary folder and a named pasteboard, never shown, whose Translate tab
-/// translates with `FakeTranslator` and reads with `FakeSpeaker`.
+/// translates with `FakeTranslator`.
 @MainActor
 private final class TranslatePaletteFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsTranslateTab-\(UUID().uuidString)"))
     let translator = FakeTranslator()
-    let speaker = FakeSpeaker()
     let tab: TranslatePaletteContent
     let palette: CommandPaletteController
 
@@ -892,14 +830,16 @@ private final class TranslatePaletteFixture {
             notices: SilentTranslateNotices(),
             search: QuickSearchModel.forTests(in: root)
         )
-        tab = TranslatePaletteContent(preferences: preferences, translator: translator, speaker: speaker, wait: { _ in })
+        tab = TranslatePaletteContent(preferences: preferences, translator: translator, wait: { _ in })
         palette.tabContents = [.translate: tab]
     }
 
-    func commandKey(_ keyCode: Int, _ characters: String, modifiers: NSEvent.ModifierFlags = .command) -> NSEvent {
+    func commandKey(
+        _ keyCode: Int, _ characters: String, modifiers: NSEvent.ModifierFlags = .command, isARepeat: Bool = false
+    ) -> NSEvent {
         NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0, context: nil,
-            characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode)
+            characters: characters, charactersIgnoringModifiers: characters, isARepeat: isARepeat, keyCode: UInt16(keyCode)
         )!
     }
 

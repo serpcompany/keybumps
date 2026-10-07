@@ -7,9 +7,8 @@ import SwiftUI
 /// clipboard back. Translations aren't kept anywhere.
 ///
 /// For the text in the field (#362), ⌘T or the swap button swaps the two languages, and the
-/// target's menu picks another; either lasts until the text changes. Picking a target for text in
-/// my language also saves it as Other language. ⌘S or the speaker button reads the translation
-/// aloud on this Mac (`TextSpeaking`), and stops it.
+/// target's menu picks another; either lasts until the text changes. A target picked for text
+/// detected in my language also becomes Other language.
 @MainActor
 @Observable
 final class TranslatePaletteContent: CapabilityPaletteContent {
@@ -42,18 +41,13 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     private(set) var needsDownload = false
     /// Whether a translation is on its way. The palette stays open meanwhile.
     private(set) var isTranslating = false
-    /// Whether the translation is being read aloud.
-    private(set) var isSpeaking = false
 
     @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let translator: (any TextTranslating)?
-    @ObservationIgnored private let speaker: any TextSpeaking
     @ObservationIgnored private let wait: (Duration) async throws -> Void
     /// Languages picked for one text, by swapping or from the target's menu, in place of detection
     /// until the text changes.
     @ObservationIgnored private var chosen: Request?
-    /// Tells a reading's end from an earlier one's.
-    @ObservationIgnored private var reading = 0
     /// The debounce and translation for the latest text; tests await it.
     @ObservationIgnored private(set) var work: Task<Void, Never>?
     /// Opens System Settings on Language & Region, where Translation Languages are downloaded.
@@ -62,17 +56,14 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     /// (`holdCommandPaletteOpen`) while a translation runs. The tab's view sets it.
     @ObservationIgnored var holdPaletteOpen: @MainActor (Bool) -> Void = { _ in }
 
-    /// `wait` sleeps out the debounce; tests pass their own. Without a speaker, it reads aloud with
-    /// `TextSpeakerFactory`'s, which is silent under unit tests.
+    /// `wait` sleeps out the debounce; tests pass their own.
     init(
         preferences: AppPreferences,
         translator: (any TextTranslating)?,
-        speaker: (any TextSpeaking)? = nil,
         wait: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.preferences = preferences
         self.translator = translator
-        self.speaker = speaker ?? TextSpeakerFactory.makeDefault()
         self.wait = wait
     }
 
@@ -111,7 +102,6 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         work = nil
         let text = Self.text(of: query)
         guard isAvailable, !text.isEmpty else { return reset() }
-        if text != request?.text { stopSpeaking() }
         if text != chosen?.text { chosen = nil }
         // Already translated, or known not to translate.
         if text == request?.text, currentTranslation(query: query) != nil || failure != nil { return setTranslating(false) }
@@ -157,13 +147,11 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         holdPaletteOpen(translating)
     }
 
-    /// Stops a translation on its way, and reading aloud, as when the palette closes, the tab
-    /// changes, or Translation is turned off.
+    /// Stops a translation on its way, as when the palette closes or Translation is turned off.
     func stop() {
         work?.cancel()
         work = nil
         setTranslating(false)
-        stopSpeaking()
     }
 
     private func reset() {
@@ -207,22 +195,25 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     }
 
     /// The languages the target's menu offers: every language Translation offers but the source.
+    /// The current target is among them, marked in the menu.
     func targetChoices(query: String) -> [TranslationLanguages.Language] {
         guard let request = currentRequest(query: query) else { return [] }
         let source = TranslationLanguagePair.code(request.source)
         return TranslationLanguages.offered.filter { $0.code != source }
     }
 
-    /// Translates the text in the field into `target` at once. When the text is in my language,
-    /// `target` also becomes Other language, as in Settings, so my language goes there from now
-    /// on. Text in another language comes back to mine, so for it the choice lasts only until the
-    /// text changes, and My language stays.
+    /// Translates the text in the field into `target` at once. When the text was detected in my
+    /// language, and not swapped, `target` also becomes Other language, as in Settings, so my
+    /// language goes there from now on. Otherwise the pick lasts only until the text changes, and
+    /// the setting stays: text in another language comes back to mine, and a swapped source isn't
+    /// what the text is written in.
     func chooseTarget(_ target: String, query: String) {
         guard let request = currentRequest(query: query), TranslationLanguages.isOffered(target) else { return }
         let target = TranslationLanguagePair.code(target)
         let source = TranslationLanguagePair.code(request.source)
         guard target != source, target != TranslationLanguagePair.code(request.target) else { return }
-        if source == preferences.translationLanguagePair.mine {
+        let mine = preferences.translationLanguagePair.mine
+        if source == mine, TranslationLanguagePair.code(detectedRequest(for: request.text).source) == mine {
             preferences.set(.choice(target), of: .translationOtherLanguage, for: .translation)
         }
         translateAgain(Request(text: request.text, source: request.source, target: target))
@@ -230,33 +221,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     /// Translates the text again in the languages picked for it, without waiting out the debounce.
     private func translateAgain(_ request: Request) {
-        stopSpeaking()
         chosen = request
         work?.cancel()
         work = Task { [weak self] in await self?.translate(request.text) }
-    }
-
-    // MARK: Reading aloud
-
-    /// Reads the translation of the text in the field aloud in a voice for its language, or stops
-    /// reading it.
-    func toggleSpeaking(query: String) {
-        if isSpeaking { return stopSpeaking() }
-        guard let translated = currentTranslation(query: query), let language = request?.target else { return }
-        reading += 1
-        let current = reading
-        isSpeaking = true
-        speaker.speak(translated, language: language) { [weak self] in
-            guard let self, self.reading == current else { return }
-            self.isSpeaking = false
-        }
-    }
-
-    func stopSpeaking() {
-        guard isSpeaking else { return }
-        reading += 1
-        isSpeaking = false
-        speaker.stop()
     }
 
     // MARK: CapabilityPaletteContent
@@ -282,15 +249,12 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
             : PaletteFooterActions(primary: "Copy", secondary: "Paste")
     }
 
-    /// ⌘T swaps the languages and ⌘S reads aloud; both are the tab's even when there's nothing to
-    /// do, so they never reach the search field.
-    func handleCommandKey(_ characters: String, query: String) -> Bool {
-        switch characters {
-        case "t": swapLanguages(query: query)
-        case "s": toggleSpeaking(query: query)
-        default: return false
-        }
-        return true
+    /// ⌘T swaps the languages. It's the tab's even with nothing to swap, so it never reaches the
+    /// search field.
+    var commandKeys: Set<String> { ["t"] }
+
+    func handleCommandKey(_ characters: String, query: String) {
+        if characters == "t" { swapLanguages(query: query) }
     }
 
     /// Each showing starts empty, so languages downloaded meanwhile are tried again.
@@ -306,7 +270,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 }
 
 /// The Translate tab: the languages, "English → Japanese", with the target a menu and a swap
-/// button, then the translation with a button that reads it aloud.
+/// button, then the translation.
 private struct TranslatePaletteResults: View {
     @Environment(\.holdCommandPaletteOpen) private var holdPaletteOpen
     @State private var holdID = UUID()
@@ -357,20 +321,16 @@ private struct TranslatePaletteResults: View {
                         .accessibilityIdentifier("palette.translate.openLanguageSettings")
                 }
             } else if let translation = content.translation {
-                HStack(alignment: .top, spacing: 12) {
-                    ScrollView {
-                        Text(translation.text)
-                            .font(.system(size: 20))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .scrollIndicators(.automatic)
-                    // Earlier text's translation, until the new one is back.
-                    .opacity(isCurrent ? 1 : 0.45)
-                    .accessibilityIdentifier("palette.translate.translation")
-                    speakButton
-                        .disabled(!isCurrent)
+                ScrollView {
+                    Text(translation.text)
+                        .font(.system(size: 20))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollIndicators(.automatic)
+                // Earlier text's translation, until the new one is back.
+                .opacity(isCurrent ? 1 : 0.45)
+                .accessibilityIdentifier("palette.translate.translation")
             }
             Spacer(minLength: 0)
         }
@@ -379,21 +339,30 @@ private struct TranslatePaletteResults: View {
         .padding(.top, 14)
     }
 
-    /// "English → Japanese": the source as text, the target a menu of the other languages, then
-    /// the swap button.
+    /// "English → Japanese": the source as text, the target a menu of the other languages with the
+    /// current one checked, then the swap button.
     private func languages(_ request: TranslatePaletteContent.Request) -> some View {
         let canChange = content.canChangeLanguages(query: query)
+        let target = TranslationLanguages.name(for: request.target)
+        let picked = Binding(
+            get: { TranslationLanguagePair.code(request.target) },
+            set: { content.chooseTarget($0, query: query) }
+        )
         return HStack(spacing: 6) {
             Text(TranslationLanguages.name(for: request.source))
             Image(systemName: "arrow.right")
                 .font(.system(size: 11, weight: .semibold))
                 .accessibilityLabel("to")
             Menu {
-                ForEach(content.targetChoices(query: query), id: \.code) { language in
-                    Button(language.name) { content.chooseTarget(language.code, query: query) }
+                Picker("Translate into", selection: picked) {
+                    ForEach(content.targetChoices(query: query), id: \.code) { language in
+                        Text(language.name).tag(language.code)
+                    }
                 }
+                .pickerStyle(.inline)
+                .labelsHidden()
             } label: {
-                Text(TranslationLanguages.name(for: request.target))
+                Text(target)
             }
             .menuStyle(.button)
             .buttonStyle(.borderless)
@@ -401,6 +370,7 @@ private struct TranslatePaletteResults: View {
             .fixedSize()
             .disabled(!canChange)
             .help("Choose the language to translate into")
+            .accessibilityLabel("Translate into \(target)")
             .accessibilityIdentifier("palette.translate.targetMenu")
             Button("Swap languages", systemImage: "arrow.left.arrow.right") { content.swapLanguages(query: query) }
                 .buttonStyle(PalettePillButtonStyle(isCircular: true))
@@ -416,17 +386,5 @@ private struct TranslatePaletteResults: View {
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("palette.translate.languages")
-    }
-
-    /// Reads the translation aloud, or stops it.
-    private var speakButton: some View {
-        let title = content.isSpeaking ? "Stop reading aloud" : "Read aloud"
-        return Button(title, systemImage: content.isSpeaking ? "stop.fill" : "speaker.wave.2") {
-            content.toggleSpeaking(query: query)
-        }
-        .buttonStyle(PalettePillButtonStyle(isCircular: true))
-        .help("\(title) (⌘S)")
-        .accessibilityLabel(title)
-        .accessibilityIdentifier("palette.translate.speak")
     }
 }

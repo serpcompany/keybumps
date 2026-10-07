@@ -37,7 +37,6 @@
 		1A1112634F9877A12C8E3B19 /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */; };
 		1B97ED234F1E2A347068FC1F /* finder-trash-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = F3872107ED622E1702DAE730 /* finder-trash-captured-sanitized-trace.json */; };
 		1C16C591081A70B947AD1444 /* OnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F766FFB10FBF4B3FBE6504B /* OnboardingFlowTests.swift */; };
-		1C83F96DA33096FE015605C8 /* TextSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD3AF42658F5D38A0159949 /* TextSpeaker.swift */; };
 		1D325D80A085336EFE15D81D /* TimerDurationParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA172708D898A0BF0D7278B /* TimerDurationParser.swift */; };
 		1E04F88877CBBFF7AA7D654C /* FinderTrashMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */; };
 		1E06BE81B86C45C1EBD05F0D /* PaletteFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874CCB1AF5C8EAD867309283 /* PaletteFilterTests.swift */; };
@@ -327,7 +326,6 @@
 		57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		58C85AC05704376F0356083E /* ScreenshotToolsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotToolsService.swift; sourceTree = "<group>"; };
 		5C6764E3032BB803A72829A5 /* DictationTranslationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTranslationTests.swift; sourceTree = "<group>"; };
-		5DD3AF42658F5D38A0159949 /* TextSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSpeaker.swift; sourceTree = "<group>"; };
 		5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		5FCA808667D04E21123AEA59 /* TextTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextTranslator.swift; sourceTree = "<group>"; };
 		5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */ = {isa = PBXFileReference; path = "LICENSE.openai-whisper"; sourceTree = "<group>"; };
@@ -511,7 +509,6 @@
 		07B24F77610B72698EE858E8 /* Translation */ = {
 			isa = PBXGroup;
 			children = (
-				5DD3AF42658F5D38A0159949 /* TextSpeaker.swift */,
 				5FCA808667D04E21123AEA59 /* TextTranslator.swift */,
 				B8303524C1C39CD33356B40F /* TranslatePaletteContent.swift */,
 				79439581AE2545F60BCCCA0F /* TranslationLanguages.swift */,
@@ -1248,7 +1245,6 @@
 				B276B1127A353841F9623DE6 /* StandardWindowControlMonitor.swift in Sources */,
 				9198579854CC8F0979A2D87D /* SystemServices.swift in Sources */,
 				41861F4AB6A67650E7EEF001 /* TextPaster.swift in Sources */,
-				1C83F96DA33096FE015605C8 /* TextSpeaker.swift in Sources */,
 				0215C3DF4956D8AC768B60B0 /* TextTranslator.swift in Sources */,
 				7EFB3F00AAD957729181BAA1 /* TimerAlarm.swift in Sources */,
 				1D325D80A085336EFE15D81D /* TimerDurationParser.swift in Sources */,
