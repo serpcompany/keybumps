@@ -840,6 +840,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
             return nil
         case 36:
+            // While an input method is composing, Return commits its candidate in the search field.
+            guard !isComposingText else { return event }
             activateSelection(reveal: event.modifierFlags.contains(.command))
             return nil
         case 51 where activeQuery.isEmpty && state.filter != nil && event.modifierFlags.isDisjoint(with: .command):
