@@ -7,12 +7,9 @@ import { isProductionSite } from '@/lib/site'
  * src/app/(sensitive-url)/. The (sensitive-url) layout serves pages whose URLs carry checkout,
  * session, or license data (/thanks/, /license/) and removes the query string in `<head>`, so GTM,
  * which this loads after hydration, never sees it. Never render this anywhere else, and never on
- * the global 404. Each tool stays off until its ID is set at build time. The privacy policy
- * (/legal/privacy/) describes the kinds of tools the site loads, not each one (apps/web/AGENTS.md):
- * a new kind of tool, or one loaded outside GTM, updates it in the same change.
+ * the global 404. Each tool stays off until its ID is set at build time.
  *
- * The owner chose Google Tag Manager only. NEXT_PUBLIC_CF_BEACON_TOKEN stays unset: the beacon
- * loads outside GTM, which the privacy policy doesn't describe.
+ * The owner chose Google Tag Manager only, so NEXT_PUBLIC_CF_BEACON_TOKEN stays unset.
  */
 export function Analytics() {
   if (!isProductionSite()) return null
