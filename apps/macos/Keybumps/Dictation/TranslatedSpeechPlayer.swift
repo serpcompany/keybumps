@@ -8,10 +8,14 @@ struct TranslationSpeechVoiceDescriptor: Equatable {
 }
 
 enum TranslationSpeechVoiceSelector {
+    /// An installed voice for the language: one for exactly that language and region, or else any
+    /// in the same language. Nil when none is installed, so nothing is read in another language's
+    /// voice.
     static func preferredVoiceIdentifier(
         targetLanguageIdentifier: String,
         supportedVoices: [TranslationSpeechVoiceDescriptor]
     ) -> String? {
+        let targetLanguageIdentifier = voiceLanguage(for: targetLanguageIdentifier)
         if let exactMatch = supportedVoices.first(where: {
             $0.language.caseInsensitiveCompare(targetLanguageIdentifier) == .orderedSame
         }) {
@@ -24,6 +28,40 @@ enum TranslationSpeechVoiceSelector {
             Locale.Language(identifier: $0.language).languageCode?.identifier == targetLanguageCode
         })?.identifier
     }
+
+    /// Voices are listed by region, so Chinese named by its script, as the Translate tab saves it,
+    /// asks first for its script's main region: Simplified for mainland China, Traditional for
+    /// Taiwan.
+    static func voiceLanguage(for identifier: String) -> String {
+        switch identifier {
+        case "zh-Hans": "zh-CN"
+        case "zh-Hant": "zh-TW"
+        default: identifier
+        }
+    }
+}
+
+/// Reads a saved translation aloud on this Mac (#362), in an installed voice for its language.
+/// `TranslatedSpeechPlayer` does it in the app; unit tests and the UI-test composition use a
+/// stand-in, so no test makes a sound. Nothing leaves the Mac.
+@MainActor
+protocol TranslationSpeaking: AnyObject {
+    /// Reads `text` aloud in an installed voice for `language` (a code such as `ja` or `zh-Hant`),
+    /// stopping anything it was reading. Returns once reading has started: nil, or why it can't,
+    /// such as no installed voice for the language.
+    func speak(_ text: String, language: String) async -> String?
+    /// Whether it's getting ready to read, or reading.
+    var isSpeaking: Bool { get }
+    /// Stops at once.
+    func stop()
+}
+
+/// Reads nothing: under unit tests and in the UI-test composition.
+@MainActor
+final class InertTranslationSpeaker: TranslationSpeaking {
+    func speak(_ text: String, language: String) async -> String? { nil }
+    var isSpeaking: Bool { false }
+    func stop() {}
 }
 
 @MainActor
@@ -38,7 +76,10 @@ final class TranslatedSpeechPlayer {
     @ObservationIgnored private var synthesizer: AVSpeechSynthesizer?
     @ObservationIgnored private var generation = 0
 
-    func prepare(text: String, languageIdentifier: String) async {
+    /// Renders `text` in an installed voice for the language. Returns the file it rendered, or nil
+    /// when there's no voice, it failed, or a newer `prepare` or `clear()` came meanwhile.
+    @discardableResult
+    func prepare(text: String, languageIdentifier: String) async -> URL? {
         clear()
         let voices = AVSpeechSynthesisVoice.speechVoices()
         let descriptors = voices.map {
@@ -49,7 +90,7 @@ final class TranslatedSpeechPlayer {
             supportedVoices: descriptors
         ), let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) else {
             lastError = "No installed voice is available for this language."
-            return
+            return nil
         }
 
         generation += 1
@@ -66,7 +107,7 @@ final class TranslatedSpeechPlayer {
             let duration = try await render(utterance, to: outputURL)
             guard generation == currentGeneration else {
                 try? FileManager.default.removeItem(at: outputURL)
-                return
+                return nil
             }
             audioURL = outputURL
             self.duration = duration
@@ -78,10 +119,10 @@ final class TranslatedSpeechPlayer {
                 lastError = "Audio could not be generated for this translation."
             }
         }
-        if generation == currentGeneration {
-            isPreparing = false
-            synthesizer = nil
-        }
+        guard generation == currentGeneration else { return nil }
+        isPreparing = false
+        synthesizer = nil
+        return audioURL
     }
 
     func clear() {
@@ -151,4 +192,20 @@ final class TranslatedSpeechPlayer {
             }
         }
     }
+}
+
+/// The Translate tab reads a saved translation aloud the way Dictation's Translate plays one: the
+/// speech is rendered to a temporary file, then played.
+extension TranslatedSpeechPlayer: TranslationSpeaking {
+    func speak(_ text: String, language: String) async -> String? {
+        // Plays only the file this call rendered, never a newer reading's: nil when there's no
+        // voice, or when it was stopped or replaced meanwhile (whose caller drops what this returns).
+        guard let audioURL = await prepare(text: text, languageIdentifier: language) else { return lastError }
+        playback.toggle(id: audioURL.lastPathComponent, audioURL: audioURL)
+        return playback.isPlaying ? nil : "This translation couldn’t be played."
+    }
+
+    var isSpeaking: Bool { isPreparing || playback.isPlaying }
+
+    func stop() { clear() }
 }

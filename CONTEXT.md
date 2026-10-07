@@ -172,8 +172,12 @@ Translating text between your two languages on this Mac, with Apple's Translatio
 _Avoid_: Translator, Translate (the tab's name)
 
 **Translate tab**:
-The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return copies the translation; ⌘Return pastes it and puts the clipboard back. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. Translations aren't kept anywhere.
+The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘Return saves it and pastes it, then puts the clipboard back. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
 _Avoid_: Translation window, translator
+
+**Recent translations**:
+The last 50 translations saved with Return in the Translate tab, newest first, listed there while the search field is empty. Return copies one, kept out of Clipboard History; ⌘Return pastes it; Delete asks, then deletes it; and its speaker button reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
+_Avoid_: Translation history, favorites, phrasebook
 
 **Language pair**:
 Translation's My language and Other language, never the same: text in my language is translated into the other, and text in any other language into mine. Dictation's Translate uses it while Translation is on, and English and Japanese otherwise.

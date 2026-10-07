@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		011D4C30FD4FF1168AD3B32B /* UnitTestHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44D821EC6664B978596FDDFD /* UnitTestHostTests.swift */; };
 		0215C3DF4956D8AC768B60B0 /* TextTranslator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCA808667D04E21123AEA59 /* TextTranslator.swift */; };
+		0504539E3FF036E64AEBCAD5 /* RecentTranslations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12BDA43A1CE8184C9124A4FE /* RecentTranslations.swift */; };
 		056730D3FDC7666D9EDAAB12 /* ClipboardHistoryModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900FCF32F9541FA9168E58D6 /* ClipboardHistoryModule.swift */; };
 		07A73572B424F72C67920D5E /* SettingsSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EFF247943688DF74FDFBFD /* SettingsSidebarTests.swift */; };
 		081AFAA9F4E7DE329219A302 /* CommandPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4233CFB60FEF84F218977D48 /* CommandPaletteController.swift */; };
@@ -265,6 +266,7 @@
 		11B45A0D668598CACCB4B1DF /* TranslationModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationModule.swift; sourceTree = "<group>"; };
 		11E1CD87EB93B65F4E866246 /* CapabilityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityModule.swift; sourceTree = "<group>"; };
 		124C5FD3D18E6E1D1EC3F91E /* ScreenshotAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotAnnotation.swift; sourceTree = "<group>"; };
+		12BDA43A1CE8184C9124A4FE /* RecentTranslations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranslations.swift; sourceTree = "<group>"; };
 		13CF3F8C2C09E95F3410A211 /* PaletteFloatingSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteFloatingSurfaceTests.swift; sourceTree = "<group>"; };
 		15F712A12B63319A7DDD3502 /* PluginsCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginsCommandTests.swift; sourceTree = "<group>"; };
 		16C81595BD6B459829442011 /* CompletedAudioTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedAudioTranscriber.swift; sourceTree = "<group>"; };
@@ -509,6 +511,7 @@
 		07B24F77610B72698EE858E8 /* Translation */ = {
 			isa = PBXGroup;
 			children = (
+				12BDA43A1CE8184C9124A4FE /* RecentTranslations.swift */,
 				5FCA808667D04E21123AEA59 /* TextTranslator.swift */,
 				B8303524C1C39CD33356B40F /* TranslatePaletteContent.swift */,
 				79439581AE2545F60BCCCA0F /* TranslationLanguages.swift */,
@@ -1220,6 +1223,7 @@
 				F6DA5B8D9EFA0F42F3743ABC /* RaycastPaletteStyle.swift in Sources */,
 				4F3E2FE9F33B1CF0F9DA36F1 /* RaycastSettingsStyle.swift in Sources */,
 				FB1EF3A045635D619E187E8D /* RecentItemStore.swift in Sources */,
+				0504539E3FF036E64AEBCAD5 /* RecentTranslations.swift in Sources */,
 				E997BE984EF0D51BCBF3B621 /* ScreenshotAnnotation.swift in Sources */,
 				AC51777E49844030C638FFDB /* ScreenshotAnnotationRenderer.swift in Sources */,
 				B3F274083A2B748371F28BE5 /* ScreenshotCapture.swift in Sources */,

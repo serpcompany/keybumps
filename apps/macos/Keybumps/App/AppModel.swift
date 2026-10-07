@@ -38,6 +38,8 @@ final class AppModel {
     let snippets: SnippetStore
     /// The Timers tab's countdowns, run by `TimerModule`.
     let timers: TimerStore
+    /// The Translate tab's saved translations; Translation's settings clear them.
+    let recentTranslations: RecentTranslations
     /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
     let keywordExpansion: KeywordExpansionController
     let screenshotTools: ScreenshotToolsService
@@ -165,6 +167,8 @@ final class AppModel {
         timers injectedTimers: TimerStore? = nil,
         timerAlerts injectedTimerAlerts: (any TimerAlerting)? = nil,
         translator injectedTranslator: (any TextTranslating)? = nil,
+        recentTranslations injectedRecentTranslations: RecentTranslations? = nil,
+        translationSpeaker injectedTranslationSpeaker: (any TranslationSpeaking)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -216,6 +220,8 @@ final class AppModel {
         self.snippets = snippets
         let timers = injectedTimers ?? TimerStore.makeDefault()
         self.timers = timers
+        let recentTranslations = injectedRecentTranslations ?? RecentTranslations.makeDefault()
+        self.recentTranslations = recentTranslations
         // Dictation and Snippets share one paste step. Unit tests and the UI-test composition never
         // synthesize ⌘V.
         let textPaster = injectedTextPaster
@@ -337,11 +343,14 @@ final class AppModel {
                 alerts: injectedTimerAlerts ?? (UnitTestHost.isActive ? InertTimerAlerts() : SystemTimerAlerts())
             ),
             EmojiPickerModule(palette: commandPalette, preferences: preferences, recents: .makeDefault()),
-            // Unit tests and the UI-test composition never download a language or translate.
+            // Unit tests and the UI-test composition never download a language, translate, or
+            // read aloud.
             TranslationModule(
                 palette: commandPalette,
                 preferences: preferences,
                 translator: injectedTranslator ?? TextTranslatorFactory.makeDefault(),
+                recents: recentTranslations,
+                speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
         ])

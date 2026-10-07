@@ -204,6 +204,8 @@ final class CommandPaletteState {
     var snippetPendingDeletion: Snippet?
     /// The recording whose Delete confirmation is showing.
     var dictationPendingDeletion: DictationHistoryEntry?
+    /// A module tab's Delete confirmation that's showing, such as a saved translation's.
+    var contentPendingDeletion: PaletteDeletionConfirmation?
     /// How many times the palette has closed. Its views stay alive while it's hidden, so work that
     /// mustn't outlast a showing, such as a translation, stops when this changes.
     private(set) var closings = 0
@@ -218,6 +220,7 @@ final class CommandPaletteState {
         filter = nil
         snippetPendingDeletion = nil
         dictationPendingDeletion = nil
+        contentPendingDeletion = nil
     }
 }
 
@@ -503,10 +506,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// without calling its binding, so the palette takes its keys back here, as `ClearAllButton`
     /// does when it disappears.
     func selectOnOpening(_ tab: CommandPaletteTab) {
-        if state.snippetPendingDeletion != nil || state.dictationPendingDeletion != nil { isPresentingConfirmation = false }
-        state.select(tab)
+        if state.snippetPendingDeletion != nil || state.dictationPendingDeletion != nil || state.contentPendingDeletion != nil {
+            isPresentingConfirmation = false
+        }
+        select(tab)
         search.query = ""
         tabContents[tab]?.didShow(palette: contentActions)
+    }
+
+    /// Switches the palette to `tab`; the tab it leaves hears it's hidden.
+    private func select(_ tab: CommandPaletteTab) {
+        let previous = state.tab
+        state.select(tab)
+        if previous != tab { tabContents[previous]?.didHide() }
     }
 
     func dismiss() {
@@ -517,6 +529,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         state.isCommandHeld = false
         state.didClose()
         removeMonitors()
+        tabContents[state.tab]?.didHide()
     }
 
     /// Holds the palette open against outside clicks for `holder`, or lets it go. The palette's
@@ -650,6 +663,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 ),
                 requestDictationDeletion: { [weak self] entry in self?.requestDictationDeletion(entry) },
                 deleteDictation: { [weak self] entry in self?.deleteDictation(entry) },
+                confirmContentDeletion: { [weak self] confirmation in self?.confirmContentDeletion(confirmation) },
+                contentDeletionDidClose: { [weak self] in self?.contentDeletionDidClose() },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
                 },
@@ -674,7 +689,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func selectTab(_ tab: CommandPaletteTab) {
-        state.select(tab)
+        select(tab)
         search.query = ""
         tabContents[tab]?.didShow(palette: contentActions)
         DispatchQueue.main.async { [weak self] in
@@ -825,6 +840,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
             return nil
         case 36:
+            // While an input method is composing, Return commits its candidate in the search field.
+            guard !isComposingText else { return event }
             activateSelection(reveal: event.modifierFlags.contains(.command))
             return nil
         case 51 where activeQuery.isEmpty && state.filter != nil && event.modifierFlags.isDisjoint(with: .command):
@@ -1040,6 +1057,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func deleteSelection() -> Bool {
         let index = state.selection
         if let tabContent {
+            if let confirmation = tabContent.deletionConfirmation(row: index, query: state.historyQuery) {
+                state.contentPendingDeletion = confirmation
+                isPresentingConfirmation = true
+                return true
+            }
             guard tabContent.delete(row: index, query: state.historyQuery) else { return false }
             state.selection = min(index, max(0, itemCount - 1))
             return true
@@ -1310,6 +1332,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         state.selection = min(state.selection, max(0, itemCount - 1))
     }
 
+    /// A module tab's confirmation's Delete: deletes, keeping the highlight on a row that exists.
+    func confirmContentDeletion(_ confirmation: PaletteDeletionConfirmation) {
+        confirmation.delete()
+        state.selection = min(state.selection, max(0, itemCount - 1))
+    }
+
+    /// A module tab's confirmation went away, after Delete or Cancel; the palette takes its keys back.
+    func contentDeletionDidClose() {
+        state.contentPendingDeletion = nil
+        isPresentingConfirmation = false
+    }
+
     /// Shows the Delete confirmation for a snippet.
     func requestSnippetDeletion(_ snippet: Snippet) {
         state.snippetPendingDeletion = snippet
@@ -1419,6 +1453,9 @@ private struct CommandPaletteView: View {
     /// Delete on a recording asks first (`requestDictationDeletion`); the alert's Delete deletes.
     let requestDictationDeletion: (DictationHistoryEntry) -> Void
     let deleteDictation: (DictationHistoryEntry) -> Void
+    /// A module tab's Delete confirmation (`state.contentPendingDeletion`): its Delete, and its going away.
+    let confirmContentDeletion: (PaletteDeletionConfirmation) -> Void
+    let contentDeletionDidClose: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let chooseFilter: (PaletteFilter) -> Void
     /// Copies (false) or pastes (true) an emoji from Quick Search's results.
@@ -1511,6 +1548,19 @@ private struct CommandPaletteView: View {
                 actions: contentActions,
                 confirmationPresentationChanged: confirmationPresentationChanged
             ))
+            .alert(
+                state.contentPendingDeletion?.title ?? "",
+                isPresented: Binding(
+                    get: { state.contentPendingDeletion != nil },
+                    set: { if !$0 { contentDeletionDidClose() } }
+                ),
+                presenting: state.contentPendingDeletion
+            ) { confirmation in
+                Button("Delete", role: .destructive) { confirmContentDeletion(confirmation) }
+                Button("Cancel", role: .cancel) {}
+            } message: { confirmation in
+                Text(confirmation.message)
+            }
         } else {
             builtInContent
         }
