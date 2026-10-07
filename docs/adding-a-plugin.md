@@ -11,7 +11,7 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
   - **Basics:** the title, `systemImage`, and `iconTint`; search keywords, the category, and any `PluginPreference`s.
   - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs. Optional permissions carry their own reason. (The website entry's permission reasons come in §4.)
   - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`.
-  - **Palette tab, if any:** the module's `paletteContent` supplies the rows. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7 and Hotkeys moved to ⌘8. Moving Hotkeys also changes:
+  - **Palette tab, if any:** the module's `paletteContent` supplies the rows. Give each row's content `.paletteQuickSelect(row:)` and its `List` or `ScrollView` `.paletteQuickSelectViewport()`, so ⇧1–9 numbers the rows on screen (#182). The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7 and Hotkeys moved to ⌘8. Moving Hotkeys also changes:
     - `KeyboardShortcutterModule`'s `commandKey`;
     - the README and architecture.md tab lists, and the release notes;
     - Shortcut Coach's `commandKey` in the website's `plugins.ts`, whose test requires unique numbers.

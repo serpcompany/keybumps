@@ -591,7 +591,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
 
         // ⇧1–9 picks a row on screen, in place of typing `!`, `@`, `#` and so on (#182).
-        if let number = PaletteQuickSelect.number(for: event), !isComposingText {
+        if let number = PaletteQuickSelect.number(for: event), !isComposingText,
+           !(state.tab == .timers && filterMenu == nil && PaletteQuickSelect.typesDigit(event)) {
             // Held down, it would act again on whatever row is Nth by then, such as a timer that moved.
             if !event.isARepeat { quickSelect(number) }
             return nil

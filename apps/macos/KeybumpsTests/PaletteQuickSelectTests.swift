@@ -39,7 +39,8 @@ struct PaletteQuickSelectTests {
         #expect(quickSelect.number(forRow: 0) == nil, "A row not on screen has no number")
 
         // 40pt rows under a 600pt viewport, scrolled so row 3 is at the top.
-        quickSelect.setViewport(CGRect(x: 0, y: 100, width: 800, height: 600))
+        let list = UUID()
+        quickSelect.setViewport(CGRect(x: 0, y: 100, width: 800, height: 600), of: list)
         func frame(_ row: Int) -> CGRect { CGRect(x: 0, y: 100 + CGFloat(row - 3) * 40, width: 800, height: 40) }
         let views = (0..<20).map { _ in UUID() }
         for row in 2..<20 { quickSelect.report(views[row], row: row, frame: frame(row)) }
@@ -57,6 +58,66 @@ struct PaletteQuickSelectTests {
         // A view that now shows another row keeps its place on screen.
         quickSelect.move(views[4], to: 40)
         #expect(quickSelect.visibleRows.contains(40))
+
+        // A new list reports before the old one goes away; only the list that reported last counts.
+        let newList = UUID()
+        quickSelect.setViewport(CGRect(x: 0, y: 140, width: 800, height: 600), of: newList)
+        quickSelect.setViewport(nil, of: list)
+        #expect(!quickSelect.visibleRows.contains(3), "Row 3 is above the new list's top")
+        #expect(quickSelect.visibleRows.contains(5))
+        quickSelect.setViewport(nil, of: newList)
+        #expect(quickSelect.visibleRows.isEmpty, "With no list, no row is on screen")
+    }
+
+    @Test("In Timers, a ⇧ key that types a digit types it, for durations on French-style layouts")
+    func timersTypeDigits() {
+        let fixture = QuickSelectFixture()
+        defer { fixture.tearDown() }
+        let azertyFive = Self.key(kVK_ANSI_5, "5", .shift)
+        let usFive = Self.key(kVK_ANSI_5, "%", .shift)
+        #expect(PaletteQuickSelect.typesDigit(azertyFive))
+        #expect(!PaletteQuickSelect.typesDigit(usFive))
+
+        fixture.palette.selectOnOpening(.timers)
+        #expect(fixture.palette.handleKeyDown(azertyFive) != nil, "5 goes to the search field")
+        #expect(fixture.palette.handleKeyDown(usFive) == nil, "On a US layout ⇧5 is still quick select")
+
+        fixture.palette.selectOnOpening(.clipboard)
+        #expect(fixture.palette.handleKeyDown(azertyFive) == nil, "Elsewhere it's quick select, as decided")
+    }
+
+    @Test("Scrolling the real Clipboard list numbers from the first row wholly inside it, not one behind the header")
+    func scrolledListNumbersFromItsTopRow() throws {
+        let fixture = QuickSelectFixture()
+        defer { fixture.tearDown() }
+        for index in 1...30 { fixture.clipboard.ingestForTesting("made-up clipboard text \(index)") }
+        fixture.palette.show(.clipboard)
+        defer { fixture.palette.dismiss() }
+        let quickSelect = fixture.palette.state.quickSelect
+        try #require(Self.waitUntil { quickSelect.visibleRows.contains(0) })
+        let panel = try #require(NSApp.windows.first { $0.identifier?.rawValue == "commandPalette" })
+        let content = try #require(panel.contentView)
+        let list = try #require(Self.scrollViews(in: content).first { $0.documentView is NSTableView })
+
+        // Part of the top row scrolls up under the header.
+        list.contentView.scroll(to: NSPoint(x: 0, y: 30))
+        list.reflectScrolledClipView(list.contentView)
+
+        #expect(Self.waitUntil { quickSelect.firstRow == 1 }, "⇧1 is the first row wholly showing, not the cut-off one")
+        #expect(quickSelect.number(forRow: 0) == nil)
+    }
+
+    private static func waitUntil(_ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition() {
+            guard Date() < deadline else { return false }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        return true
+    }
+
+    private static func scrollViews(in view: NSView) -> [NSScrollView] {
+        ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews(in:))
     }
 
     @Test("Clipboard: ⇧2 copies the second entry")
@@ -83,6 +144,7 @@ struct PaletteQuickSelectTests {
         let listed = SnippetPaletteContent.resolve(
             snippets: fixture.snippets.snippets, query: "", isEnabled: true, libraryState: fixture.snippets.libraryState
         ).entries
+        try #require(listed.count == 3)
 
         _ = fixture.palette.handleKeyDown(Self.key(kVK_ANSI_2, "@", .shift))
         #expect(fixture.pasteboard.string(forType: .string) == listed[1].text)
@@ -99,8 +161,11 @@ struct PaletteQuickSelectTests {
             characters: "!", charactersIgnoringModifiers: "!", isARepeat: true, keyCode: UInt16(kVK_ANSI_1)
         )!
 
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_ANSI_1, "!", .shift))
+        #expect(fixture.pasteboard.string(forType: .string) == fixture.clipboard.entries[0].text, "The press acts")
+        fixture.pasteboard.clearContents()
         #expect(fixture.palette.handleKeyDown(repeated) == nil, "A held key still doesn't type !")
-        #expect(fixture.pasteboard.string(forType: .string) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == nil, "Its repeats don't act again")
     }
 
     @Test("Command keys are Command alone; Caps Lock, Fn and the keypad flag don't matter")

@@ -12,6 +12,8 @@ final class PaletteQuickSelect {
     /// (`paletteQuickSelectViewport()`). Rows measure themselves in window coordinates too: a List
     /// hosts each row on its own, where the palette's own coordinate spaces don't reach.
     @ObservationIgnored private var viewport = CGRect.null
+    /// The list view that reported `viewport`, so only it going away clears it.
+    @ObservationIgnored private var viewportOwner: UUID?
     /// Each row view drawn, by its own token: its index in the tab's rows and where it is. Keyed by
     /// view rather than index, so the old tab's rows going away can't remove the new tab's.
     @ObservationIgnored private var rows: [UUID: (row: Int, frame: CGRect)] = [:]
@@ -35,8 +37,16 @@ final class PaletteQuickSelect {
         return (1...9).contains(number) ? number : nil
     }
 
-    func setViewport(_ frame: CGRect) {
-        viewport = frame
+    /// Where a list is, or nil once it's gone. The latest list to report is the one rows are
+    /// measured against; an older one going away afterwards changes nothing.
+    func setViewport(_ frame: CGRect?, of list: UUID) {
+        if let frame {
+            viewport = frame
+            viewportOwner = list
+        } else if viewportOwner == list {
+            viewport = .null
+            viewportOwner = nil
+        }
         update()
     }
 
@@ -68,6 +78,13 @@ final class PaletteQuickSelect {
         guard event.type == .keyDown,
               event.modifierFlags.intersection([.shift, .control, .option, .command]) == .shift else { return nil }
         return digitKeyCodes.firstIndex(of: Int(event.keyCode)).map { $0 + 1 }
+    }
+
+    /// Whether ⇧ and the key type a digit, as on French and Belgian layouts, where digits need ⇧.
+    /// Timers needs digits for durations, so there the key types instead (owner, 2026-10-07).
+    static func typesDigit(_ event: NSEvent) -> Bool {
+        guard let characters = event.characters, characters.count == 1, let character = characters.first else { return false }
+        return character.isASCII && character.isNumber
     }
 
     private static let digitKeyCodes = [
@@ -102,11 +119,16 @@ extension View {
 
 private struct PaletteQuickSelectViewport: ViewModifier {
     @Environment(PaletteQuickSelect.self) private var quickSelect: PaletteQuickSelect?
+    @State private var token = UUID()
 
     func body(content: Content) -> some View {
-        content.onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
-            quickSelect?.setViewport(frame)
-        }
+        content
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+                quickSelect?.setViewport(frame, of: token)
+            }
+            .onDisappear {
+                quickSelect?.setViewport(nil, of: token)
+            }
     }
 }
 
@@ -147,7 +169,10 @@ private struct PaletteQuickSelectRow: ViewModifier {
             }
         case .topLeading:
             content.overlay(alignment: .topLeading) {
-                keycap.padding(8)
+                keycap
+                    .padding(8)
+                    // It sits on the thumbnail, which a click there should still reach.
+                    .allowsHitTesting(false)
             }
         case .none:
             content
@@ -160,8 +185,6 @@ private struct PaletteQuickSelectRow: ViewModifier {
             PaletteKeycap("⇧\(number)")
                 .accessibilityLabel("Shift \(number)")
                 .help("Shift-\(number)")
-                // A tile's keycap sits on its thumbnail, which a click there should still reach.
-                .allowsHitTesting(false)
         }
     }
 }

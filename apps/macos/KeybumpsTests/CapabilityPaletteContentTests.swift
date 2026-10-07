@@ -331,7 +331,7 @@ struct CapabilityPaletteContentTests {
         fixture.palette.selectOnOpening(.keyboardShortcutter)
         let quickSelect = fixture.palette.state.quickSelect
         let views = (0..<30).map { _ in UUID() }
-        quickSelect.setViewport(CGRect(x: 0, y: 0, width: 800, height: 1000))
+        quickSelect.setViewport(CGRect(x: 0, y: 0, width: 800, height: 1000), of: UUID())
         func onScreen(_ slot: Int) -> CGRect { CGRect(x: 0, y: CGFloat(slot) * 40, width: 800, height: 40) }
         for row in 12...20 { quickSelect.report(views[row], row: row, frame: onScreen(row - 12)) }
 
