@@ -21,6 +21,15 @@ enum ShortcutOwner: Hashable, Identifiable {
         }
     }
 
+    /// The name VoiceOver hears, without the "›" it may read aloud: "Open Emoji Picker in Emoji
+    /// Picker".
+    var spokenName: String {
+        switch self {
+        case .capability(let shortcut): "\(shortcut.title) in \(shortcut.capability.descriptor.title)"
+        case .window(let action): "\(action.title) in \(Capability.windowManagement.descriptor.title)"
+        }
+    }
+
     /// Every action, plugins' first, in a fixed order, so a conflict check always names the same one.
     static let all: [ShortcutOwner] = CapabilityShortcut.allCases.map(ShortcutOwner.capability)
         + WindowAction.allCases.map(ShortcutOwner.window)
@@ -69,6 +78,13 @@ struct PendingShortcutReplacement: Equatable {
     let owner: ShortcutOwner
 
     var message: String { "\(binding.displayName) is used by \(owner.displayName)." }
+
+    /// What VoiceOver hears when the question appears (#345): the message with the keys as words,
+    /// then the choice.
+    var announcement: String {
+        let keys = KeyboardShortcutRegistry.accessibilityDescription(for: binding.displayName) ?? binding.displayName
+        return "\(keys) is used by \(owner.spokenName). Replace or Cancel."
+    }
 }
 
 extension ShortcutMove {
