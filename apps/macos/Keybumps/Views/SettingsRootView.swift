@@ -746,7 +746,7 @@ struct WindowSettingsView: View {
                         activeRecorderID: recorder.identifier,
                         liveModifiers: recorder.identifier == action.rawValue ? recorder.liveModifiers : "",
                         record: { beginRecording(action) },
-                        clear: { model.setShortcut(nil, for: .window(action)) }
+                        clear: ShortcutRowActions.clear(.window(action), model: model)
                     )
                     // No width of their own to ask for, so a long note wraps in its column rather
                     // than making the grid drop to one column (#345).
@@ -775,14 +775,7 @@ struct WindowSettingsView: View {
 
     private func beginRecording(_ action: WindowAction) {
         restoreNote = nil
-        recorder.begin(
-            identifier: action.rawValue,
-            suspend: { model.beginShortcutRecording() },
-            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: .window(action)) },
-            capture: { binding in model.finishWindowShortcutRecording(binding, for: action) },
-            replace: { model.setShortcut($0, for: .window(action)) },
-            cancel: { model.cancelShortcutRecording() }
-        )
+        ShortcutRowActions.record(.window(action), identifier: action.rawValue, in: recorder, model: model)()
     }
 
     private func restoreDefaults() {
@@ -1288,18 +1281,8 @@ private struct CapabilityShortcutEditor: View {
                     isRecording: recorder.identifier == shortcut.rawValue,
                     liveModifiers: recorder.liveModifiers,
                     title: shortcut.title,
-                    record: {
-                        recorder.begin(
-                            identifier: shortcut.rawValue,
-                            suspend: { model.beginShortcutRecording() },
-                            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
-                            capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
-                            replace: { model.setShortcut($0, for: owner) },
-                            cancel: { model.cancelShortcutRecording() }
-                        )
-                    },
-                    // Not a recording ending: another row may be recording (#345).
-                    clear: { model.setShortcut(nil, for: owner) }
+                    record: ShortcutRowActions.record(owner, identifier: shortcut.rawValue, in: recorder, model: model),
+                    clear: ShortcutRowActions.clear(owner, model: model)
                 )
                 // A shortcut that starts unassigned has no default to restore; its field clears it.
                 if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
@@ -1399,6 +1382,42 @@ extension Notification.Name {
     static let openDictationHistory = Notification.Name("Keybumps.openDictationHistory")
 }
 
+/// What a Settings shortcut row's field does, the same on plugin pages and Window Manager's page.
+/// Rows pass these closures as they are, so tests run what the rows run.
+@MainActor
+enum ShortcutRowActions {
+    /// Records `owner`'s shortcut in `recorder`. Global shortcuts are off while it records, and a
+    /// shortcut another action uses is asked about before it moves.
+    static func record(
+        _ owner: ShortcutOwner,
+        identifier: String,
+        in recorder: ShortcutRecorderState,
+        model: AppModel
+    ) -> () -> Void {
+        {
+            recorder.begin(
+                identifier: identifier,
+                suspend: { model.beginShortcutRecording() },
+                conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
+                capture: { binding in
+                    switch owner {
+                    case .capability(let shortcut): model.finishCapabilityShortcutRecording(binding, for: shortcut)
+                    case .window(let action): model.finishWindowShortcutRecording(binding, for: action)
+                    }
+                },
+                replace: { model.setShortcut($0, for: owner) },
+                cancel: { model.cancelShortcutRecording() }
+            )
+        }
+    }
+
+    /// The clear button: no shortcut, without ending a recording or turning global shortcuts back
+    /// on, since another row may be recording (#345).
+    static func clear(_ owner: ShortcutOwner, model: AppModel) -> () -> Void {
+        { model.setShortcut(nil, for: owner) }
+    }
+}
+
 @MainActor @Observable
 final class ShortcutRecorderState {
     /// The field recording. One records at a time (#345): starting one ends any other, as on
@@ -1427,8 +1446,10 @@ final class ShortcutRecorderState {
             }
         }
     }
-    /// Says a question to VoiceOver when it appears. Tests replace it to hear what it says.
+    /// Says a question to VoiceOver when it appears. Tests replace it to hear what it says; left
+    /// as it is, it says nothing in the unit-test host.
     @ObservationIgnored var announce: @MainActor (String) -> Void = { announcement in
+        guard !UnitTestHost.isActive else { return }
         NSAccessibility.post(
             element: NSApp as Any,
             notification: .announcementRequested,
@@ -1773,7 +1794,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
 /// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
 /// a hotkey field that is recording, a sheet or alert, or a text field with text in it. While a
 /// field asks whether to take another action's shortcut, Escape means Cancel instead, even in a
-/// text field with text in it (#334).
+/// text field with text in it, unless a field is recording (#334).
 struct SettingsEscapeCloser: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { EscapeView() }
     func updateNSView(_ nsView: NSView, context: Context) {}

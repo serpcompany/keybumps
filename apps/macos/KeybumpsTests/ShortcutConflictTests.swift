@@ -298,7 +298,7 @@ struct ShortcutConflictTests {
         recording.recorder.announce = { heard.append($0) }
 
         recording.recorder.receive(Self.shiftCommandE)
-        #expect(heard == ["Shift Command E is used by Emoji Picker › Open Emoji Picker. Replace or Cancel."])
+        #expect(heard == ["Shift Command E is used by Open Emoji Picker in Emoji Picker. Replace or Cancel."])
 
         recording.recorder.dismissReplacement()
         #expect(heard.count == 1, "Cancel says nothing more")
@@ -324,7 +324,7 @@ struct ShortcutConflictTests {
 
         edit.recorder.confirmReplacement()
         #expect(heard.count == 2)
-        #expect(heard.last?.contains("Screenshot Tools › Screenshot Screen.") == true)
+        #expect(heard.last?.contains("used by Screenshot Screen in Screenshot Tools.") == true)
     }
 
     // MARK: One field records at a time (#345)
@@ -362,16 +362,19 @@ struct ShortcutConflictTests {
         #expect(registered.contains(CapabilityShortcut.quickSearch.ownerID))
 
         let screen = ShortcutRecorderState()
-        screen.recordAsSettingsDoes(.screenshotScreen, in: model)
+        ShortcutRowActions.record(.capability(.screenshotScreen), identifier: "screenshotScreen", in: screen, model: model)()
         #expect(model.shortcuts.activeOwners.isEmpty)
 
         let edit = ShortcutRecorderState()
-        edit.recordAsSettingsDoes(.screenshotScreenAndEdit, in: model)
+        ShortcutRowActions.record(.capability(.screenshotScreenAndEdit), identifier: "screenshotScreenAndEdit", in: edit, model: model)()
         #expect(screen.identifier == nil)
         #expect(model.shortcuts.isSuspendedForRecording, "The first field ending doesn't turn them on")
 
-        // Another row's clear button, as Settings wires it.
-        model.setShortcut(nil, for: .capability(.screenshotArea))
+        // Other rows' clear buttons, on a plugin page and on Window Manager's.
+        ShortcutRowActions.clear(.capability(.screenshotArea), model: model)()
+        ShortcutRowActions.clear(.window(.left), model: model)()
+        #expect(preferences.capabilityShortcut(for: .screenshotArea) == nil)
+        #expect(preferences.windowShortcut(for: .left) == nil)
         #expect(model.shortcuts.isSuspendedForRecording, "Clearing a row doesn't turn them on")
         #expect(model.shortcuts.activeOwners.isEmpty)
 
@@ -484,22 +487,6 @@ private extension AppModel {
             presenceController: NoPresenceChanges(),
             detector: ManualActionDetector(),
             shortcutCoordinator: GlobalShortcutCoordinator(backend: QuietHotKeys())
-        )
-    }
-}
-
-@MainActor
-private extension ShortcutRecorderState {
-    /// Records a plugin shortcut wired to the app model as its Settings row does.
-    func recordAsSettingsDoes(_ shortcut: CapabilityShortcut, in model: AppModel) {
-        let owner = ShortcutOwner.capability(shortcut)
-        begin(
-            identifier: shortcut.rawValue,
-            suspend: { model.beginShortcutRecording() },
-            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
-            capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
-            replace: { model.setShortcut($0, for: owner) },
-            cancel: { model.cancelShortcutRecording() }
         )
     }
 }
