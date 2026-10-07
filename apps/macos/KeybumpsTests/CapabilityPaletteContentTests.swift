@@ -299,6 +299,23 @@ struct CapabilityPaletteContentTests {
         preferences.setCapability(.keyboardShortcutter, enabled: false)
         #expect(content.rowCount(query: "") == 0)
     }
+
+    @Test("Caps Lock doesn't stop the palette's Command keys (#182)")
+    func capsLockKeepsCommandKeys() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_2, "2", modifiers: [.command, .capsLock])) == nil)
+        #expect(fixture.palette.state.tab == .clipboard)
+
+        for flags: NSEvent.ModifierFlags in [.command, [.command, .capsLock], [.command, .function], [.command, .numericPad]] {
+            #expect(CommandPaletteController.isCommandKey(Self.key(kVK_ANSI_E, "e", modifiers: flags)))
+        }
+        for flags: NSEvent.ModifierFlags in [[], .capsLock, [.command, .shift], [.command, .option], [.command, .control]] {
+            #expect(!CommandPaletteController.isCommandKey(Self.key(kVK_ANSI_E, "e", modifiers: flags)))
+        }
+    }
 }
 
 /// A palette over temporary folders and a named pasteboard, with fake rows on the Hotkeys tab.

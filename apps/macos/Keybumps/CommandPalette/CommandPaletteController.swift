@@ -556,6 +556,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Command and no other modifier. Caps Lock, Fn and the keypad flag don't count, so Caps Lock
+    /// doesn't stop the palette's Command keys (#182).
+    static func isCommandKey(_ event: NSEvent) -> Bool {
+        event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command
+    }
+
     /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
     /// with synthesized events, so no real keystroke is posted.
     func handleKeyDown(_ event: NSEvent) -> NSEvent? {
@@ -564,7 +570,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         // Another Keybumps window, such as Translation's download prompt, keeps its own keys (#321).
         guard CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel) else { return event }
 
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
+        if Self.isCommandKey(event) {
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
                 selectTab(tab)
                 return nil
