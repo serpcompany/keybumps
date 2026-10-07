@@ -1,5 +1,7 @@
 import { GoogleTagManager } from '@next/third-parties/google'
 import Script from 'next/script'
+import { ConsentBanner } from '@/components/consent-banner'
+import { consentCountries, consentEvent, consentStorageKey } from '@/lib/consent'
 import { isProductionSite } from '@/lib/site'
 
 /**
@@ -19,7 +21,15 @@ export function Analytics() {
   const cloudflareBeaconToken = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN
   return (
     <>
-      {gtmId ? <GoogleTagManager gtmId={gtmId} /> : null}
+      {gtmId ? (
+        <>
+          {/* Inline, so it runs as the page parses, before GTM loads after hydration. */}
+          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: a fixed script built from constants, with no visitor data. */}
+          <script id="consent-defaults" dangerouslySetInnerHTML={{ __html: consentDefaults }} />
+          <GoogleTagManager gtmId={gtmId} />
+          <ConsentBanner />
+        </>
+      ) : null}
       {cloudflareBeaconToken ? (
         <Script
           src="https://static.cloudflareinsights.com/beacon.min.js"
@@ -30,3 +40,17 @@ export function Analytics() {
     </>
   )
 }
+
+/**
+ * Google Consent Mode defaults (#337): denied in the countries that choose first
+ * (`lib/consent.ts`), granted elsewhere. A choice saved on this browser applies at once, and the
+ * banner's choice applies when it's made. Each update also pushes `keybumps_consent` to the
+ * dataLayer, so GTM can fire a tag that waits for consent, such as Meta's pixel, as soon as it's
+ * granted.
+ */
+const consentDefaults = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}
+gtag('consent','default',{ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',analytics_storage:'denied',region:${JSON.stringify(consentCountries)},wait_for_update:500});
+gtag('consent','default',{ad_storage:'granted',ad_user_data:'granted',ad_personalization:'granted',analytics_storage:'granted'});
+function keybumpsConsent(c){if(c!=='granted'&&c!=='denied')return;gtag('consent','update',{ad_storage:c,ad_user_data:c,ad_personalization:c,analytics_storage:c});dataLayer.push({event:'keybumps_consent',keybumps_consent:c})}
+try{keybumpsConsent(localStorage.getItem(${JSON.stringify(consentStorageKey)}))}catch(e){}
+addEventListener(${JSON.stringify(consentEvent)},function(e){keybumpsConsent(e.detail)});`
