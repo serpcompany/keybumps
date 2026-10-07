@@ -273,39 +273,42 @@ async function main() {
         () => true,
         () => false
       )
-  // Reads the page. If a navigation replaces the document mid-read, it reads the new document
-  // once that has loaded and settled.
-  const state = async () => {
-    for (let attempt = 1; ; attempt++) {
+  // Reads the page. Throws "Execution context was destroyed" if a navigation replaces it mid-read.
+  const state = () =>
+    page.evaluate(() => ({
+      url: location.href,
+      h1: document.querySelector('h1')?.textContent ?? null,
+      gtm: (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start')
+    }))
+  const H1 = { thanks: 'Thanks for buying Keybumps', license: 'Find your license key' }
+  let rereads = 0
+  // Expect a clean URL on `path` (with GTM on sensitive and analytics pages, none on a 404).
+  // `missed` names a navigation the step waited for and never saw, which fails the check. If a
+  // navigation replaces the page mid-read, read the new document the same way once it has loaded.
+  const expectAt = async (name, path, { h1, gtm = true, missed } = {}) => {
+    let s
+    for (let attempt = 1; !s; attempt++) {
+      await settle()
+      // Wait for GTM only where it belongs: a 404 is sampled after the fixed settle, so "no GTM"
+      // can't pass before GTM would have started.
+      if (gtm) await gtmStarted()
       try {
-        return await page.evaluate(() => ({
-          url: location.href,
-          h1: document.querySelector('h1')?.textContent ?? null,
-          gtm: (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start')
-        }))
+        s = await state()
       } catch (error) {
         if (attempt === 5 || !/Execution context was destroyed/.test(error.message)) throw error
-        console.log('NOTE  a navigation replaced the page while it was read; reading the new page')
+        rereads++
+        console.log(
+          `NOTE  ${name}: a navigation replaced the page while it was read; reading it again`
+        )
         // Playwright can still hold the old document's load state here, so ask the page itself
-        // (waitForFunction carries on into the new document), then settle the new document.
+        // (waitForFunction carries on into the new document) before settling again.
         await page
           .waitForFunction(() => document.readyState === 'complete', null, {
             timeout: NAVIGATION_TIMEOUT
           })
           .catch(() => {})
-        await settle()
       }
     }
-  }
-  const H1 = { thanks: 'Thanks for buying Keybumps', license: 'Find your license key' }
-  // Expect a clean URL on `path` (with GTM on sensitive and analytics pages, none on a 404).
-  // `missed` names a navigation the step waited for and never saw, which fails the check.
-  const expectAt = async (name, path, { h1, gtm = true, missed } = {}) => {
-    await settle()
-    // Wait for GTM only where it belongs: a 404 is sampled after the fixed settle, so "no GTM"
-    // can't pass before GTM would have started.
-    if (gtm) await gtmStarted()
-    const s = await state()
     const ok =
       !missed &&
       s.url === `${B}${path}` &&
@@ -560,7 +563,8 @@ async function main() {
   console.log(
     `\n${results.length - failed} passed, ${failed} failed. ${external.length} external requests captured, ` +
       `${pushes.length} dataLayer pushes recorded, ${starts} GTM starts. ` +
-      `Same-origin responses for URLs with the test values: ${tokenResponses.length} (${[...new Set(tokenResponses)].join(', ')}).`
+      `Same-origin responses for URLs with the test values: ${tokenResponses.length} (${[...new Set(tokenResponses)].join(', ')}).` +
+      ` Pages read again after a navigation replaced them: ${rereads}.`
   )
   return failed
 }
