@@ -26,7 +26,6 @@
 		0F5B463A70383784E45A5ED2 /* QuickSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8898653639A2B580518571 /* QuickSearchService.swift */; };
 		0F9EABDF5F3BCBE02BFBF742 /* ClipboardRestorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF70B9542E1EC86EB3239F6 /* ClipboardRestorer.swift */; };
 		105F1C13F817F48FC866DF69 /* WhisperKitModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBBB83D782A2BF34F2C7854D /* WhisperKitModelDownloader.swift */; };
-		1158F1422A6BE314CADBEBE0 /* PaletteQuickSelect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFE19EFC8648FFF72DC2F93 /* PaletteQuickSelect.swift */; };
 		12F31F615607750DD9191EC4 /* PolarLicenseProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */; };
 		161A262BE3EB96DB9C2DAB51 /* WindowManagementModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A74EE27B85AA3D9E80FB0F /* WindowManagementModule.swift */; };
 		168EB2F837DEC3518377B4C2 /* ChromeActionDetectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD93213A966A5B227684C10 /* ChromeActionDetectionTests.swift */; };
@@ -34,7 +33,6 @@
 		196F7631D2965DEC2D452BAF /* PluginSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29161E585C6565DB6B7E10DC /* PluginSettingsPage.swift */; };
 		197955C758CB29FF6F4DCA14 /* LICENSE.openai-whisper in Resources */ = {isa = PBXBuildFile; fileRef = 5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */; };
 		1A1112634F9877A12C8E3B19 /* AccessibilitySnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FC3BA2A7FE322EF92FB290 /* AccessibilitySnapshotter.swift */; };
-		1AE8E94B5AFA8C1F44212023 /* PaletteQuickSelectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096F269FF197DB3FEE96E805 /* PaletteQuickSelectTests.swift */; };
 		1B97ED234F1E2A347068FC1F /* finder-trash-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = F3872107ED622E1702DAE730 /* finder-trash-captured-sanitized-trace.json */; };
 		1C16C591081A70B947AD1444 /* OnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F766FFB10FBF4B3FBE6504B /* OnboardingFlowTests.swift */; };
 		1D325D80A085336EFE15D81D /* TimerDurationParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA172708D898A0BF0D7278B /* TimerDurationParser.swift */; };
@@ -245,7 +243,6 @@
 		0527E1B38CDBC40AFE8E6017 /* EmojiRenderCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiRenderCheck.swift; sourceTree = "<group>"; };
 		059D55AF379C93A1EABF75A1 /* SharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedViews.swift; sourceTree = "<group>"; };
 		093E9573AD23AF63BB1C065C /* DictationTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTranscriptionEngine.swift; sourceTree = "<group>"; };
-		096F269FF197DB3FEE96E805 /* PaletteQuickSelectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteQuickSelectTests.swift; sourceTree = "<group>"; };
 		0A1892ED7941254B63C36A71 /* chrome-153-settings-failing-trace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "chrome-153-settings-failing-trace.json"; sourceTree = "<group>"; };
 		0C53D92EB611917B9E44212C /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
 		0CF1124EE4DF4E49757D9D27 /* ScreenshotEditorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorPresenter.swift; sourceTree = "<group>"; };
@@ -321,7 +318,6 @@
 		57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		58C85AC05704376F0356083E /* ScreenshotToolsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotToolsService.swift; sourceTree = "<group>"; };
 		5C6764E3032BB803A72829A5 /* DictationTranslationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTranslationTests.swift; sourceTree = "<group>"; };
-		5CFE19EFC8648FFF72DC2F93 /* PaletteQuickSelect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteQuickSelect.swift; sourceTree = "<group>"; };
 		5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */ = {isa = PBXFileReference; path = "LICENSE.openai-whisper"; sourceTree = "<group>"; };
 		60D14DA1027E52F5893FC446 /* GlobalShortcutCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutCoordinator.swift; sourceTree = "<group>"; };
@@ -568,7 +564,6 @@
 				8BB4AB69EB04679F31DBE660 /* KeyboardShortcutterPaletteContent.swift */,
 				95AB2CB917A99899D63E4232 /* PaletteFilter.swift */,
 				AA9C2CC21396F16E615BBC8D /* PalettePasteRoute.swift */,
-				5CFE19EFC8648FFF72DC2F93 /* PaletteQuickSelect.swift */,
 				9A89EEB9E257B80261B8DB77 /* RaycastPaletteStyle.swift */,
 				D93E712317CAB0EF41AA01B2 /* SnippetPaletteResults.swift */,
 			);
@@ -644,7 +639,6 @@
 				874CCB1AF5C8EAD867309283 /* PaletteFilterTests.swift */,
 				13CF3F8C2C09E95F3410A211 /* PaletteFloatingSurfaceTests.swift */,
 				6E6694CCD914D45769EA6560 /* PaletteGridTests.swift */,
-				096F269FF197DB3FEE96E805 /* PaletteQuickSelectTests.swift */,
 				01831D72F5BB6DFCC7A8EFA2 /* PluginManifestTests.swift */,
 				15F712A12B63319A7DDD3502 /* PluginsCommandTests.swift */,
 				C58C75BA38A2AB150043D3EA /* PublicModelDownloadIntegrationTests.swift */,
@@ -1179,7 +1173,6 @@
 				55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */,
 				C2C53E3391331331AFEE4F68 /* PaletteFilter.swift in Sources */,
 				9331398905CF4D5BFC769F4C /* PalettePasteRoute.swift in Sources */,
-				1158F1422A6BE314CADBEBE0 /* PaletteQuickSelect.swift in Sources */,
 				8C21790C7031D23EE928A323 /* PasteboardSnapshot.swift in Sources */,
 				29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */,
 				E34B508A541203FA4ADF33E5 /* PermissionPrompts.swift in Sources */,
@@ -1287,7 +1280,6 @@
 				1E06BE81B86C45C1EBD05F0D /* PaletteFilterTests.swift in Sources */,
 				E28A57C09FE5AF43F27144CF /* PaletteFloatingSurfaceTests.swift in Sources */,
 				BB7903129F5DB2BD7B7531FC /* PaletteGridTests.swift in Sources */,
-				1AE8E94B5AFA8C1F44212023 /* PaletteQuickSelectTests.swift in Sources */,
 				828EFE5516C46673401134BD /* PluginManifestTests.swift in Sources */,
 				96AFB77CA1910EE0ECA91D06 /* PluginsCommandTests.swift in Sources */,
 				ED773D1D56F424D545A9379E /* PublicModelDownloadIntegrationTests.swift in Sources */,
