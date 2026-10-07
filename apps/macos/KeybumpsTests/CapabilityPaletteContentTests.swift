@@ -326,6 +326,14 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.selection == 7, "Down goes on from the hovered tile")
         _ = fixture.palette.handleKeyDown(Self.key(kVK_RightArrow))
         #expect(fixture.palette.state.selection == 8, "Once the keys move in the grid, Right does too")
+
+        // Browsing with the keys, a bump of the mouse over a tile keeps Left and Right in the grid.
+        pointer = NSPoint(x: 10, y: 60)
+        fixture.palette.hover(row: 2)
+        #expect(fixture.palette.state.selection == 2)
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow))
+        #expect(fixture.palette.state.tab == .keyboardShortcutter)
+        #expect(fixture.palette.state.selection == 1)
     }
 
     @Test("Caps Lock doesn't stop the palette's Command keys (#182)")
