@@ -138,6 +138,12 @@ export default function PrivacyPage() {
         key with your receipt. We can see your email address, order details, license key, and
         country in Polar to provide support and handle refunds. We never see your full card number.
       </p>
+      <p>
+        When you buy, our website tells Google Analytics about the purchase: the order number,
+        amount, and currency, and, if you allowed analytics, the anonymous ID Google Analytics gave
+        your browser, so we can see which pages lead to purchases. It never sends your name, email,
+        address, or payment details.
+      </p>
 
       <h2>Website</h2>
       <p>

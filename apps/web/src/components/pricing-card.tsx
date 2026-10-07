@@ -23,7 +23,8 @@ export function PricingCard() {
         ))}
       </ul>
       {pricing.checkoutUrl ? (
-        <a href={pricing.checkoutUrl} className="btn btn-lg price-cta">
+        // /buy/ redirects to Polar's checkout with the visit's analytics IDs (#363).
+        <a href="/buy/" className="btn btn-lg price-cta">
           {pricing.cta} — {pricing.price}
           {pricing.period}
         </a>
