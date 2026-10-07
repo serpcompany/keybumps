@@ -137,6 +137,23 @@ final class CommandPaletteState {
     @ObservationIgnored private var pointerAtSelection: NSPoint?
     /// The pointer's position on screen; tests supply their own.
     @ObservationIgnored var mouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
+    /// Where the palette last saw the pointer over its rows, and when it got there. A row that
+    /// appears under a pointer resting since then, such as a search result that arrives late,
+    /// doesn't take the highlight (#347).
+    @ObservationIgnored private var pointerSeen: NSPoint?
+    @ObservationIgnored private var pointerSeenAt: TimeInterval = -.infinity
+    /// The time, in seconds; tests supply their own.
+    @ObservationIgnored var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// How long after the pointer last moved a hover still counts.
+    static let hoverAfterMove: TimeInterval = 0.25
+
+    /// The pointer is over the rows' area, moving or not.
+    func notePointer() {
+        let pointer = mouseLocation()
+        guard pointer != pointerSeen else { return }
+        pointerSeen = pointer
+        pointerSeenAt = now()
+    }
 
     /// Any key: whatever it does to the rows (typing that filters them, an arrow that scrolls
     /// them), the pointer has to move before a row under it takes the highlight.
@@ -148,8 +165,9 @@ final class CommandPaletteState {
     /// highlight last did. Returns whether it moved.
     @discardableResult
     func selectFromPointer(_ row: Int) -> Bool {
+        notePointer()
         let pointer = mouseLocation()
-        guard pointer != pointerAtSelection else { return false }
+        guard pointer != pointerAtSelection, now() - pointerSeenAt <= Self.hoverAfterMove else { return false }
         pointerAtSelection = pointer
         guard row != selection else {
             if !selectionFollowsPointer { selectionFollowsPointer = true }
@@ -174,6 +192,8 @@ final class CommandPaletteState {
     }
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
+    /// The recording whose Delete confirmation is showing.
+    var dictationPendingDeletion: DictationHistoryEntry?
     /// How many times the palette has closed. Its views stay alive while it's hidden, so work that
     /// mustn't outlast a showing, such as a translation, stops when this changes.
     private(set) var closings = 0
@@ -187,6 +207,7 @@ final class CommandPaletteState {
         isBrowsingGrid = false
         filter = nil
         snippetPendingDeletion = nil
+        dictationPendingDeletion = nil
     }
 }
 
@@ -437,7 +458,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// without calling its binding, so the palette takes its keys back here, as `ClearAllButton`
     /// does when it disappears.
     func selectOnOpening(_ tab: CommandPaletteTab) {
-        if state.snippetPendingDeletion != nil { isPresentingConfirmation = false }
+        if state.snippetPendingDeletion != nil || state.dictationPendingDeletion != nil { isPresentingConfirmation = false }
         state.select(tab)
         search.query = ""
         tabContents[tab]?.didShow(palette: contentActions)
@@ -576,6 +597,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                     requestDelete: { [weak self] snippet in self?.requestSnippetDeletion(snippet) },
                     delete: { [weak self] snippet in self?.deleteSnippet(snippet) }
                 ),
+                requestDictationDeletion: { [weak self] entry in self?.requestDictationDeletion(entry) },
+                deleteDictation: { [weak self] entry in self?.deleteDictation(entry) },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
                 },
@@ -952,8 +975,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard entries.indices.contains(index) else { return false }
             clipboard.delete(entries[index])
         case .dictation:
+            // A recording can't be made again, and a hover on the way to Delete can change which
+            // one is highlighted, so Delete asks first.
             guard filteredDictations.indices.contains(index) else { return false }
-            dictationHistory.delete(filteredDictations[index])
+            requestDictationDeletion(filteredDictations[index])
+            return true
         case .snippets:
             // Snippets are things you wrote, not history, so Delete asks first.
             let entries = snippetContent.entries
@@ -1191,6 +1217,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     /// Shows the Delete confirmation for a snippet.
+    func requestDictationDeletion(_ entry: DictationHistoryEntry) {
+        state.dictationPendingDeletion = entry
+        isPresentingConfirmation = true
+    }
+
+    private func deleteDictation(_ entry: DictationHistoryEntry) {
+        dictationHistory.delete(entry)
+        state.selection = min(state.selection, max(0, itemCount - 1))
+    }
+
     func requestSnippetDeletion(_ snippet: Snippet) {
         state.snippetPendingDeletion = snippet
         isPresentingConfirmation = true
@@ -1296,6 +1332,9 @@ private struct CommandPaletteView: View {
     let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
     let snippetActions: SnippetPaletteActions
+    /// Delete on a recording asks first (`requestDictationDeletion`); the alert's Delete deletes.
+    let requestDictationDeletion: (DictationHistoryEntry) -> Void
+    let deleteDictation: (DictationHistoryEntry) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let chooseFilter: (PaletteFilter) -> Void
     /// Copies (false) or pastes (true) an emoji from Quick Search's results.
@@ -1320,6 +1359,11 @@ private struct CommandPaletteView: View {
             )
             content
                 .environment(\.paletteRevealsSelection, !state.selectionFollowsPointer)
+                // The pointer moving anywhere over the rows, gaps and empty space included, so a
+                // row that appears under it later can tell it was resting.
+                .onContinuousHover { phase in
+                    if case .active = phase { state.notePointer() }
+                }
                 .contentMargins(.bottom, 56, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
@@ -1427,7 +1471,9 @@ private struct CommandPaletteView: View {
                 choose: copyDictationText,
                 transcribe: { entry in Task { await dictationService.transcribe(entry) } },
                 retryingEntryID: dictationService.retryingEntryID,
-                delete: dictationHistory.delete,
+                requestDelete: requestDictationDeletion,
+                delete: deleteDictation,
+                pendingDeletion: $state.dictationPendingDeletion,
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )

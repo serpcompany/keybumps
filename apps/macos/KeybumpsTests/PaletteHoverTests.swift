@@ -77,6 +77,45 @@ struct PaletteHoverTests {
         #expect(fixture.palette.state.selection == 2)
     }
 
+    @Test("A row that appears under a pointer resting since it last moved doesn't take the highlight")
+    func restingPointer() {
+        let fixture = HoverFixture()
+        defer { fixture.tearDown() }
+        for index in 1...10 { fixture.clipboard.ingestForTesting("made-up text \(index)") }
+        fixture.palette.selectOnOpening(.clipboard)
+        let state = fixture.palette.state
+
+        // The pointer moves onto empty space under the rows, and rests there.
+        fixture.pointer = NSPoint(x: 10, y: 400)
+        state.notePointer()
+        fixture.clock += 2
+        fixture.palette.hover(row: 6)
+        #expect(state.selection == 0, "A late row under a resting pointer")
+
+        fixture.pointer = NSPoint(x: 10, y: 402)
+        fixture.palette.hover(row: 6)
+        #expect(state.selection == 6, "Moving again counts at once")
+    }
+
+    @Test("Deleting a recording asks first, from the Delete key too, so a hover can't retarget it unseen")
+    func dictationDeleteAsks() throws {
+        let fixture = HoverFixture()
+        defer { fixture.tearDown() }
+        let audio = fixture.folder.url.appendingPathComponent("made-up.wav")
+        try Data(count: 64).write(to: audio)
+        let entry = try fixture.dictationHistory.record("made-up words", language: "en-US", duration: 1, audioSourceURL: audio)
+        fixture.palette.selectOnOpening(.dictation)
+        let delete = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "\u{7f}", charactersIgnoringModifiers: "\u{7f}", isARepeat: false, keyCode: UInt16(kVK_Delete)
+        )!
+
+        #expect(fixture.palette.handleKeyDown(delete) == nil)
+        #expect(fixture.palette.state.dictationPendingDeletion?.id == entry.id)
+        #expect(fixture.dictationHistory.entries.count == 1, "Nothing is deleted until the alert's Delete")
+        #expect(fixture.palette.handleKeyDown(delete) != nil, "While the alert shows, it has the keys")
+    }
+
     @Test("A row that's no longer in the list can't take the highlight")
     func staleRowIsIgnored() {
         let fixture = HoverFixture()
@@ -100,8 +139,10 @@ private final class HoverFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsHover-\(UUID().uuidString)"))
     let clipboard: ClipboardHistoryService
+    let dictationHistory: DictationHistoryService
     let palette: CommandPaletteController
     var pointer = NSPoint(x: -1000, y: -1000)
+    var clock: TimeInterval = 100
 
     init() {
         let root = folder.url
@@ -111,7 +152,7 @@ private final class HoverFixture {
             mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true),
             sourceApps: .inert
         )
-        let dictationHistory = DictationHistoryService(
+        dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
         palette = CommandPaletteController(
@@ -127,6 +168,7 @@ private final class HoverFixture {
             search: QuickSearchModel.forTests(in: root)
         )
         palette.state.mouseLocation = { [unowned self] in pointer }
+        palette.state.now = { [unowned self] in clock }
     }
 
     func tearDown() {
