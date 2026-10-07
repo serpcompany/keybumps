@@ -300,71 +300,7 @@ struct CapabilityPaletteContentTests {
         #expect(content.rowCount(query: "") == 0)
     }
 
-    // MARK: ⇧1–9 quick select (#182)
-
-    static func shiftNumber(_ number: Int, extra: NSEvent.ModifierFlags = []) -> NSEvent {
-        let keyCodes = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6, kVK_ANSI_7, kVK_ANSI_8, kVK_ANSI_9]
-        let symbols = Array("!@#$%^&*(")
-        return key(keyCodes[number - 1], String(symbols[number - 1]), modifiers: NSEvent.ModifierFlags.shift.union(extra))
-    }
-
-    @Test("⇧N highlights the Nth row on screen and does what Return does, instead of typing a symbol")
-    func shiftNumberActivatesTheRow() {
-        let fixture = ModuleTabFixture()
-        defer { fixture.tearDown() }
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
-
-        #expect(fixture.palette.handleKeyDown(Self.shiftNumber(2)) == nil, "⇧2 doesn't type @")
-        #expect(fixture.palette.state.selection == 1)
-        #expect(fixture.content.activations == [.init(row: 1, query: "", withCommand: false)])
-
-        #expect(fixture.palette.handleKeyDown(Self.shiftNumber(9)) == nil)
-        #expect(fixture.content.activations.count == 1, "There's no ninth row")
-        #expect(fixture.palette.handleKeyDown(Self.shiftNumber(1, extra: .command)) != nil, "⇧⌘1 isn't quick select")
-    }
-
-    @Test("Numbers follow the rows on screen: after scrolling, ⇧1 is the top one showing")
-    func shiftNumberFollowsTheRowsOnScreen() {
-        let fixture = ModuleTabFixture()
-        defer { fixture.tearDown() }
-        fixture.content.rows = 30
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
-        let quickSelect = fixture.palette.state.quickSelect
-        let views = (0..<30).map { _ in UUID() }
-        quickSelect.setViewport(CGRect(x: 0, y: 0, width: 800, height: 1000))
-        func onScreen(_ slot: Int) -> CGRect { CGRect(x: 0, y: CGFloat(slot) * 40, width: 800, height: 40) }
-        for row in 12...20 { quickSelect.report(views[row], row: row, frame: onScreen(row - 12)) }
-
-        _ = fixture.palette.handleKeyDown(Self.shiftNumber(1))
-        #expect(fixture.content.activations.last?.row == 12)
-        _ = fixture.palette.handleKeyDown(Self.shiftNumber(9))
-        #expect(fixture.content.activations.last?.row == 20)
-
-        // Scrolled to the end, with only four rows showing.
-        for row in 12...20 { quickSelect.report(views[row], row: row, frame: nil) }
-        for row in 26...29 { quickSelect.report(views[row], row: row, frame: onScreen(row - 26)) }
-        _ = fixture.palette.handleKeyDown(Self.shiftNumber(5))
-        #expect(fixture.content.activations.last?.row == 20, "⇧5 picks nothing when only four rows show")
-        _ = fixture.palette.handleKeyDown(Self.shiftNumber(4))
-        #expect(fixture.content.activations.last?.row == 29)
-    }
-
-    @Test("A grid with tiles too small to number, such as Emoji's, takes ⇧-numbers without acting")
-    func shiftNumberSkipsTheEmojiGrid() {
-        let fixture = ModuleTabFixture()
-        defer { fixture.tearDown() }
-        fixture.content.isGrid = true
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
-
-        #expect(fixture.palette.handleKeyDown(Self.shiftNumber(1)) == nil)
-        #expect(fixture.content.activations.isEmpty)
-
-        fixture.palette.state.historyQuery = "smile"
-        _ = fixture.palette.handleKeyDown(Self.shiftNumber(1))
-        #expect(fixture.content.activations == [.init(row: 0, query: "smile", withCommand: false)], "Search results are a list")
-    }
-
-    @Test("Caps Lock doesn't stop the palette's Command keys")
+    @Test("Caps Lock doesn't stop the palette's Command keys (#182)")
     func capsLockKeepsCommandKeys() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
@@ -372,7 +308,13 @@ struct CapabilityPaletteContentTests {
 
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_2, "2", modifiers: [.command, .capsLock])) == nil)
         #expect(fixture.palette.state.tab == .clipboard)
-        #expect(fixture.palette.handleKeyDown(Self.shiftNumber(1, extra: .capsLock)) == nil, "Nor ⇧-numbers")
+
+        for flags: NSEvent.ModifierFlags in [.command, [.command, .capsLock], [.command, .function], [.command, .numericPad]] {
+            #expect(CommandPaletteController.isCommandKey(Self.key(kVK_ANSI_E, "e", modifiers: flags)))
+        }
+        for flags: NSEvent.ModifierFlags in [[], .capsLock, [.command, .shift], [.command, .option], [.command, .control]] {
+            #expect(!CommandPaletteController.isCommandKey(Self.key(kVK_ANSI_E, "e", modifiers: flags)))
+        }
     }
 }
 

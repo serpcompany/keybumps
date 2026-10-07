@@ -193,7 +193,6 @@ private struct TimerPaletteResults: View {
                 }
                 Button { select(index) } label: {
                     TimerRowView(row: row, now: now)
-                        .paletteQuickSelect(row: index)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .contentShape(Rectangle())

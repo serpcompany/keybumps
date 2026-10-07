@@ -75,7 +75,6 @@ struct DictationPaletteResults: View {
                 List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                     Button { select(index) } label: {
                         DictationPaletteRow(entry: entry, isTranscribing: retryingEntryID == entry.id)
-                            .paletteQuickSelect(row: index)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .contentShape(Rectangle())

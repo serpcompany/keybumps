@@ -123,8 +123,6 @@ final class CommandPaletteState {
     /// The module-supplied tabs whose rows re-rank as you type.
     var tabsResettingSelectionWhileTyping: Set<CommandPaletteTab> = []
     var selection = 0
-    /// Which rows are on screen, for ⇧1–9 (#182).
-    let quickSelect = PaletteQuickSelect()
     /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
     /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
     var isBrowsingGrid = false
@@ -558,6 +556,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Command and no other modifier. Caps Lock, Fn and the keypad flag don't count, so Caps Lock
+    /// doesn't stop the palette's Command keys (#182).
+    static func isCommandKey(_ event: NSEvent) -> Bool {
+        event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command
+    }
+
     /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
     /// with synthesized events, so no real keystroke is posted.
     func handleKeyDown(_ event: NSEvent) -> NSEvent? {
@@ -566,8 +570,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         // Another Keybumps window, such as Translation's download prompt, keeps its own keys (#321).
         guard CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel) else { return event }
 
-        // Caps Lock doesn't stop a Command key (#182).
-        if event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command {
+        if Self.isCommandKey(event) {
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
                 selectTab(tab)
                 return nil
@@ -583,12 +586,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             if state.tab == .snippets, handleSnippetCommandKey(event.charactersIgnoringModifiers) {
                 return nil
             }
-        }
-
-        // ⇧1–9 picks a row on screen, in place of typing `!`, `@`, `#` and so on (#182).
-        if let number = PaletteQuickSelect.number(for: event), !isComposingText {
-            quickSelect(number)
-            return nil
         }
 
         // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control, or
@@ -706,17 +703,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             NSWorkspace.shared.notificationCenter.removeObserver(appSwitchObserver)
             self.appSwitchObserver = nil
         }
-    }
-
-    /// ⇧1–9: highlights that row on screen and does what Return does on it. A tab whose rows have
-    /// no Return action, such as Hotkeys, just highlights it. Emoji's grid has no numbers; its
-    /// tiles are too small for keycaps.
-    private func quickSelect(_ number: Int) {
-        if filterMenu == nil, let tabContent, tabContent.isGrid(query: state.historyQuery) { return }
-        guard let row = state.quickSelect.row(for: number), (0..<itemCount).contains(row) else { return }
-        state.selection = row
-        if isGridTab { state.isBrowsingGrid = true }
-        activateSelection(reveal: false)
     }
 
     private func moveSelection(_ delta: Int) {
@@ -1244,10 +1230,6 @@ private struct CommandPaletteView: View {
                 select: selectTab
             )
             content
-                .environment(state.quickSelect)
-                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
-                    state.quickSelect.setViewport(frame)
-                }
                 .contentMargins(.bottom, 56, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
@@ -1259,9 +1241,6 @@ private struct CommandPaletteView: View {
                             in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
                         ) != nil,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
-                        // Emoji's grid has no numbers (`quickSelect(_:)`).
-                        showsQuickSelect: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) != nil
-                            || tabContents[state.tab]?.isGrid(query: state.historyQuery) != true,
                         selectedSearchItem: state.tab == .search
                             ? QuickSearchModel.highlightedItem(in: searchItems, query: search.query, selection: state.selection)
                             : nil,
@@ -1570,7 +1549,6 @@ private struct SearchResultsView: View {
                         List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
                             Button { open(item.result) } label: {
                                 SearchResultRow(result: item.result)
-                                    .paletteQuickSelect(row: index)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 10)
                                     .contentShape(Rectangle())
@@ -1614,7 +1592,6 @@ private struct SearchResultsView: View {
                                         ),
                                         isTurnedOff: command.isTurnedOff(enabledCapabilities: enabledCapabilities)
                                     )
-                                    .paletteQuickSelect(row: index)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 10)
                                     .contentShape(Rectangle())
@@ -1628,7 +1605,6 @@ private struct SearchResultsView: View {
                                     snippetActions.copy(snippet)
                                 } label: {
                                     QuickSearchSnippetRow(snippet: snippet)
-                                        .paletteQuickSelect(row: index)
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 10)
                                         .contentShape(Rectangle())
@@ -1646,7 +1622,6 @@ private struct SearchResultsView: View {
                                     chooseEmoji(emoji, false)
                                 } label: {
                                     QuickSearchEmojiRow(emoji: emoji)
-                                        .paletteQuickSelect(row: index)
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 10)
                                         .contentShape(Rectangle())
@@ -1664,7 +1639,6 @@ private struct SearchResultsView: View {
                                     open(result)
                                 } label: {
                                     SearchResultRow(result: result)
-                                    .paletteQuickSelect(row: index)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 10)
                                     .contentShape(Rectangle())
@@ -1871,7 +1845,6 @@ private struct ClipboardResultsView: View {
                                 entry: entry,
                                 showsEditHint: edit != nil && index == selection && entry.kind == .image
                             )
-                            .paletteQuickSelect(row: index)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .contentShape(Rectangle())
@@ -2219,7 +2192,6 @@ private struct ScreenshotGrid: View {
                                     choose: { select(index); choose(entry) },
                                     delete: { delete(entry) }
                                 )
-                                .paletteQuickSelectTile(row: index)
                                 .id(entry.id)
                             }
                         }
@@ -2340,8 +2312,6 @@ private struct PaletteFooter: View {
     let isChoosingFilter: Bool
     /// Whether the search field is empty, so Left and Right switch tabs rather than move the caret.
     let isSearchEmpty: Bool
-    /// Whether ⇧1–9 picks a row here.
-    let showsQuickSelect: Bool
     /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
     let selectedSearchItem: QuickSearchItem?
     /// A module tab's actions for its selected row; they replace the tab's registered titles.
@@ -2360,11 +2330,7 @@ private struct PaletteFooter: View {
             PaletteSettingsButton(action: openSettings)
             Spacer()
             HStack(spacing: 14) {
-                hint(
-                    "Select",
-                    keys: (isGrid ? (isBrowsingGrid ? ["←", "→", "↑", "↓"] : ["↓"]) : ["↑", "↓"]) + (showsQuickSelect ? ["⇧1–9"] : []),
-                    isPrimary: false
-                )
+                hint("Select", keys: isGrid ? (isBrowsingGrid ? ["←", "→", "↑", "↓"] : ["↓"]) : ["↑", "↓"], isPrimary: false)
                 if !(isGrid && isBrowsingGrid), isSearchEmpty {
                     hint("Change Tab", keys: ["←", "→"], isPrimary: false)
                 }

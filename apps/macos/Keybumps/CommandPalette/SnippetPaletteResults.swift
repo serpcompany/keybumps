@@ -120,7 +120,6 @@ struct SnippetPaletteResults: View {
             List(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
                 Button { actions.copy(snippet) } label: {
                     SnippetRow(snippet: snippet, isSelected: index == selection)
-                        .paletteQuickSelect(row: index)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .contentShape(Rectangle())
