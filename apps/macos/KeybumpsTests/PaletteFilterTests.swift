@@ -24,6 +24,25 @@ struct PaletteFilterTests {
         #expect(PaletteFilter.menu(in: .snippets, query: "/") == nil)
     }
 
+    @Test("Quick Search's / offers Emoji only while it finds emoji, and the filter matches emoji rows (#333)")
+    func emojiFilter() {
+        #expect(PaletteFilter.menu(in: .search, query: "/")?.contains(.emoji) == false)
+        #expect(PaletteFilter.menu(in: .search, query: "/em", searchFindsEmoji: true) == [.emoji])
+        #expect(PaletteFilter.menu(in: .clipboard, query: "/", searchFindsEmoji: true)?.contains(.emoji) == false)
+        let emoji = QuickSearchItem.emoji(QuickSearchEmoji(glyph: "🎉", baseGlyph: "🎉", name: "party popper"))
+        #expect(PaletteFilter.emoji.matches(emoji))
+        #expect(!PaletteFilter.commands.matches(emoji))
+        #expect(!PaletteFilter.emoji.matches(.command(.keybumpsSettings)))
+    }
+
+    @Test("Quick Search lists emoji after apps, commands, and snippets, and before files (#333)")
+    func emojiRanking() {
+        let file = QuickSearchResult(url: URL(fileURLWithPath: "/tmp/party.txt"), kind: .file)
+        let emoji = QuickSearchEmoji(glyph: "🎉", baseGlyph: "🎉", name: "party popper")
+        let items = QuickSearchRanking.items(matching: "party", applications: [], files: [file], emoji: [emoji])
+        #expect(items.suffix(2) == [.emoji(emoji), .result(file)])
+    }
+
     @Test("A link is one http or https address and nothing else")
     func links() {
         #expect(PaletteFilter.isLink("https://example.com/a?b=c"))

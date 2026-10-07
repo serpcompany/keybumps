@@ -202,10 +202,21 @@ extension QuickSearchCommand {
 // MARK: - Quick Search rows
 
 /// One Quick Search result row: a Keybumps command, a snippet, or an app, file, or folder.
+/// An emoji Quick Search found through Emoji Picker (#333), in the skin tone chosen there.
+struct QuickSearchEmoji: Hashable {
+    /// What Return copies: the emoji in the chosen skin tone.
+    let glyph: String
+    /// The emoji without a skin tone, as Recent keeps it.
+    let baseGlyph: String
+    let name: String
+}
+
 enum QuickSearchItem: Identifiable, Hashable {
     case command(QuickSearchCommand)
     /// Return copies it and Command-Return pastes it, as in the Snippets tab.
     case snippet(Snippet)
+    /// Return copies it and Command-Return pastes it, as in the Emoji tab.
+    case emoji(QuickSearchEmoji)
     case result(QuickSearchResult)
 
     var id: Self { self }
@@ -217,13 +228,17 @@ enum QuickSearchItem: Identifiable, Hashable {
 
     /// The footer's actions while this row is selected: a snippet's, or the Search tab's.
     var primaryActionTitle: String? {
-        guard case .snippet = self else { return CommandPaletteTab.search.primaryActionTitle }
-        return "Copy"
+        switch self {
+        case .snippet, .emoji: "Copy"
+        default: CommandPaletteTab.search.primaryActionTitle
+        }
     }
 
     var secondaryActionTitle: String? {
-        guard case .snippet = self else { return CommandPaletteTab.search.secondaryActionTitle }
-        return "Paste"
+        switch self {
+        case .snippet, .emoji: "Paste"
+        default: CommandPaletteTab.search.secondaryActionTitle
+        }
     }
 }
 
@@ -248,6 +263,7 @@ extension QuickSearchRanking {
         files: [QuickSearchResult],
         commands: [QuickSearchCommand] = QuickSearchCommand.allCases,
         snippets: [Snippet] = [],
+        emoji: [QuickSearchEmoji] = [],
         usage: ApplicationUsageStore? = nil
     ) -> [QuickSearchItem] {
         let normalizedTerm = normalized(term)
@@ -270,6 +286,6 @@ extension QuickSearchRanking {
         let typedKeywords = snippetMatches.filter { SnippetSearch.isWholeKeyword($0, query: term) }
         let otherSnippets = snippetMatches.filter { !SnippetSearch.isWholeKeyword($0, query: term) }
         return typedKeywords.map(QuickSearchItem.snippet) + ranked + otherSnippets.map(QuickSearchItem.snippet)
-            + files.map(QuickSearchItem.result)
+            + emoji.map(QuickSearchItem.emoji) + files.map(QuickSearchItem.result)
     }
 }

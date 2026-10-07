@@ -201,6 +201,28 @@ struct EmojiPaletteContentTests {
         #expect(tab.glyph(for: holdingHands) == "🧑🏽‍🤝‍🧑🏽", "Both people take the tone")
     }
 
+    @Test("Quick Search finds emoji in the chosen skin tone, at most the limit, while its setting is on (#333)")
+    func quickSearchMatches() throws {
+        defer { try? FileManager.default.removeItem(at: url) }
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.set(.choice("medium"), of: .emojiSkinTone, for: .emojiPicker)
+        let tab = try content(preferences)
+
+        let thumbs = tab.quickSearchMatches("+1", limit: 6)
+        #expect(thumbs.first == QuickSearchEmoji(glyph: "👍🏽", baseGlyph: "👍", name: "thumbs up"))
+        #expect(tab.quickSearchMatches("heart", limit: 3).count == 3)
+        #expect(tab.quickSearchMatches("", limit: 6).isEmpty, "An empty query lists Recent Items, not emoji")
+
+        tab.useFromQuickSearch(try #require(thumbs.first))
+        #expect(tab.recents.glyphs == ["👍"], "Recent keeps the base emoji")
+
+        preferences.set(.bool(false), of: .emojiInQuickSearch, for: .emojiPicker)
+        #expect(tab.quickSearchMatches("+1", limit: 6).isEmpty)
+        preferences.set(.bool(true), of: .emojiInQuickSearch, for: .emojiPicker)
+        preferences.setCapability(.emojiPicker, enabled: false)
+        #expect(tab.quickSearchMatches("+1", limit: 6).isEmpty, "Emoji Picker off finds none")
+    }
+
     @Test("While Emoji Picker is off the tab has no rows")
     func offHasNoRows() throws {
         defer { try? FileManager.default.removeItem(at: url) }
@@ -247,7 +269,7 @@ struct EmojiPickerPluginTests {
         #expect(descriptor.requiredPermissions.isEmpty)
         #expect(descriptor.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(!descriptor.isOnByDefault)
-        #expect(descriptor.preferences.map(\.key) == ["skinTone", "remembersRecent"])
+        #expect(descriptor.preferences.map(\.key) == ["skinTone", "remembersRecent", "showsInQuickSearch"])
         #expect(CapabilityShortcut.emojiPicker.defaultBinding == nil, "Open Emoji Picker starts unassigned")
         #expect(CapabilityCatalog.requiredPermissions(for: [.emojiPicker]).isEmpty, "An optional permission is never setup it needs")
         #expect(QuickSearchCommand.capability(.emojiPicker).match("emoji") == .name || QuickSearchCommand.capability(.emojiPicker).match("emoji") == .keyword)

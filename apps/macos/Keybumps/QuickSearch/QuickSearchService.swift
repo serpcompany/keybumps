@@ -35,6 +35,11 @@ final class QuickSearchModel {
     /// The snippets a query can find: none until the palette supplies them, which it does only while
     /// Snippets is on.
     @ObservationIgnored var snippets: () -> [Snippet] = { [] }
+    /// The emoji a query can find, at most the given number: none until Emoji Picker supplies them
+    /// (#333), which it does only while it's on and Show emoji in Quick Search is too.
+    @ObservationIgnored var emoji: (_ query: String, _ limit: Int) -> [QuickSearchEmoji] = { _, _ in [] }
+    /// How many emoji a query lists: a few among the other results, or more under `/`'s Emoji filter.
+    @ObservationIgnored var emojiLimit: () -> Int = { 6 }
 
     private let applications: [QuickSearchResult]
     /// Whether a query also runs the Spotlight search of the home folder for files and folders.
@@ -110,7 +115,8 @@ final class QuickSearchModel {
             usage: applicationUsage
         )
         items = QuickSearchRanking.items(
-            matching: term, applications: Array(appMatches.prefix(12)), files: [], snippets: snippets(), usage: applicationUsage
+            matching: term, applications: Array(appMatches.prefix(12)), files: [], snippets: snippets(),
+            emoji: emoji(term, emojiLimit()), usage: applicationUsage
         )
         guard searchesFiles else { return }
 
@@ -156,7 +162,8 @@ final class QuickSearchModel {
             if files.count == 30 { break }
         }
         items = QuickSearchRanking.items(
-            matching: term, applications: Array(appMatches.prefix(12)), files: files, snippets: snippets(), usage: applicationUsage
+            matching: term, applications: Array(appMatches.prefix(12)), files: files, snippets: snippets(),
+            emoji: emoji(term, emojiLimit()), usage: applicationUsage
         )
     }
 
