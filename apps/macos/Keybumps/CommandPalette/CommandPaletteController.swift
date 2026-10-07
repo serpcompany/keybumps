@@ -137,6 +137,11 @@ final class CommandPaletteState {
     }
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
+    /// How many times the palette has closed. Its views stay alive while it's hidden, so work that
+    /// mustn't outlast a showing, such as a translation, stops when this changes.
+    private(set) var closings = 0
+
+    func didClose() { closings += 1 }
 
     func select(_ tab: CommandPaletteTab) {
         self.tab = tab
@@ -162,10 +167,66 @@ final class CommandPalettePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Whether the palette closes when it stops being key or a click lands outside it. Escape closes it
+/// either way.
 enum CommandPaletteDismissalPolicy {
-    static func shouldDismiss(isPresentingConfirmation: Bool) -> Bool {
-        !isPresentingConfirmation
+    /// - Parameters:
+    ///   - isPresentingConfirmation: A confirmation alert shows; it takes the palette's keys too.
+    ///   - isHeldOpen: Something in the palette holds it open (`holdCommandPaletteOpen`), such as a
+    ///     translation whose system download prompt is a Keybumps window of its own (#321). A hold
+    ///     only covers Keybumps's own windows: callers never pass it for another app.
+    static func shouldDismiss(isPresentingConfirmation: Bool = false, isHeldOpen: Bool = false) -> Bool {
+        !isPresentingConfirmation && !isHeldOpen
     }
+
+    /// When the palette stops being key. A hold keeps it only while key focus went to another
+    /// Keybumps window, such as the download prompt; switching to another app closes it.
+    static func shouldDismissOnResignKey(
+        isPresentingConfirmation: Bool,
+        isHeldOpen: Bool,
+        keyWentToOwnWindow: Bool
+    ) -> Bool {
+        shouldDismiss(isPresentingConfirmation: isPresentingConfirmation, isHeldOpen: isHeldOpen && keyWentToOwnWindow)
+    }
+
+    /// Whether the palette's keys handle a key: only one sent to the panel, or to no window. Keys
+    /// typed into another Keybumps window, such as Translation's download prompt, are that window's.
+    static func palettesKey(eventWindow: NSWindow?, panel: NSWindow?) -> Bool {
+        eventWindow == nil || eventWindow === panel
+    }
+
+    /// Whether the palette becomes key again as the last hold lets go: it's still showing but lost
+    /// key focus to a window that has since closed, and no other Keybumps window is key.
+    static func shouldTakeKeyBack(isHeldOpen: Bool, isVisible: Bool, isKey: Bool, keybumpsHasKeyWindow: Bool) -> Bool {
+        !isHeldOpen && isVisible && !isKey && !keybumpsHasKeyWindow
+    }
+}
+
+/// Holds the Command Palette open against clicks in Keybumps's other windows once it's called with
+/// `true` for an ID, until it's called with `false` for that ID or the palette closes. Outside the
+/// palette it does nothing. Equal for the same palette, so the environment value doesn't redraw its
+/// readers.
+struct CommandPaletteHold: Equatable {
+    private weak var palette: CommandPaletteController?
+
+    init(palette: CommandPaletteController? = nil) {
+        self.palette = palette
+    }
+
+    @MainActor
+    func callAsFunction(_ holder: UUID, _ isHeld: Bool) {
+        palette?.holdOpen(isHeld, by: holder)
+    }
+
+    /// How many times the palette has closed (`CommandPaletteState.closings`); 0 outside it.
+    @MainActor
+    var closings: Int { palette?.state.closings ?? 0 }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
+}
+
+extension EnvironmentValues {
+    @Entry var holdCommandPaletteOpen = CommandPaletteHold()
 }
 
 @MainActor
@@ -195,7 +256,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
     private var localClickMonitor: Any?
+    private var appSwitchObserver: NSObjectProtocol?
     private var isPresentingConfirmation = false
+    /// Who holds the palette open against clicks in Keybumps's other windows
+    /// (`holdCommandPaletteOpen`). Closing the palette lets them all go, so a hold never outlasts
+    /// one showing.
+    private var openHolds: Set<UUID> = []
+    var isHeldOpen: Bool { !openHolds.isEmpty }
     private let notices: any PaletteNoticePresenting
     /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
@@ -300,9 +367,28 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     func dismiss() {
+        // Before hiding, which resigns key: a held resign would otherwise queue a second dismiss.
+        openHolds.removeAll()
         panel?.orderOut(nil)
         isPresentingConfirmation = false
+        state.didClose()
         removeMonitors()
+    }
+
+    /// Holds the palette open against outside clicks for `holder`, or lets it go. The palette's
+    /// views reach it through `holdCommandPaletteOpen`.
+    func holdOpen(_ isHeld: Bool, by holder: UUID) {
+        if isHeld { openHolds.insert(holder) } else { openHolds.remove(holder) }
+        // Once the prompt that took key focus is gone, the palette takes its keys back, as when
+        // it opened, so Escape and the arrow keys reach it again.
+        if let panel, CommandPaletteDismissalPolicy.shouldTakeKeyBack(
+            isHeldOpen: isHeldOpen,
+            isVisible: panel.isVisible,
+            isKey: panel.isKeyWindow,
+            keybumpsHasKeyWindow: NSApp.keyWindow != nil
+        ) {
+            panel.makeKey()
+        }
     }
 
     func dismiss(ifDisplaying tab: CommandPaletteTab) {
@@ -342,11 +428,31 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        if CommandPaletteDismissalPolicy.shouldDismiss(
-            isPresentingConfirmation: isPresentingConfirmation
+        guard isHeldOpen else { return resignedKey(to: nil) }
+        // While held, see where key focus went once it has moved: to a Keybumps window, such as
+        // the download prompt, or to another app.
+        DispatchQueue.main.async { [weak self] in self?.resignedKey(to: NSApp.keyWindow) }
+    }
+
+    /// Runs once the palette stopped being key, with the window that is key now (nil for another
+    /// app). Internal so tests can say where key focus went.
+    func resignedKey(to keyWindow: NSWindow?) {
+        if let keyWindow, keyWindow === panel { return }
+        if CommandPaletteDismissalPolicy.shouldDismissOnResignKey(
+            isPresentingConfirmation: isPresentingConfirmation,
+            isHeldOpen: isHeldOpen,
+            keyWentToOwnWindow: keyWindow != nil
         ) {
             dismiss()
         }
+    }
+
+    /// Switching to another app closes the palette, held or not, so it never floats over that app.
+    /// Internal so tests can say which app came to the front.
+    func didActivateApp(processIdentifier: pid_t?) {
+        guard processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              CommandPaletteDismissalPolicy.shouldDismiss(isPresentingConfirmation: isPresentingConfirmation) else { return }
+        dismiss()
     }
 
     private func makePanel() {
@@ -401,6 +507,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
+            .environment(\.holdCommandPaletteOpen, CommandPaletteHold(palette: self))
             .uiTestAnimationsDisabled()
         )
         panel.setContentSize(size)
@@ -454,6 +561,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     func handleKeyDown(_ event: NSEvent) -> NSEvent? {
         // A confirmation alert handles its own keys: Return confirms, Escape cancels.
         guard !isPresentingConfirmation else { return event }
+        // Another Keybumps window, such as Translation's download prompt, keeps its own keys (#321).
+        guard CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel) else { return event }
 
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command {
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
@@ -551,14 +660,24 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private func installOutsideMonitors() {
         removeOutsideMonitors()
+        // A click in another app always closes the palette: a hold covers only Keybumps's own
+        // windows, which this monitor never sees.
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
             Task { @MainActor in self?.dismiss() }
+        }
+        appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let processIdentifier = app?.processIdentifier
+            MainActor.assumeIsolated { self?.didActivateApp(processIdentifier: processIdentifier) }
         }
         localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             guard let self else { return event }
             if event.window !== self.panel,
                CommandPaletteDismissalPolicy.shouldDismiss(
-                   isPresentingConfirmation: self.isPresentingConfirmation
+                   isPresentingConfirmation: self.isPresentingConfirmation,
+                   isHeldOpen: self.isHeldOpen
                ) {
                 self.dismiss()
             }
@@ -574,6 +693,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func removeOutsideMonitors() {
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor); self.outsideMonitor = nil }
         if let localClickMonitor { NSEvent.removeMonitor(localClickMonitor); self.localClickMonitor = nil }
+        if let appSwitchObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(appSwitchObserver)
+            self.appSwitchObserver = nil
+        }
     }
 
     private func moveSelection(_ delta: Int) {
