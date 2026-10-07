@@ -5,7 +5,7 @@ import SwiftUI
 /// filters ("Filter by …"); choosing one narrows the tab's items until it's removed.
 enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
     // Quick Search
-    case applications, files, folders, commands, snippets
+    case applications, files, folders, commands, snippets, emoji
     // Clipboard History
     case text, images, links
     // Screenshots and Dictation
@@ -22,6 +22,7 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
         case .folders: "Folders"
         case .commands: "Commands"
         case .snippets: "Snippets"
+        case .emoji: "Emoji"
         case .text: "Text"
         case .images: "Images"
         case .links: "Links"
@@ -38,6 +39,7 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
         case .folders: "folder"
         case .commands: "command"
         case .snippets: "text.badge.plus"
+        case .emoji: "face.smiling"
         case .text: "text.alignleft"
         case .images: "photo"
         case .links: "link"
@@ -47,10 +49,11 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
         }
     }
 
-    /// The filters `/` lists in `tab`, in order. Tabs with none type `/` as usual.
-    static func available(in tab: CommandPaletteTab) -> [PaletteFilter] {
+    /// The filters `/` lists in `tab`, in order. Tabs with none type `/` as usual. Quick Search
+    /// offers Emoji only while it finds emoji (`searchFindsEmoji`).
+    static func available(in tab: CommandPaletteTab, searchFindsEmoji: Bool = false) -> [PaletteFilter] {
         switch tab {
-        case .search: [.applications, .files, .folders, .commands, .snippets]
+        case .search: [.applications, .files, .folders, .commands, .snippets] + (searchFindsEmoji ? [.emoji] : [])
         case .clipboard: [.text, .images, .links]
         case .screenshots: [.today, .thisWeek]
         case .dictation: [.today, .thisWeek, .unfinished]
@@ -61,9 +64,9 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
     /// The filters a query starting with `/` lists: all of the tab's, or those whose title starts
     /// with what follows the `/`. Nil when the query doesn't open the list, or when no title matches,
     /// so a search that starts with `/`, such as a path or a `/sig` snippet keyword, still searches.
-    static func menu(in tab: CommandPaletteTab, query: String) -> [PaletteFilter]? {
+    static func menu(in tab: CommandPaletteTab, query: String, searchFindsEmoji: Bool = false) -> [PaletteFilter]? {
         guard query.hasPrefix("/") else { return nil }
-        let filters = available(in: tab)
+        let filters = available(in: tab, searchFindsEmoji: searchFindsEmoji)
         guard !filters.isEmpty else { return nil }
         let typed = query.dropFirst().trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty else { return filters }
@@ -75,7 +78,7 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
 
     func matches(_ item: QuickSearchItem) -> Bool {
         switch (self, item) {
-        case (.commands, .command), (.snippets, .snippet): true
+        case (.commands, .command), (.snippets, .snippet), (.emoji, .emoji): true
         case (.applications, .result(let result)): result.kind == .application
         case (.files, .result(let result)): result.kind == .file
         case (.folders, .result(let result)): result.kind == .folder

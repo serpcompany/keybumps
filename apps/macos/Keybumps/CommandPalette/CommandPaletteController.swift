@@ -171,6 +171,7 @@ enum CommandPaletteDismissalPolicy {
 @MainActor
 final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let search: QuickSearchModel
+    private var useQuickSearchEmoji: (QuickSearchEmoji) -> Void = { _ in }
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
     private let dictationService: DictationService
@@ -396,6 +397,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                     self?.isPresentingConfirmation = isPresented
                 },
                 chooseFilter: { [weak self] filter in self?.chooseFilter(filter) },
+                chooseEmoji: { [weak self] emoji, paste in self?.chooseQuickSearchEmoji(emoji, paste: paste) },
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
@@ -643,7 +645,28 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// The filters `/` lists while the search field starts with it, or nil.
     private var filterMenu: [PaletteFilter]? {
-        PaletteFilter.menu(in: state.tab, query: activeQuery)
+        PaletteFilter.menu(in: state.tab, query: activeQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji)
+    }
+
+    /// Emoji Picker's part in Quick Search (#333): the emoji a query finds, and what using one
+    /// records. `matches` returns none while it's off or Show emoji in Quick Search is.
+    func setQuickSearchEmoji(
+        matches: @escaping (_ query: String) -> [QuickSearchEmoji],
+        use: @escaping (QuickSearchEmoji) -> Void
+    ) {
+        search.emoji = matches
+        useQuickSearchEmoji = use
+    }
+
+    /// Copies a Quick Search emoji, or with `paste` pastes it and puts the clipboard back, as the
+    /// Emoji tab does.
+    func chooseQuickSearchEmoji(_ emoji: QuickSearchEmoji, paste: Bool) {
+        useQuickSearchEmoji(emoji)
+        if paste {
+            pasteText(emoji.glyph, restoresClipboard: true, for: .emojiPicker)
+        } else {
+            copyText(emoji.glyph)
+        }
     }
 
     /// Applies a filter from `/`'s list and clears the `/` from the search field.
@@ -748,7 +771,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// Quick Search's results and recent items, narrowed by the chosen filter.
     private var searchItems: [QuickSearchItem] {
-        state.filter.apply(search.items) { $0.matches($1) }
+        QuickSearchEmoji.limited(state.filter.apply(search.items) { $0.matches($1) }, showsAll: state.filter == .emoji)
     }
 
     private var recentSearchItems: [RecentItem] {
@@ -786,6 +809,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 choose(command)
             case .snippet(let snippet):
                 reveal ? pasteSnippet(snippet) : copySnippet(snippet)
+            case .emoji(let emoji):
+                chooseQuickSearchEmoji(emoji, paste: reveal)
             case .result(let result):
                 reveal ? self.reveal(result) : open(result)
             }
@@ -1055,6 +1080,8 @@ private struct CommandPaletteView: View {
     let snippetActions: SnippetPaletteActions
     let confirmationPresentationChanged: (Bool) -> Void
     let chooseFilter: (PaletteFilter) -> Void
+    /// Copies (false) or pastes (true) an emoji from Quick Search's results.
+    let chooseEmoji: (QuickSearchEmoji, Bool) -> Void
     let dismiss: () -> Void
 
     @FocusState private var inputFocused: Bool
@@ -1081,7 +1108,9 @@ private struct CommandPaletteView: View {
                         isGrid: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) == nil
                             && (state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true),
                         isBrowsingGrid: state.isBrowsingGrid,
-                        isChoosingFilter: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) != nil,
+                        isChoosingFilter: PaletteFilter.menu(
+                            in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
+                        ) != nil,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
                         selectedSearchItem: state.tab == .search
                             ? QuickSearchModel.highlightedItem(in: searchItems, query: search.query, selection: state.selection)
@@ -1122,7 +1151,9 @@ private struct CommandPaletteView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let filters = PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) {
+        if let filters = PaletteFilter.menu(
+            in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
+        ) {
             PaletteFilterMenu(filters: filters, selection: state.selection, select: { state.selection = $0 }, choose: chooseFilter)
         } else if let tabContent = tabContents[state.tab] {
             tabContent.makeView(PaletteContentContext(
@@ -1153,6 +1184,7 @@ private struct CommandPaletteView: View {
                 reveal: revealSearchResult,
                 run: chooseCommand,
                 snippetActions: snippetActions,
+                chooseEmoji: chooseEmoji,
                 deleteRecentItem: search.recentItems.delete,
                 clearRecentItems: search.recentItems.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -1247,7 +1279,7 @@ private struct CommandPaletteView: View {
 
     /// Quick Search's results and recent items, narrowed by the chosen filter.
     private var searchItems: [QuickSearchItem] {
-        state.filter.apply(search.items) { $0.matches($1) }
+        QuickSearchEmoji.limited(state.filter.apply(search.items) { $0.matches($1) }, showsAll: state.filter == .emoji)
     }
 
     private var recentSearchItems: [RecentItem] {
@@ -1351,6 +1383,7 @@ private struct SearchResultsView: View {
     let reveal: (QuickSearchResult) -> Void
     let run: (QuickSearchCommand) -> Void
     let snippetActions: SnippetPaletteActions
+    let chooseEmoji: (QuickSearchEmoji, Bool) -> Void
     let deleteRecentItem: (RecentItem) -> Void
     let clearRecentItems: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
@@ -1455,6 +1488,23 @@ private struct SearchResultsView: View {
                                 .accessibilityAction(named: "Paste") { snippetActions.paste(snippet) }
                                 .accessibilityHint("Copies the snippet")
                                 .accessibilityIdentifier("quickSearch.snippet")
+                            case .emoji(let emoji):
+                                Button {
+                                    chooseEmoji(emoji, false)
+                                } label: {
+                                    QuickSearchEmojiRow(emoji: emoji)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Copy") { chooseEmoji(emoji, false) }
+                                    Button("Paste") { chooseEmoji(emoji, true) }
+                                }
+                                .accessibilityAction(named: "Paste") { chooseEmoji(emoji, true) }
+                                .accessibilityHint("Copies the emoji")
+                                .accessibilityIdentifier("quickSearch.emoji")
                             case .result(let result):
                                 Button {
                                     open(result)
@@ -1514,6 +1564,28 @@ private struct SearchResultRow: View {
                 .foregroundStyle(.secondary)
         }
         .help(result.detail)
+    }
+}
+
+/// An emoji in Quick Search's results (#333): the emoji where an icon goes, then its name.
+private struct QuickSearchEmojiRow: View {
+    let emoji: QuickSearchEmoji
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(emoji.glyph)
+                .font(.system(size: 20))
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+            Text(emoji.name.prefix(1).uppercased() + emoji.name.dropFirst())
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1)
+            Spacer(minLength: 12)
+            Text("Emoji")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

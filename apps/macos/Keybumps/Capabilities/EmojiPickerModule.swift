@@ -27,7 +27,7 @@ extension CapabilityDescriptor {
         criticalOperations: [],
         searchKeywords: ["emoji", "emojis", "smiley"],
         category: .writing,
-        preferences: [.emojiSkinTone, .emojiRemembersRecent],
+        preferences: [.emojiSkinTone, .emojiRemembersRecent, .emojiInQuickSearch],
         optionalPermissions: [
             PluginOptionalPermission(
                 permission: .accessibility,
@@ -60,6 +60,20 @@ extension PluginPreference {
         group: "Picking",
         kind: .toggle(default: true)
     )
+    static let emojiInQuickSearch = PluginPreference(
+        key: "showsInQuickSearch",
+        title: "Show emoji in Quick Search",
+        subtitle: "Matching emoji appear in Quick Search's results, after apps, commands, and snippets.",
+        group: "Picking",
+        kind: .toggle(default: true)
+    )
+}
+
+extension AppPreferences {
+    /// Whether Quick Search finds emoji (#333): Emoji Picker is on, and so is its setting.
+    var quickSearchFindsEmoji: Bool {
+        enabledCapabilities.contains(.emojiPicker) && bool(.emojiInQuickSearch, for: .emojiPicker)
+    }
 }
 
 /// Owns the Emoji tab (`EmojiPaletteContent`) and its optional Open Emoji Picker shortcut. It ships
@@ -90,6 +104,11 @@ final class EmojiPickerModule: CapabilityModule {
             palette?.toggle(.emoji)
         }
         if !preferences.bool(.emojiRemembersRecent, for: .emojiPicker) { recents.clear() }
+        palette.setQuickSearchEmoji(
+            matches: { [weak emojiTab] query in emojiTab?.quickSearchMatches(query) ?? [] },
+            use: { [weak emojiTab] emoji in emojiTab?.useFromQuickSearch(emoji) }
+        )
+        if preferences.quickSearchFindsEmoji { emojiTab.prepareForQuickSearch() }
     }
 
     func deactivate(_ context: CapabilityContext) {

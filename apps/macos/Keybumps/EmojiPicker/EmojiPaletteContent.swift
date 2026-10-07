@@ -57,6 +57,28 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
         loadIfNeeded()
     }
 
+    // MARK: Quick Search (#333)
+
+    /// Loads the list ahead of Quick Search's first query.
+    func prepareForQuickSearch() {
+        loadIfNeeded()
+    }
+
+    /// Quick Search's emoji for a query: every match of the Emoji tab's search, while Emoji Picker
+    /// and Show emoji in Quick Search are on. None until the list has loaded.
+    func quickSearchMatches(_ query: String) -> [QuickSearchEmoji] {
+        guard preferences.quickSearchFindsEmoji, Self.isSearching(query) else { return [] }
+        loadIfNeeded()
+        return rows(query: query).map {
+            QuickSearchEmoji(glyph: glyph(for: $0), baseGlyph: $0.glyph, name: $0.name)
+        }
+    }
+
+    /// An emoji used from Quick Search becomes the most recent, as in the tab.
+    func useFromQuickSearch(_ emoji: QuickSearchEmoji) {
+        if remembersRecent { recents.use(emoji.baseGlyph) }
+    }
+
     private func loadIfNeeded() {
         guard library == nil, !loadFailed, !isLoading else { return }
         isLoading = true

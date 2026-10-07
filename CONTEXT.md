@@ -57,7 +57,7 @@ _Avoid_: Feedback, bug report, ticket
 ### Capabilities
 
 **Quick Search**:
-Finding and opening local applications, files, and folders, finding snippets by keyword or name, and running Quick Search commands; the default Command Palette tab.
+Finding and opening local applications, files, and folders, finding snippets by keyword or name and emoji by name (while Emoji Picker shows them there), and running Quick Search commands; the default Command Palette tab.
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:
