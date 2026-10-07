@@ -95,9 +95,11 @@ final class SmokeUITests: XCTestCase {
         }
         // The fill happens just after the window appears, and again once the Dock has settled.
         let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 10) == .completed
+        let geometry = element("settings.windowGeometry")
+        let appSide = geometry.exists ? String(describing: geometry.value ?? "no value") : "not found"
         XCTAssertTrue(
             settled,
-            "Settings \(window.frame) lies within a screen's visible frame \(Self.visibleFrames()); Dock \(dockFrame()). At the start: \(atStart)"
+            "Settings \(window.frame) lies within a screen's visible frame \(Self.visibleFrames()); Dock \(dockFrame()). At the start: \(atStart). App: \(appSide)"
         )
     }
 

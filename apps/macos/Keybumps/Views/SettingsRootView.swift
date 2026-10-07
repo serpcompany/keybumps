@@ -1503,6 +1503,26 @@ struct SettingsWindowFiller: NSViewRepresentable {
             } else {
                 fill(attempt: 1)
             }
+            reportGeometryForUITests()
+        }
+
+        /// TEMPORARY (#294 diagnosis): in UI-test mode, the window's geometry as this view's
+        /// accessibility value, so a UI test can compare the app's view with the runner's.
+        private func reportGeometryForUITests() {
+            guard UITestLaunchConfiguration.current.isUITesting else { return }
+            setAccessibilityElement(true)
+            setAccessibilityRole(.staticText)
+            setAccessibilityIdentifier("settings.windowGeometry")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, let window = self.window else { return }
+                let screen = window.screen
+                self.setAccessibilityValue(
+                    "frame=\(window.frame) visible=\(String(describing: screen?.visibleFrame)) screen=\(String(describing: screen?.frame)) "
+                        + "contentMin=\(window.contentMinSize) minSize=\(window.minSize) contentLayout=\(window.contentLayoutRect) "
+                        + "fullSize=\(window.styleMask.contains(.fullSizeContentView)) filled=\(self.preferences.didFillSettingsWindow) "
+                        + "screens=\(NSScreen.screens.map(\.visibleFrame))"
+                )
+            }
         }
 
         /// Fills the screen, then checks once the window has settled: if macOS restored a saved
