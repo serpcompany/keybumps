@@ -391,6 +391,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             state.tabsResettingSelectionWhileTyping = Set(tabContents.values.filter(\.resetsSelectionWhileTyping).map(\.tab))
         }
     }
+    /// Unit tests only: measures where each tab lays out its header, rows, and grid
+    /// (`PaletteLayoutProbe`). Set it before the palette first lays out; the app never does.
+    var layoutProbe: PaletteLayoutProbe? {
+        didSet { precondition(panel == nil, "Set the palette's layout probe before it first lays out") }
+    }
     private var panel: NSPanel?
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
@@ -688,6 +693,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
+            .environment(\.paletteLayoutProbe, layoutProbe)
             .environment(\.holdCommandPaletteOpen, CommandPaletteHold(palette: self))
             .environment(\.paletteHover, CommandPaletteHover(palette: self))
             .uiTestAnimationsDisabled()
@@ -1992,10 +1998,12 @@ private struct PaletteSearchField: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // A fixed height too: a taller symbol, such as the Clipboard tab's, once made the field
+            // a point taller and moved everything under it (#381).
             Image(systemName: tab.systemImage)
                 .font(.system(size: 19, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 24)
+                .frame(width: 24, height: 24)
             if let filter {
                 PaletteFilterChip(filter: filter) { self.filter = nil }
             }
@@ -2043,9 +2051,7 @@ private struct SearchResultsView: View {
                     .accessibilityIdentifier("quickSearch.noRecentItems")
                 } else {
                     VStack(spacing: 0) {
-                        HStack {
-                            PaletteSectionHeader("Recent Items")
-                            Spacer()
+                        PaletteListHeader(title: "Recent Items") {
                             ClearAllButton(
                                 confirmationTitle: "Clear recent items?",
                                 confirmationMessage: "This permanently removes your locally saved recently opened items.",
@@ -2055,9 +2061,6 @@ private struct SearchResultsView: View {
                             )
                             .buttonStyle(PalettePillButtonStyle())
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 10)
-                        .padding(.bottom, 6)
 
                         // No per-row trash button: Delete removes the highlighted Recent Item, and the
                         // context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
@@ -2065,9 +2068,6 @@ private struct SearchResultsView: View {
                             List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
                                 Button { open(item.result) } label: {
                                     SearchResultRow(result: item.result)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
@@ -2112,9 +2112,6 @@ private struct SearchResultsView: View {
                                         ),
                                         isTurnedOff: command.isTurnedOff(enabledCapabilities: enabledCapabilities)
                                     )
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .help(hint)
@@ -2125,9 +2122,6 @@ private struct SearchResultsView: View {
                                     snippetActions.copy(snippet)
                                 } label: {
                                     QuickSearchSnippetRow(snippet: snippet)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
@@ -2142,9 +2136,6 @@ private struct SearchResultsView: View {
                                     chooseEmoji(emoji, false)
                                 } label: {
                                     QuickSearchEmojiRow(emoji: emoji)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 10)
-                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
@@ -2159,9 +2150,6 @@ private struct SearchResultsView: View {
                                     open(result)
                                 } label: {
                                     SearchResultRow(result: result)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
@@ -2190,24 +2178,25 @@ private struct SearchResultRow: View {
     let result: QuickSearchResult
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: result.url.path))
-                .resizable()
-                .frame(width: 28, height: 28)
-            Text(result.name)
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(1)
-                .layoutPriority(1)
-            if result.kind != .application {
-                Text(result.url.deletingLastPathComponent().lastPathComponent)
+        PaletteRow {
+            PaletteRowAppIcon(image: NSWorkspace.shared.icon(forFile: result.url.path))
+        } content: {
+            HStack(spacing: 12) {
+                Text(result.name)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if result.kind != .application {
+                    Text(result.url.deletingLastPathComponent().lastPathComponent)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                Text(result.kind.rawValue)
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            Spacer(minLength: 12)
-            Text(result.kind.rawValue)
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
         }
         .help(result.detail)
     }
@@ -2218,18 +2207,18 @@ private struct QuickSearchEmojiRow: View {
     let emoji: QuickSearchEmoji
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(emoji.glyph)
-                .font(.system(size: 20))
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-            Text(emoji.name.prefix(1).uppercased() + emoji.name.dropFirst())
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(1)
-            Spacer(minLength: 12)
-            Text("Emoji")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+        PaletteRow {
+            PaletteRowEmoji(glyph: emoji.glyph)
+        } content: {
+            HStack(spacing: 12) {
+                Text(emoji.name.prefix(1).uppercased() + emoji.name.dropFirst())
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text("Emoji")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -2241,31 +2230,30 @@ private struct QuickSearchSnippetRow: View {
     let snippet: Snippet
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: SnippetPaletteResults.symbol)
-                .font(.system(size: 15))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
-                .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        PaletteRow {
+            PaletteRowIcon(systemImage: SnippetPaletteResults.symbol)
                 .accessibilityHidden(true)
-            Text(snippet.name)
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(1)
-                .layoutPriority(1)
-            if snippet.isSensitive {
-                Image(systemName: "lock.fill")
-                    .imageScale(.small)
+        } content: {
+            HStack(spacing: 12) {
+                Text(snippet.name)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if snippet.isSensitive {
+                    Image(systemName: "lock.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                        .help("Sensitive: the text is kept in the Keychain")
+                        .accessibilityLabel("Sensitive")
+                }
+                Spacer(minLength: 12)
+                if let keyword = snippet.keyword {
+                    SnippetKeywordChip(keyword: keyword)
+                }
+                Text("Snippet")
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                    .help("Sensitive: the text is kept in the Keychain")
-                    .accessibilityLabel("Sensitive")
             }
-            Spacer(minLength: 12)
-            if let keyword = snippet.keyword {
-                SnippetKeywordChip(keyword: keyword)
-            }
-            Text("Snippet")
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
     }
@@ -2279,26 +2267,28 @@ private struct QuickSearchCommandRow: View {
     let isTurnedOff: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        PaletteRow {
             icon
-                .frame(width: 28, height: 28)
-            Text(command.title)
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(1)
-                .layoutPriority(1)
-            if isTurnedOff {
-                Text("Turned off")
+        } content: {
+            HStack(spacing: 12) {
+                Text(command.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if isTurnedOff {
+                    Text("Turned off")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                if let shortcut {
+                    PaletteKeycaps(shortcut: shortcut)
+                }
+                Text(command.kindLabel)
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            Spacer(minLength: 12)
-            if let shortcut {
-                PaletteKeycaps(shortcut: shortcut)
-            }
-            Text(command.kindLabel)
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -2306,13 +2296,12 @@ private struct QuickSearchCommandRow: View {
     private var icon: some View {
         switch command {
         case .keybumpsSettings:
-            Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-                .resizable()
+            PaletteRowAppIcon(image: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
         case .capability(let capability):
-            SettingsIconTile(systemImage: capability.systemImage, tint: capability.descriptor.iconTint, size: 24)
+            SettingsIconTile(systemImage: capability.systemImage, tint: capability.descriptor.iconTint, size: PaletteRowMetrics.iconTileSize)
                 .accessibilityHidden(true)
         case .plugins:
-            SettingsIconTile(systemImage: SettingsSection.plugins.icon, tint: .indigo, size: 24)
+            SettingsIconTile(systemImage: SettingsSection.plugins.icon, tint: .indigo, size: PaletteRowMetrics.iconTileSize)
                 .accessibilityHidden(true)
         }
     }
@@ -2338,9 +2327,7 @@ private struct ClipboardResultsView: View {
                 PaletteEmptyState(title: emptyTitle, systemImage: "clipboard")
             } else {
                 VStack(spacing: 0) {
-                    HStack {
-                        PaletteSectionHeader("Recent")
-                        Spacer()
+                    PaletteListHeader(title: "Recent") {
                         ClearAllButton(
                             confirmationTitle: clearTitle,
                             confirmationMessage: clearMessage,
@@ -2350,9 +2337,6 @@ private struct ClipboardResultsView: View {
                         )
                         .buttonStyle(PalettePillButtonStyle())
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
-                    .padding(.bottom, 6)
 
                     // No per-row trash button: Delete (or ⌘⌫ while typing) removes the selected row,
                     // and the context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
@@ -2363,9 +2347,6 @@ private struct ClipboardResultsView: View {
                                     entry: entry,
                                     showsEditHint: edit != nil && index == selection && entry.kind == .image
                                 )
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
@@ -2406,50 +2387,61 @@ struct ClipboardRow: View {
     let showsEditHint: Bool
 
     var body: some View {
-        HStack(spacing: 14) {
+        PaletteRow {
             ClipboardEntryPreview(entry: entry)
-            VStack(alignment: .leading, spacing: 3) {
-                ClipboardEntryTitle(entry: entry)
-                Text(ClipboardRowPresentation.timestamp(entry.capturedAt))
-                    .font(.system(size: 12))
-                    .monospacedDigit()
-                    // The fixed month-first text would read as another date to day-first listeners.
-                    .accessibilityLabel(ClipboardRowPresentation.spokenTimestamp(entry.capturedAt))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        } content: {
+            HStack(spacing: 14) {
+                details
+                accessories
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Right to left: the app icon column, the app name, the domain, then Edit ⌘E on the
-            // selected image row. Only the name and domain give way when space runs out.
-            HStack(spacing: 10) {
-                HStack(spacing: 14) {
-                    if showsEditHint {
-                        HStack(spacing: 6) {
-                            Text("Edit").fixedSize()
-                            HStack(spacing: 3) {
-                                PaletteKeycap("⌘")
-                                PaletteKeycap("E")
-                            }
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Edit with Command-E")
-                    }
-                    if let domain = entry.sourceDomain {
-                        ClipboardSourceDomainLabel(domain: domain)
-                    }
-                    if let sourceApp = entry.sourceApp {
-                        ClipboardSourceAppLabel(app: sourceApp)
-                    }
-                }
-                .lineLimit(1)
-                // The palette's right-aligned accessory size, as in Quick Search's rows.
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                ClipboardSourceAppIcon(app: entry.sourceApp)
-            }
-            .frame(maxWidth: Self.accessoryMaxWidth, alignment: .trailing)
-            .layoutPriority(1)
         }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ClipboardEntryTitle(entry: entry)
+            Text(ClipboardRowPresentation.timestamp(entry.capturedAt))
+                .font(.system(size: 12))
+                .monospacedDigit()
+                // The fixed month-first text would read as another date to day-first listeners.
+                .accessibilityLabel(ClipboardRowPresentation.spokenTimestamp(entry.capturedAt))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Right to left: the app icon column, the app name, the domain, then Edit ⌘E on the selected
+    /// image row. Only the name and domain give way when space runs out.
+    private var accessories: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 14) {
+                if showsEditHint {
+                    HStack(spacing: 6) {
+                        Text("Edit").fixedSize()
+                        HStack(spacing: 3) {
+                            PaletteKeycap("⌘")
+                            PaletteKeycap("E")
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Edit with Command-E")
+                }
+                if let domain = entry.sourceDomain {
+                    ClipboardSourceDomainLabel(domain: domain)
+                }
+                if let sourceApp = entry.sourceApp {
+                    ClipboardSourceAppLabel(app: sourceApp)
+                }
+            }
+            .lineLimit(1)
+            // The palette's right-aligned accessory size, as in Quick Search's rows.
+            .font(.system(size: 14))
+            .foregroundStyle(.secondary)
+            ClipboardSourceAppIcon(app: entry.sourceApp)
+        }
+        .frame(maxWidth: Self.accessoryMaxWidth, alignment: .trailing)
+        .layoutPriority(1)
     }
 }
 
@@ -2636,9 +2628,8 @@ private struct ClipboardEntryPreview: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: 52, height: 38)
-        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-        .clipShape(.rect(cornerRadius: 6))
+        // The row's well, filled by a thumbnail.
+        .paletteWellTile()
         .accessibilityLabel(ClipboardRowPresentation.accessibilityKind(of: entry))
         .task(id: entry.mediaPath) {
             guard entry.kind == .image, let imageURL = entry.imageURL else {
@@ -2685,9 +2676,7 @@ private struct ScreenshotGrid: View {
     var body: some View {
         PaletteResultsContainer {
             VStack(spacing: 0) {
-                HStack {
-                    PaletteSectionHeader("Recent")
-                    Spacer()
+                PaletteListHeader(title: "Recent") {
                     ClearAllButton(
                         confirmationTitle: "Clear screenshots?",
                         confirmationMessage: "This removes screenshots from Keybumps history. The screenshot files stay where macOS saved them.",
@@ -2697,9 +2686,6 @@ private struct ScreenshotGrid: View {
                     )
                     .buttonStyle(PalettePillButtonStyle())
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-                .padding(.bottom, 6)
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -2718,8 +2704,9 @@ private struct ScreenshotGrid: View {
                                 .id(entry.id)
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 4)
+                        // The first thumbnail sits where the list tabs' first well does (#381).
+                        .padding(.horizontal, PaletteRowMetrics.wellX)
+                        .padding(.vertical, PaletteRowMetrics.verticalInset)
                     }
                     .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
                 }
@@ -2758,6 +2745,7 @@ private struct ScreenshotCard: View {
                 .contentShape(shape)
             }
             .buttonStyle(.plain)
+            .paletteLayoutProbe(.gridItem)
             .overlay(alignment: .topTrailing) {
                 if isHovering || isSelected {
                     Button("Delete", systemImage: "trash", role: .destructive, action: delete)
