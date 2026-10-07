@@ -29,6 +29,8 @@
  *   `CONTEXT.md`, and `docs/releases/*.md`.
  */
 
+import type { MacOSVersion } from './site'
+
 /** `PluginCategory`: the categories plugins are listed under. */
 export const pluginCategories = ['Productivity', 'Writing', 'Media'] as const
 export type PluginCategory = (typeof pluginCategories)[number]
@@ -120,8 +122,11 @@ export type Plugin = {
   isDefault: boolean
   /** The newest added capability, marked New on /plugins/. */
   isNew?: boolean
-  /** The descriptor's `minimumMacOS`, for a plugin that needs a newer macOS than Keybumps does. */
-  minimumMacOS?: string
+  /**
+   * The descriptor's `minimumMacOS`, for a plugin that needs a newer macOS than Keybumps does
+   * (`MINIMUM_MACOS`).
+   */
+  minimumMacOS?: MacOSVersion
   /** Its page's Overview: one or two paragraphs. */
   overview: readonly string[]
   /** Its page's Key features, one line each. */
@@ -765,7 +770,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can I find a translation again later?',
-        a: 'Yes, if you saved it with Return. With the field empty, the Translate tab lists your last 50 saved translations to copy, paste, or hear read aloud.'
+        a: 'Yes, if you saved it with Return or ⌘Return. With the field empty, the Translate tab lists your last 50 saved translations to copy, paste, or hear read aloud.'
       },
       {
         q: 'Does Dictation use the same languages?',
@@ -773,7 +778,7 @@ export const plugins: readonly Plugin[] = [
       }
     ],
     keeps: [
-      'The translations you save with Return, your last 50, are kept on this Mac. Clear Recent Translations in Settings › Translation removes them; turning Translation off keeps them.',
+      'For the last 50 translations you save with Return or ⌘Return, the text you translated and its translation are kept on this Mac. Clear Recent Translations in Settings › Translation removes them; turning Translation off keeps them.',
       'Text is translated on this Mac, with the languages you download in System Settings.'
     ]
   }

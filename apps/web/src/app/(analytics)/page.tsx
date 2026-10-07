@@ -10,7 +10,7 @@ import { getCurrentRelease } from '@/lib/latest-release'
 import { defaultOpenGraph } from '@/lib/metadata'
 import { linkPrefetch } from '@/lib/pages'
 import { cardShortcut, iconTints, pluginFor, pluginPath, plugins } from '@/lib/plugins'
-import { site } from '@/lib/site'
+import { MINIMUM_MACOS, site } from '@/lib/site'
 import {
   ClipboardVisual,
   DictationVisual,
@@ -182,10 +182,17 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
   }
 ]
 
+/** The last Command-number in "Jump to a tab": the highest of the tabs shown without a setting. */
+const lastTabKey = Math.max(
+  ...plugins.flatMap(plugin =>
+    plugin.paletteTab && !plugin.paletteTab.hiddenUnless ? [plugin.paletteTab.commandKey] : []
+  )
+)
+
 const questions = [
   {
     q: 'What can Keybumps replace?',
-    a: 'A launcher, a clipboard manager, a text expander, a dictation app, a window manager, a screenshot editor, a menu bar timer, and an emoji picker. Turn on the ones you want.'
+    a: 'A launcher, a clipboard manager, a text expander, a dictation app, a window manager, a screenshot editor, a menu bar timer, an emoji picker, and a translator. Turn on the ones you want.'
   },
   {
     q: 'Can I change the shortcuts?',
@@ -201,7 +208,7 @@ const questions = [
   },
   {
     q: 'What do I need to run Keybumps?',
-    a: 'An Apple silicon Mac running macOS 14.2 or later. Translating dictations needs macOS 15.'
+    a: `An Apple silicon Mac running macOS ${MINIMUM_MACOS} or later. The Translation plugin and translating dictations need macOS ${pluginFor('translation').minimumMacOS}.`
   },
   {
     q: 'Can I move it to a new Mac?',
@@ -221,7 +228,7 @@ export default async function Home() {
           description: site.description,
           url: site.url,
           applicationCategory: 'UtilitiesApplication',
-          operatingSystem: 'macOS 14.2 or later',
+          operatingSystem: `macOS ${MINIMUM_MACOS} or later`,
           softwareVersion: release.version,
           downloadUrl: release.dmgURL
         }}
@@ -249,7 +256,7 @@ export default async function Home() {
               See what it does
             </a>
           </div>
-          <p className="fine">Apple silicon · macOS 14.2 or later</p>
+          <p className="fine">{`Apple silicon · macOS ${MINIMUM_MACOS} or later`}</p>
           <div className="demo-wrap">
             <div className="glow" />
             <PaletteDemo />
@@ -273,15 +280,15 @@ export default async function Home() {
             <li>
               <h3>Jump to a tab</h3>
               <p>
-                Clipboard, Screenshots, Dictation, Snippets, Timers, and Emoji once you turn on
-                Emoji Picker.
+                Clipboard, Screenshots, Dictation, Snippets, and Timers, plus Emoji and Translate
+                once you turn on their plugins.
               </p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
                 <kbd>1</kbd>
                 <span className="keycaps-to">to</span>
                 <kbd>⌘</kbd>
-                <kbd>7</kbd>
+                <kbd>{lastTabKey}</kbd>
               </span>
             </li>
             <li>

@@ -24,6 +24,7 @@ import {
   plugins,
   searchTerms
 } from './plugins'
+import { type MacOSVersion, MINIMUM_MACOS } from './site'
 
 /** A plugin's page as HTML, with a stand-in for the Download button (it reads latest.json). */
 function renderPage(plugin: Plugin): string {
@@ -236,7 +237,7 @@ describe('plugin pages', () => {
         expect(html, `${plugin.slug} #${id}`).toContain(`id="${id}"`)
       }
       expect(html, plugin.slug).toContain('href="/plugins/"')
-      expect(html, plugin.slug).toContain(`macOS ${plugin.minimumMacOS ?? '14.2'} or later`)
+      expect(html, plugin.slug).toContain(`macOS ${plugin.minimumMacOS ?? MINIMUM_MACOS} or later`)
       expect(html, plugin.slug).toContain('Apple silicon')
     }
   })
@@ -245,10 +246,17 @@ describe('plugin pages', () => {
     // TranslationModule.swift: `minimumMacOS: 15`.
     expect(pluginFor('translation').minimumMacOS).toBe('15')
     expect(renderPage(pluginFor('translation'))).toContain('macOS 15 or later')
-    expect(renderPage(pluginFor('translation'))).not.toContain('macOS 14.2 or later')
+    expect(renderPage(pluginFor('translation'))).not.toContain(`macOS ${MINIMUM_MACOS} or later`)
     expect(plugins.filter(plugin => plugin.minimumMacOS).map(plugin => plugin.slug)).toEqual([
       'translation'
     ])
+  })
+
+  it('writes a minimum macOS as a version number, never an empty one', () => {
+    const versions: MacOSVersion[] = ['15', '14.2', MINIMUM_MACOS]
+    // @ts-expect-error An empty version would render "macOS  or later"; `pnpm typecheck` checks it.
+    const empty: MacOSVersion = ''
+    expect([...versions, empty].filter(version => /^\d+(\.\d+)?$/.test(version))).toEqual(versions)
   })
 
   it('suggests three other plugins on each page, never the plugin itself', () => {
