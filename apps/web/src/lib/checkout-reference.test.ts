@@ -98,8 +98,12 @@ describe('checkout reference (#363)', () => {
     expect(parseCheckoutReference('ga=1.2&gs=bad')).toEqual({ gaClientId: '1.2' })
   })
 
-  it('allows a reference where no choice is needed, or where analytics were granted', () => {
+  it('follows a saved choice everywhere, and the country only without one', () => {
     expect(referenceAllowed(gaCookie, 'US')).toBe(true)
+    // Declined in Germany, then bought through a US VPN: still no.
+    expect(referenceAllowed(`${gaCookie}; keybumps-consent=denied`, 'US')).toBe(false)
+    expect(referenceAllowed(`${gaCookie}; keybumps-consent=granted`, 'US')).toBe(true)
+    expect(referenceAllowed(`${gaCookie}; keybumps-consent=maybe`, 'US')).toBe(true)
     // A _ga cookie alone isn't consent: it can predate the banner, and declining keeps it.
     for (const country of ['DE', 'GB', 'CH', null]) {
       expect(referenceAllowed(gaCookie, country), String(country)).toBe(false)

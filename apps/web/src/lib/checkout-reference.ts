@@ -9,9 +9,11 @@ import { pricing } from './pricing'
  * checkout link's `reference_id`, which Polar keeps in the checkout's metadata and copies to the
  * order and its renewals. Nothing else goes in: no name, email, or other personal data.
  *
- * A visitor from a country that chooses cookies first (`lib/consent.ts`) gets a reference only
- * with the consent cookie saying `granted`. A `_ga` cookie alone isn't consent: it can predate the
- * banner, and declining doesn't delete it. So the reference itself means the IDs may be used.
+ * A saved choice decides everywhere: the consent cookie saying `denied` means no reference, even
+ * from a country that doesn't ask (a VPN, travel). Without one, a visitor from a country that
+ * chooses cookies first (`lib/consent.ts`) gets no reference, and anyone else does. A `_ga` cookie
+ * alone isn't consent: it can predate the banner, and declining doesn't delete it. So the
+ * reference itself means the IDs may be used.
  */
 export interface CheckoutReference {
   /** Google Analytics' client ID, from the `_ga` cookie: `1234567890.1700000000`. */
@@ -124,12 +126,10 @@ function compact(reference: CheckoutReference): CheckoutReference {
   ) as CheckoutReference
 }
 
-/** Whether this visitor's IDs may go with a purchase: no choice needed, or analytics granted. */
+/** Whether this visitor's IDs may go with a purchase: their saved choice, else their country's default. */
 export function referenceAllowed(cookieHeader: string | null, country: string | null): boolean {
-  return (
-    !requiresConsent(country) ||
-    storedConsent(readCookie(cookieHeader, consentCookieName)) === 'granted'
-  )
+  const choice = storedConsent(readCookie(cookieHeader, consentCookieName))
+  return choice ? choice === 'granted' : !requiresConsent(country)
 }
 
 /**

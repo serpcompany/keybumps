@@ -333,7 +333,7 @@ describe('Polar orders to GA4 (#363)', () => {
     expect(logged()[0].ga4).toBe('not_configured')
   })
 
-  it('only validates off the live site, and fails on a validation message', async () => {
+  it('only validates off the live site, and logs a validation message without retrying', async () => {
     const staging = { ...ga4, validateOnly: true }
     const valid = env({
       ga4: staging,
@@ -345,8 +345,8 @@ describe('Polar orders to GA4 (#363)', () => {
       ga4: staging,
       fetch: fakeFetch(() => Response.json({ validationMessages: [{ description: 'bad' }] }))
     })
-    expect((await handlePolarWebhook(delivery('order.paid', order()), invalid)).status).toBe(502)
-    expect(logged().map(line => line.ga4)).toEqual(['sent', 'failed_validation'])
+    expect((await handlePolarWebhook(delivery('order.paid', order()), invalid)).status).toBe(202)
+    expect(logged().map(line => line.ga4)).toEqual(['sent', 'invalid'])
   })
 
   it('logs only the event type and outcomes', async () => {
