@@ -76,7 +76,10 @@ final class TranslatedSpeechPlayer {
     @ObservationIgnored private var synthesizer: AVSpeechSynthesizer?
     @ObservationIgnored private var generation = 0
 
-    func prepare(text: String, languageIdentifier: String) async {
+    /// Renders `text` in an installed voice for the language. Returns the file it rendered, or nil
+    /// when there's no voice, it failed, or a newer `prepare` or `clear()` came meanwhile.
+    @discardableResult
+    func prepare(text: String, languageIdentifier: String) async -> URL? {
         clear()
         let voices = AVSpeechSynthesisVoice.speechVoices()
         let descriptors = voices.map {
@@ -87,7 +90,7 @@ final class TranslatedSpeechPlayer {
             supportedVoices: descriptors
         ), let voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier) else {
             lastError = "No installed voice is available for this language."
-            return
+            return nil
         }
 
         generation += 1
@@ -104,7 +107,7 @@ final class TranslatedSpeechPlayer {
             let duration = try await render(utterance, to: outputURL)
             guard generation == currentGeneration else {
                 try? FileManager.default.removeItem(at: outputURL)
-                return
+                return nil
             }
             audioURL = outputURL
             self.duration = duration
@@ -116,10 +119,10 @@ final class TranslatedSpeechPlayer {
                 lastError = "Audio could not be generated for this translation."
             }
         }
-        if generation == currentGeneration {
-            isPreparing = false
-            synthesizer = nil
-        }
+        guard generation == currentGeneration else { return nil }
+        isPreparing = false
+        synthesizer = nil
+        return audioURL
     }
 
     func clear() {
@@ -195,9 +198,9 @@ final class TranslatedSpeechPlayer {
 /// speech is rendered to a temporary file, then played.
 extension TranslatedSpeechPlayer: TranslationSpeaking {
     func speak(_ text: String, language: String) async -> String? {
-        await prepare(text: text, languageIdentifier: language)
-        // No voice, or stopped meanwhile (`clear()` leaves no file and no error).
-        guard let audioURL else { return lastError }
+        // Plays only the file this call rendered, never a newer reading's: nil when there's no
+        // voice, or when it was stopped or replaced meanwhile (whose caller drops what this returns).
+        guard let audioURL = await prepare(text: text, languageIdentifier: language) else { return lastError }
         playback.toggle(id: audioURL.lastPathComponent, audioURL: audioURL)
         return playback.isPlaying ? nil : "This translation couldn’t be played."
     }
