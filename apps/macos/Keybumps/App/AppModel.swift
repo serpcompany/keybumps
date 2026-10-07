@@ -897,7 +897,13 @@ final class AppModel {
         guard shortcuts.isSuspendedForRecording else { return }
         shortcuts.resumeAfterRecording()
     }
-    func restoreDefaultWindowShortcuts() { preferences.restoreDefaultWindowShortcuts(); applyCapabilities() }
+    /// Returns the plugin shortcuts that lost their keys to a window default.
+    @discardableResult
+    func restoreDefaultWindowShortcuts() -> [ShortcutOwner] {
+        let moved = preferences.restoreDefaultWindowShortcuts()
+        applyCapabilities()
+        return moved
+    }
     func showQuickSearch() {
         guard isLicensed else { openLicenseSettings(); return }
         guard preferences.enabledCapabilities.contains(.quickSearch) else { return }

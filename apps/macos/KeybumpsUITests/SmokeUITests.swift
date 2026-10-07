@@ -392,6 +392,39 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(field.waitForExistence(timeout: 3), "Quick Search doesn't come back on top")
     }
 
+    /// #334: recording a shortcut another action uses asks first. Cancel keeps both shortcuts;
+    /// Replace moves it, and the other action's row says where it went.
+    func testRecordingATakenShortcutAsksBeforeMovingIt() {
+        launch(permissions: "granted", ["-KBOpenSettings", "search"])
+        let field = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Record shortcut for Open Quick Search"))
+            .firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        let original = field.value as? String
+        let prompt = element("shortcut.replacementPrompt")
+
+        // ⌃⌥U is Window Manager › Top Left's default.
+        field.click()
+        app.typeKey("u", modifierFlags: [.control, .option])
+        XCTAssertTrue(prompt.waitForExistence(timeout: 5), "A taken shortcut asks first")
+        element("shortcut.keep").click()
+        XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(field.value as? String, original, "Cancel keeps Quick Search's shortcut")
+
+        field.click()
+        app.typeKey("u", modifierFlags: [.control, .option])
+        XCTAssertTrue(prompt.waitForExistence(timeout: 5))
+        element("shortcut.replace").click()
+        XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
+        XCTAssertNotEqual(field.value as? String, original, "Replace gives Quick Search the shortcut")
+
+        element("settings.sidebar.windows").click()
+        XCTAssertTrue(
+            element("shortcut.moved.window.upperLeft").waitForExistence(timeout: 5),
+            "Top Left says where its shortcut went"
+        )
+    }
+
     // MARK: - Helpers
 
     private func launch(permissions: String, _ arguments: [String] = []) {

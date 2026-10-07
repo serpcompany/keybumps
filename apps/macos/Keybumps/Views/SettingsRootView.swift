@@ -670,6 +670,8 @@ private struct DictationTranscriptionEngineRow: View {
 struct WindowSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
+    /// What Restore Defaults took from plugin shortcuts, said under the button (#334).
+    @State private var restoreNote: String?
 
     var body: some View {
         let readiness = model.permissionReadiness(for: [.windowManagement])
@@ -693,14 +695,14 @@ struct WindowSettingsView: View {
                     SettingsRowLabel(title: "Status", subtitle: "Window Manager needs Accessibility access to move other apps' windows.")
                 }
                 LabeledContent {
-                    Button("Restore Defaults") { model.restoreDefaultWindowShortcuts() }
+                    Button("Restore Defaults") { restoreDefaults() }
                         .disabled(recorder.identifier != nil)
                 } label: {
                     SettingsRowLabel(title: "Default Shortcuts", subtitle: "Reset every window shortcut to its default.")
                 }
-            }
-            if let error = recorder.error {
-                SettingsNote(error, tint: .orange)
+                if let restoreNote {
+                    SettingsNote(restoreNote, tint: .orange)
+                }
             }
             SettingsGroup("Commands") {
                 shortcutColumns(WindowSettingsLayout.primaryLeading, WindowSettingsLayout.primaryTrailing)
@@ -732,26 +734,52 @@ struct WindowSettingsView: View {
     private func shortcutColumn(_ actions: [WindowAction]) -> some View {
         VStack(spacing: 4) {
             ForEach(actions) { action in
-                WindowCommandRow(
-                    action: action,
-                    shortcut: model.preferences.windowShortcut(for: action),
-                    activeRecorderID: recorder.identifier,
-                    liveModifiers: recorder.identifier == action.rawValue ? recorder.liveModifiers : "",
-                    record: { beginRecording(action) },
-                    clear: { model.finishWindowShortcutRecording(nil, for: action) }
-                )
+                VStack(alignment: .leading, spacing: 4) {
+                    WindowCommandRow(
+                        action: action,
+                        shortcut: model.preferences.windowShortcut(for: action),
+                        activeRecorderID: recorder.identifier,
+                        liveModifiers: recorder.identifier == action.rawValue ? recorder.liveModifiers : "",
+                        record: { beginRecording(action) },
+                        clear: { model.finishWindowShortcutRecording(nil, for: action) }
+                    )
+                    rowNotes(for: action)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
+    /// Under the row being recorded: a missing modifier, or the Replace or Cancel choice. Under a
+    /// row that lost its shortcut: where it went.
+    @ViewBuilder
+    private func rowNotes(for action: WindowAction) -> some View {
+        if recorder.identifier == action.rawValue, let error = recorder.error {
+            SettingsNote(error, tint: .orange)
+        }
+        if let pending = recorder.pendingReplacement, pending.identifier == action.rawValue {
+            ShortcutReplacementPrompt(pending: pending, replace: recorder.confirmReplacement, cancel: recorder.dismissReplacement)
+        }
+        if let move = model.preferences.movedShortcuts[.window(action)] {
+            MovedShortcutNote(owner: .window(action), move: move)
+        }
+    }
+
     private func beginRecording(_ action: WindowAction) {
+        restoreNote = nil
         recorder.begin(
             identifier: action.rawValue,
             suspend: { model.beginShortcutRecording() },
+            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: .window(action)) },
             capture: { binding in model.finishWindowShortcutRecording(binding, for: action) },
             cancel: { model.cancelShortcutRecording() }
         )
+    }
+
+    private func restoreDefaults() {
+        recorder.dismissReplacement()
+        let moved = model.restoreDefaultWindowShortcuts()
+        restoreNote = ShortcutMove.restoreNote(for: moved, in: model.preferences.movedShortcuts)
     }
 }
 
@@ -1224,6 +1252,8 @@ private struct CapabilityShortcutEditor: View {
     @State private var recorder = ShortcutRecorderState()
     let shortcut: CapabilityShortcut
 
+    private var owner: ShortcutOwner { .capability(shortcut) }
+
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
         Group {
@@ -1240,6 +1270,7 @@ private struct CapabilityShortcutEditor: View {
                         recorder.begin(
                             identifier: shortcut.rawValue,
                             suspend: { model.beginShortcutRecording() },
+                            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
                             capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
                             cancel: { model.cancelShortcutRecording() }
                         )
@@ -1249,7 +1280,7 @@ private struct CapabilityShortcutEditor: View {
                 // A shortcut that starts unassigned has no default to restore; its field clears it.
                 if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
                     SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
-                        model.restoreDefaultCapabilityShortcut(shortcut)
+                        restoreDefault(defaultBinding)
                     }
                     .disabled(recorder.identifier != nil)
                 }
@@ -1257,11 +1288,29 @@ private struct CapabilityShortcutEditor: View {
             if let error = recorder.error {
                 SettingsNote(error, tint: .orange)
             }
+            if let pending = recorder.pendingReplacement {
+                ShortcutReplacementPrompt(pending: pending, replace: recorder.confirmReplacement, cancel: recorder.dismissReplacement)
+            }
+            if let move = model.preferences.movedShortcuts[owner] {
+                MovedShortcutNote(owner: owner, move: move)
+            }
             if let failure = model.shortcuts.failures[shortcut.ownerID] {
                 SettingsNote(failure, tint: .orange)
             }
         }
         .onDisappear { recorder.cancel() }
+    }
+
+    /// Restores the default, first asking, as recording does, when another action has its keys.
+    private func restoreDefault(_ defaultBinding: ShortcutBinding) {
+        guard let other = model.preferences.shortcutConflict(for: defaultBinding, assigningTo: owner) else {
+            recorder.dismissReplacement()
+            model.restoreDefaultCapabilityShortcut(shortcut)
+            return
+        }
+        recorder.askToReplace(PendingShortcutReplacement(identifier: shortcut.rawValue, binding: defaultBinding, owner: other)) {
+            model.restoreDefaultCapabilityShortcut(shortcut)
+        }
     }
 }
 
@@ -1338,20 +1387,32 @@ final class ShortcutRecorderState {
     private(set) var error: String?
     /// The modifier symbols held down while recording, shown live in the field.
     private(set) var liveModifiers = ""
+    /// A shortcut recorded or restored here that another action already uses, waiting for Replace
+    /// or Cancel (#334).
+    private(set) var pendingReplacement: PendingShortcutReplacement?
     private var monitor: Any?
     private var cancelAction: (() -> Void)?
+    private var captureAction: ((ShortcutBinding?) -> Void)?
+    private var conflictCheck: ((ShortcutBinding) -> ShortcutOwner?)?
+    private var replaceAction: (() -> Void)?
 
+    /// Starts recording. `conflict` names the other action already using a pressed shortcut's
+    /// keys; then nothing is saved until Replace.
     func begin(
         identifier: String,
         suspend: () -> Void,
+        conflict: @escaping (ShortcutBinding) -> ShortcutOwner?,
         capture: @escaping (ShortcutBinding?) -> Void,
         cancel: @escaping () -> Void
     ) {
         stopMonitor()
+        dismissReplacement()
         self.identifier = identifier
         Self.isRecordingAny = true
         error = nil
         cancelAction = cancel
+        captureAction = capture
+        conflictCheck = conflict
         suspend()
         liveModifiers = ""
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
@@ -1375,13 +1436,48 @@ final class ShortcutRecorderState {
                 self.error = "Use at least one modifier key such as Control, Option, Shift, or Command."
                 return nil
             }
-            self.finish()
-            capture(binding)
+            self.receive(binding)
             return nil
         }
     }
 
+    /// A shortcut pressed while recording: saved, or, when another action already uses its keys,
+    /// recording stops and the field asks first, with nothing changed until Replace.
+    func receive(_ binding: ShortcutBinding) {
+        guard let identifier, let capture = captureAction else { return }
+        guard let owner = conflictCheck?(binding) else {
+            finish()
+            capture(binding)
+            return
+        }
+        let resume = cancelAction
+        finish()
+        resume?()
+        askToReplace(PendingShortcutReplacement(identifier: identifier, binding: binding, owner: owner)) {
+            capture(binding)
+        }
+    }
+
+    /// Asks before taking a shortcut from another action; Replace runs `replace`.
+    func askToReplace(_ pending: PendingShortcutReplacement, replace: @escaping () -> Void) {
+        pendingReplacement = pending
+        replaceAction = replace
+    }
+
+    func confirmReplacement() {
+        let action = replaceAction
+        dismissReplacement()
+        action?()
+    }
+
+    /// Cancel: both actions keep the shortcuts they had.
+    func dismissReplacement() {
+        pendingReplacement = nil
+        replaceAction = nil
+    }
+
     func cancel() {
+        dismissReplacement()
         guard identifier != nil else { return }
         let action = cancelAction
         finish()
@@ -1395,11 +1491,47 @@ final class ShortcutRecorderState {
         error = nil
         liveModifiers = ""
         cancelAction = nil
+        captureAction = nil
+        conflictCheck = nil
     }
 
 
     private func stopMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+    }
+}
+
+/// Asks before a shortcut moves from another action (#334): which action has it, then Replace,
+/// which leaves that action without a shortcut, or Cancel, which changes nothing.
+struct ShortcutReplacementPrompt: View {
+    let pending: PendingShortcutReplacement
+    let replace: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SettingsNote(pending.message, tint: .orange)
+            HStack(spacing: 8) {
+                Button("Replace", action: replace)
+                    .help("Use \(pending.binding.displayName) here. \(pending.owner.displayName) will have no shortcut.")
+                    .accessibilityIdentifier("shortcut.replace")
+                Button("Cancel", action: cancel)
+                    .accessibilityIdentifier("shortcut.keep")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("shortcut.replacementPrompt")
+    }
+}
+
+/// Says where an action's shortcut went when Keybumps gave its keys to another action (#334).
+struct MovedShortcutNote: View {
+    let owner: ShortcutOwner
+    let move: ShortcutMove
+
+    var body: some View {
+        SettingsNote(move.note)
+            .accessibilityIdentifier("shortcut.moved.\(owner.id)")
     }
 }
 
