@@ -188,6 +188,7 @@ struct PluginManifestTests {
             let shown = PermissionRowsOnPage.read(page.content(), model: harness.model)
             let optional = descriptor.optionalPermissions.map { PermissionRow.Shown(permission: $0.permission, isOptional: true) }
             #expect(shown.filter(\.isOptional) == optional, "\(descriptor.title) shows \(shown)")
+            // Only `PermissionRow`s count: Screenshot Tools' own Screen Recording row isn't one.
             let required = shown.filter { !$0.isOptional }.map(\.permission)
             #expect(Set(required).isSubset(of: descriptor.requiredPermissions), "\(descriptor.title) shows \(shown)")
             #expect(Set(shown).count == shown.count, "\(descriptor.title) shows a permission twice: \(shown)")
