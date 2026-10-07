@@ -114,6 +114,7 @@ final class CommandPaletteState {
                 selection = 0
             }
             if historyQuery != oldValue { isBrowsingGrid = false }
+            if historyQuery.hasPrefix("/"), historyQuery != oldValue { selection = 0 }
         }
     }
     /// The module-supplied tabs whose rows re-rank as you type.
@@ -122,6 +123,8 @@ final class CommandPaletteState {
     /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
     /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
     var isBrowsingGrid = false
+    /// The filter chosen from `/`'s list, shown as a chip in the search field.
+    var filter: PaletteFilter?
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
 
@@ -130,6 +133,7 @@ final class CommandPaletteState {
         historyQuery = ""
         selection = 0
         isBrowsingGrid = false
+        filter = nil
         snippetPendingDeletion = nil
     }
 }
@@ -381,6 +385,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
                 },
+                chooseFilter: { [weak self] filter in self?.chooseFilter(filter) },
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
@@ -477,20 +482,25 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
         switch event.keyCode {
         case 53:
-            dismiss()
+            // Escape closes `/`'s list of filters first, then the palette.
+            if filterMenu != nil {
+                if state.tab == .search { search.query = "" } else { state.historyQuery = "" }
+            } else {
+                dismiss()
+            }
             return nil
         case 125:
-            if state.tab == .screenshots, !state.isBrowsingGrid {
+            if isScreenshotGrid, !state.isBrowsingGrid {
                 enterGrid(or: .down)
             } else {
-                moveSelection(state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
+                moveSelection(isScreenshotGrid ? ScreenshotGrid.columnCount : 1)
             }
             return nil
         case 126:
-            if state.tab == .screenshots, state.selection < ScreenshotGrid.columnCount {
+            if isScreenshotGrid, state.selection < ScreenshotGrid.columnCount {
                 leaveGrid()
             } else {
-                moveSelection(state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
+                moveSelection(isScreenshotGrid ? -ScreenshotGrid.columnCount : -1)
             }
             return nil
         case 123, 124:
@@ -500,7 +510,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
-            if state.tab == .screenshots, state.isBrowsingGrid {
+            if isScreenshotGrid, state.isBrowsingGrid {
                 if (0..<itemCount).contains(state.selection + offset) { state.selection += offset }
             } else {
                 switchTab(by: offset)
@@ -508,6 +518,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             return nil
         case 36:
             activateSelection(reveal: event.modifierFlags.contains(.command))
+            return nil
+        case 51 where activeQuery.isEmpty && state.filter != nil && event.modifierFlags.isDisjoint(with: .command):
+            // Delete in an empty search field removes the filter chip first, as in a token field.
+            state.filter = nil
+            state.selection = 0
             return nil
         case 51, 117:
             // Delete removes the highlighted row once the search field is empty (or with Command).
@@ -582,12 +597,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private var itemCount: Int {
+        if let filterMenu { return filterMenu.count }
         if let tabContent { return tabContent.rowCount(query: state.historyQuery) }
         return switch state.tab {
         case .search:
             search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? search.displayedRecentItems.count
-                : search.items.count
+                ? recentSearchItems.count
+                : searchItems.count
         case .clipboard:
             filteredClipboard.count
         case .dictation:
@@ -607,9 +623,24 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
     }
 
-    /// Whether the open tab lays its items out in a grid.
+    /// Whether the open tab lays its items out in a grid. `/`'s list of filters is always a list.
     private var isGridTab: Bool {
-        state.tab == .screenshots || tabContent?.isGrid(query: state.historyQuery) == true
+        filterMenu == nil && (state.tab == .screenshots || tabContent?.isGrid(query: state.historyQuery) == true)
+    }
+
+    private var isScreenshotGrid: Bool { state.tab == .screenshots && filterMenu == nil }
+
+    /// The filters `/` lists while the search field starts with it, or nil.
+    private var filterMenu: [PaletteFilter]? {
+        PaletteFilter.menu(in: state.tab, query: activeQuery)
+    }
+
+    /// Applies a filter from `/`'s list and clears the `/` from the search field.
+    func chooseFilter(_ filter: PaletteFilter) {
+        state.filter = filter
+        if state.tab == .search { search.query = "" } else { state.historyQuery = "" }
+        state.selection = 0
+        state.isBrowsingGrid = false
     }
 
     /// Outside a grid's items: Down goes into them, at the first; Left and Right switch tabs.
@@ -659,8 +690,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  search.displayedRecentItems.indices.contains(index) else { return false }
-            search.recentItems.delete(search.displayedRecentItems[index])
+                  recentSearchItems.indices.contains(index) else { return false }
+            search.recentItems.delete(recentSearchItems[index])
         case .clipboard:
             guard filteredClipboard.indices.contains(index) else { return false }
             clipboard.removeFromClipboardTab(filteredClipboard[index])
@@ -687,7 +718,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private var screenshotContent: ScreenshotPaletteContent {
         ScreenshotPaletteContent.resolve(
-            entries: clipboard.entries,
+            entries: state.filter.apply(clipboard.entries) { $0.matches($1) },
             query: state.historyQuery,
             isEnabled: preferences.enabledCapabilities.contains(.screenshotTools)
         )
@@ -695,12 +726,22 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboard.clipboardTabEntries }
-        return clipboard.clipboardTabEntries.filter { $0.matches(query) }
+        let entries = state.filter.apply(clipboard.clipboardTabEntries) { $0.matches($1) }
+        guard !query.isEmpty else { return entries }
+        return entries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
-        DictationPaletteResults.filter(dictationHistory.entries, query: state.historyQuery)
+        DictationPaletteResults.filter(state.filter.apply(dictationHistory.entries) { $0.matches($1) }, query: state.historyQuery)
+    }
+
+    /// Quick Search's results and recent items, narrowed by the chosen filter.
+    private var searchItems: [QuickSearchItem] {
+        state.filter.apply(search.items) { $0.matches($1) }
+    }
+
+    private var recentSearchItems: [RecentItem] {
+        state.filter.apply(search.displayedRecentItems) { $0.matches(.result($1.result)) }
     }
 
     private var snippetContent: SnippetPaletteContent {
@@ -713,6 +754,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func activateSelection(reveal: Bool) {
+        if let filterMenu {
+            if filterMenu.indices.contains(state.selection) { chooseFilter(filterMenu[state.selection]) }
+            return
+        }
         if let tabContent {
             tabContent.activate(row: state.selection, query: state.historyQuery, withCommand: reveal, palette: contentActions)
             return
@@ -720,12 +765,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         switch state.tab {
         case .search:
             if search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                guard search.displayedRecentItems.indices.contains(state.selection) else { return }
-                open(search.displayedRecentItems[state.selection].result)
+                guard recentSearchItems.indices.contains(state.selection) else { return }
+                open(recentSearchItems[state.selection].result)
                 return
             }
-            guard search.items.indices.contains(state.selection) else { return }
-            switch search.items[state.selection] {
+            guard searchItems.indices.contains(state.selection) else { return }
+            switch searchItems[state.selection] {
             case .command(let command):
                 choose(command)
             case .snippet(let snippet):
@@ -998,6 +1043,7 @@ private struct CommandPaletteView: View {
     let copyDictationText: (String) -> Void
     let snippetActions: SnippetPaletteActions
     let confirmationPresentationChanged: (Bool) -> Void
+    let chooseFilter: (PaletteFilter) -> Void
     let dismiss: () -> Void
 
     @FocusState private var inputFocused: Bool
@@ -1008,6 +1054,7 @@ private struct CommandPaletteView: View {
                 tab: state.tab,
                 searchQuery: $search.query,
                 historyQuery: $state.historyQuery,
+                filter: $state.filter,
                 focused: $inputFocused
             )
             PaletteTabBar(
@@ -1022,8 +1069,11 @@ private struct CommandPaletteView: View {
                         tab: state.tab,
                         isGrid: state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
                         isBrowsingGrid: state.isBrowsingGrid,
+                        isChoosingFilter: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) != nil,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
-                        selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
+                        selectedSearchItem: state.tab == .search
+                            ? QuickSearchModel.highlightedItem(in: searchItems, query: search.query, selection: state.selection)
+                            : nil,
                         contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
                         openSettings: { runCommand(.keybumpsSettings) }
                     )
@@ -1060,7 +1110,9 @@ private struct CommandPaletteView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let tabContent = tabContents[state.tab] {
+        if let filters = PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) {
+            PaletteFilterMenu(filters: filters, selection: state.selection, select: { state.selection = $0 }, choose: chooseFilter)
+        } else if let tabContent = tabContents[state.tab] {
             tabContent.makeView(PaletteContentContext(
                 query: state.historyQuery,
                 // A grid highlights nothing until Down goes into it.
@@ -1079,12 +1131,12 @@ private struct CommandPaletteView: View {
         switch state.tab {
         case .search:
             SearchResultsView(
-                items: search.items,
+                items: searchItems,
                 selection: state.selection,
                 query: search.query,
                 enabledCapabilities: preferences.enabledCapabilities,
                 visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities),
-                recentItems: search.displayedRecentItems,
+                recentItems: recentSearchItems,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
                 run: chooseCommand,
@@ -1164,7 +1216,7 @@ private struct CommandPaletteView: View {
 
     private var screenshotContent: ScreenshotPaletteContent {
         ScreenshotPaletteContent.resolve(
-            entries: clipboard.entries,
+            entries: state.filter.apply(clipboard.entries) { $0.matches($1) },
             query: state.historyQuery,
             isEnabled: preferences.enabledCapabilities.contains(.screenshotTools)
         )
@@ -1172,12 +1224,22 @@ private struct CommandPaletteView: View {
 
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return clipboard.clipboardTabEntries }
-        return clipboard.clipboardTabEntries.filter { $0.matches(query) }
+        let entries = state.filter.apply(clipboard.clipboardTabEntries) { $0.matches($1) }
+        guard !query.isEmpty else { return entries }
+        return entries.filter { $0.matches(query) }
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
-        DictationPaletteResults.filter(dictationHistory.entries, query: state.historyQuery)
+        DictationPaletteResults.filter(state.filter.apply(dictationHistory.entries) { $0.matches($1) }, query: state.historyQuery)
+    }
+
+    /// Quick Search's results and recent items, narrowed by the chosen filter.
+    private var searchItems: [QuickSearchItem] {
+        state.filter.apply(search.items) { $0.matches($1) }
+    }
+
+    private var recentSearchItems: [RecentItem] {
+        state.filter.apply(search.displayedRecentItems) { $0.matches(.result($1.result)) }
     }
 
 }
@@ -1230,7 +1292,16 @@ private struct PaletteSearchField: View {
     let tab: CommandPaletteTab
     @Binding var searchQuery: String
     @Binding var historyQuery: String
+    /// The filter chosen from `/`'s list, shown as a chip before the text.
+    @Binding var filter: PaletteFilter?
     var focused: FocusState<Bool>.Binding
+
+    private var prompt: String {
+        guard let filter else {
+            return PaletteFilter.available(in: tab).isEmpty ? tab.prompt : "\(tab.prompt), or / to filter"
+        }
+        return "Search \(filter.title.lowercased())"
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1238,11 +1309,14 @@ private struct PaletteSearchField: View {
                 .font(.system(size: 19, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 24)
+            if let filter {
+                PaletteFilterChip(filter: filter) { self.filter = nil }
+            }
             if tab == .search {
-                TextField(tab.prompt, text: $searchQuery)
+                TextField(prompt, text: $searchQuery)
                     .focused(focused)
             } else {
-                TextField(tab.prompt, text: $historyQuery)
+                TextField(prompt, text: $historyQuery)
                     .focused(focused)
             }
         }
@@ -2022,6 +2096,8 @@ private struct PaletteFooter: View {
     let isGrid: Bool
     /// Whether Down has gone into the grid, so the arrow keys move through its items.
     let isBrowsingGrid: Bool
+    /// Whether `/`'s list of filters is showing, whose rows Return applies.
+    let isChoosingFilter: Bool
     /// Whether the search field is empty, so Left and Right switch tabs rather than move the caret.
     let isSearchEmpty: Bool
     /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
@@ -2031,7 +2107,8 @@ private struct PaletteFooter: View {
     let openSettings: () -> Void
 
     private var actions: PaletteFooterActions {
-        PaletteFooterActions.resolve(tab: tab, searchItem: selectedSearchItem, content: contentActions)
+        if isChoosingFilter { return PaletteFooterActions(primary: "Filter", secondary: nil) }
+        return PaletteFooterActions.resolve(tab: tab, searchItem: selectedSearchItem, content: contentActions)
     }
     private var primaryActionTitle: String? { actions.primary }
     private var secondaryActionTitle: String? { actions.secondary }
