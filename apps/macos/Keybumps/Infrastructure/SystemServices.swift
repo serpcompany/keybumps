@@ -61,6 +61,8 @@ enum SystemSettingsPage: Equatable {
     case privacy(MacPermission)
     case filesAndFolders
     case keyboardShortcuts
+    /// Language & Region, where Translation Languages are downloaded (#322).
+    case languageAndRegion
 
     var url: URL {
         let address = switch self {
@@ -70,6 +72,8 @@ enum SystemSettingsPage: Equatable {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
         case .keyboardShortcuts:
             "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts"
+        case .languageAndRegion:
+            "x-apple.systempreferences:com.apple.Localization-Settings.extension"
         }
         return URL(string: address)!
     }

@@ -32,8 +32,10 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     private(set) var translation: Translation?
     /// Why the last request couldn't be translated.
     private(set) var failure: String?
-    /// Whether a translation is on its way. The palette stays open meanwhile, through a language's
-    /// download prompt.
+    /// Whether that's because a language isn't downloaded, which the tab offers to fix in System
+    /// Settings.
+    private(set) var needsDownload = false
+    /// Whether a translation is on its way. The palette stays open meanwhile.
     private(set) var isTranslating = false
 
     @ObservationIgnored private let preferences: AppPreferences
@@ -41,11 +43,10 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     @ObservationIgnored private let wait: (Duration) async throws -> Void
     /// The debounce and translation for the latest text; tests await it.
     @ObservationIgnored private(set) var work: Task<Void, Never>?
-    /// The language pairs whose download was declined since the tab showed, so typing on doesn't
-    /// show the download prompt again and again.
-    @ObservationIgnored private var declined: Set<[String]> = []
-    /// Holds the palette open against clicks in Keybumps's other windows, such as the download
-    /// prompt (`holdCommandPaletteOpen`), while a translation runs. The tab's view sets it.
+    /// Opens System Settings on Language & Region, where Translation Languages are downloaded.
+    @ObservationIgnored var openLanguageSettings: @MainActor () -> Void = {}
+    /// Holds the palette open against clicks in Keybumps's other windows
+    /// (`holdCommandPaletteOpen`) while a translation runs. The tab's view sets it.
     @ObservationIgnored var holdPaletteOpen: @MainActor (Bool) -> Void = { _ in }
 
     /// `wait` sleeps out the debounce; tests pass their own.
@@ -110,11 +111,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         let request = Request(text: text, source: source, target: pair.target(forSourceIdentifier: source))
         self.request = request
         failure = nil
-        let languages = [TranslationLanguagePair.code(request.source), request.target]
-        guard !declined.contains(languages) else {
-            failure = Self.message(for: .notDownloaded, request: request)
-            return setTranslating(false)
-        }
+        needsDownload = false
         setTranslating(true)
         do {
             let translated = try await translator.translate(text, from: request.source, to: request.target)
@@ -123,9 +120,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         } catch {
             guard !Task.isCancelled, self.request == request else { return }
             let reason = error as? TranslateFailure ?? .failed
-            if reason == .notDownloaded { declined.insert(languages) }
             translation = nil
             failure = Self.message(for: reason, request: request)
+            needsDownload = reason == .notDownloaded
         }
         setTranslating(false)
     }
@@ -148,6 +145,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         request = nil
         translation = nil
         failure = nil
+        needsDownload = false
     }
 
     static func message(for failure: TranslateFailure, request: Request) -> String {
@@ -155,7 +153,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         let target = TranslationLanguages.name(for: request.target)
         return switch failure {
         case .unsupportedPair: "Can’t translate \(source) into \(target) on this Mac."
-        case .notDownloaded: "\(source) and \(target) weren’t downloaded. Open Translate again to download them."
+        case .notDownloaded: "Download \(source) and \(target) in System Settings › General › Language & Region › Translation Languages, then try again."
         case .failed: "Translation couldn’t be completed."
         }
     }
@@ -183,10 +181,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
             : PaletteFooterActions(primary: "Copy", secondary: "Paste")
     }
 
-    /// Each showing starts empty, and may ask again for a download declined before.
+    /// Each showing starts empty, so languages downloaded meanwhile are tried again.
     func didShow(palette: PaletteContentActions) {
         reset()
-        declined = []
     }
 
     func makeView(_ context: PaletteContentContext) -> AnyView {
@@ -252,7 +249,13 @@ private struct TranslatePaletteResults: View {
                 Text(failure)
                     .font(.system(size: 14))
                     .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("palette.translate.failure")
+                if content.needsDownload {
+                    Button("Open Language & Region", systemImage: "gearshape") { content.openLanguageSettings() }
+                        .buttonStyle(PalettePillButtonStyle(size: .regular, showsIcon: true))
+                        .accessibilityIdentifier("palette.translate.openLanguageSettings")
+                }
             } else if let translation = content.translation {
                 ScrollView {
                     Text(translation.text)

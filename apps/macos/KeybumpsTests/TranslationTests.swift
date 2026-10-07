@@ -398,7 +398,7 @@ struct TranslateTabTests {
         #expect(tab.currentTranslation(query: Self.japanese) == nil, "A stopped translation is dropped")
     }
 
-    @Test("A pair Translation can't do, or a declined download, says so; a declined pair isn't asked again until the tab shows again")
+    @Test("A pair Translation can't do, or one not downloaded, says so; the tab offers Language & Region and tries again when it shows again")
     func failures() async {
         let translator = FakeTranslator()
         let tab = Self.tab(translator)
@@ -410,14 +410,21 @@ struct TranslateTabTests {
         #expect(tab.rowCount(query: Self.english) == 0)
         #expect(tab.footerActions(row: 0, query: Self.english) == PaletteFooterActions(primary: nil, secondary: nil))
 
+        #expect(!tab.needsDownload)
+
         translator.failure = .notDownloaded
         tab.update(query: "Another sentence in English, please.")
         await tab.work?.value
-        #expect(tab.failure == "English and Japanese weren’t downloaded. Open Translate again to download them.")
+        #expect(tab.failure == "Download English and Japanese in System Settings › General › Language & Region › Translation Languages, then try again.")
+        #expect(tab.needsDownload)
+        var opened = 0
+        tab.openLanguageSettings = { opened += 1 }
+        tab.openLanguageSettings()
+        #expect(opened == 1)
         tab.update(query: "And one more sentence in English.")
         await tab.work?.value
-        #expect(translator.calls.count == 2, "Typing on doesn't show the download prompt again")
-        #expect(tab.failure?.contains("weren’t downloaded") == true)
+        #expect(translator.calls.count == 3, "Each new text checks again; nothing shows a download prompt")
+        #expect(tab.needsDownload)
 
         let actions = RecordingActions()
         tab.didShow(palette: actions.actions)
@@ -425,8 +432,9 @@ struct TranslateTabTests {
         translator.failure = nil
         tab.update(query: "And one more sentence in English.")
         await tab.work?.value
-        #expect(translator.calls.count == 3)
+        #expect(translator.calls.count == 4)
         #expect(tab.currentTranslation(query: "And one more sentence in English.") != nil)
+        #expect(!tab.needsDownload)
 
         translator.failure = .failed
         tab.update(query: Self.japanese)
