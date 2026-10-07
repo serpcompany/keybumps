@@ -72,11 +72,16 @@ final class RecentTranslations {
         persist()
     }
 
-    /// Removes every record, and the file.
+    /// Removes every record, and the file. When the file can't be removed, it's emptied instead, so
+    /// cleared records don't come back at the next launch.
     func clear() {
         records = []
         guard let storageURL, fileManager.fileExists(atPath: storageURL.path) else { return }
-        try? fileManager.removeItem(at: storageURL)
+        do {
+            try fileManager.removeItem(at: storageURL)
+        } catch {
+            persist()
+        }
     }
 
     /// A failed save keeps the records in memory; nothing about them is logged.
