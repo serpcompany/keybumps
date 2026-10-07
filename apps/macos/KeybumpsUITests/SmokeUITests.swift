@@ -392,31 +392,55 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(field.waitForExistence(timeout: 3), "Quick Search doesn't come back on top")
     }
 
-    /// #334: recording a shortcut another action uses asks first. Cancel keeps both shortcuts;
-    /// Replace moves it, and the other action's row says where it went.
+    /// #334: recording a shortcut another action uses asks first. Cancel and Escape keep both
+    /// shortcuts; Replace moves it, and the other action's row says where it went.
     func testRecordingATakenShortcutAsksBeforeMovingIt() {
         launch(permissions: "granted", ["-KBOpenSettings", "search"])
+        let page = element("settings.detail.search")
         let field = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", "Record shortcut for Open Quick Search"))
             .firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 20))
         let original = field.value as? String
         let prompt = element("shortcut.replacementPrompt")
+        let modifierError = app.staticTexts["Use at least one modifier key such as Control, Option, Shift, or Command."]
 
-        // ⌃⌥U is Window Manager › Top Left's default.
+        // A bare key first: the error goes away without cancelling the recording. ⌃⌥U is
+        // Window Manager › Top Left's default.
         field.click()
+        app.typeKey("q", modifierFlags: [])
+        XCTAssertTrue(modifierError.waitForExistence(timeout: 5))
         app.typeKey("u", modifierFlags: [.control, .option])
         XCTAssertTrue(prompt.waitForExistence(timeout: 5), "A taken shortcut asks first")
         element("shortcut.keep").click()
         XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
         XCTAssertEqual(field.value as? String, original, "Cancel keeps Quick Search's shortcut")
 
+        // Escape cancels the question and leaves Settings open.
+        field.click()
+        app.typeKey("u", modifierFlags: [.control, .option])
+        XCTAssertTrue(prompt.waitForExistence(timeout: 5))
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(page.exists, "Escape cancels the question, not Settings")
+        XCTAssertEqual(field.value as? String, original)
+
+        // One click on the field while it asks starts recording again; a free shortcut saves.
+        field.click()
+        app.typeKey("u", modifierFlags: [.control, .option])
+        XCTAssertTrue(prompt.waitForExistence(timeout: 5))
+        field.click()
+        XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
+        app.typeKey("q", modifierFlags: [.control, .option, .shift])
+        XCTAssertTrue(waitForValue(of: field, notEqualTo: original), "A free shortcut saves at once")
+        let free = field.value as? String
+
         field.click()
         app.typeKey("u", modifierFlags: [.control, .option])
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         element("shortcut.replace").click()
         XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
-        XCTAssertNotEqual(field.value as? String, original, "Replace gives Quick Search the shortcut")
+        XCTAssertTrue(waitForValue(of: field, notEqualTo: free), "Replace gives Quick Search the shortcut")
 
         element("settings.sidebar.windows").click()
         XCTAssertTrue(
@@ -453,6 +477,11 @@ final class SmokeUITests: XCTestCase {
 
     private func waitForValue(of element: XCUIElement, _ value: Int) -> Bool {
         let predicate = NSPredicate(format: "value == %d", value)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    private func waitForValue(of element: XCUIElement, notEqualTo value: String?) -> Bool {
+        let predicate = NSPredicate(format: "value != %@", value ?? "")
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 

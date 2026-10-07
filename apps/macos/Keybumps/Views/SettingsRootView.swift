@@ -760,7 +760,7 @@ struct WindowSettingsView: View {
         if let pending = recorder.pendingReplacement, pending.identifier == action.rawValue {
             ShortcutReplacementPrompt(pending: pending, replace: recorder.confirmReplacement, cancel: recorder.dismissReplacement)
         }
-        if let move = model.preferences.movedShortcuts[.window(action)] {
+        if let move = model.preferences.movedShortcut(for: .window(action)) {
             MovedShortcutNote(owner: .window(action), move: move)
         }
     }
@@ -772,6 +772,7 @@ struct WindowSettingsView: View {
             suspend: { model.beginShortcutRecording() },
             conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: .window(action)) },
             capture: { binding in model.finishWindowShortcutRecording(binding, for: action) },
+            replace: { model.setShortcut($0, for: .window(action)) },
             cancel: { model.cancelShortcutRecording() }
         )
     }
@@ -1272,6 +1273,7 @@ private struct CapabilityShortcutEditor: View {
                             suspend: { model.beginShortcutRecording() },
                             conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
                             capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
+                            replace: { model.setShortcut($0, for: owner) },
                             cancel: { model.cancelShortcutRecording() }
                         )
                     },
@@ -1280,36 +1282,32 @@ private struct CapabilityShortcutEditor: View {
                 // A shortcut that starts unassigned has no default to restore; its field clears it.
                 if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
                     SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
-                        restoreDefault(defaultBinding)
+                        recorder.offer(
+                            defaultBinding,
+                            identifier: shortcut.rawValue,
+                            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
+                            replace: { model.restoreDefaultCapabilityShortcut(shortcut) }
+                        )
                     }
                     .disabled(recorder.identifier != nil)
                 }
             }
+            // On the row, not the group: a modifier on a `Group` goes to each of its views, and
+            // `SettingsGroup` draws each as its own row, so the error or the question going away
+            // would cancel the recording that replaced it.
+            .onDisappear { recorder.cancel() }
             if let error = recorder.error {
                 SettingsNote(error, tint: .orange)
             }
             if let pending = recorder.pendingReplacement {
                 ShortcutReplacementPrompt(pending: pending, replace: recorder.confirmReplacement, cancel: recorder.dismissReplacement)
             }
-            if let move = model.preferences.movedShortcuts[owner] {
+            if let move = model.preferences.movedShortcut(for: owner) {
                 MovedShortcutNote(owner: owner, move: move)
             }
             if let failure = model.shortcuts.failures[shortcut.ownerID] {
                 SettingsNote(failure, tint: .orange)
             }
-        }
-        .onDisappear { recorder.cancel() }
-    }
-
-    /// Restores the default, first asking, as recording does, when another action has its keys.
-    private func restoreDefault(_ defaultBinding: ShortcutBinding) {
-        guard let other = model.preferences.shortcutConflict(for: defaultBinding, assigningTo: owner) else {
-            recorder.dismissReplacement()
-            model.restoreDefaultCapabilityShortcut(shortcut)
-            return
-        }
-        recorder.askToReplace(PendingShortcutReplacement(identifier: shortcut.rawValue, binding: defaultBinding, owner: other)) {
-            model.restoreDefaultCapabilityShortcut(shortcut)
         }
     }
 }
@@ -1383,26 +1381,47 @@ extension Notification.Name {
 final class ShortcutRecorderState {
     /// Whether any hotkey field is recording, so Escape cancels it rather than closing Settings.
     @ObservationIgnored static private(set) var isRecordingAny = false
+    /// How many fields are asking whether to take a shortcut from another action; while any is,
+    /// Escape means Cancel rather than closing Settings.
+    @ObservationIgnored static private(set) var askingCount = 0
     private(set) var identifier: String?
     private(set) var error: String?
     /// The modifier symbols held down while recording, shown live in the field.
     private(set) var liveModifiers = ""
     /// A shortcut recorded or restored here that another action already uses, waiting for Replace
     /// or Cancel (#334).
-    private(set) var pendingReplacement: PendingShortcutReplacement?
+    private(set) var pendingReplacement: PendingShortcutReplacement? {
+        didSet {
+            switch (oldValue == nil, pendingReplacement == nil) {
+            case (true, false):
+                Self.askingCount += 1
+                installEscapeMonitor()
+            case (false, true):
+                Self.askingCount -= 1
+                stopEscapeMonitor()
+            default:
+                break
+            }
+        }
+    }
     private var monitor: Any?
+    private var escapeMonitor: Any?
     private var cancelAction: (() -> Void)?
     private var captureAction: ((ShortcutBinding?) -> Void)?
     private var conflictCheck: ((ShortcutBinding) -> ShortcutOwner?)?
-    private var replaceAction: (() -> Void)?
+    private var saveAction: ((ShortcutBinding) -> Void)?
+    /// What Replace checks again and then runs, for the question showing.
+    private var question: (conflict: (ShortcutBinding) -> ShortcutOwner?, replace: () -> Void)?
 
-    /// Starts recording. `conflict` names the other action already using a pressed shortcut's
-    /// keys; then nothing is saved until Replace.
+    /// Starts recording. `capture` saves a shortcut and ends recording. A pressed shortcut that
+    /// `conflict` says another action uses ends recording too, and is saved with `replace` only if
+    /// the person chooses Replace.
     func begin(
         identifier: String,
         suspend: () -> Void,
         conflict: @escaping (ShortcutBinding) -> ShortcutOwner?,
         capture: @escaping (ShortcutBinding?) -> Void,
+        replace: @escaping (ShortcutBinding) -> Void,
         cancel: @escaping () -> Void
     ) {
         stopMonitor()
@@ -1413,6 +1432,7 @@ final class ShortcutRecorderState {
         cancelAction = cancel
         captureAction = capture
         conflictCheck = conflict
+        saveAction = replace
         suspend()
         liveModifiers = ""
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
@@ -1444,36 +1464,54 @@ final class ShortcutRecorderState {
     /// A shortcut pressed while recording: saved, or, when another action already uses its keys,
     /// recording stops and the field asks first, with nothing changed until Replace.
     func receive(_ binding: ShortcutBinding) {
-        guard let identifier, let capture = captureAction else { return }
-        guard let owner = conflictCheck?(binding) else {
+        guard let identifier, let capture = captureAction, let conflict = conflictCheck,
+              let save = saveAction else { return }
+        guard conflict(binding) != nil else {
             finish()
             capture(binding)
             return
         }
+        // Global shortcuts come back while it asks. Replace then saves without touching them,
+        // since another field may be recording by then.
         let resume = cancelAction
         finish()
         resume?()
-        askToReplace(PendingShortcutReplacement(identifier: identifier, binding: binding, owner: owner)) {
-            capture(binding)
+        offer(binding, identifier: identifier, conflict: conflict) { save(binding) }
+    }
+
+    /// Sets a shortcut outside recording, such as a restored default: at once when it's free, or
+    /// after asking when `conflict` says another action uses its keys.
+    func offer(
+        _ binding: ShortcutBinding,
+        identifier: String,
+        conflict: @escaping (ShortcutBinding) -> ShortcutOwner?,
+        replace: @escaping () -> Void
+    ) {
+        guard let owner = conflict(binding) else {
+            dismissReplacement()
+            replace()
+            return
         }
+        question = (conflict, replace)
+        pendingReplacement = PendingShortcutReplacement(identifier: identifier, binding: binding, owner: owner)
     }
 
-    /// Asks before taking a shortcut from another action; Replace runs `replace`.
-    func askToReplace(_ pending: PendingShortcutReplacement, replace: @escaping () -> Void) {
-        pendingReplacement = pending
-        replaceAction = replace
-    }
-
+    /// Replace. If another action has the keys by now, such as after Replace on another row, it
+    /// asks about that one instead.
     func confirmReplacement() {
-        let action = replaceAction
+        guard let pending = pendingReplacement, let question else { return }
+        if let owner = question.conflict(pending.binding), owner != pending.owner {
+            pendingReplacement = PendingShortcutReplacement(identifier: pending.identifier, binding: pending.binding, owner: owner)
+            return
+        }
         dismissReplacement()
-        action?()
+        question.replace()
     }
 
     /// Cancel: both actions keep the shortcuts they had.
     func dismissReplacement() {
         pendingReplacement = nil
-        replaceAction = nil
+        question = nil
     }
 
     func cancel() {
@@ -1493,11 +1531,26 @@ final class ShortcutRecorderState {
         cancelAction = nil
         captureAction = nil
         conflictCheck = nil
+        saveAction = nil
     }
-
 
     private func stopMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+    }
+
+    /// Escape while it asks means Cancel; `SettingsEscapePolicy` keeps Settings open meanwhile.
+    private func installEscapeMonitor() {
+        stopEscapeMonitor()
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.keyCode == UInt16(kVK_Escape),
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty else { return event }
+            self.dismissReplacement()
+            return nil
+        }
+    }
+
+    private func stopEscapeMonitor() {
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor); self.escapeMonitor = nil }
     }
 }
 
@@ -1718,7 +1771,7 @@ enum SettingsEscapePolicy {
               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
               event.window === window, window.isKeyWindow,
               window.attachedSheet == nil, NSApp.modalWindow == nil,
-              !ShortcutRecorderState.isRecordingAny else { return false }
+              !ShortcutRecorderState.isRecordingAny, ShortcutRecorderState.askingCount == 0 else { return false }
         if let editor = window.firstResponder as? NSTextView, editor.isFieldEditor, !editor.string.isEmpty {
             return false
         }

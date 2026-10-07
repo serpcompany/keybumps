@@ -893,6 +893,11 @@ final class AppModel {
         applyCapabilities()
         shortcuts.resumeAfterRecording()
     }
+    /// Sets a shortcut without ending a recording, as Replace does once recording has stopped.
+    func setShortcut(_ binding: ShortcutBinding?, for owner: ShortcutOwner) {
+        preferences.setShortcut(binding, for: owner)
+        applyCapabilities()
+    }
     func cancelShortcutRecording() {
         guard shortcuts.isSuspendedForRecording else { return }
         shortcuts.resumeAfterRecording()

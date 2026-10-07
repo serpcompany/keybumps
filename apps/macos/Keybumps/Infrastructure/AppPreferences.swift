@@ -319,10 +319,17 @@ final class AppPreferences {
         return moved
     }
 
+    /// Where `owner`'s shortcut went, while the action it went to still has those keys; after
+    /// that, the note would point the wrong way.
+    func movedShortcut(for owner: ShortcutOwner) -> ShortcutMove? {
+        guard let move = movedShortcuts[owner], shortcut(for: move.to)?.usesSameKeys(as: move.binding) == true else { return nil }
+        return move
+    }
+
     /// Takes `owner`'s shortcut away because `destination` now has its keys, noting where it went.
     private func clear(_ owner: ShortcutOwner, movingTo destination: ShortcutOwner) {
-        if let keys = shortcut(for: owner)?.displayName {
-            movedShortcuts[owner] = ShortcutMove(keys: keys, to: destination)
+        if let binding = shortcut(for: owner) {
+            movedShortcuts[owner] = ShortcutMove(binding: binding, to: destination)
         }
         store(nil, for: owner)
     }

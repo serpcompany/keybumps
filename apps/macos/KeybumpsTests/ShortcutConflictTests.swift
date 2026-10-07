@@ -79,12 +79,15 @@ struct ShortcutConflictTests {
         #expect(recording.recorder.pendingReplacement?.message == "⇧⌘E is used by Emoji Picker › Open Emoji Picker.")
         #expect(recording.recorder.identifier == nil, "Recording stops while it asks")
         #expect(recording.resumed == 1, "Global shortcuts come back while it asks")
+        #expect(recording.captured == 0)
         #expect(preferences.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch)
         #expect(preferences.capabilityShortcut(for: .emojiPicker) == Self.shiftCommandE)
 
         recording.recorder.confirmReplacement()
 
         #expect(recording.recorder.pendingReplacement == nil)
+        #expect(recording.captured == 0, "Replace saves without ending a recording, which may be another field's by now")
+        #expect(recording.resumed == 1)
         #expect(preferences.capabilityShortcut(for: .quickSearch) == Self.shiftCommandE)
         #expect(preferences.capabilityShortcut(for: .emojiPicker) == nil)
         #expect(preferences.movedShortcuts[.capability(.emojiPicker)]?.note == "⇧⌘E moved to Quick Search › Open Quick Search.")
@@ -132,7 +135,7 @@ struct ShortcutConflictTests {
         let preferences = preferencesWithEmojiPickerOnShiftCommandE()
         let moved = preferences.setCapabilityShortcut(Self.shiftCommandE, for: .quickSearch)
         #expect(moved == [.capability(.emojiPicker)])
-        #expect(preferences.movedShortcuts[.capability(.emojiPicker)] == ShortcutMove(keys: "⇧⌘E", to: .capability(.quickSearch)))
+        #expect(preferences.movedShortcut(for: .capability(.emojiPicker)) == ShortcutMove(binding: Self.shiftCommandE, to: .capability(.quickSearch)))
 
         preferences.setCapabilityShortcut(Self.unused, for: .emojiPicker)
         #expect(preferences.movedShortcuts.isEmpty)
@@ -177,8 +180,98 @@ struct ShortcutConflictTests {
         let preferences = AppPreferences(defaults: defaults)
 
         #expect(preferences.capabilityShortcut(for: .dictation) == nil)
-        #expect(preferences.movedShortcuts[.capability(.dictation)] == ShortcutMove(keys: "⌥ Space", to: .window(.left)))
+        #expect(preferences.movedShortcut(for: .capability(.dictation)) == ShortcutMove(binding: DefaultShortcut.dictation, to: .window(.left)))
+        #expect(preferences.movedShortcut(for: .capability(.dictation))?.note == "⌥ Space moved to Window Manager › Left.")
         #expect(AppPreferences(defaults: defaults).movedShortcuts.isEmpty, "Once cleared, the next launch has nothing to move")
+    }
+
+    @Test("A retired window action left in stored data doesn't take a plugin's shortcut at launch")
+    func retiredWindowActionsTakeNothing() throws {
+        let defaults = InMemoryDefaults()
+        defaults.set(try JSONEncoder().encode(["retiredAction": DefaultShortcut.dictation]), forKey: "windowShortcuts")
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        #expect(preferences.capabilityShortcut(for: .dictation) == DefaultShortcut.dictation)
+        #expect(preferences.movedShortcuts.isEmpty)
+    }
+
+    @Test("A moved note goes away once the action it names no longer has those keys")
+    func movedNoteFollowsTheKeys() {
+        let preferences = preferencesWithEmojiPickerOnShiftCommandE()
+        preferences.setWindowShortcut(Self.shiftCommandE, for: .right)
+        #expect(preferences.movedShortcut(for: .capability(.emojiPicker))?.note == "⇧⌘E moved to Window Manager › Right.")
+
+        preferences.restoreDefaultWindowShortcuts()
+
+        #expect(preferences.windowShortcut(for: .right) == WindowAction.right.defaultShortcut)
+        #expect(preferences.movedShortcut(for: .capability(.emojiPicker)) == nil, "Right has its default again, not ⇧⌘E")
+    }
+
+    // MARK: Asking outside recording, and asking again
+
+    @Test("Restoring a default sets it at once when free, and asks when another action has it")
+    func offerAsksOnlyWhenTaken() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let recorder = ShortcutRecorderState()
+        let conflict = { (binding: ShortcutBinding) in preferences.shortcutConflict(for: binding, assigningTo: .capability(.quickSearch)) }
+        var restored = 0
+
+        recorder.offer(DefaultShortcut.quickSearch, identifier: "quickSearch", conflict: conflict) { restored += 1 }
+        #expect(restored == 1)
+        #expect(recorder.pendingReplacement == nil)
+
+        preferences.setCapabilityShortcut(DefaultShortcut.quickSearch, for: .timer)
+        recorder.offer(DefaultShortcut.quickSearch, identifier: "quickSearch", conflict: conflict) { restored += 1 }
+        #expect(restored == 1)
+        #expect(recorder.pendingReplacement?.owner == .capability(.timer))
+        recorder.confirmReplacement()
+        #expect(restored == 2)
+    }
+
+    @Test("Replace asks again when another action took the keys after it asked")
+    func replaceAsksAgainAfterAnotherReplace() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let area = DefaultShortcut.screenshotArea
+        let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
+        screen.recorder.receive(area)
+        edit.recorder.receive(area)
+        #expect(screen.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
+        #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
+
+        screen.recorder.confirmReplacement()
+        #expect(preferences.capabilityShortcut(for: .screenshotScreen) == area)
+
+        edit.recorder.confirmReplacement()
+        #expect(preferences.capabilityShortcut(for: .screenshotScreen) == area, "Nothing moves without asking about Screenshot Screen")
+        #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotScreen))
+        #expect(edit.recorder.pendingReplacement?.message == "⇧⌘4 is used by Screenshot Tools › Screenshot Screen.")
+
+        edit.recorder.confirmReplacement()
+        #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == area)
+        #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
+    }
+
+    @Test("While a field asks, Escape doesn't close Settings")
+    func askingKeepsSettingsOpen() {
+        let preferences = preferencesWithEmojiPickerOnShiftCommandE()
+        let before = ShortcutRecorderState.askingCount
+        let recording = Recording(preferences: preferences, owner: .capability(.quickSearch))
+
+        recording.recorder.receive(Self.shiftCommandE)
+        #expect(ShortcutRecorderState.askingCount == before + 1)
+        recording.recorder.confirmReplacement()
+        #expect(ShortcutRecorderState.askingCount == before)
+
+        recording.begin()
+        recording.recorder.receive(Self.unused)
+        recording.begin()
+        preferences.setCapabilityShortcut(Self.shiftCommandE, for: .emojiPicker)
+        recording.recorder.receive(Self.shiftCommandE)
+        #expect(ShortcutRecorderState.askingCount == before + 1)
+        recording.recorder.cancel()
+        #expect(ShortcutRecorderState.askingCount == before)
     }
 }
 
@@ -187,6 +280,8 @@ struct ShortcutConflictTests {
 private final class Recording {
     let recorder = ShortcutRecorderState()
     private(set) var resumed = 0
+    /// Recordings that ended by saving, which resumes global shortcuts in the app.
+    private(set) var captured = 0
     private let preferences: AppPreferences
     private let owner: ShortcutOwner
 
@@ -201,7 +296,11 @@ private final class Recording {
             identifier: Self.identifier(owner),
             suspend: {},
             conflict: { [preferences, owner] in preferences.shortcutConflict(for: $0, assigningTo: owner) },
-            capture: { [preferences, owner] in preferences.setShortcut($0, for: owner) },
+            capture: { [weak self, preferences, owner] in
+                preferences.setShortcut($0, for: owner)
+                self?.captured += 1
+            },
+            replace: { [preferences, owner] in preferences.setShortcut($0, for: owner) },
             cancel: { [weak self] in self?.resumed += 1 }
         )
     }

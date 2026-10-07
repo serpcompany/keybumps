@@ -52,10 +52,11 @@ enum ShortcutConflict {
 /// A shortcut Keybumps took off one action and gave to another: by Replace, by restoring
 /// defaults, or by the launch-time cleanup. The action that lost it says so on its row (#334).
 struct ShortcutMove: Equatable {
-    /// The keys, as the action that lost them showed them.
-    let keys: String
+    /// The shortcut, as the action that lost it had it.
+    let binding: ShortcutBinding
     let to: ShortcutOwner
 
+    var keys: String { binding.displayName }
     var note: String { "\(keys) moved to \(to.displayName)." }
 }
 
