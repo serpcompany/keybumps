@@ -23,9 +23,6 @@ struct SnippetsSettingsView: View {
         let isWritable = store.libraryState.isWritable
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
-            // Accessibility is optional: without it, ⌘P copies instead of pasting. Expanding needs
-            // it too; while auto-expansion is on, its section below says so but asks only here.
-            PluginPermissionsGroup(capability: .snippets)
             SettingsGroup("Auto-expansion") {
                 Toggle(isOn: Binding(
                     get: { model.preferences.expandsSnippetKeywords },
@@ -52,10 +49,10 @@ struct SnippetsSettingsView: View {
                     }
                     ForEach(missing, id: \.self) { permission in
                         if permission == .accessibility {
-                            // Its row in Permissions above asks for it, so this only says why.
+                            // Its row in Permissions below asks for it, so this only says why.
                             SettingsRowLabel(
                                 title: "Expanding needs Accessibility",
-                                subtitle: "Lets Keybumps replace the keyword with the snippet. Allow it in Permissions above."
+                                subtitle: "Lets Keybumps replace the keyword with the snippet. Allow it in Permissions below."
                             )
                         } else {
                             LabeledContent {
@@ -140,6 +137,10 @@ struct SnippetsSettingsView: View {
             if case .recovered(let copyName) = store.libraryState {
                 SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in its Application Support folder.", tint: .orange)
             }
+            // Last, so the snippets stay at the top of the page. Accessibility is optional: without
+            // it, ⌘P copies instead of pasting. Expanding needs it too; while auto-expansion is on,
+            // its section above says so but asks only here.
+            PluginPermissionsGroup(capability: .snippets)
         }
         .navigationTitle("Snippets")
         .alert("Start a new snippet library?", isPresented: $confirmsStartOver) {
