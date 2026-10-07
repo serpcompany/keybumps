@@ -597,7 +597,7 @@ struct LocalDictationTranslationView: View {
             TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: $0.source,
                 supportedIdentifiers: supportedTargets.map(\.minimalIdentifier),
-                pair: .systemDefault()
+                pair: .dictationDefault
             )
         } ?? ""
         hasLoadedTargets = true

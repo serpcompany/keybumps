@@ -12,8 +12,11 @@ struct TranslationLanguagePair: Equatable {
         self.other = Self.code(other)
     }
 
-    /// The Mac's first preferred language, with English, or with Japanese when that's English: the
-    /// pair Dictation's Translate always used for English.
+    /// What Dictation's Translate has always done: English text to Japanese, anything else to
+    /// English. The Translation plugin's setting replaces it when that plugin is on.
+    static let dictationDefault = TranslationLanguagePair(mine: "en", other: "ja")
+
+    /// The Mac's first preferred language, with English, or with Japanese when that's English.
     static func systemDefault(preferredLanguages: [String] = Locale.preferredLanguages) -> TranslationLanguagePair {
         let mine = code(preferredLanguages.first ?? "en")
         return TranslationLanguagePair(mine: mine, other: mine == "en" ? "ja" : "en")
