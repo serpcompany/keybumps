@@ -145,10 +145,10 @@ export type HandledEvent = (typeof handledEvents)[number]
 export type Ga4Skip = 'zero_amount' | 'not_paid' | 'partial_refund' | 'no_consent'
 
 /**
- * The GA4 event for an order, or why there's none. A buyer billed in a country that chooses
- * cookies first (`lib/consent.ts`) is counted only with a client ID from /buy/, which gives one
- * there only when the visitor allowed analytics. Without one, a buyer billed elsewhere is counted
- * under a derived client ID.
+ * The GA4 event for an order, or why there's none. A reference that says the visitor didn't allow
+ * analytics means nothing is sent. With no reference at all (a checkout that didn't start at
+ * /buy/), a buyer billed in a country that chooses cookies first (`lib/consent.ts`) isn't counted,
+ * and anyone else is counted under a derived client ID.
  */
 export async function ga4PayloadForOrder(
   event: HandledEvent,
@@ -162,8 +162,8 @@ export async function ga4PayloadForOrder(
     // GA4's revenue keeps it. The full-refund policy makes these rare.
     return 'partial_refund'
   }
-  const { gaClientId, gaSessionId } = order.reference
-  if (!gaClientId && requiresConsent(order.country)) return 'no_consent'
+  const { gaClientId, gaSessionId, consentDenied } = order.reference
+  if (consentDenied || (!gaClientId && requiresConsent(order.country))) return 'no_consent'
 
   const client_id = gaClientId ?? (await derivedClientId(order.id))
   if (event === 'order.refunded') {

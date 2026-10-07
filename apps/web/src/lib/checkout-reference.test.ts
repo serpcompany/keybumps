@@ -74,6 +74,14 @@ describe('checkout reference (#363)', () => {
     expect(parseCheckoutReference('ga=1.2&gs=bad')).toEqual({ gaClientId: '1.2' })
   })
 
+  it('carries a refusal on its own, dropping any IDs', () => {
+    expect(encodeCheckoutReference({ consentDenied: true, gaClientId: '1.2' })).toBe(
+      'consent=denied'
+    )
+    expect(parseCheckoutReference('consent=denied&ga=1.2')).toEqual({ consentDenied: true })
+    expect(parseCheckoutReference('consent=granted&ga=1.2')).toEqual({ gaClientId: '1.2' })
+  })
+
   it('follows a saved choice everywhere, and the country only without one', () => {
     expect(referenceAllowed(gaCookie, 'US')).toBe(true)
     // Declined in Germany, then bought through a US VPN: still no.
@@ -88,11 +96,13 @@ describe('checkout reference (#363)', () => {
     }
   })
 
-  it('/buy/ sends the IDs from a consent country only with consent', () => {
-    const location = (cookies: string) =>
-      buyRedirect(cookies, 'G-TEST123', 'DE', checkout).headers.get('location')
-    expect(location(`${gaCookie}; ${sessionV2}`)).toBe(checkout)
-    expect(location(`${gaCookie}; keybumps-consent=denied`)).toBe(checkout)
+  it('/buy/ sends the IDs from a consent country only with consent, and says so otherwise', () => {
+    const location = (cookies: string, country = 'DE') =>
+      buyRedirect(cookies, 'G-TEST123', country, checkout).headers.get('location')
+    const denied = `${checkout}?reference_id=consent%3Ddenied`
+    expect(location(`${gaCookie}; ${sessionV2}`)).toBe(denied)
+    expect(location(`${gaCookie}; keybumps-consent=denied`)).toBe(denied)
+    expect(location(`${gaCookie}; keybumps-consent=denied`, 'US')).toBe(denied)
     expect(location(`${gaCookie}; keybumps-consent=granted`)).toBe(
       `${checkout}?reference_id=ga%3D1234567890.1700000000`
     )
@@ -123,8 +133,8 @@ describe('checkout reference (#363)', () => {
           headers: { cookie: gaCookie, 'cf-ipcountry': country }
         })
       ).headers.get('location') ?? ''
-    expect(buy('DE')).toBe(pricing.checkoutUrl ?? '/pricing/')
     if (pricing.checkoutUrl) {
+      expect(buy('DE')).toBe(`${pricing.checkoutUrl}?reference_id=consent%3Ddenied`)
       expect(buy('US')).toBe(`${pricing.checkoutUrl}?reference_id=ga%3D1234567890.1700000000`)
     }
   })
