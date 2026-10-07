@@ -1307,8 +1307,9 @@ final class FakeTranslator: TextTranslating {
 
 /// Reads nothing aloud and never makes a sound: it records what it was asked to read, in which
 /// language, and each stop. With no voice for a language, it says so, as `TranslatedSpeechPlayer`
-/// does.
+/// does. Like it, it's observable, so a view redraws when reading starts or stops.
 @MainActor
+@Observable
 final class FakeTranslationSpeaker: TranslationSpeaking {
     struct Reading: Equatable {
         let text: String
@@ -1344,7 +1345,7 @@ private final class UnremovableFileManager: FileManager {
 }
 
 @MainActor
-private final class RecordingActions {
+final class RecordingActions {
     private(set) var copied: [String] = []
     private(set) var pasted: [(text: String, restoresClipboard: Bool)] = []
     private(set) var cleared = 0
@@ -1365,19 +1366,20 @@ private final class RecordingActions {
 /// translates with `FakeTranslator`, keeps recent translations in the folder, and reads aloud with
 /// `FakeTranslationSpeaker`.
 @MainActor
-private final class TranslatePaletteFixture {
+final class TranslatePaletteFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsTranslateTab-\(UUID().uuidString)"))
     let translator = FakeTranslator()
     let speaker = FakeTranslationSpeaker()
     let recents: RecentTranslations
     let clipboard: ClipboardHistoryService
+    let dictationHistory: DictationHistoryService
     let tab: TranslatePaletteContent
     let palette: CommandPaletteController
 
     init() {
         let root = folder.url
-        let dictationHistory = DictationHistoryService(
+        dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
         let preferences = TranslateTabTests.preferences()

@@ -459,6 +459,7 @@ struct ClipboardSettingsView: View {
     var body: some View {
         SettingsPage {
             CapabilityControl(capability: .clipboardHistory, shortcuts: [.clipboardHistory])
+            PluginPermissionsGroup(capability: .clipboardHistory)
             SettingsGroup("History") {
                 SettingsNote("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
             }
@@ -475,6 +476,8 @@ struct ScreenshotToolsSettingsView: View {
                 capability: .screenshotTools,
                 shortcuts: [.screenshotScreen, .screenshotScreenAndEdit, .screenshotArea]
             )
+            // Screen Recording, which it needs, has its own row below, with Restart Keybumps.
+            PluginPermissionsGroup(capability: .screenshotTools, includesRequired: false)
             SettingsGroup("Screenshots") {
                 if !model.permissions.screenRecordingGranted {
                     LabeledContent {
@@ -1333,6 +1336,7 @@ struct PermissionRow: View {
             requiresRelaunch: model.requiresPermissionRelaunch(permission)
         )
         content(state: state, action: action)
+            .preference(key: Shown.Key.self, value: [Shown(permission: permission, isOptional: optionalReason != nil)])
     }
 
     /// The status beside the row. An optional permission that isn't granted reads "Not Granted",
@@ -1340,6 +1344,18 @@ struct PermissionRow: View {
     static func status(_ state: PermissionAuthorizationState, requiresRelaunch: Bool, isOptional: Bool) -> String {
         if requiresRelaunch { return "Restart Required" }
         return isOptional && !state.isGranted ? "Not Granted" : state.rawValue
+    }
+
+    /// A row a page draws. Each row reports itself through `Key`, so a test can lay out every
+    /// plugin's page and check it shows the permissions its manifest declares (#379).
+    struct Shown: Hashable {
+        let permission: MacPermission
+        let isOptional: Bool
+
+        struct Key: PreferenceKey {
+            static let defaultValue: [Shown] = []
+            static func reduce(value: inout [Shown], nextValue: () -> [Shown]) { value += nextValue() }
+        }
     }
 
     @ViewBuilder

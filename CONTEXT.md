@@ -176,7 +176,7 @@ The Command Palette tab (⌘8) for Translation: what you type or paste in the se
 _Avoid_: Translation window, translator
 
 **Recent translations**:
-The last 50 translations saved with Return or ⌘P in the Translate tab, newest first, listed there while the search field is empty. Return or ⌘C copies one, kept out of Clipboard History; ⌘P pastes it; Delete asks, then deletes it; and its speaker button, or Space, reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
+The last 50 translations saved with Return or ⌘P in the Translate tab, newest first, listed there while the search field is empty, with the highlighted one in full beside the list, as in the Dictation tab. Return or ⌘C copies one, kept out of Clipboard History; ⌘P pastes it; Delete asks, then deletes it; and Read Aloud, or Space, reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
 _Avoid_: Translation history, favorites, phrasebook
 
 **Language pair**:
