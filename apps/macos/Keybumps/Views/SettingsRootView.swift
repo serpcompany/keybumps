@@ -1405,9 +1405,9 @@ final class ShortcutRecorderState {
 
 /// The Settings window's sizes, and how it is kept on its screen (#294).
 enum SettingsWindowFrame {
-    /// Low enough that the window, with its title bar and toolbar, fits above the Dock on the
-    /// smallest screens: CI's 1024×768 leaves 674pt (a 31pt menu bar and a 63pt Dock), and a 13-inch
-    /// MacBook at Larger Text (1024×640) about 546pt. Every page and the sidebar scroll.
+    /// Low enough that the window, with its title bar and toolbar (492pt in all), fits the visible
+    /// frame of the smallest screens: on CI's 1024×768 the app's screen reports 677pt, and a 13-inch
+    /// MacBook at Larger Text (1024×640) leaves about 546pt. Every page and the sidebar scroll.
     static let minimumContentSize = CGSize(width: 960, height: 440)
     /// What Settings asks for when macOS has nothing saved; `SettingsWindowFiller` fits it to the
     /// screen once it shows.
@@ -1435,9 +1435,9 @@ enum SettingsWindowFrame {
 /// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
 /// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at,
 /// except that a window larger than its screen's visible frame is shrunk to fit whenever it comes
-/// forward, moves to another screen, or the screen changes (the Dock resized or moved, the
-/// resolution changed), so it never reaches under the Dock (#294). Its position is kept where it
-/// can be; a size reaching under the Dock is not.
+/// forward, moves to another screen, or the screen's parameters change (the Dock moved, the
+/// resolution changed), so it stays within what the menu bar and Dock leave (#294). Its position is
+/// kept where it can be; a size larger than the visible frame is not.
 struct SettingsWindowFiller: NSViewRepresentable {
     let preferences: AppPreferences
 
@@ -1493,9 +1493,8 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
         /// In UI-test mode, this view's accessibility value (`settings.visibleFrame`) is the visible
         /// frame of the window's screen as the app sees it, in AppKit coordinates, then the primary
-        /// screen's height: `minX,minY,width,height,primaryHeight`. The UI test checks the window's
-        /// frame against it. The test runner's own `NSScreen` can disagree with the app's (on CI,
-        /// 674pt against 677pt), so it can't be the reference.
+        /// screen's height: `minX,minY,width,height,primaryHeight`. The #294 UI test checks the
+        /// window's frame against it.
         private func reportVisibleFrameForUITests() {
             guard UITestLaunchConfiguration.current.isUITesting else { return }
             setAccessibilityElement(true)
@@ -1519,7 +1518,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
             window.setFrame(screen.visibleFrame, display: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, let window = self.window, window.isVisible, !preferences.didFillSettingsWindow else { return }
-                // Against the visible frame now, which the Dock may have changed meanwhile.
+                // Against the visible frame now, in case it changed meanwhile.
                 if window.frame != (window.screen ?? screen).visibleFrame, attempt < 3 {
                     fill(attempt: attempt + 1)
                 } else {

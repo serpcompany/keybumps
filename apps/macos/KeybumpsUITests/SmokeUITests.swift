@@ -75,14 +75,16 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(language.value as? String, title, "Picking a language changes the setting")
     }
 
-    /// #294: Settings opens within the space the menu bar and Dock leave. CI's 1024×768 screen is
-    /// shorter than the window's old minimum, so there it reached under the Dock. Each UI-test
-    /// launch has fresh defaults, so this is the first-open fill.
+    /// #294: Settings isn't held taller than its screen's visible frame. CI's 1024×768 screen is
+    /// shorter than the window's old minimum, so the window reached under the Dock there. Each
+    /// UI-test launch has fresh defaults, so this is the first-open fill.
     ///
     /// The window's frame (read through Accessibility) is checked against the visible frame the
-    /// app's screen reports (`settings.visibleFrame`). The test runner's own `NSScreen` can
-    /// disagree with the app's by a few points (on CI, 674pt against 677pt), so it's only reported.
-    func testSettingsWindowFitsAboveTheDock() {
+    /// app's screen reports (`settings.visibleFrame`). That doesn't prove the window clears the
+    /// Dock: on CI the app's visible frame (677pt tall) ends about 4pt inside the Dock's
+    /// Accessibility frame, while the runner's `NSScreen` reports 674pt; the cause isn't known.
+    /// The Dock's frame and the runner's visible frame are only reported.
+    func testSettingsWindowFitsItsScreensVisibleFrame() {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
         XCTAssertTrue(element("settings.detail.dictation").waitForExistence(timeout: 20))
         let window = app.windows.containing(.any, identifier: "settings.detail.dictation").firstMatch
@@ -98,7 +100,12 @@ final class SmokeUITests: XCTestCase {
         let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 10) == .completed
         let appVisible = Self.visibleFrame(reportedBy: reported).map { "\($0)" } ?? "unreadable"
         let runnerVisible = NSScreen.screens.first.map { "\(Self.topLeft($0.visibleFrame, primaryHeight: $0.frame.maxY))" } ?? "none"
-        XCTAssertTrue(settled, "Settings \(window.frame) lies within its screen's visible frame \(appVisible) (the runner sees \(runnerVisible))")
+        let dockBar = XCUIApplication(bundleIdentifier: "com.apple.dock").children(matching: .any).firstMatch
+        let dock = dockBar.exists ? "\(dockBar.frame)" : "not found"
+        XCTAssertTrue(
+            settled,
+            "Settings \(window.frame) lies within its screen's visible frame \(appVisible) (runner's visible frame \(runnerVisible), Dock \(dock))"
+        )
     }
 
     /// The visible frame the app reports as `minX,minY,width,height,primaryHeight` in AppKit

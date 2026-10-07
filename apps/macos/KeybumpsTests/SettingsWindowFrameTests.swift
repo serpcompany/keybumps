@@ -5,7 +5,7 @@ import Testing
 /// AppKit screen coordinates: the origin is the primary screen's bottom-left corner.
 @Suite("Settings window frame")
 struct SettingsWindowFrameTests {
-    /// CI's 1024×768 screen: a 31pt menu bar on top and a 63pt Dock at the bottom.
+    /// A 1024×768 screen with a 31pt menu bar on top and a 63pt Dock at the bottom.
     private let smallScreen = CGRect(x: 0, y: 63, width: 1024, height: 674)
 
     @Test("On a 1024×768 screen, a window reaching under the Dock is shrunk to the visible frame (#294)")
@@ -15,9 +15,9 @@ struct SettingsWindowFrameTests {
         #expect(SettingsWindowFrame.fitted(overflowing, in: smallScreen) == smallScreen)
     }
 
-    @Test("A window filled before the Dock grew is shrunk to the new visible frame")
-    func refitsAfterTheDockGrows() {
-        // What CI's UI test saw: filled while the Dock was 60pt, then the Dock grew to 63pt.
+    @Test("A window filled before the visible frame shrank is shrunk to the new visible frame")
+    func refitsAfterTheVisibleFrameShrinks() {
+        // Filled to a 677pt visible frame, which then became 674pt (the Dock moved or grew).
         let filledEarlier = CGRect(x: 0, y: 60, width: 1024, height: 677)
         #expect(SettingsWindowFrame.fitted(filledEarlier, in: smallScreen) == smallScreen)
     }
