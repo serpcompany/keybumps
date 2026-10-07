@@ -5,3 +5,8 @@ onlyBuiltDependencies:
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+# sharp below 0.35.5 has GHSA-wq5f-xc86-pv6w (Dependabot alert 15). miniflare pins 0.35.4
+# exactly, even in Wrangler 4.148.0. Remove this once Wrangler ships a miniflare with 0.35.5+.
+overrides:
+  "sharp@<0.35.5": 0.35.5
