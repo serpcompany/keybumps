@@ -120,6 +120,7 @@ private struct KeyboardShortcutterResultsView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .paletteQuickSelectViewport()
                 }
             }
         }

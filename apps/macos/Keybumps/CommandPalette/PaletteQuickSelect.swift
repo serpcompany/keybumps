@@ -8,12 +8,9 @@ import SwiftUI
 /// follow the rows on screen, so after scrolling ⇧1 is the top row showing, as in Alfred.
 @MainActor @Observable
 final class PaletteQuickSelect {
-    /// The bottom band the footer floats over. A row whose middle is in it isn't counted as on screen.
-    static let footerInset: CGFloat = 56
-
-    /// The area under the tab bar where rows show, in window coordinates. Rows measure themselves
-    /// in window coordinates too: a List hosts each row on its own, where the palette's own
-    /// coordinate spaces don't reach.
+    /// The list or grid the rows scroll in, in window coordinates, below any header above it
+    /// (`paletteQuickSelectViewport()`). Rows measure themselves in window coordinates too: a List
+    /// hosts each row on its own, where the palette's own coordinate spaces don't reach.
     @ObservationIgnored private var viewport = CGRect.null
     /// Each row view drawn, by its own token: its index in the tab's rows and where it is. Keyed by
     /// view rather than index, so the old tab's rows going away can't remove the new tab's.
@@ -61,7 +58,7 @@ final class PaletteQuickSelect {
     }
 
     private func isOnScreen(_ frame: CGRect) -> Bool {
-        !viewport.isNull && frame.minY >= viewport.minY - 1 && frame.midY <= viewport.maxY - Self.footerInset
+        !viewport.isNull && frame.minY >= viewport.minY - 1 && frame.midY <= viewport.maxY - PaletteTheme.footerClearance
     }
 
     /// The number ⇧ and a number key pick. The key is matched by its position in the top row, so
@@ -88,6 +85,22 @@ extension View {
     /// A grid tile ⇧1–9 can pick, with its keycap over the top-leading corner.
     func paletteQuickSelectTile(row: Int) -> some View {
         modifier(PaletteQuickSelectRow(row: row, placement: .topLeading))
+    }
+
+    /// The List or ScrollView whose rows ⇧1–9 numbers. Rows count as on screen only inside it, so
+    /// one scrolled up behind a header above the list, such as Clipboard's Clear All, doesn't.
+    func paletteQuickSelectViewport() -> some View {
+        modifier(PaletteQuickSelectViewport())
+    }
+}
+
+private struct PaletteQuickSelectViewport: ViewModifier {
+    @Environment(PaletteQuickSelect.self) private var quickSelect: PaletteQuickSelect?
+
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+            quickSelect?.setViewport(frame)
+        }
     }
 }
 
@@ -119,8 +132,11 @@ private struct PaletteQuickSelectRow: ViewModifier {
             HStack(spacing: 10) {
                 content
                 if quickSelect != nil {
-                    // Every row keeps the space, so what's beside it lines up whether or not it has a number.
-                    keycap.frame(width: 30, alignment: .trailing)
+                    // Every row keeps the space, so what's beside it lines up whether or not it has a
+                    // number; a frame around a keycap that isn't there would take none.
+                    Color.clear
+                        .frame(width: 30)
+                        .overlay(alignment: .trailing) { keycap }
                 }
             }
         case .topLeading:
@@ -136,6 +152,8 @@ private struct PaletteQuickSelectRow: ViewModifier {
             PaletteKeycap("⇧\(number)")
                 .accessibilityLabel("Shift \(number)")
                 .help("Shift-\(number)")
+                // A tile's keycap sits on its thumbnail, which a click there should still reach.
+                .allowsHitTesting(false)
         }
     }
 }

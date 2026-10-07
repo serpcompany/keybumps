@@ -13,6 +13,9 @@ enum PaletteTheme {
     static let rowRadius: CGFloat = 8
     /// The height of the footer's floating pill and its round Settings button.
     static let footerHeight: CGFloat = 38
+    /// The band at the bottom of the rows that the floating footer covers; lists leave it as a
+    /// margin, and ⇧1–9 doesn't number a row in it.
+    static let footerClearance: CGFloat = 56
     /// The outline of every floating surface: a capsule, or a circle in a square frame. Its ends
     /// must be circular, not SwiftUI's default continuous curve. SwiftUI draws the hairline border
     /// as a Core Animation layer border, and Core Animation draws a continuous capsule's border with

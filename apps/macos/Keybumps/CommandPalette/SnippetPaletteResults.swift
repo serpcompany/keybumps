@@ -143,6 +143,7 @@ struct SnippetPaletteResults: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .paletteQuickSelectViewport()
             .onChange(of: selection) {
                 if snippets.indices.contains(selection) { proxy.scrollTo(snippets[selection].id) }
             }

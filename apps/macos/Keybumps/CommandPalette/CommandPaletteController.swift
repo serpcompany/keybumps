@@ -558,6 +558,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Command and no other modifier. Caps Lock, Fn and the keypad flag don't count, so Caps Lock
+    /// doesn't stop the palette's Command keys (#182).
+    static func isCommandKey(_ event: NSEvent) -> Bool {
+        event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command
+    }
+
     /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
     /// with synthesized events, so no real keystroke is posted.
     func handleKeyDown(_ event: NSEvent) -> NSEvent? {
@@ -566,8 +572,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         // Another Keybumps window, such as Translation's download prompt, keeps its own keys (#321).
         guard CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel) else { return event }
 
-        // Caps Lock doesn't stop a Command key (#182).
-        if event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command {
+        if Self.isCommandKey(event) {
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
                 selectTab(tab)
                 return nil
@@ -587,7 +592,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
         // ⇧1–9 picks a row on screen, in place of typing `!`, `@`, `#` and so on (#182).
         if let number = PaletteQuickSelect.number(for: event), !isComposingText {
-            quickSelect(number)
+            // Held down, it would act again on whatever row is Nth by then, such as a timer that moved.
+            if !event.isARepeat { quickSelect(number) }
             return nil
         }
 
@@ -1245,10 +1251,7 @@ private struct CommandPaletteView: View {
             )
             content
                 .environment(state.quickSelect)
-                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
-                    state.quickSelect.setViewport(frame)
-                }
-                .contentMargins(.bottom, 56, for: .scrollContent)
+                .contentMargins(.bottom, PaletteTheme.footerClearance, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
                         tab: state.tab,
@@ -1589,6 +1592,7 @@ private struct SearchResultsView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        .paletteQuickSelectViewport()
                     }
                 }
             } else if items.isEmpty {
@@ -1682,6 +1686,7 @@ private struct SearchResultsView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .paletteQuickSelectViewport()
                     .onChange(of: selection) {
                         if items.indices.contains(selection) {
                             proxy.scrollTo(items[selection].id)
@@ -1892,6 +1897,7 @@ private struct ClipboardResultsView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .paletteQuickSelectViewport()
                 }
             }
         }
@@ -2226,6 +2232,7 @@ private struct ScreenshotGrid: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 4)
                     }
+                    .paletteQuickSelectViewport()
                     .onChange(of: selection) {
                         guard entries.indices.contains(selection) else { return }
                         proxy.scrollTo(entries[selection].id)

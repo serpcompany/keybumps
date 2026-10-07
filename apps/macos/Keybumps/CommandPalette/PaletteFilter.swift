@@ -148,6 +148,7 @@ struct PaletteFilterMenu: View {
                             Image(systemName: filter.systemImage)
                                 .frame(width: 22)
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                             Text("Filter by")
                                 .foregroundStyle(.secondary)
                             Text(filter.title)
@@ -164,7 +165,6 @@ struct PaletteFilterMenu: View {
                     }
                     .buttonStyle(.plain)
                     .onHover { if $0 { select(index) } }
-                    .accessibilityLabel("Filter by \(filter.title)")
                     .accessibilityAddTraits(index == selection ? .isSelected : [])
                     .listRowInsets(.init())
                     .listRowSeparator(.hidden)
@@ -172,6 +172,7 @@ struct PaletteFilterMenu: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .paletteQuickSelectViewport()
             }
         }
     }

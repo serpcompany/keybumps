@@ -91,6 +91,7 @@ struct DictationPaletteResults: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .paletteQuickSelectViewport()
                 .onChange(of: selection) {
                     if entries.indices.contains(selection) { proxy.scrollTo(entries[selection].id) }
                 }

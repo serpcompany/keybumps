@@ -329,6 +329,7 @@ private struct EmojiPaletteResults: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .paletteQuickSelectViewport()
                     .onChange(of: selection) {
                         if rows.indices.contains(selection) { proxy.scrollTo(rows[selection].glyph) }
                     }

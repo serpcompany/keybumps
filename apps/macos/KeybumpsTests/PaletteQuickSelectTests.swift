@@ -71,6 +71,48 @@ struct PaletteQuickSelectTests {
         #expect(fixture.pasteboard.string(forType: .string) == second)
     }
 
+    @Test("Snippets: ⇧2 copies the second snippet listed")
+    func snippets() throws {
+        let fixture = QuickSelectFixture()
+        defer { fixture.tearDown() }
+        for name in ["Made-up alpha", "Made-up beta", "Made-up gamma"] {
+            try fixture.snippets.add(SnippetDraft(name: name, keyword: ";\(name.split(separator: " ")[1])", text: "\(name) text"))
+        }
+        fixture.preferences.setCapability(.snippets, enabled: true)
+        fixture.palette.selectOnOpening(.snippets)
+        let listed = SnippetPaletteContent.resolve(
+            snippets: fixture.snippets.snippets, query: "", isEnabled: true, libraryState: fixture.snippets.libraryState
+        ).entries
+
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_ANSI_2, "@", .shift))
+        #expect(fixture.pasteboard.string(forType: .string) == listed[1].text)
+    }
+
+    @Test("Holding ⇧N acts once, not again on whatever row is Nth by then")
+    func heldKeyActsOnce() {
+        let fixture = QuickSelectFixture()
+        defer { fixture.tearDown() }
+        for text in ["made-up first", "made-up second"] { fixture.clipboard.ingestForTesting(text) }
+        fixture.palette.selectOnOpening(.clipboard)
+        let repeated = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0, windowNumber: 0, context: nil,
+            characters: "!", charactersIgnoringModifiers: "!", isARepeat: true, keyCode: UInt16(kVK_ANSI_1)
+        )!
+
+        #expect(fixture.palette.handleKeyDown(repeated) == nil, "A held key still doesn't type !")
+        #expect(fixture.pasteboard.string(forType: .string) == nil)
+    }
+
+    @Test("Command keys are Command alone; Caps Lock, Fn and the keypad flag don't matter")
+    func commandKeys() {
+        for flags: NSEvent.ModifierFlags in [.command, [.command, .capsLock], [.command, .function], [.command, .numericPad]] {
+            #expect(CommandPaletteController.isCommandKey(Self.key(kVK_ANSI_E, "e", flags)))
+        }
+        for flags: NSEvent.ModifierFlags in [[], .capsLock, [.command, .shift], [.command, .option], [.command, .control]] {
+            #expect(!CommandPaletteController.isCommandKey(Self.key(kVK_ANSI_E, "e", flags)))
+        }
+    }
+
     @Test("/'s filters are numbered too: ⇧2 chooses the second")
     func filters() {
         let fixture = QuickSelectFixture()
@@ -89,6 +131,8 @@ private final class QuickSelectFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsQuickSelect-\(UUID().uuidString)"))
     let clipboard: ClipboardHistoryService
+    let snippets: SnippetStore
+    let preferences = AppPreferences(defaults: InMemoryDefaults())
     let palette: CommandPaletteController
 
     init() {
@@ -102,6 +146,7 @@ private final class QuickSelectFixture {
         let dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
+        snippets = folder.makeStore()
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -111,8 +156,8 @@ private final class QuickSelectFixture {
                 paster: InertTextPaster(),
                 allowsSystemAccess: false
             ),
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
-            snippets: folder.makeStore(),
+            preferences: preferences,
+            snippets: snippets,
             pasteboard: pasteboard,
             notices: QuietNotices(),
             search: QuickSearchModel.forTests(in: root)

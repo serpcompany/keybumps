@@ -207,6 +207,7 @@ private struct TimerPaletteResults: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .paletteQuickSelectViewport()
     }
 
     /// A section header above the first row of each kind.
