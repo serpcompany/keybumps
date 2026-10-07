@@ -35,6 +35,10 @@ struct CapabilityDescriptor: Identifiable {
     /// Whether it's on in a new install, and turned on once in existing installs by the update that
     /// adds it. One that ships off is listed in Settings › Plugins with its switch off.
     var isOnByDefault = true
+    /// The oldest macOS it runs on, as a major version such as 15; nil for every macOS Keybumps
+    /// runs on. On an older Mac it's listed with "Requires macOS 15" and can't be turned on
+    /// (`PluginCompatibility`).
+    var minimumMacOS: Int?
 
     var id: Capability { capability }
 }
@@ -69,7 +73,8 @@ enum CapabilityCatalog {
     /// Registry order. It is the order modules apply in and Quick Search lists their commands; a module
     /// follows every module it depends on, so a dependency is settled before its dependents read it.
     static let descriptors: [CapabilityDescriptor] = [
-        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer, .emojiPicker
+        .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer, .emojiPicker,
+        .translation,
     ]
 
     /// The default capabilities: the feature set Keybumps was locked at (#205). Every capability

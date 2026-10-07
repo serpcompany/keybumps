@@ -25,6 +25,7 @@ struct DictationHistoryView: View {
             content
         }
         .navigationTitle("Dictation History")
+        .environment(\.dictationTranslationPair, model.preferences.dictationTranslationPair)
         .onAppear {
             model.dictationHistory.refresh()
             if expansion.expandedEntryID == nil, let first = model.dictationHistory.entries.first {
@@ -397,6 +398,12 @@ struct ClearAllButton: View {
     }
 }
 
+extension EnvironmentValues {
+    /// The languages Dictation's Translate goes between (`AppPreferences.dictationTranslationPair`):
+    /// the Translation plugin's while it's on, otherwise English and Japanese.
+    @Entry var dictationTranslationPair = TranslationLanguagePair.dictationDefault
+}
+
 @available(macOS 15.0, *)
 struct LocalDictationTranslationView: View {
     let sourceText: String
@@ -406,6 +413,7 @@ struct LocalDictationTranslationView: View {
     let close: () -> Void
 
     @Environment(\.holdCommandPaletteOpen) private var holdPaletteOpen
+    @Environment(\.dictationTranslationPair) private var translationPair
     @State private var holdID = UUID()
     /// Where Translate starts, once the targets have loaded; nil when nothing can be translated.
     @State private var sourceLanguageIdentifier: String?
@@ -570,12 +578,12 @@ struct LocalDictationTranslationView: View {
         if configuration?.source == source, configuration?.target == target {
             configuration?.invalidate()
         } else {
-            configuration = TranslationSession.Configuration(source: source, target: target)
+            configuration = TranslationModels.configuration(source: source, target: target)
         }
     }
 
     private func loadSupportedTargets() async {
-        let availability = LanguageAvailability()
+        let availability = TranslationModels.availability()
         let supported = await availability.supportedLanguages
         let resolved = await TranslationLanguagePolicy.translatableSource(
             for: sourceText,
@@ -597,7 +605,7 @@ struct LocalDictationTranslationView: View {
             TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: $0.source,
                 supportedIdentifiers: supportedTargets.map(\.minimalIdentifier),
-                pair: .dictationDefault
+                pair: translationPair
             )
         } ?? ""
         hasLoadedTargets = true

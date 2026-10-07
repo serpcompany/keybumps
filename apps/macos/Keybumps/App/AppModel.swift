@@ -164,6 +164,7 @@ final class AppModel {
         problemReports injectedProblemReports: (any ProblemReportPresenting)? = nil,
         timers injectedTimers: TimerStore? = nil,
         timerAlerts injectedTimerAlerts: (any TimerAlerting)? = nil,
+        translator injectedTranslator: (any TextTranslating)? = nil,
         dictationHistory injectedDictationHistory: DictationHistoryService? = nil,
         quickSearch injectedQuickSearch: QuickSearchModel? = nil,
         windows injectedWindows: WindowManagementService? = nil,
@@ -335,7 +336,13 @@ final class AppModel {
                 // Unit tests never play a sound or show a notice.
                 alerts: injectedTimerAlerts ?? (UnitTestHost.isActive ? InertTimerAlerts() : SystemTimerAlerts())
             ),
-            EmojiPickerModule(palette: commandPalette, preferences: preferences, recents: .makeDefault())
+            EmojiPickerModule(palette: commandPalette, preferences: preferences, recents: .makeDefault()),
+            // Unit tests and the UI-test composition never download a language or translate.
+            TranslationModule(
+                palette: commandPalette,
+                preferences: preferences,
+                translator: injectedTranslator ?? TextTranslatorFactory.makeDefault()
+            ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }

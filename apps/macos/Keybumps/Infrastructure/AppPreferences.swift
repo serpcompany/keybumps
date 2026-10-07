@@ -28,13 +28,22 @@ final class AppPreferences {
     }
 
     private let defaults: UserDefaults
+    /// Which plugins this Mac's macOS runs (#322).
+    let compatibility: PluginCompatibility
 
     var showInDockAndSwitcher: Bool {
         didSet { defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher) }
     }
 
+    /// The plugins that are on. A plugin this Mac's macOS can't run is never among them, even when
+    /// saved on or set here (`PluginCompatibility`), so its module, tab, and shortcuts never run.
     var enabledCapabilities: Set<Capability> {
-        didSet { defaults.set(enabledCapabilities.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities) }
+        get { storedEnabledCapabilities }
+        set { storedEnabledCapabilities = newValue.filter(compatibility.supports) }
+    }
+
+    private var storedEnabledCapabilities: Set<Capability> {
+        didSet { defaults.set(storedEnabledCapabilities.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities) }
     }
 
     var dictationLanguage: String {
@@ -122,9 +131,25 @@ final class AppPreferences {
         return false
     }
 
+    /// A menu preference's chosen value, or "" for a switch.
+    func choice(_ preference: PluginPreference, for capability: Capability) -> String {
+        if case .choice(let value) = value(of: preference, for: capability) { return value }
+        return ""
+    }
+
     /// Sets a preference `capability` declares, to a value of its kind; anything else is ignored.
+    /// Choosing the value of the menu it `differsFrom` swaps the two, so they never match.
     func set(_ value: PluginPreference.Value, of preference: PluginPreference, for capability: Capability) {
-        guard capability.descriptor.preferences.contains(preference), preference.accepts(value) else { return }
+        let declared = capability.descriptor.preferences
+        guard declared.contains(preference), preference.accepts(value) else { return }
+        if let key = preference.differsFrom, let counterpart = declared.first(where: { $0.key == key }),
+           self.value(of: counterpart, for: capability) == value {
+            store(self.value(of: preference, for: capability), of: counterpart, for: capability)
+        }
+        store(value, of: preference, for: capability)
+    }
+
+    private func store(_ value: PluginPreference.Value, of preference: PluginPreference, for capability: Capability) {
         let key = preference.storageKey(for: capability)
         pluginValues[key] = value
         switch value {
@@ -159,15 +184,20 @@ final class AppPreferences {
         return Set(stored.compactMap(Capability.init(rawValue:))).union(introduced)
     }
 
-    init(defaults: UserDefaults = .standard, legacyDefaults: [UserDefaults] = []) {
+    init(
+        defaults: UserDefaults = .standard,
+        legacyDefaults: [UserDefaults] = [],
+        compatibility: PluginCompatibility = .current
+    ) {
         self.defaults = defaults
+        self.compatibility = compatibility
         let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
         let initial = Self.initialCapabilities(
             stored: stored,
             known: defaults.array(forKey: Key.knownCapabilities) as? [String],
             shippingOff: Set(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability))
-        )
-        enabledCapabilities = initial
+        ).filter(compatibility.supports)
+        storedEnabledCapabilities = initial
         if stored != nil {
             defaults.set(initial.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities)
         }
@@ -242,6 +272,7 @@ final class AppPreferences {
         loadPluginValues()
     }
 
+    /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {
         if enabled { enabledCapabilities.insert(capability) }
         else { enabledCapabilities.remove(capability) }

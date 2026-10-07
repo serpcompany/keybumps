@@ -874,15 +874,15 @@ struct SnippetPaletteTests {
         #expect(NSPasteboard.contentsOptions(concealed: false) == [])
     }
 
-    @Test("Snippets takes ⌘5, and the hidden-by-default Hotkeys tab stays last, after Timers and Emoji")
+    @Test("Snippets takes ⌘5, and the hidden-by-default Hotkeys tab stays last, after Timers, Emoji, and Translate")
     func tabOrdering() {
-        #expect(CommandPaletteTab.allCases.suffix(4) == [.snippets, .timers, .emoji, .keyboardShortcutter])
+        #expect(CommandPaletteTab.allCases.suffix(5) == [.snippets, .timers, .emoji, .translate, .keyboardShortcutter])
         #expect(CommandPaletteTab.snippets.shortcutLabel == "⌘5")
-        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘8")
+        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9")
         let visible = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: Set(Capability.allCases))
-        #expect(visible.map(\.shortcutLabel) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7"], "No gap in the visible tabs")
+        #expect(visible.map(\.shortcutLabel) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8"], "No gap in the visible tabs")
         #expect(CommandPaletteTab.matchingCommandKey("5", in: visible) == .snippets)
-        #expect(CommandPaletteTab.matchingCommandKey("8", in: visible) == nil)
+        #expect(CommandPaletteTab.matchingCommandKey("9", in: visible) == nil)
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases)).last == .keyboardShortcutter)
     }
 }
@@ -1080,7 +1080,7 @@ struct SnippetPaletteKeyTests {
         #expect(module.attentionCount(denied) == 0)
     }
 
-    @Test("⌘5 selects Snippets; ⌘8 does nothing while the Hotkeys tab is hidden")
+    @Test("⌘5 selects Snippets; ⌘8 and ⌘9 do nothing while Translation is off and the Hotkeys tab is hidden")
     func tabKeys() {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
@@ -1088,6 +1088,8 @@ struct SnippetPaletteKeyTests {
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_5, "5", command: true)) == nil)
         #expect(fixture.palette.state.tab == .snippets)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_8, "8", command: true)) != nil)
+        #expect(fixture.palette.state.tab == .snippets)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_9, "9", command: true)) != nil)
         #expect(fixture.palette.state.tab == .snippets)
     }
 }

@@ -1,25 +1,87 @@
 import Foundation
 import NaturalLanguage
 
+/// The languages the Translation plugin's "My language" and "Other language" offer (#322), and the
+/// one place they're listed: the ones Apple's Translation offers on macOS 15, the plugin's oldest
+/// macOS. Later versions add more (Danish, Finnish, Hebrew, Malay, Norwegian, and Swedish by macOS
+/// 27), which the Translate tab still translates from when it detects them. Chinese is listed by
+/// script.
+enum TranslationLanguages {
+    struct Language: Equatable {
+        /// Its `TranslationLanguagePair.code`, such as `en` or `zh-Hant`.
+        let code: String
+        let name: String
+    }
+
+    static let offered: [Language] = [
+        Language(code: "ar", name: "Arabic"),
+        Language(code: "zh-Hans", name: "Chinese (Simplified)"),
+        Language(code: "zh-Hant", name: "Chinese (Traditional)"),
+        Language(code: "nl", name: "Dutch"),
+        Language(code: "en", name: "English"),
+        Language(code: "fr", name: "French"),
+        Language(code: "de", name: "German"),
+        Language(code: "hi", name: "Hindi"),
+        Language(code: "id", name: "Indonesian"),
+        Language(code: "it", name: "Italian"),
+        Language(code: "ja", name: "Japanese"),
+        Language(code: "ko", name: "Korean"),
+        Language(code: "pl", name: "Polish"),
+        Language(code: "pt", name: "Portuguese"),
+        Language(code: "ru", name: "Russian"),
+        Language(code: "es", name: "Spanish"),
+        Language(code: "th", name: "Thai"),
+        Language(code: "tr", name: "Turkish"),
+        Language(code: "uk", name: "Ukrainian"),
+        Language(code: "vi", name: "Vietnamese"),
+    ]
+
+    static func isOffered(_ identifier: String) -> Bool {
+        let code = TranslationLanguagePair.code(identifier)
+        return offered.contains { $0.code == code }
+    }
+
+    /// A language's name: its name in the list, or the Mac's name for one Translate detected that
+    /// isn't in it.
+    static func name(for identifier: String) -> String {
+        let code = TranslationLanguagePair.code(identifier)
+        return offered.first { $0.code == code }?.name
+            ?? Locale.current.localizedString(forIdentifier: code)
+            ?? identifier
+    }
+}
+
 /// The two languages translation goes between (#322): text in mine goes to the other, and text in
-/// any other language comes back to mine, as in Easydict and Pot. Languages are codes such as `en`.
+/// any other language comes back to mine, as in Easydict and Pot. Languages are codes such as `en`,
+/// with the script for Chinese (`zh-Hans`, `zh-Hant`), since that's which Chinese it is.
 struct TranslationLanguagePair: Equatable {
     let mine: String
     let other: String
 
+    /// The two are never the same language: when they are, the other becomes English, or Japanese
+    /// when mine is English.
     init(mine: String, other: String) {
-        self.mine = Self.code(mine)
-        self.other = Self.code(other)
+        let mine = Self.code(mine)
+        let other = Self.code(other)
+        self.mine = mine
+        self.other = other == mine ? Self.otherDefault(forMine: mine) : other
     }
 
-    /// What Dictation's Translate has always done: English text to Japanese, anything else to
-    /// English. The Translation plugin's setting replaces it when that plugin is on.
+    /// What Dictation's Translate does while the Translation plugin is off: English text to
+    /// Japanese, anything else to English. The plugin's setting replaces it while it's on.
     static let dictationDefault = TranslationLanguagePair(mine: "en", other: "ja")
 
-    /// The Mac's first preferred language, with English, or with Japanese when that's English.
+    /// The Translation plugin's starting pair: the Mac's first preferred language, when Translation
+    /// offers it (`TranslationLanguages`), or else English; with English, or with Japanese when
+    /// mine is English.
     static func systemDefault(preferredLanguages: [String] = Locale.preferredLanguages) -> TranslationLanguagePair {
-        let mine = code(preferredLanguages.first ?? "en")
-        return TranslationLanguagePair(mine: mine, other: mine == "en" ? "ja" : "en")
+        let first = preferredLanguages.first.map(code) ?? "en"
+        let mine = TranslationLanguages.isOffered(first) ? first : "en"
+        return TranslationLanguagePair(mine: mine, other: otherDefault(forMine: mine))
+    }
+
+    private static func otherDefault(forMine mine: String) -> String {
+        mine == "en" ? "ja" : "en"
     }
 
     /// The language to translate text in `sourceIdentifier` into.
@@ -27,8 +89,14 @@ struct TranslationLanguagePair: Equatable {
         Self.code(sourceIdentifier) == mine ? other : mine
     }
 
-    private static func code(_ identifier: String) -> String {
-        Locale.Language(identifier: identifier).languageCode?.identifier ?? identifier
+    /// The language an identifier names, as the pair keeps it: its language code (`pt-BR` is `pt`),
+    /// with the script for Chinese, which Taiwan and Hong Kong write in Traditional (`zh-TW` is
+    /// `zh-Hant`).
+    static func code(_ identifier: String) -> String {
+        let language = Locale.Language(identifier: identifier)
+        guard let code = language.languageCode?.identifier else { return identifier }
+        if code == "zh", let script = language.script?.identifier { return "\(code)-\(script)" }
+        return code
     }
 }
 
@@ -113,8 +181,7 @@ enum TranslationLanguagePolicy {
         pair: TranslationLanguagePair
     ) -> String? {
         let preferred = pair.target(forSourceIdentifier: sourceIdentifier)
-        return supportedIdentifiers.first(where: {
-            Locale.Language(identifier: $0).languageCode?.identifier == preferred
-        }) ?? supportedIdentifiers.first
+        return supportedIdentifiers.first(where: { TranslationLanguagePair.code($0) == preferred })
+            ?? supportedIdentifiers.first
     }
 }
