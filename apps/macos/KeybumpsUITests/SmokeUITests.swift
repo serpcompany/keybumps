@@ -30,7 +30,7 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker"] {
+        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -164,13 +164,15 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(paletteField(prompt).waitForExistence(timeout: 5), "⌘\(key)")
         }
 
-        // Emoji (⌘7) ships off, and the Hotkeys tab (⌘8) is hidden by default: neither shows, and
-        // their Command-numbers do nothing.
+        // Emoji (⌘7) and Translate (⌘8) ship off, and the Hotkeys tab (⌘9) is hidden by default: none
+        // shows, and their Command-numbers do nothing.
         XCTAssertFalse(app.buttons["palette.tab.emoji"].exists)
+        XCTAssertFalse(app.buttons["palette.tab.translate"].exists)
         XCTAssertFalse(app.buttons["palette.tab.keyboardShortcutter"].exists)
         app.typeKey("7", modifierFlags: .command)
         app.typeKey("8", modifierFlags: .command)
-        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘7 and ⌘8 are ignored")
+        app.typeKey("9", modifierFlags: .command)
+        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘7, ⌘8, and ⌘9 are ignored")
     }
 
     func testEmojiPickerShipsOffAndTurnsOnInSettings() {
@@ -187,6 +189,23 @@ final class SmokeUITests: XCTestCase {
         element("capability.offBanner.turnOn.emojiPicker").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
         XCTAssertTrue(element("capability.offBanner.emojiPicker").waitForNonExistence(timeout: 5))
+    }
+
+    func testTranslationShipsOffAndTurnsOnInSettings() {
+        // Its page is drawn by the plugin template, with its two languages and Accessibility as an
+        // optional permission. CI's Mac runs macOS 15 or later, so it can be turned on.
+        launch(permissions: "denied", ["-KBOpenSettings", "translation"])
+        let toggle = element("capability.toggle.translation")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForValue(of: toggle, 0), "Translation ships off")
+        XCTAssertTrue(app.staticTexts["Accessibility (Optional)"].exists)
+        XCTAssertTrue(element("plugin.translation.myLanguage").exists)
+        XCTAssertTrue(element("plugin.translation.otherLanguage").exists)
+        XCTAssertTrue(element("capability.offBanner.translation").exists, "Its page says it's off")
+
+        element("capability.offBanner.turnOn.translation").click()
+        XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.translation").waitForNonExistence(timeout: 5))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {

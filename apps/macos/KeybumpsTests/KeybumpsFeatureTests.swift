@@ -1752,7 +1752,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     func testCapabilitiesDefaultEnabledAndPersist() {
         let defaults = InMemoryDefaults()
         let first = AppPreferences(defaults: defaults)
-        XCTAssertEqual(first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker]), "Emoji Picker ships off")
+        XCTAssertEqual(first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation]), "Emoji Picker and Translation ship off")
         first.setCapability(.dictation, enabled: false)
         XCTAssertFalse(AppPreferences(defaults: defaults).enabledCapabilities.contains(.dictation))
     }
@@ -2207,19 +2207,21 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testDictationTranslationRequiresRealTranscriptText() {
-        XCTAssertTrue(DictationTranslationPolicy.canTranslate("Translate this"))
-        XCTAssertFalse(DictationTranslationPolicy.canTranslate("  \n "))
+        XCTAssertTrue(TranslationLanguagePolicy.canTranslate("Translate this"))
+        XCTAssertFalse(TranslationLanguagePolicy.canTranslate("  \n "))
         XCTAssertEqual(
-            DictationTranslationPolicy.preferredTargetIdentifier(
+            TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: "en-US",
-                supportedIdentifiers: ["fr", "ja", "es"]
+                supportedIdentifiers: ["fr", "ja", "es"],
+                pair: TranslationLanguagePair(mine: "en", other: "ja")
             ),
             "ja"
         )
         XCTAssertEqual(
-            DictationTranslationPolicy.preferredTargetIdentifier(
+            TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: "ja-JP",
-                supportedIdentifiers: ["fr", "en-US", "es"]
+                supportedIdentifiers: ["fr", "en-US", "es"],
+                pair: TranslationLanguagePair(mine: "en", other: "ja")
             ),
             "en-US"
         )
@@ -2273,8 +2275,8 @@ final class KeybumpsFeatureTests: XCTestCase {
     func testCommandPaletteHasItsTabsWithSearchAsDefault() {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
-        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji, .keyboardShortcutter])
-        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8"])
+        XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji, .translate, .keyboardShortcutter])
+        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9"])
         XCTAssertEqual(
             CommandPaletteTab.allCases.map(\.labelPresentation),
             [
@@ -2285,29 +2287,32 @@ final class KeybumpsFeatureTests: XCTestCase {
                 CommandPaletteTabLabel(shortcut: "⌘5", name: "Snippets"),
                 CommandPaletteTabLabel(shortcut: "⌘6", name: "Timers"),
                 CommandPaletteTabLabel(shortcut: "⌘7", name: "Emoji"),
-                CommandPaletteTabLabel(shortcut: "⌘8", name: "Hotkeys")
+                CommandPaletteTabLabel(shortcut: "⌘8", name: "Translate"),
+                CommandPaletteTabLabel(shortcut: "⌘9", name: "Hotkeys")
             ]
         )
         XCTAssertEqual(
             CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
-            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"], ["⌘", "5"], ["⌘", "6"], ["⌘", "7"], ["⌘", "8"]]
+            [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"], ["⌘", "5"], ["⌘", "6"], ["⌘", "7"], ["⌘", "8"], ["⌘", "9"]]
         )
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("3"), .screenshots)
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("4"), .dictation)
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("5"), .snippets)
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("6"), .timers)
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("7"), .emoji)
-        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("8"), .keyboardShortcutter)
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("8"), .translate)
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("9"), .keyboardShortcutter)
 
-        // The Hotkeys tab is hidden by default, except while it is open, so the visible tabs stay ⌘1–⌘7.
+        // The Hotkeys tab is hidden by default, except while it is open, so the visible tabs stay ⌘1–⌘8.
         XCTAssertFalse(AppPreferences(defaults: InMemoryDefaults()).showsHotkeysTab)
         let hidden = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: Set(Capability.allCases))
-        XCTAssertEqual(hidden, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji])
-        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("7", in: hidden), .emoji)
-        XCTAssertNil(CommandPaletteTab.matchingCommandKey("8", in: hidden))
+        XCTAssertEqual(hidden, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji, .translate])
+        XCTAssertEqual(CommandPaletteTab.matchingCommandKey("8", in: hidden), .translate)
+        XCTAssertNil(CommandPaletteTab.matchingCommandKey("9", in: hidden))
         XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .keyboardShortcutter, enabled: Set(Capability.allCases)).last, .keyboardShortcutter)
         XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases)), CommandPaletteTab.allCases)
-        XCTAssertNil(CommandPaletteTab.matchingCommandKey("9"))
+        // ⌘9 is the last number the palette matches; none is left for another tab.
+        XCTAssertNil(CommandPaletteTab.matchingCommandKey("0"))
         XCTAssertEqual(CommandPaletteTab.snippets.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.snippets.secondaryActionTitle, "Paste")
         XCTAssertEqual(CommandPaletteTab.snippets.prompt, "Search snippets")

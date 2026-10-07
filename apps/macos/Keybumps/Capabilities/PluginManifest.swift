@@ -24,6 +24,30 @@ struct PluginOptionalPermission: Equatable {
     let reason: String
 }
 
+/// The one rule for plugins that need a newer macOS than Keybumps does (#322): one whose
+/// `minimumMacOS` is newer than this Mac's can't be turned on, and is never on. `AppPreferences`
+/// applies it to the plugins that are on, so no module, palette tab, or shortcut of such a plugin
+/// ever runs; Settings shows its `requirement`.
+struct PluginCompatibility: Equatable {
+    /// This Mac's macOS major version, such as 15. Tests pass their own.
+    let macOSMajorVersion: Int
+
+    static let current = PluginCompatibility(
+        macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    )
+
+    func supports(_ capability: Capability) -> Bool {
+        guard let minimum = capability.descriptor.minimumMacOS else { return true }
+        return macOSMajorVersion >= minimum
+    }
+
+    /// Why it can't be turned on here, such as "Requires macOS 15"; nil when it can.
+    func requirement(for capability: Capability) -> String? {
+        guard !supports(capability), let minimum = capability.descriptor.minimumMacOS else { return nil }
+        return "Requires macOS \(minimum)"
+    }
+}
+
 /// Who makes a plugin. For now every plugin is official, built by Keybumps (ADR 0006).
 enum PluginPublisher: Equatable {
     case keybumps
@@ -61,6 +85,9 @@ struct PluginPreference: Identifiable, Equatable {
     /// The heading it's listed under; preferences that share one are drawn together.
     var group: String
     let kind: Kind
+    /// The key of another menu of the same plugin that never has the same value, such as
+    /// Translation's two languages. Choosing that one's value swaps the two (`AppPreferences.set`).
+    var differsFrom: String?
 
     var id: String { key }
 

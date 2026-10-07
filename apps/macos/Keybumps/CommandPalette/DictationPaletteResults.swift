@@ -250,7 +250,7 @@ private struct DictationPaletteDetail: View {
             if !entry.text.isEmpty {
                 Button("Copy", systemImage: "doc.on.doc", action: copy)
             }
-            if #available(macOS 15.0, *), DictationTranslationPolicy.canTranslate(entry.text) {
+            if #available(macOS 15.0, *), TranslationLanguagePolicy.canTranslate(entry.text) {
                 Button("Translate", systemImage: "translate") { showsTranslation.toggle() }
             }
             Button("Show in Finder", systemImage: "folder", action: reveal)

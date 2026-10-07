@@ -16,7 +16,7 @@ struct CapabilityModuleTests {
 
         let order: [Capability] = [
             .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer,
-            .emojiPicker,
+            .emojiPicker, .translation,
         ]
         #expect(CapabilityCatalog.descriptors.map(\.capability) == order)
         #expect(harness.model.capabilities.modules.map(\.capability) == order)
@@ -27,16 +27,17 @@ struct CapabilityModuleTests {
         }
     }
 
-    @Test("Shortcut Coach's, Timer's, and Emoji Picker's modules supply their tabs' rows, and the app gives them to the palette")
+    @Test("Shortcut Coach's, Timer's, Emoji Picker's, and Translation's modules supply their tabs' rows, and the app gives them to the palette")
     func moduleRowsComeFromTheModules() {
         let harness = ModuleHarness()
         defer { harness.tearDown() }
 
-        #expect(Set(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter, .timers, .emoji])
+        #expect(Set(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter, .timers, .emoji, .translate])
         #expect(harness.model.capabilities.module(for: .keyboardShortcutter)?.paletteContent?.tab == .keyboardShortcutter)
         #expect(harness.model.capabilities.module(for: .timer)?.paletteContent?.tab == .timers)
         #expect(harness.model.capabilities.module(for: .emojiPicker)?.paletteContent?.tab == .emoji)
-        #expect(Set(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter, .timers, .emoji])
+        #expect(harness.model.capabilities.module(for: .translation)?.paletteContent?.tab == .translate)
+        #expect(Set(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter, .timers, .emoji, .translate])
     }
 
     @Test("Every palette tab is drawn by the palette or supplied by its module, never neither or both")
@@ -123,7 +124,7 @@ struct CapabilityModuleTests {
     func offPluginsHaveNoTab() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
         let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled)
-        #expect(tabs == [.search, .dictation, .snippets, .timers], "Screenshots lists Clipboard History, so it goes too")
+        #expect(tabs == [.search, .dictation, .snippets, .timers, .translate], "Screenshots lists Clipboard History, so it goes too")
         #expect(CommandPaletteTab.matchingCommandKey("7", in: tabs) == nil)
         #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == .timers, "Numbers stay fixed")
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .emoji, enabled: enabled).contains(.emoji))
@@ -136,16 +137,17 @@ struct CapabilityModuleTests {
         #expect(CommandPaletteTab.adjacent(to: .search, offset: 1, in: tabs) == .dictation)
         #expect(CommandPaletteTab.adjacent(to: .dictation, offset: -1, in: tabs) == .search)
         #expect(CommandPaletteTab.adjacent(to: .search, offset: -1, in: tabs) == nil, "No wrap at the first tab")
-        #expect(CommandPaletteTab.adjacent(to: .timers, offset: 1, in: tabs) == nil, "No wrap at the last tab")
+        #expect(CommandPaletteTab.adjacent(to: .timers, offset: 1, in: tabs) == .translate)
+        #expect(CommandPaletteTab.adjacent(to: .translate, offset: 1, in: tabs) == nil, "No wrap at the last tab")
         #expect(CommandPaletteTab.adjacent(to: .emoji, offset: 1, in: tabs) == nil, "A tab not in the bar has no neighbor")
     }
 
     @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs
-        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6, 7, 8])
+        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6, 7, 8, 9])
         #expect(Set(tabs.map(\.tab)).count == tabs.count)
-        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets", "timers", "emoji"] {
+        for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets", "timers", "emoji", "translate"] {
             #expect(CommandPaletteTab(rawValue: rawValue).map(CommandPaletteTab.allCases.contains) == true)
         }
         #expect(CommandPaletteTab.search.owner == .quickSearch)
@@ -154,6 +156,7 @@ struct CapabilityModuleTests {
         #expect(CommandPaletteTab.snippets.owner == .snippets)
         #expect(CommandPaletteTab.timers.owner == .timer)
         #expect(CommandPaletteTab.emoji.owner == .emojiPicker)
+        #expect(CommandPaletteTab.translate.owner == .translation)
         #expect(CapabilityCatalog.paletteTab(for: .screenshots).tab.dataSource == .clipboardHistory)
         #expect(CapabilityDescriptor.windowManagement.paletteTab == nil)
 
@@ -192,7 +195,8 @@ struct CapabilityModuleTests {
             .keyboardShortcutter: [],
             .snippets: [],
             .timer: [],
-            .emojiPicker: []
+            .emojiPicker: [],
+            .translation: []
         ])
     }
 
@@ -249,7 +253,7 @@ struct CapabilityModuleTests {
     func preferenceKeysAndKnownCapabilitiesMigration() {
         #expect(Capability.allCases.map(\.rawValue) == [
             "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools", "snippets",
-            "timer", "emojiPicker",
+            "timer", "emojiPicker", "translation",
         ])
         #expect(Capability.originalCapabilities == [
             .quickSearch, .clipboardHistory, .dictation, .windowManagement, .keyboardShortcutter
@@ -345,6 +349,13 @@ private final class ModuleHarness {
         displayName: "⌃⌥⇧E"
     )
 
+    /// A binding for the Open Translate shortcut, which also starts unassigned.
+    static let translationBinding = ShortcutBinding(
+        keyCode: UInt32(kVK_ANSI_L),
+        modifiers: UInt32(controlKey | optionKey | shiftKey),
+        displayName: "⌃⌥⇧L"
+    )
+
     init(
         licensing: (any LicenseControlling)? = nil,
         assignsSnippetsShortcut: Bool = true,
@@ -364,6 +375,7 @@ private final class ModuleHarness {
         }
         preferences.setCapabilityShortcut(Self.timerBinding, for: .timer)
         preferences.setCapabilityShortcut(Self.emojiPickerBinding, for: .emojiPicker)
+        preferences.setCapabilityShortcut(Self.translationBinding, for: .translation)
 
         clipboard = TrackingClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
@@ -439,6 +451,7 @@ private final class ModuleHarness {
         case .snippets: [CapabilityShortcut.snippets.ownerID]
         case .timer: [CapabilityShortcut.timer.ownerID]
         case .emojiPicker: [CapabilityShortcut.emojiPicker.ownerID]
+        case .translation: [CapabilityShortcut.translation.ownerID]
         }
     }
 
@@ -451,7 +464,7 @@ private final class ModuleHarness {
     /// resource are judged by their shortcut alone.
     func resourcesRunning(for capability: Capability) -> Bool {
         switch capability {
-        case .quickSearch, .dictation, .snippets, .emojiPicker:
+        case .quickSearch, .dictation, .snippets, .emojiPicker, .translation:
             model.shortcuts.activeOwners.isSuperset(of: Self.ownedShortcuts(for: capability))
         case .clipboardHistory: clipboard.isMonitoring
         case .windowManagement: windows.isDragSnapping

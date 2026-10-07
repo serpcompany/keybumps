@@ -235,18 +235,22 @@ final class WiringHarness {
     private let pasteboard: NSPasteboard
     private var lastShortcuts: [String: String] = [:]
 
-    /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder.
+    /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder. The
+    /// Mac runs macOS 15 unless `compatibility` says otherwise, so the snapshot doesn't depend on the
+    /// Mac recording it; `defaults` holds what was saved before launch.
     init(
         enabled: Set<Capability>,
         missing: MacPermission?,
         root: URL,
         didCompleteOnboarding: Bool = true,
-        quickSearch: QuickSearchModel? = nil
+        quickSearch: QuickSearchModel? = nil,
+        compatibility: PluginCompatibility = PluginCompatibility(macOSMajorVersion: 15),
+        defaults: UserDefaults = InMemoryDefaults()
     ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let preferences = AppPreferences(defaults: defaults, compatibility: compatibility)
         preferences.enabledCapabilities = enabled
         preferences.didCompleteOnboarding = didCompleteOnboarding
         // Open Snippets starts unassigned; give it one so the snapshot records Snippets registering

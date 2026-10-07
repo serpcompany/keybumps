@@ -103,6 +103,13 @@ private struct PluginsListRow: View {
                         SettingsRowLabel(title: descriptor.title, subtitle: descriptor.settingsPage?.summary)
                             .lineLimit(1)
                         Spacer(minLength: 8)
+                        // A plugin that needs a newer macOS than this Mac's (#322).
+                        if let requirement = model.preferences.compatibility.requirement(for: capability) {
+                            Text(requirement)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                         if model.settingsAttentionCount(for: page) > 0 {
                             Image(systemName: "exclamationmark.circle.fill")
                                 .foregroundStyle(.red)

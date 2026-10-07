@@ -11,8 +11,8 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .keyboardShortcutter,
             name: "Hotkeys",
-            // Hidden by default, so it comes last and the visible tabs stay ⌘1–⌘7 (Emoji is ⌘7).
-            commandKey: 8,
+            // Hidden by default, so it comes last and the visible tabs stay ⌘1–⌘8 (Translate is ⌘8).
+            commandKey: 9,
             systemImage: "keyboard",
             prompt: "Search hotkeys",
             primaryActionTitle: nil,
