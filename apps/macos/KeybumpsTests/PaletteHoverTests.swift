@@ -124,6 +124,36 @@ struct PaletteHoverTests {
         #expect(fixture.palette.state.selection == 0)
     }
 
+    @Test("Arrowing past the visible rows scrolls the real Clipboard list to the highlight (#352)")
+    func clipboardScrollsToTheHighlight() throws {
+        let fixture = HoverFixture()
+        defer { fixture.tearDown() }
+        for index in 1...40 { fixture.clipboard.ingestForTesting("made-up text \(index)") }
+        let panel = try #require(fixture.palette.layOutForTesting(.clipboard))
+        defer { panel.orderOut(nil) }
+        let content = try #require(panel.contentView)
+        let list = try #require(Self.waitFor { Self.scrollViews(in: content).first { $0.documentView is NSTableView } })
+        #expect(list.contentView.bounds.minY <= 0)
+
+        for _ in 0..<30 { _ = fixture.palette.handleKeyDown(Self.key(kVK_DownArrow)) }
+
+        #expect(fixture.palette.state.selection == 30)
+        #expect(Self.waitFor { list.contentView.bounds.minY > 300 ? true : nil } == true, "The list scrolled down to row 30")
+    }
+
+    private static func waitFor<T>(_ value: () -> T?) -> T? {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if let found = value() { return found }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        return nil
+    }
+
+    private static func scrollViews(in view: NSView) -> [NSScrollView] {
+        ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews(in:))
+    }
+
     @Test("A row that's no longer in the list can't take the highlight")
     func staleRowIsIgnored() {
         let fixture = HoverFixture()
@@ -175,8 +205,9 @@ private final class HoverFixture {
             notices: HoverNotices(),
             search: QuickSearchModel.forTests(in: root)
         )
-        palette.state.mouseLocation = { [unowned self] in pointer }
-        palette.state.now = { [unowned self] in clock }
+        // Weak: a shown palette's window outlives the fixture.
+        palette.state.mouseLocation = { [weak self] in self?.pointer ?? .zero }
+        palette.state.now = { [weak self] in self?.clock ?? 0 }
     }
 
     func tearDown() {

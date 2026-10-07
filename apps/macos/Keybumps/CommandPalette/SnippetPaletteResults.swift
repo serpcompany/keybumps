@@ -16,7 +16,6 @@ struct SnippetPaletteActions {
 /// The Snippets tab: a Snippets header with New Snippet, then one row per snippet in the Clipboard
 /// tab's row layout. Return copies, ⌘Return pastes, ⌘E edits, and ⌘N makes a new one.
 struct SnippetPaletteResults: View {
-    @Environment(\.paletteRevealsSelection) private var revealsSelection
     static let symbol = "text.quote"
 
     let content: SnippetPaletteContent
@@ -144,9 +143,7 @@ struct SnippetPaletteResults: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .onChange(of: selection) {
-                if revealsSelection, snippets.indices.contains(selection) { proxy.scrollTo(snippets[selection].id) }
-            }
+            .paletteScrollsToSelection(selection, proxy: proxy) { snippets.indices.contains($0) ? snippets[$0].id : nil }
         }
     }
 }

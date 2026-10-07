@@ -141,35 +141,39 @@ struct PaletteFilterMenu: View {
             if filters.isEmpty {
                 PaletteEmptyState(title: "No matching filter", systemImage: "line.3.horizontal.decrease")
             } else {
-                List(Array(filters.enumerated()), id: \.element.id) { index, filter in
-                    Button { choose(filter) } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: filter.systemImage)
-                                .frame(width: 22)
-                                .foregroundStyle(.secondary)
-                            Text("Filter by")
-                                .foregroundStyle(.secondary)
-                            Text(filter.title)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            Spacer()
+                ScrollViewReader { proxy in
+                    List(Array(filters.enumerated()), id: \.element.id) { index, filter in
+                        Button { choose(filter) } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: filter.systemImage)
+                                    .frame(width: 22)
+                                    .foregroundStyle(.secondary)
+                                Text("Filter by")
+                                    .foregroundStyle(.secondary)
+                                Text(filter.title)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                Spacer()
+                            }
+                            .font(.system(size: 15))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
                         }
-                        .font(.system(size: 15))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Filter by \(filter.title)")
+                        .accessibilityAddTraits(index == selection ? .isSelected : [])
+                        .listRowInsets(.init())
+                        .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
+                        .paletteRowBackground(isSelected: index == selection)
+                        .id(filter.id)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Filter by \(filter.title)")
-                    .accessibilityAddTraits(index == selection ? .isSelected : [])
-                    .listRowInsets(.init())
-                    .listRowSeparator(.hidden)
-                    .paletteHoverHighlights(row: index)
-                    .paletteRowBackground(isSelected: index == selection)
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .paletteScrollsToSelection(selection, proxy: proxy) { filters.indices.contains($0) ? filters[$0].id : nil }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
         }
     }
