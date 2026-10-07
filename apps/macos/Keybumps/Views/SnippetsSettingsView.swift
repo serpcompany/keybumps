@@ -24,7 +24,7 @@ struct SnippetsSettingsView: View {
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
             // Accessibility is optional: without it, ⌘P copies instead of pasting. Expanding needs
-            // it too, so while auto-expansion is on, its row below also asks for it.
+            // it too; while auto-expansion is on, its section below says so but asks only here.
             PluginPermissionsGroup(capability: .snippets)
             SettingsGroup("Auto-expansion") {
                 Toggle(isOn: Binding(
@@ -51,17 +51,23 @@ struct SnippetsSettingsView: View {
                         }
                     }
                     ForEach(missing, id: \.self) { permission in
-                        LabeledContent {
-                            Button("Allow…") { Task { await model.recoverPermission(permission) } }
-                                .disabled(model.permissions.activeRequest != nil)
-                                .accessibilityLabel("Allow \(permission.title) so keywords expand")
-                        } label: {
+                        if permission == .accessibility {
+                            // Its row in Permissions above asks for it, so this only says why.
                             SettingsRowLabel(
-                                title: "Expanding needs \(permission.title)",
-                                subtitle: permission == .inputMonitoring
-                                    ? "Lets Keybumps notice when you type a keyword."
-                                    : "Lets Keybumps replace the keyword with the snippet."
+                                title: "Expanding needs Accessibility",
+                                subtitle: "Lets Keybumps replace the keyword with the snippet. Allow it in Permissions above."
                             )
+                        } else {
+                            LabeledContent {
+                                Button("Allow…") { Task { await model.recoverPermission(permission) } }
+                                    .disabled(model.permissions.activeRequest != nil)
+                                    .accessibilityLabel("Allow \(permission.title) so keywords expand")
+                            } label: {
+                                SettingsRowLabel(
+                                    title: "Expanding needs \(permission.title)",
+                                    subtitle: "Lets Keybumps notice when you type a keyword."
+                                )
+                            }
                         }
                     }
                 }
