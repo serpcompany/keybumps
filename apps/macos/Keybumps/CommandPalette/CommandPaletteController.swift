@@ -194,6 +194,12 @@ enum CommandPaletteDismissalPolicy {
     static func palettesKey(eventWindow: NSWindow?, panel: NSWindow?) -> Bool {
         eventWindow == nil || eventWindow === panel
     }
+
+    /// Whether the palette becomes key again as the last hold lets go: it's still showing but lost
+    /// key focus to a window that has since closed, and no other Keybumps window is key.
+    static func shouldTakeKeyBack(isHeldOpen: Bool, isVisible: Bool, isKey: Bool, keybumpsHasKeyWindow: Bool) -> Bool {
+        !isHeldOpen && isVisible && !isKey && !keybumpsHasKeyWindow
+    }
 }
 
 /// Holds the Command Palette open against clicks in Keybumps's other windows once it's called with
@@ -361,9 +367,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     func dismiss() {
+        // Before hiding, which resigns key: a held resign would otherwise queue a second dismiss.
+        openHolds.removeAll()
         panel?.orderOut(nil)
         isPresentingConfirmation = false
-        openHolds.removeAll()
         state.didClose()
         removeMonitors()
     }
@@ -372,6 +379,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// views reach it through `holdCommandPaletteOpen`.
     func holdOpen(_ isHeld: Bool, by holder: UUID) {
         if isHeld { openHolds.insert(holder) } else { openHolds.remove(holder) }
+        // Once the prompt that took key focus is gone, the palette takes its keys back, as when
+        // it opened, so Escape and the arrow keys reach it again.
+        if let panel, CommandPaletteDismissalPolicy.shouldTakeKeyBack(
+            isHeldOpen: isHeldOpen,
+            isVisible: panel.isVisible,
+            isKey: panel.isKeyWindow,
+            keybumpsHasKeyWindow: NSApp.keyWindow != nil
+        ) {
+            panel.makeKey()
+        }
     }
 
     func dismiss(ifDisplaying tab: CommandPaletteTab) {

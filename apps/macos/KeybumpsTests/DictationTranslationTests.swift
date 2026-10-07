@@ -28,6 +28,8 @@ struct DictationTranslationTests {
         #expect(Self.source(Self.spanish) == "es")
         #expect(Self.source(Self.japanese) == "ja")
         #expect(Self.source("我明天早上会晚一点到。") == "zh-Hans")
+        #expect(Self.source("我明天早上會晚一點到。") == "zh-Hant")
+        #expect(Self.source("我明天早上會晚一點到。", recordedWith: "zh-TW") == "zh-TW")
     }
 
     @Test("Text in the setting's language keeps the setting, region and all")
@@ -58,7 +60,10 @@ struct DictationTranslationTests {
         #expect(source(nil, 0) == "en-US")
         #expect(source(.english, 1) == "en-US", "The setting's own language keeps its region")
         #expect(source(.simplifiedChinese, 1, recordedWith: "zh-CN") == "zh-CN", "Same script")
-        #expect(source(.simplifiedChinese, 1, recordedWith: "zh-TW") == "zh-Hans", "Another script")
+        #expect(source(.simplifiedChinese, 1, recordedWith: "zh-TW") == "zh-Hans", "Simplified text, another script")
+        #expect(source(.traditionalChinese, 1, recordedWith: "zh-TW") == "zh-TW", "Traditional text keeps Taiwan")
+        #expect(source(.traditionalChinese, 1, recordedWith: "zh-HK") == "zh-HK", "Traditional text keeps Hong Kong")
+        #expect(source(.traditionalChinese, 1) == "zh-Hant")
     }
 
     @Test("A language Translation can't start from falls back to the setting; with neither, nothing is offered")
@@ -164,6 +169,20 @@ struct DictationTranslationTests {
         #expect(CommandPaletteDismissalPolicy.palettesKey(eventWindow: nil, panel: panel))
         #expect(!CommandPaletteDismissalPolicy.palettesKey(eventWindow: prompt, panel: panel))
         #expect(!CommandPaletteDismissalPolicy.palettesKey(eventWindow: prompt, panel: nil))
+    }
+
+    @Test("As the last hold lets go, a showing palette that lost key focus to a closed prompt takes it back")
+    func takesKeyBack() {
+        func takesKey(held: Bool = false, visible: Bool = true, key: Bool = false, otherKey: Bool = false) -> Bool {
+            CommandPaletteDismissalPolicy.shouldTakeKeyBack(
+                isHeldOpen: held, isVisible: visible, isKey: key, keybumpsHasKeyWindow: otherKey
+            )
+        }
+        #expect(takesKey())
+        #expect(!takesKey(held: true), "Another holder still holds it")
+        #expect(!takesKey(visible: false), "A closed palette stays closed")
+        #expect(!takesKey(key: true), "Already key")
+        #expect(!takesKey(otherKey: true), "The prompt or another Keybumps window still has the keys")
     }
 
     @Test("Keys typed into another Keybumps window pass through untouched")
