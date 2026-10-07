@@ -167,6 +167,18 @@ _Avoid_: Emoji grid, emoji search
 The emoji you picked most recently, shown first in the Emoji tab. User content, kept only on this Mac (`emoji-recent.json`) and never logged; turning off "Remember recently used emoji" clears them.
 _Avoid_: Frequently used, history
 
+**Translation**:
+Translating text between your two languages on this Mac, with Apple's Translation. It ships off, and needs macOS 15: on an older Mac it's listed with "Requires macOS 15" and can't be turned on.
+_Avoid_: Translator, Translate (the tab's name)
+
+**Translate tab**:
+The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return copies the translation; ⌘Return pastes it and puts the clipboard back. Translations aren't kept anywhere.
+_Avoid_: Translation window, translator
+
+**Language pair**:
+Translation's My language and Other language, never the same: text in my language is translated into the other, and text in any other language into mine. Dictation's Translate uses it while Translation is on, and English and Japanese otherwise.
+_Avoid_: Source and target (one translation's languages), target language setting
+
 ### Licensing
 
 **License Check**:

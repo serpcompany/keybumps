@@ -6,7 +6,7 @@ import SwiftUI
 enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
-    case emojiPicker = "Emoji Picker"
+    case emojiPicker = "Emoji Picker", translation = "Translation"
     case plugins = "Plugins", permissions = "Permissions", general = "General", account = "Account"
     var id: String { rawValue }
 
@@ -1184,24 +1184,33 @@ struct CapabilityControl: View {
 
 /// Says plainly, under a plugin's header, that the plugin is off, with a button to turn it on
 /// (#254). The toolbar switch alone was easy to miss, such as for a plugin that ships off and is
-/// opened from Quick Search. It goes away once the plugin is on.
+/// opened from Quick Search. It goes away once the plugin is on. A plugin that needs a newer macOS
+/// says so in place of the button (#322).
 struct CapabilityOffBanner: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
 
     var body: some View {
         if !model.preferences.enabledCapabilities.contains(capability) {
+            let requirement = model.preferences.compatibility.requirement(for: capability)
             HStack(spacing: 12) {
                 Image(systemName: "power.circle.fill")
                     .font(.system(size: 22))
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
-                SettingsRowLabel(title: Self.title(capability), subtitle: Self.subtitle)
+                SettingsRowLabel(title: Self.title(capability), subtitle: requirement == nil ? Self.subtitle : Self.unsupportedSubtitle)
                 Spacer(minLength: 12)
-                Button("Turn On") { model.setCapability(capability, enabled: true) }
-                    .buttonStyle(SettingsButtonStyle(isProminent: true))
-                    .accessibilityLabel("Turn On \(capability.title)")
-                    .accessibilityIdentifier("capability.offBanner.turnOn.\(capability.rawValue)")
+                if let requirement {
+                    Text(requirement)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("capability.offBanner.requirement.\(capability.rawValue)")
+                } else {
+                    Button("Turn On") { model.setCapability(capability, enabled: true) }
+                        .buttonStyle(SettingsButtonStyle(isProminent: true))
+                        .accessibilityLabel("Turn On \(capability.title)")
+                        .accessibilityIdentifier("capability.offBanner.turnOn.\(capability.rawValue)")
+                }
             }
             .padding(.horizontal, SettingsTheme.rowInset + 3)
             .padding(.vertical, 12)
@@ -1219,6 +1228,7 @@ struct CapabilityOffBanner: View {
 
     static func title(_ capability: Capability) -> String { "\(capability.title) is turned off" }
     static let subtitle = "Its shortcuts and features don't work until you turn it on."
+    static let unsupportedSubtitle = "It needs a newer macOS than this Mac has, so it can't be turned on."
 }
 
 /// A plugin's switch: on its page's toolbar, and in its row on the Plugins page.
@@ -1227,10 +1237,13 @@ struct CapabilityToggle: View {
     let capability: Capability
 
     var body: some View {
+        let requirement = model.preferences.compatibility.requirement(for: capability)
         Toggle("Enable \(capability.title)", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
             .settingsCompactSwitch()
             .labelsHidden()
-            .help(capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
+            // A plugin that needs a newer macOS can't be turned on (#322).
+            .disabled(requirement != nil)
+            .help(requirement ?? capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
             .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
     }
 }

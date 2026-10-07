@@ -12,6 +12,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     case snippets
     case timers
     case emoji
+    case translate
 
     var id: String { rawValue }
 
@@ -1528,6 +1529,7 @@ private struct CommandPaletteView: View {
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
+            .environment(\.dictationTranslationPair, preferences.dictationTranslationPair)
         case .screenshots:
             switch screenshotContent {
             case .disabled:

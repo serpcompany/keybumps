@@ -11,13 +11,14 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
   - **Basics:** the title, `systemImage`, and `iconTint`; search keywords, the category, and any `PluginPreference`s.
   - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs. Optional permissions carry their own reason. (The website entry's permission reasons come in §4.)
   - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`.
-  - **Palette tab, if any:** the module's `paletteContent` supplies the rows. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7 and Hotkeys moved to ⌘8. Moving Hotkeys also changes:
+  - **Palette tab, if any:** the module's `paletteContent` supplies the rows. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7, then Translation took ⌘8 and Hotkeys moved to ⌘9. Moving Hotkeys also changes:
     - `KeyboardShortcutterModule`'s `commandKey`;
     - the README and architecture.md tab lists, and the release notes;
     - Shortcut Coach's `commandKey` in the website's `plugins.ts`, whose test requires unique numbers.
 
-    The palette matches one typed digit, so ⌘9 is the last number left.
-  - **`isOnByDefault`:** most plugins ship on. Emoji Picker ships off. Several tests depend on this choice (§2).
+    The palette matches one typed digit, and Hotkeys now has ⌘9, the last one: a tenth tab needs another way in.
+  - **`isOnByDefault`:** most plugins ship on. Emoji Picker and Translation ship off. Several tests depend on this choice (§2).
+  - **`minimumMacOS`:** set it when the plugin needs a newer macOS than Keybumps does, as Translation needs 15. `PluginCompatibility` then keeps it off on older Macs and Settings says why; give its macOS-only code an inert path for the older ones.
   - **`criticalOperations`:** a plugin that holds unsaved work must make an update restart wait. It has to be declared *and* set while work is unsaved (`updateSafety.setCriticalOperation(_:active:)`, as `ScreenshotToolsModule` does); declaring alone does nothing. But `.unsavedWork` is one shared flag: a second plugin that clears it also clears the Screenshot Editor's, and the quit warning in `Updates/UpdateController.swift` names only the Screenshot Editor. So first give each source its own case (or count holders) and its own quit reason, which is #272.
 - **Registry:** add it to `CapabilityCatalog.descriptors` (`Capabilities/CapabilityModule.swift`), after anything it depends on. Construct its module in `AppModel` (`App/AppModel.swift`) in the same order, or a launch precondition stops the app. Never add it to the locked sets `defaultCapabilities`, `Capability.originalCapabilities`, or `CapabilityShortcut.originalShortcuts`.
 - **Seams:** give every system boundary an inert stand-in in `App/UITestComposition.swift` and under unit tests.
@@ -38,7 +39,7 @@ These name plugins on purpose. Update every one. Some fail when a plugin is miss
 - **Palette numbering:** a new tab moves Hotkeys and the first unused number, which these check:
   - `SnippetTests`' tab order and tab keys;
   - `EmojiPickerTests` (Hotkeys' number);
-  - `KeybumpsFeatureTests`, which expects ⌘9 to match nothing.
+  - `KeybumpsFeatureTests`, which expects ⌘0 to match nothing.
 - **Upgrades:** `ScreenshotToolsTests` lists the plugins an upgrade turns on, so a plugin that ships on changes it.
 - **Smoke tests:** `SmokeUITests`' section list in `testEverySettingsPageOpens`, and `testPaletteCommandNumberSwitchesTabs`, which expects the number after the last visible tab to do nothing.
 - **Wiring snapshot:** `KeybumpsTests/Fixtures/capability-wiring.json`. Re-record it with `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` in `xcodebuild`'s environment, before the command (after it, it's a build setting and never reaches the tests), and review the diff. It records every combination of plugins, so each new plugin roughly doubles it.

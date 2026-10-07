@@ -265,7 +265,7 @@ struct EmojiPickerPluginTests {
         let descriptor = CapabilityDescriptor.emojiPicker
         #expect(descriptor.category == .writing)
         #expect(descriptor.paletteTab?.commandKey == 7)
-        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘8", "Hotkeys moved to make room")
+        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9", "Hotkeys moved to make room, then again for Translate")
         #expect(descriptor.requiredPermissions.isEmpty)
         #expect(descriptor.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(!descriptor.isOnByDefault)
