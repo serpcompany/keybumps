@@ -957,7 +957,9 @@ struct RecentTranslationTests {
         try await Task.sleep(for: .milliseconds(100))
         panel.contentView?.layoutSubtreeIfNeeded()
 
-        let translation = try #require(PaletteCopyPasteKeyTests.selectableText(in: panel.contentView))
+        // Some macOS versions (26 on CI) build SwiftUI's selectable text only on a real click;
+        // `PaletteCopyPasteKeyTests.pointerSelectionInAStandIn` covers the decision there.
+        guard let translation = PaletteCopyPasteKeyTests.selectableText(in: panel.contentView) else { return }
         #expect(panel.makeFirstResponder(translation))
         #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_C, "c")) == nil, "Nothing selected, and the translation being typed doesn't copy")
         translation.perform(#selector(NSResponder.selectAll(_:)), with: nil)

@@ -269,8 +269,10 @@ struct PaletteCopyPasteKeyTests {
         try await Task.sleep(for: .milliseconds(100))
         panel.contentView?.layoutSubtreeIfNeeded()
 
-        // SwiftUI's selectable text, as a click on the transcript leaves it: taking the keys.
-        let transcript = try #require(Self.selectableText(in: panel.contentView))
+        // SwiftUI's selectable text, as a click on the transcript leaves it: taking the keys. Some
+        // macOS versions (26 on CI) build that view only on a real click, so there's nothing to find;
+        // `pointerSelectionInAStandIn` covers the same decision there.
+        guard let transcript = Self.selectableText(in: panel.contentView) else { return }
         #expect(panel.makeFirstResponder(transcript))
         #expect(fixture.palette.handleKeyDown(Self.commandC) == nil, "Nothing selected: ⌘C copies the recording")
         #expect(fixture.pasteboard.string(forType: .string) == "made-up transcript")
@@ -280,6 +282,27 @@ struct PaletteCopyPasteKeyTests {
         #expect(fixture.palette.handleKeyDown(Self.commandC) != nil)
         #expect(fixture.pasteboard.string(forType: .string) == nil, "The recording wasn't copied")
         #expect(fixture.notices.shown.count == 1)
+    }
+
+    @Test("Text selected with the pointer in a view that isn't an NSTextView: ⌘C is Edit › Copy's, not the row's")
+    func pointerSelectionInAStandIn() async throws {
+        let fixture = CopyPasteFixture()
+        defer { fixture.tearDown() }
+        try fixture.recording("made-up transcript")
+        let panel = try #require(fixture.palette.layOutForTesting(.dictation))
+        defer { panel.orderOut(nil) }
+        let standIn = SelectableTextStandIn()
+        panel.contentView?.addSubview(standIn)
+        defer { standIn.removeFromSuperview() }
+
+        #expect(panel.makeFirstResponder(standIn))
+        #expect(fixture.palette.handleKeyDown(Self.commandC) == nil, "Nothing selected: ⌘C copies the recording")
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up transcript")
+
+        fixture.pasteboard.clearContents()
+        standIn.selectAll(nil)
+        #expect(fixture.palette.handleKeyDown(Self.commandC) != nil, "Selected text is Edit › Copy's")
+        #expect(fixture.pasteboard.string(forType: .string) == nil, "The recording wasn't copied")
     }
 
     // MARK: Quick Search
@@ -493,4 +516,13 @@ private final class CopyPasteNotices: PaletteNoticePresenting {
     func showNotice(_ message: String, isWarning: Bool) {
         shown.append(Notice(message: message, isWarning: isWarning))
     }
+}
+
+/// Stands in for SwiftUI's selectable text where a test can't reach it: it takes the keys, can select
+/// all, and reports its selection to accessibility, as that view does once clicked.
+final class SelectableTextStandIn: NSView {
+    private var selection = ""
+    override var acceptsFirstResponder: Bool { true }
+    override func selectAll(_ sender: Any?) { selection = "made-up selection" }
+    override func accessibilitySelectedText() -> String? { selection }
 }
