@@ -16,11 +16,11 @@ struct DictationTranslationTests {
     static let supported = ["en-US", "es-ES", "ja-JP", "fr-FR"].map(Locale.Language.init(identifier:))
 
     static func source(_ text: String, recordedWith recorded: String = "en-US") -> String {
-        DictationTranslationPolicy.sourceLanguageIdentifier(for: text, recordedLanguageIdentifier: recorded)
+        TranslationLanguagePolicy.sourceLanguageIdentifier(for: text, fallbackLanguageIdentifier: recorded)
     }
 
     static func targets(_ text: String) -> [String] {
-        DictationTranslationPolicy.targets(from: supported, sourceIdentifier: source(text)).map(\.minimalIdentifier)
+        TranslationLanguagePolicy.targets(from: supported, sourceIdentifier: source(text)).map(\.minimalIdentifier)
     }
 
     @Test("Text in another language than the setting translates from the language it's in")
@@ -48,11 +48,11 @@ struct DictationTranslationTests {
     @Test("A guess replaces the setting from 0.8 confidence; undetermined or missing guesses never do")
     func confidenceThreshold() {
         func source(_ guess: NLLanguage?, _ confidence: Double, recordedWith recorded: String = "en-US") -> String {
-            DictationTranslationPolicy.sourceLanguageIdentifier(
-                guess: guess, confidence: confidence, recordedLanguageIdentifier: recorded
+            TranslationLanguagePolicy.sourceLanguageIdentifier(
+                guess: guess, confidence: confidence, fallbackLanguageIdentifier: recorded
             )
         }
-        #expect(DictationTranslationPolicy.sourceDetectionConfidence == 0.8)
+        #expect(TranslationLanguagePolicy.sourceDetectionConfidence == 0.8)
         #expect(source(.spanish, 0.79) == "en-US")
         #expect(source(.spanish, 0.8) == "es")
         #expect(source(.spanish, 1) == "es")
@@ -71,8 +71,8 @@ struct DictationTranslationTests {
         let swedish = "Kan du påminna mig om att köpa bröd och mjölk i eftermiddag?"
         #expect(Self.source(swedish) == "sv")
         var asked: [String] = []
-        let offeredFromEnglish = await DictationTranslationPolicy.translatableSource(
-            for: swedish, recordedLanguageIdentifier: "en-US"
+        let offeredFromEnglish = await TranslationLanguagePolicy.translatableSource(
+            for: swedish, fallbackLanguageIdentifier: "en-US"
         ) { source in
             asked.append(source)
             return source == "en-US" ? Self.supported : []
@@ -82,8 +82,8 @@ struct DictationTranslationTests {
         #expect(offeredFromEnglish?.targets == Self.supported)
 
         asked = []
-        let nothing = await DictationTranslationPolicy.translatableSource(
-            for: swedish, recordedLanguageIdentifier: "en-US"
+        let nothing = await TranslationLanguagePolicy.translatableSource(
+            for: swedish, fallbackLanguageIdentifier: "en-US"
         ) { source in
             asked.append(source)
             return []
@@ -92,8 +92,8 @@ struct DictationTranslationTests {
         #expect(asked == ["sv", "en-US"])
 
         asked = []
-        let fromSpanish = await DictationTranslationPolicy.translatableSource(
-            for: Self.spanish, recordedLanguageIdentifier: "en-US"
+        let fromSpanish = await TranslationLanguagePolicy.translatableSource(
+            for: Self.spanish, fallbackLanguageIdentifier: "en-US"
         ) { source in
             asked.append(source)
             return Self.supported
@@ -102,8 +102,8 @@ struct DictationTranslationTests {
         #expect(asked == ["es"], "A translatable language isn't second-guessed")
 
         asked = []
-        _ = await DictationTranslationPolicy.translatableSource(
-            for: Self.english, recordedLanguageIdentifier: "en-US"
+        _ = await TranslationLanguagePolicy.translatableSource(
+            for: Self.english, fallbackLanguageIdentifier: "en-US"
         ) { source in
             asked.append(source)
             return []
@@ -125,19 +125,44 @@ struct DictationTranslationTests {
     func preferredTarget() {
         func preferred(_ text: String) -> String? {
             let source = Self.source(text)
-            return DictationTranslationPolicy.preferredTargetIdentifier(
+            return TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: source,
-                supportedIdentifiers: DictationTranslationPolicy.targets(from: Self.supported, sourceIdentifier: source)
-                    .map(\.minimalIdentifier)
+                supportedIdentifiers: TranslationLanguagePolicy.targets(from: Self.supported, sourceIdentifier: source)
+                    .map(\.minimalIdentifier),
+                pair: TranslationLanguagePair(mine: "en", other: "ja")
             )
         }
         #expect(preferred(Self.spanish) == "en")
         #expect(preferred(Self.japanese) == "en")
         #expect(preferred(Self.english) == "ja")
         #expect(
-            DictationTranslationPolicy.preferredTargetIdentifier(sourceIdentifier: "es", supportedIdentifiers: ["fr", "de"]) == "fr",
+            TranslationLanguagePolicy.preferredTargetIdentifier(
+                sourceIdentifier: "es", supportedIdentifiers: ["fr", "de"], pair: TranslationLanguagePair(mine: "en", other: "ja")
+            ) == "fr",
             "Without English, the first language offered"
         )
+    }
+
+    @Test("The language pair: text in mine goes to the other, anything else comes back to mine (#322)")
+    func languagePair() {
+        let englishJapanese = TranslationLanguagePair(mine: "en-US", other: "ja-JP")
+        #expect(englishJapanese == TranslationLanguagePair(mine: "en", other: "ja"), "Regions don't matter")
+        #expect(englishJapanese.target(forSourceIdentifier: "en-GB") == "ja")
+        #expect(englishJapanese.target(forSourceIdentifier: "ja") == "en")
+        #expect(englishJapanese.target(forSourceIdentifier: "fr-FR") == "en")
+
+        #expect(TranslationLanguagePair.systemDefault(preferredLanguages: ["en-US", "ja-JP"]) == englishJapanese,
+                "An English Mac keeps Dictation's English ↔ Japanese")
+        #expect(TranslationLanguagePair.systemDefault(preferredLanguages: ["de-DE"]) == TranslationLanguagePair(mine: "de", other: "en"))
+        #expect(TranslationLanguagePair.systemDefault(preferredLanguages: []) == englishJapanese)
+
+        let germanEnglish = TranslationLanguagePair(mine: "de", other: "en")
+        #expect(TranslationLanguagePolicy.preferredTargetIdentifier(
+            sourceIdentifier: "de-DE", supportedIdentifiers: ["fr", "en-US"], pair: germanEnglish
+        ) == "en-US")
+        #expect(TranslationLanguagePolicy.preferredTargetIdentifier(
+            sourceIdentifier: "ja", supportedIdentifiers: ["de", "en"], pair: germanEnglish
+        ) == "de")
     }
 
     @Test("A hold keeps the palette open against Keybumps's other windows, as a confirmation does")

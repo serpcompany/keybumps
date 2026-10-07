@@ -136,93 +136,6 @@ enum DictationHistoryClipboard {
     }
 }
 
-enum DictationTranslationPolicy {
-    static func canTranslate(_ text: String) -> Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    /// How sure `NLLanguageRecognizer` must be before its guess replaces the recorded language.
-    /// Short words that several languages share score below it ("OK", "Hola", "Bonjour", and "Ciao"
-    /// score 0.3 to 0.7), while a sentence, or a Chinese or Japanese word of two characters, scores
-    /// 0.8 or more.
-    static let sourceDetectionConfidence = 0.8
-    /// The fewest characters worth a guess: one says too little. It stays low because two Japanese
-    /// characters are already a certain guess; the confidence screens out the rest.
-    static let sourceDetectionMinimumLength = 2
-
-    /// The language to translate from: the one the text is written in. A recording's language is the
-    /// Dictation language setting it was recorded with, not what was spoken (#321). Keeps the recorded
-    /// language when the text is in it (so its region stays, as in `pt-BR`), or when the guess is
-    /// unsure.
-    static func sourceLanguageIdentifier(for text: String, recordedLanguageIdentifier: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= sourceDetectionMinimumLength else { return recordedLanguageIdentifier }
-        let recognizer = NLLanguageRecognizer()
-        recognizer.processString(trimmed)
-        let guess = recognizer.languageHypotheses(withMaximum: 1).first
-        return sourceLanguageIdentifier(
-            guess: guess?.key,
-            confidence: guess?.value ?? 0,
-            recordedLanguageIdentifier: recordedLanguageIdentifier
-        )
-    }
-
-    /// The recognizer's top guess, unless it's missing, undetermined, below
-    /// `sourceDetectionConfidence`, or the recorded language in the same script; then the recorded
-    /// language.
-    static func sourceLanguageIdentifier(
-        guess: NLLanguage?,
-        confidence: Double,
-        recordedLanguageIdentifier: String
-    ) -> String {
-        guard let guess, guess != .undetermined,
-              confidence >= sourceDetectionConfidence else { return recordedLanguageIdentifier }
-        let detected = Locale.Language(identifier: guess.rawValue)
-        let recorded = Locale.Language(identifier: recordedLanguageIdentifier)
-        let sameLanguage = detected.languageCode == recorded.languageCode
-            && Locale.Language(identifier: detected.maximalIdentifier).script
-                == Locale.Language(identifier: recorded.maximalIdentifier).script
-        return sameLanguage ? recordedLanguageIdentifier : guess.rawValue
-    }
-
-    /// The languages Translate offers: every supported one but the source's.
-    static func targets(from supported: [Locale.Language], sourceIdentifier: String) -> [Locale.Language] {
-        let source = Locale.Language(identifier: sourceIdentifier)
-        return supported.filter { !$0.isEquivalent(to: source) }
-    }
-
-    /// Where Translate starts, and the targets it offers from there: the text's language, or the
-    /// recorded language when Translation offers nothing from the text's. Translation knows fewer
-    /// languages than the recognizer (not Swedish, Danish, or Greek, for example). Nil when neither
-    /// offers a target.
-    @MainActor
-    static func translatableSource(
-        for text: String,
-        recordedLanguageIdentifier: String,
-        targets: (String) async -> [Locale.Language]
-    ) async -> (source: String, targets: [Locale.Language])? {
-        let detected = sourceLanguageIdentifier(for: text, recordedLanguageIdentifier: recordedLanguageIdentifier)
-        let candidates = detected == recordedLanguageIdentifier ? [detected] : [detected, recordedLanguageIdentifier]
-        for source in candidates {
-            let offered = await targets(source)
-            if !offered.isEmpty { return (source, offered) }
-        }
-        return nil
-    }
-
-    /// English, or Japanese when the text is in English.
-    static func preferredTargetIdentifier(
-        sourceIdentifier: String,
-        supportedIdentifiers: [String]
-    ) -> String? {
-        let source = Locale.Language(identifier: sourceIdentifier)
-        let preferred = source.languageCode?.identifier == "en" ? "ja" : "en"
-        return supportedIdentifiers.first(where: {
-            Locale.Language(identifier: $0).languageCode?.identifier == preferred
-        }) ?? supportedIdentifiers.first
-    }
-}
-
 struct DictationHistoryCard: View {
     let entry: DictationHistoryEntry
     let isExpanded: Bool
@@ -332,7 +245,7 @@ struct DictationHistoryCard: View {
                                 Image(systemName: "translate")
                             }
                             .buttonStyle(.borderless)
-                            .disabled(!DictationTranslationPolicy.canTranslate(entry.text))
+                            .disabled(!TranslationLanguagePolicy.canTranslate(entry.text))
                             .help("Translate transcript")
                             .accessibilityLabel("Translate transcript")
                         } else {
@@ -664,13 +577,13 @@ struct LocalDictationTranslationView: View {
     private func loadSupportedTargets() async {
         let availability = LanguageAvailability()
         let supported = await availability.supportedLanguages
-        let resolved = await DictationTranslationPolicy.translatableSource(
+        let resolved = await TranslationLanguagePolicy.translatableSource(
             for: sourceText,
-            recordedLanguageIdentifier: recordedLanguageIdentifier
+            fallbackLanguageIdentifier: recordedLanguageIdentifier
         ) { sourceIdentifier in
             let source = Locale.Language(identifier: sourceIdentifier)
             var compatible: [Locale.Language] = []
-            for language in DictationTranslationPolicy.targets(from: supported, sourceIdentifier: sourceIdentifier) {
+            for language in TranslationLanguagePolicy.targets(from: supported, sourceIdentifier: sourceIdentifier) {
                 let status = await availability.status(from: source, to: language)
                 if status != .unsupported { compatible.append(language) }
             }
@@ -681,9 +594,10 @@ struct LocalDictationTranslationView: View {
             displayName(for: $0).localizedCaseInsensitiveCompare(displayName(for: $1)) == .orderedAscending
         }
         targetIdentifier = resolved.flatMap {
-            DictationTranslationPolicy.preferredTargetIdentifier(
+            TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: $0.source,
-                supportedIdentifiers: supportedTargets.map(\.minimalIdentifier)
+                supportedIdentifiers: supportedTargets.map(\.minimalIdentifier),
+                pair: .systemDefault()
             )
         } ?? ""
         hasLoadedTargets = true
