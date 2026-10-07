@@ -4,6 +4,7 @@ import {
   Columns2,
   Focus,
   Keyboard,
+  Languages,
   type LucideIcon,
   Search,
   Smile,
@@ -23,7 +24,8 @@ const icons: Record<PluginSystemImage, LucideIcon> = {
   keyboard: Keyboard,
   'text.quote': TextQuote,
   timer: Timer,
-  'face.smiling': Smile
+  'face.smiling': Smile,
+  translate: Languages
 }
 
 /**

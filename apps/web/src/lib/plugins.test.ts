@@ -236,9 +236,19 @@ describe('plugin pages', () => {
         expect(html, `${plugin.slug} #${id}`).toContain(`id="${id}"`)
       }
       expect(html, plugin.slug).toContain('href="/plugins/"')
-      expect(html, plugin.slug).toContain('macOS 14.2 or later')
+      expect(html, plugin.slug).toContain(`macOS ${plugin.minimumMacOS ?? '14.2'} or later`)
       expect(html, plugin.slug).toContain('Apple silicon')
     }
+  })
+
+  it('gives Translation’s page its own minimum macOS, and the rest Keybumps’s', () => {
+    // TranslationModule.swift: `minimumMacOS: 15`.
+    expect(pluginFor('translation').minimumMacOS).toBe('15')
+    expect(renderPage(pluginFor('translation'))).toContain('macOS 15 or later')
+    expect(renderPage(pluginFor('translation'))).not.toContain('macOS 14.2 or later')
+    expect(plugins.filter(plugin => plugin.minimumMacOS).map(plugin => plugin.slug)).toEqual([
+      'translation'
+    ])
   })
 
   it('suggests three other plugins on each page, never the plugin itself', () => {

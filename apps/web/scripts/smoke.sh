@@ -152,8 +152,8 @@ read_plugin_paths() {
     [ -n "$path" ] && plugin_paths+=("$path")
   done < <(grep -oE '<loc>https://keybumps\.app/plugins/[a-z-]+/</loc>' <<<"$(fetch /sitemaps/pages.xml)" |
     sed -E 's#^<loc>https://keybumps\.app(.*)</loc>$#\1#' || true)
-  if [ "${#plugin_paths[@]}" -lt 9 ]; then
-    why="want 9+ plugin pages in /sitemaps/pages.xml, got ${#plugin_paths[@]}"
+  if [ "${#plugin_paths[@]}" -lt 10 ]; then
+    why="want 10+ plugin pages in /sitemaps/pages.xml, got ${#plugin_paths[@]}"
     return 1
   fi
 }

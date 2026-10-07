@@ -38,8 +38,9 @@ const heroIcons: readonly (readonly [string, number, number])[][] = [
     ['window-manager', 52, 0.35]
   ],
   [
-    ['clipboard-history', 60, 0.5],
-    ['dictation', 80, 1],
+    ['clipboard-history', 52, 0.35],
+    ['dictation', 68, 0.75],
+    ['translation', 80, 1],
     ['screenshot-tools', 68, 0.75],
     ['shortcut-coach', 52, 0.35]
   ]
