@@ -115,6 +115,7 @@ private struct KeyboardShortcutterResultsView: View {
                         .buttonStyle(.plain)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)

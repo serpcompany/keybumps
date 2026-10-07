@@ -134,7 +134,6 @@ extension Optional where Wrapped == PaletteFilter {
 struct PaletteFilterMenu: View {
     let filters: [PaletteFilter]
     let selection: Int
-    let select: (Int) -> Void
     let choose: (PaletteFilter) -> Void
 
     var body: some View {
@@ -162,11 +161,11 @@ struct PaletteFilterMenu: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .onHover { if $0 { select(index) } }
                     .accessibilityLabel("Filter by \(filter.title)")
                     .accessibilityAddTraits(index == selection ? .isSelected : [])
                     .listRowInsets(.init())
                     .listRowSeparator(.hidden)
+                    .paletteHoverHighlights(row: index)
                     .paletteRowBackground(isSelected: index == selection)
                 }
                 .listStyle(.plain)

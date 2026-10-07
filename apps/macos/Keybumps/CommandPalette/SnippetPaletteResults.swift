@@ -16,6 +16,7 @@ struct SnippetPaletteActions {
 /// The Snippets tab: a Snippets header with New Snippet, then one row per snippet in the Clipboard
 /// tab's row layout. Return copies, ⌘Return pastes, ⌘E edits, and ⌘N makes a new one.
 struct SnippetPaletteResults: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     static let symbol = "text.quote"
 
     let content: SnippetPaletteContent
@@ -137,13 +138,14 @@ struct SnippetPaletteResults: View {
                 .accessibilityAction(named: "Delete") { actions.requestDelete(snippet) }
                 .listRowInsets(.init())
                 .listRowSeparator(.hidden)
+                .paletteHoverHighlights(row: index)
                 .paletteRowBackground(isSelected: index == selection)
                 .id(snippet.id)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .onChange(of: selection) {
-                if snippets.indices.contains(selection) { proxy.scrollTo(snippets[selection].id) }
+                if revealsSelection, snippets.indices.contains(selection) { proxy.scrollTo(snippets[selection].id) }
             }
         }
     }

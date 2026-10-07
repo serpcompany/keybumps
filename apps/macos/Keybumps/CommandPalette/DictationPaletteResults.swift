@@ -4,6 +4,7 @@ import SwiftUI
 /// The Dictation tab, in Raycast's list-and-detail layout: compact recordings on the left and the
 /// highlighted recording's transcript, playback, information, and actions on the right.
 struct DictationPaletteResults: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     let entries: [DictationHistoryEntry]
     let selection: Int
     let select: (Int) -> Void
@@ -85,13 +86,14 @@ struct DictationPaletteResults: View {
                     })
                     .listRowInsets(.init())
                     .listRowSeparator(.hidden)
+                    .paletteHoverHighlights(row: index)
                     .paletteRowBackground(isSelected: index == selection)
                     .id(entry.id)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .onChange(of: selection) {
-                    if entries.indices.contains(selection) { proxy.scrollTo(entries[selection].id) }
+                    if revealsSelection, entries.indices.contains(selection) { proxy.scrollTo(entries[selection].id) }
                 }
             }
         }

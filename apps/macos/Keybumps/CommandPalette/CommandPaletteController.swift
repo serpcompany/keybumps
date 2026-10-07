@@ -122,7 +122,34 @@ final class CommandPaletteState {
     }
     /// The module-supplied tabs whose rows re-rank as you type.
     var tabsResettingSelectionWhileTyping: Set<CommandPaletteTab> = []
-    var selection = 0
+    var selection = 0 {
+        didSet {
+            selectionFollowsPointer = isSelectingFromPointer
+            if !isSelectingFromPointer { pointerAtSelection = mouseLocation() }
+        }
+    }
+    /// Whether the pointer moved the highlight last (#347), so lists don't scroll to it.
+    private(set) var selectionFollowsPointer = false
+    @ObservationIgnored private var isSelectingFromPointer = false
+    /// Where the pointer was when the highlight last moved. A hover counts only once the pointer
+    /// has moved from there, so rows that scroll or appear under a still pointer don't take the
+    /// highlight from the keyboard (#347).
+    @ObservationIgnored private var pointerAtSelection: NSPoint?
+    /// The pointer's position on screen; tests supply their own.
+    @ObservationIgnored var mouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
+
+    /// Moves the highlight to a row the pointer is over, if the pointer has moved since the
+    /// highlight last did. Returns whether it moved.
+    @discardableResult
+    func selectFromPointer(_ row: Int) -> Bool {
+        let pointer = mouseLocation()
+        guard pointer != pointerAtSelection else { return false }
+        pointerAtSelection = pointer
+        isSelectingFromPointer = true
+        selection = row
+        isSelectingFromPointer = false
+        return true
+    }
     /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
     /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
     var isBrowsingGrid = false
@@ -225,8 +252,48 @@ struct CommandPaletteHold: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
 }
 
+/// Moving the pointer over a palette row or tile highlights it, as in Raycast (#347). Outside the
+/// palette it does nothing. Equal for the same palette, so the environment value doesn't redraw
+/// its readers.
+struct CommandPaletteHover: Equatable {
+    private weak var palette: CommandPaletteController?
+
+    init(palette: CommandPaletteController? = nil) {
+        self.palette = palette
+    }
+
+    @MainActor
+    func callAsFunction(_ row: Int) {
+        palette?.hover(row: row)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
+}
+
 extension EnvironmentValues {
     @Entry var holdCommandPaletteOpen = CommandPaletteHold()
+    @Entry var paletteHover = CommandPaletteHover()
+    /// False while the pointer moved the highlight, so a list doesn't scroll to the row under it.
+    @Entry var paletteRevealsSelection = true
+}
+
+extension View {
+    /// A row or tile that takes the highlight when the pointer moves over it (#347). Put it on the
+    /// whole row, padding included.
+    func paletteHoverHighlights(row: Int) -> some View {
+        modifier(PaletteHoverRow(row: row))
+    }
+}
+
+private struct PaletteHoverRow: ViewModifier {
+    let row: Int
+    @Environment(\.paletteHover) private var hover
+
+    func body(content: Content) -> some View {
+        content.onContinuousHover { phase in
+            if case .active = phase { hover(row) }
+        }
+    }
 }
 
 @MainActor
@@ -508,6 +575,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             )
             .frame(width: size.width, height: size.height)
             .environment(\.holdCommandPaletteOpen, CommandPaletteHold(palette: self))
+            .environment(\.paletteHover, CommandPaletteHover(palette: self))
             .uiTestAnimationsDisabled()
         )
         panel.setContentSize(size)
@@ -703,6 +771,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             NSWorkspace.shared.notificationCenter.removeObserver(appSwitchObserver)
             self.appSwitchObserver = nil
         }
+    }
+
+    /// The pointer moved over a row or tile: it takes the highlight (`selectFromPointer`), and in a
+    /// grid that brings the arrow keys into it too.
+    func hover(row: Int) {
+        guard state.selectFromPointer(row), isGridTab else { return }
+        state.isBrowsingGrid = true
     }
 
     private func moveSelection(_ delta: Int) {
@@ -1230,6 +1305,7 @@ private struct CommandPaletteView: View {
                 select: selectTab
             )
             content
+                .environment(\.paletteRevealsSelection, !state.selectionFollowsPointer)
                 .contentMargins(.bottom, 56, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
@@ -1283,7 +1359,7 @@ private struct CommandPaletteView: View {
         if let filters = PaletteFilter.menu(
             in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
         ) {
-            PaletteFilterMenu(filters: filters, selection: state.selection, select: { state.selection = $0 }, choose: chooseFilter)
+            PaletteFilterMenu(filters: filters, selection: state.selection, choose: chooseFilter)
         } else if let tabContent = tabContents[state.tab] {
             tabContent.makeView(PaletteContentContext(
                 query: state.historyQuery,
@@ -1501,6 +1577,7 @@ private struct PaletteSearchField: View {
 }
 
 private struct SearchResultsView: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     let items: [QuickSearchItem]
     let selection: Int
     let query: String
@@ -1563,6 +1640,7 @@ private struct SearchResultsView: View {
                             .accessibilityAction(named: "Delete") { deleteRecentItem(item) }
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
+                            .paletteHoverHighlights(row: index)
                             .paletteRowBackground(isSelected: index == selection)
                         }
                         .listStyle(.plain)
@@ -1651,13 +1729,14 @@ private struct SearchResultsView: View {
                         }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
                         .id(item.id)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .onChange(of: selection) {
-                        if items.indices.contains(selection) {
+                        if revealsSelection, items.indices.contains(selection) {
                             proxy.scrollTo(items[selection].id)
                         }
                     }
@@ -1861,6 +1940,7 @@ private struct ClipboardResultsView: View {
                         .accessibilityAction(named: "Delete") { delete(entry) }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)
@@ -2151,6 +2231,7 @@ private struct ClipboardEntryPreview: View {
 /// so screenshots are recognizable at a glance. Arrow keys move through the grid.
 private struct ScreenshotGrid: View {
     static let columnCount = 3
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
 
     let entries: [ClipboardEntry]
     let selection: Int
@@ -2192,6 +2273,7 @@ private struct ScreenshotGrid: View {
                                     choose: { select(index); choose(entry) },
                                     delete: { delete(entry) }
                                 )
+                                .paletteHoverHighlights(row: index)
                                 .id(entry.id)
                             }
                         }
@@ -2199,7 +2281,7 @@ private struct ScreenshotGrid: View {
                         .padding(.vertical, 4)
                     }
                     .onChange(of: selection) {
-                        guard entries.indices.contains(selection) else { return }
+                        guard revealsSelection, entries.indices.contains(selection) else { return }
                         proxy.scrollTo(entries[selection].id)
                     }
                 }

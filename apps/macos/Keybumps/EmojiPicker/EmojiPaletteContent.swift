@@ -209,6 +209,7 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
 
 /// The Emoji tab's grid or list, and the highlighted emoji's name.
 private struct EmojiPaletteResults: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     let content: EmojiPaletteContent
     let query: String
     let selection: Int
@@ -258,6 +259,7 @@ private struct EmojiPaletteResults: View {
                                         select: { select(index) },
                                         pick: { pick(index) }
                                     )
+                                    .paletteHoverHighlights(row: index)
                                     .id(index)
                                 }
                             }
@@ -268,6 +270,9 @@ private struct EmojiPaletteResults: View {
                 }
                 .scrollIndicators(.never)
                 .onChange(of: selection) {
+                    // The pointer moved the highlight: the tile is already under it, and VoiceOver
+                    // follows the pointer itself.
+                    guard revealsSelection else { return }
                     proxy.scrollTo(selection)
                     // Arrowing through the grid moves no VoiceOver cursor, so say where it went.
                     if let selected { Self.announce(selected.name) }
@@ -322,6 +327,7 @@ private struct EmojiPaletteResults: View {
                         .simultaneousGesture(TapGesture(count: 2).onEnded { pick(index) })
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
                         .accessibilityAddTraits(index == selection ? .isSelected : [])
                         .accessibilityIdentifier("palette.emoji.row")
@@ -329,7 +335,7 @@ private struct EmojiPaletteResults: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .onChange(of: selection) {
-                        if rows.indices.contains(selection) { proxy.scrollTo(rows[selection].glyph) }
+                        if revealsSelection, rows.indices.contains(selection) { proxy.scrollTo(rows[selection].glyph) }
                     }
                 }
             }

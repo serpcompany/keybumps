@@ -143,6 +143,7 @@ final class TimerPaletteContent: CapabilityPaletteContent {
 /// each with a ring for the time left. It redraws each second only while a timer runs and the
 /// palette is on screen (an animation timeline follows the display).
 private struct TimerPaletteResults: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     @Bindable var store: TimerStore
     @Bindable var preferences: AppPreferences
     let query: String
@@ -175,7 +176,7 @@ private struct TimerPaletteResults: View {
         ScrollViewReader { proxy in
             timerList(rows, now: now)
                 .onChange(of: selection) {
-                    if rows.indices.contains(selection) { proxy.scrollTo(rows[selection].id) }
+                    if revealsSelection, rows.indices.contains(selection) { proxy.scrollTo(rows[selection].id) }
                 }
         }
     }
@@ -200,6 +201,7 @@ private struct TimerPaletteResults: View {
                 .buttonStyle(.plain)
                 .listRowInsets(.init())
                 .listRowSeparator(.hidden)
+                .paletteHoverHighlights(row: index)
                 .paletteRowBackground(isSelected: index == selection)
                 .accessibilityIdentifier(row.id == "new" ? "palette.timers.new" : "palette.timers.row")
             }
