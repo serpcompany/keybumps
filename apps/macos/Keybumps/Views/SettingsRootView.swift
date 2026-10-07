@@ -669,9 +669,14 @@ private struct DictationTranscriptionEngineRow: View {
 
 struct WindowSettingsView: View {
     @Environment(AppModel.self) private var model
-    @State private var recorder = ShortcutRecorderState()
+    @State private var recorder: ShortcutRecorderState
     /// What Restore Defaults took from plugin shortcuts, said under the button (#334).
     @State private var restoreNote: String?
+
+    /// `recorder` is for tests, to show a row's note.
+    init(recorder: ShortcutRecorderState? = nil) {
+        _recorder = State(initialValue: recorder ?? ShortcutRecorderState())
+    }
 
     var body: some View {
         let readiness = model.permissionReadiness(for: [.windowManagement])
@@ -743,7 +748,10 @@ struct WindowSettingsView: View {
                         record: { beginRecording(action) },
                         clear: { model.finishWindowShortcutRecording(nil, for: action) }
                     )
+                    // No width of their own to ask for, so a long note wraps in its column rather
+                    // than making the grid drop to one column (#345).
                     rowNotes(for: action)
+                        .frame(idealWidth: 0, maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -1455,28 +1463,37 @@ final class ShortcutRecorderState {
         liveModifiers = ""
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
-            if event.type == .flagsChanged {
-                self.liveModifiers = ShortcutBinding.modifierSymbols(for: event.modifierFlags)
-                return event
-            }
-            if event.keyCode == UInt16(kVK_Escape) {
-                self.finish()
-                cancel()
-                return nil
-            }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if event.keyCode == UInt16(kVK_Delete), flags.isEmpty {
-                self.finish()
-                capture(nil)
-                return nil
-            }
-            guard let binding = ShortcutBinding(event: event) else {
-                self.error = "Use at least one modifier key such as Control, Option, Shift, or Command."
-                return nil
-            }
-            self.receive(binding)
+            return self.handle(event)
+        }
+    }
+
+    /// A key or modifier change while recording. Returns nil for the keys it takes: Escape
+    /// cancels, Delete clears the shortcut, and a key without a modifier shows what's missing.
+    func handle(_ event: NSEvent) -> NSEvent? {
+        guard identifier != nil else { return event }
+        if event.type == .flagsChanged {
+            liveModifiers = ShortcutBinding.modifierSymbols(for: event.modifierFlags)
+            return event
+        }
+        if event.keyCode == UInt16(kVK_Escape) {
+            let cancel = cancelAction
+            finish()
+            cancel?()
             return nil
         }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.keyCode == UInt16(kVK_Delete), flags.isEmpty {
+            let capture = captureAction
+            finish()
+            capture?(nil)
+            return nil
+        }
+        guard let binding = ShortcutBinding(event: event) else {
+            error = "Use at least one modifier key such as Control, Option, Shift, or Command."
+            return nil
+        }
+        receive(binding)
+        return nil
     }
 
     /// A shortcut pressed while recording: saved, or, when another action already uses its keys,

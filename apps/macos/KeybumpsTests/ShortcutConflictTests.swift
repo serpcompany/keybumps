@@ -1,5 +1,7 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
+import SwiftUI
 import Testing
 @testable import Keybumps
 
@@ -322,6 +324,113 @@ struct ShortcutConflictTests {
         edit.recorder.confirmReplacement()
         #expect(heard.count == 2)
         #expect(heard.last?.contains("Screenshot Tools › Screenshot Screen.") == true)
+    }
+}
+
+/// Window Manager's two-column grid at Settings' narrowest width (#345): a note under a row wraps
+/// in its column rather than making the grid drop to one column, which moves the rows.
+@MainActor
+@Suite("Window Manager's shortcut grid")
+struct WindowShortcutGridTests {
+    enum Note: String, CaseIterable, CustomTestStringConvertible {
+        /// A key pressed without a modifier.
+        case missingModifier
+        /// The Replace or Cancel question.
+        case question
+
+        var testDescription: String { rawValue }
+    }
+
+    /// The Settings window's minimum width less the widest sidebar (280pt): the narrowest the page
+    /// gets.
+    static let narrowestPageWidth = SettingsWindowFrame.minimumContentSize.width - 280
+    /// What the Commands grid dropping to one column adds at least: its second column, seven
+    /// rows of 28pt fields, moves below the first.
+    static let columnDrop = CGFloat(WindowSettingsLayout.primaryTrailing.count) * 28
+
+    @Test("A note under a row keeps the Commands grid in two columns at the narrowest width", arguments: Note.allCases)
+    func aNoteKeepsTwoColumns(_ note: Note) throws {
+        let model = AppModel.forShortcutTests(preferences: AppPreferences(defaults: InMemoryDefaults()))
+        let plain = try Self.pageHeight(model: model, recorder: ShortcutRecorderState(), width: Self.narrowestPageWidth)
+        let narrow = try Self.pageHeight(model: model, recorder: ShortcutRecorderState(), width: 480)
+        #expect(narrow - plain >= Self.columnDrop, "Two columns at the narrowest width to begin with; one at 480pt")
+
+        let recorder = ShortcutRecorderState()
+        defer { recorder.cancel() }
+        switch note {
+        case .missingModifier:
+            recorder.begin(identifier: WindowAction.left.rawValue, suspend: {}, conflict: { _ in nil }, capture: { _ in }, replace: { _ in }, cancel: {})
+            let key = try #require(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: UInt16(kVK_ANSI_A)
+            ))
+            #expect(recorder.handle(key) == nil, "Recording takes the key")
+            #expect(recorder.error != nil)
+        case .question:
+            recorder.offer(
+                DefaultShortcut.screenshotArea, identifier: WindowAction.left.rawValue,
+                conflict: { _ in .capability(.screenshotScreenAndEdit) }, replace: {}
+            )
+            #expect(recorder.pendingReplacement != nil)
+        }
+        let withNote = try Self.pageHeight(model: model, recorder: recorder, width: Self.narrowestPageWidth)
+        #expect(withNote > plain, "The note shows")
+        #expect(withNote - plain < Self.columnDrop, "The note wraps in its column, and the grid keeps two")
+    }
+
+    /// Lays out Window Manager's page in a window that is never shown, and returns the height of
+    /// what its scroll view scrolls.
+    static func pageHeight(model: AppModel, recorder: ShortcutRecorderState, width: CGFloat) throws -> CGFloat {
+        let size = CGSize(width: width, height: 2000)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: WindowSettingsView(recorder: recorder).environment(model))
+        host.frame = NSRect(origin: .zero, size: size)
+        window.contentView = host
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        host.layoutSubtreeIfNeeded()
+        let scrollView = try #require(Self.firstScrollView(in: host), "SettingsPage scrolls in an NSScrollView")
+        return try #require(scrollView.documentView).frame.height
+    }
+
+    private static func firstScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView { return scrollView }
+        return view.subviews.lazy.compactMap(firstScrollView).first
+    }
+}
+
+private struct NoCoachingEvents: EventPersistence {
+    func load() throws -> [CoachingEvent] { [] }
+    func save(_ events: [CoachingEvent]) throws {}
+}
+
+@MainActor
+private struct NoPresenceChanges: AppPresenceControlling {
+    func apply(showInDockAndSwitcher: Bool) {}
+}
+
+@MainActor
+private final class QuietHotKeys: GlobalHotKeyRegistering {
+    let registrationScope = GlobalHotKeyRegistrationScope.systemWide
+    func installHandler(_ handler: @escaping (UInt32) -> Void) {}
+    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { true }
+    func unregister(identifier: UInt32) {}
+}
+
+@MainActor
+private extension AppModel {
+    /// An app model whose global shortcuts register nowhere.
+    static func forShortcutTests(preferences: AppPreferences) -> AppModel {
+        AppModel(
+            preferences: preferences,
+            inbox: InboxStore(persistence: NoCoachingEvents()),
+            presenceController: NoPresenceChanges(),
+            detector: ManualActionDetector(),
+            shortcutCoordinator: GlobalShortcutCoordinator(backend: QuietHotKeys())
+        )
     }
 }
 
