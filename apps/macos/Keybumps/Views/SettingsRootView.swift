@@ -1447,7 +1447,6 @@ struct SettingsWindowFiller: NSViewRepresentable {
     final class FillerView: NSView {
         private let preferences: AppPreferences
         private var observers: [Any] = []
-        private var workspaceObservers: [Any] = []
 
         init(preferences: AppPreferences) {
             self.preferences = preferences
@@ -1458,15 +1457,12 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
         deinit {
             observers.forEach(NotificationCenter.default.removeObserver)
-            workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             observers.forEach(NotificationCenter.default.removeObserver)
-            workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
             observers = []
-            workspaceObservers = []
             guard let window, !UnitTestHost.isActive else { return }
             // Each time Settings comes forward or changes screen. Until it has filled once, this
             // fills, so a first open that was closed straight away fills the next time instead.
@@ -1482,19 +1478,8 @@ struct SettingsWindowFiller: NSViewRepresentable {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.fillOrFit() }
             })
-            // A full Dock resizes as apps open and quit, without that notification: once its icons
-            // have settled, fit again (#294, seen on CI's 1024pt-wide screen).
-            for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
-                workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.fillOrFit() }
-                })
-            }
-            // After this turn, so the frame macOS restores for the window doesn't replace it. Then
-            // again shortly after, as the Dock may still be resizing for an app that just quit.
+            // After this turn, so the frame macOS restores for the window doesn't replace it.
             DispatchQueue.main.async { [weak self] in self?.fillOrFit() }
-            for delay in [1.0, 3.0] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.fillOrFit() }
-            }
         }
 
         private func fillOrFit() {
@@ -1503,24 +1488,23 @@ struct SettingsWindowFiller: NSViewRepresentable {
             } else {
                 fill(attempt: 1)
             }
-            reportGeometryForUITests()
+            reportVisibleFrameForUITests()
         }
 
-        /// TEMPORARY (#294 diagnosis): in UI-test mode, the window's geometry as this view's
-        /// accessibility value, so a UI test can compare the app's view with the runner's.
-        private func reportGeometryForUITests() {
+        /// In UI-test mode, this view's accessibility value (`settings.visibleFrame`) is the visible
+        /// frame of the window's screen as the app sees it, in AppKit coordinates, then the primary
+        /// screen's height: `minX,minY,width,height,primaryHeight`. The UI test checks the window's
+        /// frame against it. The test runner's own `NSScreen` can disagree with the app's (on CI,
+        /// 674pt against 677pt), so it can't be the reference.
+        private func reportVisibleFrameForUITests() {
             guard UITestLaunchConfiguration.current.isUITesting else { return }
             setAccessibilityElement(true)
             setAccessibilityRole(.staticText)
-            setAccessibilityIdentifier("settings.windowGeometry")
+            setAccessibilityIdentifier("settings.visibleFrame")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self, let window = self.window else { return }
-                let screen = window.screen
-                self.setAccessibilityValue(
-                    "frame=\(window.frame) visible=\(String(describing: screen?.visibleFrame)) screen=\(String(describing: screen?.frame)) "
-                        + "contentMin=\(window.contentMinSize) minSize=\(window.minSize) contentLayout=\(window.contentLayoutRect) "
-                        + "fullSize=\(window.styleMask.contains(.fullSizeContentView)) filled=\(self.preferences.didFillSettingsWindow) "
-                        + "screens=\(NSScreen.screens.map(\.visibleFrame))"
+                guard let self, let visible = window?.screen?.visibleFrame, let primary = NSScreen.screens.first?.frame else { return }
+                setAccessibilityValue(
+                    [visible.minX, visible.minY, visible.width, visible.height, primary.maxY].map { "\($0)" }.joined(separator: ",")
                 )
             }
         }

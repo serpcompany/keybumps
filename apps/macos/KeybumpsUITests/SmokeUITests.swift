@@ -78,39 +78,41 @@ final class SmokeUITests: XCTestCase {
     /// #294: Settings opens within the space the menu bar and Dock leave. CI's 1024×768 screen is
     /// shorter than the window's old minimum, so there it reached under the Dock. Each UI-test
     /// launch has fresh defaults, so this is the first-open fill.
+    ///
+    /// The window's frame (read through Accessibility) is checked against the visible frame the
+    /// app's screen reports (`settings.visibleFrame`). The test runner's own `NSScreen` can
+    /// disagree with the app's by a few points (on CI, 674pt against 677pt), so it's only reported.
     func testSettingsWindowFitsAboveTheDock() {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
         XCTAssertTrue(element("settings.detail.dictation").waitForExistence(timeout: 20))
         let window = app.windows.containing(.any, identifier: "settings.detail.dictation").firstMatch
         XCTAssertTrue(window.exists)
-        let dockBar = XCUIApplication(bundleIdentifier: "com.apple.dock").children(matching: .any).firstMatch
-        let dockFrame = { dockBar.exists ? "\(dockBar.frame)" : "not found" }
-        let atStart = "Settings \(window.frame), visible \(Self.visibleFrames()), Dock \(dockFrame())"
+        let reported = element("settings.visibleFrame")
+        XCTAssertTrue(reported.waitForExistence(timeout: 5), "The app reports its screen's visible frame in UI-test mode")
 
-        // Read again on every check: the Dock can change size while the test waits, as icons come
-        // and go on a 1024pt-wide screen.
         let fits = NSPredicate { _, _ in
-            let frame = window.frame
-            return Self.visibleFrames().contains { $0.insetBy(dx: -1, dy: -1).contains(frame) }
+            guard let visible = Self.visibleFrame(reportedBy: reported) else { return false }
+            return visible.insetBy(dx: -1, dy: -1).contains(window.frame)
         }
-        // The fill happens just after the window appears, and again once the Dock has settled.
+        // The fill happens just after the window appears.
         let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 10) == .completed
-        let geometry = element("settings.windowGeometry")
-        let appSide = geometry.exists ? String(describing: geometry.value ?? "no value") : "not found"
-        XCTAssertTrue(
-            settled,
-            "Settings \(window.frame) lies within a screen's visible frame \(Self.visibleFrames()); Dock \(dockFrame()). At the start: \(atStart). App: \(appSide)"
-        )
+        let appVisible = Self.visibleFrame(reportedBy: reported).map { "\($0)" } ?? "unreadable"
+        let runnerVisible = NSScreen.screens.first.map { "\(Self.topLeft($0.visibleFrame, primaryHeight: $0.frame.maxY))" } ?? "none"
+        XCTAssertTrue(settled, "Settings \(window.frame) lies within its screen's visible frame \(appVisible) (the runner sees \(runnerVisible))")
     }
 
-    /// Each screen's visible frame (the part the menu bar and Dock leave) in XCUITest's coordinates,
-    /// which start at the primary screen's top-left corner; AppKit's start at its bottom-left.
-    private static func visibleFrames() -> [CGRect] {
-        guard let primary = NSScreen.screens.first else { return [] }
-        return NSScreen.screens.map { screen in
-            let visible = screen.visibleFrame
-            return CGRect(x: visible.minX, y: primary.frame.maxY - visible.maxY, width: visible.width, height: visible.height)
-        }
+    /// The visible frame the app reports as `minX,minY,width,height,primaryHeight` in AppKit
+    /// coordinates, in XCUITest's.
+    private static func visibleFrame(reportedBy element: XCUIElement) -> CGRect? {
+        let numbers = ((element.value as? String) ?? "").split(separator: ",").compactMap { Double($0) }
+        guard numbers.count == 5 else { return nil }
+        return topLeft(CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3]), primaryHeight: numbers[4])
+    }
+
+    /// AppKit's screen coordinates start at the primary screen's bottom-left corner; XCUITest's at
+    /// its top-left.
+    private static func topLeft(_ rect: CGRect, primaryHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
     func testEscapeClosesSettings() {
