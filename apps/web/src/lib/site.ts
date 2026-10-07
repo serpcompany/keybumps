@@ -3,7 +3,7 @@ export const SUPPORT_EMAIL = 'support@keybumps.app'
 /** Polar customer portal: purchases, license keys, and freeing a Mac. */
 export const CUSTOMER_PORTAL_URL = 'https://polar.sh/serp/portal'
 
-export const LEGAL_UPDATED = 'October 6, 2026'
+export const LEGAL_UPDATED = 'October 7, 2026'
 
 export const site = {
   name: 'Keybumps',
