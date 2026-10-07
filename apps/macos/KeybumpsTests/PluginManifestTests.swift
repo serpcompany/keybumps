@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -171,5 +172,52 @@ struct PluginManifestTests {
     func minimumMacOS() {
         #expect(CapabilityCatalog.descriptors.filter { $0.minimumMacOS != nil }.map(\.capability) == [.translation])
         #expect(CapabilityDescriptor.translation.minimumMacOS == 15)
+    }
+
+    @Test(
+        "Every plugin's Settings page shows each optional permission it declares, marked Optional, and no permission it doesn't declare, once (#379)",
+        arguments: [nil, MacPermission.accessibility]
+    )
+    func pagesShowTheirPermissions(missing: MacPermission?) throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsPluginPermissions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: missing, root: root)
+        for descriptor in CapabilityCatalog.descriptors {
+            let page = try #require(descriptor.settingsPage, "\(descriptor.title) has a Settings page")
+            let shown = PermissionRowsOnPage.read(page.content(), model: harness.model)
+            let optional = descriptor.optionalPermissions.map { PermissionRow.Shown(permission: $0.permission, isOptional: true) }
+            #expect(shown.filter(\.isOptional) == optional, "\(descriptor.title) shows \(shown)")
+            let required = shown.filter { !$0.isOptional }.map(\.permission)
+            #expect(Set(required).isSubset(of: descriptor.requiredPermissions), "\(descriptor.title) shows \(shown)")
+            #expect(Set(shown).count == shown.count, "\(descriptor.title) shows a permission twice: \(shown)")
+        }
+    }
+}
+
+/// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
+/// returns the permission rows it draws, in order.
+@MainActor
+private enum PermissionRowsOnPage {
+    private final class Rows: @unchecked Sendable {
+        var shown: [PermissionRow.Shown] = []
+    }
+
+    static func read(_ page: AnyView, model: AppModel) -> [PermissionRow.Shown] {
+        let rows = Rows()
+        let size = CGSize(width: 720, height: 4000)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: page
+            .environment(model)
+            .onPreferenceChange(PermissionRow.Shown.Key.self) { rows.shown = $0 })
+        host.frame = NSRect(origin: .zero, size: size)
+        window.contentView = host
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        host.layoutSubtreeIfNeeded()
+        return rows.shown
     }
 }
