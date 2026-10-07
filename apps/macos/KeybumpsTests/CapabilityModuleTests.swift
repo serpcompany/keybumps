@@ -120,6 +120,18 @@ struct CapabilityModuleTests {
         #expect(tab.recents.glyphs.isEmpty)
     }
 
+    @Test("Turning Translation off keeps recent translations; Settings clears the Translate tab's own")
+    func translationOffKeepsRecentTranslations() throws {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+        let tab = try #require(harness.model.commandPalette.tabContents[.translate] as? TranslatePaletteContent)
+        #expect(tab.recents === harness.model.recentTranslations)
+        harness.model.recentTranslations.save("Hello", translated: "こんにちは", from: "en", to: "ja")
+        harness.model.setCapability(.translation, enabled: false)
+        #expect(harness.model.recentTranslations.records.map(\.sourceText) == ["Hello"])
+    }
+
     @Test("A plugin that's off has no tab in the bar, and its Command-number does nothing, unless its tab is on screen")
     func offPluginsHaveNoTab() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
@@ -412,6 +424,7 @@ private final class ModuleHarness {
                 scheduler: NoTimerWakeUps(),
                 notifications: NotificationCenter()
             ),
+            recentTranslations: RecentTranslations(storageURL: root.appendingPathComponent(RecentTranslations.fileName)),
             dictationHistory: DictationHistoryService(
                 recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
             ),

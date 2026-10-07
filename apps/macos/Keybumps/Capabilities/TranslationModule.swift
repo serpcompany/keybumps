@@ -22,7 +22,7 @@ extension CapabilityDescriptor {
             section: .translation,
             summary: "Translate what you type, then copy it or paste it where you’re typing.",
             disableExplanation: "Turning this off closes the Translate tab and releases its global shortcut. Dictation’s Translate goes back to English and Japanese.",
-            content: { AnyView(PluginSettingsPage(capability: .translation)) }
+            content: { AnyView(PluginSettingsPage(capability: .translation) { RecentTranslationsSettings() }) }
         ),
         criticalOperations: [],
         searchKeywords: ["translate", "translator", "languages"],
@@ -84,6 +84,7 @@ extension AppPreferences {
 
 /// Owns the Translate tab (`TranslatePaletteContent`) and its optional Open Translate shortcut. It
 /// ships off, and needs macOS 15 (`minimumMacOS`), where Apple's Translation translates on this Mac.
+/// Turning it off keeps recent translations; only their Clear button removes them.
 @MainActor
 final class TranslationModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.translation
@@ -95,10 +96,12 @@ final class TranslationModule: CapabilityModule {
         palette: CommandPaletteController,
         preferences: AppPreferences,
         translator: (any TextTranslating)?,
+        recents: RecentTranslations,
+        speaker: any TranslationSpeaking,
         openSystemSettings: @escaping @MainActor (SystemSettingsPage) -> Void = { _ in }
     ) {
         self.palette = palette
-        translateTab = TranslatePaletteContent(preferences: preferences, translator: translator)
+        translateTab = TranslatePaletteContent(preferences: preferences, translator: translator, recents: recents, speaker: speaker)
         // The palette closes first, so System Settings comes forward over it.
         translateTab.openLanguageSettings = { [weak palette] in
             palette?.dismiss()
@@ -119,5 +122,34 @@ final class TranslationModule: CapabilityModule {
     func deactivate(_ context: CapabilityContext) {
         palette.dismiss(ifDisplaying: .translate)
         translateTab.stop()
+    }
+}
+
+/// The Translation page's own part, below its languages: clearing recent translations, which asks
+/// first. It works whether Translation is on or off.
+private struct RecentTranslationsSettings: View {
+    @Environment(AppModel.self) private var model
+    @State private var confirmsClear = false
+
+    var body: some View {
+        let recents = model.recentTranslations
+        SettingsGroup {
+            LabeledContent {
+                Button("Clear Recent Translations") { confirmsClear = true }
+                    .disabled(recents.records.isEmpty)
+                    .accessibilityIdentifier("plugin.translation.clearRecent")
+            } label: {
+                SettingsRowLabel(
+                    title: "Recent translations",
+                    subtitle: "Return in the Translate tab saves a translation. The last \(RecentTranslations.limit) are kept on this Mac."
+                )
+            }
+        }
+        .alert("Clear recent translations?", isPresented: $confirmsClear) {
+            Button("Clear", role: .destructive) { recents.clear() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every saved translation will be removed from this Mac.")
+        }
     }
 }

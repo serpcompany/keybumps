@@ -2,13 +2,18 @@ import SwiftUI
 
 /// The Translate tab (#322): what's typed or pasted in the search field, translated as you type,
 /// about 300 ms after the typing stops. Text in My language goes to Other language, and text in
-/// any other language comes back to mine (`TranslationLanguagePair`). Return copies the translation,
-/// kept out of Clipboard History; ⌘Return pastes it into the app you were using and puts the
-/// clipboard back. Translations aren't kept anywhere.
+/// any other language comes back to mine (`TranslationLanguagePair`).
 ///
 /// For the text in the field (#362), ⌘T or the swap button swaps the two languages, and the
 /// target's menu picks another; either lasts until the text changes. A target picked for text
 /// detected in my language also becomes Other language.
+///
+/// Return saves the translation to recent translations (`RecentTranslations`, the last 50, kept on
+/// this Mac) and clears the field; ⌘Return saves it and pastes it into the app you were using,
+/// putting the clipboard back (#362). With the field empty, the tab lists them, newest first: Return
+/// copies one, kept out of Clipboard History; ⌘Return pastes it; Delete asks, then deletes it. Its
+/// speaker button reads it aloud (`TranslationSpeaking`) until the palette closes, the tab or the
+/// text changes, another is read, or it's deleted.
 @MainActor
 @Observable
 final class TranslatePaletteContent: CapabilityPaletteContent {
@@ -16,6 +21,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     static let debounce: Duration = .milliseconds(300)
 
     let tab = CommandPaletteTab.translate
+    /// Typing goes back to the first row: the translation, or the newest saved one once the field
+    /// is cleared.
+    let resetsSelectionWhileTyping = true
 
     /// A translation asked for: the text, and the languages it goes between.
     struct Request: Equatable {
@@ -41,10 +49,26 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     private(set) var needsDownload = false
     /// Whether a translation is on its way. The palette stays open meanwhile.
     private(set) var isTranslating = false
+    /// The saved translation asked to be read aloud; `isReading(_:)` says whether it still is.
+    private(set) var readingID: UUID?
+    /// Why a saved translation couldn't be read aloud, such as no installed voice for its language.
+    private(set) var speechProblem: SpeechProblem?
 
+    struct SpeechProblem: Equatable {
+        let id: UUID
+        let message: String
+    }
+
+    /// The translations Return saved, listed while the field is empty.
+    let recents: RecentTranslations
+    @ObservationIgnored private let speaker: any TranslationSpeaking
     @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let translator: (any TextTranslating)?
     @ObservationIgnored private let wait: (Duration) async throws -> Void
+    /// Reading a saved translation aloud, until it starts; tests await it.
+    @ObservationIgnored private(set) var reading: Task<Void, Never>?
+    /// Changes whenever reading stops, so a reading that starts late is dropped.
+    @ObservationIgnored private var readingGeneration = 0
     /// Languages picked for one text, by swapping or from the target's menu, in place of detection
     /// until the text changes.
     @ObservationIgnored private var chosen: Request?
@@ -60,10 +84,14 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     init(
         preferences: AppPreferences,
         translator: (any TextTranslating)?,
+        recents: RecentTranslations,
+        speaker: any TranslationSpeaking,
         wait: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.preferences = preferences
         self.translator = translator
+        self.recents = recents
+        self.speaker = speaker
         self.wait = wait
     }
 
@@ -96,8 +124,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     /// The search field changed: translates its text once typing stops for `debounce`. Anything
     /// still on its way for earlier text is dropped, so a slow translation never replaces a newer
-    /// one.
+    /// one. Reading aloud stops, since the list goes or is about to.
     func update(query: String) {
+        stopReading()
         work?.cancel()
         work = nil
         let text = Self.text(of: query)
@@ -147,11 +176,13 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         holdPaletteOpen(translating)
     }
 
-    /// Stops a translation on its way, as when the palette closes or Translation is turned off.
+    /// Stops a translation on its way, and reading aloud, as when the palette closes or Translation
+    /// is turned off.
     func stop() {
         work?.cancel()
         work = nil
         setTranslating(false)
+        stopReading()
     }
 
     private func reset() {
@@ -226,27 +257,120 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         work = Task { [weak self] in await self?.translate(request.text) }
     }
 
-    // MARK: CapabilityPaletteContent
+    // MARK: Recent translations
 
-    /// One row, the translation, once it's back.
-    func rowCount(query: String) -> Int {
-        currentTranslation(query: query) == nil ? 0 : 1
+    /// The saved translation a row lists: the field is empty, so the tab lists them.
+    func record(row: Int, query: String) -> TranslationRecord? {
+        guard isAvailable, Self.text(of: query).isEmpty, recents.records.indices.contains(row) else { return nil }
+        return recents.records[row]
     }
 
-    /// Return copies the translation; ⌘Return pastes it, then puts the clipboard back.
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
-        guard row == 0, let translated = currentTranslation(query: query) else { return }
-        if withCommand {
-            palette.paste(translated, true)
-        } else {
-            palette.copy(translated)
+    /// "English → Japanese"
+    static func languages(of record: TranslationRecord) -> String {
+        "\(TranslationLanguages.name(for: record.sourceLanguage)) → \(TranslationLanguages.name(for: record.targetLanguage))"
+    }
+
+    /// Saves the translation of the text in the field, once it's back.
+    private func saveCurrentTranslation(query: String) -> TranslationRecord? {
+        guard let translated = currentTranslation(query: query), let request else { return nil }
+        return recents.save(request.text, translated: translated, from: request.source, to: request.target)
+    }
+
+    /// Deletes a saved translation, and stops reading it aloud.
+    func deleteRecord(_ id: UUID) {
+        if readingID == id {
+            stopReading()
+        } else if speechProblem?.id == id {
+            speechProblem = nil
+        }
+        recents.delete(id)
+    }
+
+    // MARK: Reading aloud
+
+    /// Whether a saved translation is being read aloud, or getting ready to be.
+    func isReading(_ id: UUID) -> Bool {
+        readingID == id && speaker.isSpeaking
+    }
+
+    /// Reads a saved translation aloud in a voice for its target language, stopping anything
+    /// being read. Asked again while it's reading, it stops. With no installed voice for the
+    /// language, it says so on the row instead.
+    func readAloud(_ id: UUID) {
+        guard let record = recents.records.first(where: { $0.id == id }) else { return }
+        let wasReading = isReading(id)
+        stopReading()
+        guard !wasReading else { return }
+        readingID = id
+        let speaker = speaker
+        let generation = readingGeneration
+        reading = Task { [weak self] in
+            let problem = await speaker.speak(record.translatedText, language: record.targetLanguage)
+            // Stopped, or another asked for, meanwhile.
+            guard let self, self.readingGeneration == generation, let problem else { return }
+            self.readingID = nil
+            self.speechProblem = SpeechProblem(id: id, message: problem)
         }
     }
 
+    /// Stops reading aloud, and forgets why the last one couldn't be read.
+    func stopReading() {
+        readingGeneration += 1
+        reading = nil
+        speechProblem = nil
+        guard readingID != nil else { return }
+        readingID = nil
+        speaker.stop()
+    }
+
+    // MARK: CapabilityPaletteContent
+
+    /// With text in the field, one row, its translation, once it's back. With the field empty, the
+    /// saved translations.
+    func rowCount(query: String) -> Int {
+        guard isAvailable else { return 0 }
+        if Self.text(of: query).isEmpty { return recents.records.count }
+        return currentTranslation(query: query) == nil ? 0 : 1
+    }
+
+    /// On the translation: Return saves it and clears the field, leaving it highlighted at the top
+    /// of the list; ⌘Return saves it and pastes it, then puts the clipboard back. On a saved
+    /// translation: Return copies it, kept out of Clipboard History; ⌘Return pastes it.
+    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
+        if let record = record(row: row, query: query) {
+            if withCommand {
+                palette.paste(record.translatedText, true)
+            } else {
+                palette.copy(record.translatedText)
+            }
+            return
+        }
+        guard row == 0, let record = saveCurrentTranslation(query: query) else { return }
+        if withCommand {
+            palette.paste(record.translatedText, true)
+        } else {
+            palette.clearQuery()
+            palette.selectRow(0)
+        }
+    }
+
+    /// A saved translation's Delete asks first, as a recording's does.
+    func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation? {
+        guard let id = record(row: row, query: query)?.id else { return nil }
+        return PaletteDeletionConfirmation(
+            title: "Delete this translation?",
+            message: "It will be removed from this Mac.",
+            delete: { [weak self] in self?.deleteRecord(id) }
+        )
+    }
+
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
-        currentTranslation(query: query) == nil
+        if record(row: row, query: query) != nil {
+            return PaletteFooterActions(primary: "Copy", secondary: "Paste")
+        }
+        return currentTranslation(query: query) == nil
             ? PaletteFooterActions(primary: nil, secondary: nil)
-            : PaletteFooterActions(primary: "Copy", secondary: "Paste")
+            : PaletteFooterActions(primary: "Save", secondary: "Save and Paste")
     }
 
     /// ⌘T swaps the languages. It's the tab's even with nothing to swap, so it never reaches the
@@ -262,28 +386,44 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         reset()
     }
 
+    /// The palette closed or went to another tab: translating and reading aloud stop.
+    func didHide() {
+        stop()
+    }
+
     func makeView(_ context: PaletteContentContext) -> AnyView {
-        let view = AnyView(TranslatePaletteResults(content: self, query: context.query))
+        let view = AnyView(TranslatePaletteResults(
+            content: self,
+            query: context.query,
+            selection: context.selection,
+            actions: context.actions
+        ))
         // Apple's Translation runs its sessions in the tab's view (`hostingSessions`).
         return translator?.hostingSessions(in: view) ?? view
     }
 }
 
-/// The Translate tab: the languages, "English → Japanese", with the target a menu and a swap
-/// button, then the translation.
+/// The Translate tab: with text in the field, the languages, "English → Japanese", with the target
+/// a menu and a swap button, then the translation. With the field empty, recent translations.
 private struct TranslatePaletteResults: View {
     @Environment(\.holdCommandPaletteOpen) private var holdPaletteOpen
     @State private var holdID = UUID()
     let content: TranslatePaletteContent
     let query: String
+    let selection: Int
+    let actions: PaletteContentActions
 
     var body: some View {
         PaletteResultsContainer {
             if let reason = content.unavailableReason {
                 PaletteEmptyState(title: reason, systemImage: "translate")
             } else if TranslatePaletteContent.text(of: query).isEmpty {
-                PaletteEmptyState(title: "Type or paste text to translate it", systemImage: "translate")
-                    .accessibilityIdentifier("palette.translate.empty")
+                if content.recents.records.isEmpty {
+                    PaletteEmptyState(title: "Type or paste text to translate it", systemImage: "translate")
+                        .accessibilityIdentifier("palette.translate.empty")
+                } else {
+                    RecentTranslationList(content: content, selection: selection, actions: actions)
+                }
             } else {
                 result
             }
@@ -386,5 +526,116 @@ private struct TranslatePaletteResults: View {
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("palette.translate.languages")
+    }
+}
+
+/// Recent translations, newest first, listed like the Dictation tab's recordings: a click
+/// highlights a row and a double-click copies it. The highlighted row, and the one being read,
+/// shows its speaker button.
+private struct RecentTranslationList: View {
+    let content: TranslatePaletteContent
+    let selection: Int
+    let actions: PaletteContentActions
+
+    var body: some View {
+        let records = content.recents.records
+        VStack(spacing: 0) {
+            HStack {
+                PaletteSectionHeader("Recent Translations")
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+
+            ScrollViewReader { proxy in
+                List(Array(records.enumerated()), id: \.element.id) { index, record in
+                    row(record, index: index)
+                        .listRowInsets(.init())
+                        .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
+                        .paletteRowBackground(isSelected: index == selection)
+                        .id(record.id)
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .paletteScrollsToSelection(selection, proxy: proxy) { records.indices.contains($0) ? records[$0].id : nil }
+            }
+        }
+    }
+
+    private func row(_ record: TranslationRecord, index: Int) -> some View {
+        let isReading = content.isReading(record.id)
+        let showsSpeaker = index == selection || isReading
+        return HStack(spacing: 0) {
+            Button { actions.selectRow(index) } label: {
+                RecentTranslationRow(
+                    record: record,
+                    problem: content.speechProblem?.id == record.id ? content.speechProblem?.message : nil
+                )
+                .padding(.leading, 12)
+                .padding(.trailing, 8)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture(count: 2).onEnded { actions.copy(record.translatedText) })
+
+            // Its place is kept on every row, so a row's text doesn't move as the highlight does.
+            Button(isReading ? "Stop Reading" : "Read Aloud", systemImage: isReading ? "stop.fill" : "speaker.wave.2") {
+                content.readAloud(record.id)
+            }
+            .buttonStyle(PalettePillButtonStyle(isCircular: true))
+            .help(isReading ? "Stop reading" : "Read aloud")
+            .accessibilityIdentifier("palette.translate.readAloud")
+            .opacity(showsSpeaker ? 1 : 0)
+            .allowsHitTesting(showsSpeaker)
+            .accessibilityHidden(!showsSpeaker)
+            .padding(.trailing, 12)
+        }
+    }
+}
+
+/// A saved translation's row, in the Dictation tab's look: the translation, then what was typed and
+/// its languages, and why it couldn't be read aloud, if it couldn't.
+private struct RecentTranslationRow: View {
+    let record: TranslationRecord
+    let problem: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "translate")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.translatedText)
+                    .font(.system(size: 14))
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(record.sourceText)
+                        .lineLimit(1)
+                    Text("·")
+                        .accessibilityHidden(true)
+                    Text(TranslatePaletteContent.languages(of: record))
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                if let problem {
+                    Text(problem)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("palette.translate.recent")
     }
 }
