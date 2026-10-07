@@ -159,8 +159,9 @@ export type Ga4Skip = 'zero_amount' | 'not_paid' | 'partial_refund' | 'no_consen
 /**
  * The GA4 event for an order, or why there's none. A reference that says the visitor didn't allow
  * analytics means nothing is sent. With no reference at all (a checkout that didn't start at
- * /buy/), a buyer billed in a country that chooses cookies first (`lib/consent.ts`) isn't counted,
- * and anyone else is counted under a derived client ID.
+ * /buy/, or a visitor with no `_ga` cookie), a buyer billed in a country that chooses cookies first
+ * (`lib/consent.ts`) isn't counted, even one who accepted, and anyone else is counted under a
+ * derived client ID.
  */
 export async function ga4PayloadForOrder(
   event: HandledEvent,
