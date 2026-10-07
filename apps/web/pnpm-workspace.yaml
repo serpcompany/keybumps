@@ -7,6 +7,7 @@ ignoredBuiltDependencies:
   - unrs-resolver
 
 # sharp below 0.35.5 has GHSA-wq5f-xc86-pv6w (Dependabot alert 15). miniflare pins 0.35.4
-# exactly, even in Wrangler 4.148.0. Remove this once Wrangler ships a miniflare with 0.35.5+.
+# exactly, even in Wrangler 4.148.0. pnpm matches the key against each declared range, so this
+# also raises Next.js's ^0.35.4 to ^0.35.5. Remove it once Wrangler ships a miniflare with 0.35.5+.
 overrides:
-  "sharp@<0.35.5": 0.35.5
+  "sharp@<0.35.5": ^0.35.5
