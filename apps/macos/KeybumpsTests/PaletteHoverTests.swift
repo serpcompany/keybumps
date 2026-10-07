@@ -57,6 +57,13 @@ struct PaletteHoverTests {
         fixture.palette.selectOnOpening(.clipboard)
         fixture.palette.hover(row: 6)
         #expect(fixture.palette.state.selection == 0, "The new tab's rows appeared under a still pointer")
+
+        // Clipboard only filters as you type, so its selection stays put; typing still re-arms.
+        fixture.pointer = NSPoint(x: 10, y: 90)
+        fixture.palette.state.historyQuery = "made-up"
+        #expect(fixture.palette.state.selection == 0)
+        fixture.palette.hover(row: 3)
+        #expect(fixture.palette.state.selection == 0, "Rows that typing brought under a still pointer")
     }
 
     @Test("Hovering a screenshot tile brings the arrow keys into the grid")

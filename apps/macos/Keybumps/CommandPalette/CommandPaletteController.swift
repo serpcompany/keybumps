@@ -113,7 +113,11 @@ final class CommandPaletteState {
             if tab == .snippets || tabsResettingSelectionWhileTyping.contains(tab), historyQuery != oldValue {
                 selection = 0
             }
-            if historyQuery != oldValue { isBrowsingGrid = false }
+            if historyQuery != oldValue {
+                isBrowsingGrid = false
+                // Typing changes the rows under a still pointer, even where it keeps the selection.
+                pointerAtSelection = mouseLocation()
+            }
             // Opening, narrowing, or closing `/`'s list starts again at the first row.
             if historyQuery.hasPrefix("/") != oldValue.hasPrefix("/") || historyQuery.hasPrefix("/") && historyQuery != oldValue {
                 selection = 0
@@ -145,6 +149,10 @@ final class CommandPaletteState {
         let pointer = mouseLocation()
         guard pointer != pointerAtSelection else { return false }
         pointerAtSelection = pointer
+        guard row != selection else {
+            selectionFollowsPointer = true
+            return true
+        }
         isSelectingFromPointer = true
         selection = row
         isSelectingFromPointer = false
