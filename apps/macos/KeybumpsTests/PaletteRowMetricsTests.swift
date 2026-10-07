@@ -15,6 +15,14 @@ struct PaletteRowMetricsTests {
     /// The tabs that list rows under a section header while the search field is empty, as ← → shows
     /// them; Dictation and Translate in the list column beside their detail.
     static let listTabs: [CommandPaletteTab] = [.search, .clipboard, .dictation, .snippets, .timers, .translate, .keyboardShortcutter]
+    /// The tabs that browse a grid while the search field is empty.
+    static let gridTabs: [CommandPaletteTab] = [.screenshots, .emoji]
+
+    @Test("Every palette tab is measured, so a new plugin's tab can't be skipped")
+    func everyTabIsMeasured() {
+        #expect(Set(Self.listTabs + Self.gridTabs) == Set(CommandPaletteTab.allCases))
+        #expect(Self.listTabs.count + Self.gridTabs.count == CommandPaletteTab.allCases.count)
+    }
 
     @Test("Every list tab puts its header, its first row, the row's well, and its title in the same place")
     func listTabsLineUp() async throws {
@@ -80,6 +88,8 @@ struct PaletteRowMetricsTests {
         #expect(abs(try emoji.require(.gridItem).minX - well.minX) < 0.5, "The first tile starts where the wells do")
     }
 
+    /// Typed Quick Search results and `/`'s filters have no section header, so their first row sits
+    /// a header block higher than the tabs' by design; only their x and height are compared.
     @Test("Rows while typing and `/`'s filters use the same well, title, and height as the tabs' rows")
     func typedRowsLineUp() async throws {
         let clipboard = try await PaletteMetricsFixture.measure(.clipboard)
