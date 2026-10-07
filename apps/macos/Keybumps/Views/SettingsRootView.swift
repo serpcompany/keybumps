@@ -1403,8 +1403,41 @@ final class ShortcutRecorderState {
     }
 }
 
+/// The Settings window's sizes, and how it is kept on its screen (#294).
+enum SettingsWindowFrame {
+    /// Low enough that the window, with its title bar and toolbar (492pt in all), fits the visible
+    /// frame of the smallest screens: on CI's 1024×768 the app's screen reports 677pt, and a 13-inch
+    /// MacBook at Larger Text (1024×640) leaves about 546pt. Every page and the sidebar scroll.
+    static let minimumContentSize = CGSize(width: 960, height: 440)
+    /// What Settings asks for when macOS has nothing saved; `SettingsWindowFiller` fits it to the
+    /// screen once it shows.
+    static let defaultContentSize = CGSize(width: 1240, height: 944)
+
+    /// The frame for a window wider or taller than its screen's visible frame (the part the menu
+    /// bar and Dock leave): shrunk to that frame, but not below `minimumSize`, and moved inside it,
+    /// keeping its top edge on the screen when even the minimum doesn't fit. Nil when the window is
+    /// no larger than the visible frame, so its position stays as the person put it, or when it is
+    /// already as small and as far inside as it can be, so it doesn't jump each time.
+    static func fitted(_ frame: CGRect, in visible: CGRect, minimumSize: CGSize = .zero) -> CGRect? {
+        guard frame.width > visible.width || frame.height > visible.height else { return nil }
+        let width = max(min(frame.width, visible.width), minimumSize.width)
+        let height = max(min(frame.height, visible.height), minimumSize.height)
+        let fitted = CGRect(
+            x: max(min(frame.minX, visible.maxX - width), visible.minX),
+            y: min(max(frame.minY, visible.minY), visible.maxY - height),
+            width: width,
+            height: height
+        )
+        return fitted == frame ? nil : fitted
+    }
+}
+
 /// Fills the screen with the Settings window the first time it opens, as the window's Zoom does,
-/// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at.
+/// leaving the menu bar and Dock showing. After that macOS restores whatever size it was left at,
+/// except that a window larger than its screen's visible frame is shrunk to fit whenever it comes
+/// forward, moves to another screen, or the screen's parameters change (the Dock moved, the
+/// resolution changed), so it stays within what the menu bar and Dock leave (#294). Its position is
+/// kept where it can be; a size larger than the visible frame is not.
 struct SettingsWindowFiller: NSViewRepresentable {
     let preferences: AppPreferences
 
@@ -1413,7 +1446,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
 
     final class FillerView: NSView {
         private let preferences: AppPreferences
-        private var keyObserver: Any?
+        private var observers: [Any] = []
 
         init(preferences: AppPreferences) {
             self.preferences = preferences
@@ -1423,23 +1456,56 @@ struct SettingsWindowFiller: NSViewRepresentable {
         required init?(coder: NSCoder) { nil }
 
         deinit {
-            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+            observers.forEach(NotificationCenter.default.removeObserver)
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
-            keyObserver = nil
-            guard let window, !preferences.didFillSettingsWindow, !UnitTestHost.isActive else { return }
-            // Each time Settings comes forward until it has filled once, so a first open that was
-            // closed straight away fills the next time instead.
-            keyObserver = NotificationCenter.default.addObserver(
-                forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.fill(attempt: 1) }
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            guard let window, !UnitTestHost.isActive else { return }
+            // Each time Settings comes forward or changes screen. Until it has filled once, this
+            // fills, so a first open that was closed straight away fills the next time instead.
+            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didChangeScreenNotification] {
+                observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.fillOrFit() }
+                })
             }
+            // The screen's visible frame changing under a window that stays key, such as the Dock
+            // moving or the resolution changing.
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.fillOrFit() }
+            })
             // After this turn, so the frame macOS restores for the window doesn't replace it.
-            DispatchQueue.main.async { [weak self] in self?.fill(attempt: 1) }
+            DispatchQueue.main.async { [weak self] in self?.fillOrFit() }
+        }
+
+        private func fillOrFit() {
+            if preferences.didFillSettingsWindow {
+                fitToScreen()
+            } else {
+                fill(attempt: 1)
+            }
+            reportVisibleFrameForUITests()
+        }
+
+        /// In UI-test mode, this view's accessibility value (`settings.visibleFrame`) is the visible
+        /// frame of the window's screen as the app sees it, in AppKit coordinates, then the primary
+        /// screen's height: `minX,minY,width,height,primaryHeight`. The #294 UI test checks the
+        /// window's frame against it.
+        private func reportVisibleFrameForUITests() {
+            guard UITestLaunchConfiguration.current.isUITesting else { return }
+            setAccessibilityElement(true)
+            setAccessibilityRole(.staticText)
+            setAccessibilityIdentifier("settings.visibleFrame")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, let visible = window?.screen?.visibleFrame, let primary = NSScreen.screens.first?.frame else { return }
+                setAccessibilityValue(
+                    [visible.minX, visible.minY, visible.width, visible.height, primary.maxY].map { "\($0)" }.joined(separator: ",")
+                )
+            }
         }
 
         /// Fills the screen, then checks once the window has settled: if macOS restored a saved
@@ -1449,17 +1515,37 @@ struct SettingsWindowFiller: NSViewRepresentable {
         private func fill(attempt: Int) {
             guard let window, window.isVisible, let screen = window.screen ?? NSScreen.main,
                   !preferences.didFillSettingsWindow else { return }
-            let target = screen.visibleFrame
-            window.setFrame(target, display: true)
+            window.setFrame(screen.visibleFrame, display: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, let window = self.window, window.isVisible, !preferences.didFillSettingsWindow else { return }
-                if window.frame != target, attempt < 3 {
+                // Against the visible frame now, in case it changed meanwhile.
+                if window.frame != (window.screen ?? screen).visibleFrame, attempt < 3 {
                     fill(attempt: attempt + 1)
                 } else {
                     preferences.didFillSettingsWindow = true
-                    if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
-                    keyObserver = nil
+                    fitToScreen()
                 }
+            }
+        }
+
+        /// Shrinks a window larger than its screen's visible frame to fit, such as a frame saved
+        /// on a larger screen or before #294. Waits while a mouse button is down, so a window being
+        /// dragged to another screen is fitted once it is let go. Full screen is left alone.
+        private func fitToScreen() {
+            guard let window, window.isVisible, !window.styleMask.contains(.fullScreen),
+                  let screen = window.screen else { return }
+            guard NSEvent.pressedMouseButtons == 0 else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.fitToScreen() }
+                return
+            }
+            // AppKit's own minimum frame for the content's minimum, title bar and toolbar included.
+            let contentMinimum = window.frameRect(forContentRect: NSRect(origin: .zero, size: window.contentMinSize)).size
+            let minimum = CGSize(
+                width: max(window.minSize.width, contentMinimum.width),
+                height: max(window.minSize.height, contentMinimum.height)
+            )
+            if let fitted = SettingsWindowFrame.fitted(window.frame, in: screen.visibleFrame, minimumSize: minimum) {
+                window.setFrame(fitted, display: true)
             }
         }
     }

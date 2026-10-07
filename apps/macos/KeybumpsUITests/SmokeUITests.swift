@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Smoke suite for #70. Every launch uses faked permissions, disabled global hot keys, a fresh
@@ -57,8 +58,8 @@ final class SmokeUITests: XCTestCase {
     }
 
     /// #286: Dictation's dropdowns open and change the setting. It drives Recognition language,
-    /// which is near the top: on CI's 1024×768 screen the Settings window reaches under the Dock,
-    /// so the last row (Recording length, the same `SettingsDropdown`) can't be clicked there.
+    /// which is near the top, so no scrolling is needed; the last row (Recording length) is the
+    /// same `SettingsDropdown`. Before #294, CI's 1024×768 screen put that row under the Dock.
     func testDictationDropdownsOpenAndChangeTheSetting() {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
         let language = element("settings.dictation.language")
@@ -72,6 +73,53 @@ final class SmokeUITests: XCTestCase {
         let title = first.title
         first.click()
         XCTAssertEqual(language.value as? String, title, "Picking a language changes the setting")
+    }
+
+    /// #294: Settings isn't held taller than its screen's visible frame. CI's 1024×768 screen is
+    /// shorter than the window's old minimum, so the window reached under the Dock there. Each
+    /// UI-test launch has fresh defaults, so this is the first-open fill.
+    ///
+    /// The window's frame (read through Accessibility) is checked against the visible frame the
+    /// app's screen reports (`settings.visibleFrame`). That doesn't prove the window clears the
+    /// Dock: on CI the app's visible frame (677pt tall) ends about 4pt inside the Dock's
+    /// Accessibility frame, while the runner's `NSScreen` reports 674pt; the cause isn't known.
+    /// The Dock's frame and the runner's visible frame are only reported.
+    func testSettingsWindowFitsItsScreensVisibleFrame() {
+        launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
+        XCTAssertTrue(element("settings.detail.dictation").waitForExistence(timeout: 20))
+        let window = app.windows.containing(.any, identifier: "settings.detail.dictation").firstMatch
+        XCTAssertTrue(window.exists)
+        let reported = element("settings.visibleFrame")
+        XCTAssertTrue(reported.waitForExistence(timeout: 5), "The app reports its screen's visible frame in UI-test mode")
+
+        let fits = NSPredicate { _, _ in
+            guard let visible = Self.visibleFrame(reportedBy: reported) else { return false }
+            return visible.insetBy(dx: -1, dy: -1).contains(window.frame)
+        }
+        // The fill happens just after the window appears.
+        let settled = XCTWaiter().wait(for: [expectation(for: fits, evaluatedWith: nil)], timeout: 10) == .completed
+        let appVisible = Self.visibleFrame(reportedBy: reported).map { "\($0)" } ?? "unreadable"
+        let runnerVisible = NSScreen.screens.first.map { "\(Self.topLeft($0.visibleFrame, primaryHeight: $0.frame.maxY))" } ?? "none"
+        let dockBar = XCUIApplication(bundleIdentifier: "com.apple.dock").children(matching: .any).firstMatch
+        let dock = dockBar.exists ? "\(dockBar.frame)" : "not found"
+        XCTAssertTrue(
+            settled,
+            "Settings \(window.frame) lies within its screen's visible frame \(appVisible) (runner's visible frame \(runnerVisible), Dock \(dock))"
+        )
+    }
+
+    /// The visible frame the app reports as `minX,minY,width,height,primaryHeight` in AppKit
+    /// coordinates, in XCUITest's.
+    private static func visibleFrame(reportedBy element: XCUIElement) -> CGRect? {
+        let numbers = ((element.value as? String) ?? "").split(separator: ",").compactMap { Double($0) }
+        guard numbers.count == 5 else { return nil }
+        return topLeft(CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3]), primaryHeight: numbers[4])
+    }
+
+    /// AppKit's screen coordinates start at the primary screen's bottom-left corner; XCUITest's at
+    /// its top-left.
+    private static func topLeft(_ rect: CGRect, primaryHeight: CGFloat) -> CGRect {
+        CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
     func testEscapeClosesSettings() {
