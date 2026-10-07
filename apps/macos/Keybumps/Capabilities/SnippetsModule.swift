@@ -28,7 +28,13 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [],
         searchKeywords: ["snippet", "snip"],
-        category: .writing
+        category: .writing,
+        optionalPermissions: [
+            PluginOptionalPermission(
+                permission: .accessibility,
+                reason: "Lets ⌘P paste a snippet into the app you’re using; without it, ⌘P copies. Expanding keywords needs it too."
+            ),
+        ]
     )
 }
 

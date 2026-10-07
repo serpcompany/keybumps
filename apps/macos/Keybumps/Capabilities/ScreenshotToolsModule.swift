@@ -26,7 +26,13 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [.unsavedWork],
         searchKeywords: ["screenshots", "screenshot", "screen", "capture", "annotate"],
-        category: .media
+        category: .media,
+        optionalPermissions: [
+            PluginOptionalPermission(
+                permission: .accessibility,
+                reason: "Lets ⌘P paste a screenshot into the app you were using. Without it, ⌘P copies the screenshot instead."
+            ),
+        ]
     )
 }
 
