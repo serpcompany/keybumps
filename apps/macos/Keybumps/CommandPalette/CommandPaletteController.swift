@@ -234,13 +234,13 @@ final class CommandPalettePanel: NSPanel {
         )
     }
 
-    /// Set while unit tests lay the palette out (`CommandPaletteController.layOutForTesting`), so the
-    /// hidden panel never takes key focus, and with it keystrokes typed in other apps, as when a
-    /// translation ends and the palette takes its keys back.
-    var refusesKeyForTesting = false
-
-    override var canBecomeKey: Bool { !refusesKeyForTesting }
+    /// In the unit-test host the panel never takes key focus, and with it keystrokes typed in other
+    /// apps while tests run, as when a translation ends and the palette takes its keys back (#377).
+    override var canBecomeKey: Bool { Self.takesKeyFocus(inUnitTestHost: UnitTestHost.isActive) }
     override var canBecomeMain: Bool { false }
+
+    /// Whether the panel takes key focus: always in the app, never in the unit-test host.
+    static func takesKeyFocus(inUnitTestHost: Bool) -> Bool { !inUnitTestHost }
 }
 
 /// Whether the palette closes when it stops being key or a click lands outside it. Escape closes it
@@ -484,7 +484,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         installKeyMonitor()
         installOutsideMonitors()
         panel.hideDuringUnitTests()
-        (panel as? CommandPalettePanel)?.refusesKeyForTesting = false
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async { [weak self, weak panel] in
             self?.focusInput()
@@ -502,7 +501,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard let panel else { return nil }
         selectOnOpening(tab)
         panel.hideDuringUnitTests()
-        (panel as? CommandPalettePanel)?.refusesKeyForTesting = true
         panel.orderFrontRegardless()
         return panel
     }

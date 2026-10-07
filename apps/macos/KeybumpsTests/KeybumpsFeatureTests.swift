@@ -2539,14 +2539,19 @@ final class KeybumpsFeatureTests: XCTestCase {
 
         XCTAssertTrue(panel.styleMask.contains(.borderless))
         XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
-        XCTAssertTrue(panel.canBecomeKey)
         XCTAssertFalse(panel.canBecomeMain)
+        // It takes key focus in the app. Here, in the unit-test host, it never does, so it can't
+        // take keystrokes typed in other apps while tests run (#377); its field still takes focus.
+        XCTAssertTrue(CommandPalettePanel.takesKeyFocus(inUnitTestHost: false))
+        XCTAssertFalse(CommandPalettePanel.takesKeyFocus(inUnitTestHost: true))
+        XCTAssertFalse(panel.canBecomeKey)
 
+        panel.hideDuringUnitTests()
         panel.makeKeyAndOrderFront(nil)
         XCTAssertTrue(panel.makeFirstResponder(field))
 
         XCTAssertTrue(panel.isVisible)
-        XCTAssertTrue(panel.isKeyWindow)
+        XCTAssertFalse(panel.isKeyWindow)
         XCTAssertTrue(panel.firstResponder === field.currentEditor())
     }
 
