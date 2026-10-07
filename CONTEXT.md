@@ -30,6 +30,10 @@ _Avoid_: Extension
 The single floating, keyboard-first surface whose tabs present the capabilities' searchable content.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
+**Quick select**:
+⇧1–9 in the Command Palette: what Return does on the first to ninth row on screen, numbered from the top one showing. Each such row shows its ⇧N keycap.
+_Avoid_: Hotkey (a global shortcut), ⌘-number (switches tabs)
+
 **Notch notice**:
 A brief, self-dismissing message that grows out of the notch, or the top of the menu bar on screens without one.
 _Avoid_: Toast, HUD, banner

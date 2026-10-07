@@ -157,6 +157,7 @@ struct PaletteFilterMenu: View {
                             Spacer()
                         }
                         .font(.system(size: 15))
+                        .paletteQuickSelect(row: index)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                         .contentShape(Rectangle())
