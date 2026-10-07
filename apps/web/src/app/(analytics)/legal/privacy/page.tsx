@@ -141,10 +141,10 @@ export default function PrivacyPage() {
       <p>
         When you buy, our website tells Google Analytics about the purchase, so we can see which
         pages lead to purchases: the order number, product, amount, tax, currency, and any discount
-        code. If you allowed analytics, it adds the anonymous IDs Google Analytics gave your
-        browser, which travel to Polar with your checkout to make the link. If you declined
-        analytics, or you’re in the EU, the EEA, the UK, or Switzerland and didn’t allow them, the
-        purchase isn’t sent at all. It never sends your name, email, address, or payment details.
+        code. It also adds the anonymous IDs Google Analytics gave your browser, which travel to
+        Polar with your checkout to make the link. If you declined analytics, or you’re in the EU,
+        the EEA, the UK, or Switzerland and didn’t allow them, it sends nothing about your
+        purchase. It never sends your name, email, address, or payment details.
       </p>
 
       <h2>Website</h2>
