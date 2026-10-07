@@ -4,13 +4,19 @@ import SwiftUI
 /// The Dictation tab, in Raycast's list-and-detail layout: compact recordings on the left and the
 /// highlighted recording's transcript, playback, information, and actions on the right.
 struct DictationPaletteResults: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     let entries: [DictationHistoryEntry]
     let selection: Int
     let select: (Int) -> Void
     let choose: (String) -> Void
     let transcribe: (DictationHistoryEntry) -> Void
     let retryingEntryID: String?
+    /// Delete, from the detail's button or the Delete key: asks first.
+    let requestDelete: (DictationHistoryEntry) -> Void
+    /// The confirmation's Delete.
     let delete: (DictationHistoryEntry) -> Void
+    /// The recording whose Delete confirmation is showing.
+    @Binding var pendingDeletion: DictationHistoryEntry?
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     @State private var audioPlayer = DictationAudioPlayer()
@@ -43,6 +49,26 @@ struct DictationPaletteResults: View {
             }
         }
         .onDisappear { audioPlayer.stop() }
+        .alert(
+            "Delete this recording?",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { isPresented in
+                    guard !isPresented else { return }
+                    pendingDeletion = nil
+                    confirmationPresentationChanged(false)
+                }
+            ),
+            presenting: pendingDeletion
+        ) { entry in
+            Button("Delete", role: .destructive) {
+                if audioPlayer.activeEntryID == entry.id { audioPlayer.stop() }
+                delete(entry)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Its audio and transcript will be removed from this Mac.")
+        }
         .onChange(of: entries.map(\.id)) {
             if let active = audioPlayer.activeEntryID, !entries.contains(where: { $0.id == active }) {
                 audioPlayer.stop()
@@ -85,13 +111,14 @@ struct DictationPaletteResults: View {
                     })
                     .listRowInsets(.init())
                     .listRowSeparator(.hidden)
+                    .paletteHoverHighlights(row: index)
                     .paletteRowBackground(isSelected: index == selection)
                     .id(entry.id)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .onChange(of: selection) {
-                    if entries.indices.contains(selection) { proxy.scrollTo(entries[selection].id) }
+                    if revealsSelection, entries.indices.contains(selection) { proxy.scrollTo(entries[selection].id) }
                 }
             }
         }
@@ -109,10 +136,7 @@ struct DictationPaletteResults: View {
             copy: { choose(entry.text) },
             transcribe: { transcribe(entry) },
             reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },
-            delete: {
-                if audioPlayer.activeEntryID == entry.id { audioPlayer.stop() }
-                delete(entry)
-            }
+            delete: { requestDelete(entry) }
         )
         .id(entry.id)
     }

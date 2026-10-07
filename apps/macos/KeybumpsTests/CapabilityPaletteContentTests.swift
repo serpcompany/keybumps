@@ -300,6 +300,42 @@ struct CapabilityPaletteContentTests {
         #expect(content.rowCount(query: "") == 0)
     }
 
+    @Test("Hovering a grid tile highlights it; Up and Down go on from it, but Left and Right still switch tabs (#347)")
+    func hoverInAGrid() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 9
+        var pointer = NSPoint(x: -1000, y: -1000)
+        fixture.palette.state.mouseLocation = { pointer }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+
+        pointer = NSPoint(x: 10, y: 20)
+        fixture.palette.hover(row: 4)
+        #expect(fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.state.selection == 4)
+
+        // Hotkeys is the last tab, so Left is the one that can switch.
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow))
+        #expect(fixture.palette.state.tab != .keyboardShortcutter, "Left switches tabs after the pointer passed over a tile")
+
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        pointer = NSPoint(x: 10, y: 40)
+        fixture.palette.hover(row: 4)
+        _ = fixture.palette.handleKeyDown(Self.downKey)
+        #expect(fixture.palette.state.selection == 7, "Down goes on from the hovered tile")
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_RightArrow))
+        #expect(fixture.palette.state.selection == 8, "Once the keys move in the grid, Right does too")
+
+        // Browsing with the keys, a bump of the mouse over a tile keeps Left and Right in the grid.
+        pointer = NSPoint(x: 10, y: 60)
+        fixture.palette.hover(row: 2)
+        #expect(fixture.palette.state.selection == 2)
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow))
+        #expect(fixture.palette.state.tab == .keyboardShortcutter)
+        #expect(fixture.palette.state.selection == 1)
+    }
+
     @Test("Caps Lock doesn't stop the palette's Command keys (#182)")
     func capsLockKeepsCommandKeys() {
         let fixture = ModuleTabFixture()

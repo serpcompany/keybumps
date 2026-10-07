@@ -122,10 +122,72 @@ final class CommandPaletteState {
     }
     /// The module-supplied tabs whose rows re-rank as you type.
     var tabsResettingSelectionWhileTyping: Set<CommandPaletteTab> = []
-    var selection = 0
+    var selection = 0 {
+        didSet {
+            if selectionFollowsPointer != isSelectingFromPointer { selectionFollowsPointer = isSelectingFromPointer }
+            if !isSelectingFromPointer { pointerAtSelection = mouseLocation() }
+        }
+    }
+    /// Whether the pointer moved the highlight last (#347), so lists don't scroll to it.
+    private(set) var selectionFollowsPointer = false
+    @ObservationIgnored private var isSelectingFromPointer = false
+    /// Where the pointer was when the highlight last moved. A hover counts only once the pointer
+    /// has moved from there, so rows that scroll or appear under a still pointer don't take the
+    /// highlight from the keyboard (#347).
+    @ObservationIgnored private var pointerAtSelection: NSPoint?
+    /// The pointer's position on screen; tests supply their own.
+    @ObservationIgnored var mouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
+    /// Where the palette last saw the pointer over its rows, and when it got there. A row that
+    /// appears under a pointer resting since then, such as a search result that arrives late,
+    /// doesn't take the highlight (#347).
+    @ObservationIgnored private var pointerSeen: NSPoint?
+    @ObservationIgnored private var pointerSeenAt: TimeInterval = -.infinity
+    /// The time, in seconds; tests supply their own.
+    @ObservationIgnored var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    /// How long after the pointer last moved a hover still counts.
+    static let hoverAfterMove: TimeInterval = 0.25
+
+    /// The pointer is over the rows' area, moving or not. A row can still take the highlight within
+    /// `hoverAfterMove` of a move, or when the pointer came to rest somewhere no hover reported it:
+    /// the cost of not depending on which hover callback runs first.
+    func notePointer() {
+        let pointer = mouseLocation()
+        guard pointer != pointerSeen else { return }
+        pointerSeen = pointer
+        pointerSeenAt = now()
+    }
+
+    /// Any key: whatever it does to the rows (typing that filters them, an arrow that scrolls
+    /// them), the pointer has to move before a row under it takes the highlight.
+    func keyWasPressed() {
+        pointerAtSelection = mouseLocation()
+    }
+
+    /// Moves the highlight to a row the pointer is over, if the pointer has moved since the
+    /// highlight last did. Returns whether it moved.
+    @discardableResult
+    func selectFromPointer(_ row: Int) -> Bool {
+        notePointer()
+        let pointer = mouseLocation()
+        guard pointer != pointerAtSelection, now() - pointerSeenAt <= Self.hoverAfterMove else { return false }
+        pointerAtSelection = pointer
+        guard row != selection else {
+            if !selectionFollowsPointer { selectionFollowsPointer = true }
+            return true
+        }
+        isSelectingFromPointer = true
+        selection = row
+        isSelectingFromPointer = false
+        return true
+    }
     /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
     /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
-    var isBrowsingGrid = false
+    var isBrowsingGrid = false {
+        didSet { if !isBrowsingGrid { gridEnteredByPointer = false } }
+    }
+    /// Whether the pointer, not a key, brought the highlight into the grid. Until a key moves
+    /// within it, Left and Right still switch tabs (#347).
+    var gridEnteredByPointer = false
     /// The filter chosen from `/`'s list, shown as a chip in the search field. Choosing or removing
     /// one starts again at the first row.
     var filter: PaletteFilter? {
@@ -137,6 +199,8 @@ final class CommandPaletteState {
     }
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
+    /// The recording whose Delete confirmation is showing.
+    var dictationPendingDeletion: DictationHistoryEntry?
     /// How many times the palette has closed. Its views stay alive while it's hidden, so work that
     /// mustn't outlast a showing, such as a translation, stops when this changes.
     private(set) var closings = 0
@@ -150,6 +214,7 @@ final class CommandPaletteState {
         isBrowsingGrid = false
         filter = nil
         snippetPendingDeletion = nil
+        dictationPendingDeletion = nil
     }
 }
 
@@ -225,8 +290,48 @@ struct CommandPaletteHold: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
 }
 
+/// Moving the pointer over a palette row or tile highlights it, as in Raycast (#347). Outside the
+/// palette it does nothing. Equal for the same palette, so the environment value doesn't redraw
+/// its readers.
+struct CommandPaletteHover: Equatable {
+    private weak var palette: CommandPaletteController?
+
+    init(palette: CommandPaletteController? = nil) {
+        self.palette = palette
+    }
+
+    @MainActor
+    func callAsFunction(_ row: Int) {
+        palette?.hover(row: row)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
+}
+
 extension EnvironmentValues {
     @Entry var holdCommandPaletteOpen = CommandPaletteHold()
+    @Entry var paletteHover = CommandPaletteHover()
+    /// False while the pointer moved the highlight, so a list doesn't scroll to the row under it.
+    @Entry var paletteRevealsSelection = true
+}
+
+extension View {
+    /// A row or tile that takes the highlight when the pointer moves over it (#347). Put it on the
+    /// whole row, padding included.
+    func paletteHoverHighlights(row: Int) -> some View {
+        modifier(PaletteHoverRow(row: row))
+    }
+}
+
+private struct PaletteHoverRow: ViewModifier {
+    let row: Int
+    @Environment(\.paletteHover) private var hover
+
+    func body(content: Content) -> some View {
+        content.onContinuousHover { phase in
+            if case .active = phase { hover(row) }
+        }
+    }
 }
 
 @MainActor
@@ -355,12 +460,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         pendingPaste = nil
     }
 
-    /// Runs as the palette opens on a tab, even while a snippet's Delete alert shows (a hot key or
+    /// Runs as the palette opens on a tab, even while a snippet's or recording's Delete alert shows (a hot key or
     /// a Dock click). Selecting drops the pending deletion, and SwiftUI can take the alert away
     /// without calling its binding, so the palette takes its keys back here, as `ClearAllButton`
     /// does when it disappears.
     func selectOnOpening(_ tab: CommandPaletteTab) {
-        if state.snippetPendingDeletion != nil { isPresentingConfirmation = false }
+        if state.snippetPendingDeletion != nil || state.dictationPendingDeletion != nil { isPresentingConfirmation = false }
         state.select(tab)
         search.query = ""
         tabContents[tab]?.didShow(palette: contentActions)
@@ -499,6 +604,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                     requestDelete: { [weak self] snippet in self?.requestSnippetDeletion(snippet) },
                     delete: { [weak self] snippet in self?.deleteSnippet(snippet) }
                 ),
+                requestDictationDeletion: { [weak self] entry in self?.requestDictationDeletion(entry) },
+                deleteDictation: { [weak self] entry in self?.deleteDictation(entry) },
                 confirmationPresentationChanged: { [weak self] isPresented in
                     self?.isPresentingConfirmation = isPresented
                 },
@@ -508,6 +615,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             )
             .frame(width: size.width, height: size.height)
             .environment(\.holdCommandPaletteOpen, CommandPaletteHold(palette: self))
+            .environment(\.paletteHover, CommandPaletteHover(palette: self))
             .uiTestAnimationsDisabled()
         )
         panel.setContentSize(size)
@@ -569,6 +677,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard !isPresentingConfirmation else { return event }
         // Another Keybumps window, such as Translation's download prompt, keeps its own keys (#321).
         guard CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel) else { return event }
+        state.keyWasPressed()
 
         if Self.isCommandKey(event) {
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
@@ -593,14 +702,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         // grid and Up from its top row comes back out; outside it, Left and Right switch tabs.
         if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
            !isComposingText, event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
-            guard state.isBrowsingGrid else {
+            // Until an arrow key moves within the grid, Left and Right switch tabs, even after the
+            // pointer highlighted a tile on its way across.
+            guard state.isBrowsingGrid, !(state.gridEnteredByPointer && (move == .left || move == .right)) else {
                 enterGrid(or: move)
                 return nil
             }
             if !(0..<itemCount).contains(state.selection) {
                 state.selection = 0
+                state.gridEnteredByPointer = false
             } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
+                state.gridEnteredByPointer = false
             } else if move == .up {
                 leaveGrid()
             }
@@ -637,7 +750,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
-            if isScreenshotGrid, state.isBrowsingGrid {
+            if isScreenshotGrid, state.isBrowsingGrid, !state.gridEnteredByPointer {
                 if (0..<itemCount).contains(state.selection + offset) { state.selection += offset }
             } else {
                 switchTab(by: offset)
@@ -705,9 +818,22 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The pointer moved over a row or tile: it takes the highlight (`selectFromPointer`), and in a
+    /// grid that brings the arrow keys into it too.
+    func hover(row: Int) {
+        // Not behind a Delete alert. A row view on its way out, after a Delete or while a list
+        // re-filters, can still report.
+        guard !isPresentingConfirmation, (0..<itemCount).contains(row), state.selectFromPointer(row),
+              isGridTab, !state.isBrowsingGrid else { return }
+        state.isBrowsingGrid = true
+        state.gridEnteredByPointer = true
+    }
+
     private func moveSelection(_ delta: Int) {
         let count = itemCount
         guard count > 0 else { return }
+        // Up and Down in the screenshot grid move within it, so Left and Right do too from here.
+        state.gridEnteredByPointer = false
         if abs(delta) > 1 {
             // Moving a grid row stops at the edges instead of wrapping to another column.
             let target = state.selection + delta
@@ -863,8 +989,11 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard entries.indices.contains(index) else { return false }
             clipboard.delete(entries[index])
         case .dictation:
+            // A recording can't be made again, and a hover on the way to Delete can change which
+            // one is highlighted, so Delete asks first.
             guard filteredDictations.indices.contains(index) else { return false }
-            dictationHistory.delete(filteredDictations[index])
+            requestDictationDeletion(filteredDictations[index])
+            return true
         case .snippets:
             // Snippets are things you wrote, not history, so Delete asks first.
             let entries = snippetContent.entries
@@ -1101,6 +1230,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         openSettings(.snippets)
     }
 
+    /// Shows the Delete confirmation for a recording.
+    func requestDictationDeletion(_ entry: DictationHistoryEntry) {
+        state.dictationPendingDeletion = entry
+        isPresentingConfirmation = true
+    }
+
+    /// The confirmation's Delete: removes the recording, keeping the highlight on a row that exists.
+    func deleteDictation(_ entry: DictationHistoryEntry) {
+        dictationHistory.delete(entry)
+        state.selection = min(state.selection, max(0, itemCount - 1))
+    }
+
     /// Shows the Delete confirmation for a snippet.
     func requestSnippetDeletion(_ snippet: Snippet) {
         state.snippetPendingDeletion = snippet
@@ -1207,6 +1348,9 @@ private struct CommandPaletteView: View {
     let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
     let snippetActions: SnippetPaletteActions
+    /// Delete on a recording asks first (`requestDictationDeletion`); the alert's Delete deletes.
+    let requestDictationDeletion: (DictationHistoryEntry) -> Void
+    let deleteDictation: (DictationHistoryEntry) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
     let chooseFilter: (PaletteFilter) -> Void
     /// Copies (false) or pastes (true) an emoji from Quick Search's results.
@@ -1230,6 +1374,12 @@ private struct CommandPaletteView: View {
                 select: selectTab
             )
             content
+                .environment(\.paletteRevealsSelection, !state.selectionFollowsPointer)
+                // The pointer moving anywhere over the rows, gaps and empty space included, so a
+                // row that appears under it later can tell it was resting.
+                .onContinuousHover { phase in
+                    if case .active = phase { state.notePointer() }
+                }
                 .contentMargins(.bottom, 56, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
@@ -1283,7 +1433,7 @@ private struct CommandPaletteView: View {
         if let filters = PaletteFilter.menu(
             in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
         ) {
-            PaletteFilterMenu(filters: filters, selection: state.selection, select: { state.selection = $0 }, choose: chooseFilter)
+            PaletteFilterMenu(filters: filters, selection: state.selection, choose: chooseFilter)
         } else if let tabContent = tabContents[state.tab] {
             tabContent.makeView(PaletteContentContext(
                 query: state.historyQuery,
@@ -1337,7 +1487,9 @@ private struct CommandPaletteView: View {
                 choose: copyDictationText,
                 transcribe: { entry in Task { await dictationService.transcribe(entry) } },
                 retryingEntryID: dictationService.retryingEntryID,
-                delete: dictationHistory.delete,
+                requestDelete: requestDictationDeletion,
+                delete: deleteDictation,
+                pendingDeletion: $state.dictationPendingDeletion,
                 clear: dictationHistory.clear,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
@@ -1501,6 +1653,7 @@ private struct PaletteSearchField: View {
 }
 
 private struct SearchResultsView: View {
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
     let items: [QuickSearchItem]
     let selection: Int
     let query: String
@@ -1563,6 +1716,7 @@ private struct SearchResultsView: View {
                             .accessibilityAction(named: "Delete") { deleteRecentItem(item) }
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
+                            .paletteHoverHighlights(row: index)
                             .paletteRowBackground(isSelected: index == selection)
                         }
                         .listStyle(.plain)
@@ -1651,13 +1805,14 @@ private struct SearchResultsView: View {
                         }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
                         .id(item.id)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .onChange(of: selection) {
-                        if items.indices.contains(selection) {
+                        if revealsSelection, items.indices.contains(selection) {
                             proxy.scrollTo(items[selection].id)
                         }
                     }
@@ -1861,6 +2016,7 @@ private struct ClipboardResultsView: View {
                         .accessibilityAction(named: "Delete") { delete(entry) }
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
+                        .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
                     }
                     .listStyle(.plain)
@@ -2151,6 +2307,7 @@ private struct ClipboardEntryPreview: View {
 /// so screenshots are recognizable at a glance. Arrow keys move through the grid.
 private struct ScreenshotGrid: View {
     static let columnCount = 3
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
 
     let entries: [ClipboardEntry]
     let selection: Int
@@ -2192,6 +2349,7 @@ private struct ScreenshotGrid: View {
                                     choose: { select(index); choose(entry) },
                                     delete: { delete(entry) }
                                 )
+                                .paletteHoverHighlights(row: index)
                                 .id(entry.id)
                             }
                         }
@@ -2199,7 +2357,7 @@ private struct ScreenshotGrid: View {
                         .padding(.vertical, 4)
                     }
                     .onChange(of: selection) {
-                        guard entries.indices.contains(selection) else { return }
+                        guard revealsSelection, entries.indices.contains(selection) else { return }
                         proxy.scrollTo(entries[selection].id)
                     }
                 }
