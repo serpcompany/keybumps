@@ -838,6 +838,136 @@ struct RecentTranslationTests {
         #expect(RecentTranslations(storageURL: url).records.isEmpty)
     }
 
+    @Test("When the file can't be removed, Clear empties it, so cleared translations don't come back")
+    func clearWhenTheFileStays() {
+        let folder = TemporaryFolder()
+        defer { folder.remove() }
+        let url = folder.url.appendingPathComponent(RecentTranslations.fileName)
+        let recents = RecentTranslations(storageURL: url, fileManager: UnremovableFileManager())
+        recents.save("Hello", translated: "こんにちは", from: "en", to: "ja")
+
+        recents.clear()
+        #expect(recents.records.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: url.path), "Removing it failed")
+        #expect(RecentTranslations(storageURL: url).records.isEmpty, "The next launch reads none")
+    }
+
+    @Test("Return saves nothing after a failure, or while a swap's translation is on its way; then it saves the languages the header shows")
+    func savesAfterASwapOnlyOnceItsBack() async throws {
+        let translator = FakeTranslator(waits: true)
+        let recents = RecentTranslations(storageURL: nil)
+        let tab = TranslateTabTests.tab(translator, recents: recents)
+        let actions = RecordingActions()
+
+        translator.failure = .unsupportedPair
+        tab.update(query: Self.english)
+        await tab.work?.value
+        #expect(tab.failure != nil)
+        tab.activate(row: 0, query: Self.english, withCommand: false, palette: actions.actions)
+        tab.activate(row: 0, query: Self.english, withCommand: true, palette: actions.actions)
+        #expect(recents.records.isEmpty)
+        #expect(actions.cleared == 0 && actions.pasted.isEmpty)
+
+        translator.failure = nil
+        tab.swapLanguages(query: Self.english)
+        await translator.untilCalled(2)
+        #expect(tab.request == TranslatePaletteContent.Request(text: Self.english, source: "ja", target: "en"))
+        tab.activate(row: 0, query: Self.english, withCommand: false, palette: actions.actions)
+        tab.activate(row: 0, query: Self.english, withCommand: true, palette: actions.actions)
+        #expect(recents.records.isEmpty, "Its translation isn't back yet")
+
+        translator.resolve(1, with: "swapped")
+        await tab.work?.value
+        tab.activate(row: 0, query: Self.english, withCommand: false, palette: actions.actions)
+        let record = try #require(recents.records.first)
+        #expect(record.translatedText == "swapped")
+        #expect(record.sourceLanguage == "ja" && record.targetLanguage == "en", "Japanese → English, as the header showed")
+    }
+
+    @Test("Return saves nothing while a picked language's translation is on its way; then it saves that language")
+    func savesAfterAPickOnlyOnceItsBack() async throws {
+        let translator = FakeTranslator(waits: true)
+        let recents = RecentTranslations(storageURL: nil)
+        let tab = TranslateTabTests.tab(translator, recents: recents)
+        let actions = RecordingActions()
+        tab.update(query: Self.english)
+        await translator.untilCalled(1)
+        translator.resolve(0, with: "into Japanese")
+        await tab.work?.value
+
+        tab.chooseTarget("es", query: Self.english)
+        await translator.untilCalled(2)
+        tab.activate(row: 0, query: Self.english, withCommand: false, palette: actions.actions)
+        tab.activate(row: 0, query: Self.english, withCommand: true, palette: actions.actions)
+        #expect(recents.records.isEmpty, "Not the Japanese one, which the header no longer shows")
+
+        translator.resolve(1, with: "into Spanish")
+        await tab.work?.value
+        tab.activate(row: 0, query: Self.english, withCommand: false, palette: actions.actions)
+        let record = try #require(recents.records.first)
+        #expect(recents.records.count == 1)
+        #expect(record.translatedText == "into Spanish")
+        #expect(record.sourceLanguage == "en" && record.targetLanguage == "es", "English → Spanish, as the header showed")
+    }
+
+    @Test("While an input method is composing, Return commits its candidate in the field: nothing's saved or cleared")
+    func returnWhileComposing() async throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+        let panel = try #require(palette.layOutForTesting(.translate))
+        defer { panel.orderOut(nil) }
+        palette.state.historyQuery = Self.english
+        fixture.tab.update(query: Self.english)
+        await fixture.tab.work?.value
+        try await Task.sleep(for: .milliseconds(100))
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let field = try #require(Self.searchField(in: panel.contentView))
+        #expect(panel.makeFirstResponder(field))
+        let editor = try #require(panel.firstResponder as? NSTextView)
+
+        editor.setMarkedText("きょう", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.hasMarkedText())
+        #expect(fixture.tab.rowCount(query: palette.state.historyQuery) == 1, "Without the guard, Return would save it")
+        #expect(palette.handleKeyDown(fixture.key(kVK_Return, "\r")) != nil, "Return goes to the input method")
+        #expect(fixture.recents.records.isEmpty)
+
+        editor.unmarkText()
+        #expect(!editor.hasMarkedText())
+        palette.state.historyQuery = Self.english
+        #expect(palette.handleKeyDown(fixture.key(kVK_Return, "\r")) == nil, "Once committed, Return is the palette's")
+        #expect(fixture.recents.records.map(\.sourceText) == [Self.english])
+    }
+
+    @Test("Opening the palette again by its shortcut while \"Delete this translation?\" shows drops the question and gives the palette its keys back")
+    func reopeningDropsTheQuestion() {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+        fixture.recents.save("Good night", translated: "おやすみ", from: "en", to: "ja")
+        fixture.recents.save("Thank you", translated: "Merci", from: "en", to: "fr")
+        palette.selectOnOpening(.translate)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_Delete, "\u{8}")) == nil)
+        #expect(palette.state.contentPendingDeletion != nil)
+        #expect(palette.handleKeyDown(fixture.key(kVK_Return, "\r")) != nil, "The alert has the keys")
+
+        palette.selectOnOpening(.translate)
+        #expect(palette.state.contentPendingDeletion == nil)
+        #expect(fixture.recents.records.count == 2, "Nothing deleted")
+        #expect(palette.handleKeyDown(fixture.key(kVK_Return, "\r")) == nil, "The palette has its keys back")
+        #expect(fixture.pasteboard.string(forType: .string) == "Merci", "Return copied the first row")
+    }
+
+    /// The palette's search field, as `CommandPaletteController` finds it to focus it.
+    static func searchField(in view: NSView?) -> NSTextField? {
+        guard let view else { return nil }
+        if let field = view as? NSTextField, field.isEditable, field.isEnabled { return field }
+        for subview in view.subviews {
+            if let field = searchField(in: subview) { return field }
+        }
+        return nil
+    }
+
     @Test("Return on the translation, in the palette: saved, the field clears, it's highlighted at the top, and nothing's copied")
     func returnInThePalette() async {
         let fixture = TranslatePaletteFixture()
@@ -1135,6 +1265,13 @@ final class FakeTranslationSpeaker: TranslationSpeaking {
     func stop() {
         stops += 1
         isSpeaking = false
+    }
+}
+
+/// A file manager whose `removeItem` always fails, as for a file that can't be deleted.
+private final class UnremovableFileManager: FileManager {
+    override func removeItem(at url: URL) throws {
+        throw CocoaError(.fileWriteNoPermission)
     }
 }
 
