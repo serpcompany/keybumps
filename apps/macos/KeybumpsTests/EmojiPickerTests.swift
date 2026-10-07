@@ -201,26 +201,26 @@ struct EmojiPaletteContentTests {
         #expect(tab.glyph(for: holdingHands) == "🧑🏽‍🤝‍🧑🏽", "Both people take the tone")
     }
 
-    @Test("Quick Search finds emoji in the chosen skin tone, at most the limit, while its setting is on (#333)")
+    @Test("Quick Search finds every matching emoji in the chosen skin tone while its setting is on (#333)")
     func quickSearchMatches() throws {
         defer { try? FileManager.default.removeItem(at: url) }
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.set(.choice("medium"), of: .emojiSkinTone, for: .emojiPicker)
         let tab = try content(preferences)
 
-        let thumbs = tab.quickSearchMatches("+1", limit: 6)
+        let thumbs = tab.quickSearchMatches("+1")
         #expect(thumbs.first == QuickSearchEmoji(glyph: "👍🏽", baseGlyph: "👍", name: "thumbs up"))
-        #expect(tab.quickSearchMatches("heart", limit: 3).count == 3)
-        #expect(tab.quickSearchMatches("", limit: 6).isEmpty, "An empty query lists Recent Items, not emoji")
+        #expect(tab.quickSearchMatches("heart").count > QuickSearchEmoji.shownAmongOtherResults)
+        #expect(tab.quickSearchMatches("").isEmpty, "An empty query lists Recent Items, not emoji")
 
         tab.useFromQuickSearch(try #require(thumbs.first))
         #expect(tab.recents.glyphs == ["👍"], "Recent keeps the base emoji")
 
         preferences.set(.bool(false), of: .emojiInQuickSearch, for: .emojiPicker)
-        #expect(tab.quickSearchMatches("+1", limit: 6).isEmpty)
+        #expect(tab.quickSearchMatches("+1").isEmpty)
         preferences.set(.bool(true), of: .emojiInQuickSearch, for: .emojiPicker)
         preferences.setCapability(.emojiPicker, enabled: false)
-        #expect(tab.quickSearchMatches("+1", limit: 6).isEmpty, "Emoji Picker off finds none")
+        #expect(tab.quickSearchMatches("+1").isEmpty, "Emoji Picker off finds none")
     }
 
     @Test("While Emoji Picker is off the tab has no rows")

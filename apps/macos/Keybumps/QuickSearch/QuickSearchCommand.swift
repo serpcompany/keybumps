@@ -201,7 +201,6 @@ extension QuickSearchCommand {
 
 // MARK: - Quick Search rows
 
-/// One Quick Search result row: a Keybumps command, a snippet, or an app, file, or folder.
 /// An emoji Quick Search found through Emoji Picker (#333), in the skin tone chosen there.
 struct QuickSearchEmoji: Hashable {
     /// What Return copies: the emoji in the chosen skin tone.
@@ -209,8 +208,23 @@ struct QuickSearchEmoji: Hashable {
     /// The emoji without a skin tone, as Recent keeps it.
     let baseGlyph: String
     let name: String
+
+    /// How many emoji Quick Search shows among its other results; `/`'s Emoji filter shows them all.
+    static let shownAmongOtherResults = 6
+
+    /// `items` with all but the first few emoji left out, unless `showsAll`.
+    static func limited(_ items: [QuickSearchItem], showsAll: Bool) -> [QuickSearchItem] {
+        guard !showsAll else { return items }
+        var shown = 0
+        return items.filter { item in
+            guard case .emoji = item else { return true }
+            shown += 1
+            return shown <= shownAmongOtherResults
+        }
+    }
 }
 
+/// One Quick Search result row: a Keybumps command, a snippet, an emoji, or an app, file, or folder.
 enum QuickSearchItem: Identifiable, Hashable {
     case command(QuickSearchCommand)
     /// Return copies it and Command-Return pastes it, as in the Snippets tab.

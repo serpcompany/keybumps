@@ -651,11 +651,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Emoji Picker's part in Quick Search (#333): the emoji a query finds, and what using one
     /// records. `matches` returns none while it's off or Show emoji in Quick Search is.
     func setQuickSearchEmoji(
-        matches: @escaping (_ query: String, _ limit: Int) -> [QuickSearchEmoji],
+        matches: @escaping (_ query: String) -> [QuickSearchEmoji],
         use: @escaping (QuickSearchEmoji) -> Void
     ) {
         search.emoji = matches
-        search.emojiLimit = { [weak self] in self?.state.filter == .emoji ? 200 : 6 }
         useQuickSearchEmoji = use
     }
 
@@ -772,7 +771,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// Quick Search's results and recent items, narrowed by the chosen filter.
     private var searchItems: [QuickSearchItem] {
-        state.filter.apply(search.items) { $0.matches($1) }
+        QuickSearchEmoji.limited(state.filter.apply(search.items) { $0.matches($1) }, showsAll: state.filter == .emoji)
     }
 
     private var recentSearchItems: [RecentItem] {
@@ -1280,7 +1279,7 @@ private struct CommandPaletteView: View {
 
     /// Quick Search's results and recent items, narrowed by the chosen filter.
     private var searchItems: [QuickSearchItem] {
-        state.filter.apply(search.items) { $0.matches($1) }
+        QuickSearchEmoji.limited(state.filter.apply(search.items) { $0.matches($1) }, showsAll: state.filter == .emoji)
     }
 
     private var recentSearchItems: [RecentItem] {
@@ -1568,8 +1567,6 @@ private struct SearchResultRow: View {
     }
 }
 
-/// A snippet in Quick Search's row layout: the snippet icon, its name (with a lock when it's
-/// sensitive), and its keyword chip and kind on the right. Its text never shows here.
 /// An emoji in Quick Search's results (#333): the emoji where an icon goes, then its name.
 private struct QuickSearchEmojiRow: View {
     let emoji: QuickSearchEmoji
@@ -1592,6 +1589,8 @@ private struct QuickSearchEmojiRow: View {
     }
 }
 
+/// A snippet in Quick Search's row layout: the snippet icon, its name (with a lock when it's
+/// sensitive), and its keyword chip and kind on the right. Its text never shows here.
 private struct QuickSearchSnippetRow: View {
     let snippet: Snippet
 

@@ -64,12 +64,12 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
         loadIfNeeded()
     }
 
-    /// Quick Search's emoji for a query: the Emoji tab's search, at most `limit`, while Emoji Picker
+    /// Quick Search's emoji for a query: every match of the Emoji tab's search, while Emoji Picker
     /// and Show emoji in Quick Search are on. None until the list has loaded.
-    func quickSearchMatches(_ query: String, limit: Int) -> [QuickSearchEmoji] {
+    func quickSearchMatches(_ query: String) -> [QuickSearchEmoji] {
         guard preferences.quickSearchFindsEmoji, Self.isSearching(query) else { return [] }
         loadIfNeeded()
-        return rows(query: query).prefix(limit).map {
+        return rows(query: query).map {
             QuickSearchEmoji(glyph: glyph(for: $0), baseGlyph: $0.glyph, name: $0.name)
         }
     }

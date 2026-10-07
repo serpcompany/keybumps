@@ -105,7 +105,7 @@ final class EmojiPickerModule: CapabilityModule {
         }
         if !preferences.bool(.emojiRemembersRecent, for: .emojiPicker) { recents.clear() }
         palette.setQuickSearchEmoji(
-            matches: { [weak emojiTab] query, limit in emojiTab?.quickSearchMatches(query, limit: limit) ?? [] },
+            matches: { [weak emojiTab] query in emojiTab?.quickSearchMatches(query) ?? [] },
             use: { [weak emojiTab] emoji in emojiTab?.useFromQuickSearch(emoji) }
         )
         if preferences.quickSearchFindsEmoji { emojiTab.prepareForQuickSearch() }

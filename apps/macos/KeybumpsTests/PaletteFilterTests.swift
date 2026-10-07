@@ -43,6 +43,37 @@ struct PaletteFilterTests {
         #expect(items.suffix(2) == [.emoji(emoji), .result(file)])
     }
 
+    @Test("Emoji Picker's emoji reach Quick Search: a few among the results, all under the Emoji filter, and Return copies one (#333)")
+    func emojiInQuickSearch() {
+        let fixture = PaletteFilterFixture()
+        defer { fixture.tearDown() }
+        var used: [String] = []
+        let found = (0..<10).map { QuickSearchEmoji(glyph: "\($0)\u{FE0F}\u{20E3}", baseGlyph: "\($0)", name: "made-up \($0)") }
+        fixture.palette.setQuickSearchEmoji(matches: { _ in found }, use: { used.append($0.baseGlyph) })
+        fixture.palette.selectOnOpening(.search)
+        fixture.search.query = "zzqq"
+
+        func rowCount() -> Int {
+            // Down wraps at the last row, so count the steps back to the first.
+            var steps = 0
+            repeat {
+                _ = fixture.palette.handleKeyDown(Self.key(kVK_DownArrow))
+                steps += 1
+            } while fixture.palette.state.selection != 0 && steps < 50
+            return steps
+        }
+        #expect(rowCount() == QuickSearchEmoji.shownAmongOtherResults)
+        fixture.palette.chooseFilter(.emoji)
+        fixture.search.query = "zzqq"
+        #expect(rowCount() == 10, "The Emoji filter lists every match")
+        fixture.palette.state.filter = nil
+        #expect(rowCount() == QuickSearchEmoji.shownAmongOtherResults, "Removing it goes back to a few, with no new search")
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Return, "\r")) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == found[0].glyph)
+        #expect(used == ["0"])
+    }
+
     @Test("A link is one http or https address and nothing else")
     func links() {
         #expect(PaletteFilter.isLink("https://example.com/a?b=c"))
@@ -167,6 +198,7 @@ private final class PaletteFilterFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsPaletteFilter-\(UUID().uuidString)"))
     let clipboard: ClipboardHistoryService
+    let search: QuickSearchModel
     let palette: CommandPaletteController
 
     init() {
@@ -177,6 +209,7 @@ private final class PaletteFilterFixture {
             mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true),
             sourceApps: .inert
         )
+        search = QuickSearchModel.forTests(in: root)
         let dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
@@ -193,7 +226,7 @@ private final class PaletteFilterFixture {
             snippets: folder.makeStore(),
             pasteboard: pasteboard,
             notices: SilentFilterNotices(),
-            search: QuickSearchModel.forTests(in: root)
+            search: search
         )
     }
 
