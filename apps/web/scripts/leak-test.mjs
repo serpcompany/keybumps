@@ -159,7 +159,7 @@ const check = (name, ok, detail) => {
 }
 const hasSecret = text => text.includes(SECRET) || text.includes(CHECKOUT)
 
-let browserStarted = false
+let runWideChecksDue = false // set once request capture is installed
 const external = []
 const pushes = []
 const tokenResponses = [] // same-origin responses whose request URL carried the test values
@@ -167,6 +167,7 @@ const tokenResponses = [] // same-origin responses whose request URL carried the
 // The checks across every scenario. They also run when a scenario crashes, so a crash never hides
 // a leak from the scenarios before it.
 function runWideChecks() {
+  runWideChecksDue = false
   const leakedRequests = external.filter(hasSecret)
   check(
     'no external request (URL, Referer, body) carries the test values',
@@ -197,7 +198,6 @@ async function main() {
   )
   const context = await browser.newContext()
   const page = await context.newPage()
-  browserStarted = true
 
   const sensitiveRsc = [] // RSC requests for /thanks/ or /license/ (prefetch noise)
 
@@ -251,6 +251,8 @@ async function main() {
     })
   })
 
+  runWideChecksDue = true
+
   // Playwright fires `networkidle` once per document, so once a page has been idle this only
   // waits the final 400 ms. A step that navigates must wait for its navigation first.
   const settle = async () => {
@@ -258,7 +260,21 @@ async function main() {
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {})
     await page.waitForTimeout(400)
   }
-  // Reads the page, and reads it again if a navigation replaces the document mid-read.
+  const NAVIGATION_TIMEOUT = 15000
+  // GTM starts after hydration. Resolves to whether the GTM stand-in started within 5 s.
+  const gtmStarted = () =>
+    page
+      .waitForFunction(
+        () => (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start'),
+        null,
+        { timeout: 5000 }
+      )
+      .then(
+        () => true,
+        () => false
+      )
+  // Reads the page. If a navigation replaces the document mid-read, it reads the new document
+  // once that has loaded and settled.
   const state = async () => {
     for (let attempt = 1; ; attempt++) {
       try {
@@ -269,7 +285,15 @@ async function main() {
         }))
       } catch (error) {
         if (attempt === 5 || !/Execution context was destroyed/.test(error.message)) throw error
-        await page.waitForLoadState('load').catch(() => {})
+        console.log('NOTE  a navigation replaced the page while it was read; reading the new page')
+        // Playwright can still hold the old document's load state here, so ask the page itself
+        // (waitForFunction carries on into the new document), then settle the new document.
+        await page
+          .waitForFunction(() => document.readyState === 'complete', null, {
+            timeout: NAVIGATION_TIMEOUT
+          })
+          .catch(() => {})
+        await settle()
       }
     }
   }
@@ -278,17 +302,9 @@ async function main() {
   // `missed` names a navigation the step waited for and never saw, which fails the check.
   const expectAt = async (name, path, { h1, gtm = true, missed } = {}) => {
     await settle()
-    // GTM starts after hydration. Wait for it only where it belongs: a 404 must still be sampled
-    // after the fixed settle, not as soon as it looks clean.
-    if (gtm) {
-      await page
-        .waitForFunction(
-          () => (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start'),
-          null,
-          { timeout: 5000 }
-        )
-        .catch(() => {})
-    }
+    // Wait for GTM only where it belongs: a 404 is sampled after the fixed settle, so "no GTM"
+    // can't pass before GTM would have started.
+    if (gtm) await gtmStarted()
     const s = await state()
     const ok =
       !missed &&
@@ -302,22 +318,27 @@ async function main() {
   // (src/lib/sensitive-url-routes.ts), so Next.js loads the URL as a new document, which then
   // redirects without its query. That load can start a second or more after the call, and for
   // the same page the URL already matches, so wait for the new document's `load` (never fired by
-  // a same-document navigation). A prefetch (`loads: false`) loads nothing: wait for its RSC
-  // response instead. Either one missing within the timeout fails the step.
-  const NAVIGATION_TIMEOUT = 15000
+  // a same-document navigation). A prefetch (`loads: false`) loads nothing: wait for the
+  // response to its prefetch request instead. Either one missing within the timeout fails the
+  // step. Only the GTM stand-in records history changes, so it must be running before the call.
   const client = async (name, from, call, path, h1, { loads = true } = {}) => {
     await page.goto(`${B}${from}`)
     await settle()
+    const watching = await gtmStarted()
     const before = pushes.length
-    const options = { timeout: NAVIGATION_TIMEOUT }
+    const wait = { timeout: NAVIGATION_TIMEOUT }
     const navigated = (
       loads
-        ? page.waitForEvent('load', options)
-        : page.waitForResponse(
-            response =>
-              !!response.request().headers().rsc && sensitivePath(new URL(response.url()).pathname),
-            options
-          )
+        ? page.waitForEvent('load', wait)
+        : page.waitForResponse(response => {
+            const headers = response.request().headers()
+            return (
+              !!headers.rsc &&
+              !!headers['next-router-prefetch'] &&
+              hasSecret(response.url()) &&
+              sensitivePath(new URL(response.url()).pathname)
+            )
+          }, wait)
     ).then(
       () => true,
       () => false
@@ -326,10 +347,14 @@ async function main() {
     await page.evaluate(call, Q).catch(() => {})
     const missed = (await navigated)
       ? undefined
-      : `no ${loads ? 'page load' : 'RSC response'} within ${NAVIGATION_TIMEOUT / 1000} s`
+      : `no ${loads ? 'page load' : 'prefetch response'} within ${NAVIGATION_TIMEOUT / 1000} s`
     await expectAt(name, path, { h1, missed })
     const changes = pushes.slice(before).filter(p => p.includes('gtm.historyChange-v2'))
-    check(`${name}: no history change carries the token`, !changes.some(hasSecret), changes.length)
+    check(
+      `${name}: no history change carries the token`,
+      watching && !changes.some(hasSecret),
+      watching ? changes.length : { missed: 'GTM never started on the starting page' }
+    )
   }
 
   // A. Direct loads, as Polar returns buyers (with and without the trailing slash).
@@ -547,7 +572,7 @@ main()
   })
   .catch(error => {
     console.error(error)
-    if (browserStarted) runWideChecks()
+    if (runWideChecksDue) runWideChecks()
     stopPreview()
     process.exit(2)
   })
