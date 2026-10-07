@@ -746,7 +746,7 @@ struct WindowSettingsView: View {
                         activeRecorderID: recorder.identifier,
                         liveModifiers: recorder.identifier == action.rawValue ? recorder.liveModifiers : "",
                         record: { beginRecording(action) },
-                        clear: { model.finishWindowShortcutRecording(nil, for: action) }
+                        clear: { model.setShortcut(nil, for: .window(action)) }
                     )
                     // No width of their own to ask for, so a long note wraps in its column rather
                     // than making the grid drop to one column (#345).
@@ -1298,7 +1298,8 @@ private struct CapabilityShortcutEditor: View {
                             cancel: { model.cancelShortcutRecording() }
                         )
                     },
-                    clear: { model.finishCapabilityShortcutRecording(nil, for: shortcut) }
+                    // Not a recording ending: another row may be recording (#345).
+                    clear: { model.setShortcut(nil, for: owner) }
                 )
                 // A shortcut that starts unassigned has no default to restore; its field clears it.
                 if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
@@ -1400,8 +1401,11 @@ extension Notification.Name {
 
 @MainActor @Observable
 final class ShortcutRecorderState {
+    /// The field recording. One records at a time (#345): starting one ends any other, as on
+    /// Window Manager's page, where one recorder serves every row. Weak, like `asking`.
+    @ObservationIgnored private static let recording = NSHashTable<ShortcutRecorderState>.weakObjects()
     /// Whether any hotkey field is recording, so Escape cancels it rather than closing Settings.
-    @ObservationIgnored static private(set) var isRecordingAny = false
+    static var isRecordingAny: Bool { !recording.allObjects.isEmpty }
     /// The fields asking whether to take a shortcut from another action. Weak, so a field that
     /// goes away without `onDisappear` can't leave Settings thinking one still asks.
     @ObservationIgnored private static let asking = NSHashTable<ShortcutRecorderState>.weakObjects()
@@ -1442,6 +1446,10 @@ final class ShortcutRecorderState {
     /// Starts recording. `capture` saves a shortcut and ends recording. A pressed shortcut that
     /// `conflict` says another action uses ends recording too, and is saved with `replace` only if
     /// the person chooses Replace.
+    ///
+    /// `suspend` turns global shortcuts off, and `capture` (when it saves) and `cancel` turn them
+    /// back on. A field already recording stops without calling either, since this one keeps
+    /// them off.
     func begin(
         identifier: String,
         suspend: () -> Void,
@@ -1450,10 +1458,11 @@ final class ShortcutRecorderState {
         replace: @escaping (ShortcutBinding) -> Void,
         cancel: @escaping () -> Void
     ) {
+        for other in Self.recording.allObjects where other !== self { other.finish() }
         stopMonitor()
         dismissReplacement()
         self.identifier = identifier
-        Self.isRecordingAny = true
+        Self.recording.add(self)
         error = nil
         cancelAction = cancel
         captureAction = capture
@@ -1565,7 +1574,7 @@ final class ShortcutRecorderState {
     private func finish() {
         stopMonitor()
         identifier = nil
-        Self.isRecordingAny = false
+        Self.recording.remove(self)
         error = nil
         liveModifiers = ""
         cancelAction = nil

@@ -235,9 +235,10 @@ struct ShortcutConflictTests {
     func replaceAsksAgainAfterAnotherReplace() {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         let area = DefaultShortcut.screenshotArea
+        // One row records at a time (#345), so each records in turn; both then ask.
         let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
-        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
         screen.recorder.receive(area)
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
         edit.recorder.receive(area)
         #expect(screen.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
         #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
@@ -324,6 +325,59 @@ struct ShortcutConflictTests {
         edit.recorder.confirmReplacement()
         #expect(heard.count == 2)
         #expect(heard.last?.contains("Screenshot Tools › Screenshot Screen.") == true)
+    }
+
+    // MARK: One field records at a time (#345)
+
+    @Test("Starting one field's recording ends another's, which then saves nothing")
+    func startingOneRecordingEndsTheOther() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
+        #expect(screen.recorder.identifier == CapabilityShortcut.screenshotScreen.rawValue)
+
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
+        #expect(screen.recorder.identifier == nil)
+        #expect(edit.recorder.identifier == CapabilityShortcut.screenshotScreenAndEdit.rawValue)
+        #expect(screen.resumed == 0, "The other field keeps global shortcuts off")
+        #expect(ShortcutRecorderState.isRecordingAny)
+
+        screen.recorder.receive(Self.unused)
+        #expect(preferences.capabilityShortcut(for: .screenshotScreen) != Self.unused)
+        #expect(screen.captured == 0)
+        #expect(ShortcutRecorderState.isRecordingAny, "Escape still cancels the field recording")
+
+        edit.recorder.receive(Self.unused)
+        #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == Self.unused)
+        #expect(!ShortcutRecorderState.isRecordingAny)
+    }
+
+    @Test("Global shortcuts stay off until the last field stops recording, even when another row is cleared")
+    func globalShortcutsStayOffWhileAFieldRecords() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.didCompleteOnboarding = true
+        preferences.enabledCapabilities = [.quickSearch]
+        let model = AppModel.forShortcutTests(preferences: preferences)
+        model.applyCapabilities()
+        let registered = model.shortcuts.activeOwners
+        #expect(registered.contains(CapabilityShortcut.quickSearch.ownerID))
+
+        let screen = ShortcutRecorderState()
+        screen.recordAsSettingsDoes(.screenshotScreen, in: model)
+        #expect(model.shortcuts.activeOwners.isEmpty)
+
+        let edit = ShortcutRecorderState()
+        edit.recordAsSettingsDoes(.screenshotScreenAndEdit, in: model)
+        #expect(screen.identifier == nil)
+        #expect(model.shortcuts.isSuspendedForRecording, "The first field ending doesn't turn them on")
+
+        // Another row's clear button, as Settings wires it.
+        model.setShortcut(nil, for: .capability(.screenshotArea))
+        #expect(model.shortcuts.isSuspendedForRecording, "Clearing a row doesn't turn them on")
+        #expect(model.shortcuts.activeOwners.isEmpty)
+
+        edit.cancel()
+        #expect(!model.shortcuts.isSuspendedForRecording)
+        #expect(model.shortcuts.activeOwners == registered)
     }
 }
 
@@ -430,6 +484,22 @@ private extension AppModel {
             presenceController: NoPresenceChanges(),
             detector: ManualActionDetector(),
             shortcutCoordinator: GlobalShortcutCoordinator(backend: QuietHotKeys())
+        )
+    }
+}
+
+@MainActor
+private extension ShortcutRecorderState {
+    /// Records a plugin shortcut wired to the app model as its Settings row does.
+    func recordAsSettingsDoes(_ shortcut: CapabilityShortcut, in model: AppModel) {
+        let owner = ShortcutOwner.capability(shortcut)
+        begin(
+            identifier: shortcut.rawValue,
+            suspend: { model.beginShortcutRecording() },
+            conflict: { model.preferences.shortcutConflict(for: $0, assigningTo: owner) },
+            capture: { model.finishCapabilityShortcutRecording($0, for: shortcut) },
+            replace: { model.setShortcut($0, for: owner) },
+            cancel: { model.cancelShortcutRecording() }
         )
     }
 }
