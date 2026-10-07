@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.3-beta.21](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.20...v0.0.3-beta.21) (2026-10-07)
+
+
+### Features
+
+* ⌘C copies and ⌘P pastes the highlighted row, and Space plays and pauses audio ([#370](https://github.com/serpcompany/keybumps/issues/370)) ([#372](https://github.com/serpcompany/keybumps/issues/372)) ([b43249f](https://github.com/serpcompany/keybumps/commit/b43249f0f9fb7c1dc7b280d6e384d623e0123855))
+
+
+### Fixes
+
+* the shortcut question is announced to VoiceOver, and shortcut rows record one at a time ([#345](https://github.com/serpcompany/keybumps/issues/345)) ([#371](https://github.com/serpcompany/keybumps/issues/371)) ([fb9a1fe](https://github.com/serpcompany/keybumps/commit/fb9a1febb998791e78859dcadee16922cef478ed))
+
 ## [0.0.3-beta.20](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.19...v0.0.3-beta.20) (2026-10-07)
 
 
