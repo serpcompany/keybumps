@@ -89,6 +89,11 @@ struct PluginManifestTests {
                     #expect(Set(options.map(\.value)).count == options.count)
                 }
                 #expect(preference.key != "byline")
+                if let key = preference.differsFrom {
+                    let counterpart = descriptor.preferences.first { $0.key == key }
+                    #expect(counterpart?.differsFrom == preference.key, "\(descriptor.capability).\(preference.key) and \(key) differ from each other")
+                    #expect(counterpart.map { $0.defaultValue != preference.defaultValue } == true, "Their defaults differ")
+                }
             }
         }
     }
@@ -139,9 +144,17 @@ struct PluginManifestTests {
         #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
     }
 
-    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243)")
-    func onlyTheEmojiPickerShipsOff() {
-        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker])
+    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), and Translation (#322)")
+    func onlyTheEmojiPickerAndTranslationShipOff() {
+        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker, .translation])
         #expect(CapabilityDescriptor.emojiPicker.optionalPermissions.map(\.permission) == [.accessibility])
+        #expect(CapabilityDescriptor.translation.optionalPermissions.map(\.permission) == [.accessibility])
+        #expect(CapabilityDescriptor.translation.requiredPermissions.isEmpty)
+    }
+
+    @Test("Only Translation needs a newer macOS than Keybumps does (#322)")
+    func minimumMacOS() {
+        #expect(CapabilityCatalog.descriptors.filter { $0.minimumMacOS != nil }.map(\.capability) == [.translation])
+        #expect(CapabilityDescriptor.translation.minimumMacOS == 15)
     }
 }

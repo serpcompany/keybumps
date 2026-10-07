@@ -118,6 +118,8 @@ extension AppModel {
             whatsNew: InertWhatsNewPresenter(),
             // A timer's end never plays a sound.
             timerAlerts: InertTimerAlerts(),
+            // Never downloads a language or translates.
+            translator: InertTextTranslator(),
             screenshotTools: ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(
                     preferredLocation: { sandbox.screenshots.path },
