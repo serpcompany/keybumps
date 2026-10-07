@@ -24,6 +24,9 @@ protocol CapabilityPaletteContent: AnyObject {
     /// Delete on the selected row, with Command or once the search field is empty. Returns whether
     /// it removed something; the palette then keeps the selection on a row that still exists.
     func delete(row: Int, query: String) -> Bool
+    /// For a row whose Delete asks first, as a recording's does: the question, and what its Delete
+    /// does. The palette shows it in place of `delete(row:query:)`. Nil deletes at once.
+    func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation?
     /// What the footer says Return and Command-Return do on the selected row.
     func footerActions(row: Int, query: String) -> PaletteFooterActions
     /// The Command keys the tab keeps for itself, such as `t` for the Translate tab's ⌘T, as
@@ -34,6 +37,8 @@ protocol CapabilityPaletteContent: AnyObject {
     func handleCommandKey(_ characters: String, query: String)
     /// Runs each time the palette shows the tab: when it opens on it, or switches to it.
     func didShow(palette: PaletteContentActions)
+    /// Runs when the palette stops showing the tab: it closes, or switches to another tab.
+    func didHide()
     /// The rows under the tab bar.
     func makeView(_ context: PaletteContentContext) -> AnyView
 }
@@ -44,10 +49,20 @@ extension CapabilityPaletteContent {
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int? { nil }
     func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {}
     func delete(row: Int, query: String) -> Bool { false }
+    func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation? { nil }
     func footerActions(row: Int, query: String) -> PaletteFooterActions { PaletteFooterActions(tab: tab) }
     var commandKeys: Set<String> { [] }
     func handleCommandKey(_ characters: String, query: String) {}
     func didShow(palette: PaletteContentActions) {}
+    func didHide() {}
+}
+
+/// Delete's question for a row that asks first, such as "Delete this translation?", and what its
+/// Delete button does. The palette shows it as an alert, as it does a recording's.
+struct PaletteDeletionConfirmation {
+    let title: String
+    let message: String
+    let delete: @MainActor () -> Void
 }
 
 /// What the footer names after Select: Return's action and Command-Return's. Nil leaves one out.
