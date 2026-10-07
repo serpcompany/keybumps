@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.20](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.19...v0.0.3-beta.20) (2026-10-07)
+
+
+### Features
+
+* the Translate tab keeps recent translations, saved with Return, and reads them aloud ([#362](https://github.com/serpcompany/keybumps/issues/362)) ([#366](https://github.com/serpcompany/keybumps/issues/366)) ([b0c0056](https://github.com/serpcompany/keybumps/commit/b0c005666ed7ae1b9a08590e7337e8f3163b3a71))
+
 ## [0.0.3-beta.19](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.18...v0.0.3-beta.19) (2026-10-07)
 
 
