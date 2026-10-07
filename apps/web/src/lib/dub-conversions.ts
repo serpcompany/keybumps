@@ -28,14 +28,18 @@ export type DubOutcome =
   | 'sent'
   | 'unattributed'
   | 'refunded'
+  | 'adjusted'
   | 'no_commission'
   | 'already_paid'
+  | 'closed'
   | 'rejected'
+  | 'failed_auth'
   | 'failed_network'
   | 'failed_status'
 
 const api = 'https://api.dub.co'
-const requestTimeoutMs = 4000
+/** A refund makes two calls before GA4's; all three must finish inside Polar's 10-second timeout. */
+const requestTimeoutMs = 2500
 
 /** The config from the Worker's environment: only on the live site, and only once the key is set. */
 export function dubConfigFromEnv(env: Record<string, string | undefined>): DubConfig | null {
@@ -44,30 +48,38 @@ export function dubConfigFromEnv(env: Record<string, string | undefined>): DubCo
 }
 
 /**
- * Tracks a sale. Dub keeps one sale per invoice ID, so a retried delivery records nothing new.
- * A sale whose click Dub doesn't know is accepted with no customer: `unattributed`.
+ * Tracks a sale. Dub ignores a repeat of an invoice ID for 7 days, so Polar's retries record
+ * nothing new; a manual redelivery after that adds to Dub's sale stats, though never a second
+ * commission. A click Dub doesn't know (expired, forged) is a 404: `unattributed`.
  */
 export async function trackDubSale(
   config: DubConfig,
   sale: DubSale,
   fetchImpl: typeof fetch = fetch
 ): Promise<DubOutcome> {
-  const response = await request(config, fetchImpl, 'POST', '/track/sale', {
-    ...sale,
-    paymentProcessor: 'polar'
-  })
-  if (typeof response === 'string') return response
-  const body = (await response.json().catch(() => null)) as { customer?: unknown } | null
-  return body?.customer ? 'sent' : 'unattributed'
+  const response = await request(
+    config,
+    fetchImpl,
+    'POST',
+    '/track/sale',
+    { ...sale, paymentProcessor: 'polar' },
+    'unattributed'
+  )
+  return typeof response === 'string' ? response : 'sent'
 }
 
 /**
- * Marks the commission for a fully refunded order refunded, so it leaves the partner's next
- * payout. A commission Dub has already paid can't change: that needs a clawback in Dub, by hand.
+ * Updates the partner's commission for a refunded order. A full refund (`remainingCents` 0) marks
+ * it refunded, so it leaves the next payout; a partial one sets the sale to what's left, which is
+ * safe to send again. Only a pending commission can change: one Dub has paid or is paying needs a
+ * clawback in Dub, by hand (`already_paid`), and a duplicate, fraudulent, or canceled one is left
+ * alone (`closed`).
  */
 export async function refundDubCommission(
   config: DubConfig,
   invoiceId: string,
+  remainingCents: number,
+  currency: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<DubOutcome> {
   const listed = await request(
@@ -83,27 +95,33 @@ export async function refundDubCommission(
   const commission = Array.isArray(commissions) ? commissions[0] : undefined
   if (!commission || typeof commission.id !== 'string') return 'no_commission'
   if (commission.status === 'refunded') return 'refunded'
-  if (commission.status === 'paid') return 'already_paid'
+  if (commission.status === 'paid' || commission.status === 'processed') return 'already_paid'
+  if (commission.status !== 'pending') return 'closed'
+  const full = remainingCents <= 0
   const updated = await request(
     config,
     fetchImpl,
     'PATCH',
     `/commissions/${encodeURIComponent(commission.id)}`,
-    { status: 'refunded' }
+    full ? { status: 'refunded' } : { saleAmount: remainingCents, currency }
   )
-  return typeof updated === 'string' ? updated : 'refunded'
+  if (typeof updated === 'string') return updated
+  return full ? 'refunded' : 'adjusted'
 }
 
 /**
- * One API call. A network error, a 429, or a 5xx is worth retrying (`failed_*`); any other 4xx
- * won't change on a retry, so it's `rejected`.
+ * One API call. A network error, a 429, or a 5xx is worth retrying (`failed_*`), and so is a 401
+ * or 403 (`failed_auth`: a revoked key or a missing permission), so the delivery shows as failed
+ * in Polar and can be redelivered once the key is fixed. Any other 4xx won't change on a retry:
+ * `rejected`, or `notFound` for a 404 where the caller names one.
  */
 async function request(
   config: DubConfig,
   fetchImpl: typeof fetch,
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  notFound: DubOutcome = 'rejected'
 ): Promise<Response | DubOutcome> {
   let response: Response
   try {
@@ -120,5 +138,7 @@ async function request(
     return 'failed_network'
   }
   if (response.ok) return response
-  return response.status === 429 || response.status >= 500 ? 'failed_status' : 'rejected'
+  if (response.status === 401 || response.status === 403) return 'failed_auth'
+  if (response.status === 429 || response.status >= 500) return 'failed_status'
+  return response.status === 404 ? notFound : 'rejected'
 }
