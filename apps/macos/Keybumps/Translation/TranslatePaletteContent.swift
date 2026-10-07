@@ -330,7 +330,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     /// Reads a saved translation aloud in a voice for its target language, stopping anything
     /// being read. Asked again while it's reading, it stops. With no installed voice for the
-    /// language, it says so on the row instead.
+    /// language, its detail says so instead.
     func readAloud(_ id: UUID) {
         guard let record = recents.records.first(where: { $0.id == id }) else { return }
         let wasReading = isReading(id)
