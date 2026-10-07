@@ -15,7 +15,7 @@ extension CapabilityDescriptor {
             systemImage: "clipboard",
             prompt: "Search clipboard history",
             primaryActionTitle: "Copy",
-            secondaryActionTitle: nil,
+            secondaryActions: [.paste()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

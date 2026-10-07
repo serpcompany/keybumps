@@ -227,9 +227,9 @@ struct QuickSearchEmoji: Hashable {
 /// One Quick Search result row: a Keybumps command, a snippet, an emoji, or an app, file, or folder.
 enum QuickSearchItem: Identifiable, Hashable {
     case command(QuickSearchCommand)
-    /// Return copies it and Command-Return pastes it, as in the Snippets tab.
+    /// Return and ⌘C copy it and ⌘P pastes it, as in the Snippets tab.
     case snippet(Snippet)
-    /// Return copies it and Command-Return pastes it, as in the Emoji tab.
+    /// Return and ⌘C copy it and ⌘P pastes it, as in the Emoji tab.
     case emoji(QuickSearchEmoji)
     case result(QuickSearchResult)
 
@@ -248,10 +248,10 @@ enum QuickSearchItem: Identifiable, Hashable {
         }
     }
 
-    var secondaryActionTitle: String? {
+    var secondaryActions: [PaletteKeyAction] {
         switch self {
-        case .snippet, .emoji: "Paste"
-        default: CommandPaletteTab.search.secondaryActionTitle
+        case .snippet, .emoji: [.paste()]
+        default: CommandPaletteTab.search.secondaryActions
         }
     }
 }

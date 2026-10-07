@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The rows of a Command Palette tab that a capability module supplies itself, so the palette needs
 /// no case of its own for the tab. The palette keeps the search field, the tab bar, the selection,
-/// the arrow keys, Escape, and the footer's chrome; the content answers for its rows, for Return
-/// and Delete on them, and for what the footer says Return does.
+/// the arrow keys, Escape, and the footer's chrome; the content answers for its rows, for Return,
+/// ⌘C, ⌘P, Space, and Delete on them, and for what the footer says those keys do.
 @MainActor
 protocol CapabilityPaletteContent: AnyObject {
     /// The tab these rows fill; it is the owning module's `paletteTab`.
@@ -19,15 +19,26 @@ protocol CapabilityPaletteContent: AnyObject {
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int?
     /// The rows Up and Down move through, for the text in the search field.
     func rowCount(query: String) -> Int
-    /// Return on the selected row; `withCommand` is Command-Return.
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions)
+    /// Return on the selected row: the tab's main action, such as Copy. ⌘Return does the same, and
+    /// never pastes (#370).
+    func activate(row: Int, query: String, palette: PaletteContentActions)
+    /// ⌘C on the selected row: copies it, as Return does in most tabs. A row that doesn't copy does
+    /// nothing.
+    func copy(row: Int, query: String, palette: PaletteContentActions)
+    /// ⌘P on the selected row: pastes it into the app you were using (`PaletteContentActions.paste`).
+    /// A row that doesn't paste does nothing.
+    func paste(row: Int, query: String, palette: PaletteContentActions)
+    /// What Space does on the selected row while the search field is empty: plays or pauses its
+    /// audio, such as a saved translation read aloud. Nil for a row with none, where Space types.
+    func playback(row: Int, query: String) -> PalettePlayback?
     /// Delete on the selected row, with Command or once the search field is empty. Returns whether
     /// it removed something; the palette then keeps the selection on a row that still exists.
     func delete(row: Int, query: String) -> Bool
     /// For a row whose Delete asks first, as a recording's does: the question, and what its Delete
     /// does. The palette shows it in place of `delete(row:query:)`. Nil deletes at once.
     func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation?
-    /// What the footer says Return and Command-Return do on the selected row.
+    /// What the footer says Return and the other keys do on the selected row. The palette adds
+    /// Space's, from `playback(row:query:)`.
     func footerActions(row: Int, query: String) -> PaletteFooterActions
     /// The Command keys the tab keeps for itself, such as `t` for the Translate tab's ⌘T, as
     /// `charactersIgnoringModifiers` reports them, lowercased. The palette's own Command keys (the
@@ -47,7 +58,10 @@ extension CapabilityPaletteContent {
     var resetsSelectionWhileTyping: Bool { false }
     func isGrid(query: String) -> Bool { false }
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int? { nil }
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {}
+    func activate(row: Int, query: String, palette: PaletteContentActions) {}
+    func copy(row: Int, query: String, palette: PaletteContentActions) {}
+    func paste(row: Int, query: String, palette: PaletteContentActions) {}
+    func playback(row: Int, query: String) -> PalettePlayback? { nil }
     func delete(row: Int, query: String) -> Bool { false }
     func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation? { nil }
     func footerActions(row: Int, query: String) -> PaletteFooterActions { PaletteFooterActions(tab: tab) }
@@ -65,20 +79,51 @@ struct PaletteDeletionConfirmation {
     let delete: @MainActor () -> Void
 }
 
-/// What the footer names after Select: Return's action and Command-Return's. Nil leaves one out.
+/// What the footer names after Select: Return's action, then each other key's, such as Paste ⌘P.
+/// A nil primary leaves Return out.
 struct PaletteFooterActions: Equatable {
     var primary: String?
-    var secondary: String?
+    var secondary: [PaletteKeyAction]
 
-    init(primary: String?, secondary: String?) {
+    init(primary: String?, secondary: [PaletteKeyAction] = []) {
         self.primary = primary
         self.secondary = secondary
     }
 
-    /// The titles the tab's descriptor registers.
+    /// The actions the tab's descriptor registers.
     init(tab: CommandPaletteTab) {
-        self.init(primary: tab.primaryActionTitle, secondary: tab.secondaryActionTitle)
+        self.init(primary: tab.primaryActionTitle, secondary: tab.secondaryActions)
     }
+}
+
+/// A key the footer names after Return's, and what it does on the selected row: "Paste" with ⌘P.
+struct PaletteKeyAction: Equatable, CustomStringConvertible {
+    let title: String
+    /// Its keycaps, in order.
+    let keys: [String]
+
+    /// ⌘P, which pastes the row into the app you were using (#370).
+    static func paste(_ title: String = "Paste") -> PaletteKeyAction {
+        PaletteKeyAction(title: title, keys: ["⌘", "P"])
+    }
+
+    /// ⌘Return, which in the Screenshots tab opens the Screenshot Editor.
+    static let edit = PaletteKeyAction(title: "Edit", keys: ["⌘", "↵"])
+
+    /// Space, which plays or pauses a row's audio while the search field is empty.
+    static func space(_ title: String) -> PaletteKeyAction {
+        PaletteKeyAction(title: title, keys: ["Space"])
+    }
+
+    /// "Paste ⌘P"
+    var description: String { "\(title) \(keys.joined())" }
+}
+
+/// Space on a row with audio while the search field is empty: what the footer calls it, such as
+/// Play or Pause, and what it does.
+struct PalettePlayback {
+    let title: String
+    let toggle: @MainActor () -> Void
 }
 
 /// What a tab's rows can ask of the palette.
@@ -95,9 +140,9 @@ struct PaletteContentActions {
     /// Copies text, keeping it out of Clipboard History, then closes the palette and confirms the
     /// copy at the notch.
     var copy: (String) -> Void = { _ in }
-    /// Closes the palette and pastes text into the app that was in front when it opened, or copies
-    /// it and says why when it can't (`PalettePasteRoute`). With `restoresClipboard` true, what was on
-    /// the clipboard comes back once the paste has been read.
+    /// Closes the palette and pastes text into the app that was in front when it opened (⌘P), or
+    /// copies it and says why when it can't (`PalettePasteRoute`). With `restoresClipboard` true, what
+    /// was on the clipboard comes back once the paste has been read.
     var paste: (_ text: String, _ restoresClipboard: Bool) -> Void = { _, _ in }
 }
 

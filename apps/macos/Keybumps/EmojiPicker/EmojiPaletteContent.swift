@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The Emoji tab (#243). With the search empty it's a grid to browse: Recent, then Unicode's groups.
-/// Typing turns it into a ranked list, as the Search tab is. Return copies the emoji and ⌘Return
+/// Typing turns it into a ranked list, as the Search tab is. Return or ⌘C copies the emoji and ⌘P
 /// pastes it into the app you were using, putting your clipboard back afterwards; a double-click
 /// copies too. The emoji takes the skin tone set in Settings when it has one.
 @MainActor
@@ -175,23 +175,33 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
         PaletteGrid.selection(after: move, from: row, sectionCounts: sections.map(\.emoji.count), columns: Self.columns)
     }
 
-    /// Return copies; ⌘Return pastes, then puts the clipboard back. Either way the emoji becomes
+    /// Return and ⌘C copy; ⌘P pastes, then puts the clipboard back. Either way the emoji becomes
     /// the most recent, unless recent emoji are turned off.
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
+    func activate(row: Int, query: String, palette: PaletteContentActions) {
+        copy(row: row, query: query, palette: palette)
+    }
+
+    func copy(row: Int, query: String, palette: PaletteContentActions) {
+        guard let glyph = use(row: row, query: query) else { return }
+        palette.copy(glyph)
+    }
+
+    func paste(row: Int, query: String, palette: PaletteContentActions) {
+        guard let glyph = use(row: row, query: query) else { return }
+        palette.paste(glyph, true)
+    }
+
+    /// The glyph a row copies or pastes, making it the most recent emoji.
+    private func use(row: Int, query: String) -> String? {
         let rows = rows(query: query)
-        guard rows.indices.contains(row) else { return }
+        guard rows.indices.contains(row) else { return nil }
         let emoji = rows[row]
         if remembersRecent { recents.use(emoji.glyph) }
-        let glyph = glyph(for: emoji)
-        if withCommand {
-            palette.paste(glyph, true)
-        } else {
-            palette.copy(glyph)
-        }
+        return glyph(for: emoji)
     }
 
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
-        PaletteFooterActions(primary: "Copy", secondary: "Paste")
+        PaletteFooterActions(primary: "Copy", secondary: [.paste()])
     }
 
     func makeView(_ context: PaletteContentContext) -> AnyView {
@@ -202,7 +212,7 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
             query: query,
             selection: context.selection,
             select: actions.selectRow,
-            pick: { [weak self] row in self?.activate(row: row, query: query, withCommand: false, palette: actions) }
+            pick: { [weak self] row in self?.activate(row: row, query: query, palette: actions) }
         ))
     }
 }

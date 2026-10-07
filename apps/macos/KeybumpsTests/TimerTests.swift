@@ -395,7 +395,7 @@ struct TimerModuleTests {
 
         // Return on Tea restarts it: the alarm is Eggs's alone.
         let tea = try #require(fixture.store.displayed.firstIndex { $0.name == "Tea" })
-        content.activate(row: tea, query: "", withCommand: false, palette: fixture.actions)
+        content.activate(row: tea, query: "", palette: fixture.actions)
         #expect(fixture.alerts.raised.last?.title == "Eggs finished")
         #expect(fixture.alerts.stops == 0)
 
@@ -470,13 +470,13 @@ struct TimerModuleTests {
         #expect(content.footerActions(row: 0, query: "tea").primary == nil, "Not a duration")
         #expect(content.footerActions(row: 0, query: "30h").primary == nil, "Too long")
 
-        content.activate(row: 0, query: "tea 5m", withCommand: false, palette: fixture.actions)
+        content.activate(row: 0, query: "tea 5m", palette: fixture.actions)
         #expect(fixture.dismissals == 1)
         #expect(fixture.notices.shown == ["tea started"])
         #expect(fixture.store.items.map(\.name) == ["tea"])
         #expect(fixture.store.items.first?.duration == 300)
 
-        content.activate(row: 0, query: "tea", withCommand: false, palette: fixture.actions)
+        content.activate(row: 0, query: "tea", palette: fixture.actions)
         #expect(fixture.store.items.count == 1, "Unreadable text starts nothing")
     }
 
@@ -490,15 +490,15 @@ struct TimerModuleTests {
         fixture.store.start(duration: 300, name: "tea")
 
         #expect(content.footerActions(row: 0, query: "").primary == "Pause")
-        content.activate(row: 0, query: "", withCommand: false, palette: fixture.actions)
+        content.activate(row: 0, query: "", palette: fixture.actions)
         #expect(content.footerActions(row: 0, query: "").primary == "Resume")
-        content.activate(row: 0, query: "", withCommand: false, palette: fixture.actions)
+        content.activate(row: 0, query: "", palette: fixture.actions)
         #expect(content.footerActions(row: 0, query: "").primary == "Pause")
 
         fixture.clock.advance(300)
         fixture.scheduler.fire()
         #expect(content.footerActions(row: 0, query: "").primary == "Restart")
-        content.activate(row: 0, query: "", withCommand: false, palette: fixture.actions)
+        content.activate(row: 0, query: "", palette: fixture.actions)
         #expect(fixture.store.items.first?.isRunning == true)
 
         #expect(content.footerActions(row: 1, query: "5m").primary == "Pause", "Timers follow the new-timer row")
@@ -527,12 +527,12 @@ struct TimerModuleTests {
         fixture.store.start(duration: 600, name: "pasta")
 
         // Tea is first while running; paused, it moves below Pasta.
-        content.activate(row: 0, query: "", withCommand: false, palette: fixture.actions)
+        content.activate(row: 0, query: "", palette: fixture.actions)
         #expect(fixture.selectedRows.last == 1)
         #expect(fixture.store.displayed.map(\.name) == ["pasta", "tea"])
 
         // Return again resumes Tea, not Pasta.
-        content.activate(row: 1, query: "", withCommand: false, palette: fixture.actions)
+        content.activate(row: 1, query: "", palette: fixture.actions)
         let allRunning = fixture.store.items.allSatisfy(\.isRunning)
         #expect(allRunning)
         #expect(fixture.selectedRows.last == 0)

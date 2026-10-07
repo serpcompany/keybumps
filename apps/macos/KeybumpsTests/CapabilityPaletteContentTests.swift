@@ -15,17 +15,18 @@ struct CapabilityPaletteContentTests {
     }
 
     /// Arrow keys carry the function and numeric-pad flags, as real ones do.
-    static func key(_ keyCode: Int, _ characters: String = "", modifiers: NSEvent.ModifierFlags) -> NSEvent {
+    static func key(_ keyCode: Int, _ characters: String = "", modifiers: NSEvent.ModifierFlags, isARepeat: Bool = false) -> NSEvent {
         let isArrow = [kVK_LeftArrow, kVK_RightArrow, kVK_DownArrow, kVK_UpArrow].contains(keyCode)
         return NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: isArrow ? modifiers.union([.function, .numericPad]) : modifiers,
             timestamp: 0, windowNumber: 0, context: nil, characters: characters,
-            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode)
+            charactersIgnoringModifiers: characters, isARepeat: isARepeat, keyCode: UInt16(keyCode)
         )!
     }
 
     static let returnKey = key(kVK_Return, "\r")
     static let commandReturn = key(kVK_Return, "\r", command: true)
+    static let spaceKey = key(kVK_Space, " ")
     static let deleteKey = key(kVK_Delete, "\u{7f}")
     static let downKey = key(kVK_DownArrow)
     static let upKey = key(kVK_UpArrow)
@@ -48,7 +49,7 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.selection == 2, "Wraps to the last row")
     }
 
-    @Test("Return and ⌘Return go to the module tab's rows")
+    @Test("Return and ⌘Return both go to the module tab's main action; neither pastes (#370)")
     func returnGoesToTheContent() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
@@ -59,10 +60,81 @@ struct CapabilityPaletteContentTests {
 
         #expect(fixture.palette.handleKeyDown(Self.returnKey) == nil)
         #expect(fixture.palette.handleKeyDown(Self.commandReturn) == nil)
-        #expect(fixture.content.activations == [
-            .init(row: 1, query: "5m", withCommand: false),
-            .init(row: 1, query: "5m", withCommand: true)
-        ])
+        #expect(fixture.content.activations == [.init(row: 1, query: "5m"), .init(row: 1, query: "5m")])
+        #expect(fixture.content.pastes.isEmpty)
+    }
+
+    @Test("⌘C and ⌘P go to the module tab's highlighted row, Caps Lock or not; a held key's repeats do nothing")
+    func copyAndPasteGoToTheContent() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.state.historyQuery = "tea"
+        fixture.palette.state.selection = 2
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "C", modifiers: [.command, .capsLock])) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "P", modifiers: [.command, .capsLock])) == nil)
+        #expect(fixture.content.copies == [.init(row: 2, query: "tea"), .init(row: 2, query: "tea")])
+        #expect(fixture.content.pastes == [.init(row: 2, query: "tea"), .init(row: 2, query: "tea")])
+        #expect(fixture.content.activations.isEmpty, "Neither is Return")
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: .command, isARepeat: true)) == nil)
+        #expect(fixture.content.pastes.count == 2)
+
+        // ⇧⌘C and ⌥⌘P aren't them.
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", modifiers: [.command, .shift])) != nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: [.command, .option])) != nil)
+        #expect(fixture.content.copies.count == 2 && fixture.content.pastes.count == 2)
+    }
+
+    @Test("With no highlighted row, ⌘C and ⌘P do nothing: an empty list, or a grid nothing in is highlighted yet")
+    func copyAndPasteNeedAHighlightedRow() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.content.rows = 0
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+
+        fixture.content.rows = 3
+        fixture.content.isGrid = true
+        #expect(!fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+        #expect(fixture.content.copies.isEmpty && fixture.content.pastes.isEmpty)
+
+        // Once Down goes into the grid, its first item is highlighted.
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
+        #expect(fixture.content.copies == [.init(row: 0, query: "")])
+    }
+
+    @Test("Space plays or pauses the highlighted row's audio only while the search field is empty; otherwise it types")
+    func spacePlaysWithAnEmptyField() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.hasAudio = true
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.state.selection = 1
+
+        #expect(fixture.palette.handleKeyDown(Self.spaceKey) == nil)
+        #expect(fixture.content.toggles == [1])
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Space, " ", modifiers: [], isARepeat: true)) == nil, "A held Space is still the row's")
+        #expect(fixture.content.toggles == [1], "…but its repeats do nothing")
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Space, " ", modifiers: .capsLock)) == nil, "Caps Lock doesn't count")
+        #expect(fixture.content.toggles == [1, 1])
+
+        for modifier: NSEvent.ModifierFlags in [.shift, .option, .command, .control] {
+            #expect(fixture.palette.handleKeyDown(Self.key(kVK_Space, " ", modifiers: modifier)) != nil)
+        }
+        fixture.palette.state.historyQuery = "tea"
+        #expect(fixture.palette.handleKeyDown(Self.spaceKey) != nil, "With text in the field, Space types")
+        fixture.palette.state.historyQuery = ""
+        fixture.content.hasAudio = false
+        #expect(fixture.palette.handleKeyDown(Self.spaceKey) != nil, "A row with no audio leaves Space to the field")
+        #expect(fixture.content.toggles == [1, 1])
     }
 
     @Test("Down goes into a grid, which then gets all four arrow keys; a list's, or a grid's once you type, leave Left and Right to the search field")
@@ -271,15 +343,23 @@ struct CapabilityPaletteContentTests {
         #expect(filtering.palette.state.selection == 2)
     }
 
-    @Test("The footer names a module tab's actions, else Quick Search's row's, else the tab's own")
+    @Test("The footer names a module tab's actions, else Quick Search's row's, else the tab's own, then Space's")
     func footerActions() {
-        let content = PaletteFooterActions(primary: "Pause", secondary: nil)
+        let content = PaletteFooterActions(primary: "Pause")
         #expect(PaletteFooterActions.resolve(tab: .keyboardShortcutter, searchItem: nil, content: content) == content)
         #expect(
             PaletteFooterActions.resolve(tab: .snippets, searchItem: nil, content: nil)
-                == PaletteFooterActions(primary: "Copy", secondary: "Paste")
+                == PaletteFooterActions(primary: "Copy", secondary: [.paste()])
         )
-        #expect(PaletteFooterActions(tab: .keyboardShortcutter) == PaletteFooterActions(primary: nil, secondary: nil))
+        #expect(PaletteFooterActions(tab: .keyboardShortcutter) == PaletteFooterActions(primary: nil))
+        #expect(
+            PaletteFooterActions.resolve(tab: .dictation, searchItem: nil, content: nil, playback: "Play")
+                == PaletteFooterActions(primary: "Copy", secondary: [.paste(), .space("Play")])
+        )
+        #expect(
+            PaletteFooterActions.resolve(tab: .translate, searchItem: nil, content: PaletteFooterActions(primary: "Copy", secondary: [.paste()]), playback: "Read Aloud")
+                .secondary.map(\.description) == ["Paste ⌘P", "Read Aloud Space"]
+        )
     }
 
     @Test("The Hotkeys rows are Shortcut Coach's history, filtered, and none while it's off")
@@ -410,10 +490,10 @@ private final class ModuleTabFixture {
 /// Three fake rows that record what the palette asks of them.
 @MainActor
 private final class RecordingPaletteContent: CapabilityPaletteContent {
+    /// A row and the search field's text when a key reached it.
     struct Activation: Equatable {
         let row: Int
         let query: String
-        let withCommand: Bool
     }
 
     let tab = CommandPaletteTab.keyboardShortcutter
@@ -423,9 +503,14 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
     var clearsQueryOnActivate = false
     var isGrid = false
     var copiesOnActivate: String?
+    /// Whether every row has audio for Space to play.
+    var hasAudio = false
     private(set) var moves: [PaletteMove] = []
     private(set) var shows = 0
     private(set) var activations: [Activation] = []
+    private(set) var copies: [Activation] = []
+    private(set) var pastes: [Activation] = []
+    private(set) var toggles: [Int] = []
     private(set) var deletions: [Int] = []
 
     init(resetsSelectionWhileTyping: Bool) {
@@ -442,10 +527,23 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
         return PaletteGrid.selection(after: move, from: row, sectionCounts: [rows], columns: 3)
     }
 
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
-        activations.append(Activation(row: row, query: query, withCommand: withCommand))
+    func activate(row: Int, query: String, palette: PaletteContentActions) {
+        activations.append(Activation(row: row, query: query))
         if clearsQueryOnActivate { palette.clearQuery() }
         if let copiesOnActivate { palette.copy(copiesOnActivate) }
+    }
+
+    func copy(row: Int, query: String, palette: PaletteContentActions) {
+        copies.append(Activation(row: row, query: query))
+    }
+
+    func paste(row: Int, query: String, palette: PaletteContentActions) {
+        pastes.append(Activation(row: row, query: query))
+    }
+
+    func playback(row: Int, query: String) -> PalettePlayback? {
+        guard hasAudio else { return nil }
+        return PalettePlayback(title: "Play") { [weak self] in self?.toggles.append(row) }
     }
 
     func delete(row: Int, query: String) -> Bool {

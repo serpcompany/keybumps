@@ -16,7 +16,7 @@ extension CapabilityDescriptor {
             systemImage: "timer",
             prompt: "Start a timer: 5m, 1h30m, tea 25",
             primaryActionTitle: "Start",
-            secondaryActionTitle: nil,
+            secondaryActions: [],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

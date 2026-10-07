@@ -17,13 +17,13 @@ struct PasteTarget: Equatable {
     }
 }
 
-/// Whether the palette pastes text (a snippet's ⌘Return, or a module tab's paste), or copies it and
-/// says why. It pastes only into the app that was in front when the palette opened
-/// (`CommandPaletteController.pasteTarget`; the non-activating palette never takes it over), and only
-/// while that app is still in front after the palette closes and a short wait, with the palette not
-/// reopened. Posting ⌘V into another app needs Accessibility, which is optional for pasting: without
-/// it the text is copied, and the permission assistant offers the usual setup. The paste itself is
-/// `TextPasting`, the step Dictation shares.
+/// Whether the palette pastes the highlighted row (⌘P, #370), or copies it and says why. It pastes
+/// only into the app that was in front when the palette opened (`CommandPaletteController.pasteTarget`;
+/// the non-activating palette never takes it over), and only while that app is still in front after
+/// the palette closes and a short wait, with the palette not reopened. Posting ⌘V into another app
+/// needs Accessibility, which is optional for pasting: without it the row is copied, and the
+/// permission assistant offers the usual setup. The paste itself is `TextPasting`, the step Dictation
+/// shares.
 enum PalettePasteRoute: Equatable {
     enum Reason: Equatable {
         /// Posting ⌘V into another app needs Accessibility.
@@ -52,7 +52,7 @@ enum PalettePasteRoute: Equatable {
         return reason.notice
     }
 
-    /// Decided when ⌘Return is pressed, before the palette closes.
+    /// Decided when ⌘P is pressed, before the palette closes.
     static func beforeClosing(canPaste: Bool, target: PasteTarget?) -> PalettePasteRoute {
         guard let target, !target.isKeybumps else { return .copy(.noOtherApp) }
         guard canPaste else { return .copy(.needsAccessibility) }

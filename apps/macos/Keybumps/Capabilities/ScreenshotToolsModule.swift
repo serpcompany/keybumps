@@ -15,7 +15,7 @@ extension CapabilityDescriptor {
             systemImage: "camera.viewfinder",
             prompt: "Search screenshots",
             primaryActionTitle: "Copy",
-            secondaryActionTitle: "Edit",
+            secondaryActions: [.paste(), .edit],
             dataSource: .clipboardHistory
         ),
         settingsPage: CapabilitySettingsPage(

@@ -169,20 +169,29 @@ struct EmojiPaletteContentTests {
         #expect(tab.selection(after: .down, from: 1, query: "") == 1 + EmojiPaletteContent.columns)
     }
 
-    @Test("Return copies, ⌘Return pastes and puts the clipboard back, and either makes it recent")
+    @Test("Return and ⌘C copy, ⌘P pastes and puts the clipboard back, and each makes it recent")
     func copyAndPaste() throws {
         defer { try? FileManager.default.removeItem(at: url) }
         let tab = try content()
         let palette = Palette()
         let row = try #require(tab.rows(query: "joy").firstIndex { $0.glyph == "😂" })
 
-        tab.activate(row: row, query: "joy", withCommand: false, palette: palette.actions)
+        tab.activate(row: row, query: "joy", palette: palette.actions)
         #expect(palette.copied == ["😂"])
-        tab.activate(row: 0, query: "tada", withCommand: true, palette: palette.actions)
+        tab.paste(row: 0, query: "tada", palette: palette.actions)
         #expect(palette.pasted.map(\.text) == ["🎉"])
         #expect(palette.pasted.map(\.restores) == [true])
-        #expect(tab.recents.glyphs == ["🎉", "😂"])
-        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: "Paste"))
+        tab.copy(row: 0, query: "+1", palette: palette.actions)
+        #expect(palette.copied == ["😂", "👍"])
+        #expect(palette.pasted.count == 1)
+        #expect(tab.recents.glyphs == ["👍", "🎉", "😂"])
+        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.paste()]))
+        #expect(tab.playback(row: 0, query: "") == nil, "Emoji have no audio, so Space types")
+
+        // A row that isn't there copies and pastes nothing.
+        tab.copy(row: 99_999, query: "", palette: palette.actions)
+        tab.paste(row: 99_999, query: "", palette: palette.actions)
+        #expect(palette.copied.count == 2 && palette.pasted.count == 1)
     }
 
     @Test("The skin tone setting picks each emoji's form, and recent emoji are kept by their base")
@@ -192,7 +201,7 @@ struct EmojiPaletteContentTests {
         preferences.set(.choice("medium"), of: .emojiSkinTone, for: .emojiPicker)
         let tab = try content(preferences)
         let palette = Palette()
-        tab.activate(row: 0, query: "+1", withCommand: false, palette: palette.actions)
+        tab.activate(row: 0, query: "+1", palette: palette.actions)
         #expect(palette.copied == ["👍🏽"])
         #expect(tab.recents.glyphs == ["👍"])
         let smile = try #require(tab.library?.emoji(withGlyph: "😀"))
@@ -250,7 +259,7 @@ struct EmojiPaletteContentTests {
         preferences.set(.bool(false), of: .emojiRemembersRecent, for: .emojiPicker)
         let tab = try content(preferences)
         let palette = Palette()
-        tab.activate(row: 0, query: "+1", withCommand: false, palette: palette.actions)
+        tab.activate(row: 0, query: "+1", palette: palette.actions)
         #expect(palette.copied == ["👍"])
         #expect(tab.recents.glyphs.isEmpty)
         #expect(tab.sections.first?.title == "Smileys & Emotion")

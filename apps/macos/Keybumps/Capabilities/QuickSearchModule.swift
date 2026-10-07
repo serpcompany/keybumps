@@ -15,7 +15,7 @@ extension CapabilityDescriptor {
             systemImage: "magnifyingglass",
             prompt: "Search apps, files, and folders",
             primaryActionTitle: "Open",
-            secondaryActionTitle: nil,
+            secondaryActions: [],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

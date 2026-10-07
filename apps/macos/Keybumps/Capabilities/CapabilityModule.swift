@@ -52,9 +52,10 @@ struct CapabilityPaletteTab {
     let commandKey: Int
     let systemImage: String
     let prompt: String
+    /// What Return does, shown first in the footer with ↵.
     let primaryActionTitle: String?
-    /// Shown in the footer after the primary action.
-    let secondaryActionTitle: String?
+    /// The other keys the footer names after Return, with their keys, such as Paste ⌘P.
+    let secondaryActions: [PaletteKeyAction]
     let dataSource: Capability?
 }
 
