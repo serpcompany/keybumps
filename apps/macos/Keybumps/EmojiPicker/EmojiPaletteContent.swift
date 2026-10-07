@@ -314,6 +314,7 @@ private struct EmojiPaletteResults: View {
                     List(Array(rows.enumerated()), id: \.element.glyph) { index, emoji in
                         Button { select(index) } label: {
                             EmojiRow(glyph: content.glyph(for: emoji), emoji: emoji)
+                                .paletteQuickSelect(row: index)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 6)
                                 .contentShape(Rectangle())

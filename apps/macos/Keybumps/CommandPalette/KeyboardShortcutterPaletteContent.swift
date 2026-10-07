@@ -108,6 +108,7 @@ private struct KeyboardShortcutterResultsView: View {
                     List(Array(entries.enumerated()), id: \.element.id) { index, event in
                         Button { select(index) } label: {
                             CoachingEventRow(event: event)
+                                .paletteQuickSelect(row: index)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 7)
                                 .contentShape(Rectangle())
