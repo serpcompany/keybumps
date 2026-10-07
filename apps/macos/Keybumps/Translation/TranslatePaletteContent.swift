@@ -5,6 +5,10 @@ import SwiftUI
 /// any other language comes back to mine (`TranslationLanguagePair`). Return copies the translation,
 /// kept out of Clipboard History; ⌘Return pastes it into the app you were using and puts the
 /// clipboard back. Translations aren't kept anywhere.
+///
+/// For the text in the field (#362), ⌘T or the swap button swaps the two languages, and the
+/// target's menu picks another; either lasts until the text changes. A target picked for text
+/// detected in my language also becomes Other language.
 @MainActor
 @Observable
 final class TranslatePaletteContent: CapabilityPaletteContent {
@@ -41,6 +45,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let translator: (any TextTranslating)?
     @ObservationIgnored private let wait: (Duration) async throws -> Void
+    /// Languages picked for one text, by swapping or from the target's menu, in place of detection
+    /// until the text changes.
+    @ObservationIgnored private var chosen: Request?
     /// The debounce and translation for the latest text; tests await it.
     @ObservationIgnored private(set) var work: Task<Void, Never>?
     /// Opens System Settings on Language & Region, where Translation Languages are downloaded.
@@ -95,6 +102,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         work = nil
         let text = Self.text(of: query)
         guard isAvailable, !text.isEmpty else { return reset() }
+        if text != chosen?.text { chosen = nil }
         // Already translated, or known not to translate.
         if text == request?.text, currentTranslation(query: query) != nil || failure != nil { return setTranslating(false) }
         let wait = wait
@@ -106,9 +114,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     private func translate(_ text: String) async {
         guard !Task.isCancelled, let translator else { return }
-        let pair = preferences.translationLanguagePair
-        let source = TranslationLanguagePolicy.sourceLanguageIdentifier(for: text, fallbackLanguageIdentifier: pair.mine)
-        let request = Request(text: text, source: source, target: pair.target(forSourceIdentifier: source))
+        let request = chosen.flatMap { $0.text == text ? $0 : nil } ?? detectedRequest(for: text)
         self.request = request
         failure = nil
         needsDownload = false
@@ -127,6 +133,14 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         setTranslating(false)
     }
 
+    /// The languages for text nobody picked any for: the one it's written in, and the pair's
+    /// language for it.
+    private func detectedRequest(for text: String) -> Request {
+        let pair = preferences.translationLanguagePair
+        let source = TranslationLanguagePolicy.sourceLanguageIdentifier(for: text, fallbackLanguageIdentifier: pair.mine)
+        return Request(text: text, source: source, target: pair.target(forSourceIdentifier: source))
+    }
+
     private func setTranslating(_ translating: Bool) {
         guard translating != isTranslating else { return }
         isTranslating = translating
@@ -142,6 +156,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     private func reset() {
         stop()
+        chosen = nil
         request = nil
         translation = nil
         failure = nil
@@ -156,6 +171,59 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         case .notDownloaded: "Download \(source) and \(target) in System Settings › General › Language & Region › Translation Languages, then try again."
         case .failed: "Translation couldn’t be completed."
         }
+    }
+
+    // MARK: Swapping and picking languages
+
+    /// The request for the text in the field, once it's asked for; the header names its languages.
+    private func currentRequest(query: String) -> Request? {
+        guard isAvailable, let request, request.text == Self.text(of: query) else { return nil }
+        return request
+    }
+
+    /// Whether the languages can be swapped or the target picked: the text in the field was asked
+    /// for, so the header shows its languages.
+    func canChangeLanguages(query: String) -> Bool {
+        currentRequest(query: query) != nil
+    }
+
+    /// Translates the text in the field the other way, from its target into its source, as for a
+    /// short word detected as the wrong language. Detection comes back with the next text.
+    func swapLanguages(query: String) {
+        guard let request = currentRequest(query: query) else { return }
+        translateAgain(Request(text: request.text, source: request.target, target: request.source))
+    }
+
+    /// The languages the target's menu offers: every language Translation offers but the source.
+    /// The current target is among them, marked in the menu.
+    func targetChoices(query: String) -> [TranslationLanguages.Language] {
+        guard let request = currentRequest(query: query) else { return [] }
+        let source = TranslationLanguagePair.code(request.source)
+        return TranslationLanguages.offered.filter { $0.code != source }
+    }
+
+    /// Translates the text in the field into `target` at once. When the text was detected in my
+    /// language, and not swapped, `target` also becomes Other language, as in Settings, so my
+    /// language goes there from now on. Otherwise the pick lasts only until the text changes, and
+    /// the setting stays: text in another language comes back to mine, and a swapped source isn't
+    /// what the text is written in.
+    func chooseTarget(_ target: String, query: String) {
+        guard let request = currentRequest(query: query), TranslationLanguages.isOffered(target) else { return }
+        let target = TranslationLanguagePair.code(target)
+        let source = TranslationLanguagePair.code(request.source)
+        guard target != source, target != TranslationLanguagePair.code(request.target) else { return }
+        let mine = preferences.translationLanguagePair.mine
+        if source == mine, TranslationLanguagePair.code(detectedRequest(for: request.text).source) == mine {
+            preferences.set(.choice(target), of: .translationOtherLanguage, for: .translation)
+        }
+        translateAgain(Request(text: request.text, source: request.source, target: target))
+    }
+
+    /// Translates the text again in the languages picked for it, without waiting out the debounce.
+    private func translateAgain(_ request: Request) {
+        chosen = request
+        work?.cancel()
+        work = Task { [weak self] in await self?.translate(request.text) }
     }
 
     // MARK: CapabilityPaletteContent
@@ -181,6 +249,14 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
             : PaletteFooterActions(primary: "Copy", secondary: "Paste")
     }
 
+    /// ⌘T swaps the languages. It's the tab's even with nothing to swap, so it never reaches the
+    /// search field.
+    var commandKeys: Set<String> { ["t"] }
+
+    func handleCommandKey(_ characters: String, query: String) {
+        if characters == "t" { swapLanguages(query: query) }
+    }
+
     /// Each showing starts empty, so languages downloaded meanwhile are tried again.
     func didShow(palette: PaletteContentActions) {
         reset()
@@ -193,7 +269,8 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     }
 }
 
-/// The Translate tab: the languages, "English → Japanese", then the translation.
+/// The Translate tab: the languages, "English → Japanese", with the target a menu and a swap
+/// button, then the translation.
 private struct TranslatePaletteResults: View {
     @Environment(\.holdCommandPaletteOpen) private var holdPaletteOpen
     @State private var holdID = UUID()
@@ -230,20 +307,7 @@ private struct TranslatePaletteResults: View {
         let isCurrent = content.currentTranslation(query: query) != nil
         return VStack(alignment: .leading, spacing: 12) {
             if let request = content.request {
-                HStack(spacing: 6) {
-                    Text(TranslationLanguages.name(for: request.source))
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .accessibilityLabel("to")
-                    Text(TranslationLanguages.name(for: request.target))
-                    if content.isTranslating {
-                        ProgressView().controlSize(.small).padding(.leading, 4)
-                    }
-                }
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("palette.translate.languages")
+                languages(request)
             }
             if let failure = content.failure {
                 Text(failure)
@@ -273,5 +337,54 @@ private struct TranslatePaletteResults: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, 20)
         .padding(.top, 14)
+    }
+
+    /// "English → Japanese": the source as text, the target a menu of the other languages with the
+    /// current one checked, then the swap button.
+    private func languages(_ request: TranslatePaletteContent.Request) -> some View {
+        let canChange = content.canChangeLanguages(query: query)
+        let target = TranslationLanguages.name(for: request.target)
+        let picked = Binding(
+            get: { TranslationLanguagePair.code(request.target) },
+            set: { content.chooseTarget($0, query: query) }
+        )
+        return HStack(spacing: 6) {
+            Text(TranslationLanguages.name(for: request.source))
+            Image(systemName: "arrow.right")
+                .font(.system(size: 11, weight: .semibold))
+                .accessibilityLabel("to")
+            Menu {
+                Picker("Translate into", selection: picked) {
+                    ForEach(content.targetChoices(query: query), id: \.code) { language in
+                        Text(language.name).tag(language.code)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Text(target)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.borderless)
+            .menuIndicator(.visible)
+            .fixedSize()
+            .disabled(!canChange)
+            .help("Choose the language to translate into")
+            .accessibilityLabel("Translate into \(target)")
+            .accessibilityIdentifier("palette.translate.targetMenu")
+            Button("Swap languages", systemImage: "arrow.left.arrow.right") { content.swapLanguages(query: query) }
+                .buttonStyle(PalettePillButtonStyle(isCircular: true))
+                .disabled(!canChange)
+                .help("Swap languages (⌘T)")
+                .accessibilityLabel("Swap languages")
+                .accessibilityIdentifier("palette.translate.swap")
+            if content.isTranslating {
+                ProgressView().controlSize(.small).padding(.leading, 4)
+            }
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("palette.translate.languages")
     }
 }

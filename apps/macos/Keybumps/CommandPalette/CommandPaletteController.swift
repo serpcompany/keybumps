@@ -613,6 +613,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.identifier = NSUserInterfaceItemIdentifier("commandPalette")
+        // The panel never activates Keybumps, and macOS shows a window's tooltips only while its
+        // app is active unless the window allows them.
+        panel.allowsToolTipsWhenApplicationIsInactive = true
         panel.contentViewController = NSHostingController(
             rootView: CommandPaletteView(
                 state: state,
@@ -745,6 +748,12 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
             if let command = QuickSearchCommand.matchingCommandKey(event.charactersIgnoringModifiers) {
                 run(command)
+                return nil
+            }
+            if let tabContent, let characters = event.charactersIgnoringModifiers?.lowercased(),
+               tabContent.commandKeys.contains(characters) {
+                // Holding the key down does it once, so a held ⌘T doesn't keep swapping.
+                if !event.isARepeat { tabContent.handleCommandKey(characters, query: state.historyQuery) }
                 return nil
             }
             if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots, filterMenu == nil {

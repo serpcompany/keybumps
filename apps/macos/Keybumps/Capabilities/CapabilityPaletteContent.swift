@@ -26,6 +26,12 @@ protocol CapabilityPaletteContent: AnyObject {
     func delete(row: Int, query: String) -> Bool
     /// What the footer says Return and Command-Return do on the selected row.
     func footerActions(row: Int, query: String) -> PaletteFooterActions
+    /// The Command keys the tab keeps for itself, such as `t` for the Translate tab's ⌘T, as
+    /// `charactersIgnoringModifiers` reports them, lowercased. The palette's own Command keys (the
+    /// tab numbers and ⌘,) come first.
+    var commandKeys: Set<String> { get }
+    /// One of `commandKeys`, pressed with Command. A held key's repeats don't come here.
+    func handleCommandKey(_ characters: String, query: String)
     /// Runs each time the palette shows the tab: when it opens on it, or switches to it.
     func didShow(palette: PaletteContentActions)
     /// The rows under the tab bar.
@@ -39,6 +45,8 @@ extension CapabilityPaletteContent {
     func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {}
     func delete(row: Int, query: String) -> Bool { false }
     func footerActions(row: Int, query: String) -> PaletteFooterActions { PaletteFooterActions(tab: tab) }
+    var commandKeys: Set<String> { [] }
+    func handleCommandKey(_ characters: String, query: String) {}
     func didShow(palette: PaletteContentActions) {}
 }
 
