@@ -269,11 +269,11 @@ private struct EmojiPaletteResults: View {
                     .padding(.bottom, 8)
                 }
                 .scrollIndicators(.never)
+                .paletteScrollsToSelection(selection, proxy: proxy) { all.indices.contains($0) ? $0 : nil }
                 .onChange(of: selection) {
                     // The pointer moved the highlight: the tile is already under it, and the name
                     // above the grid shows which emoji it is.
                     guard revealsSelection else { return }
-                    proxy.scrollTo(selection)
                     // Arrowing through the grid moves no VoiceOver cursor, so say where it went.
                     if let selected { Self.announce(selected.name) }
                 }
@@ -334,9 +334,7 @@ private struct EmojiPaletteResults: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .onChange(of: selection) {
-                        if revealsSelection, rows.indices.contains(selection) { proxy.scrollTo(rows[selection].glyph) }
-                    }
+                    .paletteScrollsToSelection(selection, proxy: proxy) { rows.indices.contains($0) ? rows[$0].glyph : nil }
                 }
             }
         }

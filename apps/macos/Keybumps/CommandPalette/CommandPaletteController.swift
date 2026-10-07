@@ -316,6 +316,29 @@ extension View {
     }
 }
 
+extension View {
+    /// Keeps the highlighted row on screen as the keys move it, but not when the pointer moved it
+    /// (#347, #352). Every palette list and grid uses it, inside its `ScrollViewReader`; `id` names
+    /// the row at an index, matching its `.id`.
+    func paletteScrollsToSelection<ID: Hashable>(_ selection: Int, proxy: ScrollViewProxy, id: @escaping (Int) -> ID?) -> some View {
+        modifier(PaletteScrollsToSelection(selection: selection, proxy: proxy, id: id))
+    }
+}
+
+private struct PaletteScrollsToSelection<ID: Hashable>: ViewModifier {
+    let selection: Int
+    let proxy: ScrollViewProxy
+    let id: (Int) -> ID?
+    @Environment(\.paletteRevealsSelection) private var revealsSelection
+
+    func body(content: Content) -> some View {
+        content.onChange(of: selection) {
+            guard revealsSelection, let target = id(selection) else { return }
+            proxy.scrollTo(target)
+        }
+    }
+}
+
 private struct PaletteHoverRow: ViewModifier {
     let row: Int
     @Environment(\.paletteHover) private var hover
@@ -1637,7 +1660,6 @@ private struct PaletteSearchField: View {
 }
 
 private struct SearchResultsView: View {
-    @Environment(\.paletteRevealsSelection) private var revealsSelection
     let items: [QuickSearchItem]
     let selection: Int
     let query: String
@@ -1683,6 +1705,7 @@ private struct SearchResultsView: View {
 
                         // No per-row trash button: Delete removes the highlighted Recent Item, and the
                         // context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
+                        ScrollViewReader { proxy in
                         List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
                             Button { open(item.result) } label: {
                                 SearchResultRow(result: item.result)
@@ -1702,9 +1725,12 @@ private struct SearchResultsView: View {
                             .listRowSeparator(.hidden)
                             .paletteHoverHighlights(row: index)
                             .paletteRowBackground(isSelected: index == selection)
+                            .id(item.id)
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        .paletteScrollsToSelection(selection, proxy: proxy) { recentItems.indices.contains($0) ? recentItems[$0].id : nil }
+                        }
                     }
                 }
             } else if items.isEmpty {
@@ -1795,11 +1821,7 @@ private struct SearchResultsView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .onChange(of: selection) {
-                        if revealsSelection, items.indices.contains(selection) {
-                            proxy.scrollTo(items[selection].id)
-                        }
-                    }
+                    .paletteScrollsToSelection(selection, proxy: proxy) { items.indices.contains($0) ? items[$0].id : nil }
                 }
             }
         }
@@ -1978,6 +2000,7 @@ private struct ClipboardResultsView: View {
 
                     // No per-row trash button: Delete (or ⌘⌫ while typing) removes the selected row,
                     // and the context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
+                    ScrollViewReader { proxy in
                     List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         Button { choose(entry) } label: {
                             ClipboardRow(
@@ -2002,9 +2025,12 @@ private struct ClipboardResultsView: View {
                         .listRowSeparator(.hidden)
                         .paletteHoverHighlights(row: index)
                         .paletteRowBackground(isSelected: index == selection)
+                        .id(entry.id)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
+                    }
                 }
             }
         }
@@ -2291,7 +2317,6 @@ private struct ClipboardEntryPreview: View {
 /// so screenshots are recognizable at a glance. Arrow keys move through the grid.
 private struct ScreenshotGrid: View {
     static let columnCount = 3
-    @Environment(\.paletteRevealsSelection) private var revealsSelection
 
     let entries: [ClipboardEntry]
     let selection: Int
@@ -2340,10 +2365,7 @@ private struct ScreenshotGrid: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 4)
                     }
-                    .onChange(of: selection) {
-                        guard revealsSelection, entries.indices.contains(selection) else { return }
-                        proxy.scrollTo(entries[selection].id)
-                    }
+                    .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
                 }
             }
         }
