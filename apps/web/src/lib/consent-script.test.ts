@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { consentDefaults } from '@/components/analytics'
 
 /** Runs the inline consent script against a fake page and returns what it did. */
-function run(saved: string | null) {
+function run(saved: string | null, { cookiesBlocked = false } = {}) {
   const dataLayer: unknown[] = []
   const cookies: string[] = []
   const listeners: Record<string, (event: { detail: unknown }) => void> = {}
@@ -11,6 +11,7 @@ function run(saved: string | null) {
     localStorage: { getItem: () => saved },
     document: {
       set cookie(value: string) {
+        if (cookiesBlocked) throw new Error('cookies blocked')
         cookies.push(value)
       }
     },
@@ -34,14 +35,29 @@ describe('the inline consent script (#337, #363)', () => {
     ])
   })
 
-  it('writes the banner’s choice, and nothing before one is made', () => {
+  it('deletes the cookie when no choice is saved, then writes the banner’s choice', () => {
     const page = run(null)
-    expect(page.cookies).toEqual([])
+    // The banner will ask again, so /buy/ mustn't act on an older choice.
+    expect(page.cookies).toEqual(['keybumps-consent=;Max-Age=0;Path=/;SameSite=Lax;Secure'])
+    page.cookies.length = 0
     page.choose('denied')
     expect(page.cookies).toEqual([
       'keybumps-consent=denied;Max-Age=31536000;Path=/;SameSite=Lax;Secure'
     ])
     page.choose('something else')
     expect(page.cookies).toHaveLength(1)
+  })
+
+  it('still updates consent and tells GTM when cookies can’t be written', () => {
+    const page = run(null, { cookiesBlocked: true })
+    page.choose('granted')
+    const pushes = page.dataLayer.map(entry =>
+      JSON.stringify(Array.from(entry as ArrayLike<unknown>))
+    )
+    expect(pushes.some(push => push.includes('"update"') && push.includes('"granted"'))).toBe(true)
+    expect(page.dataLayer).toContainEqual({
+      event: 'keybumps_consent',
+      keybumps_consent: 'granted'
+    })
   })
 })

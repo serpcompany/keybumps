@@ -247,17 +247,20 @@ expect_redirect /buy /buy/
 eventually 'the Buy button on /pricing/ links to /buy/' body_matches /pricing/ 'href="/buy/"'
 
 # Polar's webhook refuses an unsigned delivery: 401, or 503 before its secret is set. Never a
-# redirect or a 404, which Polar would count as failed deliveries of real events.
+# redirect or a 404, which Polar would count as failed deliveries of real events. /api/ is never
+# redirected, so the unslashed URL reaches it too.
 webhook_refuses_unsigned() {
   local got
   got="$(curl -s "${limits[@]}" "${smoke[@]}" -X POST -H 'content-type: application/json' \
-    -d '{}' -o /dev/null -w '%{http_code}' "$base/api/webhooks/polar/" || true)"
+    -d '{}' -o /dev/null -w '%{http_code}' "$base$1" || true)"
   [ "$got" = 401 ] || [ "$got" = 503 ] || {
     why="got '$got'"
     return 1
   }
 }
-eventually 'POST /api/webhooks/polar/ refuses an unsigned delivery' webhook_refuses_unsigned
+for webhook_path in /api/webhooks/polar/ /api/webhooks/polar; do
+  eventually "POST $webhook_path refuses an unsigned delivery" webhook_refuses_unsigned "$webhook_path"
+done
 
 # Sitemaps list only canonical URLs: child sitemaps are unslashed files, pages end in a slash.
 # sitemap_is_canonical <path> <loc regex>
