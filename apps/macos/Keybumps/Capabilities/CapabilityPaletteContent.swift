@@ -101,10 +101,13 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
     let title: String
     /// Its keycaps, in order.
     let keys: [String]
+    /// Whether the key does anything only on a highlighted row, as ⌘P and Space do; Return acts on
+    /// a grid's first item before Down goes into it. The footer leaves such a key out until then.
+    var needsHighlightedRow = false
 
     /// ⌘P, which pastes the row into the app you were using (#370).
     static func paste(_ title: String = "Paste") -> PaletteKeyAction {
-        PaletteKeyAction(title: title, keys: ["⌘", "P"])
+        PaletteKeyAction(title: title, keys: ["⌘", "P"], needsHighlightedRow: true)
     }
 
     /// ⌘Return, which in the Screenshots tab opens the Screenshot Editor.
@@ -112,11 +115,23 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
 
     /// Space, which plays or pauses a row's audio while the search field is empty.
     static func space(_ title: String) -> PaletteKeyAction {
-        PaletteKeyAction(title: title, keys: ["Space"])
+        PaletteKeyAction(title: title, keys: ["Space"], needsHighlightedRow: true)
     }
 
     /// "Paste ⌘P"
     var description: String { "\(title) \(keys.joined())" }
+
+    /// What VoiceOver reads for a footer hint: "Paste, Command P", "Select, Up Arrow or Down Arrow".
+    /// Keys after a modifier are one shortcut; keys on their own are alternatives.
+    static func accessibilityLabel(title: String, keys: [String]) -> String {
+        let spoken = keys.map { spokenKeys[$0] ?? $0 }
+        let isShortcut = keys.first.map { spokenKeys[$0] == "Command" } ?? false
+        return "\(title), \(spoken.joined(separator: isShortcut ? " " : " or "))"
+    }
+
+    private static let spokenKeys = [
+        "⌘": "Command", "↵": "Return", "↑": "Up Arrow", "↓": "Down Arrow", "←": "Left Arrow", "→": "Right Arrow",
+    ]
 }
 
 /// Space on a row with audio while the search field is empty: what the footer calls it, such as

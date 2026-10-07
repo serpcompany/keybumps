@@ -757,6 +757,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
     /// with synthesized events, so no real keystroke is posted.
+    ///
+    /// On the highlighted row (#370), ⌘C copies it and ⌘P pastes it into the app you were using
+    /// (`PalettePasteRoute`): a Clipboard History or Screenshots item, a snippet, or a transcript stays
+    /// on the clipboard; an emoji or a translation puts the clipboard back. With the search field
+    /// empty, Space plays or pauses the row's audio. ⌘Return does what Return does, except Reveal in
+    /// Quick Search and Edit in Screenshots. Text selected where the keys go, and an input method
+    /// that's composing, keep their keys.
     func handleKeyDown(_ event: NSEvent) -> NSEvent? {
         // A confirmation alert handles its own keys: Return confirms, Escape cancels.
         guard !isPresentingConfirmation else { return event }
@@ -787,7 +794,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 if !event.isARepeat { copySelection() }
                 return nil
             case "p":
-                // ⌘P pastes the highlighted row into the app you were using, or does nothing.
+                // ⌘P pastes the highlighted row into the app you were using, or does nothing. While
+                // an input method is composing, the keys are its.
+                if isComposingText { return event }
                 if !event.isARepeat { pasteSelection() }
                 return nil
             default:
@@ -1082,11 +1091,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         (panel?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
     }
 
-    /// Whether text is selected where the keys go: the search field, or text selected with the
-    /// pointer, such as a transcript. ⌘C copies it, as in any text field.
+    /// Whether text is selected where the keys go: in the search field, or with the pointer in a
+    /// transcript or translation. ⌘C is then Edit › Copy's, as in any text field. SwiftUI's
+    /// selectable text isn't an NSTextView: clicked, it takes the keys and reports its selection to
+    /// accessibility.
     private var hasSelectedText: Bool {
-        guard let editor = panel?.firstResponder as? NSTextView else { return false }
-        return editor.selectedRanges.contains { $0.rangeValue.length > 0 }
+        switch panel?.firstResponder {
+        case let editor as NSTextView:
+            editor.selectedRanges.contains { $0.rangeValue.length > 0 }
+        case let view as NSView:
+            view.accessibilitySelectedText()?.isEmpty == false
+        default:
+            false
+        }
     }
 
     private var activeQuery: String {
@@ -2781,18 +2798,21 @@ struct PaletteEmptyState: View {
 extension PaletteFooterActions {
     /// What the footer names: a module tab's actions for its selected row, else Quick Search's
     /// highlighted row's (a snippet copies and pastes), else the tab's registered ones. Then Space's,
-    /// such as Play, when the selected row has audio and the search field is empty.
+    /// such as Play, when the selected row has audio and the search field is empty. Until a grid's
+    /// tile is highlighted, keys that need one, such as Paste ⌘P, are left out.
     static func resolve(
         tab: CommandPaletteTab,
         searchItem: QuickSearchItem?,
         content: PaletteFooterActions?,
-        playback: String? = nil
+        playback: String? = nil,
+        isRowHighlighted: Bool = true
     ) -> PaletteFooterActions {
         var actions = content ?? PaletteFooterActions(
             primary: searchItem?.primaryActionTitle ?? tab.primaryActionTitle,
             secondary: searchItem?.secondaryActions ?? tab.secondaryActions
         )
         if let playback { actions.secondary.append(.space(playback)) }
+        if !isRowHighlighted { actions.secondary.removeAll(where: \.needsHighlightedRow) }
         return actions
     }
 }
@@ -2819,7 +2839,13 @@ private struct PaletteFooter: View {
 
     private var actions: PaletteFooterActions {
         if isChoosingFilter { return PaletteFooterActions(primary: "Filter") }
-        return PaletteFooterActions.resolve(tab: tab, searchItem: selectedSearchItem, content: contentActions, playback: playbackTitle)
+        return PaletteFooterActions.resolve(
+            tab: tab,
+            searchItem: selectedSearchItem,
+            content: contentActions,
+            playback: playbackTitle,
+            isRowHighlighted: !isGrid || isBrowsingGrid
+        )
     }
 
     var body: some View {
@@ -2855,6 +2881,9 @@ private struct PaletteFooter: View {
                 ForEach(keys, id: \.self) { PaletteKeycap($0) }
             }
         }
+        // One element read as words, "Paste, Command P", not the keycaps' symbols.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(PaletteKeyAction.accessibilityLabel(title: title, keys: keys))
     }
 }
 

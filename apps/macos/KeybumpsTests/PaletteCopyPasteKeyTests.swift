@@ -32,6 +32,18 @@ struct PaletteCopyPasteKeyTests {
         return view.subviews.lazy.compactMap { searchField(in: $0) }.first
     }
 
+    /// The view behind SwiftUI's selectable text (`.textSelection(.enabled)`), such as a transcript:
+    /// one that takes the keys, can select all, and reports its selection to accessibility. On
+    /// macOS 27 it's an `AppKitTextInteractionView`, not an NSTextView. The search field is skipped.
+    static func selectableText(in view: NSView?) -> NSView? {
+        guard let view, !(view is NSTextField) else { return nil }
+        if view.acceptsFirstResponder, view.responds(to: #selector(NSResponder.selectAll(_:))),
+           view.accessibilitySelectedText() != nil {
+            return view
+        }
+        return view.subviews.lazy.compactMap { selectableText(in: $0) }.first
+    }
+
     // MARK: Clipboard
 
     @Test("Clipboard: ⌘C copies the highlighted item as Return does; ⌘P puts it on the clipboard, pastes it, and leaves it there")
@@ -224,6 +236,10 @@ struct PaletteCopyPasteKeyTests {
         editor.setMarkedText("きょう", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         #expect(fixture.palette.handleKeyDown(Self.space) != nil, "Space goes to the input method")
         #expect(fixture.palette.handleKeyDown(Self.commandC) != nil)
+        #expect(fixture.palette.handleKeyDown(Self.commandP) != nil, "⌘P too")
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(fixture.paster.pasted.isEmpty, "Nothing was pasted")
+        #expect(fixture.pasteboard.string(forType: .string) == nil)
         editor.unmarkText()
         editor.string = ""
         fixture.palette.state.historyQuery = ""
@@ -241,6 +257,29 @@ struct PaletteCopyPasteKeyTests {
         #expect(fixture.pasteboard.string(forType: .string) == "made-up transcript")
         #expect(fixture.palette.handleKeyDown(Self.space) == nil)
         #expect(toggled == [entry.id])
+    }
+
+    @Test("Part of a transcript selected with the pointer: ⌘C is Edit › Copy's, not the recording's")
+    func pointerSelectionInTheTranscript() async throws {
+        let fixture = CopyPasteFixture()
+        defer { fixture.tearDown() }
+        try fixture.recording("made-up transcript")
+        let panel = try #require(fixture.palette.layOutForTesting(.dictation))
+        defer { panel.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(100))
+        panel.contentView?.layoutSubtreeIfNeeded()
+
+        // SwiftUI's selectable text, as a click on the transcript leaves it: taking the keys.
+        let transcript = try #require(Self.selectableText(in: panel.contentView))
+        #expect(panel.makeFirstResponder(transcript))
+        #expect(fixture.palette.handleKeyDown(Self.commandC) == nil, "Nothing selected: ⌘C copies the recording")
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up transcript")
+
+        fixture.pasteboard.clearContents()
+        transcript.perform(#selector(NSResponder.selectAll(_:)), with: nil)
+        #expect(fixture.palette.handleKeyDown(Self.commandC) != nil)
+        #expect(fixture.pasteboard.string(forType: .string) == nil, "The recording wasn't copied")
+        #expect(fixture.notices.shown.count == 1)
     }
 
     // MARK: Quick Search
@@ -285,13 +324,18 @@ struct PaletteCopyPasteKeyTests {
 
     @Test("The footer names each tab's keys: Copy ↵ and Paste ⌘P, Edit ⌘↵ in Screenshots, and Space for audio")
     func footerKeys() throws {
-        func footer(_ tab: CommandPaletteTab, playback: String? = nil) -> [String] {
-            let actions = PaletteFooterActions.resolve(tab: tab, searchItem: nil, content: nil, playback: playback)
+        func footer(_ tab: CommandPaletteTab, playback: String? = nil, isRowHighlighted: Bool = true) -> [String] {
+            let actions = PaletteFooterActions.resolve(
+                tab: tab, searchItem: nil, content: nil, playback: playback, isRowHighlighted: isRowHighlighted
+            )
             return (actions.primary.map { ["\($0) ↵"] } ?? []) + actions.secondary.map(\.description)
         }
         #expect(footer(.search) == ["Open ↵"])
         #expect(footer(.clipboard) == ["Copy ↵", "Paste ⌘P"])
         #expect(footer(.screenshots) == ["Copy ↵", "Paste ⌘P", "Edit ⌘↵"])
+        // Before Down goes into the grid, Return and ⌘Return act on the first screenshot; ⌘P does nothing.
+        #expect(footer(.screenshots, isRowHighlighted: false) == ["Copy ↵", "Edit ⌘↵"])
+        #expect(footer(.emoji, isRowHighlighted: false) == ["Copy ↵"])
         #expect(footer(.dictation, playback: "Play") == ["Copy ↵", "Paste ⌘P", "Play Space"])
         #expect(footer(.snippets) == ["Copy ↵", "Paste ⌘P"])
         #expect(footer(.timers) == ["Start ↵"])
@@ -304,6 +348,15 @@ struct PaletteCopyPasteKeyTests {
         #expect(DictationPaletteResults.playbackTitle(of: entry, player: fixture.palette.dictationPlayer) == "Play")
         let silent = DictationHistoryEntry(metadata: entry.metadata, directoryURL: entry.directoryURL, audioURL: nil)
         #expect(DictationPaletteResults.playbackTitle(of: silent, player: fixture.palette.dictationPlayer) == nil, "No audio, no Space")
+    }
+
+    @Test("VoiceOver reads each footer hint as words: \"Paste, Command P\"")
+    func footerHintsSpoken() {
+        #expect(PaletteKeyAction.accessibilityLabel(title: "Paste", keys: PaletteKeyAction.paste().keys) == "Paste, Command P")
+        #expect(PaletteKeyAction.accessibilityLabel(title: "Edit", keys: PaletteKeyAction.edit.keys) == "Edit, Command Return")
+        #expect(PaletteKeyAction.accessibilityLabel(title: "Copy", keys: ["↵"]) == "Copy, Return")
+        #expect(PaletteKeyAction.accessibilityLabel(title: "Play", keys: ["Space"]) == "Play, Space")
+        #expect(PaletteKeyAction.accessibilityLabel(title: "Select", keys: ["↑", "↓"]) == "Select, Up Arrow or Down Arrow")
     }
 
     @Test("The shared paste step presses ⌘V for what's on the clipboard without writing it; the inert one refuses")

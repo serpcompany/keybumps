@@ -944,6 +944,28 @@ struct RecentTranslationTests {
         #expect(fixture.recents.records.map(\.sourceText) == [Self.english])
     }
 
+    @Test("Part of the translation selected with the pointer: ⌘C is Edit › Copy's, as before #370")
+    func pointerSelectionInTheTranslation() async throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+        let panel = try #require(palette.layOutForTesting(.translate))
+        defer { panel.orderOut(nil) }
+        palette.state.historyQuery = Self.english
+        fixture.tab.update(query: Self.english)
+        await fixture.tab.work?.value
+        try await Task.sleep(for: .milliseconds(100))
+        panel.contentView?.layoutSubtreeIfNeeded()
+
+        let translation = try #require(PaletteCopyPasteKeyTests.selectableText(in: panel.contentView))
+        #expect(panel.makeFirstResponder(translation))
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_C, "c")) == nil, "Nothing selected, and the translation being typed doesn't copy")
+        translation.perform(#selector(NSResponder.selectAll(_:)), with: nil)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_C, "c")) != nil, "Selected text is Edit › Copy's")
+        #expect(fixture.pasteboard.string(forType: .string) == nil)
+        #expect(fixture.recents.records.isEmpty)
+    }
+
     @Test("Opening the palette again by its shortcut while \"Delete this translation?\" shows drops the question and gives the palette its keys back")
     func reopeningDropsTheQuestion() {
         let fixture = TranslatePaletteFixture()
