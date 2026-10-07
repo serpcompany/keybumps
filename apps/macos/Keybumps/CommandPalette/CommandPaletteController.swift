@@ -113,11 +113,7 @@ final class CommandPaletteState {
             if tab == .snippets || tabsResettingSelectionWhileTyping.contains(tab), historyQuery != oldValue {
                 selection = 0
             }
-            if historyQuery != oldValue {
-                isBrowsingGrid = false
-                // Typing changes the rows under a still pointer, even where it keeps the selection.
-                pointerAtSelection = mouseLocation()
-            }
+            if historyQuery != oldValue { isBrowsingGrid = false }
             // Opening, narrowing, or closing `/`'s list starts again at the first row.
             if historyQuery.hasPrefix("/") != oldValue.hasPrefix("/") || historyQuery.hasPrefix("/") && historyQuery != oldValue {
                 selection = 0
@@ -128,7 +124,7 @@ final class CommandPaletteState {
     var tabsResettingSelectionWhileTyping: Set<CommandPaletteTab> = []
     var selection = 0 {
         didSet {
-            selectionFollowsPointer = isSelectingFromPointer
+            if selectionFollowsPointer != isSelectingFromPointer { selectionFollowsPointer = isSelectingFromPointer }
             if !isSelectingFromPointer { pointerAtSelection = mouseLocation() }
         }
     }
@@ -142,6 +138,12 @@ final class CommandPaletteState {
     /// The pointer's position on screen; tests supply their own.
     @ObservationIgnored var mouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
 
+    /// Any key: whatever it does to the rows (typing that filters them, an arrow that scrolls
+    /// them), the pointer has to move before a row under it takes the highlight.
+    func keyWasPressed() {
+        pointerAtSelection = mouseLocation()
+    }
+
     /// Moves the highlight to a row the pointer is over, if the pointer has moved since the
     /// highlight last did. Returns whether it moved.
     @discardableResult
@@ -150,7 +152,7 @@ final class CommandPaletteState {
         guard pointer != pointerAtSelection else { return false }
         pointerAtSelection = pointer
         guard row != selection else {
-            selectionFollowsPointer = true
+            if !selectionFollowsPointer { selectionFollowsPointer = true }
             return true
         }
         isSelectingFromPointer = true
@@ -645,6 +647,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard !isPresentingConfirmation else { return event }
         // Another Keybumps window, such as Translation's download prompt, keeps its own keys (#321).
         guard CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel) else { return event }
+        state.keyWasPressed()
 
         if Self.isCommandKey(event) {
             if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
@@ -669,7 +672,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         // grid and Up from its top row comes back out; outside it, Left and Right switch tabs.
         if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
            !isComposingText, event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
-            guard state.isBrowsingGrid else {
+            // Until an arrow key moves within the grid, Left and Right switch tabs, even after the
+            // pointer highlighted a tile on its way across.
+            guard state.isBrowsingGrid, !(state.selectionFollowsPointer && (move == .left || move == .right)) else {
                 enterGrid(or: move)
                 return nil
             }
@@ -713,7 +718,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
-            if isScreenshotGrid, state.isBrowsingGrid {
+            if isScreenshotGrid, state.isBrowsingGrid, !state.selectionFollowsPointer {
                 if (0..<itemCount).contains(state.selection + offset) { state.selection += offset }
             } else {
                 switchTab(by: offset)
@@ -784,7 +789,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The pointer moved over a row or tile: it takes the highlight (`selectFromPointer`), and in a
     /// grid that brings the arrow keys into it too.
     func hover(row: Int) {
-        guard state.selectFromPointer(row), isGridTab else { return }
+        // A row view on its way out, after a Delete or while a list re-filters, can still report.
+        guard (0..<itemCount).contains(row), state.selectFromPointer(row), isGridTab, !state.isBrowsingGrid else { return }
         state.isBrowsingGrid = true
     }
 

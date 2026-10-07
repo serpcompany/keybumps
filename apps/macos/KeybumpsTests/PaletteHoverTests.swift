@@ -58,25 +58,40 @@ struct PaletteHoverTests {
         fixture.palette.hover(row: 6)
         #expect(fixture.palette.state.selection == 0, "The new tab's rows appeared under a still pointer")
 
-        // Clipboard only filters as you type, so its selection stays put; typing still re-arms.
+        // Clipboard only filters as you type, so its selection stays put; any key still re-arms.
         fixture.pointer = NSPoint(x: 10, y: 90)
-        fixture.palette.state.historyQuery = "made-up"
+        let typed = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+            characters: "m", charactersIgnoringModifiers: "m", isARepeat: false, keyCode: UInt16(kVK_ANSI_M)
+        )!
+        #expect(fixture.palette.handleKeyDown(typed) != nil, "The letter goes to the search field")
+        fixture.palette.state.historyQuery = "m"
         #expect(fixture.palette.state.selection == 0)
         fixture.palette.hover(row: 3)
         #expect(fixture.palette.state.selection == 0, "Rows that typing brought under a still pointer")
+
+        // A click moves the highlight without the pointer flag, and re-arms too.
+        fixture.pointer = NSPoint(x: 10, y: 120)
+        fixture.palette.state.selection = 2
+        fixture.palette.hover(row: 5)
+        #expect(fixture.palette.state.selection == 2)
     }
 
-    @Test("Hovering a screenshot tile brings the arrow keys into the grid")
-    func gridTile() {
+    @Test("A row that's no longer in the list can't take the highlight")
+    func staleRowIsIgnored() {
         let fixture = HoverFixture()
         defer { fixture.tearDown() }
-        fixture.palette.selectOnOpening(.screenshots)
-        #expect(!fixture.palette.state.isBrowsingGrid)
-
+        for index in 1...3 { fixture.clipboard.ingestForTesting("made-up text \(index)") }
+        fixture.palette.selectOnOpening(.clipboard)
         fixture.pointer = NSPoint(x: 10, y: 20)
-        fixture.palette.hover(row: 0)
-        #expect(fixture.palette.state.isBrowsingGrid)
+
+        fixture.palette.hover(row: 3)
+        #expect(fixture.palette.state.selection == 0)
+        fixture.palette.hover(row: 2)
+        #expect(fixture.palette.state.selection == 2)
     }
+
+
 }
 
 /// A palette over temporary folders and a named pasteboard, with a pointer the test moves.

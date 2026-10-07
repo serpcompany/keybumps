@@ -270,8 +270,8 @@ private struct EmojiPaletteResults: View {
                 }
                 .scrollIndicators(.never)
                 .onChange(of: selection) {
-                    // The pointer moved the highlight: the tile is already under it, and VoiceOver
-                    // follows the pointer itself.
+                    // The pointer moved the highlight: the tile is already under it, and the name
+                    // above the grid shows which emoji it is.
                     guard revealsSelection else { return }
                     proxy.scrollTo(selection)
                     // Arrowing through the grid moves no VoiceOver cursor, so say where it went.
