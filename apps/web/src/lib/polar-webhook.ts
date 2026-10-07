@@ -29,7 +29,7 @@ import {
  *
  * There is no database, so a retried delivery is handled downstream: Google Analytics removes a
  * repeated purchase with the same transaction ID and client (`derivedClientId` keeps the client
- * stable), and Dub keeps one sale per invoice ID. A delivery succeeds (2xx) unless a send failed,
+ * stable), and Dub ignores a repeated invoice ID for 7 days. A delivery succeeds (2xx) unless a send failed,
  * so Polar retries only then.
  *
  * Logs hold only the event type and outcomes, never order, customer, or reference data.

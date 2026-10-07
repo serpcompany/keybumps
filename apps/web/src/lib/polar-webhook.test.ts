@@ -642,6 +642,8 @@ describe('Polar orders to Dub (#337)', () => {
       [{ id: 'cm_test_1', status: 'refunded' }],
       [{ id: 'cm_test_1', status: 'duplicate' }],
       [{ id: 'cm_test_1', status: 'fraud' }],
+      [{ id: 'cm_test_1', status: 'canceled' }],
+      [{ id: 'cm_test_1', status: 'some_new_status' }],
       []
     ]) {
       await handlePolarWebhook(
@@ -655,8 +657,44 @@ describe('Polar orders to Dub (#337)', () => {
       'refunded',
       'closed',
       'closed',
+      'closed',
+      'closed',
       'no_commission'
     ])
+  })
+
+  it('logs a refused PATCH: rejected when pending, no_commission on a 404', async () => {
+    const refunded = () =>
+      delivery('order.refunded', order({ status: 'refunded', refunded_amount: 3900 }))
+    for (const [status, code] of [
+      ['pending', 400],
+      ['processed', 404]
+    ] as const) {
+      await handlePolarWebhook(
+        refunded(),
+        dubEnv(call =>
+          call.method === 'GET'
+            ? Response.json([{ id: 'cm_test_1', status }])
+            : new Response(null, { status: code })
+        )
+      )
+    }
+    expect(logged().map(line => line.dub)).toEqual(['rejected', 'no_commission'])
+  })
+
+  it('never raises a sale a later partial refund already lowered', async () => {
+    // A retried older event (1000 refunded, so 2900 left) after a later one set the sale to 1900.
+    const older = order({ status: 'partially_refunded', refunded_amount: 1000 })
+    await handlePolarWebhook(
+      delivery('order.refunded', older),
+      dubEnv(call =>
+        call.method === 'GET'
+          ? Response.json([{ id: 'cm_test_1', status: 'pending', amount: 1900 }])
+          : Response.json({})
+      )
+    )
+    expect(calls.map(call => call.method)).toEqual(['GET'])
+    expect(logged()[0].dub).toBe('unchanged')
   })
 
   it('retries when the commission list can’t be read, and holds GA4’s refund', async () => {

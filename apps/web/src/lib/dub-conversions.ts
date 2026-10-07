@@ -29,6 +29,7 @@ export type DubOutcome =
   | 'unattributed'
   | 'refunded'
   | 'adjusted'
+  | 'unchanged'
   | 'no_commission'
   | 'already_paid'
   | 'closed'
@@ -98,21 +99,28 @@ export async function refundDubCommission(
   // An unreadable list (cut off by the timeout, say) is worth retrying, not "no commission".
   const commissions = (await listed.json().catch(() => null)) as unknown
   if (!Array.isArray(commissions)) return 'failed_status'
-  const commission = commissions[0] as { id?: unknown; status?: unknown } | undefined
+  const commission = commissions[0] as
+    | { id?: unknown; status?: unknown; amount?: unknown }
+    | undefined
   if (!commission || typeof commission.id !== 'string') return 'no_commission'
   if (commission.status === 'refunded') return 'refunded'
   if (commission.status === 'paid') return 'already_paid'
-  if (['duplicate', 'fraud', 'canceled'].includes(String(commission.status))) return 'closed'
+  // Only these can change; anything else (duplicate, fraud, canceled, or a new status) is left.
+  if (!['pending', 'hold', 'processed'].includes(String(commission.status))) return 'closed'
   const full = remainingCents <= 0
+  // A retried older partial refund must not raise a sale a later refund already lowered.
+  if (!full && typeof commission.amount === 'number' && remainingCents >= commission.amount) {
+    return 'unchanged'
+  }
   const updated = await request(
     config,
     fetchImpl,
     'PATCH',
     `/commissions/${encodeURIComponent(commission.id)}`,
     full ? { status: 'refunded' } : { saleAmount: remainingCents, currency },
-    { timeoutMs: refundCallTimeoutMs }
+    { notFound: 'no_commission', timeoutMs: refundCallTimeoutMs }
   )
-  // Dub refuses a commission whose payout is already being sent: that one is paid in effect.
+  // Dub refuses (400) a commission whose payout is already being sent: that one is paid in effect.
   if (updated === 'rejected' && commission.status === 'processed') return 'already_paid'
   if (typeof updated === 'string') return updated
   return full ? 'refunded' : 'adjusted'
