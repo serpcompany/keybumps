@@ -377,7 +377,7 @@ export const plugins: readonly Plugin[] = [
       'The notch shows a recording timer and live microphone bars while you speak',
       'Records up to five minutes by default; choose 10, 15, 30, or 60 minutes, or no limit',
       'Transcribes the whole recording after you stop, so a pause never cuts it short',
-      'Dictation History: search, play back, copy, paste, reveal in Finder, and delete recordings',
+      'Dictation History: search, play back, reveal in Finder, and delete recordings',
       'In Dictation History, Return or ⌘C copies a transcript, ⌘P pastes it into the app you were using, and Space plays or pauses the recording while the search field is empty',
       'On macOS 15 or later, translate a transcript on this Mac and hear it in an installed macOS voice'
     ],

@@ -293,7 +293,10 @@ export default async function Home() {
             </li>
             <li>
               <h3>Type, then press Return</h3>
-              <p>Open the app or file, or copy the item you found. Press ⌘P to paste it instead.</p>
+              <p>
+                Open the app or file, copy the item you found, or press ⌘P to paste that item into
+                the app you were using.
+              </p>
               <span className="keycaps">
                 <kbd>↩</kbd>
               </span>

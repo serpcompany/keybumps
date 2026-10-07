@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Metadata } from 'next'
@@ -314,8 +314,8 @@ describe('plugin page guides', () => {
     expect(text.filter(line => /whisper|apple speech|model/i.test(line))).toEqual([])
   })
 
-  it('pastes with ⌘P, never ⌘Return, which only opens the Screenshot Editor (#370)', () => {
-    const text = plugins.flatMap(plugin => [
+  it('pastes with ⌘P, never ⌘Return, which only edits in Screenshots and reveals in Finder in Search (#370)', () => {
+    const pluginText = plugins.flatMap(plugin => [
       ...plugin.overview,
       ...plugin.features,
       ...plugin.howTo.map(step => step.text),
@@ -323,7 +323,14 @@ describe('plugin page guides', () => {
       ...plugin.keeps,
       ...[...plugin.permissions, ...(plugin.optionalPermissions ?? [])].map(item => item.reason)
     ])
-    expect(text.filter(line => /⌘Return[^;,.]*\b(past|cop|sav)/i.test(line))).toEqual([])
+    // Every page and component under src/app/, such as the home page and the privacy page.
+    const appDir = fileURLToPath(new URL('../app/', import.meta.url))
+    const pageText = readdirSync(appDir, { recursive: true, encoding: 'utf8' })
+      .filter(file => file.endsWith('.tsx'))
+      .map(file => readFileSync(join(appDir, file), 'utf8'))
+    const commandReturn = /⌘(Return|↵|↩)[^;,.]*\b(past|cop|sav)\w*/gi
+    const claims = [...pluginText, ...pageText].flatMap(text => text.match(commandReturn) ?? [])
+    expect(claims).toEqual([])
     // Each tab where ⌘P pastes lists Accessibility, which the paste uses.
     for (const slug of [
       'clipboard-history',
