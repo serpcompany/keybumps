@@ -14,7 +14,7 @@ final class DictationWarmRuntimeBenchmarkTests: XCTestCase {
         guard let modelPath,
               FileManager.default.fileExists(atPath: modelPath),
               FileManager.default.fileExists(atPath: audioPath) else {
-            throw XCTSkip("Set TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_MODEL to a model folder (and TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_AUDIO to a non-private WAV) on the xcodebuild command line to collect local timing evidence.")
+            throw XCTSkip("Set TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_MODEL to a model folder (and TEST_RUNNER_KEYBUMPS_WHISPER_BENCHMARK_AUDIO to a non-private WAV) in xcodebuild's environment, before the command, to collect local timing evidence.")
         }
 
         let modelURL = URL(fileURLWithPath: modelPath, isDirectory: true)

@@ -282,7 +282,7 @@ import Testing
               FileManager.default.fileExists(atPath: modelPath),
               FileManager.default.fileExists(atPath: audioPath) else {
             // Pass TEST_RUNNER_KEYBUMPS_WHISPER_CPP_MODEL=<ggml file> and
-            // TEST_RUNNER_KEYBUMPS_WHISPER_CPP_AUDIO=<non-private WAV> to xcodebuild to run it.
+            // TEST_RUNNER_KEYBUMPS_WHISPER_CPP_AUDIO=<non-private WAV> in xcodebuild's environment to run it.
             return
         }
         let loadStarted = ContinuousClock.now

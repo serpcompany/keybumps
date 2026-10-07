@@ -20,6 +20,14 @@ struct CapabilityWiringSnapshotTests {
         let actual = try WiringRecorder.renderSnapshot()
         let environment = ProcessInfo.processInfo.environment
         if environment["KEYBUMPS_RECORD_SNAPSHOTS"] == "1" {
+            // Only recording needs a second render: a fixture recorded from a render that isn't
+            // deterministic would make every later comparison fail intermittently.
+            let second = try WiringRecorder.renderSnapshot()
+            guard second == actual else {
+                Attachment.record(second, named: "capability-wiring.second-render.json")
+                Issue.record("Rendering the wiring snapshot isn't deterministic, so the fixture wasn't recorded. \(WiringRecorder.firstDifference(expected: actual, actual: second, expectedLabel: "first render", actualLabel: "second render"))")
+                return
+            }
             try actual.write(to: Self.fixtureURL, atomically: true, encoding: .utf8)
             return
         }
@@ -28,11 +36,6 @@ struct CapabilityWiringSnapshotTests {
             Attachment.record(actual, named: "capability-wiring.actual.json")
             Issue.record("Capability wiring changed. \(WiringRecorder.firstDifference(expected: expected, actual: actual))")
         }
-    }
-
-    @Test("Rendering the wiring snapshot is deterministic")
-    func renderingIsDeterministic() throws {
-        #expect(try WiringRecorder.renderSnapshot() == WiringRecorder.renderSnapshot())
     }
 }
 
@@ -206,14 +209,16 @@ enum WiringRecorder {
         }
     }
 
-    static func firstDifference(expected: String, actual: String) -> String {
+    static func firstDifference(
+        expected: String, actual: String, expectedLabel: String = "fixture", actualLabel: String = "actual"
+    ) -> String {
         let expectedLines = expected.components(separatedBy: "\n")
         let actualLines = actual.components(separatedBy: "\n")
         for index in 0..<max(expectedLines.count, actualLines.count) {
-            let lhs = index < expectedLines.count ? expectedLines[index] : "<end of fixture>"
-            let rhs = index < actualLines.count ? actualLines[index] : "<end of output>"
+            let lhs = index < expectedLines.count ? expectedLines[index] : "<end of \(expectedLabel)>"
+            let rhs = index < actualLines.count ? actualLines[index] : "<end of \(actualLabel)>"
             if lhs != rhs {
-                return "First difference at line \(index + 1):\n  fixture: \(lhs)\n  actual:  \(rhs)"
+                return "First difference at line \(index + 1):\n  \(expectedLabel): \(lhs)\n  \(actualLabel): \(rhs)"
             }
         }
         return "Outputs differ only in length."

@@ -41,7 +41,7 @@ These name plugins on purpose. Update every one. Some fail when a plugin is miss
   - `KeybumpsFeatureTests`, which expects ⌘9 to match nothing.
 - **Upgrades:** `ScreenshotToolsTests` lists the plugins an upgrade turns on, so a plugin that ships on changes it.
 - **Smoke tests:** `SmokeUITests`' section list in `testEverySettingsPageOpens`, and `testPaletteCommandNumberSwitchesTabs`, which expects the number after the last visible tab to do nothing.
-- **Wiring snapshot:** `KeybumpsTests/Fixtures/capability-wiring.json`. Re-record it with `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` on the `xcodebuild` command line, and review the diff. It records every combination of plugins, so each new plugin roughly doubles it.
+- **Wiring snapshot:** `KeybumpsTests/Fixtures/capability-wiring.json`. Re-record it with `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` in `xcodebuild`'s environment, before the command (after it, it's a build setting and never reaches the tests), and review the diff. It records every combination of plugins, so each new plugin roughly doubles it.
 
 Add the plugin's own tests in Swift Testing (`docs/testing.md`).
 
