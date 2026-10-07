@@ -20,6 +20,12 @@ struct CapabilityWiringSnapshotTests {
         let actual = try WiringRecorder.renderSnapshot()
         let environment = ProcessInfo.processInfo.environment
         if environment["KEYBUMPS_RECORD_SNAPSHOTS"] == "1" {
+            // Only recording needs a second render: a fixture recorded from a render that isn't
+            // deterministic would make every later comparison fail intermittently.
+            guard try WiringRecorder.renderSnapshot() == actual else {
+                Issue.record("Rendering the wiring snapshot isn't deterministic, so the fixture wasn't recorded.")
+                return
+            }
             try actual.write(to: Self.fixtureURL, atomically: true, encoding: .utf8)
             return
         }
