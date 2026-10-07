@@ -65,17 +65,12 @@ struct SnippetPaletteResults: View {
     }
 
     private var header: some View {
-        HStack {
-            PaletteSectionHeader("Snippets")
-            Spacer()
+        PaletteListHeader(title: "Snippets") {
             Button("New Snippet", systemImage: "plus", action: actions.create)
                 .buttonStyle(PalettePillButtonStyle(showsIcon: true))
                 .help("New Snippet (⌘N)")
                 .accessibilityIdentifier("palette.snippets.new")
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
     }
 
     private var emptyState: some View {
@@ -120,9 +115,6 @@ struct SnippetPaletteResults: View {
             List(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
                 Button { actions.copy(snippet) } label: {
                     SnippetRow(snippet: snippet, isSelected: index == selection)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
@@ -156,46 +148,53 @@ struct SnippetRow: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: SnippetPaletteResults.symbol)
-                .font(.system(size: 18))
-                .foregroundStyle(.secondary)
-                .frame(width: 52, height: 38)
-                .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        PaletteRow {
+            PaletteRowIcon(systemImage: SnippetPaletteResults.symbol)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(snippet.name)
-                    .font(.system(size: 15))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                SnippetPreviewText(snippet: snippet)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        } content: {
             HStack(spacing: 14) {
-                if isSelected {
-                    HStack(spacing: 6) {
-                        Text("Edit").fixedSize()
-                        HStack(spacing: 3) {
-                            PaletteKeycap("⌘")
-                            PaletteKeycap("E")
-                        }
-                    }
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Edit with Command-E")
-                }
-                if let keyword = snippet.keyword {
-                    SnippetKeywordChip(keyword: keyword)
-                }
+                details
+                accessories
             }
-            .frame(maxWidth: ClipboardRow.accessoryMaxWidth, alignment: .trailing)
-            .layoutPriority(1)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(SnippetPresentation.accessibilityLabel(for: snippet))
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(snippet.name)
+                .font(.system(size: 15))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            SnippetPreviewText(snippet: snippet)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var accessories: some View {
+        HStack(spacing: 14) {
+            if isSelected {
+                HStack(spacing: 6) {
+                    Text("Edit").fixedSize()
+                    HStack(spacing: 3) {
+                        PaletteKeycap("⌘")
+                        PaletteKeycap("E")
+                    }
+                }
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Edit with Command-E")
+            }
+            if let keyword = snippet.keyword {
+                SnippetKeywordChip(keyword: keyword)
+            }
+        }
+        .frame(maxWidth: ClipboardRow.accessoryMaxWidth, alignment: .trailing)
+        .layoutPriority(1)
     }
 }
 
