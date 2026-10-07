@@ -114,6 +114,14 @@ struct PaletteHoverTests {
         #expect(fixture.palette.state.dictationPendingDeletion?.id == entry.id)
         #expect(fixture.dictationHistory.entries.count == 1, "Nothing is deleted until the alert's Delete")
         #expect(fixture.palette.handleKeyDown(delete) != nil, "While the alert shows, it has the keys")
+
+        fixture.pointer = NSPoint(x: 10, y: 20)
+        fixture.palette.hover(row: 0)
+        #expect(!fixture.palette.state.selectionFollowsPointer, "The pointer behind the alert changes nothing")
+
+        fixture.palette.deleteDictation(entry)
+        #expect(fixture.dictationHistory.entries.isEmpty, "The alert's Delete deletes")
+        #expect(fixture.palette.state.selection == 0)
     }
 
     @Test("Arrowing past the visible rows scrolls the real Clipboard list to the highlight (#352)")

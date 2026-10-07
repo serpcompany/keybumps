@@ -147,7 +147,9 @@ final class CommandPaletteState {
     /// How long after the pointer last moved a hover still counts.
     static let hoverAfterMove: TimeInterval = 0.25
 
-    /// The pointer is over the rows' area, moving or not.
+    /// The pointer is over the rows' area, moving or not. A row can still take the highlight within
+    /// `hoverAfterMove` of a move, or when the pointer came to rest somewhere no hover reported it:
+    /// the cost of not depending on which hover callback runs first.
     func notePointer() {
         let pointer = mouseLocation()
         guard pointer != pointerSeen else { return }
@@ -180,7 +182,12 @@ final class CommandPaletteState {
     }
     /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
     /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
-    var isBrowsingGrid = false
+    var isBrowsingGrid = false {
+        didSet { if !isBrowsingGrid { gridEnteredByPointer = false } }
+    }
+    /// Whether the pointer, not a key, brought the highlight into the grid. Until a key moves
+    /// within it, Left and Right still switch tabs (#347).
+    var gridEnteredByPointer = false
     /// The filter chosen from `/`'s list, shown as a chip in the search field. Choosing or removing
     /// one starts again at the first row.
     var filter: PaletteFilter? {
@@ -476,7 +483,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         pendingPaste = nil
     }
 
-    /// Runs as the palette opens on a tab, even while a snippet's Delete alert shows (a hot key or
+    /// Runs as the palette opens on a tab, even while a snippet's or recording's Delete alert shows (a hot key or
     /// a Dock click). Selecting drops the pending deletion, and SwiftUI can take the alert away
     /// without calling its binding, so the palette takes its keys back here, as `ClearAllButton`
     /// does when it disappears.
@@ -720,14 +727,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
            !isComposingText, event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
             // Until an arrow key moves within the grid, Left and Right switch tabs, even after the
             // pointer highlighted a tile on its way across.
-            guard state.isBrowsingGrid, !(state.selectionFollowsPointer && (move == .left || move == .right)) else {
+            guard state.isBrowsingGrid, !(state.gridEnteredByPointer && (move == .left || move == .right)) else {
                 enterGrid(or: move)
                 return nil
             }
             if !(0..<itemCount).contains(state.selection) {
                 state.selection = 0
+                state.gridEnteredByPointer = false
             } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
+                state.gridEnteredByPointer = false
             } else if move == .up {
                 leaveGrid()
             }
@@ -764,7 +773,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
-            if isScreenshotGrid, state.isBrowsingGrid, !state.selectionFollowsPointer {
+            if isScreenshotGrid, state.isBrowsingGrid, !state.gridEnteredByPointer {
                 if (0..<itemCount).contains(state.selection + offset) { state.selection += offset }
             } else {
                 switchTab(by: offset)
@@ -835,14 +844,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The pointer moved over a row or tile: it takes the highlight (`selectFromPointer`), and in a
     /// grid that brings the arrow keys into it too.
     func hover(row: Int) {
-        // A row view on its way out, after a Delete or while a list re-filters, can still report.
-        guard (0..<itemCount).contains(row), state.selectFromPointer(row), isGridTab, !state.isBrowsingGrid else { return }
+        // Not behind a Delete alert. A row view on its way out, after a Delete or while a list
+        // re-filters, can still report.
+        guard !isPresentingConfirmation, (0..<itemCount).contains(row), state.selectFromPointer(row),
+              isGridTab, !state.isBrowsingGrid else { return }
         state.isBrowsingGrid = true
+        state.gridEnteredByPointer = true
     }
 
     private func moveSelection(_ delta: Int) {
         let count = itemCount
         guard count > 0 else { return }
+        // Up and Down in the screenshot grid move within it, so Left and Right do too from here.
+        state.gridEnteredByPointer = false
         if abs(delta) > 1 {
             // Moving a grid row stops at the edges instead of wrapping to another column.
             let target = state.selection + delta
@@ -1239,17 +1253,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         openSettings(.snippets)
     }
 
-    /// Shows the Delete confirmation for a snippet.
+    /// Shows the Delete confirmation for a recording.
     func requestDictationDeletion(_ entry: DictationHistoryEntry) {
         state.dictationPendingDeletion = entry
         isPresentingConfirmation = true
     }
 
-    private func deleteDictation(_ entry: DictationHistoryEntry) {
+    /// The confirmation's Delete: removes the recording, keeping the highlight on a row that exists.
+    func deleteDictation(_ entry: DictationHistoryEntry) {
         dictationHistory.delete(entry)
         state.selection = min(state.selection, max(0, itemCount - 1))
     }
 
+    /// Shows the Delete confirmation for a snippet.
     func requestSnippetDeletion(_ snippet: Snippet) {
         state.snippetPendingDeletion = snippet
         isPresentingConfirmation = true
