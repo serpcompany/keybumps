@@ -2207,19 +2207,21 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testDictationTranslationRequiresRealTranscriptText() {
-        XCTAssertTrue(DictationTranslationPolicy.canTranslate("Translate this"))
-        XCTAssertFalse(DictationTranslationPolicy.canTranslate("  \n "))
+        XCTAssertTrue(TranslationLanguagePolicy.canTranslate("Translate this"))
+        XCTAssertFalse(TranslationLanguagePolicy.canTranslate("  \n "))
         XCTAssertEqual(
-            DictationTranslationPolicy.preferredTargetIdentifier(
+            TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: "en-US",
-                supportedIdentifiers: ["fr", "ja", "es"]
+                supportedIdentifiers: ["fr", "ja", "es"],
+                pair: TranslationLanguagePair(mine: "en", other: "ja")
             ),
             "ja"
         )
         XCTAssertEqual(
-            DictationTranslationPolicy.preferredTargetIdentifier(
+            TranslationLanguagePolicy.preferredTargetIdentifier(
                 sourceIdentifier: "ja-JP",
-                supportedIdentifiers: ["fr", "en-US", "es"]
+                supportedIdentifiers: ["fr", "en-US", "es"],
+                pair: TranslationLanguagePair(mine: "en", other: "ja")
             ),
             "en-US"
         )
