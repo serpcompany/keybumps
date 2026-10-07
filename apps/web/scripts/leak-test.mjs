@@ -211,6 +211,10 @@ async function main() {
     }
     return route.abort()
   })
+  let documentRequests = 0 // main-frame navigations, counted to spot one during a check
+  page.on('request', request => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests++
+  })
   page.on('response', response => {
     const request = response.request()
     if (!request.url().startsWith(B)) return
@@ -282,18 +286,23 @@ async function main() {
     }))
   const H1 = { thanks: 'Thanks for buying Keybumps', license: 'Find your license key' }
   let rereads = 0
+  let navigatedDuringCheck = 0
   // Expect a clean URL on `path` (with GTM on sensitive and analytics pages, none on a 404).
   // `missed` names a navigation the step waited for and never saw, which fails the check. If a
   // navigation replaces the page mid-read, read the new document the same way once it has loaded.
+  // Every step's own navigation has loaded before this runs, so any navigation during it is one
+  // nothing waited for: it's printed and counted.
   const expectAt = async (name, path, { h1, gtm = true, missed } = {}) => {
+    const documentsBefore = documentRequests
     let s
-    for (let attempt = 1; !s; attempt++) {
+    for (let attempt = 1; ; attempt++) {
       await settle()
       // Wait for GTM only where it belongs: a 404 is sampled after the fixed settle, so "no GTM"
       // can't pass before GTM would have started.
       if (gtm) await gtmStarted()
       try {
         s = await state()
+        break
       } catch (error) {
         if (attempt === 5 || !/Execution context was destroyed/.test(error.message)) throw error
         rereads++
@@ -308,6 +317,10 @@ async function main() {
           })
           .catch(() => {})
       }
+    }
+    if (documentRequests !== documentsBefore) {
+      navigatedDuringCheck++
+      console.log(`NOTE  ${name}: the page navigated while it was checked`)
     }
     const ok =
       !missed &&
@@ -564,7 +577,7 @@ async function main() {
     `\n${results.length - failed} passed, ${failed} failed. ${external.length} external requests captured, ` +
       `${pushes.length} dataLayer pushes recorded, ${starts} GTM starts. ` +
       `Same-origin responses for URLs with the test values: ${tokenResponses.length} (${[...new Set(tokenResponses)].join(', ')}).` +
-      ` Pages read again after a navigation replaced them: ${rereads}.`
+      ` Checks during which the page navigated: ${navigatedDuringCheck} (reads interrupted: ${rereads}).`
   )
   return failed
 }
