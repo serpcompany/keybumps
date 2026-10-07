@@ -95,6 +95,67 @@ struct TranslateDetailTests {
         #expect(document.frame.height > detailScroll.contentView.bounds.height, "Too long for the pane, so it scrolls")
     }
 
+    @Test("A hairline divides the translation from the text it was translated from, drawn as Information's rows are divided")
+    func dividerBetweenTheLanguages() async throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        fixture.recents.save("Good night", translated: "おやすみ", from: "en", to: "ja")
+        // Dark, as the other pixel checks are (`PaletteFloatingSurfaceTests`).
+        let ax = try await PaletteAccessibility.layOut(fixture.palette, appearance: .darkAqua)
+        defer { ax.close() }
+        #expect(await ax.shows("palette.translate.detail.translation", "おやすみ"))
+        let detail = try await ax.require("palette.translate.detail")
+        let translation = ax.frameFromTop(of: try await ax.require("palette.translate.detail.translation"))
+        let english = ax.frameFromTop(of: try #require(PaletteAccessibility.element(reading: "English", in: detail)))
+        let information = ax.frameFromTop(of: try #require(PaletteAccessibility.element(reading: "Information", in: detail)))
+        let languages = ax.frameFromTop(of: try #require(PaletteAccessibility.element(reading: "Languages", in: detail)))
+        #expect(translation.maxY < english.minY && english.maxY < information.minY && information.maxY < languages.minY)
+
+        let image = try ax.render()
+        let x = translation.minX + 4
+        let between = PaletteAccessibility.hairlines(in: image, x: x, from: translation.maxY + 2, to: english.minY - 2)
+        let inInformation = PaletteAccessibility.hairlines(in: image, x: x, from: information.maxY + 1, to: languages.minY - 2)
+        #expect(between.count == 1, "One hairline between the translation and English")
+        #expect(inInformation.count == 1, "The hairline above Languages, for comparison")
+        let ink = try #require(between.first)
+        let reference = try #require(inInformation.first)
+        #expect(abs(ink - reference) <= reference * 0.2, "Drawn alike: \(ink) and \(reference)")
+    }
+
+    @Test("The Dictation tab keeps its layout on the shared pieces: its header and Clear All, a row per recording, and the highlighted one's detail beside them")
+    func dictationLayoutOnTheSharedPieces() async throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        for transcript in ["made-up first transcript", "made-up second transcript"] {
+            let audio = fixture.folder.url.appendingPathComponent("made-up-\(UUID().uuidString).wav")
+            try Data("made-up audio".utf8).write(to: audio)
+            _ = try fixture.dictationHistory.record(transcript, language: "en-US", duration: 1, audioSourceURL: audio)
+        }
+        let ax = try await PaletteAccessibility.layOut(fixture.palette, tab: .dictation)
+        defer {
+            fixture.palette.dictationPlayer.stop()
+            ax.close()
+        }
+
+        #expect(await ax.waitFor { PaletteAccessibility.element(reading: "Recent", in: ax.root) } != nil, "The list's header")
+        #expect(PaletteAccessibility.element(reading: "Clear All", in: ax.root) != nil)
+        let list = try #require(PaletteAccessibility.scrollViews(in: ax.root).first { $0.documentView is NSTableView })
+        #expect((list.documentView as? NSTableView)?.numberOfRows == 2)
+        #expect(abs(list.accessibilityFrame().width - 330) < 1)
+
+        // The detail: what's read right of the list.
+        let listEdge = list.accessibilityFrame().maxX
+        func inDetail(_ text: String) -> NSObject? {
+            PaletteAccessibility.element(reading: text, in: ax.root) { PaletteAccessibility.frame(of: $0).minX >= listEdge }
+        }
+        #expect(await ax.waitFor { inDetail("made-up second transcript") } != nil, "The newest recording's transcript")
+        #expect(inDetail("Information") != nil)
+        #expect(inDetail("Recorded") != nil)
+
+        #expect(fixture.palette.handleKeyDown(fixture.commandKey(kVK_DownArrow, "", modifiers: [.function, .numericPad])) == nil)
+        #expect(await ax.waitFor { inDetail("made-up first transcript") } != nil, "The detail follows the highlight")
+    }
+
     @Test("Moving the highlight shows that record in the detail")
     func detailFollowsTheHighlight() async throws {
         let fixture = TranslatePaletteFixture()
@@ -229,8 +290,9 @@ struct TranslateDetailTests {
         try await Task.sleep(for: .milliseconds(100))
         panel.contentView?.layoutSubtreeIfNeeded()
 
-        // Some macOS versions (26 on CI) build SwiftUI's selectable text only on a real click;
-        // `PaletteCopyPasteKeyTests.pointerSelectionInAStandIn` covers the decision there.
+        // Some macOS versions (26 on CI) build SwiftUI's selectable text only on a real click, so
+        // there's nothing to find and this test stops here;
+        // `PaletteCopyPasteKeyTests.pointerSelectionInAStandIn` covers the same decision on every macOS.
         guard let translation = PaletteCopyPasteKeyTests.selectableText(in: panel.contentView) else { return }
         #expect(panel.makeFirstResponder(translation))
         #expect(fixture.palette.handleKeyDown(fixture.commandKey(kVK_ANSI_C, "c")) == nil, "Nothing selected: ⌘C copies the record")
@@ -323,20 +385,33 @@ struct PaletteAccessibility {
     let panel: NSWindow
     let root: NSView
 
-    static func layOut(_ palette: CommandPaletteController) async throws -> PaletteAccessibility {
-        let panel = try #require(palette.layOutForTesting(.translate))
-        let root = try #require(panel.contentView)
+    /// `appearance` fixes light or dark, as a pixel check needs; nil follows the Mac's. When it
+    /// throws, it has already stopped asking and put the panel away, since the caller can't `close`.
+    static func layOut(
+        _ palette: CommandPaletteController,
+        tab: CommandPaletteTab = .translate,
+        appearance: NSAppearance.Name? = nil
+    ) async throws -> PaletteAccessibility {
+        let panel = try #require(palette.layOutForTesting(tab))
         setAssistiveAppAsking(true)
-        let accessibility = PaletteAccessibility(panel: panel, root: root)
-        // The palette's own element, once SwiftUI has built them, and its list, once laid out.
-        _ = try #require(await accessibility.waitFor {
-            children(of: root).first { label(of: $0) == "Keybumps command palette" }
-        }, "SwiftUI built no accessibility elements")
-        _ = await accessibility.waitFor {
-            root.layoutSubtreeIfNeeded()
-            return scrollViews(in: root).first { $0.documentView is NSTableView }
+        do {
+            panel.appearance = appearance.flatMap(NSAppearance.init(named:))
+            let root = try #require(panel.contentView)
+            let accessibility = PaletteAccessibility(panel: panel, root: root)
+            // The palette's own element, once SwiftUI has built them, and its list, once laid out.
+            _ = try #require(await accessibility.waitFor {
+                children(of: root).first { label(of: $0) == "Keybumps command palette" }
+            }, "SwiftUI built no accessibility elements")
+            _ = await accessibility.waitFor {
+                root.layoutSubtreeIfNeeded()
+                return scrollViews(in: root).first { $0.documentView is NSTableView }
+            }
+            return accessibility
+        } catch {
+            panel.orderOut(nil)
+            setAssistiveAppAsking(false)
+            throw error
         }
-        return accessibility
     }
 
     func close() {
@@ -395,6 +470,72 @@ struct PaletteAccessibility {
             try? await Task.sleep(for: .milliseconds(20))
         }
         return value()
+    }
+
+    /// The first element under `object` that VoiceOver reads as `text`, such as a section header,
+    /// and that `matches`, such as by where it is.
+    static func element(
+        reading text: String, in object: NSObject, where matches: (NSObject) -> Bool = { _ in true }
+    ) -> NSObject? {
+        if children(of: object).isEmpty, self.text(of: object) == text, matches(object) { return object }
+        for child in children(of: object) {
+            if let found = element(reading: text, in: child, where: matches) { return found }
+        }
+        return nil
+    }
+
+    // MARK: Drawing
+
+    /// An element's frame in the palette view's own points, measured from its top left.
+    func frameFromTop(of object: NSObject) -> NSRect {
+        let inView = root.convert(panel.convertFromScreen(Self.frame(of: object)), from: nil)
+        return root.isFlipped ? inView : NSRect(
+            x: inView.minX, y: root.bounds.height - inView.maxY, width: inView.width, height: inView.height
+        )
+    }
+
+    /// The palette as it draws, at 2x, through AppKit and Core Animation, as the app draws it.
+    func render() throws -> NSBitmapImageRep {
+        root.layoutSubtreeIfNeeded()
+        let size = root.bounds.size
+        let rep = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        rep.size = size
+        root.cacheDisplay(in: root.bounds, to: rep)
+        return rep
+    }
+
+    /// The hairlines drawn across `x` (in points) between two heights measured from the top: how
+    /// much each one differs from the background there, summed over its pixel rows, so a line
+    /// that straddles two rows counts the same as one that fills one.
+    static func hairlines(in image: NSBitmapImageRep, x: CGFloat, from top: CGFloat, to bottom: CGFloat) -> [Double] {
+        func luma(_ row: Int) -> Double {
+            // Averaged across a short stretch of the line.
+            let columns = Array(stride(from: Int(x * 2), to: Int(x * 2) + 40, by: 4))
+            return columns.map { column in
+                guard let color = image.colorAt(x: column, y: row)?.usingColorSpace(.sRGB) else { return 0 }
+                return (color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255
+            }.reduce(0, +) / Double(columns.count)
+        }
+        let rows = Array(Int(top * 2)..<Int(bottom * 2))
+        guard let first = rows.first else { return [] }
+        let background = luma(first)
+        var lines: [Double] = []
+        var current = 0.0
+        for row in rows {
+            let difference = abs(luma(row) - background)
+            if difference > 3 {
+                current += difference
+            } else if current > 0 {
+                lines.append(current)
+                current = 0
+            }
+        }
+        if current > 0 { lines.append(current) }
+        return lines
     }
 
     static func element(_ identifier: String, in object: NSObject) -> NSObject? {

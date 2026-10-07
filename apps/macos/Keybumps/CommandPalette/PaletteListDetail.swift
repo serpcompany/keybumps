@@ -93,6 +93,14 @@ struct PaletteInformation<Rows: View>: View {
     }
 }
 
+/// A detail pane's hairline, between Information's rows or between its sections, such as a saved
+/// translation and the text it was translated from.
+struct PaletteDivider: View {
+    var body: some View {
+        Rectangle().fill(PaletteTheme.border).frame(height: 1)
+    }
+}
+
 /// One row of `PaletteInformation`.
 struct PaletteInformationRow: View {
     let title: String
@@ -105,7 +113,7 @@ struct PaletteInformationRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Rectangle().fill(PaletteTheme.border).frame(height: 1)
+            PaletteDivider()
             HStack {
                 Text(title).foregroundStyle(.secondary)
                 Spacer()
