@@ -1381,9 +1381,11 @@ extension Notification.Name {
 final class ShortcutRecorderState {
     /// Whether any hotkey field is recording, so Escape cancels it rather than closing Settings.
     @ObservationIgnored static private(set) var isRecordingAny = false
-    /// How many fields are asking whether to take a shortcut from another action; while any is,
-    /// Escape means Cancel rather than closing Settings.
-    @ObservationIgnored static private(set) var askingCount = 0
+    /// The fields asking whether to take a shortcut from another action. Weak, so a field that
+    /// goes away without `onDisappear` can't leave Settings thinking one still asks.
+    @ObservationIgnored private static let asking = NSHashTable<ShortcutRecorderState>.weakObjects()
+    /// Whether a field is asking; Escape in Settings then means Cancel rather than closing it.
+    static var isAskingAny: Bool { asking.allObjects.contains { $0.pendingReplacement != nil } }
     private(set) var identifier: String?
     private(set) var error: String?
     /// The modifier symbols held down while recording, shown live in the field.
@@ -1392,20 +1394,10 @@ final class ShortcutRecorderState {
     /// or Cancel (#334).
     private(set) var pendingReplacement: PendingShortcutReplacement? {
         didSet {
-            switch (oldValue == nil, pendingReplacement == nil) {
-            case (true, false):
-                Self.askingCount += 1
-                installEscapeMonitor()
-            case (false, true):
-                Self.askingCount -= 1
-                stopEscapeMonitor()
-            default:
-                break
-            }
+            if pendingReplacement == nil { Self.asking.remove(self) } else { Self.asking.add(self) }
         }
     }
     private var monitor: Any?
-    private var escapeMonitor: Any?
     private var cancelAction: (() -> Void)?
     private var captureAction: ((ShortcutBinding?) -> Void)?
     private var conflictCheck: ((ShortcutBinding) -> ShortcutOwner?)?
@@ -1514,6 +1506,11 @@ final class ShortcutRecorderState {
         question = nil
     }
 
+    /// Escape in Settings while fields ask: Cancel on each.
+    static func dismissAllReplacements() {
+        asking.allObjects.forEach { $0.dismissReplacement() }
+    }
+
     func cancel() {
         dismissReplacement()
         guard identifier != nil else { return }
@@ -1536,21 +1533,6 @@ final class ShortcutRecorderState {
 
     private func stopMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-    }
-
-    /// Escape while it asks means Cancel; `SettingsEscapePolicy` keeps Settings open meanwhile.
-    private func installEscapeMonitor() {
-        stopEscapeMonitor()
-        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.keyCode == UInt16(kVK_Escape),
-                  event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty else { return event }
-            self.dismissReplacement()
-            return nil
-        }
-    }
-
-    private func stopEscapeMonitor() {
-        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor); self.escapeMonitor = nil }
     }
 }
 
@@ -1750,10 +1732,12 @@ struct SettingsEscapeCloser: NSViewRepresentable {
             if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
             guard window != nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let window = self?.window, SettingsEscapePolicy.shouldClose(event: event, window: window) else {
-                    return event
+                guard let window = self?.window,
+                      let action = SettingsEscapePolicy.action(event: event, window: window) else { return event }
+                switch action {
+                case .close: window.performClose(nil)
+                case .cancelShortcutQuestion: ShortcutRecorderState.dismissAllReplacements()
                 }
-                window.performClose(nil)
                 return nil
             }
         }
@@ -1766,15 +1750,28 @@ struct SettingsEscapeCloser: NSViewRepresentable {
 
 @MainActor
 enum SettingsEscapePolicy {
-    static func shouldClose(event: NSEvent, window: NSWindow) -> Bool {
+    enum Action: Equatable {
+        case close
+        /// A hotkey field is asking whether to take another action's shortcut (#334): Cancel it.
+        case cancelShortcutQuestion
+    }
+
+    /// What Escape does in the Settings window, or nil to leave it to whatever has it: a recording
+    /// hotkey field, a sheet or alert, another window, or a text field with text in it.
+    static func action(event: NSEvent, window: NSWindow) -> Action? {
         guard event.keyCode == UInt16(kVK_Escape),
               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
               event.window === window, window.isKeyWindow,
-              window.attachedSheet == nil, NSApp.modalWindow == nil,
-              !ShortcutRecorderState.isRecordingAny, ShortcutRecorderState.askingCount == 0 else { return false }
-        if let editor = window.firstResponder as? NSTextView, editor.isFieldEditor, !editor.string.isEmpty {
-            return false
+              window.attachedSheet == nil, NSApp.modalWindow == nil else { return nil }
+        return action(isRecording: ShortcutRecorderState.isRecordingAny, isAsking: ShortcutRecorderState.isAskingAny, editor: window.firstResponder)
+    }
+
+    static func action(isRecording: Bool, isAsking: Bool, editor: NSResponder?) -> Action? {
+        guard !isRecording else { return nil }
+        if isAsking { return .cancelShortcutQuestion }
+        if let editor = editor as? NSTextView, editor.isFieldEditor, !editor.string.isEmpty {
+            return nil
         }
-        return true
+        return .close
     }
 }

@@ -397,17 +397,20 @@ final class SmokeUITests: XCTestCase {
     func testRecordingATakenShortcutAsksBeforeMovingIt() {
         launch(permissions: "granted", ["-KBOpenSettings", "search"])
         let page = element("settings.detail.search")
-        let field = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Record shortcut for Open Quick Search"))
-            .firstMatch
+        let field = app.buttons.matching(NSPredicate(format: "label == %@", "Record shortcut for Open Quick Search")).firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 20))
         let original = field.value as? String
         let prompt = element("shortcut.replacementPrompt")
         let modifierError = app.staticTexts["Use at least one modifier key such as Control, Option, Shift, or Command."]
+        // Typing before the click has started recording sends the key to the page instead.
+        func record() {
+            field.click()
+            XCTAssertTrue(waitForValue(of: field, equalTo: "Waiting for shortcut"), "The click starts recording")
+        }
 
         // A bare key first: the error goes away without cancelling the recording. ⌃⌥U is
         // Window Manager › Top Left's default.
-        field.click()
+        record()
         app.typeKey("q", modifierFlags: [])
         XCTAssertTrue(modifierError.waitForExistence(timeout: 5))
         app.typeKey("u", modifierFlags: [.control, .option])
@@ -417,7 +420,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, original, "Cancel keeps Quick Search's shortcut")
 
         // Escape cancels the question and leaves Settings open.
-        field.click()
+        record()
         app.typeKey("u", modifierFlags: [.control, .option])
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
@@ -426,21 +429,21 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, original)
 
         // One click on the field while it asks starts recording again; a free shortcut saves.
-        field.click()
+        record()
         app.typeKey("u", modifierFlags: [.control, .option])
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
-        field.click()
+        record()
         XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
         app.typeKey("q", modifierFlags: [.control, .option, .shift])
-        XCTAssertTrue(waitForValue(of: field, notEqualTo: original), "A free shortcut saves at once")
+        XCTAssertTrue(waitForSavedValue(of: field, notEqualTo: original), "A free shortcut saves at once")
         let free = field.value as? String
 
-        field.click()
+        record()
         app.typeKey("u", modifierFlags: [.control, .option])
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         element("shortcut.replace").click()
         XCTAssertTrue(prompt.waitForNonExistence(timeout: 5))
-        XCTAssertTrue(waitForValue(of: field, notEqualTo: free), "Replace gives Quick Search the shortcut")
+        XCTAssertTrue(waitForSavedValue(of: field, notEqualTo: free), "Replace gives Quick Search the shortcut")
 
         element("settings.sidebar.windows").click()
         XCTAssertTrue(
@@ -480,8 +483,14 @@ final class SmokeUITests: XCTestCase {
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 
-    private func waitForValue(of element: XCUIElement, notEqualTo value: String?) -> Bool {
-        let predicate = NSPredicate(format: "value != %@", value ?? "")
+    private func waitForValue(of element: XCUIElement, equalTo value: String) -> Bool {
+        let predicate = NSPredicate(format: "value == %@", value)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    /// Waits for a hotkey field to show a saved shortcut other than `value`, not still recording.
+    private func waitForSavedValue(of element: XCUIElement, notEqualTo value: String?) -> Bool {
+        let predicate = NSPredicate(format: "value != %@ AND value != %@", value ?? "", "Waiting for shortcut")
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 

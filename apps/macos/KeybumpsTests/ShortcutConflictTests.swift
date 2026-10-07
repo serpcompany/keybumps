@@ -253,25 +253,36 @@ struct ShortcutConflictTests {
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
     }
 
-    @Test("While a field asks, Escape doesn't close Settings")
-    func askingKeepsSettingsOpen() {
+    @Test("While a field asks, Escape in Settings cancels the question instead of closing")
+    func escapeCancelsTheQuestion() {
         let preferences = preferencesWithEmojiPickerOnShiftCommandE()
-        let before = ShortcutRecorderState.askingCount
         let recording = Recording(preferences: preferences, owner: .capability(.quickSearch))
+        #expect(!ShortcutRecorderState.isAskingAny)
+        #expect(SettingsEscapePolicy.action(isRecording: false, isAsking: false, editor: nil) == .close)
+        #expect(SettingsEscapePolicy.action(isRecording: true, isAsking: false, editor: nil) == nil, "A recording field takes Escape")
 
         recording.recorder.receive(Self.shiftCommandE)
-        #expect(ShortcutRecorderState.askingCount == before + 1)
-        recording.recorder.confirmReplacement()
-        #expect(ShortcutRecorderState.askingCount == before)
+        #expect(ShortcutRecorderState.isAskingAny)
+        #expect(SettingsEscapePolicy.action(isRecording: false, isAsking: true, editor: nil) == .cancelShortcutQuestion)
+        #expect(SettingsEscapePolicy.action(isRecording: true, isAsking: true, editor: nil) == nil, "Another row recording keeps Escape")
 
-        recording.begin()
-        recording.recorder.receive(Self.unused)
-        recording.begin()
-        preferences.setCapabilityShortcut(Self.shiftCommandE, for: .emojiPicker)
-        recording.recorder.receive(Self.shiftCommandE)
-        #expect(ShortcutRecorderState.askingCount == before + 1)
-        recording.recorder.cancel()
-        #expect(ShortcutRecorderState.askingCount == before)
+        ShortcutRecorderState.dismissAllReplacements()
+        #expect(recording.recorder.pendingReplacement == nil)
+        #expect(!ShortcutRecorderState.isAskingAny)
+        #expect(preferences.capabilityShortcut(for: .emojiPicker) == Self.shiftCommandE, "Escape is Cancel")
+    }
+
+    @Test("A field that goes away while it asks doesn't keep Settings thinking one still asks")
+    func aFieldThatGoesAwayStopsAsking() {
+        let preferences = preferencesWithEmojiPickerOnShiftCommandE()
+        autoreleasepool {
+            let recorder = ShortcutRecorderState()
+            recorder.offer(Self.shiftCommandE, identifier: "quickSearch", conflict: {
+                preferences.shortcutConflict(for: $0, assigningTo: .capability(.quickSearch))
+            }, replace: {})
+            #expect(ShortcutRecorderState.isAskingAny)
+        }
+        #expect(!ShortcutRecorderState.isAskingAny)
     }
 }
 

@@ -279,6 +279,11 @@ struct SettingsHotkeyField: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // On the record button itself, not the whole field, so the clear button keeps its own name
+        // for VoiceOver and UI tests (#334).
+        .help("Click, then press a new shortcut. Delete clears it; Escape cancels.")
+        .accessibilityLabel("Record shortcut for \(title)")
+        .accessibilityValue(accessibilityValue)
         .overlay(alignment: .trailing) {
             if shortcut != nil, isHovering, !isRecording {
                 Button(action: clear) {
@@ -292,9 +297,6 @@ struct SettingsHotkeyField: View {
             }
         }
         .onHover { isHovering = $0 }
-        .help("Click, then press a new shortcut. Delete clears it; Escape cancels.")
-        .accessibilityLabel("Record shortcut for \(title)")
-        .accessibilityValue(accessibilityValue)
     }
 
     private var accessibilityValue: String {
