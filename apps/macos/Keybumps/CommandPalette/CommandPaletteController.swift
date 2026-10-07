@@ -113,11 +113,15 @@ final class CommandPaletteState {
             if tab == .snippets || tabsResettingSelectionWhileTyping.contains(tab), historyQuery != oldValue {
                 selection = 0
             }
+            if historyQuery != oldValue { isBrowsingGrid = false }
         }
     }
     /// The module-supplied tabs whose rows re-rank as you type.
     var tabsResettingSelectionWhileTyping: Set<CommandPaletteTab> = []
     var selection = 0
+    /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
+    /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
+    var isBrowsingGrid = false
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
 
@@ -125,6 +129,7 @@ final class CommandPaletteState {
         self.tab = tab
         historyQuery = ""
         selection = 0
+        isBrowsingGrid = false
         snippetPendingDeletion = nil
     }
 }
@@ -452,20 +457,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
 
         // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control, or
-        // while an input method is composing, they stay with the search field. Left on the first
-        // item and Right on the last (or in an empty grid) switch tabs, as in a list.
+        // while an input method is composing, they stay with the search field. Down goes into the
+        // grid and Up from its top row comes back out; outside it, Left and Right switch tabs.
         if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
            !isComposingText, event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
+            guard state.isBrowsingGrid else {
+                enterGrid(or: move)
+                return nil
+            }
             if !(0..<itemCount).contains(state.selection) {
-                if itemCount == 0, move == .left || move == .right {
-                    switchTab(by: move == .right ? 1 : -1)
-                } else {
-                    state.selection = 0
-                }
+                state.selection = 0
             } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
-            } else if move == .left || move == .right {
-                switchTab(by: move == .right ? 1 : -1)
+            } else if move == .up {
+                leaveGrid()
             }
             return nil
         }
@@ -475,20 +480,28 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             dismiss()
             return nil
         case 125:
-            moveSelection(state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
+            if state.tab == .screenshots, !state.isBrowsingGrid {
+                enterGrid(or: .down)
+            } else {
+                moveSelection(state.tab == .screenshots ? ScreenshotGrid.columnCount : 1)
+            }
             return nil
         case 126:
-            moveSelection(state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
+            if state.tab == .screenshots, state.selection < ScreenshotGrid.columnCount {
+                leaveGrid()
+            } else {
+                moveSelection(state.tab == .screenshots ? -ScreenshotGrid.columnCount : -1)
+            }
             return nil
         case 123, 124:
             // With text in the search field, Left and Right move the caret. Otherwise they move
-            // through the screenshot grid, or switch to the tab beside this one: from a list, from an
-            // empty grid, or from the grid's first (Left) or last (Right) screenshot.
+            // through the screenshot grid once Down has gone into it, or switch to the tab beside
+            // this one.
             guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
             let offset = event.keyCode == 124 ? 1 : -1
-            if state.tab == .screenshots, (0..<itemCount).contains(state.selection + offset) {
-                state.selection += offset
+            if state.tab == .screenshots, state.isBrowsingGrid {
+                if (0..<itemCount).contains(state.selection + offset) { state.selection += offset }
             } else {
                 switchTab(by: offset)
             }
@@ -498,7 +511,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             return nil
         case 51, 117:
             // Delete removes the highlighted row once the search field is empty (or with Command).
+            // A grid has no highlighted item until Down goes into it.
             guard activeQuery.isEmpty || event.modifierFlags.contains(.command),
+                  !isGridTab || state.isBrowsingGrid,
                   deleteSelection() else { return event }
             return nil
         default:
@@ -553,7 +568,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var contentActions: PaletteContentActions {
         PaletteContentActions(
             dismiss: { [weak self] in self?.dismiss() },
-            selectRow: { [weak self] row in self?.state.selection = row },
+            selectRow: { [weak self] row in
+                self?.state.selection = row
+                self?.state.isBrowsingGrid = true
+            },
             clearQuery: { [weak self] in self?.state.historyQuery = "" },
             copy: { [weak self] text in self?.copyText(text) },
             paste: { [weak self] text, restoresClipboard in
@@ -587,6 +605,31 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The tabs in the tab bar, which Command-number and Left and Right switch between.
     private var visibleTabs: [CommandPaletteTab] {
         CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
+    }
+
+    /// Whether the open tab lays its items out in a grid.
+    private var isGridTab: Bool {
+        state.tab == .screenshots || tabContent?.isGrid(query: state.historyQuery) == true
+    }
+
+    /// Outside a grid's items: Down goes into them, at the first; Left and Right switch tabs.
+    private func enterGrid(or move: PaletteMove) {
+        switch move {
+        case .down:
+            guard itemCount > 0 else { return }
+            state.selection = 0
+            state.isBrowsingGrid = true
+        case .left, .right:
+            switchTab(by: move == .right ? 1 : -1)
+        case .up:
+            break
+        }
+    }
+
+    /// Up from a grid's top row hands the arrow keys back to the tabs.
+    private func leaveGrid() {
+        state.isBrowsingGrid = false
+        state.selection = 0
     }
 
     /// Switches to the tab beside this one in the tab bar, if there is one.
@@ -977,12 +1020,8 @@ private struct CommandPaletteView: View {
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
                         tab: state.tab,
-                        // An empty grid hands Left and Right to the tabs, as a list does.
-                        isGrid: state.tab == .screenshots
-                            ? !screenshotContent.entries.isEmpty
-                            : tabContents[state.tab].map {
-                                $0.isGrid(query: state.historyQuery) && $0.rowCount(query: state.historyQuery) > 0
-                            } == true,
+                        isGrid: state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
+                        isBrowsingGrid: state.isBrowsingGrid,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
                         selectedSearchItem: state.tab == .search ? search.highlightedItem(at: state.selection) : nil,
                         contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
@@ -1024,7 +1063,8 @@ private struct CommandPaletteView: View {
         if let tabContent = tabContents[state.tab] {
             tabContent.makeView(PaletteContentContext(
                 query: state.historyQuery,
-                selection: state.selection,
+                // A grid highlights nothing until Down goes into it.
+                selection: tabContent.isGrid(query: state.historyQuery) && !state.isBrowsingGrid ? -1 : state.selection,
                 actions: contentActions,
                 confirmationPresentationChanged: confirmationPresentationChanged
             ))
@@ -1092,8 +1132,11 @@ private struct CommandPaletteView: View {
             case .entries(let entries):
                 ScreenshotGrid(
                     entries: entries,
-                    selection: state.selection,
-                    select: { state.selection = $0 },
+                    selection: state.isBrowsingGrid ? state.selection : -1,
+                    select: {
+                        state.selection = $0
+                        state.isBrowsingGrid = true
+                    },
                     choose: chooseScreenshot,
                     delete: clipboard.delete,
                     clear: clipboard.clearScreenshots,
@@ -1977,6 +2020,8 @@ private struct PaletteFooter: View {
     let tab: CommandPaletteTab
     /// Whether Left and Right move the selection too.
     let isGrid: Bool
+    /// Whether Down has gone into the grid, so the arrow keys move through its items.
+    let isBrowsingGrid: Bool
     /// Whether the search field is empty, so Left and Right switch tabs rather than move the caret.
     let isSearchEmpty: Bool
     /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
@@ -1996,8 +2041,8 @@ private struct PaletteFooter: View {
             PaletteSettingsButton(action: openSettings)
             Spacer()
             HStack(spacing: 14) {
-                hint("Select", keys: isGrid ? ["←", "→", "↑", "↓"] : ["↑", "↓"], isPrimary: false)
-                if !isGrid, isSearchEmpty {
+                hint("Select", keys: isGrid ? (isBrowsingGrid ? ["←", "→", "↑", "↓"] : ["↓"]) : ["↑", "↓"], isPrimary: false)
+                if !(isGrid && isBrowsingGrid), isSearchEmpty {
                     hint("Change Tab", keys: ["←", "→"], isPrimary: false)
                 }
                 if let primaryActionTitle {

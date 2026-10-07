@@ -65,7 +65,7 @@ struct CapabilityPaletteContentTests {
         ])
     }
 
-    @Test("A grid tab's rows get all four arrow keys; a list's, or a grid's once you type, leave Left and Right to the search field")
+    @Test("Down goes into a grid, which then gets all four arrow keys; a list's, or a grid's once you type, leave Left and Right to the search field")
     func gridGetsArrowKeys() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
@@ -76,6 +76,9 @@ struct CapabilityPaletteContentTests {
 
         fixture.content.isGrid = true
         fixture.content.rows = 6
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.state.selection == 0, "Down goes into the grid at its first item")
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
         #expect(fixture.palette.state.selection == 1)
         #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
@@ -90,6 +93,8 @@ struct CapabilityPaletteContentTests {
         fixture.palette.state.selection = 99
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
         #expect(fixture.palette.state.selection == 0)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .keyboardShortcutter, "Inside the grid, Left at the first item stays put")
 
         // Typing turns the grid into a list: Right goes back to the search field's caret.
         fixture.palette.state.historyQuery = "made-up"
@@ -118,37 +123,46 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.tab == .search)
     }
 
-    @Test("In a grid, Left on the first item, Right on the last, or either key in an empty grid switches tabs")
-    func gridEdgesSwitchTabs() {
+    @Test("Until Down goes into a grid, Left and Right switch tabs and Delete removes nothing; Up from the top row comes back out")
+    func gridTabLevel() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
         fixture.content.isGrid = true
         fixture.content.rows = 6
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
-
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
-        #expect(fixture.palette.state.tab == .keyboardShortcutter, "Right inside the grid moves the selection")
-        #expect(fixture.palette.state.selection == 1)
-        fixture.palette.state.selection = 0
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
-        #expect(fixture.palette.state.tab == .timers, "Left on the first item goes to the tab before; Emoji is off")
-
-        fixture.content.rows = 0
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
-        #expect(fixture.palette.state.tab == .timers, "An empty grid doesn't trap Left and Right")
-
-        // Right on the last item goes to the next tab. The fake rows stand in for the Clipboard tab here.
-        fixture.content.rows = 6
         fixture.palette.tabContents[.clipboard] = fixture.content
         fixture.palette.selectOnOpening(.clipboard)
-        fixture.palette.state.selection = 5
+
+        #expect(!fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.handleKeyDown(Self.deleteKey) != nil, "Nothing is highlighted to delete")
+        #expect(fixture.content.deletions.isEmpty)
+        #expect(fixture.palette.handleKeyDown(Self.upKey) == nil)
+        #expect(fixture.palette.state.tab == .clipboard)
+
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(fixture.palette.state.selection == 1)
+        #expect(fixture.palette.handleKeyDown(Self.upKey) == nil)
+        #expect(!fixture.palette.state.isBrowsingGrid, "Up from the top row leaves the grid")
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
         #expect(fixture.palette.state.tab == .screenshots)
+
+        // Typing leaves the grid too.
+        fixture.palette.selectOnOpening(.clipboard)
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        fixture.palette.state.historyQuery = "x"
+        #expect(!fixture.palette.state.isBrowsingGrid)
+
+        // An empty grid has nothing to go into.
+        fixture.content.rows = 0
+        fixture.palette.selectOnOpening(.clipboard)
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(!fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(fixture.palette.state.tab == .search)
     }
 
-    @Test("In the Screenshots grid, Left and Right move between screenshots, then on to the tabs beside it")
-    func screenshotsGridEdgesSwitchTabs() throws {
+    @Test("Screenshots: Left and Right switch tabs until Down goes into the grid, then move between screenshots")
+    func screenshotsGridNeedsDown() throws {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
         for name in ["First.png", "Second.png"] {
@@ -159,14 +173,22 @@ struct CapabilityPaletteContentTests {
         fixture.palette.selectOnOpening(.screenshots)
 
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
-        #expect(fixture.palette.state.tab == .screenshots)
+        #expect(fixture.palette.state.tab == .dictation, "Right from the tab goes on to the next one")
+        fixture.palette.selectOnOpening(.screenshots)
+        #expect(fixture.palette.handleKeyDown(Self.deleteKey) != nil, "Nothing is highlighted to delete")
+        #expect(fixture.clipboard.entries.count == 2)
+
+        #expect(fixture.palette.handleKeyDown(Self.downKey) == nil)
+        #expect(fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
         #expect(fixture.palette.state.selection == 1)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
-        #expect(fixture.palette.state.tab == .dictation, "Right on the last screenshot goes to the next tab")
-
-        fixture.palette.selectOnOpening(.screenshots)
+        #expect(fixture.palette.state.tab == .screenshots, "Inside the grid, Right at the last screenshot stays put")
+        #expect(fixture.palette.state.selection == 1)
+        #expect(fixture.palette.handleKeyDown(Self.upKey) == nil)
+        #expect(!fixture.palette.state.isBrowsingGrid, "Up from the top row leaves the grid")
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
-        #expect(fixture.palette.state.tab == .clipboard, "Left on the first screenshot goes to the tab before")
+        #expect(fixture.palette.state.tab == .clipboard)
     }
 
     @Test("An empty Screenshots grid passes Left and Right on to the tabs beside it")
