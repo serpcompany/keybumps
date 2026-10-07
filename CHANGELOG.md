@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.3-beta.22](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.21...v0.0.3-beta.22) (2026-10-07)
+
+
+### Features
+
+* the Translate tab shows a saved translation in full, laid out like Dictation ([#377](https://github.com/serpcompany/keybumps/issues/377)) ([#378](https://github.com/serpcompany/keybumps/issues/378)) ([a550bba](https://github.com/serpcompany/keybumps/commit/a550bbade0dbc023607fc22bd85c4eba05d4cd82))
+
+
+### Fixes
+
+* Clipboard History's, Screenshot Tools', and Snippets' Settings show the Accessibility permission ⌘P uses ([#379](https://github.com/serpcompany/keybumps/issues/379)) ([#382](https://github.com/serpcompany/keybumps/issues/382)) ([d029a15](https://github.com/serpcompany/keybumps/commit/d029a15d73472abe7e8b481aa14a530d468b5f20))
+* Command Palette rows use the same metrics in every tab ([#381](https://github.com/serpcompany/keybumps/issues/381)) ([#384](https://github.com/serpcompany/keybumps/issues/384)) ([87f73eb](https://github.com/serpcompany/keybumps/commit/87f73ebbd6fce52ead21cae469afb0792bae238e))
+
 ## [0.0.3-beta.21](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.20...v0.0.3-beta.21) (2026-10-07)
 
 

@@ -181,19 +181,16 @@ private struct TimerPaletteResults: View {
     private func timerList(_ rows: [TimerPaletteRow], now: Date) -> some View {
         List {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                // Each section's header is the other tabs' list header, so the first sits where
+                // theirs does (#381).
                 if let header = header(for: row, after: index > 0 ? rows[index - 1] : nil) {
-                    PaletteSectionHeader(header)
-                        .padding(.horizontal, 12)
-                        .padding(.top, index > 0 ? 6 : 4)
+                    PaletteListHeader(header, isInList: true)
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
                 Button { select(index) } label: {
                     TimerRowView(row: row, now: now)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .listRowInsets(.init())
@@ -231,24 +228,26 @@ private struct TimerRowView: View {
     let now: Date
 
     var body: some View {
-        HStack(spacing: 12) {
+        PaletteRow {
             ring
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 15))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+        } content: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 15))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
+                Spacer(minLength: 12)
+                trailing
             }
-            Spacer(minLength: 12)
-            trailing
         }
-        .frame(minHeight: 42)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenLabel)
     }

@@ -256,8 +256,11 @@ private struct EmojiPaletteResults: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(sections.enumerated()), id: \.element.title) { sectionIndex, section in
+                            // A group's title starts where the other tabs' headers do, and its tiles
+                            // where their rows' wells do (#381).
                             PaletteSectionHeader(section.title)
-                                .padding(.horizontal, 4)
+                                .paletteLayoutProbe(.gridHeader)
+                                .padding(.horizontal, PaletteRowMetrics.headerInset)
                                 .padding(.top, sectionIndex == 0 ? 0 : 8)
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: EmojiPaletteContent.columns), spacing: 4) {
                                 ForEach(Array(section.emoji.enumerated()), id: \.element.glyph) { offset, emoji in
@@ -273,9 +276,9 @@ private struct EmojiPaletteResults: View {
                                     .id(index)
                                 }
                             }
+                            .padding(.horizontal, PaletteRowMetrics.wellX)
                         }
                     }
-                    .padding(.horizontal, 14)
                     .padding(.bottom, 8)
                 }
                 .scrollIndicators(.never)
@@ -311,8 +314,8 @@ private struct EmojiPaletteResults: View {
             Spacer()
         }
         .lineLimit(1)
-        .frame(height: 30)
-        .padding(.horizontal, 18)
+        // Where the other tabs' section header is, so the grid starts where their rows do (#381).
+        .paletteHeaderBand()
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("palette.emoji.selectedName")
     }
@@ -329,9 +332,6 @@ private struct EmojiPaletteResults: View {
                     List(Array(rows.enumerated()), id: \.element.glyph) { index, emoji in
                         Button { select(index) } label: {
                             EmojiRow(glyph: content.glyph(for: emoji), emoji: emoji)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 6)
-                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture(count: 2).onEnded { pick(index) })
@@ -374,6 +374,7 @@ private struct EmojiCell: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .paletteLayoutProbe(.gridItem)
         .simultaneousGesture(TapGesture(count: 2).onEnded(pick))
         .accessibilityLabel(name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -386,19 +387,19 @@ private struct EmojiRow: View {
     let emoji: Emoji
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(glyph)
-                .font(.system(size: 24))
-                .frame(width: 34)
-                .accessibilityHidden(true)
-            Text(emoji.name)
-                .font(.system(size: 15))
-                .lineLimit(1)
-            Spacer(minLength: 12)
-            Text(":\(emoji.aliases[0]):")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+        PaletteRow {
+            PaletteRowEmoji(glyph: glyph)
+        } content: {
+            HStack(spacing: 12) {
+                Text(emoji.name)
+                    .font(.system(size: 15))
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text(":\(emoji.aliases[0]):")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .accessibilityElement(children: .combine)
     }

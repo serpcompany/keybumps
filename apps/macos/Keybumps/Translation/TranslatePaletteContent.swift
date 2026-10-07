@@ -10,10 +10,13 @@ import SwiftUI
 ///
 /// Return saves the translation to recent translations (`RecentTranslations`, the last 50, kept on
 /// this Mac) and clears the field; ⌘P saves it and pastes it into the app you were using, putting
-/// the clipboard back (#362, #370). With the field empty, the tab lists them, newest first: Return
-/// or ⌘C copies one, kept out of Clipboard History; ⌘P pastes it; Delete asks, then deletes it. Its
-/// speaker button, or Space, reads it aloud (`TranslationSpeaking`) until the palette closes, the tab
-/// or the text changes, another is read, or it's deleted.
+/// the clipboard back (#362, #370). With the field empty, the tab lists them, newest first, laid out
+/// like the Dictation tab (#377): a compact row each on the left, and the highlighted one in full on
+/// the right (`detail(row:query:)`), its translation and source text selectable and scrolling, its
+/// languages and when it was saved, and a button for each key. Return or ⌘C copies one, kept out of
+/// Clipboard History; ⌘P pastes it; Delete asks, then deletes it. Read Aloud, or Space, reads it
+/// aloud (`TranslationSpeaking`) until the palette closes, the tab or the text changes, another is
+/// read, or it's deleted. Text selected with the pointer is Edit › Copy's, so ⌘C copies just that.
 @MainActor
 @Observable
 final class TranslatePaletteContent: CapabilityPaletteContent {
@@ -270,6 +273,38 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         "\(TranslationLanguages.name(for: record.sourceLanguage)) → \(TranslationLanguages.name(for: record.targetLanguage))"
     }
 
+    /// The highlighted saved translation as its detail pane shows it (#377).
+    struct RecordDetail: Equatable {
+        /// The record in full: its translation and source text are never shortened.
+        let record: TranslationRecord
+        /// "English → Japanese"
+        let languages: String
+        /// When it was saved, as "Oct 7, 2026 at 3:41 PM".
+        let saved: String
+        let isReading: Bool
+        /// Why it couldn't be read aloud, such as no installed voice for its language.
+        let speechProblem: String?
+
+        /// What its Read Aloud button, and Space in the footer, say.
+        var readAloudTitle: String { TranslatePaletteContent.readAloudTitle(isReading: isReading) }
+    }
+
+    /// The saved translation a row lists, in full, for the detail pane beside the list.
+    func detail(row: Int, query: String) -> RecordDetail? {
+        guard let record = record(row: row, query: query) else { return nil }
+        return RecordDetail(
+            record: record,
+            languages: Self.languages(of: record),
+            saved: record.savedAt.formatted(date: .abbreviated, time: .shortened),
+            isReading: isReading(record.id),
+            speechProblem: speechProblem?.id == record.id ? speechProblem?.message : nil
+        )
+    }
+
+    nonisolated static func readAloudTitle(isReading: Bool) -> String {
+        isReading ? "Stop Reading" : "Read Aloud"
+    }
+
     /// Saves the translation of the text in the field, once it's back.
     private func saveCurrentTranslation(query: String) -> TranslationRecord? {
         guard let translated = currentTranslation(query: query), let request else { return nil }
@@ -295,7 +330,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     /// Reads a saved translation aloud in a voice for its target language, stopping anything
     /// being read. Asked again while it's reading, it stops. With no installed voice for the
-    /// language, it says so on the row instead.
+    /// language, its detail says so instead.
     func readAloud(_ id: UUID) {
         guard let record = recents.records.first(where: { $0.id == id }) else { return }
         let wasReading = isReading(id)
@@ -366,7 +401,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     /// Space on a saved translation reads it aloud, or stops reading it.
     func playback(row: Int, query: String) -> PalettePlayback? {
         guard let id = record(row: row, query: query)?.id else { return nil }
-        return PalettePlayback(title: isReading(id) ? "Stop Reading" : "Read Aloud") { [weak self] in
+        return PalettePlayback(title: Self.readAloudTitle(isReading: isReading(id))) { [weak self] in
             self?.readAloud(id)
         }
     }
@@ -439,7 +474,7 @@ private struct TranslatePaletteResults: View {
                     PaletteEmptyState(title: "Type or paste text to translate it", systemImage: "translate")
                         .accessibilityIdentifier("palette.translate.empty")
                 } else {
-                    RecentTranslationList(content: content, selection: selection, actions: actions)
+                    RecentTranslationsView(content: content, query: query, selection: selection, actions: actions)
                 }
             } else {
                 result
@@ -546,88 +581,51 @@ private struct TranslatePaletteResults: View {
     }
 }
 
-/// Recent translations, newest first, listed like the Dictation tab's recordings: a click
-/// highlights a row and a double-click copies it. The highlighted row, and the one being read,
-/// shows its speaker button.
-private struct RecentTranslationList: View {
+/// Recent translations, newest first, in the Dictation tab's list-and-detail layout (#377): a
+/// compact row each on the left, where a click highlights a row and a double-click copies it, and
+/// the highlighted one in full on the right. The detail's buttons do what the keys do.
+private struct RecentTranslationsView: View {
     let content: TranslatePaletteContent
+    let query: String
     let selection: Int
     let actions: PaletteContentActions
 
     var body: some View {
-        let records = content.recents.records
-        VStack(spacing: 0) {
-            HStack {
-                PaletteSectionHeader("Recent Translations")
-                Spacer()
+        PaletteListDetail(highlighted: content.detail(row: selection, query: query)) {
+            PaletteDetailList(
+                title: "Recent Translations",
+                items: content.recents.records,
+                selection: selection,
+                select: actions.selectRow,
+                choose: { actions.copy($0.translatedText) }
+            ) { record in
+                RecentTranslationRow(record: record, isReading: content.isReading(record.id))
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
-
-            ScrollViewReader { proxy in
-                List(Array(records.enumerated()), id: \.element.id) { index, record in
-                    row(record, index: index)
-                        .listRowInsets(.init())
-                        .listRowSeparator(.hidden)
-                        .paletteHoverHighlights(row: index)
-                        .paletteRowBackground(isSelected: index == selection)
-                        .id(record.id)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .paletteScrollsToSelection(selection, proxy: proxy) { records.indices.contains($0) ? records[$0].id : nil }
-            }
-        }
-    }
-
-    private func row(_ record: TranslationRecord, index: Int) -> some View {
-        let isReading = content.isReading(record.id)
-        let showsSpeaker = index == selection || isReading
-        return HStack(spacing: 0) {
-            Button { actions.selectRow(index) } label: {
-                RecentTranslationRow(
-                    record: record,
-                    problem: content.speechProblem?.id == record.id ? content.speechProblem?.message : nil
-                )
-                .padding(.leading, 12)
-                .padding(.trailing, 8)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .simultaneousGesture(TapGesture(count: 2).onEnded { actions.copy(record.translatedText) })
-
-            // Its place is kept on every row, so a row's text doesn't move as the highlight does.
-            Button(isReading ? "Stop Reading" : "Read Aloud", systemImage: isReading ? "stop.fill" : "speaker.wave.2") {
-                content.readAloud(record.id)
-            }
-            .buttonStyle(PalettePillButtonStyle(isCircular: true))
-            .help(isReading ? "Stop reading (Space)" : "Read aloud (Space)")
-            .accessibilityIdentifier("palette.translate.readAloud")
-            .opacity(showsSpeaker ? 1 : 0)
-            .allowsHitTesting(showsSpeaker)
-            .accessibilityHidden(!showsSpeaker)
-            .padding(.trailing, 12)
+        } detail: { detail in
+            RecentTranslationDetail(
+                detail: detail,
+                copy: { content.copy(row: selection, query: query, palette: actions) },
+                paste: { content.paste(row: selection, query: query, palette: actions) },
+                readAloud: { content.readAloud(detail.record.id) },
+                delete: { actions.deleteRow(selection) }
+            )
+            .id(detail.record.id)
         }
     }
 }
 
-/// A saved translation's row, in the Dictation tab's look: the translation, then what was typed and
-/// its languages, and why it couldn't be read aloud, if it couldn't.
+/// A saved translation's row, in the Dictation tab's look: the translation on one line, then what
+/// was typed and its languages. Its icon is a speaker while it's read aloud, so the list shows which
+/// one is while another is highlighted.
 private struct RecentTranslationRow: View {
     let record: TranslationRecord
-    let problem: String?
+    let isReading: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "translate")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        PaletteRow {
+            PaletteRowIcon(systemImage: isReading ? "speaker.wave.2.fill" : "translate")
                 .accessibilityHidden(true)
+        } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(record.translatedText)
                     .font(.system(size: 14))
@@ -643,16 +641,94 @@ private struct RecentTranslationRow: View {
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-                if let problem {
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("palette.translate.recent")
+    }
+}
+
+/// The highlighted saved translation in full, as the Dictation tab shows a recording: its actions,
+/// with their keys, stay at the top, and below them scroll the translation, large, then, under a
+/// hairline, the text it was translated from, and its languages and when it was saved. Both texts can be selected with the
+/// pointer, and ⌘C then copies the selection. VoiceOver reads the translation, the source, the
+/// languages, then the actions.
+private struct RecentTranslationDetail: View {
+    let detail: TranslatePaletteContent.RecordDetail
+    let copy: () -> Void
+    let paste: () -> Void
+    let readAloud: () -> Void
+    let delete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                actions
+                if let problem = detail.speechProblem {
                     Text(problem)
                         .font(.system(size: 12))
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("palette.translate.detail.speechProblem")
                 }
             }
-            Spacer(minLength: 0)
+            .padding([.horizontal, .top], 18)
+            .padding(.bottom, 12)
+            .accessibilityElement(children: .contain)
+            .accessibilitySortPriority(0)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(detail.record.translatedText)
+                        .font(.system(size: 20))
+                        .lineSpacing(3)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("palette.translate.detail.translation")
+                    // Between the two languages, as between Information's rows (#377).
+                    PaletteDivider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        PaletteSectionHeader(TranslationLanguages.name(for: detail.record.sourceLanguage))
+                        Text(detail.record.sourceText)
+                            .font(.system(size: 15))
+                            .lineSpacing(3)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("palette.translate.detail.source")
+                    }
+                    PaletteInformation {
+                        PaletteInformationRow("Languages", detail.languages)
+                        PaletteInformationRow("Saved", detail.saved)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("palette.translate.detail.languages")
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
+            }
+            // Read before the actions above it.
+            .accessibilitySortPriority(1)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("palette.translate.recent")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("palette.translate.detail")
+    }
+
+    private var actions: some View {
+        HStack(spacing: 6) {
+            PaletteActionButton(title: "Copy", systemImage: "doc.on.doc", shortcuts: [["↵"], ["⌘", "C"]], action: copy)
+                .accessibilityIdentifier("palette.translate.detail.copy")
+            PaletteActionButton(title: "Paste", systemImage: "doc.on.clipboard", shortcuts: [["⌘", "P"]], action: paste)
+                .accessibilityIdentifier("palette.translate.detail.paste")
+            PaletteActionButton(
+                title: detail.readAloudTitle,
+                systemImage: detail.isReading ? "stop.fill" : "speaker.wave.2",
+                shortcuts: [["Space"]],
+                action: readAloud
+            )
+            .accessibilityIdentifier("palette.translate.detail.readAloud")
+            Spacer(minLength: 0)
+            PaletteActionButton(title: "Delete", systemImage: "trash", shortcuts: [["⌘", "⌫"]], role: .destructive, action: delete)
+                .accessibilityIdentifier("palette.translate.detail.delete")
+        }
     }
 }

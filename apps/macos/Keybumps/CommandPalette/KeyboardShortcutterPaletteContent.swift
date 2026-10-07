@@ -89,9 +89,7 @@ private struct KeyboardShortcutterResultsView: View {
                 PaletteEmptyState(title: "No matching hotkeys", systemImage: "keyboard")
             case .entries(let entries):
                 VStack(spacing: 0) {
-                    HStack {
-                        PaletteSectionHeader("Recent")
-                        Spacer()
+                    PaletteListHeader(title: "Recent") {
                         ClearAllButton(
                             confirmationTitle: "Clear Shortcut Coach history?",
                             confirmationMessage: "This permanently removes all saved Shortcut Coach events.",
@@ -101,17 +99,11 @@ private struct KeyboardShortcutterResultsView: View {
                         )
                         .buttonStyle(PalettePillButtonStyle())
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
-                    .padding(.bottom, 6)
 
                     ScrollViewReader { proxy in
                         List(Array(entries.enumerated()), id: \.element.id) { index, event in
                             Button { select(index) } label: {
                                 CoachingEventRow(event: event)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 7)
-                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                             .listRowInsets(.init())

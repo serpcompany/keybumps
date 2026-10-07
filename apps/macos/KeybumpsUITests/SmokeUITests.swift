@@ -284,10 +284,12 @@ final class SmokeUITests: XCTestCase {
         let expansion = element("snippets.expansion")
         XCTAssertTrue(expansion.waitForExistence(timeout: 20))
         XCTAssertFalse(app.buttons["Allow Input Monitoring so keywords expand"].exists, "Off by default, so it needs nothing")
+        XCTAssertTrue(app.staticTexts["Accessibility (Optional)"].exists, "⌘P pastes with it (#379)")
 
         expansion.click()
         XCTAssertTrue(app.buttons["Allow Input Monitoring so keywords expand"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Allow Accessibility so keywords expand"].exists)
+        XCTAssertTrue(app.staticTexts["Expanding needs Accessibility"].exists)
+        XCTAssertFalse(app.buttons["Allow Accessibility so keywords expand"].exists, "Only its Permissions row asks for it")
     }
 
     func testCommandEOnClipboardImageOpensScreenshotEditor() {

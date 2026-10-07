@@ -65,21 +65,26 @@ struct CoachingEventRowPresentation: Equatable {
     }
 }
 
+/// A Shortcut Coach event in the Hotkeys tab, in the palette's row layout (`PaletteRow`): the
+/// keyboard tile, the action over its app, and the shortcut's keycaps on the right.
 struct CoachingEventRow: View {
     let event: CoachingEvent
 
     var body: some View {
         let presentation = CoachingEventRowPresentation(event: event)
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(presentation.actionTitle).font(.headline)
-                Text(presentation.applicationName).font(.subheadline).foregroundStyle(.secondary)
+        PaletteRow {
+            PaletteRowIcon(systemImage: "keyboard")
+                .accessibilityHidden(true)
+        } content: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(presentation.actionTitle).font(.headline)
+                    Text(presentation.applicationName).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                ShortcutKeycaps(shortcut: presentation.shortcut)
             }
-            Spacer()
-            ShortcutKeycaps(shortcut: presentation.shortcut)
         }
-        .padding(.vertical, 5)
-        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "\(presentation.actionTitle) in \(presentation.applicationName). \(shortcutAccessibilityCopy)."
