@@ -1373,12 +1373,13 @@ final class TranslatePaletteFixture {
     let speaker = FakeTranslationSpeaker()
     let recents: RecentTranslations
     let clipboard: ClipboardHistoryService
+    let dictationHistory: DictationHistoryService
     let tab: TranslatePaletteContent
     let palette: CommandPaletteController
 
     init() {
         let root = folder.url
-        let dictationHistory = DictationHistoryService(
+        dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
         let preferences = TranslateTabTests.preferences()

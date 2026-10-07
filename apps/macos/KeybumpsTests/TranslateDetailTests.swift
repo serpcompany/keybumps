@@ -122,6 +122,40 @@ struct TranslateDetailTests {
         #expect(abs(ink - reference) <= reference * 0.2, "Drawn alike: \(ink) and \(reference)")
     }
 
+    @Test("The Dictation tab keeps its layout on the shared pieces: its header and Clear All, a row per recording, and the highlighted one's detail beside them")
+    func dictationLayoutOnTheSharedPieces() async throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        for transcript in ["made-up first transcript", "made-up second transcript"] {
+            let audio = fixture.folder.url.appendingPathComponent("made-up-\(UUID().uuidString).wav")
+            try Data("made-up audio".utf8).write(to: audio)
+            _ = try fixture.dictationHistory.record(transcript, language: "en-US", duration: 1, audioSourceURL: audio)
+        }
+        let ax = try await PaletteAccessibility.layOut(fixture.palette, tab: .dictation)
+        defer {
+            fixture.palette.dictationPlayer.stop()
+            ax.close()
+        }
+
+        #expect(await ax.waitFor { PaletteAccessibility.element(reading: "Recent", in: ax.root) } != nil, "The list's header")
+        #expect(PaletteAccessibility.element(reading: "Clear All", in: ax.root) != nil)
+        let list = try #require(PaletteAccessibility.scrollViews(in: ax.root).first { $0.documentView is NSTableView })
+        #expect((list.documentView as? NSTableView)?.numberOfRows == 2)
+        #expect(abs(list.accessibilityFrame().width - 330) < 1)
+
+        // The detail: what's read right of the list.
+        let listEdge = list.accessibilityFrame().maxX
+        func inDetail(_ text: String) -> NSObject? {
+            PaletteAccessibility.element(reading: text, in: ax.root) { PaletteAccessibility.frame(of: $0).minX >= listEdge }
+        }
+        #expect(await ax.waitFor { inDetail("made-up second transcript") } != nil, "The newest recording's transcript")
+        #expect(inDetail("Information") != nil)
+        #expect(inDetail("Recorded") != nil)
+
+        #expect(fixture.palette.handleKeyDown(fixture.commandKey(kVK_DownArrow, "", modifiers: [.function, .numericPad])) == nil)
+        #expect(await ax.waitFor { inDetail("made-up first transcript") } != nil, "The detail follows the highlight")
+    }
+
     @Test("Moving the highlight shows that record in the detail")
     func detailFollowsTheHighlight() async throws {
         let fixture = TranslatePaletteFixture()
@@ -256,8 +290,9 @@ struct TranslateDetailTests {
         try await Task.sleep(for: .milliseconds(100))
         panel.contentView?.layoutSubtreeIfNeeded()
 
-        // Some macOS versions (26 on CI) build SwiftUI's selectable text only on a real click;
-        // `PaletteCopyPasteKeyTests.pointerSelectionInAStandIn` covers the decision there.
+        // Some macOS versions (26 on CI) build SwiftUI's selectable text only on a real click, so
+        // there's nothing to find and this test stops here;
+        // `PaletteCopyPasteKeyTests.pointerSelectionInAStandIn` covers the same decision on every macOS.
         guard let translation = PaletteCopyPasteKeyTests.selectableText(in: panel.contentView) else { return }
         #expect(panel.makeFirstResponder(translation))
         #expect(fixture.palette.handleKeyDown(fixture.commandKey(kVK_ANSI_C, "c")) == nil, "Nothing selected: ⌘C copies the record")
@@ -350,22 +385,33 @@ struct PaletteAccessibility {
     let panel: NSWindow
     let root: NSView
 
-    /// `appearance` fixes light or dark, as a pixel check needs; nil follows the Mac's.
-    static func layOut(_ palette: CommandPaletteController, appearance: NSAppearance.Name? = nil) async throws -> PaletteAccessibility {
-        let panel = try #require(palette.layOutForTesting(.translate))
-        panel.appearance = appearance.flatMap(NSAppearance.init(named:))
-        let root = try #require(panel.contentView)
+    /// `appearance` fixes light or dark, as a pixel check needs; nil follows the Mac's. When it
+    /// throws, it has already stopped asking and put the panel away, since the caller can't `close`.
+    static func layOut(
+        _ palette: CommandPaletteController,
+        tab: CommandPaletteTab = .translate,
+        appearance: NSAppearance.Name? = nil
+    ) async throws -> PaletteAccessibility {
+        let panel = try #require(palette.layOutForTesting(tab))
         setAssistiveAppAsking(true)
-        let accessibility = PaletteAccessibility(panel: panel, root: root)
-        // The palette's own element, once SwiftUI has built them, and its list, once laid out.
-        _ = try #require(await accessibility.waitFor {
-            children(of: root).first { label(of: $0) == "Keybumps command palette" }
-        }, "SwiftUI built no accessibility elements")
-        _ = await accessibility.waitFor {
-            root.layoutSubtreeIfNeeded()
-            return scrollViews(in: root).first { $0.documentView is NSTableView }
+        do {
+            panel.appearance = appearance.flatMap(NSAppearance.init(named:))
+            let root = try #require(panel.contentView)
+            let accessibility = PaletteAccessibility(panel: panel, root: root)
+            // The palette's own element, once SwiftUI has built them, and its list, once laid out.
+            _ = try #require(await accessibility.waitFor {
+                children(of: root).first { label(of: $0) == "Keybumps command palette" }
+            }, "SwiftUI built no accessibility elements")
+            _ = await accessibility.waitFor {
+                root.layoutSubtreeIfNeeded()
+                return scrollViews(in: root).first { $0.documentView is NSTableView }
+            }
+            return accessibility
+        } catch {
+            panel.orderOut(nil)
+            setAssistiveAppAsking(false)
+            throw error
         }
-        return accessibility
     }
 
     func close() {
@@ -426,11 +472,14 @@ struct PaletteAccessibility {
         return value()
     }
 
-    /// The first element under `object` that VoiceOver reads as `text`, such as a section header.
-    static func element(reading text: String, in object: NSObject) -> NSObject? {
-        if children(of: object).isEmpty, self.text(of: object) == text { return object }
+    /// The first element under `object` that VoiceOver reads as `text`, such as a section header,
+    /// and that `matches`, such as by where it is.
+    static func element(
+        reading text: String, in object: NSObject, where matches: (NSObject) -> Bool = { _ in true }
+    ) -> NSObject? {
+        if children(of: object).isEmpty, self.text(of: object) == text, matches(object) { return object }
         for child in children(of: object) {
-            if let found = element(reading: text, in: child) { return found }
+            if let found = element(reading: text, in: child, where: matches) { return found }
         }
         return nil
     }
