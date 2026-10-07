@@ -114,7 +114,10 @@ final class CommandPaletteState {
                 selection = 0
             }
             if historyQuery != oldValue { isBrowsingGrid = false }
-            if historyQuery.hasPrefix("/"), historyQuery != oldValue { selection = 0 }
+            // Opening, narrowing, or closing `/`'s list starts again at the first row.
+            if historyQuery.hasPrefix("/") != oldValue.hasPrefix("/") || historyQuery.hasPrefix("/") && historyQuery != oldValue {
+                selection = 0
+            }
         }
     }
     /// The module-supplied tabs whose rows re-rank as you type.
@@ -123,8 +126,15 @@ final class CommandPaletteState {
     /// Whether Down has taken the arrow keys into a grid tab's items (Screenshots, Emoji). Until
     /// then nothing is highlighted, Left and Right switch tabs, and Return acts on the first item.
     var isBrowsingGrid = false
-    /// The filter chosen from `/`'s list, shown as a chip in the search field.
-    var filter: PaletteFilter?
+    /// The filter chosen from `/`'s list, shown as a chip in the search field. Choosing or removing
+    /// one starts again at the first row.
+    var filter: PaletteFilter? {
+        didSet {
+            guard filter != oldValue else { return }
+            selection = 0
+            isBrowsingGrid = false
+        }
+    }
     /// The snippet whose Delete confirmation is showing.
     var snippetPendingDeletion: Snippet?
 
@@ -452,7 +462,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 run(command)
                 return nil
             }
-            if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots {
+            if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots, filterMenu == nil {
                 editSelectedClipboardImage()
                 return nil
             }
@@ -526,8 +536,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             return nil
         case 51, 117:
             // Delete removes the highlighted row once the search field is empty (or with Command).
-            // A grid has no highlighted item until Down goes into it.
-            guard activeQuery.isEmpty || event.modifierFlags.contains(.command),
+            // A grid has no highlighted item until Down goes into it, and `/`'s list hides the rows,
+            // so there Delete (with Command too) edits the search text.
+            guard filterMenu == nil, activeQuery.isEmpty || event.modifierFlags.contains(.command),
                   !isGridTab || state.isBrowsingGrid,
                   deleteSelection() else { return event }
             return nil
@@ -1067,7 +1078,8 @@ private struct CommandPaletteView: View {
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
                         tab: state.tab,
-                        isGrid: state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
+                        isGrid: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) == nil
+                            && (state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true),
                         isBrowsingGrid: state.isBrowsingGrid,
                         isChoosingFilter: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) != nil,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
@@ -1296,10 +1308,9 @@ private struct PaletteSearchField: View {
     @Binding var filter: PaletteFilter?
     var focused: FocusState<Bool>.Binding
 
+    /// The tab's own placeholder, which the UI tests find the field by, until a filter is chosen.
     private var prompt: String {
-        guard let filter else {
-            return PaletteFilter.available(in: tab).isEmpty ? tab.prompt : "\(tab.prompt), or / to filter"
-        }
+        guard let filter else { return tab.prompt }
         return "Search \(filter.title.lowercased())"
     }
 

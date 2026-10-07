@@ -59,14 +59,16 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
     }
 
     /// The filters a query starting with `/` lists: all of the tab's, or those whose title starts
-    /// with what follows the `/`. Nil when the query doesn't open the list.
+    /// with what follows the `/`. Nil when the query doesn't open the list, or when no title matches,
+    /// so a search that starts with `/`, such as a path or a `/sig` snippet keyword, still searches.
     static func menu(in tab: CommandPaletteTab, query: String) -> [PaletteFilter]? {
         guard query.hasPrefix("/") else { return nil }
         let filters = available(in: tab)
         guard !filters.isEmpty else { return nil }
         let typed = query.dropFirst().trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty else { return filters }
-        return filters.filter { $0.title.range(of: typed, options: [.caseInsensitive, .anchored]) != nil }
+        let matches = filters.filter { $0.title.range(of: typed, options: [.caseInsensitive, .anchored]) != nil }
+        return matches.isEmpty ? nil : matches
     }
 
     // MARK: - Matching

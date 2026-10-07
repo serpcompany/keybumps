@@ -14,7 +14,8 @@ struct PaletteFilterTests {
         #expect(PaletteFilter.menu(in: .clipboard, query: "/") == [.text, .images, .links])
         #expect(PaletteFilter.menu(in: .clipboard, query: "/im") == [.images])
         #expect(PaletteFilter.menu(in: .clipboard, query: "/IM") == [.images])
-        #expect(PaletteFilter.menu(in: .clipboard, query: "/zzz") == [])
+        #expect(PaletteFilter.menu(in: .clipboard, query: "/zzz") == nil, "No matching title searches for the text instead")
+        #expect(PaletteFilter.menu(in: .search, query: "/Users") == nil, "A path still searches")
         #expect(PaletteFilter.menu(in: .search, query: "/")?.first == .applications)
         #expect(PaletteFilter.menu(in: .dictation, query: "/f") == [.unfinished])
         #expect(PaletteFilter.menu(in: .clipboard, query: "a/") == nil, "Only a leading / opens the list")
@@ -88,10 +89,32 @@ struct PaletteFilterTests {
         #expect(fixture.palette.state.historyQuery.isEmpty, "Escape closes the list, not the palette")
         #expect(fixture.palette.state.filter == nil)
 
+        // Closing the list starts again at the first row, so Return never acts on a row nobody saw.
+        fixture.palette.state.historyQuery = "/"
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Escape, "\u{1b}")) == nil)
+        #expect(fixture.palette.state.selection == 0)
+        fixture.palette.chooseFilter(.images)
+        fixture.palette.state.selection = 2
+        fixture.palette.state.filter = nil
+        #expect(fixture.palette.state.selection == 0, "Removing the chip with its × starts again too")
+
         // Switching tabs drops the filter.
         fixture.palette.chooseFilter(.links)
         fixture.palette.selectOnOpening(.dictation)
         #expect(fixture.palette.state.filter == nil)
+    }
+
+    @Test("While / lists filters, Delete and ⌘Delete edit the search text and never remove a hidden row")
+    func deleteWhileListing() {
+        let fixture = PaletteFilterFixture()
+        defer { fixture.tearDown() }
+        fixture.clipboard.ingestForTesting("made-up copied text")
+        fixture.palette.selectOnOpening(.clipboard)
+        fixture.palette.state.historyQuery = "/"
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Delete, "\u{7f}", command: true)) != nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Delete, "\u{7f}")) != nil)
+        #expect(fixture.clipboard.entries.count == 1)
     }
 
     @Test("On Screenshots, / lists filters as rows, so Down doesn't go into the grid")
@@ -107,10 +130,12 @@ struct PaletteFilterTests {
         #expect(fixture.palette.state.filter == .thisWeek)
     }
 
-    static func key(_ keyCode: Int, _ characters: String = "") -> NSEvent {
+    static func key(_ keyCode: Int, _ characters: String = "", command: Bool = false) -> NSEvent {
         let isArrow = [kVK_LeftArrow, kVK_RightArrow, kVK_DownArrow, kVK_UpArrow].contains(keyCode)
+        var flags: NSEvent.ModifierFlags = isArrow ? [.function, .numericPad] : []
+        if command { flags.insert(.command) }
         return NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: isArrow ? [.function, .numericPad] : [],
+            with: .keyDown, location: .zero, modifierFlags: flags,
             timestamp: 0, windowNumber: 0, context: nil, characters: characters,
             charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode)
         )!
@@ -122,11 +147,12 @@ struct PaletteFilterTests {
 private final class PaletteFilterFixture {
     let folder = TemporaryFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsPaletteFilter-\(UUID().uuidString)"))
+    let clipboard: ClipboardHistoryService
     let palette: CommandPaletteController
 
     init() {
         let root = folder.url
-        let clipboard = ClipboardHistoryService(
+        clipboard = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
             pasteboard: pasteboard,
             mediaDirectoryURL: root.appendingPathComponent("clipboard-media", isDirectory: true),
