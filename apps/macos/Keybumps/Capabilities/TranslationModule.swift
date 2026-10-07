@@ -95,10 +95,11 @@ final class TranslationModule: CapabilityModule {
         palette: CommandPaletteController,
         preferences: AppPreferences,
         translator: (any TextTranslating)?,
+        speaker: any TextSpeaking,
         openSystemSettings: @escaping @MainActor (SystemSettingsPage) -> Void = { _ in }
     ) {
         self.palette = palette
-        translateTab = TranslatePaletteContent(preferences: preferences, translator: translator)
+        translateTab = TranslatePaletteContent(preferences: preferences, translator: translator, speaker: speaker)
         // The palette closes first, so System Settings comes forward over it.
         translateTab.openLanguageSettings = { [weak palette] in
             palette?.dismiss()
