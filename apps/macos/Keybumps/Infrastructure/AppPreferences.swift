@@ -67,6 +67,10 @@ final class AppPreferences {
         didSet { persistWindowShortcuts() }
     }
 
+    /// Shortcuts Keybumps took off an action since launch, by the action that lost them, so its
+    /// row can say where they went (#334). Not saved: after a restart the row is just empty.
+    private(set) var movedShortcuts: [ShortcutOwner: ShortcutMove] = [:]
+
     /// macOS symbolic hotkey IDs Keybumps turned off for its screenshot hotkeys, to restore later.
     var takenOverSystemShortcuts: Set<String> {
         didSet { defaults.set(takenOverSystemShortcuts.sorted(), forKey: Key.takenOverSystemShortcuts) }
@@ -251,48 +255,90 @@ final class AppPreferences {
         capabilityShortcuts[shortcut.rawValue]
     }
 
-    func setCapabilityShortcut(_ binding: ShortcutBinding?, for shortcut: CapabilityShortcut) {
-        if let binding {
-            for (key, existing) in capabilityShortcuts
-                where existing.usesSameKeys(as: binding) && key != shortcut.rawValue {
-                capabilityShortcuts[key] = nil
-            }
-            for (key, existing) in windowShortcuts where existing.usesSameKeys(as: binding) {
-                windowShortcuts[key] = nil
-            }
-            capabilityShortcuts[shortcut.rawValue] = binding
-        } else {
-            capabilityShortcuts[shortcut.rawValue] = nil
+    func shortcut(for owner: ShortcutOwner) -> ShortcutBinding? {
+        switch owner {
+        case .capability(let shortcut): capabilityShortcut(for: shortcut)
+        case .window(let action): windowShortcut(for: action)
         }
+    }
+
+    /// The other action already using `binding`'s keys, which setting it for `owner` would take
+    /// them from (#334).
+    func shortcutConflict(for binding: ShortcutBinding, assigningTo owner: ShortcutOwner) -> ShortcutOwner? {
+        ShortcutConflict.find(binding, for: owner, capabilityShortcuts: capabilityShortcuts, windowShortcuts: windowShortcuts)
+    }
+
+    /// Sets an action's shortcut. Another action using the same keys loses them, and its row says
+    /// where they went (`movedShortcuts`). Returns the actions that lost them.
+    @discardableResult
+    func setShortcut(_ binding: ShortcutBinding?, for owner: ShortcutOwner) -> [ShortcutOwner] {
+        var moved: [ShortcutOwner] = []
+        if let binding {
+            while let other = shortcutConflict(for: binding, assigningTo: owner) {
+                clear(other, movingTo: owner)
+                moved.append(other)
+            }
+        }
+        store(binding, for: owner)
+        movedShortcuts[owner] = nil
+        return moved
+    }
+
+    @discardableResult
+    func setCapabilityShortcut(_ binding: ShortcutBinding?, for shortcut: CapabilityShortcut) -> [ShortcutOwner] {
+        setShortcut(binding, for: .capability(shortcut))
     }
 
     func restoreDefaultCapabilityShortcut(_ shortcut: CapabilityShortcut) {
         setCapabilityShortcut(shortcut.defaultBinding, for: shortcut)
     }
 
-    func setWindowShortcut(_ binding: ShortcutBinding?, for action: WindowAction) {
-        if let binding {
-            for (key, existing) in windowShortcuts
-                where existing.usesSameKeys(as: binding) && key != action.rawValue {
-                windowShortcuts[key] = nil
-            }
-            for (key, existing) in capabilityShortcuts where existing.usesSameKeys(as: binding) {
-                capabilityShortcuts[key] = nil
-            }
-            windowShortcuts[action.rawValue] = binding
-        } else {
-            windowShortcuts[action.rawValue] = nil
-        }
+    @discardableResult
+    func setWindowShortcut(_ binding: ShortcutBinding?, for action: WindowAction) -> [ShortcutOwner] {
+        setShortcut(binding, for: .window(action))
     }
 
-    func restoreDefaultWindowShortcuts() {
-        let defaults = Dictionary(uniqueKeysWithValues: WindowAction.allCases.compactMap { action in
+    /// Resets every window shortcut. A plugin shortcut using a window default's keys loses them,
+    /// and its row says so; returns the plugin shortcuts that lost them.
+    @discardableResult
+    func restoreDefaultWindowShortcuts() -> [ShortcutOwner] {
+        var moved: [ShortcutOwner] = []
+        for shortcut in CapabilityShortcut.allCases {
+            guard let existing = capabilityShortcuts[shortcut.rawValue],
+                  let action = WindowAction.allCases.first(where: { $0.defaultShortcut?.usesSameKeys(as: existing) == true })
+            else { continue }
+            clear(.capability(shortcut), movingTo: .window(action))
+            moved.append(.capability(shortcut))
+        }
+        windowShortcuts = Dictionary(uniqueKeysWithValues: WindowAction.allCases.compactMap { action in
             action.defaultShortcut.map { (action.rawValue, $0) }
         })
-        for (key, existing) in capabilityShortcuts where defaults.values.contains(where: { $0.usesSameKeys(as: existing) }) {
-            capabilityShortcuts[key] = nil
+        for action in WindowAction.allCases {
+            movedShortcuts[.window(action)] = nil
         }
-        windowShortcuts = defaults
+        return moved
+    }
+
+    /// Where `owner`'s shortcut went, while the action it went to still has those keys; after
+    /// that, the note would point the wrong way.
+    func movedShortcut(for owner: ShortcutOwner) -> ShortcutMove? {
+        guard let move = movedShortcuts[owner], shortcut(for: move.to)?.usesSameKeys(as: move.binding) == true else { return nil }
+        return move
+    }
+
+    /// Takes `owner`'s shortcut away because `destination` now has its keys, noting where it went.
+    private func clear(_ owner: ShortcutOwner, movingTo destination: ShortcutOwner) {
+        if let binding = shortcut(for: owner) {
+            movedShortcuts[owner] = ShortcutMove(binding: binding, to: destination)
+        }
+        store(nil, for: owner)
+    }
+
+    private func store(_ binding: ShortcutBinding?, for owner: ShortcutOwner) {
+        switch owner {
+        case .capability(let shortcut): capabilityShortcuts[shortcut.rawValue] = binding
+        case .window(let action): windowShortcuts[action.rawValue] = binding
+        }
     }
 
     private func persistWindowShortcuts() {
@@ -306,10 +352,11 @@ final class AppPreferences {
     }
 
     private func normalizeShortcutConflictsFavoringExistingWindowBindings() {
-        for windowBinding in windowShortcuts.values {
-            for (key, capabilityBinding) in capabilityShortcuts
-                where capabilityBinding.usesSameKeys(as: windowBinding) {
-                capabilityShortcuts[key] = nil
+        for action in WindowAction.allCases {
+            guard let windowBinding = windowShortcuts[action.rawValue] else { continue }
+            for shortcut in CapabilityShortcut.allCases
+                where capabilityShortcuts[shortcut.rawValue]?.usesSameKeys(as: windowBinding) == true {
+                clear(.capability(shortcut), movingTo: .window(action))
             }
         }
     }
