@@ -234,8 +234,13 @@ final class CommandPalettePanel: NSPanel {
         )
     }
 
-    override var canBecomeKey: Bool { true }
+    /// In the unit-test host the panel never takes key focus, and with it keystrokes typed in other
+    /// apps while tests run, as when a translation ends and the palette takes its keys back (#377).
+    override var canBecomeKey: Bool { Self.takesKeyFocus(inUnitTestHost: UnitTestHost.isActive) }
     override var canBecomeMain: Bool { false }
+
+    /// Whether the panel takes key focus: always in the app, never in the unit-test host.
+    static func takesKeyFocus(inUnitTestHost: Bool) -> Bool { !inUnitTestHost }
 }
 
 /// Whether the palette closes when it stops being key or a click lands outside it. Escape closes it
@@ -987,7 +992,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             paste: { [weak self] text, restoresClipboard in
                 guard let self else { return }
                 self.pasteText(text, restoresClipboard: restoresClipboard, for: self.state.tab.owner)
-            }
+            },
+            deleteRow: { [weak self] row in _ = self?.deleteContentRow(row) }
         )
     }
 
@@ -1113,16 +1119,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Deletes the highlighted row in the tabs where Delete removes items.
     private func deleteSelection() -> Bool {
         let index = state.selection
-        if let tabContent {
-            if let confirmation = tabContent.deletionConfirmation(row: index, query: state.historyQuery) {
-                state.contentPendingDeletion = confirmation
-                isPresentingConfirmation = true
-                return true
-            }
-            guard tabContent.delete(row: index, query: state.historyQuery) else { return false }
-            state.selection = min(index, max(0, itemCount - 1))
-            return true
-        }
+        if tabContent != nil { return deleteContentRow(index) }
         switch state.tab {
         case .search:
             guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -1497,6 +1494,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     func openSnippetsSettings() {
         dismiss()
         openSettings(.snippets)
+    }
+
+    /// Delete on a module tab's row, from the key or the row's own Delete button: asks first when the
+    /// row does, else deletes, keeping the highlight on a row that still exists.
+    private func deleteContentRow(_ index: Int) -> Bool {
+        guard let tabContent else { return false }
+        if let confirmation = tabContent.deletionConfirmation(row: index, query: state.historyQuery) {
+            state.contentPendingDeletion = confirmation
+            isPresentingConfirmation = true
+            return true
+        }
+        guard tabContent.delete(row: index, query: state.historyQuery) else { return false }
+        state.selection = min(index, max(0, itemCount - 1))
+        return true
     }
 
     /// Shows the Delete confirmation for a recording.

@@ -124,13 +124,19 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
     /// What VoiceOver reads for a footer hint: "Paste, Command P", "Select, Up Arrow or Down Arrow".
     /// Keys after a modifier are one shortcut; keys on their own are alternatives.
     static func accessibilityLabel(title: String, keys: [String]) -> String {
+        "\(title), \(spokenShortcut(keys))"
+    }
+
+    /// Keys as VoiceOver reads them: "Command P", or "Up Arrow or Down Arrow".
+    static func spokenShortcut(_ keys: [String]) -> String {
         let spoken = keys.map { spokenKeys[$0] ?? $0 }
         let isShortcut = keys.first.map { spokenKeys[$0] == "Command" } ?? false
-        return "\(title), \(spoken.joined(separator: isShortcut ? " " : " or "))"
+        return spoken.joined(separator: isShortcut ? " " : " or ")
     }
 
     private static let spokenKeys = [
         "⌘": "Command", "↵": "Return", "↑": "Up Arrow", "↓": "Down Arrow", "←": "Left Arrow", "→": "Right Arrow",
+        "⌫": "Delete",
     ]
 }
 
@@ -159,6 +165,9 @@ struct PaletteContentActions {
     /// copies it and says why when it can't (`PalettePasteRoute`). With `restoresClipboard` true, what
     /// was on the clipboard comes back once the paste has been read.
     var paste: (_ text: String, _ restoresClipboard: Bool) -> Void = { _, _ in }
+    /// Deletes a row as the Delete key does, as from a detail pane's Delete button: a row whose
+    /// Delete asks first (`deletionConfirmation(row:query:)`) shows its question.
+    var deleteRow: (Int) -> Void = { _ in }
 }
 
 /// An arrow key in a grid tab.
