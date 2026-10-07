@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.0.3-beta.19](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.18...v0.0.3-beta.19) (2026-10-07)
+
+
+### Features
+
+* / in the Command Palette filters a tab's items ([#332](https://github.com/serpcompany/keybumps/issues/332)) ([497981a](https://github.com/serpcompany/keybumps/commit/497981ade9d9502f7792d1a76815507eecb89981))
+* Left and Right switch Command Palette tabs while the search field is empty ([#326](https://github.com/serpcompany/keybumps/issues/326)) ([e662f9d](https://github.com/serpcompany/keybumps/commit/e662f9d8fb4437f27cb380126c4c3775e05e6725))
+* moving the pointer over a Command Palette row highlights it, as in Raycast ([#351](https://github.com/serpcompany/keybumps/issues/351)) ([405d307](https://github.com/serpcompany/keybumps/commit/405d307c92f35a24d59e898f66aded733f5d7eec))
+* Quick Search finds emoji, with a setting to turn it off ([#335](https://github.com/serpcompany/keybumps/issues/335)) ([4db62bf](https://github.com/serpcompany/keybumps/commit/4db62bf9b41d0feb4dd266dcad04af2d9f97a9a5))
+* the Command Palette's tabs are icons, with names only on the open tab ([#360](https://github.com/serpcompany/keybumps/issues/360)) ([d0dd7e5](https://github.com/serpcompany/keybumps/commit/d0dd7e5ac6974c3d7148c236f8ac4aed9b5729e3))
+* the Translate tab swaps languages (⌘T) and picks the other language from its header ([#362](https://github.com/serpcompany/keybumps/issues/362), part 1) ([bbbecd7](https://github.com/serpcompany/keybumps/commit/bbbecd742612dfc25f8038f1d13845548fbb3e0b))
+* Translation plugin with a Translate tab (⌘8), for macOS 15 ([#358](https://github.com/serpcompany/keybumps/issues/358)) ([5580e20](https://github.com/serpcompany/keybumps/commit/5580e209b80ede78b87f75806267a3d54eebb164))
+
+
+### Fixes
+
+* a Dictation recording cut off by a crash can be retried ([#328](https://github.com/serpcompany/keybumps/issues/328)) ([42d5b09](https://github.com/serpcompany/keybumps/commit/42d5b09138dadd9f5e9c00430fce2ff0f0ceeec4))
+* copying a Clipboard History image whose file is missing no longer empties the clipboard ([#324](https://github.com/serpcompany/keybumps/issues/324)) ([890ab1e](https://github.com/serpcompany/keybumps/commit/890ab1e8e0da6036b4c3ee2bb2296c5bc498b074))
+* Dictation's Translate offers English for text in another language, and the palette stays open while a language downloads ([#330](https://github.com/serpcompany/keybumps/issues/330)) ([bd6f525](https://github.com/serpcompany/keybumps/commit/bd6f525b7d724a57c75241d744fe218b176cf0c6))
+* Escape while Dictation's model loads stops the wait and no longer fails the next dictation ([#318](https://github.com/serpcompany/keybumps/issues/318)) ([106d73d](https://github.com/serpcompany/keybumps/commit/106d73d576e1b1e79f419a350d914e9ef20948e0))
+* every Command Palette list keeps the highlighted row on screen ([#353](https://github.com/serpcompany/keybumps/issues/353)) ([49697b3](https://github.com/serpcompany/keybumps/commit/49697b314e78900a40eda95aaf579bcbafe43f66))
+* on a small screen the Settings window fits above the Dock ([#323](https://github.com/serpcompany/keybumps/issues/323)) ([d3b9057](https://github.com/serpcompany/keybumps/commit/d3b90570df99a34da60ab74a0085d78dcfc00f5d))
+* setting a shortcut another Keybumps action uses asks before moving it ([#342](https://github.com/serpcompany/keybumps/issues/342)) ([b16456a](https://github.com/serpcompany/keybumps/commit/b16456a0ab36a1acd7533c9f9a6ec31c146043c6))
+* the Command Palette's Command keys work while Caps Lock is on ([#182](https://github.com/serpcompany/keybumps/issues/182)) ([2d181e8](https://github.com/serpcompany/keybumps/commit/2d181e810df937d6db7a65b81d330e07a0e8fe73))
+* the Command Palette's corners no longer show a square edge outside the rounded ones ([#315](https://github.com/serpcompany/keybumps/issues/315)) ([47ea55f](https://github.com/serpcompany/keybumps/commit/47ea55fa129fc259fcd817c680606c439f8dfcf5))
+
+
+### Improvements
+
+* translation languages move to a shared Translation folder, with a language pair ([#356](https://github.com/serpcompany/keybumps/issues/356)) ([002d3db](https://github.com/serpcompany/keybumps/commit/002d3db8b81186be11e4cd4991c5426b447165fa))
+
 ## [0.0.3-beta.18](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.17...v0.0.3-beta.18) (2026-10-06)
 
 
