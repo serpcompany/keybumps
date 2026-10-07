@@ -41,17 +41,10 @@ struct DictationPaletteResults: View {
                 ContentUnavailableView("Your dictated text will appear here", systemImage: "waveform")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                HStack(spacing: 0) {
+                PaletteListDetail(highlighted: entries.indices.contains(selection) ? entries[selection] : nil) {
                     list
-                        .frame(width: 330)
-                    Rectangle()
-                        .fill(PaletteTheme.border)
-                        .frame(width: 1)
-                    if entries.indices.contains(selection) {
-                        detail(entries[selection])
-                    } else {
-                        Spacer()
-                    }
+                } detail: { entry in
+                    detail(entry)
                 }
             }
         }
@@ -85,47 +78,27 @@ struct DictationPaletteResults: View {
     }
 
     private var list: some View {
-        VStack(spacing: 0) {
-            HStack {
-                PaletteSectionHeader("Recent")
-                Spacer()
-                ClearAllButton(
-                    confirmationTitle: "Clear all dictation history?",
-                    confirmationMessage: "This permanently removes every Keybumps recording directory, transcript, and audio file.",
-                    disabled: entries.isEmpty,
-                    confirmationPresentationChanged: confirmationPresentationChanged
-                ) {
-                    audioPlayer.stop()
-                    clear()
-                }
-                .buttonStyle(PalettePillButtonStyle())
+        PaletteDetailList(
+            title: "Recent",
+            items: entries,
+            selection: selection,
+            select: select,
+            choose: { entry in
+                if !entry.text.isEmpty { choose(entry.text) }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
-
-            ScrollViewReader { proxy in
-                List(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    Button { select(index) } label: {
-                        DictationPaletteRow(entry: entry, isTranscribing: retryingEntryID == entry.id)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(TapGesture(count: 2).onEnded {
-                        if !entry.text.isEmpty { choose(entry.text) }
-                    })
-                    .listRowInsets(.init())
-                    .listRowSeparator(.hidden)
-                    .paletteHoverHighlights(row: index)
-                    .paletteRowBackground(isSelected: index == selection)
-                    .id(entry.id)
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
+        ) {
+            ClearAllButton(
+                confirmationTitle: "Clear all dictation history?",
+                confirmationMessage: "This permanently removes every Keybumps recording directory, transcript, and audio file.",
+                disabled: entries.isEmpty,
+                confirmationPresentationChanged: confirmationPresentationChanged
+            ) {
+                audioPlayer.stop()
+                clear()
             }
+            .buttonStyle(PalettePillButtonStyle())
+        } row: { entry in
+            DictationPaletteRow(entry: entry, isTranscribing: retryingEntryID == entry.id)
         }
     }
 
@@ -153,11 +126,7 @@ private struct DictationPaletteRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            PaletteRowIcon(systemImage: icon, tint: tint)
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.displayText)
                     .font(.system(size: 14))
@@ -270,13 +239,11 @@ private struct DictationPaletteDetail: View {
     }
 
     private var information: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            PaletteSectionHeader("Information")
-                .padding(.bottom, 6)
-            row("Recorded", entry.capturedAt.formatted(date: .abbreviated, time: .shortened))
-            row("Duration", DictationHistoryCard.durationFormatter.string(from: entry.duration) ?? "0:00")
-            row("Language", Locale.current.localizedString(forIdentifier: entry.language) ?? entry.language)
-            row("Status", status)
+        PaletteInformation {
+            PaletteInformationRow("Recorded", entry.capturedAt.formatted(date: .abbreviated, time: .shortened))
+            PaletteInformationRow("Duration", DictationHistoryCard.durationFormatter.string(from: entry.duration) ?? "0:00")
+            PaletteInformationRow("Language", Locale.current.localizedString(forIdentifier: entry.language) ?? entry.language)
+            PaletteInformationRow("Status", status)
         }
     }
 
@@ -288,19 +255,6 @@ private struct DictationPaletteDetail: View {
         case .interrupted: return "Recording interrupted"
         case .recording: return "Recording"
         case .transcribing: return "Transcribing…"
-        }
-    }
-
-    private func row(_ title: String, _ value: String) -> some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(PaletteTheme.border).frame(height: 1)
-            HStack {
-                Text(title).foregroundStyle(.secondary)
-                Spacer()
-                Text(value).foregroundStyle(.primary)
-            }
-            .font(.system(size: 13))
-            .padding(.vertical, 8)
         }
     }
 }
