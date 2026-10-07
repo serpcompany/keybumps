@@ -147,12 +147,12 @@ export default function PrivacyPage() {
         It never sends your name, email, address, or payment details.
       </p>
       <p>
-        If a partner’s link brought you to our website, it also tells Dub, which runs our partner
-        program, about the purchase and any renewal or refund of it, so the partner is credited and
-        paid: the order number, amount, and currency, the referral, which travels to Polar with your
-        checkout, and Polar’s customer number. If you declined cookies, or you’re in the EU, the
-        EEA, the UK, or Switzerland and didn’t allow them, no partner is credited. Dub never
-        receives your name, email, or payment details.
+        If a partner’s or another tracked link brought you to our website, it also tells Dub, which
+        runs our partner program, about the purchase and any renewal or refund of it, so the partner
+        is credited and paid: the order number, amount, and currency, the referral, which travels to
+        Polar with your checkout, and Polar’s customer number. If you declined cookies, or you’re in
+        the EU, the EEA, the UK, or Switzerland and didn’t allow them, no partner is credited. Dub
+        never receives your name, email, or payment details.
       </p>
 
       <h2>Website</h2>

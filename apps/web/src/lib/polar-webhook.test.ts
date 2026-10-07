@@ -607,14 +607,41 @@ describe('Polar orders to Dub (#337)', () => {
     expect(logged()[0].dub).toBe('refunded')
   })
 
-  it('leaves a paid, processing, refunded, closed, or missing commission alone', async () => {
+  it('refunds a pending, held, or not-yet-sent commission', async () => {
+    const refunded = () =>
+      delivery('order.refunded', order({ status: 'refunded', refunded_amount: 3900 }))
+    for (const status of ['pending', 'hold', 'processed']) {
+      await handlePolarWebhook(
+        refunded(),
+        dubEnv(call =>
+          call.method === 'GET' ? Response.json([{ id: 'cm_test_1', status }]) : Response.json({})
+        )
+      )
+    }
+    expect(calls.filter(call => call.method === 'PATCH')).toHaveLength(3)
+    expect(logged().map(line => line.dub)).toEqual(['refunded', 'refunded', 'refunded'])
+  })
+
+  it('reports a commission whose payout is already being sent as paid', async () => {
+    await handlePolarWebhook(
+      delivery('order.refunded', order({ status: 'refunded', refunded_amount: 3900 })),
+      dubEnv(call =>
+        call.method === 'GET'
+          ? Response.json([{ id: 'cm_test_1', status: 'processed' }])
+          : Response.json({ error: { code: 'bad_request' } }, { status: 400 })
+      )
+    )
+    expect(logged()[0]).toMatchObject({ status: 202, dub: 'already_paid' })
+  })
+
+  it('leaves a paid, refunded, closed, or missing commission alone', async () => {
     const refunded = () =>
       delivery('order.refunded', order({ status: 'refunded', refunded_amount: 3900 }))
     for (const listed of [
       [{ id: 'cm_test_1', status: 'paid' }],
-      [{ id: 'cm_test_1', status: 'processed' }],
       [{ id: 'cm_test_1', status: 'refunded' }],
       [{ id: 'cm_test_1', status: 'duplicate' }],
+      [{ id: 'cm_test_1', status: 'fraud' }],
       []
     ]) {
       await handlePolarWebhook(
@@ -625,11 +652,20 @@ describe('Polar orders to Dub (#337)', () => {
     expect(calls.every(call => call.method === 'GET')).toBe(true)
     expect(logged().map(line => line.dub)).toEqual([
       'already_paid',
-      'already_paid',
       'refunded',
+      'closed',
       'closed',
       'no_commission'
     ])
+  })
+
+  it('retries when the commission list can’t be read, and holds GA4’s refund', async () => {
+    const response = await handlePolarWebhook(
+      delivery('order.refunded', order({ status: 'refunded', refunded_amount: 3900 })),
+      env({ dub, fetch: router(() => new Response('{"truncated')) })
+    )
+    expect(response.status).toBe(502)
+    expect(logged()[0]).toMatchObject({ dub: 'failed_status', ga4: 'deferred' })
   })
 
   it('sets a partially refunded sale to what’s left, which is safe to send again', async () => {

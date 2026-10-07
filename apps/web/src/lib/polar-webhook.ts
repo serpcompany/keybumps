@@ -24,7 +24,8 @@ import {
  * Polar's order ID, real amount after discounts, and currency, and a full refund becomes a GA4
  * `refund`. It replaces GTM's purchase tag on /thanks/, which had no order ID or real amount and
  * missed buyers who never reached that page. An order a Dub partner link brought also becomes a
- * Dub sale, and its full refund refunds the partner's commission (#337, `lib/dub-conversions.ts`).
+ * Dub sale, and a refund of it, full or partial, updates the partner's commission (#337,
+ * `lib/dub-conversions.ts`).
  *
  * There is no database, so a retried delivery is handled downstream: Google Analytics removes a
  * repeated purchase with the same transaction ID and client (`derivedClientId` keeps the client

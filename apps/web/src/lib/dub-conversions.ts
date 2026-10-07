@@ -1,7 +1,7 @@
 /**
  * Records partner sales in Dub (#337), so partners in the Keybumps partner program are credited
  * and paid. Only the Polar webhook (`lib/polar-webhook.ts`) uses it: a paid order whose checkout
- * reference has a Dub click becomes a Dub sale, and a full refund marks its commission refunded.
+ * reference has a Dub click becomes a Dub sale, and a refund updates its commission.
  * Dub gets the click, Polar's customer ID, the order ID, the amount, and the currency; never the
  * buyer's name or email, so Dub shows partners a made-up name.
  *
@@ -38,8 +38,10 @@ export type DubOutcome =
   | 'failed_status'
 
 const api = 'https://api.dub.co'
+/** A sale runs alongside GA4's call, so it can wait longer than Polar's 10 s allows for a refund. */
+const saleTimeoutMs = 6000
 /** A refund makes two calls before GA4's; all three must finish inside Polar's 10-second timeout. */
-const requestTimeoutMs = 2500
+const refundCallTimeoutMs = 2500
 
 /** The config from the Worker's environment: only on the live site, and only once the key is set. */
 export function dubConfigFromEnv(env: Record<string, string | undefined>): DubConfig | null {
@@ -50,7 +52,8 @@ export function dubConfigFromEnv(env: Record<string, string | undefined>): DubCo
 /**
  * Tracks a sale. Dub ignores a repeat of an invoice ID for 7 days, so Polar's retries record
  * nothing new; a manual redelivery after that adds to Dub's sale stats, though never a second
- * commission. A click Dub doesn't know (expired, forged) is a 404: `unattributed`.
+ * commission. A click Dub doesn't know (expired, forged, or its link deleted or disabled) is a 404:
+ * `unattributed`, never worth retrying.
  */
 export async function trackDubSale(
   config: DubConfig,
@@ -63,7 +66,7 @@ export async function trackDubSale(
     'POST',
     '/track/sale',
     { ...sale, paymentProcessor: 'polar' },
-    'unattributed'
+    { notFound: 'unattributed', timeoutMs: saleTimeoutMs }
   )
   return typeof response === 'string' ? response : 'sent'
 }
@@ -71,8 +74,9 @@ export async function trackDubSale(
 /**
  * Updates the partner's commission for a refunded order. A full refund (`remainingCents` 0) marks
  * it refunded, so it leaves the next payout; a partial one sets the sale to what's left, which is
- * safe to send again. Only a pending commission can change: one Dub has paid or is paying needs a
- * clawback in Dub, by hand (`already_paid`), and a duplicate, fraudulent, or canceled one is left
+ * safe to send again. Dub takes the change while the commission is pending, on hold, or in a payout
+ * not yet sent (`processed`). One it has paid, or whose payout is already being sent, needs a
+ * clawback in Dub, by hand (`already_paid`); a duplicate, fraudulent, or canceled one is left
  * alone (`closed`).
  */
 export async function refundDubCommission(
@@ -86,25 +90,30 @@ export async function refundDubCommission(
     config,
     fetchImpl,
     'GET',
-    `/commissions?${new URLSearchParams({ invoiceId })}`
+    `/commissions?${new URLSearchParams({ invoiceId })}`,
+    undefined,
+    { timeoutMs: refundCallTimeoutMs }
   )
   if (typeof listed === 'string') return listed
-  const commissions = (await listed.json().catch(() => null)) as
-    | { id?: unknown; status?: unknown }[]
-    | null
-  const commission = Array.isArray(commissions) ? commissions[0] : undefined
+  // An unreadable list (cut off by the timeout, say) is worth retrying, not "no commission".
+  const commissions = (await listed.json().catch(() => null)) as unknown
+  if (!Array.isArray(commissions)) return 'failed_status'
+  const commission = commissions[0] as { id?: unknown; status?: unknown } | undefined
   if (!commission || typeof commission.id !== 'string') return 'no_commission'
   if (commission.status === 'refunded') return 'refunded'
-  if (commission.status === 'paid' || commission.status === 'processed') return 'already_paid'
-  if (commission.status !== 'pending') return 'closed'
+  if (commission.status === 'paid') return 'already_paid'
+  if (['duplicate', 'fraud', 'canceled'].includes(String(commission.status))) return 'closed'
   const full = remainingCents <= 0
   const updated = await request(
     config,
     fetchImpl,
     'PATCH',
     `/commissions/${encodeURIComponent(commission.id)}`,
-    full ? { status: 'refunded' } : { saleAmount: remainingCents, currency }
+    full ? { status: 'refunded' } : { saleAmount: remainingCents, currency },
+    { timeoutMs: refundCallTimeoutMs }
   )
+  // Dub refuses a commission whose payout is already being sent: that one is paid in effect.
+  if (updated === 'rejected' && commission.status === 'processed') return 'already_paid'
   if (typeof updated === 'string') return updated
   return full ? 'refunded' : 'adjusted'
 }
@@ -120,8 +129,8 @@ async function request(
   fetchImpl: typeof fetch,
   method: string,
   path: string,
-  body?: unknown,
-  notFound: DubOutcome = 'rejected'
+  body: unknown,
+  { notFound = 'rejected', timeoutMs }: { notFound?: DubOutcome; timeoutMs: number }
 ): Promise<Response | DubOutcome> {
   let response: Response
   try {
@@ -132,7 +141,7 @@ async function request(
         ...(body ? { 'Content-Type': 'application/json' } : {})
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(requestTimeoutMs)
+      signal: AbortSignal.timeout(timeoutMs)
     })
   } catch {
     return 'failed_network'

@@ -77,6 +77,10 @@ describe('checkout reference (#363)', () => {
       `${checkout}?reference_id=dub%3Ddubclicktest0001`
     )
     expect(location(dubCookie, 'US')).toBe(`${checkout}?reference_id=dub%3Ddubclicktest0001`)
+    // Declined anywhere: the click stays home too.
+    expect(location(`${dubCookie}; keybumps-consent=denied`, 'US')).toBe(
+      `${checkout}?reference_id=consent%3Ddenied`
+    )
   })
 
   it('round-trips through Polar, and drops anything /buy/ would not write', () => {
