@@ -28,7 +28,8 @@ struct PaletteListDetail<Item, ListView: View, Detail: View>: View {
 }
 
 /// The list half of `PaletteListDetail`: a section header, with an accessory such as Clear All,
-/// over compact rows. A click highlights a row and a double-click chooses it. The pointer highlights
+/// over rows, each a `PaletteRow` as in every other tab (#381). A click highlights a row and a
+/// double-click chooses it. The pointer highlights
 /// the row under it (#351), and the highlighted row stays on screen as the keys move it (#353).
 struct PaletteDetailList<Item: Identifiable, Accessory: View, Row: View>: View {
     let title: String
@@ -42,22 +43,12 @@ struct PaletteDetailList<Item: Identifiable, Accessory: View, Row: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                PaletteSectionHeader(title)
-                Spacer()
-                accessory
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
+            PaletteListHeader(title: title) { accessory }
 
             ScrollViewReader { proxy in
                 List(Array(items.enumerated()), id: \.element.id) { index, item in
                     Button { select(index) } label: {
                         row(item)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture(count: 2).onEnded { choose(item) })
@@ -85,21 +76,6 @@ extension PaletteDetailList where Accessory == EmptyView {
         @ViewBuilder row: @escaping (Item) -> Row
     ) {
         self.init(title: title, items: items, selection: selection, select: select, choose: choose, accessory: { EmptyView() }, row: row)
-    }
-}
-
-/// A list row's icon on a small rounded tile, as Dictation's recordings and saved translations
-/// show it.
-struct PaletteRowIcon: View {
-    let systemImage: String
-    var tint: Color = .secondary
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(tint)
-            .frame(width: 30, height: 30)
-            .background(PaletteTheme.keycapFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 

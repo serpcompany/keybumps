@@ -622,9 +622,10 @@ private struct RecentTranslationRow: View {
     let isReading: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        PaletteRow {
             PaletteRowIcon(systemImage: isReading ? "speaker.wave.2.fill" : "translate")
                 .accessibilityHidden(true)
+        } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(record.translatedText)
                     .font(.system(size: 14))
@@ -641,7 +642,6 @@ private struct RecentTranslationRow: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("palette.translate.recent")

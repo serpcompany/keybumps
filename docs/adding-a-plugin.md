@@ -11,7 +11,7 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
   - **Basics:** the title, `systemImage`, and `iconTint`; search keywords, the category, and any `PluginPreference`s.
   - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs. Optional permissions carry their own reason. (The website entry's permission reasons come in §4.)
   - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`. A page drawn by hand shows the plugin's optional permissions with `PluginPermissionsGroup`, and `PluginManifestTests` fails if a page leaves one out (#379).
-  - **Palette tab, if any:** the module's `paletteContent` supplies the rows, and the descriptor's `systemImage` is the tab's icon in the tab bar, so it must differ from the other tabs'. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7, then Translation took ⌘8 and Hotkeys moved to ⌘9. Moving Hotkeys also changes:
+  - **Palette tab, if any:** the module's `paletteContent` supplies the rows, drawn with `PaletteRow` under a `PaletteListHeader` (or, for a grid, inset to `PaletteRowMetrics.wellX`), so switching tabs moves nothing (#381). The descriptor's `systemImage` is the tab's icon in the tab bar, so it must differ from the other tabs'. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7, then Translation took ⌘8 and Hotkeys moved to ⌘9. Moving Hotkeys also changes:
     - `KeyboardShortcutterModule`'s `commandKey`;
     - the README and architecture.md tab lists, and the release notes;
     - Shortcut Coach's `commandKey` in the website's `plugins.ts`, whose test requires unique numbers.
@@ -40,6 +40,7 @@ These name plugins on purpose. Update every one. Some fail when a plugin is miss
   - `SnippetTests`' tab order and tab keys;
   - `EmojiPickerTests` (Hotkeys' number);
   - `KeybumpsFeatureTests`, which expects ⌘0 to match nothing.
+- **Palette layout:** `PaletteRowMetricsTests` lays out every tab and fails until a new one is in its list tabs or grid tabs; give the fixture made-up rows for it.
 - **Upgrades:** `ScreenshotToolsTests` lists the plugins an upgrade turns on, so a plugin that ships on changes it.
 - **Smoke tests:** `SmokeUITests`' section list in `testEverySettingsPageOpens`, and `testPaletteCommandNumberSwitchesTabs`, which expects the number after the last visible tab to do nothing.
 - **Wiring snapshot:** `KeybumpsTests/Fixtures/capability-wiring.json`. Re-record it with `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` in `xcodebuild`'s environment, before the command (after it, it's a build setting and never reaches the tests), and review the diff. It records every combination of plugins, so each new plugin roughly doubles it.
