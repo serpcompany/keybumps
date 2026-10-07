@@ -159,6 +159,34 @@ const check = (name, ok, detail) => {
 }
 const hasSecret = text => text.includes(SECRET) || text.includes(CHECKOUT)
 
+let browserStarted = false
+const external = []
+const pushes = []
+const tokenResponses = [] // same-origin responses whose request URL carried the test values
+
+// The checks across every scenario. They also run when a scenario crashes, so a crash never hides
+// a leak from the scenarios before it.
+function runWideChecks() {
+  const leakedRequests = external.filter(hasSecret)
+  check(
+    'no external request (URL, Referer, body) carries the test values',
+    leakedRequests.length === 0,
+    leakedRequests
+  )
+  const leakedPushes = pushes.filter(hasSecret)
+  check(
+    'no dataLayer push carries the test values',
+    leakedPushes.length === 0,
+    leakedPushes.map(p => p.slice(0, 300))
+  )
+  const served = tokenResponses.filter(r => r.startsWith('200'))
+  check(
+    'the site never serves a 200 for a URL with the test values',
+    served.length === 0,
+    tokenResponses
+  )
+}
+
 async function main() {
   const B = options.base?.replace(/\/$/, '') ?? (await startPreview(options.port))
   const sensitivePath = path => /^\/(thanks|license)\/?$/.test(path)
@@ -169,10 +197,8 @@ async function main() {
   )
   const context = await browser.newContext()
   const page = await context.newPage()
+  browserStarted = true
 
-  const external = []
-  const pushes = []
-  const tokenResponses = [] // same-origin responses whose request URL carried the test values
   const sensitiveRsc = [] // RSC requests for /thanks/ or /license/ (prefetch noise)
 
   await context.route('**/*', route => {
@@ -225,34 +251,83 @@ async function main() {
     })
   })
 
+  // Playwright fires `networkidle` once per document, so once a page has been idle this only
+  // waits the final 400 ms. A step that navigates must wait for its navigation first.
   const settle = async () => {
     await page.waitForLoadState('load').catch(() => {})
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {})
     await page.waitForTimeout(400)
   }
-  const state = () =>
-    page.evaluate(() => ({
-      url: location.href,
-      h1: document.querySelector('h1')?.textContent ?? null,
-      gtm: (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start')
-    }))
+  // Reads the page, and reads it again if a navigation replaces the document mid-read.
+  const state = async () => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await page.evaluate(() => ({
+          url: location.href,
+          h1: document.querySelector('h1')?.textContent ?? null,
+          gtm: (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start')
+        }))
+      } catch (error) {
+        if (attempt === 5 || !/Execution context was destroyed/.test(error.message)) throw error
+        await page.waitForLoadState('load').catch(() => {})
+      }
+    }
+  }
   const H1 = { thanks: 'Thanks for buying Keybumps', license: 'Find your license key' }
   // Expect a clean URL on `path` (with GTM on sensitive and analytics pages, none on a 404).
-  const expectAt = async (name, path, { h1, gtm = true } = {}) => {
+  // `missed` names a navigation the step waited for and never saw, which fails the check.
+  const expectAt = async (name, path, { h1, gtm = true, missed } = {}) => {
     await settle()
+    // GTM starts after hydration. Wait for it only where it belongs: a 404 must still be sampled
+    // after the fixed settle, not as soon as it looks clean.
+    if (gtm) {
+      await page
+        .waitForFunction(
+          () => (window.dataLayer || []).some(e => e && e.event === 'stub.gtm.start'),
+          null,
+          { timeout: 5000 }
+        )
+        .catch(() => {})
+    }
     const s = await state()
     const ok =
-      s.url === `${B}${path}` && !s.url.includes('?') && s.gtm === gtm && (!h1 || s.h1 === h1)
-    check(name, ok, s)
+      !missed &&
+      s.url === `${B}${path}` &&
+      !s.url.includes('?') &&
+      s.gtm === gtm &&
+      (!h1 || s.h1 === h1)
+    check(name, ok, missed ? { missed, ...s } : s)
   }
-  const client = async (name, from, call, path, h1) => {
+  // Every router call below except a lone prefetch gets a 404 for its RSC request
+  // (src/lib/sensitive-url-routes.ts), so Next.js loads the URL as a new document, which then
+  // redirects without its query. That load can start a second or more after the call, and for
+  // the same page the URL already matches, so wait for the new document's `load` (never fired by
+  // a same-document navigation). A prefetch (`loads: false`) loads nothing: wait for its RSC
+  // response instead. Either one missing within the timeout fails the step.
+  const NAVIGATION_TIMEOUT = 15000
+  const client = async (name, from, call, path, h1, { loads = true } = {}) => {
     await page.goto(`${B}${from}`)
     await settle()
     const before = pushes.length
+    const options = { timeout: NAVIGATION_TIMEOUT }
+    const navigated = (
+      loads
+        ? page.waitForEvent('load', options)
+        : page.waitForResponse(
+            response =>
+              !!response.request().headers().rsc && sensitivePath(new URL(response.url()).pathname),
+            options
+          )
+    ).then(
+      () => true,
+      () => false
+    )
     // The navigation can replace the document before evaluate returns.
     await page.evaluate(call, Q).catch(() => {})
-    await page.waitForTimeout(300)
-    await expectAt(name, path, { h1 })
+    const missed = (await navigated)
+      ? undefined
+      : `no ${loads ? 'page load' : 'RSC response'} within ${NAVIGATION_TIMEOUT / 1000} s`
+    await expectAt(name, path, { h1, missed })
     const changes = pushes.slice(before).filter(p => p.includes('gtm.historyChange-v2'))
     check(`${name}: no history change carries the token`, !changes.some(hasSecret), changes.length)
   }
@@ -346,7 +421,8 @@ async function main() {
     '/thanks/',
     q => window.next.router.prefetch(`/license/?${q}`),
     '/thanks/',
-    H1.thanks
+    H1.thanks,
+    { loads: false }
   )
 
   // D. From the (analytics) layout into the group.
@@ -451,25 +527,7 @@ async function main() {
   const noise = sensitiveRsc.slice(noiseBefore)
   check('page views prefetch nothing from /thanks/ or /license/', noise.length === 0, noise)
 
-  // Across every scenario.
-  const leakedRequests = external.filter(hasSecret)
-  check(
-    'no external request (URL, Referer, body) carries the test values',
-    leakedRequests.length === 0,
-    leakedRequests
-  )
-  const leakedPushes = pushes.filter(hasSecret)
-  check(
-    'no dataLayer push carries the test values',
-    leakedPushes.length === 0,
-    leakedPushes.map(p => p.slice(0, 300))
-  )
-  const served = tokenResponses.filter(r => r.startsWith('200'))
-  check(
-    'the site never serves a 200 for a URL with the test values',
-    served.length === 0,
-    tokenResponses
-  )
+  runWideChecks()
 
   await browser.close()
   const failed = results.filter(r => !r.ok).length
@@ -489,6 +547,7 @@ main()
   })
   .catch(error => {
     console.error(error)
+    if (browserStarted) runWideChecks()
     stopPreview()
     process.exit(2)
   })
