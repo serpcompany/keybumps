@@ -314,6 +314,31 @@ describe('plugin page guides', () => {
     expect(text.filter(line => /whisper|apple speech|model/i.test(line))).toEqual([])
   })
 
+  it('pastes with ⌘P, never ⌘Return, which only opens the Screenshot Editor (#370)', () => {
+    const text = plugins.flatMap(plugin => [
+      ...plugin.overview,
+      ...plugin.features,
+      ...plugin.howTo.map(step => step.text),
+      ...plugin.faq.flatMap(item => [item.q, item.a]),
+      ...plugin.keeps,
+      ...[...plugin.permissions, ...(plugin.optionalPermissions ?? [])].map(item => item.reason)
+    ])
+    expect(text.filter(line => /⌘Return[^;,.]*\b(past|cop|sav)/i.test(line))).toEqual([])
+    // Each tab where ⌘P pastes lists Accessibility, which the paste uses.
+    for (const slug of [
+      'clipboard-history',
+      'screenshot-tools',
+      'dictation',
+      'snippets',
+      'emoji-picker',
+      'translation'
+    ]) {
+      const { permissions, optionalPermissions = [] } = pluginFor(slug)
+      const names = [...permissions, ...optionalPermissions].map(item => item.permission)
+      expect(names, slug).toContain('Accessibility')
+    }
+  })
+
   it('renders the breadcrumb, steps, and questions with their structured data', () => {
     for (const plugin of plugins) {
       const html = renderPage(plugin)

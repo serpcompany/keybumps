@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react'
 
 type Row = { icon: string; title: string; meta: string }
-type Tab = { key: string; label: string; query: string; rows: Row[] }
+/** A footer hint, as the app's footer names a tab's actions: Return's first, then the others. */
+type Hint = { keys: string; title: string }
+type Tab = { key: string; label: string; query: string; rows: Row[]; footer: Hint[] }
+
+const COPY: Hint = { keys: '↵', title: 'Copy' }
+const PASTE: Hint = { keys: '⌘P', title: 'Paste' }
 
 const TABS: Tab[] = [
   {
@@ -15,7 +20,8 @@ const TABS: Tab[] = [
       { icon: '▤', title: 'figma-export-final.pdf', meta: '~/Downloads' },
       { icon: '▢', title: 'Figma Assets', meta: '~/Design' },
       { icon: '▤', title: 'figma-tokens.json', meta: '~/dev/site' }
-    ]
+    ],
+    footer: [{ keys: '↵', title: 'Open' }]
   },
   {
     key: '⌘2',
@@ -26,17 +32,19 @@ const TABS: Tab[] = [
       { icon: '▣', title: 'invoice-screenshot.png', meta: 'Image · 14m ago' },
       { icon: '¶', title: 'billing@acme.co', meta: '1h ago' },
       { icon: '¶', title: 'Net 30, paid via ACH', meta: 'Yesterday' }
-    ]
+    ],
+    footer: [COPY, PASTE]
   },
   {
     key: '⌘3',
     label: 'Screenshots',
     query: '',
     rows: [
-      { icon: '▣', title: 'Screenshot 9:41:02', meta: 'Area · Return to edit' },
+      { icon: '▣', title: 'Screenshot 9:41:02', meta: 'Area · ⌘Return to edit' },
       { icon: '▣', title: 'Screenshot 9:38:47', meta: 'All screens' },
       { icon: '▣', title: 'Screenshot 9:12:10', meta: 'Edited · redacted' }
-    ]
+    ],
+    footer: [COPY, PASTE, { keys: '⌘↵', title: 'Edit' }]
   },
   {
     key: '⌘4',
@@ -54,7 +62,8 @@ const TABS: Tab[] = [
         meta: '0:18'
       },
       { icon: '◉', title: 'Standup follow-ups for Friday', meta: '1:05' }
-    ]
+    ],
+    footer: [COPY, PASTE]
   }
 ]
 
@@ -128,15 +137,11 @@ export function PaletteDemo() {
         ))}
       </ul>
       <div className="palette-footer" aria-hidden="true">
-        <span>
-          <kbd>↵</kbd> Open
-        </span>
-        <span>
-          <kbd>⌘C</kbd> Copy
-        </span>
-        <span>
-          <kbd>⌫</kbd> Delete
-        </span>
+        {current.footer.map(hint => (
+          <span key={hint.title}>
+            <kbd>{hint.keys}</kbd> {hint.title}
+          </span>
+        ))}
       </div>
     </div>
   )

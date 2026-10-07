@@ -51,7 +51,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Translation</strong> keeps the text you translate and its translation on your Mac,
-          for the last 50 you save with Return or ⌘Return. Clear Recent Translations in its settings
+          for the last 50 you save with Return or ⌘P. Clear Recent Translations in its settings
           removes them.
         </li>
         <li>
