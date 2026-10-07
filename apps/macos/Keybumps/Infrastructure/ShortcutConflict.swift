@@ -69,6 +69,13 @@ struct PendingShortcutReplacement: Equatable {
     let owner: ShortcutOwner
 
     var message: String { "\(binding.displayName) is used by \(owner.displayName)." }
+
+    /// What VoiceOver hears when the question appears (#345): the message with the keys as words,
+    /// then the choice.
+    var announcement: String {
+        let keys = KeyboardShortcutRegistry.accessibilityDescription(for: binding.displayName) ?? binding.displayName
+        return "\(keys) is used by \(owner.displayName). Replace or Cancel."
+    }
 }
 
 extension ShortcutMove {

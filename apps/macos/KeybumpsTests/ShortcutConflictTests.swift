@@ -284,6 +284,45 @@ struct ShortcutConflictTests {
         }
         #expect(!ShortcutRecorderState.isAskingAny)
     }
+
+    // MARK: VoiceOver (#345)
+
+    @Test("VoiceOver hears the question when it appears: the keys as words, who has them, and the choice")
+    func theQuestionIsAnnounced() {
+        let preferences = preferencesWithEmojiPickerOnShiftCommandE()
+        let recording = Recording(preferences: preferences, owner: .capability(.quickSearch))
+        var heard: [String] = []
+        recording.recorder.announce = { heard.append($0) }
+
+        recording.recorder.receive(Self.shiftCommandE)
+        #expect(heard == ["Shift Command E is used by Emoji Picker › Open Emoji Picker. Replace or Cancel."])
+
+        recording.recorder.dismissReplacement()
+        #expect(heard.count == 1, "Cancel says nothing more")
+
+        // Restoring a default that another action has asks the same way.
+        recording.recorder.offer(Self.shiftCommandE, identifier: "quickSearch", conflict: {
+            preferences.shortcutConflict(for: $0, assigningTo: .capability(.quickSearch))
+        }, replace: {})
+        #expect(heard.count == 2)
+    }
+
+    @Test("When Replace finds another action has the keys by now, VoiceOver hears the new question")
+    func theNewQuestionIsAnnounced() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let area = DefaultShortcut.screenshotArea
+        let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
+        screen.recorder.receive(area)
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
+        var heard: [String] = []
+        edit.recorder.announce = { heard.append($0) }
+        edit.recorder.receive(area)
+        screen.recorder.confirmReplacement()
+
+        edit.recorder.confirmReplacement()
+        #expect(heard.count == 2)
+        #expect(heard.last?.contains("Screenshot Tools › Screenshot Screen.") == true)
+    }
 }
 
 /// A recorder field for one action, saving into `preferences` as Settings does.

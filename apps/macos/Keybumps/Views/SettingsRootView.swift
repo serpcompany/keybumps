@@ -1408,7 +1408,20 @@ final class ShortcutRecorderState {
     private(set) var pendingReplacement: PendingShortcutReplacement? {
         didSet {
             if pendingReplacement == nil { Self.asking.remove(self) } else { Self.asking.add(self) }
+            // Recording has stopped and the question appears below the field, so without this
+            // VoiceOver hears nothing, as if the key was ignored (#345).
+            if let pendingReplacement, pendingReplacement != oldValue {
+                announce(pendingReplacement.announcement)
+            }
         }
+    }
+    /// Says a question to VoiceOver when it appears. Tests replace it to hear what it says.
+    @ObservationIgnored var announce: @MainActor (String) -> Void = { announcement in
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: announcement, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+        )
     }
     private var monitor: Any?
     private var cancelAction: (() -> Void)?
