@@ -12,6 +12,8 @@ const sensitiveGroup = '(sensitive-url)'
 const analyticsComponent = join(srcDir, 'components', 'analytics.tsx')
 const siteDocument = join(srcDir, 'components', 'site-document.tsx')
 const footer = join(srcDir, 'components', 'site-footer.tsx')
+/** Server-side GA4 events (#363), sent only by the Polar webhook. */
+const measurementProtocol = join(srcDir, 'lib', 'ga4-measurement-protocol.ts')
 const rootLayouts = [
   join(appDir, analyticsGroup, 'layout.tsx'),
   join(appDir, sensitiveGroup, 'layout.tsx')
@@ -97,6 +99,28 @@ function analyticsFiles(overrides: Record<string, string> = {}) {
   return [...sources]
     .filter(([file, source]) => reaches(file) || markers.some(marker => marker.test(source)))
     .map(([file]) => relative(srcDir, file))
+    .sort()
+}
+
+/** Source files that reach `target` through any chain of imports, `target` included. */
+function filesReaching(target: string) {
+  const imports = new Map(
+    sourceFiles().map(file => [
+      file,
+      importSpecifiers(readFileSync(file, 'utf8')).flatMap(
+        specifier => resolveImport(file, specifier) ?? []
+      )
+    ])
+  )
+  const reaches = (file: string, seen = new Set<string>()): boolean => {
+    if (file === target) return true
+    if (seen.has(file)) return false
+    seen.add(file)
+    return (imports.get(file) ?? []).some(next => reaches(next, seen))
+  }
+  return [...imports.keys()]
+    .filter(file => reaches(file))
+    .map(file => relative(srcDir, file))
     .sort()
 }
 
@@ -220,8 +244,20 @@ describe('analytics scope', () => {
   })
 
   it('loads analytics only from the analytics component and the two root layouts', () => {
-    const allowed = [analyticsComponent, ...rootLayouts].map(file => relative(srcDir, file)).sort()
+    // The Measurement Protocol sender names Google Analytics' endpoint, but runs only on the
+    // server; the next test keeps it there.
+    const allowed = [analyticsComponent, ...rootLayouts, measurementProtocol]
+      .map(file => relative(srcDir, file))
+      .sort()
     expect(analyticsFiles()).toEqual(allowed)
+  })
+
+  it('sends server-side GA4 events only from the Polar webhook route', () => {
+    expect(filesReaching(measurementProtocol)).toEqual([
+      join('app', 'api', 'webhooks', 'polar', 'route.ts'),
+      join('lib', 'ga4-measurement-protocol.ts'),
+      join('lib', 'polar-webhook.ts')
+    ])
   })
 
   it('catches every form of import of the analytics component or a root layout', () => {

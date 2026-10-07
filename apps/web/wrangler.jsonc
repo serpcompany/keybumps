@@ -31,7 +31,9 @@
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web" }],
   "env": {
     "staging": {
-      "vars": { "SITE_ENV": "staging" },
+      // GA4_MEASUREMENT_ID is the live GA4 stream, used by /buy/ and the Polar webhook (#363). Staging
+      // sends only to GA4's validation endpoint, which records nothing (lib/ga4-measurement-protocol.ts).
+      "vars": { "SITE_ENV": "staging", "GA4_MEASUREMENT_ID": "G-VQJZQNHWFB" },
       // Keep workers_dev: CI smoke-tests the workers.dev URL, which skips the zone's bot
       // protection. Without the smoke-test header, that URL redirects to staging.keybumps.app.
       "workers_dev": true,
@@ -39,7 +41,7 @@
       "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "keybumps-web-staging" }]
     },
     "production": {
-      "vars": { "SITE_ENV": "production" },
+      "vars": { "SITE_ENV": "production", "GA4_MEASUREMENT_ID": "G-VQJZQNHWFB" },
       // Keep workers_dev: CI smoke-tests the workers.dev URL, which skips the zone's bot
       // protection. www redirects to the apex in src/lib/redirects.ts.
       "workers_dev": true,

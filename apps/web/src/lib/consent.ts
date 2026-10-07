@@ -3,7 +3,8 @@
  * of the EEA, the UK, and Switzerland choose before tags that set cookies run; everyone else gets
  * them by default. Cloudflare says which country a request comes from (`/api/consent/`), and
  * Google Consent Mode carries the choice to the tags in Google Tag Manager
- * (`components/analytics.tsx`).
+ * (`components/analytics.tsx`). The choice is also kept in a cookie, so /buy/ can tell whether the
+ * visitor's analytics IDs may go with a purchase (`lib/checkout-reference.ts`).
  */
 
 /** The EU, Iceland, Liechtenstein, and Norway (the EEA), the UK, and Switzerland. */
@@ -44,6 +45,8 @@ export const consentCountries = [
 
 /** Where the visitor's choice is kept, on their own browser only. */
 export const consentStorageKey = 'keybumps-consent'
+/** The cookie that carries the same choice to the server, for /buy/. */
+export const consentCookieName = 'keybumps-consent'
 /** The DOM event the banner sends with the choice, which the consent script in `components/analytics.tsx` hears. */
 export const consentEvent = 'keybumps:consent'
 

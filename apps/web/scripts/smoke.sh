@@ -4,7 +4,8 @@
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; every
 # plugin page in the pages sitemap responds, canonical to itself and linked from /plugins/; the
 # trailing-slash and legacy redirects take one 308 hop; /download/ sends a 302 to the current DMG,
-# which the Download buttons link to directly; search-engine rules and analytics match the
+# which the Download buttons link to directly; /buy/ sends a 302 to Polar's checkout, and Polar's
+# webhook refuses an unsigned delivery; search-engine rules and analytics match the
 # environment (only production may be indexed or load GTM, which it does on /, /thanks/, and
 # /license/); /thanks/ and /license/ redirect a query away before rendering and are never served to
 # client-side navigation; and the non-canonical hosts (www and workers.dev) redirect to the branded
@@ -225,6 +226,42 @@ links_to_dmg() {
 eventually 'download buttons on / link to the current DMG (the 302 target)' links_to_dmg / 3
 eventually 'download buttons on /thanks/ link to the current DMG (the 302 target)' \
   links_to_dmg /thanks/ 2
+
+# Buy buttons link to /buy/ (#363), which sends a temporary 302, never cached, to Polar's checkout
+# with the visitor's analytics IDs. These requests carry no analytics cookies, so no IDs; from a
+# country that chooses cookies first, the reference says consent=denied instead.
+buy_redirects_to_checkout() {
+  local headers status location cache
+  headers="$(curl -s "${limits[@]}" "${smoke[@]}" -o /dev/null -D - "$base/buy/" || true)"
+  headers="${headers//$'\r'/}"
+  status="$(head -1 <<<"$headers" | awk '{print $2}')"
+  location="$(grep -i '^location:' <<<"$headers" | head -1 | sed 's/^[^:]*: *//' || true)"
+  cache="$(grep -i '^cache-control:' <<<"$headers" | head -1 || true)"
+  if [ "$status" != 302 ] || ! grep -qE '^https://buy\.polar\.sh/polar_cl_[0-9A-Za-z]+(\?reference_id=consent%3Ddenied)?$' <<<"$location" ||
+    ! grep -qi 'no-store' <<<"$cache"; then
+    why="got '$status' to '$location' with '${cache:-no Cache-Control}'"
+    return 1
+  fi
+}
+eventually '302 /buy/ -> Polar checkout, not cached' buy_redirects_to_checkout
+expect_redirect /buy /buy/
+eventually 'the Buy button on /pricing/ links to /buy/' body_matches /pricing/ 'href="/buy/"'
+
+# Polar's webhook refuses an unsigned delivery: 401, or 503 before its secret is set. Never a
+# redirect or a 404, which Polar would count as failed deliveries of real events. /api/ is never
+# redirected, so the unslashed URL reaches it too.
+webhook_refuses_unsigned() {
+  local got
+  got="$(curl -s "${limits[@]}" "${smoke[@]}" -X POST -H 'content-type: application/json' \
+    -d '{}' -o /dev/null -w '%{http_code}' "$base$1" || true)"
+  [ "$got" = 401 ] || [ "$got" = 503 ] || {
+    why="got '$got'"
+    return 1
+  }
+}
+for webhook_path in /api/webhooks/polar/ /api/webhooks/polar; do
+  eventually "POST $webhook_path refuses an unsigned delivery" webhook_refuses_unsigned "$webhook_path"
+done
 
 # Sitemaps list only canonical URLs: child sitemaps are unslashed files, pages end in a slash.
 # sitemap_is_canonical <path> <loc regex>

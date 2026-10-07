@@ -58,7 +58,11 @@ describe('pricing', () => {
       ...strings(pricing.model)
     ].map(word => word.toLowerCase())
     // #269: /license/ is a (sensitive-url) page, so it moves with its own leak test.
-    const allowed = new Set(['app/(sensitive-url)/license/page.tsx: one mac'])
+    const allowed = new Set([
+      'app/(sensitive-url)/license/page.tsx: one mac',
+      // Polar's billing reason `subscription_create`, which the webhook reads; not copy.
+      'lib/polar-webhook.ts: subscription'
+    ])
     const pricingFile = join(src, 'lib', 'pricing.ts')
     const found = sourceFiles(src)
       .filter(file => file !== pricingFile)
