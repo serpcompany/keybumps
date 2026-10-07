@@ -724,6 +724,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 run(command)
                 return nil
             }
+            if let characters = event.charactersIgnoringModifiers?.lowercased(),
+               tabContent?.handleCommandKey(characters, query: state.historyQuery) == true {
+                return nil
+            }
             if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots, filterMenu == nil {
                 editSelectedClipboardImage()
                 return nil
