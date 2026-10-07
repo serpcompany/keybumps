@@ -2,12 +2,12 @@ import { consentCookieName, requiresConsent, storedConsent } from './consent'
 import { pricing } from './pricing'
 
 /**
- * The checkout reference (#363): the visitor's anonymous Google Analytics IDs, carried through
- * Polar's checkout so the paid order's webhook can credit the sale to the visit that led to it
- * (`lib/polar-webhook.ts`). /buy/ reads them from the first-party cookies Google Analytics sets
- * and passes them to Polar as the checkout link's `reference_id`, which Polar keeps in the
- * checkout's metadata and copies to the order and its renewals. Nothing else goes in: no name,
- * email, or other personal data.
+ * The checkout reference (#363, #337): the visitor's anonymous Google Analytics IDs and Dub
+ * partner click ID, carried through Polar's checkout so the paid order's webhook can credit the
+ * sale to the visit and the partner that led to it (`lib/polar-webhook.ts`). /buy/ reads them from
+ * the first-party cookies Google Analytics and Dub's script set and passes them to Polar as the
+ * checkout link's `reference_id`, which Polar keeps in the checkout's metadata and copies to the
+ * order and its renewals. Nothing else goes in: no name, email, or other personal data.
  *
  * A visitor from a country that chooses cookies first (`lib/consent.ts`) gets a reference only
  * with the consent cookie saying `granted`. A `_ga` cookie alone isn't consent: it can predate the
@@ -18,6 +18,8 @@ export interface CheckoutReference {
   gaClientId?: string
   /** Google Analytics' session ID, from the `_ga_<stream>` cookie: `1700000000`. */
   gaSessionId?: string
+  /** The Dub partner link click that brought the visitor, from the `dub_id` cookie. */
+  dubClickId?: string
 }
 
 /** The order metadata key Polar stores a checkout link's `reference_id` under. */
@@ -25,6 +27,7 @@ export const referenceMetadataKey = 'reference_id'
 
 const gaClientIdPattern = /^\d{1,20}\.\d{1,20}$/
 const gaSessionIdPattern = /^\d{1,20}$/
+const dubClickIdPattern = /^[A-Za-z0-9_-]{1,64}$/
 const measurementIdPattern = /^G-[A-Z0-9]{4,20}$/
 
 /** `_ga`'s value, `GA1.1.1234567890.1700000000`, gives the client ID `1234567890.1700000000`. */
@@ -68,19 +71,28 @@ export function referenceFromCookies(
   measurementId: string | undefined
 ): CheckoutReference {
   const gaClientId = gaClientIdFromCookie(readCookie(cookieHeader, '_ga'))
-  if (!gaClientId) return {}
   const sessionCookie = gaSessionCookieName(measurementId)
-  const gaSessionId = sessionCookie
-    ? gaSessionIdFromCookie(readCookie(cookieHeader, sessionCookie))
-    : undefined
-  return gaSessionId ? { gaClientId, gaSessionId } : { gaClientId }
+  const gaSessionId =
+    gaClientId && sessionCookie
+      ? gaSessionIdFromCookie(readCookie(cookieHeader, sessionCookie))
+      : undefined
+  const dubClickId = readCookie(cookieHeader, 'dub_id')
+  return compact({
+    gaClientId,
+    gaSessionId,
+    dubClickId: dubClickId && dubClickIdPattern.test(dubClickId) ? dubClickId : undefined
+  })
 }
 
-/** The reference as Polar keeps it: `ga=1234567890.1700000000&gs=1700000000`, or null when empty. */
+/**
+ * The reference as Polar keeps it, `ga=1234567890.1700000000&gs=1700000000&dub=…`, or null when
+ * empty.
+ */
 export function encodeCheckoutReference(reference: CheckoutReference): string | null {
   const params = new URLSearchParams()
   if (reference.gaClientId) params.set('ga', reference.gaClientId)
   if (reference.gaSessionId) params.set('gs', reference.gaSessionId)
+  if (reference.dubClickId) params.set('dub', reference.dubClickId)
   const encoded = params.toString()
   return encoded || null
 }
@@ -92,10 +104,24 @@ export function encodeCheckoutReference(reference: CheckoutReference): string | 
 export function parseCheckoutReference(value: unknown): CheckoutReference {
   if (typeof value !== 'string' || value.length > 500) return {}
   const params = new URLSearchParams(value)
-  const gaClientId = params.get('ga') ?? ''
-  const gaSessionId = params.get('gs') ?? ''
-  if (!gaClientIdPattern.test(gaClientId)) return {}
-  return gaSessionIdPattern.test(gaSessionId) ? { gaClientId, gaSessionId } : { gaClientId }
+  const valid = (key: string, pattern: RegExp) => {
+    const part = params.get(key)
+    return part && pattern.test(part) ? part : undefined
+  }
+  const gaClientId = valid('ga', gaClientIdPattern)
+  return compact({
+    gaClientId,
+    // A session means nothing without its client.
+    gaSessionId: gaClientId ? valid('gs', gaSessionIdPattern) : undefined,
+    dubClickId: valid('dub', dubClickIdPattern)
+  })
+}
+
+/** The reference without its empty parts. */
+function compact(reference: CheckoutReference): CheckoutReference {
+  return Object.fromEntries(
+    Object.entries(reference).filter(([, value]) => value !== undefined)
+  ) as CheckoutReference
 }
 
 /** Whether this visitor's IDs may go with a purchase: no choice needed, or analytics granted. */

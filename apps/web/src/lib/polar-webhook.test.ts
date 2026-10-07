@@ -1,6 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 import { POST } from '@/app/api/webhooks/polar/route'
+import { type DubConfig, dubConfigFromEnv } from './dub-conversions'
 import { derivedClientId, type Ga4Config, ga4ConfigFromEnv } from './ga4-measurement-protocol'
 import { handlePolarWebhook, type PolarWebhookEnv, verifyPolarSignature } from './polar-webhook'
 
@@ -11,6 +12,8 @@ const legacySecret = 'whsec_polar-hmac-test-secret'
 const apiSecret = 'test-api-secret'
 const now = 1_760_000_000_000
 const clientId = '1234567890.1700000000'
+const dubClickId = 'dubclicktest0001'
+const dubApiKey = 'test-dub-api-key'
 
 const ga4: Ga4Config = { measurementId: 'G-TEST123', apiSecret, validateOnly: false }
 
@@ -29,10 +32,11 @@ function order(overrides: Record<string, unknown> = {}) {
     billing_name: 'Test Buyer',
     billing_address: { country: 'US', line1: '1 Test Street' },
     customer: { email: 'buyer@example.com', name: 'Test Buyer' },
+    customer_id: 'cus_test_0001',
     product_id: 'prod_test',
     product: { name: 'Keybumps' },
     discount: { code: 'LAUNCH' },
-    metadata: { reference_id: `ga=${clientId}&gs=1700000100` },
+    metadata: { reference_id: `ga=${clientId}&gs=1700000100&dub=${dubClickId}` },
     ...overrides
   }
 }
@@ -70,7 +74,7 @@ function fakeFetch(response: () => Response | Promise<Response> = () => new Resp
 }
 
 function env(overrides: Partial<PolarWebhookEnv> = {}): PolarWebhookEnv {
-  return { secret: standardSecret, ga4, fetch: fakeFetch(), now, ...overrides }
+  return { secret: standardSecret, ga4, dub: null, fetch: fakeFetch(), now, ...overrides }
 }
 
 function logged() {
@@ -357,6 +361,8 @@ describe('Polar orders to GA4 (#363)', () => {
         'buyer@example.com',
         'prod_test',
         'LAUNCH',
+        'cus_test_0001',
+        dubClickId,
         apiSecret,
         standardSecret,
         'msg_test_1'
@@ -365,7 +371,14 @@ describe('Polar orders to GA4 (#363)', () => {
       }
     }
     expect(logged()).toEqual([
-      { event: 'polar_webhook', status: 202, type: 'order.paid', outcome: 'handled', ga4: 'sent' },
+      {
+        event: 'polar_webhook',
+        status: 202,
+        type: 'order.paid',
+        outcome: 'handled',
+        ga4: 'sent',
+        dub: 'not_configured'
+      },
       { event: 'polar_webhook', status: 401, outcome: 'bad_signature' }
     ])
   })
@@ -377,5 +390,174 @@ describe('Polar orders to GA4 (#363)', () => {
     expect(ga4ConfigFromEnv({ ...base })?.validateOnly).toBe(true)
     expect(ga4ConfigFromEnv({ GA4_MEASUREMENT_ID: 'G-TEST123' })).toBeNull()
     expect(ga4ConfigFromEnv({ ...base, GA4_MEASUREMENT_ID: 'UA-1-1' })).toBeNull()
+  })
+})
+
+describe('Polar orders to Dub (#337)', () => {
+  const dub: DubConfig = { apiKey: dubApiKey }
+  interface Call {
+    method: string
+    url: URL
+    headers: Headers
+    body: unknown
+  }
+  let calls: Call[]
+
+  /** A fake fetch that records each call and answers from `route`. */
+  function router(
+    route: (call: Call) => Response = () => Response.json({ customer: { id: 'c' } })
+  ) {
+    return (async (input: URL | string, init: RequestInit = {}) => {
+      const call = {
+        method: init.method ?? 'GET',
+        url: new URL(String(input)),
+        headers: new Headers(init.headers),
+        body: init.body ? JSON.parse(String(init.body)) : undefined
+      }
+      calls.push(call)
+      return route(call)
+    }) as typeof fetch
+  }
+
+  function dubEnv(route?: (call: Call) => Response, overrides: Partial<PolarWebhookEnv> = {}) {
+    return env({ ga4: null, dub, fetch: router(route), ...overrides })
+  }
+
+  beforeEach(() => {
+    calls = []
+  })
+
+  it('tracks a paid order a partner link brought as a Dub sale', async () => {
+    const response = await handlePolarWebhook(delivery('order.paid', order()), dubEnv())
+    expect(response.status).toBe(202)
+    expect(calls).toHaveLength(1)
+    const [call] = calls
+    expect(`${call.method} ${call.url}`).toBe('POST https://api.dub.co/track/sale')
+    expect(call.headers.get('authorization')).toBe(`Bearer ${dubApiKey}`)
+    expect(call.body).toEqual({
+      clickId: dubClickId,
+      customerExternalId: 'cus_test_0001',
+      amount: 3900,
+      currency: 'usd',
+      invoiceId: 'order_test_0001',
+      eventName: 'Purchase',
+      paymentProcessor: 'polar'
+    })
+    expect(JSON.stringify(call.body)).not.toMatch(/buyer@example\.com|Test Buyer|Test Street/)
+    expect(logged()[0]).toMatchObject({ dub: 'sent', ga4: 'not_configured' })
+  })
+
+  it('names a renewal so partners can tell it from a purchase', async () => {
+    await handlePolarWebhook(
+      delivery('order.paid', order({ billing_reason: 'subscription_cycle' })),
+      dubEnv()
+    )
+    expect(calls[0].body).toMatchObject({ eventName: 'Invoice paid', clickId: dubClickId })
+  })
+
+  it('sends nothing to Dub without a partner click', async () => {
+    const data = order({ metadata: { reference_id: `ga=${clientId}` } })
+    await handlePolarWebhook(delivery('order.paid', data), dubEnv())
+    await handlePolarWebhook(delivery('order.paid', order({ net_amount: 0 })), dubEnv())
+    expect(calls).toEqual([])
+    expect(logged().map(line => line.dub)).toEqual(['no_click', 'zero_amount'])
+  })
+
+  it('logs a click Dub doesn’t know as unattributed', async () => {
+    await handlePolarWebhook(
+      delivery('order.paid', order()),
+      dubEnv(() => Response.json({ customer: null, sale: null }))
+    )
+    expect(logged()[0].dub).toBe('unattributed')
+  })
+
+  it('retries when Dub is down, and not when it refuses the sale', async () => {
+    const statuses = [500, 429, 400, 404]
+    for (const status of statuses) {
+      const response = await handlePolarWebhook(
+        delivery('order.paid', order()),
+        dubEnv(() => new Response(null, { status }))
+      )
+      expect(response.status, String(status)).toBe(status >= 429 ? 502 : 202)
+    }
+    const offline = dubEnv(() => {
+      throw new TypeError('network')
+    })
+    expect((await handlePolarWebhook(delivery('order.paid', order()), offline)).status).toBe(502)
+    expect(logged().map(line => line.dub)).toEqual([
+      'failed_status',
+      'failed_status',
+      'rejected',
+      'rejected',
+      'failed_network'
+    ])
+  })
+
+  it('retries when GA4 fails even though Dub took the sale, which Dub keeps once', async () => {
+    const both = env({
+      dub,
+      fetch: router(call =>
+        call.url.hostname === 'www.google-analytics.com'
+          ? new Response(null, { status: 503 })
+          : Response.json({ customer: { id: 'c' } })
+      )
+    })
+    expect((await handlePolarWebhook(delivery('order.paid', order()), both)).status).toBe(502)
+    expect(logged()[0]).toMatchObject({ ga4: 'failed_status', dub: 'sent' })
+  })
+
+  it('refunds the partner’s commission when the order is fully refunded', async () => {
+    const refunded = delivery(
+      'order.refunded',
+      order({ status: 'refunded', refunded_amount: 3900 })
+    )
+    const response = await handlePolarWebhook(
+      refunded,
+      dubEnv(call =>
+        call.method === 'GET'
+          ? Response.json([{ id: 'cm_test_1', status: 'pending' }])
+          : Response.json({ id: 'cm_test_1', status: 'refunded' })
+      )
+    )
+    expect(response.status).toBe(202)
+    expect(calls.map(call => `${call.method} ${call.url}`)).toEqual([
+      'GET https://api.dub.co/commissions?invoiceId=order_test_0001',
+      'PATCH https://api.dub.co/commissions/cm_test_1'
+    ])
+    expect(calls[1].body).toEqual({ status: 'refunded' })
+    expect(logged()[0].dub).toBe('refunded')
+  })
+
+  it('leaves a paid, refunded, or missing commission alone', async () => {
+    const refunded = () =>
+      delivery('order.refunded', order({ status: 'refunded', refunded_amount: 3900 }))
+    for (const listed of [
+      [{ id: 'cm_test_1', status: 'paid' }],
+      [{ id: 'cm_test_1', status: 'refunded' }],
+      []
+    ]) {
+      await handlePolarWebhook(
+        refunded(),
+        dubEnv(() => Response.json(listed))
+      )
+    }
+    expect(calls.every(call => call.method === 'GET')).toBe(true)
+    expect(logged().map(line => line.dub)).toEqual(['already_paid', 'refunded', 'no_commission'])
+  })
+
+  it('leaves a partial refund, or one with no partner, to a person', async () => {
+    const partial = order({ status: 'partially_refunded', refunded_amount: 1000 })
+    await handlePolarWebhook(delivery('order.refunded', partial), dubEnv())
+    const unreferred = order({ status: 'refunded', refunded_amount: 3900, metadata: {} })
+    await handlePolarWebhook(delivery('order.refunded', unreferred), dubEnv())
+    expect(calls).toEqual([])
+    expect(logged().map(line => line.dub)).toEqual(['partial_refund', 'no_click'])
+  })
+
+  it('sends to Dub only from the live site', () => {
+    expect(dubConfigFromEnv({ SITE_ENV: 'production', DUB_API_KEY: dubApiKey })).toEqual(dub)
+    expect(dubConfigFromEnv({ SITE_ENV: 'staging', DUB_API_KEY: dubApiKey })).toBeNull()
+    expect(dubConfigFromEnv({ DUB_API_KEY: dubApiKey })).toBeNull()
+    expect(dubConfigFromEnv({ SITE_ENV: 'production' })).toBeNull()
   })
 })
