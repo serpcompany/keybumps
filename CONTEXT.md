@@ -172,7 +172,7 @@ Translating text between your two languages on this Mac, with Apple's Translatio
 _Avoid_: Translator, Translate (the tab's name)
 
 **Translate tab**:
-The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return copies the translation; ⌘Return pastes it and puts the clipboard back. Translations aren't kept anywhere.
+The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return copies the translation; ⌘Return pastes it and puts the clipboard back. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. Translations aren't kept anywhere.
 _Avoid_: Translation window, translator
 
 **Language pair**:
