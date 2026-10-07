@@ -910,7 +910,8 @@ final class AppModel {
         applyCapabilities()
         shortcuts.resumeAfterRecording()
     }
-    /// Sets a shortcut without ending a recording, as Replace does once recording has stopped.
+    /// Sets a shortcut without ending a recording, as Replace does once recording has stopped, and
+    /// a field's clear button does while another field may be recording (#345).
     func setShortcut(_ binding: ShortcutBinding?, for owner: ShortcutOwner) {
         preferences.setShortcut(binding, for: owner)
         applyCapabilities()

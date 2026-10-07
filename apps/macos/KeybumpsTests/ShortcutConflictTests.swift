@@ -1,5 +1,7 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
+import SwiftUI
 import Testing
 @testable import Keybumps
 
@@ -233,9 +235,10 @@ struct ShortcutConflictTests {
     func replaceAsksAgainAfterAnotherReplace() {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         let area = DefaultShortcut.screenshotArea
+        // One row records at a time (#345), so each records in turn; both then ask.
         let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
-        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
         screen.recorder.receive(area)
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
         edit.recorder.receive(area)
         #expect(screen.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
         #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
@@ -283,6 +286,208 @@ struct ShortcutConflictTests {
             #expect(ShortcutRecorderState.isAskingAny)
         }
         #expect(!ShortcutRecorderState.isAskingAny)
+    }
+
+    // MARK: VoiceOver (#345)
+
+    @Test("VoiceOver hears the question when it appears: the keys as words, who has them, and the choice")
+    func theQuestionIsAnnounced() {
+        let preferences = preferencesWithEmojiPickerOnShiftCommandE()
+        let recording = Recording(preferences: preferences, owner: .capability(.quickSearch))
+        var heard: [String] = []
+        recording.recorder.announce = { heard.append($0) }
+
+        recording.recorder.receive(Self.shiftCommandE)
+        #expect(heard == ["Shift Command E is used by Open Emoji Picker in Emoji Picker. Replace or Cancel."])
+
+        recording.recorder.dismissReplacement()
+        #expect(heard.count == 1, "Cancel says nothing more")
+
+        // Restoring a default that another action has asks the same way.
+        recording.recorder.offer(Self.shiftCommandE, identifier: "quickSearch", conflict: {
+            preferences.shortcutConflict(for: $0, assigningTo: .capability(.quickSearch))
+        }, replace: {})
+        #expect(heard.count == 2)
+    }
+
+    @Test("When Replace finds another action has the keys by now, VoiceOver hears the new question")
+    func theNewQuestionIsAnnounced() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let area = DefaultShortcut.screenshotArea
+        let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
+        screen.recorder.receive(area)
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
+        var heard: [String] = []
+        edit.recorder.announce = { heard.append($0) }
+        edit.recorder.receive(area)
+        screen.recorder.confirmReplacement()
+
+        edit.recorder.confirmReplacement()
+        #expect(heard.count == 2)
+        #expect(heard.last?.contains("used by Screenshot Screen in Screenshot Tools.") == true)
+    }
+
+    // MARK: One field records at a time (#345)
+
+    @Test("Starting one field's recording ends another's, which then saves nothing")
+    func startingOneRecordingEndsTheOther() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
+        #expect(screen.recorder.identifier == CapabilityShortcut.screenshotScreen.rawValue)
+
+        let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
+        #expect(screen.recorder.identifier == nil)
+        #expect(edit.recorder.identifier == CapabilityShortcut.screenshotScreenAndEdit.rawValue)
+        #expect(screen.resumed == 0, "The other field keeps global shortcuts off")
+        #expect(ShortcutRecorderState.isRecordingAny)
+
+        screen.recorder.receive(Self.unused)
+        #expect(preferences.capabilityShortcut(for: .screenshotScreen) != Self.unused)
+        #expect(screen.captured == 0)
+        #expect(ShortcutRecorderState.isRecordingAny, "Escape still cancels the field recording")
+
+        edit.recorder.receive(Self.unused)
+        #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == Self.unused)
+        #expect(!ShortcutRecorderState.isRecordingAny)
+    }
+
+    @Test("Global shortcuts stay off until the last field stops recording, even when another row is cleared")
+    func globalShortcutsStayOffWhileAFieldRecords() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.didCompleteOnboarding = true
+        preferences.enabledCapabilities = [.quickSearch]
+        let model = AppModel.forShortcutTests(preferences: preferences)
+        model.applyCapabilities()
+        let registered = model.shortcuts.activeOwners
+        #expect(registered.contains(CapabilityShortcut.quickSearch.ownerID))
+
+        let screen = ShortcutRecorderState()
+        ShortcutRowActions.record(.capability(.screenshotScreen), identifier: "screenshotScreen", in: screen, model: model)()
+        #expect(model.shortcuts.activeOwners.isEmpty)
+
+        let edit = ShortcutRecorderState()
+        ShortcutRowActions.record(.capability(.screenshotScreenAndEdit), identifier: "screenshotScreenAndEdit", in: edit, model: model)()
+        #expect(screen.identifier == nil)
+        #expect(model.shortcuts.isSuspendedForRecording, "The first field ending doesn't turn them on")
+
+        // Other rows' clear buttons, on a plugin page and on Window Manager's.
+        ShortcutRowActions.clear(.capability(.screenshotArea), model: model)()
+        ShortcutRowActions.clear(.window(.left), model: model)()
+        #expect(preferences.capabilityShortcut(for: .screenshotArea) == nil)
+        #expect(preferences.windowShortcut(for: .left) == nil)
+        #expect(model.shortcuts.isSuspendedForRecording, "Clearing a row doesn't turn them on")
+        #expect(model.shortcuts.activeOwners.isEmpty)
+
+        edit.cancel()
+        #expect(!model.shortcuts.isSuspendedForRecording)
+        #expect(model.shortcuts.activeOwners == registered)
+    }
+}
+
+/// Window Manager's two-column grid at Settings' narrowest width (#345): a note under a row wraps
+/// in its column rather than making the grid drop to one column, which moves the rows.
+@MainActor
+@Suite("Window Manager's shortcut grid")
+struct WindowShortcutGridTests {
+    enum Note: String, CaseIterable, CustomTestStringConvertible {
+        /// A key pressed without a modifier.
+        case missingModifier
+        /// The Replace or Cancel question.
+        case question
+
+        var testDescription: String { rawValue }
+    }
+
+    /// The Settings window's minimum width less the widest sidebar (280pt): the narrowest the page
+    /// gets.
+    static let narrowestPageWidth = SettingsWindowFrame.minimumContentSize.width - 280
+    /// What the Commands grid dropping to one column adds at least: its second column, seven
+    /// rows of 28pt fields, moves below the first.
+    static let columnDrop = CGFloat(WindowSettingsLayout.primaryTrailing.count) * 28
+
+    @Test("A note under a row keeps the Commands grid in two columns at the narrowest width", arguments: Note.allCases)
+    func aNoteKeepsTwoColumns(_ note: Note) throws {
+        let model = AppModel.forShortcutTests(preferences: AppPreferences(defaults: InMemoryDefaults()))
+        let plain = try Self.pageHeight(model: model, recorder: ShortcutRecorderState(), width: Self.narrowestPageWidth)
+        let narrow = try Self.pageHeight(model: model, recorder: ShortcutRecorderState(), width: 480)
+        #expect(narrow - plain >= Self.columnDrop, "Two columns at the narrowest width to begin with; one at 480pt")
+
+        let recorder = ShortcutRecorderState()
+        defer { recorder.cancel() }
+        switch note {
+        case .missingModifier:
+            recorder.begin(identifier: WindowAction.left.rawValue, suspend: {}, conflict: { _ in nil }, capture: { _ in }, replace: { _ in }, cancel: {})
+            let key = try #require(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: UInt16(kVK_ANSI_A)
+            ))
+            #expect(recorder.handle(key) == nil, "Recording takes the key")
+            #expect(recorder.error != nil)
+        case .question:
+            recorder.offer(
+                DefaultShortcut.screenshotArea, identifier: WindowAction.left.rawValue,
+                conflict: { _ in .capability(.screenshotScreenAndEdit) }, replace: {}
+            )
+            #expect(recorder.pendingReplacement != nil)
+        }
+        let withNote = try Self.pageHeight(model: model, recorder: recorder, width: Self.narrowestPageWidth)
+        #expect(withNote > plain, "The note shows")
+        #expect(withNote - plain < Self.columnDrop, "The note wraps in its column, and the grid keeps two")
+    }
+
+    /// Lays out Window Manager's page in a window that is never shown, and returns the height of
+    /// what its scroll view scrolls.
+    static func pageHeight(model: AppModel, recorder: ShortcutRecorderState, width: CGFloat) throws -> CGFloat {
+        let size = CGSize(width: width, height: 2000)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: WindowSettingsView(recorder: recorder).environment(model))
+        host.frame = NSRect(origin: .zero, size: size)
+        window.contentView = host
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        host.layoutSubtreeIfNeeded()
+        let scrollView = try #require(Self.firstScrollView(in: host), "SettingsPage scrolls in an NSScrollView")
+        return try #require(scrollView.documentView).frame.height
+    }
+
+    private static func firstScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView { return scrollView }
+        return view.subviews.lazy.compactMap(firstScrollView).first
+    }
+}
+
+private struct NoCoachingEvents: EventPersistence {
+    func load() throws -> [CoachingEvent] { [] }
+    func save(_ events: [CoachingEvent]) throws {}
+}
+
+@MainActor
+private struct NoPresenceChanges: AppPresenceControlling {
+    func apply(showInDockAndSwitcher: Bool) {}
+}
+
+@MainActor
+private final class QuietHotKeys: GlobalHotKeyRegistering {
+    let registrationScope = GlobalHotKeyRegistrationScope.systemWide
+    func installHandler(_ handler: @escaping (UInt32) -> Void) {}
+    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { true }
+    func unregister(identifier: UInt32) {}
+}
+
+@MainActor
+private extension AppModel {
+    /// An app model whose global shortcuts register nowhere.
+    static func forShortcutTests(preferences: AppPreferences) -> AppModel {
+        AppModel(
+            preferences: preferences,
+            inbox: InboxStore(persistence: NoCoachingEvents()),
+            presenceController: NoPresenceChanges(),
+            detector: ManualActionDetector(),
+            shortcutCoordinator: GlobalShortcutCoordinator(backend: QuietHotKeys())
+        )
     }
 }
 
