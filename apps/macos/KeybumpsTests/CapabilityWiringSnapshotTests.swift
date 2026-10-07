@@ -25,7 +25,7 @@ struct CapabilityWiringSnapshotTests {
             let second = try WiringRecorder.renderSnapshot()
             guard second == actual else {
                 Attachment.record(second, named: "capability-wiring.second-render.json")
-                Issue.record("Rendering the wiring snapshot isn't deterministic, so the fixture wasn't recorded. \(WiringRecorder.firstDifference(expected: actual, actual: second))")
+                Issue.record("Rendering the wiring snapshot isn't deterministic, so the fixture wasn't recorded. \(WiringRecorder.firstDifference(expected: actual, actual: second, expectedLabel: "first render", actualLabel: "second render"))")
                 return
             }
             try actual.write(to: Self.fixtureURL, atomically: true, encoding: .utf8)
@@ -209,14 +209,16 @@ enum WiringRecorder {
         }
     }
 
-    static func firstDifference(expected: String, actual: String) -> String {
+    static func firstDifference(
+        expected: String, actual: String, expectedLabel: String = "fixture", actualLabel: String = "actual"
+    ) -> String {
         let expectedLines = expected.components(separatedBy: "\n")
         let actualLines = actual.components(separatedBy: "\n")
         for index in 0..<max(expectedLines.count, actualLines.count) {
-            let lhs = index < expectedLines.count ? expectedLines[index] : "<end of fixture>"
-            let rhs = index < actualLines.count ? actualLines[index] : "<end of output>"
+            let lhs = index < expectedLines.count ? expectedLines[index] : "<end of \(expectedLabel)>"
+            let rhs = index < actualLines.count ? actualLines[index] : "<end of \(actualLabel)>"
             if lhs != rhs {
-                return "First difference at line \(index + 1):\n  fixture: \(lhs)\n  actual:  \(rhs)"
+                return "First difference at line \(index + 1):\n  \(expectedLabel): \(lhs)\n  \(actualLabel): \(rhs)"
             }
         }
         return "Outputs differ only in length."
