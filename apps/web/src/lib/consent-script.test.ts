@@ -1,14 +1,23 @@
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { consentDefaults } from '@/components/analytics'
 
-/** Runs the inline consent script against a fake page and returns what it did. */
-function run(saved: string | null, { cookiesBlocked = false } = {}) {
+/**
+ * Runs the inline consent script as a page would, with a fake window as its global object, and
+ * returns what it did.
+ */
+function run(saved: string | null, { cookiesBlocked = false, storageBlocked = false } = {}) {
   const dataLayer: unknown[] = []
   const cookies: string[] = []
   const listeners: Record<string, (event: { detail: unknown }) => void> = {}
-  const window = {
+  const window: Record<string, unknown> = {
     dataLayer,
-    localStorage: { getItem: () => saved },
+    localStorage: {
+      getItem: () => {
+        if (storageBlocked) throw new Error('storage blocked')
+        return saved
+      }
+    },
     document: {
       set cookie(value: string) {
         if (cookiesBlocked) throw new Error('cookies blocked')
@@ -19,8 +28,10 @@ function run(saved: string | null, { cookiesBlocked = false } = {}) {
       listeners[name] = listener
     }
   }
-  new Function('window', `with (window) { ${consentDefaults} }`)(window)
+  window.window = window
+  runInNewContext(consentDefaults, window)
   return {
+    window,
     dataLayer,
     cookies,
     choose: (choice: string) => listeners['keybumps:consent']({ detail: choice })
@@ -46,6 +57,29 @@ describe('the inline consent script (#337, #363)', () => {
     ])
     page.choose('something else')
     expect(page.cookies).toHaveLength(1)
+  })
+
+  it('deletes the cookie when storage can’t be read or holds something else', () => {
+    const deleted = ['keybumps-consent=;Max-Age=0;Path=/;SameSite=Lax;Secure']
+    expect(run(null, { storageBlocked: true }).cookies).toEqual(deleted)
+    expect(run('yes').cookies).toEqual(deleted)
+  })
+
+  it('leaves no globals behind besides its own functions', () => {
+    const page = run('granted')
+    // Top-level declarations in an inline script become window properties, so nothing that holds
+    // the visitor's choice may be declared there.
+    expect(Object.keys(page.window).sort()).toEqual(
+      [
+        'addEventListener',
+        'dataLayer',
+        'document',
+        'gtag',
+        'keybumpsConsent',
+        'localStorage',
+        'window'
+      ].sort()
+    )
   })
 
   it('still updates consent and tells GTM when cookies can’t be written', () => {

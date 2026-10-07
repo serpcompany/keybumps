@@ -142,16 +142,17 @@ export default function PrivacyPage() {
         When you buy, our website tells Google Analytics about the purchase, so we can see which
         pages lead to purchases: the order number, product, amount, tax, currency, and any discount
         code. If you allowed analytics, it adds the anonymous IDs Google Analytics gave your
-        browser, which travel to Polar with your checkout to make the link. Buyers in the EU, the
-        EEA, the UK, and Switzerland are counted only if they allowed analytics. It never sends your
-        name, email, address, or payment details.
+        browser, which travel to Polar with your checkout to make the link. If you declined
+        analytics, or you’re in the EU, the EEA, the UK, or Switzerland and didn’t allow them, the
+        purchase isn’t sent at all. It never sends your name, email, address, or payment details.
       </p>
       <p>
         If a partner’s link brought you to our website, it also tells Dub, which runs our partner
-        program, about the purchase, so the partner is credited and paid: the order number, amount,
-        and currency, the referral, which travels to Polar with your checkout, and Polar’s customer
-        number. Buyers in the EU, the EEA, the UK, and Switzerland are credited only if they allowed
-        cookies. Dub never receives your name, email, or payment details.
+        program, about the purchase and any renewal or refund of it, so the partner is credited and
+        paid: the order number, amount, and currency, the referral, which travels to Polar with your
+        checkout, and Polar’s customer number. If you declined cookies, or you’re in the EU, the
+        EEA, the UK, or Switzerland and didn’t allow them, no partner is credited. Dub never
+        receives your name, email, or payment details.
       </p>
 
       <h2>Website</h2>
@@ -168,9 +169,9 @@ export default function PrivacyPage() {
         never on test or staging versions of the site.
       </p>
       <p>
-        If you arrive through a partner’s link, Dub’s script, also loaded through Google Tag
-        Manager, keeps the referral in a cookie for up to 90 days, so the partner is credited if you
-        buy.
+        If you arrive through a partner’s or another tracked link, Dub’s script, also loaded through
+        Google Tag Manager, keeps the referral, and any partner discount it comes with, in cookies
+        for up to 90 days, so the partner is credited if you buy.
       </p>
 
       <h2>Email</h2>

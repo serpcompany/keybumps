@@ -3,7 +3,7 @@ export const SUPPORT_EMAIL = 'support@keybumps.app'
 /** Polar customer portal: purchases, license keys, and freeing a Mac. */
 export const CUSTOMER_PORTAL_URL = 'https://polar.sh/serp/portal'
 
-export const LEGAL_UPDATED = 'October 7, 2026'
+export const LEGAL_UPDATED = 'October 8, 2026'
 
 /** A macOS version as the site writes it: 15 or 14.2, never empty. */
 export type MacOSVersion = `${number}` | `${number}.${number}`

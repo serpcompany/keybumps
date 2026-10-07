@@ -228,7 +228,8 @@ eventually 'download buttons on /thanks/ link to the current DMG (the 302 target
   links_to_dmg /thanks/ 2
 
 # Buy buttons link to /buy/ (#363), which sends a temporary 302, never cached, to Polar's checkout
-# with the visitor's analytics IDs. These requests carry no analytics cookies, so no IDs.
+# with the visitor's analytics IDs. These requests carry no analytics cookies, so no IDs; from a
+# country that chooses cookies first, the reference says consent=denied instead.
 buy_redirects_to_checkout() {
   local headers status location cache
   headers="$(curl -s "${limits[@]}" "${smoke[@]}" -o /dev/null -D - "$base/buy/" || true)"
@@ -236,7 +237,7 @@ buy_redirects_to_checkout() {
   status="$(head -1 <<<"$headers" | awk '{print $2}')"
   location="$(grep -i '^location:' <<<"$headers" | head -1 | sed 's/^[^:]*: *//' || true)"
   cache="$(grep -i '^cache-control:' <<<"$headers" | head -1 || true)"
-  if [ "$status" != 302 ] || ! grep -qE '^https://buy\.polar\.sh/polar_cl_[0-9A-Za-z]+$' <<<"$location" ||
+  if [ "$status" != 302 ] || ! grep -qE '^https://buy\.polar\.sh/polar_cl_[0-9A-Za-z]+(\?reference_id=consent%3Ddenied)?$' <<<"$location" ||
     ! grep -qi 'no-store' <<<"$cache"; then
     why="got '$status' to '$location' with '${cache:-no Cache-Control}'"
     return 1

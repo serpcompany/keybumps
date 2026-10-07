@@ -49,12 +49,12 @@ export function Analytics() {
  *
  * Every choice, saved or new, is also written to the `keybumps-consent` cookie for a year, so
  * /buy/ knows it (#363). Rewriting it on each page view gives choices made before the cookie
- * existed one too, and a page view with no saved choice deletes the cookie, so /buy/ never acts
- * on a choice the banner has forgotten.
+ * existed one too, and a page view with no saved choice (none, unreadable storage, or anything
+ * else) deletes the cookie, so /buy/ never acts on a choice the banner has forgotten.
  */
 export const consentDefaults = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}
 gtag('consent','default',{ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',analytics_storage:'denied',region:${JSON.stringify(consentCountries)},wait_for_update:500});
 gtag('consent','default',{ad_storage:'granted',ad_user_data:'granted',ad_personalization:'granted',analytics_storage:'granted'});
 function keybumpsConsent(c,announce){if(c!=='granted'&&c!=='denied')return;gtag('consent','update',{ad_storage:c,ad_user_data:c,ad_personalization:c,analytics_storage:c});try{document.cookie=${JSON.stringify(consentCookieName)}+'='+c+';Max-Age=31536000;Path=/;SameSite=Lax;Secure'}catch(e){}if(announce)dataLayer.push({event:'keybumps_consent',keybumps_consent:c})}
-try{var saved=localStorage.getItem(${JSON.stringify(consentStorageKey)});if(saved)keybumpsConsent(saved,false);else document.cookie=${JSON.stringify(consentCookieName)}+'=;Max-Age=0;Path=/;SameSite=Lax;Secure'}catch(e){}
+(function(){var c=null;try{c=localStorage.getItem(${JSON.stringify(consentStorageKey)})}catch(e){}if(c==='granted'||c==='denied')keybumpsConsent(c,false);else try{document.cookie=${JSON.stringify(consentCookieName)}+'=;Max-Age=0;Path=/;SameSite=Lax;Secure'}catch(e){}})();
 addEventListener(${JSON.stringify(consentEvent)},function(e){keybumpsConsent(e.detail,true)});`

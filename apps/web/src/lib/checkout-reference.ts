@@ -9,11 +9,12 @@ import { pricing } from './pricing'
  * checkout link's `reference_id`, which Polar keeps in the checkout's metadata and copies to the
  * order and its renewals. Nothing else goes in: no name, email, or other personal data.
  *
- * A saved choice decides everywhere: the consent cookie saying `denied` means no reference, even
- * from a country that doesn't ask (a VPN, travel). Without one, a visitor from a country that
- * chooses cookies first (`lib/consent.ts`) gets no reference, and anyone else does. A `_ga` cookie
- * alone isn't consent: it can predate the banner, and declining doesn't delete it. So the
- * reference itself means the IDs may be used.
+ * A saved choice decides everywhere: the consent cookie saying `denied` means no IDs, even from
+ * a country that doesn't ask (a VPN, travel). Without one, a visitor from a country that chooses
+ * cookies first (`lib/consent.ts`) gets no IDs, and anyone else does. A `_ga` cookie alone isn't
+ * consent: it can predate the banner, and declining doesn't delete it. Where the IDs are withheld,
+ * the reference says `consent=denied` instead, so the webhook doesn't count the purchase under
+ * another ID either.
  */
 export interface CheckoutReference {
   /** Google Analytics' client ID, from the `_ga` cookie: `1234567890.1700000000`. */
@@ -22,6 +23,8 @@ export interface CheckoutReference {
   gaSessionId?: string
   /** The Dub partner link click that brought the visitor, from the `dub_id` cookie. */
   dubClickId?: string
+  /** The visitor didn't allow analytics: count nothing for this purchase. */
+  consentDenied?: true
 }
 
 /** The order metadata key Polar stores a checkout link's `reference_id` under. */
@@ -91,6 +94,7 @@ export function referenceFromCookies(
  * empty.
  */
 export function encodeCheckoutReference(reference: CheckoutReference): string | null {
+  if (reference.consentDenied) return 'consent=denied'
   const params = new URLSearchParams()
   if (reference.gaClientId) params.set('ga', reference.gaClientId)
   if (reference.gaSessionId) params.set('gs', reference.gaSessionId)
@@ -106,6 +110,7 @@ export function encodeCheckoutReference(reference: CheckoutReference): string | 
 export function parseCheckoutReference(value: unknown): CheckoutReference {
   if (typeof value !== 'string' || value.length > 500) return {}
   const params = new URLSearchParams(value)
+  if (params.get('consent') === 'denied') return { consentDenied: true }
   const valid = (key: string, pattern: RegExp) => {
     const part = params.get(key)
     return part && pattern.test(part) ? part : undefined
@@ -146,9 +151,11 @@ export function buyRedirect(
   let location = '/pricing/'
   if (checkoutUrl) {
     const url = new URL(checkoutUrl)
-    const reference = referenceAllowed(cookieHeader, country)
-      ? encodeCheckoutReference(referenceFromCookies(cookieHeader, measurementId))
-      : null
+    const reference = encodeCheckoutReference(
+      referenceAllowed(cookieHeader, country)
+        ? referenceFromCookies(cookieHeader, measurementId)
+        : { consentDenied: true }
+    )
     if (reference) url.searchParams.set(referenceMetadataKey, reference)
     location = url.toString()
   }

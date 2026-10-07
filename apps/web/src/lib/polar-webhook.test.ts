@@ -235,6 +235,19 @@ describe('Polar orders to GA4 (#363)', () => {
     ])
   })
 
+  it('sends nothing for a buyer whose visit refused analytics, wherever they’re billed', async () => {
+    const data = order({ metadata: { reference_id: 'consent=denied' } })
+    await handlePolarWebhook(delivery('order.paid', data), env())
+    const refund = order({
+      status: 'refunded',
+      refunded_amount: 3900,
+      metadata: { reference_id: 'consent=denied' }
+    })
+    await handlePolarWebhook(delivery('order.refunded', refund), env())
+    expect(sent).toEqual([])
+    expect(logged().map(line => line.ga4)).toEqual(['no_consent', 'no_consent'])
+  })
+
   it('sends a purchase for a buyer from those countries who allowed analytics', async () => {
     await handlePolarWebhook(
       delivery('order.paid', order({ billing_address: { country: 'DE' } })),
