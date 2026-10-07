@@ -475,6 +475,18 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Unit tests only: lays the palette out on `tab`, invisible and without key focus, monitors, or
+    /// paste target, so a test can scroll its real lists while the owner keeps typing elsewhere.
+    func layOutForTesting(_ tab: CommandPaletteTab) -> NSWindow? {
+        guard UnitTestHost.isActive else { return nil }
+        if panel == nil { makePanel() }
+        guard let panel else { return nil }
+        selectOnOpening(tab)
+        panel.hideDuringUnitTests()
+        panel.orderFrontRegardless()
+        return panel
+    }
+
     /// Runs as the palette opens. The palette never activates Keybumps, so the app in front is the
     /// one you were typing in, unless Keybumps already was (a Dock click, or Settings). Opening the
     /// palette also cancels a paste still waiting to happen.
@@ -1722,30 +1734,30 @@ private struct SearchResultsView: View {
                         // No per-row trash button: Delete removes the highlighted Recent Item, and the
                         // context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
                         ScrollViewReader { proxy in
-                        List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
-                            Button { open(item.result) } label: {
-                                SearchResultRow(result: item.result)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 10)
-                                    .contentShape(Rectangle())
+                            List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
+                                Button { open(item.result) } label: {
+                                    SearchResultRow(result: item.result)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button("Open") { open(item.result) }
+                                    Button("Reveal in Finder") { reveal(item.result) }
+                                    Divider()
+                                    Button("Delete", role: .destructive) { deleteRecentItem(item) }
+                                }
+                                .accessibilityAction(named: "Delete") { deleteRecentItem(item) }
+                                .listRowInsets(.init())
+                                .listRowSeparator(.hidden)
+                                .paletteHoverHighlights(row: index)
+                                .paletteRowBackground(isSelected: index == selection)
+                                .id(item.id)
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button("Open") { open(item.result) }
-                                Button("Reveal in Finder") { reveal(item.result) }
-                                Divider()
-                                Button("Delete", role: .destructive) { deleteRecentItem(item) }
-                            }
-                            .accessibilityAction(named: "Delete") { deleteRecentItem(item) }
-                            .listRowInsets(.init())
-                            .listRowSeparator(.hidden)
-                            .paletteHoverHighlights(row: index)
-                            .paletteRowBackground(isSelected: index == selection)
-                            .id(item.id)
-                        }
-                        .listStyle(.plain)
-                        .scrollContentBackground(.hidden)
-                        .paletteScrollsToSelection(selection, proxy: proxy) { recentItems.indices.contains($0) ? recentItems[$0].id : nil }
+                            .listStyle(.plain)
+                            .scrollContentBackground(.hidden)
+                            .paletteScrollsToSelection(selection, proxy: proxy) { recentItems.indices.contains($0) ? recentItems[$0].id : nil }
                         }
                     }
                 }
@@ -2017,35 +2029,35 @@ private struct ClipboardResultsView: View {
                     // No per-row trash button: Delete (or ⌘⌫ while typing) removes the selected row,
                     // and the context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
                     ScrollViewReader { proxy in
-                    List(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        Button { choose(entry) } label: {
-                            ClipboardRow(
-                                entry: entry,
-                                showsEditHint: edit != nil && index == selection && entry.kind == .image
-                            )
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Copy") { copy(entry) }
-                            if let edit, entry.kind == .image {
-                                Button("Edit") { edit(entry) }
+                        List(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                            Button { choose(entry) } label: {
+                                ClipboardRow(
+                                    entry: entry,
+                                    showsEditHint: edit != nil && index == selection && entry.kind == .image
+                                )
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .contentShape(Rectangle())
                             }
-                            Divider()
-                            Button("Delete", role: .destructive) { delete(entry) }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Copy") { copy(entry) }
+                                if let edit, entry.kind == .image {
+                                    Button("Edit") { edit(entry) }
+                                }
+                                Divider()
+                                Button("Delete", role: .destructive) { delete(entry) }
+                            }
+                            .accessibilityAction(named: "Delete") { delete(entry) }
+                            .listRowInsets(.init())
+                            .listRowSeparator(.hidden)
+                            .paletteHoverHighlights(row: index)
+                            .paletteRowBackground(isSelected: index == selection)
+                            .id(entry.id)
                         }
-                        .accessibilityAction(named: "Delete") { delete(entry) }
-                        .listRowInsets(.init())
-                        .listRowSeparator(.hidden)
-                        .paletteHoverHighlights(row: index)
-                        .paletteRowBackground(isSelected: index == selection)
-                        .id(entry.id)
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
                     }
                 }
             }

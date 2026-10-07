@@ -106,23 +106,23 @@ private struct KeyboardShortcutterResultsView: View {
                     .padding(.bottom, 6)
 
                     ScrollViewReader { proxy in
-                    List(Array(entries.enumerated()), id: \.element.id) { index, event in
-                        Button { select(index) } label: {
-                            CoachingEventRow(event: event)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 7)
-                                .contentShape(Rectangle())
+                        List(Array(entries.enumerated()), id: \.element.id) { index, event in
+                            Button { select(index) } label: {
+                                CoachingEventRow(event: event)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 7)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .listRowInsets(.init())
+                            .listRowSeparator(.hidden)
+                            .paletteHoverHighlights(row: index)
+                            .paletteRowBackground(isSelected: index == selection)
+                            .id(event.id)
                         }
-                        .buttonStyle(.plain)
-                        .listRowInsets(.init())
-                        .listRowSeparator(.hidden)
-                        .paletteHoverHighlights(row: index)
-                        .paletteRowBackground(isSelected: index == selection)
-                        .id(event.id)
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
                     }
                 }
             }

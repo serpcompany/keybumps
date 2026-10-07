@@ -129,9 +129,8 @@ struct PaletteHoverTests {
         let fixture = HoverFixture()
         defer { fixture.tearDown() }
         for index in 1...40 { fixture.clipboard.ingestForTesting("made-up text \(index)") }
-        fixture.palette.show(.clipboard)
-        defer { fixture.palette.dismiss() }
-        let panel = try #require(NSApp.windows.first { $0.identifier?.rawValue == "commandPalette" })
+        let panel = try #require(fixture.palette.layOutForTesting(.clipboard))
+        defer { panel.orderOut(nil) }
         let content = try #require(panel.contentView)
         let list = try #require(Self.waitFor { Self.scrollViews(in: content).first { $0.documentView is NSTableView } })
         #expect(list.contentView.bounds.minY <= 0)
