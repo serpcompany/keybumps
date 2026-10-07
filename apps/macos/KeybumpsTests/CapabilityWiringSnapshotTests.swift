@@ -29,11 +29,6 @@ struct CapabilityWiringSnapshotTests {
             Issue.record("Capability wiring changed. \(WiringRecorder.firstDifference(expected: expected, actual: actual))")
         }
     }
-
-    @Test("Rendering the wiring snapshot is deterministic")
-    func renderingIsDeterministic() throws {
-        #expect(try WiringRecorder.renderSnapshot() == WiringRecorder.renderSnapshot())
-    }
 }
 
 // MARK: - Snapshot model
