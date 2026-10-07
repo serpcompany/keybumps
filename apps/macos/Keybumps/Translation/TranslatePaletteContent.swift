@@ -649,8 +649,8 @@ private struct RecentTranslationRow: View {
 }
 
 /// The highlighted saved translation in full, as the Dictation tab shows a recording: its actions,
-/// with their keys, stay at the top, and below them scroll the translation, large, the text it was
-/// translated from, and its languages and when it was saved. Both texts can be selected with the
+/// with their keys, stay at the top, and below them scroll the translation, large, then, under a
+/// hairline, the text it was translated from, and its languages and when it was saved. Both texts can be selected with the
 /// pointer, and ⌘C then copies the selection. VoiceOver reads the translation, the source, the
 /// languages, then the actions.
 private struct RecentTranslationDetail: View {
@@ -685,6 +685,8 @@ private struct RecentTranslationDetail: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("palette.translate.detail.translation")
+                    // Between the two languages, as between Information's rows (#377).
+                    PaletteDivider()
                     VStack(alignment: .leading, spacing: 6) {
                         PaletteSectionHeader(TranslationLanguages.name(for: detail.record.sourceLanguage))
                         Text(detail.record.sourceText)
