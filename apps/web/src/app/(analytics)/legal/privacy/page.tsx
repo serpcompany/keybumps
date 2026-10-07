@@ -141,11 +141,11 @@ export default function PrivacyPage() {
       </p>
       <p>
         To understand how many people visit and which pages they use, the live keybumps.app site
-        loads Google Tag Manager, which loads the analytics tags we configure in it. Google Tag
-        Manager and those tags receive standard request details, such as your IP address, browser,
-        the page you visit, and the page that linked you there, and analytics tags may set cookies.
-        Google handles that data under its own privacy policy. Analytics run only on the live
-        website: never in the Keybumps app, and never on test or staging versions of the site.
+        loads analytics tools through Google Tag Manager, such as Google Analytics. These tools
+        receive standard request details, such as your IP address, browser, the page you visit, and
+        the page that linked you there, and they may set cookies. Each handles that data under its
+        own privacy policy. Analytics run only on the live website: never in the Keybumps app, and
+        never on test or staging versions of the site.
       </p>
 
       <h2>Email</h2>

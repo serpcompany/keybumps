@@ -96,7 +96,7 @@ Configuration is explicit per environment and falls back to the safe behavior: a
 | --- | --- | --- | --- |
 | `SITE_ENV` | build time **and** runtime | The `deploy:staging` and `deploy:production` scripts (build), and each environment's `vars` in `wrangler.jsonc` (runtime) | `isProductionSite()` in `src/lib/site.ts`. `next.config.ts` (the `X-Robots-Tag` header and the `workers.dev` redirect target) reads the build-time value. OpenNext renders `robots.txt` and pages on the Worker at request time, so they, and the analytics in the layout, read the runtime value. Both must match, or production ships a `robots.txt` that disallows crawling. |
 | `NEXT_PUBLIC_GTM_ID` | build time | The production job of `web-deploy.yml`, from the GitHub `website-production` environment's variables. Staging builds get the placeholder `GTM-STAGING0`, which the `SITE_ENV` gate keeps from rendering; the staging smoke test checks that. | `src/components/analytics.tsx` |
-| `NEXT_PUBLIC_CF_BEACON_TOKEN` | build time | **Must not be set** until the privacy policy covers Cloudflare Web Analytics. The owner chose Google Tag Manager only; setting this token would turn on the beacon without the policy describing it. `web-deploy.yml` doesn't pass it. | `src/components/analytics.tsx` |
+| `NEXT_PUBLIC_CF_BEACON_TOKEN` | build time | **Must not be set.** The owner chose Google Tag Manager only, and the privacy policy describes analytics loaded through GTM; this beacon loads outside it. `web-deploy.yml` doesn't pass it. | `src/components/analytics.tsx` |
 | Secrets | runtime | None today. Use `wrangler secret put --env <env>`, never `wrangler.jsonc` or the repository. | none |
 | `.dev.vars`, `.env*` | local only | Uncommitted (`.gitignore`) | local runs |
 
@@ -121,7 +121,7 @@ The setting covers only Workers Logs and traces. Cloudflare's own zone request l
 
 ## Analytics and privacy
 
-The site uses Google Tag Manager only. `src/components/analytics.tsx` renders nothing unless `SITE_ENV=production`, then loads GTM when `NEXT_PUBLIC_GTM_ID` is set. The privacy policy (`/legal/privacy/`) describes GTM. It also supports the Cloudflare Web Analytics beacon, but `NEXT_PUBLIC_CF_BEACON_TOKEN` must not be set until the privacy policy covers Cloudflare Web Analytics. Any change to analytics tools or tags updates that page in the same pull request.
+The site uses Google Tag Manager only. `src/components/analytics.tsx` renders nothing unless `SITE_ENV=production`, then loads GTM when `NEXT_PUBLIC_GTM_ID` is set. The privacy policy (`/legal/privacy/`) describes the *kinds* of tools the site loads (today, analytics tools through GTM, such as Google Analytics) and what they collect, not each tool by name (owner, 2026-10-07). Another analytics tag in GTM needs no change to it. A new kind of tool (an advertising pixel, affiliate tracking), a tool loaded outside GTM, or new data collected updates that page in the same pull request. The component also supports the Cloudflare Web Analytics beacon, but `NEXT_PUBLIC_CF_BEACON_TOKEN` must not be set: it loads outside GTM.
 
 Checkout, session, and license data in a URL never reach analytics. Polar sends buyers to `/thanks/` with a customer-session token (a bearer credential for the customer portal) and a checkout ID in the query string. GTM and GA read the full page URL, the referrer, and history state, so filtering in the container isn't enough. GTM runs on `/thanks/` and `/license/`, but they never have a query when it does. Structurally:
 

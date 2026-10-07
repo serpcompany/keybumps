@@ -84,7 +84,7 @@ describe('pricing', () => {
       guarantee: pricing.guarantee,
       terms: pricing.model.terms
     }).toEqual({
-      LEGAL_UPDATED: 'October 6, 2026',
+      LEGAL_UPDATED: 'October 7, 2026',
       macs: 1,
       macsInWords: 'one',
       refundDays: 30,
