@@ -91,9 +91,19 @@ final class TranslationModule: CapabilityModule {
     private let translateTab: TranslatePaletteContent
     private let palette: CommandPaletteController
 
-    init(palette: CommandPaletteController, preferences: AppPreferences, translator: (any TextTranslating)?) {
+    init(
+        palette: CommandPaletteController,
+        preferences: AppPreferences,
+        translator: (any TextTranslating)?,
+        openSystemSettings: @escaping @MainActor (SystemSettingsPage) -> Void = { _ in }
+    ) {
         self.palette = palette
         translateTab = TranslatePaletteContent(preferences: preferences, translator: translator)
+        // The palette closes first, so System Settings comes forward over it.
+        translateTab.openLanguageSettings = { [weak palette] in
+            palette?.dismiss()
+            openSystemSettings(.languageAndRegion)
+        }
     }
 
     func apply(_ context: CapabilityContext) {

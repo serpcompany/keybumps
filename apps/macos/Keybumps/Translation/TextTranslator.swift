@@ -5,7 +5,8 @@ import Translation
 enum TranslateFailure: Error, Equatable {
     /// Translation can't go between these two languages.
     case unsupportedPair
-    /// A language needs a download, and it was declined or didn't finish.
+    /// A language isn't downloaded yet. Keybumps never shows the system's download prompt, which
+    /// can't stay up over the palette; the tab sends people to Translation Languages instead.
     case notDownloaded
     /// Anything else.
     case failed
@@ -67,9 +68,9 @@ enum TranslationModels {
 }
 
 /// Apple's Translation, on this Mac. Each translation asks the Translate tab's view
-/// (`hostingSessions`) for a session in its languages; a language's first use shows the system's
-/// download prompt from there. A new translation, or cancelling the task that asked, ends the one
-/// before.
+/// (`hostingSessions`) for a session in its languages, only once both are installed, so the
+/// system's download prompt never shows. A new translation, or cancelling the task that asked,
+/// ends the one before.
 @available(macOS 15.0, *)
 @MainActor
 @Observable
@@ -91,6 +92,8 @@ final class SystemTextTranslator: TextTranslating {
         let targetLanguage = Locale.Language(identifier: target)
         let status = await TranslationModels.availability().status(from: sourceLanguage, to: targetLanguage)
         guard status != .unsupported else { throw TranslateFailure.unsupportedPair }
+        // A session for a pair that isn't installed would show the system's download prompt.
+        guard status == .installed else { throw TranslateFailure.notDownloaded }
         try Task.checkCancellation()
         let id = UUID()
         do {
@@ -104,8 +107,7 @@ final class SystemTextTranslator: TextTranslating {
         } catch {
             if error is CancellationError || Task.isCancelled { throw CancellationError() }
             if Self.isUnsupported(error) { throw TranslateFailure.unsupportedPair }
-            // Only a pair still to download shows the prompt; failing there means it wasn't.
-            throw status == .supported ? TranslateFailure.notDownloaded : TranslateFailure.failed
+            throw TranslateFailure.failed
         }
     }
 
@@ -138,7 +140,6 @@ final class SystemTextTranslator: TextTranslating {
               session.sourceLanguage.map({ $0.isEquivalent(to: request.source) }) ?? true,
               session.targetLanguage.map({ $0.isEquivalent(to: request.target) }) ?? true else { return }
         do {
-            try await session.prepareTranslation()
             let response = try await session.translate(request.text)
             resume(request.id, with: .success(response.targetText))
         } catch {

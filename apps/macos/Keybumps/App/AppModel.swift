@@ -341,7 +341,8 @@ final class AppModel {
             TranslationModule(
                 palette: commandPalette,
                 preferences: preferences,
-                translator: injectedTranslator ?? TextTranslatorFactory.makeDefault()
+                translator: injectedTranslator ?? TextTranslatorFactory.makeDefault(),
+                openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
