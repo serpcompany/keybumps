@@ -94,6 +94,26 @@ describe('Polar webhook signatures (#363)', () => {
     expect(await verifyPolarSignature(body, headers(legacySecret), legacySecret, now)).toBeNull()
   })
 
+  it('accepts any one valid signature in the header, as during a secret rotation', async () => {
+    const body = '{"type":"order.paid"}'
+    const valid = new Headers(sign(body, standardKey))
+    const other = new Headers(sign(body, randomBytes(24)))
+    const both = `${other.get('webhook-signature')} ${valid.get('webhook-signature')}`
+    valid.set('webhook-signature', both)
+    expect(await verifyPolarSignature(body, valid, standardSecret, now)).toBeNull()
+    valid.set('webhook-signature', `v2,abc ${other.get('webhook-signature')}`)
+    expect(await verifyPolarSignature(body, valid, standardSecret, now)).toBe('bad_signature')
+  })
+
+  it('accepts an older secret whose text also reads as base64', async () => {
+    // "whsec_" plus 32 base64 characters: tried as a Standard Webhooks key first, then as text.
+    const secret = `whsec_${'A'.repeat(32)}`
+    const body = '{"type":"order.paid"}'
+    expect(
+      await verifyPolarSignature(body, new Headers(sign(body, secret)), secret, now)
+    ).toBeNull()
+  })
+
   it('rejects a wrong key, a changed body, missing headers, and an old or future timestamp', async () => {
     const body = '{"type":"order.paid"}'
     const headers = new Headers(sign(body, standardKey))
@@ -122,6 +142,17 @@ describe('Polar webhook signatures (#363)', () => {
     expect(response.status).toBe(401)
     expect(sent).toEqual([])
     expect(logged()).toEqual([{ event: 'polar_webhook', status: 401, outcome: 'bad_signature' }])
+  })
+
+  it('answers 400 to a signed body that isn’t JSON', async () => {
+    const body = 'not json'
+    const request = new Request('https://keybumps.app/api/webhooks/polar/', {
+      method: 'POST',
+      headers: sign(body, standardKey),
+      body
+    })
+    expect((await handlePolarWebhook(request, env())).status).toBe(400)
+    expect(logged()).toEqual([{ event: 'polar_webhook', status: 400, outcome: 'bad_json' }])
   })
 
   it('answers 503 until the secret is set, so Polar retries', async () => {
@@ -243,6 +274,18 @@ describe('Polar orders to GA4 (#363)', () => {
     expect(logged()[1].ga4).toBe('partial_refund')
   })
 
+  it('sends no refund for a buyer who must choose cookies first and brought no visit', async () => {
+    const refunded = order({
+      status: 'refunded',
+      refunded_amount: 3900,
+      metadata: {},
+      billing_address: { country: 'FR' }
+    })
+    await handlePolarWebhook(delivery('order.refunded', refunded), env())
+    expect(sent).toEqual([])
+    expect(logged()[0].ga4).toBe('no_consent')
+  })
+
   it('accepts other events without sending anything', async () => {
     for (const type of ['order.created', 'checkout.updated', 'subscription.active']) {
       expect((await handlePolarWebhook(delivery(type, order()), env())).status).toBe(202)
@@ -271,6 +314,12 @@ describe('Polar orders to GA4 (#363)', () => {
     const refused = env({ fetch: fakeFetch(() => new Response(null, { status: 500 })) })
     expect((await handlePolarWebhook(delivery('order.paid', order()), refused)).status).toBe(502)
     expect(logged().map(line => line.ga4)).toEqual(['failed_network', 'failed_status'])
+  })
+
+  it('doesn’t retry a request GA4 rejects, which a retry wouldn’t change', async () => {
+    const rejected = env({ fetch: fakeFetch(() => new Response(null, { status: 400 })) })
+    expect((await handlePolarWebhook(delivery('order.paid', order()), rejected)).status).toBe(202)
+    expect(logged()[0].ga4).toBe('rejected')
   })
 
   it('accepts deliveries before GA4 is set up, and sends nothing', async () => {

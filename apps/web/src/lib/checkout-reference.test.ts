@@ -8,6 +8,7 @@ import {
   gaSessionIdFromCookie,
   parseCheckoutReference,
   readCookie,
+  referenceAllowed,
   referenceFromCookies
 } from './checkout-reference'
 import { pricing } from './pricing'
@@ -73,8 +74,28 @@ describe('checkout reference (#363)', () => {
     expect(parseCheckoutReference('ga=1.2&gs=bad')).toEqual({ gaClientId: '1.2' })
   })
 
+  it('allows a reference where no choice is needed, or where analytics were granted', () => {
+    expect(referenceAllowed(gaCookie, 'US')).toBe(true)
+    // A _ga cookie alone isn't consent: it can predate the banner, and declining keeps it.
+    for (const country of ['DE', 'GB', 'CH', null]) {
+      expect(referenceAllowed(gaCookie, country), String(country)).toBe(false)
+      expect(referenceAllowed(`${gaCookie}; keybumps-consent=denied`, country)).toBe(false)
+      expect(referenceAllowed(`${gaCookie}; keybumps-consent=granted`, country)).toBe(true)
+    }
+  })
+
+  it('/buy/ sends the IDs from a consent country only with consent', () => {
+    const location = (cookies: string) =>
+      buyRedirect(cookies, 'G-TEST123', 'DE', checkout).headers.get('location')
+    expect(location(`${gaCookie}; ${sessionV2}`)).toBe(checkout)
+    expect(location(`${gaCookie}; keybumps-consent=denied`)).toBe(checkout)
+    expect(location(`${gaCookie}; keybumps-consent=granted`)).toBe(
+      `${checkout}?reference_id=ga%3D1234567890.1700000000`
+    )
+  })
+
   it('/buy/ redirects to the checkout with the reference, uncached', () => {
-    const response = buyRedirect(`${gaCookie}; ${sessionV2}`, 'G-TEST123', checkout)
+    const response = buyRedirect(`${gaCookie}; ${sessionV2}`, 'G-TEST123', 'US', checkout)
     expect(response.status).toBe(302)
     expect(response.headers.get('cache-control')).toBe('private, no-store')
     const location = new URL(response.headers.get('location') ?? '')
@@ -83,17 +104,24 @@ describe('checkout reference (#363)', () => {
   })
 
   it('/buy/ sends a visitor without analytics cookies to the bare checkout', () => {
-    const response = buyRedirect('other=1', 'G-TEST123', checkout)
+    const response = buyRedirect('other=1', 'G-TEST123', 'US', checkout)
     expect(response.headers.get('location')).toBe(checkout)
   })
 
   it('/buy/ goes to /pricing/ when there is no checkout', () => {
-    expect(buyRedirect(gaCookie, 'G-TEST123', null).headers.get('location')).toBe('/pricing/')
+    expect(buyRedirect(gaCookie, 'G-TEST123', 'US', null).headers.get('location')).toBe('/pricing/')
   })
 
-  it('serves /buy/ from the pricing checkout link', () => {
-    const response = GET(new Request('https://keybumps.app/buy/'))
-    const expected = pricing.checkoutUrl ?? '/pricing/'
-    expect(response.headers.get('location')).toBe(expected)
+  it('serves /buy/ from the pricing checkout link and Cloudflare’s country', () => {
+    const buy = (country: string) =>
+      GET(
+        new Request('https://keybumps.app/buy/', {
+          headers: { cookie: gaCookie, 'cf-ipcountry': country }
+        })
+      ).headers.get('location') ?? ''
+    expect(buy('DE')).toBe(pricing.checkoutUrl ?? '/pricing/')
+    if (pricing.checkoutUrl) {
+      expect(buy('US')).toBe(`${pricing.checkoutUrl}?reference_id=ga%3D1234567890.1700000000`)
+    }
   })
 })

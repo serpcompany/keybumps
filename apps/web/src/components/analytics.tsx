@@ -1,7 +1,7 @@
 import { GoogleTagManager } from '@next/third-parties/google'
 import Script from 'next/script'
 import { ConsentBanner } from '@/components/consent-banner'
-import { consentCountries, consentEvent, consentStorageKey } from '@/lib/consent'
+import { consentCookieName, consentCountries, consentEvent, consentStorageKey } from '@/lib/consent'
 import { isProductionSite } from '@/lib/site'
 
 /**
@@ -46,10 +46,14 @@ export function Analytics() {
  * `keybumps_consent` to the dataLayer, so GTM can fire a tag that waits for consent, such as Meta's
  * pixel, on that page. A saved choice doesn't push it: it applies before GTM loads, so the page's
  * own triggers already see it, and pushing it too would fire those tags twice.
+ *
+ * Every choice, saved or new, is also written to the `keybumps-consent` cookie for a year, so
+ * /buy/ knows it (#363). Rewriting it on each page view gives choices made before the cookie
+ * existed one too.
  */
-const consentDefaults = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}
+export const consentDefaults = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}
 gtag('consent','default',{ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',analytics_storage:'denied',region:${JSON.stringify(consentCountries)},wait_for_update:500});
 gtag('consent','default',{ad_storage:'granted',ad_user_data:'granted',ad_personalization:'granted',analytics_storage:'granted'});
-function keybumpsConsent(c,announce){if(c!=='granted'&&c!=='denied')return;gtag('consent','update',{ad_storage:c,ad_user_data:c,ad_personalization:c,analytics_storage:c});if(announce)dataLayer.push({event:'keybumps_consent',keybumps_consent:c})}
+function keybumpsConsent(c,announce){if(c!=='granted'&&c!=='denied')return;gtag('consent','update',{ad_storage:c,ad_user_data:c,ad_personalization:c,analytics_storage:c});try{document.cookie=${JSON.stringify(consentCookieName)}+'='+c+';Max-Age=31536000;Path=/;SameSite=Lax;Secure'}catch(e){}if(announce)dataLayer.push({event:'keybumps_consent',keybumps_consent:c})}
 try{keybumpsConsent(localStorage.getItem(${JSON.stringify(consentStorageKey)}),false)}catch(e){}
 addEventListener(${JSON.stringify(consentEvent)},function(e){keybumpsConsent(e.detail,true)});`

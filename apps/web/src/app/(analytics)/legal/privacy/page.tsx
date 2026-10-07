@@ -139,10 +139,12 @@ export default function PrivacyPage() {
         country in Polar to provide support and handle refunds. We never see your full card number.
       </p>
       <p>
-        When you buy, our website tells Google Analytics about the purchase: the order number,
-        amount, and currency, and, if you allowed analytics, the anonymous ID Google Analytics gave
-        your browser, so we can see which pages lead to purchases. It never sends your name, email,
-        address, or payment details.
+        When you buy, our website tells Google Analytics about the purchase, so we can see which
+        pages lead to purchases: the order number, product, amount, tax, currency, and any discount
+        code. If you allowed analytics, it adds the anonymous IDs Google Analytics gave your
+        browser, which travel to Polar with your checkout to make the link. Buyers in the EU, the
+        EEA, the UK, and Switzerland are counted only if they allowed analytics. It never sends your
+        name, email, address, or payment details.
       </p>
 
       <h2>Website</h2>

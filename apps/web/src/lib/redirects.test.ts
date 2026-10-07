@@ -68,6 +68,21 @@ describe('site redirects', () => {
     expect(resolve(production, { path: '/sitemaps/pages.xml/' })).toBe('/sitemaps/pages.xml')
   })
 
+  it('never redirects /api/ routes, with or without a slash', () => {
+    for (const path of [
+      '/api',
+      '/api/',
+      '/api/consent',
+      '/api/consent/',
+      '/api/webhooks/polar',
+      '/api/webhooks/polar/'
+    ]) {
+      expect(resolve(production, { path }), path).toBeNull()
+    }
+    // A segment that only starts with "api" is an ordinary page and still gets its slash.
+    expect(resolve(production, { path: '/apis' })).toBe('/apis/')
+  })
+
   it('sends legacy URLs straight to their page', () => {
     for (const legacy of ['privacy', 'terms', 'refunds']) {
       expect(resolve(production, { path: `/${legacy}` })).toBe(`/legal/${legacy}/`)

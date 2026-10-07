@@ -1,3 +1,4 @@
+import { consentCookieName, requiresConsent, storedConsent } from './consent'
 import { pricing } from './pricing'
 
 /**
@@ -5,9 +6,12 @@ import { pricing } from './pricing'
  * Polar's checkout so the paid order's webhook can credit the sale to the visit that led to it
  * (`lib/polar-webhook.ts`). /buy/ reads them from the first-party cookies Google Analytics sets
  * and passes them to Polar as the checkout link's `reference_id`, which Polar keeps in the
- * checkout's metadata and copies to the order and its renewals. Google Analytics sets these
- * cookies only where the visitor allowed analytics (`lib/consent.ts`), so their presence is the
- * consent signal. Nothing else goes in: no name, email, or other personal data.
+ * checkout's metadata and copies to the order and its renewals. Nothing else goes in: no name,
+ * email, or other personal data.
+ *
+ * A visitor from a country that chooses cookies first (`lib/consent.ts`) gets a reference only
+ * with the consent cookie saying `granted`. A `_ga` cookie alone isn't consent: it can predate the
+ * banner, and declining doesn't delete it. So the reference itself means the IDs may be used.
  */
 export interface CheckoutReference {
   /** Google Analytics' client ID, from the `_ga` cookie: `1234567890.1700000000`. */
@@ -94,19 +98,31 @@ export function parseCheckoutReference(value: unknown): CheckoutReference {
   return gaSessionIdPattern.test(gaSessionId) ? { gaClientId, gaSessionId } : { gaClientId }
 }
 
+/** Whether this visitor's IDs may go with a purchase: no choice needed, or analytics granted. */
+export function referenceAllowed(cookieHeader: string | null, country: string | null): boolean {
+  return (
+    !requiresConsent(country) ||
+    storedConsent(readCookie(cookieHeader, consentCookieName)) === 'granted'
+  )
+}
+
 /**
  * /buy/'s answer: a temporary redirect to Polar's checkout with the reference, never cached, since
  * it's built from this visitor's cookies. With no checkout configured, it goes to /pricing/.
+ * `country` is the request's, from Cloudflare (`lib/request-country.ts`).
  */
 export function buyRedirect(
   cookieHeader: string | null,
   measurementId: string | undefined,
+  country: string | null,
   checkoutUrl: string | null = pricing.checkoutUrl
 ): Response {
   let location = '/pricing/'
   if (checkoutUrl) {
     const url = new URL(checkoutUrl)
-    const reference = encodeCheckoutReference(referenceFromCookies(cookieHeader, measurementId))
+    const reference = referenceAllowed(cookieHeader, country)
+      ? encodeCheckoutReference(referenceFromCookies(cookieHeader, measurementId))
+      : null
     if (reference) url.searchParams.set(referenceMetadataKey, reference)
     location = url.toString()
   }

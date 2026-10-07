@@ -26,7 +26,12 @@ export interface Ga4Payload {
   events: Ga4Event[]
 }
 
-export type Ga4Outcome = 'sent' | 'failed_network' | 'failed_status' | 'failed_validation'
+export type Ga4Outcome =
+  | 'sent'
+  | 'rejected'
+  | 'failed_network'
+  | 'failed_status'
+  | 'failed_validation'
 
 const measurementIdPattern = /^G-[A-Z0-9]{4,20}$/
 const requestTimeoutMs = 4000
@@ -51,7 +56,11 @@ export async function derivedClientId(seed: string): Promise<string> {
   return `${digest.getUint32(0)}.${digest.getUint32(4)}`
 }
 
-/** Sends one payload. The URL holds the API secret, so it must never be logged. */
+/**
+ * Sends one payload. A network error, a 429, or a 5xx is worth retrying (`failed_*`); any other
+ * 4xx won't change on a retry, so it's `rejected`. The URL holds the API secret, so it must never
+ * be logged.
+ */
 export async function sendToGa4(
   config: Ga4Config,
   payload: Ga4Payload,
@@ -72,7 +81,9 @@ export async function sendToGa4(
   } catch {
     return 'failed_network'
   }
-  if (!response.ok) return 'failed_status'
+  if (!response.ok) {
+    return response.status === 429 || response.status >= 500 ? 'failed_status' : 'rejected'
+  }
   if (!config.validateOnly) return 'sent'
   const body = (await response.json().catch(() => null)) as {
     validationMessages?: unknown[]

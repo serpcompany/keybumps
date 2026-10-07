@@ -21,9 +21,12 @@ const smokeTest = { type: 'header', key: smokeTestHeader } as const
 
 // Next.js lets every custom redirect source match with or without a trailing slash, so a page
 // pattern has to refuse slashed paths itself, or /about/ would redirect to itself. Paths whose
-// segments start with `_` (/_next/, Next.js dev endpoints) are never pages.
-const unslashedPage = '(?:(?!_|.*/$)[^/.]+)'
-const pageDirectory = '(?:(?!_|\\.well-known/)[^/]+)'
+// segments start with `_` (/_next/, Next.js dev endpoints) are never pages. Nor is anything under
+// /api/: routes there (webhooks, /api/consent/) are served exactly as requested, because a webhook
+// sender treats a redirect as a failed delivery (SERP URL standard). The site has no other
+// segment named `api`.
+const unslashedPage = '(?:(?!_|api$|.*/$)[^/.]+)'
+const pageDirectory = '(?:(?!_|\\.well-known/|api/)[^/]+)'
 const file = '[^/]+\\.\\w+'
 
 /**
