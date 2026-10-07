@@ -125,6 +125,7 @@
 		81435AF03A41EA6929021C1F /* DictationCancelShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2754FB6183BCAF1EE7538ED4 /* DictationCancelShortcutTests.swift */; };
 		81BA58EB099F44DBEE5F94BD /* MenuBarAttention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44AC426D00D2407454C265DD /* MenuBarAttention.swift */; };
 		81E9E085E0D0875986F3A090 /* TranslateDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1F9E10ED0E12C47D9147B5 /* TranslateDetailTests.swift */; };
+		8253ABB74D5E58917B8469BC /* PaletteRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F3221DFBBF7B92C3FCD3B5 /* PaletteRow.swift */; };
 		828EFE5516C46673401134BD /* PluginManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01831D72F5BB6DFCC7A8EFA2 /* PluginManifestTests.swift */; };
 		839ADB854B9177E47955376F /* WhatsNew.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */; };
 		84156585EA619D8BBFB145F3 /* chrome-green-captured-sanitized-trace.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B4BE38E7AF2268494DAE9E2 /* chrome-green-captured-sanitized-trace.json */; };
@@ -281,6 +282,7 @@
 		25220DE0BCB6C2B17E3322BD /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
 		25A41CB8D7FC4C900A758D77 /* CapabilityWiringSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityWiringSnapshotTests.swift; sourceTree = "<group>"; };
 		2754FB6183BCAF1EE7538ED4 /* DictationCancelShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationCancelShortcutTests.swift; sourceTree = "<group>"; };
+		27F3221DFBBF7B92C3FCD3B5 /* PaletteRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteRow.swift; sourceTree = "<group>"; };
 		2819590FC41823CB37040246 /* ShortcutCoachClickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCoachClickTests.swift; sourceTree = "<group>"; };
 		29161E585C6565DB6B7E10DC /* PluginSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginSettingsPage.swift; sourceTree = "<group>"; };
 		2B2F11C413514322A01BCD85 /* KeybumpsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeybumpsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -599,6 +601,7 @@
 				95AB2CB917A99899D63E4232 /* PaletteFilter.swift */,
 				9D19DED4C8F4BA1750CEEA6E /* PaletteListDetail.swift */,
 				AA9C2CC21396F16E615BBC8D /* PalettePasteRoute.swift */,
+				27F3221DFBBF7B92C3FCD3B5 /* PaletteRow.swift */,
 				9A89EEB9E257B80261B8DB77 /* RaycastPaletteStyle.swift */,
 				D93E712317CAB0EF41AA01B2 /* SnippetPaletteResults.swift */,
 			);
@@ -1215,6 +1218,7 @@
 				C2C53E3391331331AFEE4F68 /* PaletteFilter.swift in Sources */,
 				0533BDE3A631FF395330EBA4 /* PaletteListDetail.swift in Sources */,
 				9331398905CF4D5BFC769F4C /* PalettePasteRoute.swift in Sources */,
+				8253ABB74D5E58917B8469BC /* PaletteRow.swift in Sources */,
 				8C21790C7031D23EE928A323 /* PasteboardSnapshot.swift in Sources */,
 				29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */,
 				E34B508A541203FA4ADF33E5 /* PermissionPrompts.swift in Sources */,

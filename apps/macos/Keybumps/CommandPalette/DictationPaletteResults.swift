@@ -125,8 +125,9 @@ private struct DictationPaletteRow: View {
     let isTranscribing: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        PaletteRow {
             PaletteRowIcon(systemImage: icon, tint: tint)
+        } content: {
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.displayText)
                     .font(.system(size: 14))
@@ -141,7 +142,6 @@ private struct DictationPaletteRow: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
         }
     }
 
