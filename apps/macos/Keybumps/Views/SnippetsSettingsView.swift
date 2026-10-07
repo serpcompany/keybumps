@@ -23,6 +23,9 @@ struct SnippetsSettingsView: View {
         let isWritable = store.libraryState.isWritable
         SettingsPage {
             CapabilityControl(capability: .snippets, shortcuts: [.snippets])
+            // Accessibility is optional: without it, ⌘P copies instead of pasting. Expanding needs
+            // it too, so while auto-expansion is on, its row below also asks for it.
+            PluginPermissionsGroup(capability: .snippets)
             SettingsGroup("Auto-expansion") {
                 Toggle(isOn: Binding(
                     get: { model.preferences.expandsSnippetKeywords },
@@ -60,23 +63,6 @@ struct SnippetsSettingsView: View {
                                     : "Lets Keybumps replace the keyword with the snippet."
                             )
                         }
-                    }
-                }
-            }
-            // Accessibility is optional: without it, ⌘P copies instead of pasting. While
-            // auto-expansion is on, its own row above asks for it instead.
-            if model.preferences.enabledCapabilities.contains(.snippets), !model.preferences.expandsSnippetKeywords,
-               !model.permissions.accessibilityGranted {
-                SettingsGroup("Paste") {
-                    LabeledContent {
-                        Button("Allow…") { Task { await model.recoverPermission(.accessibility) } }
-                            .disabled(model.permissions.activeRequest != nil)
-                            .accessibilityLabel("Allow Accessibility so ⌘P pastes")
-                    } label: {
-                        SettingsRowLabel(
-                            title: "⌘P pastes with Accessibility",
-                            subtitle: "Without it, ⌘P in the Snippets tab copies the snippet instead of pasting it into the app you’re using. Copying needs no permission."
-                        )
                     }
                 }
             }
