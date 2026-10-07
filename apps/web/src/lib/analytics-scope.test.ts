@@ -14,6 +14,8 @@ const siteDocument = join(srcDir, 'components', 'site-document.tsx')
 const footer = join(srcDir, 'components', 'site-footer.tsx')
 /** Server-side GA4 events (#363), sent only by the Polar webhook. */
 const measurementProtocol = join(srcDir, 'lib', 'ga4-measurement-protocol.ts')
+/** Dub partner sales (#337), sent only by the Polar webhook. */
+const dubConversions = join(srcDir, 'lib', 'dub-conversions.ts')
 const rootLayouts = [
   join(appDir, analyticsGroup, 'layout.tsx'),
   join(appDir, sensitiveGroup, 'layout.tsx')
@@ -256,6 +258,14 @@ describe('analytics scope', () => {
     expect(filesReaching(measurementProtocol)).toEqual([
       join('app', 'api', 'webhooks', 'polar', 'route.ts'),
       join('lib', 'ga4-measurement-protocol.ts'),
+      join('lib', 'polar-webhook.ts')
+    ])
+  })
+
+  it('sends Dub partner sales only from the Polar webhook route', () => {
+    expect(filesReaching(dubConversions)).toEqual([
+      join('app', 'api', 'webhooks', 'polar', 'route.ts'),
+      join('lib', 'dub-conversions.ts'),
       join('lib', 'polar-webhook.ts')
     ])
   })

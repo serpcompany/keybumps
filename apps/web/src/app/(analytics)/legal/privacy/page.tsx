@@ -146,6 +146,14 @@ export default function PrivacyPage() {
         the EEA, the UK, or Switzerland and didn’t allow them, it sends nothing about your purchase.
         It never sends your name, email, address, or payment details.
       </p>
+      <p>
+        If a partner’s or another tracked link brought you to our website, it also tells Dub, which
+        runs our partner program, about the purchase and any renewal or refund of it, so the partner
+        is credited and paid: the order number, amount, and currency, the referral, which travels to
+        Polar with your checkout, and Polar’s customer number. If you declined cookies, or you’re in
+        the EU, the EEA, the UK, or Switzerland and didn’t allow them, no partner is credited. Dub
+        never receives your name, email, or payment details.
+      </p>
 
       <h2>Website</h2>
       <p>
@@ -159,6 +167,11 @@ export default function PrivacyPage() {
         the page that linked you there, and they may set cookies. Each handles that data under its
         own privacy policy. Analytics run only on the live website: never in the Keybumps app, and
         never on test or staging versions of the site.
+      </p>
+      <p>
+        If you arrive through a partner’s or another tracked link, Dub’s script, also loaded through
+        Google Tag Manager, keeps the referral, and any partner discount it comes with, in cookies
+        for up to 90 days, so the partner is credited if you buy.
       </p>
 
       <h2>Email</h2>

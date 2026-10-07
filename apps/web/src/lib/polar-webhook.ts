@@ -5,6 +5,13 @@ import {
 } from './checkout-reference'
 import { requiresConsent } from './consent'
 import {
+  type DubConfig,
+  type DubOutcome,
+  type DubSale,
+  refundDubCommission,
+  trackDubSale
+} from './dub-conversions'
+import {
   derivedClientId,
   type Ga4Config,
   type Ga4Outcome,
@@ -16,11 +23,14 @@ import {
  * Polar's webhook (#363): `POST /api/webhooks/polar/`. A paid order becomes a GA4 `purchase` with
  * Polar's order ID, real amount after discounts, and currency, and a full refund becomes a GA4
  * `refund`. It replaces GTM's purchase tag on /thanks/, which had no order ID or real amount and
- * missed buyers who never reached that page.
+ * missed buyers who never reached that page. An order a Dub partner link brought also becomes a
+ * Dub sale, and a refund of it, full or partial, updates the partner's commission (#337,
+ * `lib/dub-conversions.ts`).
  *
  * There is no database, so a retried delivery is handled downstream: Google Analytics removes a
  * repeated purchase with the same transaction ID and client (`derivedClientId` keeps the client
- * stable). A delivery succeeds (2xx) unless a send failed, so Polar retries only then.
+ * stable), and Dub ignores a repeated invoice ID for 7 days. A delivery succeeds (2xx) unless a send failed,
+ * so Polar retries only then.
  *
  * Logs hold only the event type and outcomes, never order, customer, or reference data.
  */
@@ -94,6 +104,8 @@ export interface PolarOrder {
   taxAmount: number
   refundedAmount: number
   currency: string
+  /** Polar's customer ID: Dub's customer ID for the partner's sales. */
+  customerId: string | null
   /** The billing address's two-letter country, if Polar has one. */
   country: string | null
   productId: string | null
@@ -130,6 +142,7 @@ export function orderFromPayload(data: unknown): PolarOrder | null {
     taxAmount: tax_amount,
     refundedAmount: refunded_amount,
     currency: currency.toUpperCase(),
+    customerId: typeof data.customer_id === 'string' ? data.customer_id : null,
     country: typeof address?.country === 'string' ? address.country : null,
     productId: typeof data.product_id === 'string' ? data.product_id : null,
     productName: typeof product?.name === 'string' ? product.name : null,
@@ -212,16 +225,65 @@ export async function ga4PayloadForOrder(
   }
 }
 
+export type DubSkip = 'no_click' | 'zero_amount' | 'not_paid' | 'no_customer'
+
+/** Dub's names for the payment, so a partner's dashboard tells a purchase from a renewal. */
+const dubEventNames: Record<string, string> = {
+  purchase: 'Purchase',
+  subscription_create: 'Subscription created'
+}
+
+/**
+ * The Dub sale for a paid order a partner link brought, or why there's none. The click rides in
+ * the checkout reference, which Polar copies to renewals too, so each renewal is credited as well.
+ */
+export function dubSaleForOrder(order: PolarOrder): DubSale | DubSkip {
+  if (order.status !== 'paid') return 'not_paid'
+  if (order.netAmount <= 0) return 'zero_amount'
+  const clickId = order.reference.dubClickId
+  if (!clickId) return 'no_click'
+  if (!order.customerId) return 'no_customer'
+  return {
+    clickId,
+    // Prefixed: other SERP products in the same Dub workspace may sell through the same Polar
+    // organization, and one Dub customer would credit every product's sales to one partner.
+    customerExternalId: `keybumps_${order.customerId}`,
+    amount: order.netAmount,
+    currency: order.currency.toLowerCase(),
+    invoiceId: order.id,
+    eventName: dubEventNames[order.billingReason] ?? 'Invoice paid'
+  }
+}
+
+async function sendToDub(
+  config: DubConfig,
+  event: HandledEvent,
+  order: PolarOrder,
+  fetchImpl: typeof fetch
+): Promise<DubOutcome | DubSkip> {
+  if (event === 'order.refunded') {
+    if (!order.reference.dubClickId) return 'no_click'
+    // Unlike GA4's, Dub's commission takes the sale's new total, so a partial refund is exact.
+    const remaining = order.status === 'refunded' ? 0 : order.netAmount - order.refundedAmount
+    return refundDubCommission(config, order.id, remaining, order.currency.toLowerCase(), fetchImpl)
+  }
+  const sale = dubSaleForOrder(order)
+  return typeof sale === 'string' ? sale : trackDubSale(config, sale, fetchImpl)
+}
+
 export interface PolarWebhookEnv {
   /** Polar's webhook secret (`POLAR_WEBHOOK_SECRET`). Without it, every delivery gets a 503. */
   secret: string | undefined
   /** Null until GA4's measurement ID and API secret are both set. */
   ga4: Ga4Config | null
+  /** Null off the live site, and until Dub's API key is set. */
+  dub: DubConfig | null
   fetch?: typeof fetch
   now?: number
 }
 
-type Ga4Result = Ga4Outcome | Ga4Skip | 'not_configured'
+type Ga4Result = Ga4Outcome | Ga4Skip | 'not_configured' | 'deferred'
+type DubResult = DubOutcome | DubSkip | 'not_configured'
 
 /** Handles one delivery: verify, act on a handled event, and log what happened. */
 export async function handlePolarWebhook(
@@ -247,19 +309,33 @@ export async function handlePolarWebhook(
   const order = orderFromPayload(isRecord(payload) ? payload.data : null)
   if (!order) return respond(202, { type: event, outcome: 'unexpected_payload' })
 
-  let ga4: Ga4Result = 'not_configured'
-  if (env.ga4) {
+  const fetchImpl = env.fetch ?? fetch
+  const ga4Config = env.ga4
+  const dubConfig = env.dub
+  const toGa4 = async (): Promise<Ga4Result> => {
+    if (!ga4Config) return 'not_configured'
     const ga4Payload = await ga4PayloadForOrder(event, order)
-    ga4 =
-      typeof ga4Payload === 'string'
-        ? ga4Payload
-        : await sendToGa4(env.ga4, ga4Payload, env.fetch ?? fetch)
+    return typeof ga4Payload === 'string' ? ga4Payload : sendToGa4(ga4Config, ga4Payload, fetchImpl)
   }
-  const failed = ga4.startsWith('failed_')
+  const toDub = (): Promise<DubResult> =>
+    dubConfig ? sendToDub(dubConfig, event, order, fetchImpl) : Promise.resolve('not_configured')
+  let ga4: Ga4Result
+  let dub: DubResult
+  if (event === 'order.refunded') {
+    // GA4 drops a repeated purchase but not a repeated refund, so a refund goes to GA4 only once
+    // Dub, the side a retry is for, has taken it.
+    dub = await toDub()
+    ga4 = dub.startsWith('failed_') ? 'deferred' : await toGa4()
+  } else {
+    // A retry repeats both, and both drop the repeat: GA4 by transaction and client, Dub by invoice.
+    ;[ga4, dub] = await Promise.all([toGa4(), toDub()])
+  }
+  const failed = ga4.startsWith('failed_') || dub.startsWith('failed_')
   return respond(failed ? 502 : 202, {
     type: event,
     outcome: failed ? 'failed' : 'handled',
-    ga4
+    ga4,
+    dub
   })
 }
 

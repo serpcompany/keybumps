@@ -18,6 +18,7 @@ const gaCookie = '_ga=GA1.1.1234567890.1700000000'
 const sessionV1 = '_ga_TEST123=GS1.1.1700000100.3.1.1700000200.0.0.0'
 const sessionV2 = '_ga_TEST123=GS2.1.s1700000100$o3$g1$t1700000200$j0$l0$h0'
 const checkout = 'https://checkout.example/polar_cl_test'
+const dubCookie = 'dub_id=dubclicktest0001'
 
 describe('checkout reference (#363)', () => {
   it('reads the client ID from _ga and the session ID from either _ga_<stream> format', () => {
@@ -53,6 +54,33 @@ describe('checkout reference (#363)', () => {
     // No client ID (analytics declined or blocked): nothing, not even the session.
     expect(referenceFromCookies(sessionV1, 'G-TEST123')).toEqual({})
     expect(referenceFromCookies(null, 'G-TEST123')).toEqual({})
+  })
+
+  it('adds the Dub partner click, with or without analytics', () => {
+    expect(referenceFromCookies(`${gaCookie}; ${dubCookie}`, undefined)).toEqual({
+      gaClientId: '1234567890.1700000000',
+      dubClickId: 'dubclicktest0001'
+    })
+    expect(referenceFromCookies(dubCookie, 'G-TEST123')).toEqual({ dubClickId: 'dubclicktest0001' })
+    expect(referenceFromCookies('dub_id=not%20a%20click', 'G-TEST123')).toEqual({})
+    const encoded = encodeCheckoutReference({ dubClickId: 'dubclicktest0001' })
+    expect(encoded).toBe('dub=dubclicktest0001')
+    expect(parseCheckoutReference(encoded)).toEqual({ dubClickId: 'dubclicktest0001' })
+    expect(parseCheckoutReference('ga=1.2&dub=me@example.com')).toEqual({ gaClientId: '1.2' })
+  })
+
+  it('/buy/ sends a partner click from a consent country only with consent', () => {
+    const location = (cookies: string, country: string) =>
+      buyRedirect(cookies, 'G-TEST123', country, checkout).headers.get('location')
+    expect(location(dubCookie, 'FR')).toBe(`${checkout}?reference_id=consent%3Ddenied`)
+    expect(location(`${dubCookie}; keybumps-consent=granted`, 'FR')).toBe(
+      `${checkout}?reference_id=dub%3Ddubclicktest0001`
+    )
+    expect(location(dubCookie, 'US')).toBe(`${checkout}?reference_id=dub%3Ddubclicktest0001`)
+    // Declined anywhere: the click stays home too.
+    expect(location(`${dubCookie}; keybumps-consent=denied`, 'US')).toBe(
+      `${checkout}?reference_id=consent%3Ddenied`
+    )
   })
 
   it('round-trips through Polar, and drops anything /buy/ would not write', () => {

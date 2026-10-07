@@ -29,7 +29,8 @@ export interface Ga4Payload {
 export type Ga4Outcome = 'sent' | 'rejected' | 'invalid' | 'failed_network' | 'failed_status'
 
 const measurementIdPattern = /^G-[A-Z0-9]{4,20}$/
-const requestTimeoutMs = 4000
+/** With a refund's two Dub calls first, this keeps a delivery inside Polar's 10-second timeout. */
+const requestTimeoutMs = 3000
 
 /** The config from the Worker's environment, or null until both values are set. */
 export function ga4ConfigFromEnv(env: Record<string, string | undefined>): Ga4Config | null {
