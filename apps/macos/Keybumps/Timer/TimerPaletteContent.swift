@@ -88,7 +88,7 @@ final class TimerPaletteContent: CapabilityPaletteContent {
 
     /// Return starts the typed timer and closes the palette; on a timer it pauses, resumes, or
     /// restarts it.
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
+    func activate(row: Int, query: String, palette: PaletteContentActions) {
         let rows = rows(query: query)
         guard rows.indices.contains(row) else { return }
         switch rows[row] {
@@ -115,7 +115,7 @@ final class TimerPaletteContent: CapabilityPaletteContent {
 
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
         let rows = rows(query: query)
-        return PaletteFooterActions(primary: rows.indices.contains(row) ? rows[row].returnAction : nil, secondary: nil)
+        return PaletteFooterActions(primary: rows.indices.contains(row) ? rows[row].returnAction : nil)
     }
 
     func didShow(palette: PaletteContentActions) {

@@ -16,7 +16,7 @@ extension CapabilityDescriptor {
             systemImage: "keyboard",
             prompt: "Search hotkeys",
             primaryActionTitle: nil,
-            secondaryActionTitle: nil,
+            secondaryActions: [],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

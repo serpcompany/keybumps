@@ -15,7 +15,7 @@ extension CapabilityDescriptor {
             systemImage: "clipboard",
             prompt: "Search clipboard history",
             primaryActionTitle: "Copy",
-            secondaryActionTitle: nil,
+            secondaryActions: [.paste()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(
@@ -26,7 +26,13 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [],
         searchKeywords: ["copy", "copied", "paste"],
-        category: .productivity
+        category: .productivity,
+        optionalPermissions: [
+            PluginOptionalPermission(
+                permission: .accessibility,
+                reason: "Lets ⌘P paste a clipboard item into the app you were using. Without it, ⌘P copies the item instead."
+            ),
+        ]
     )
 }
 

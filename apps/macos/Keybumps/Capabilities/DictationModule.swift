@@ -16,7 +16,7 @@ extension CapabilityDescriptor {
             systemImage: "waveform",
             prompt: "Search dictation history",
             primaryActionTitle: "Copy",
-            secondaryActionTitle: nil,
+            secondaryActions: [.paste()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

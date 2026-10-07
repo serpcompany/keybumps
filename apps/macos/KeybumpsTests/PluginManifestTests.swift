@@ -109,6 +109,21 @@ struct PluginManifestTests {
         }
     }
 
+    @Test("Every plugin whose tab pastes with ⌘P declares Accessibility, which pasting into another app needs (#370)")
+    func pastingPluginsDeclareAccessibility() {
+        let pasting = CapabilityCatalog.descriptors.filter { descriptor in
+            descriptor.paletteTab?.secondaryActions.contains { $0.keys == PaletteKeyAction.paste().keys } == true
+        }
+        #expect(pasting.map(\.capability) == [.clipboardHistory, .screenshotTools, .dictation, .snippets, .emojiPicker, .translation])
+        for descriptor in pasting {
+            let declared = descriptor.requiredPermissions.union(descriptor.optionalPermissions.map(\.permission))
+            #expect(declared.contains(.accessibility), "\(descriptor.title)")
+        }
+        #expect(CapabilityDescriptor.clipboardHistory.optionalPermissions.map(\.permission) == [.accessibility])
+        #expect(CapabilityDescriptor.screenshotTools.optionalPermissions.map(\.permission) == [.accessibility])
+        #expect(CapabilityDescriptor.dictation.requiredPermissions.contains(.accessibility), "Dictation needs it anyway")
+    }
+
     @Test("A new install starts with every plugin on except those that ship off")
     func newInstallSkipsPluginsThatShipOff() {
         let started = AppPreferences.initialCapabilities(stored: nil, known: nil, shippingOff: [.timer])

@@ -10,6 +10,8 @@ struct DictationPaletteResults: View {
     let choose: (String) -> Void
     let transcribe: (DictationHistoryEntry) -> Void
     let retryingEntryID: String?
+    /// The palette's player, so Space plays and pauses the highlighted recording too.
+    let audioPlayer: DictationAudioPlayer
     /// Delete, from the detail's button or the Delete key: asks first.
     let requestDelete: (DictationHistoryEntry) -> Void
     /// The confirmation's Delete.
@@ -18,13 +20,19 @@ struct DictationPaletteResults: View {
     @Binding var pendingDeletion: DictationHistoryEntry?
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
-    @State private var audioPlayer = DictationAudioPlayer()
 
     /// The recordings the tab lists; shared with the controller so keyboard selection matches.
     static func filter(_ entries: [DictationHistoryEntry], query: String) -> [DictationHistoryEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return entries }
         return entries.filter { $0.displayText.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    /// What Space does on a recording, for the footer: Pause while it plays, else Play. Nil for one
+    /// with no audio.
+    static func playbackTitle(of entry: DictationHistoryEntry, player: DictationAudioPlayer) -> String? {
+        guard entry.audioURL != nil else { return nil }
+        return player.activeEntryID == entry.id && player.isPlaying ? "Pause" : "Play"
     }
 
     var body: some View {

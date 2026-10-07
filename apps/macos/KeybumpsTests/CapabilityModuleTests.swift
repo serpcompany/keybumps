@@ -187,10 +187,10 @@ struct CapabilityModuleTests {
     func screenshotsTabCopiesAndEditsWithCommand() {
         #expect(ScreenshotPaletteAction(withCommand: false) == .copy)
         #expect(ScreenshotPaletteAction(withCommand: true) == .edit)
-        // The footer pill names them in that order: Copy ↵, then Edit ⌘↵.
+        // The footer pill names them in that order: Copy ↵, Paste ⌘P, then Edit ⌘↵.
         #expect(CommandPaletteTab.screenshots.primaryActionTitle == "Copy")
         #expect(CommandPaletteTab.screenshots.primaryActionTitle == CommandPaletteTab.clipboard.primaryActionTitle)
-        #expect(CommandPaletteTab.screenshots.secondaryActionTitle == "Edit")
+        #expect(CommandPaletteTab.screenshots.secondaryActions.map(\.description) == ["Paste ⌘P", "Edit ⌘↵"])
     }
 
     @Test("Only the modules that own critical operations declare them")

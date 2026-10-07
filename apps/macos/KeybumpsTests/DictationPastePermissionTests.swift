@@ -300,7 +300,7 @@ struct DictationPastePermissionTests {
         let harness = try PromptHarness(enabled: [.snippets])
         defer { harness.tearDown() }
 
-        // ⌘Return in the Snippets tab had to copy for lack of Accessibility.
+        // ⌘P in the Snippets tab had to copy for lack of Accessibility.
         harness.model.commandPalette.offerPasteSetup(.snippets)
         #expect(harness.model.permissionAssistantPresentation == .pasteSetup)
         // Set Up Paste…: System Settings and the drag card.

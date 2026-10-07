@@ -97753,6 +97753,9 @@
       "matchedByCommandKey" : "search",
       "primaryAction" : "Open",
       "prompt" : "Search apps, files, and folders",
+      "secondaryActions" : [
+
+      ],
       "systemImage" : "magnifyingglass",
       "tab" : "search"
     },
@@ -97762,6 +97765,9 @@
       "matchedByCommandKey" : "clipboard",
       "primaryAction" : "Copy",
       "prompt" : "Search clipboard history",
+      "secondaryActions" : [
+        "Paste ⌘P"
+      ],
       "systemImage" : "clipboard",
       "tab" : "clipboard"
     },
@@ -97771,7 +97777,10 @@
       "matchedByCommandKey" : "screenshots",
       "primaryAction" : "Copy",
       "prompt" : "Search screenshots",
-      "secondaryAction" : "Edit",
+      "secondaryActions" : [
+        "Paste ⌘P",
+        "Edit ⌘↵"
+      ],
       "systemImage" : "camera.viewfinder",
       "tab" : "screenshots"
     },
@@ -97781,6 +97790,9 @@
       "matchedByCommandKey" : "dictation",
       "primaryAction" : "Copy",
       "prompt" : "Search dictation history",
+      "secondaryActions" : [
+        "Paste ⌘P"
+      ],
       "systemImage" : "waveform",
       "tab" : "dictation"
     },
@@ -97790,7 +97802,9 @@
       "matchedByCommandKey" : "snippets",
       "primaryAction" : "Copy",
       "prompt" : "Search snippets",
-      "secondaryAction" : "Paste",
+      "secondaryActions" : [
+        "Paste ⌘P"
+      ],
       "systemImage" : "text.quote",
       "tab" : "snippets"
     },
@@ -97800,6 +97814,9 @@
       "matchedByCommandKey" : "timers",
       "primaryAction" : "Start",
       "prompt" : "Start a timer: 5m, 1h30m, tea 25",
+      "secondaryActions" : [
+
+      ],
       "systemImage" : "timer",
       "tab" : "timers"
     },
@@ -97809,7 +97826,9 @@
       "matchedByCommandKey" : "emoji",
       "primaryAction" : "Copy",
       "prompt" : "Search emoji by name, keyword, or :shortcode:",
-      "secondaryAction" : "Paste",
+      "secondaryActions" : [
+        "Paste ⌘P"
+      ],
       "systemImage" : "face.smiling",
       "tab" : "emoji"
     },
@@ -97819,7 +97838,9 @@
       "matchedByCommandKey" : "translate",
       "primaryAction" : "Copy",
       "prompt" : "Type or paste text to translate",
-      "secondaryAction" : "Paste",
+      "secondaryActions" : [
+        "Paste ⌘P"
+      ],
       "systemImage" : "translate",
       "tab" : "translate"
     },
@@ -97828,6 +97849,9 @@
       "label" : "Hotkeys",
       "matchedByCommandKey" : "keyboardShortcutter",
       "prompt" : "Search hotkeys",
+      "secondaryActions" : [
+
+      ],
       "systemImage" : "keyboard",
       "tab" : "keyboardShortcutter"
     }

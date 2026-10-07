@@ -15,7 +15,7 @@ extension CapabilityDescriptor {
             systemImage: "face.smiling",
             prompt: "Search emoji by name, keyword, or :shortcode:",
             primaryActionTitle: "Copy",
-            secondaryActionTitle: "Paste",
+            secondaryActions: [.paste()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(
@@ -31,7 +31,7 @@ extension CapabilityDescriptor {
         optionalPermissions: [
             PluginOptionalPermission(
                 permission: .accessibility,
-                reason: "Lets ⌘Return paste the emoji into the app you’re using. Without it, ⌘Return copies the emoji instead."
+                reason: "Lets ⌘P paste the emoji into the app you’re using. Without it, ⌘P copies the emoji instead."
             ),
         ],
         isOnByDefault: false

@@ -43,11 +43,19 @@ enum TextPasteError: Error, Equatable {
 /// control this computer" alert. So callers check Accessibility first, and the poster checks again.
 protocol TextPasting {
     @MainActor func paste(_ text: String, concealed: Bool) throws
+    /// Presses ⌘V for what's on the clipboard already, writing nothing: a Clipboard History or
+    /// Screenshots item the palette's ⌘P put back there, which stays on it (#370).
+    @MainActor func pasteClipboard() throws
     /// Keyword expansion: deletes the `count` characters just typed (the keyword), before pasting.
     @MainActor func deleteTyped(_ count: Int) throws
 }
 
 extension TextPasting {
+    @MainActor
+    func pasteClipboard() throws {
+        throw TextPasteError.unavailable
+    }
+
     @MainActor
     func deleteTyped(_ count: Int) throws {
         throw TextPasteError.unavailable
@@ -72,6 +80,11 @@ struct SystemTextPaster: TextPasting {
     func paste(_ text: String, concealed: Bool) throws {
         guard pasteboard().writeText(text, concealed: concealed) else { throw TextPasteError.pasteboardWriteFailed }
         didWritePasteboard()
+        try postCommandV()
+    }
+
+    @MainActor
+    func pasteClipboard() throws {
         try postCommandV()
     }
 

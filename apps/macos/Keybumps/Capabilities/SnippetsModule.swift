@@ -6,7 +6,7 @@ extension CapabilityDescriptor {
         title: "Snippets",
         systemImage: "text.quote",
         iconTint: .green,
-        // Copying needs no permission. ⌘Return's paste uses Accessibility when it's granted and
+        // Copying needs no permission. ⌘P's paste uses Accessibility when it's granted and
         // copies otherwise, so Accessibility is optional here and never counts as missing.
         requiredPermissions: [],
         dependencies: [],
@@ -17,7 +17,7 @@ extension CapabilityDescriptor {
             systemImage: "text.quote",
             prompt: "Search snippets",
             primaryActionTitle: "Copy",
-            secondaryActionTitle: "Paste",
+            secondaryActions: [.paste()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(
@@ -28,7 +28,13 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [],
         searchKeywords: ["snippet", "snip"],
-        category: .writing
+        category: .writing,
+        optionalPermissions: [
+            PluginOptionalPermission(
+                permission: .accessibility,
+                reason: "Lets ⌘P paste a snippet into the app you’re using; without it, ⌘P copies. Expanding keywords needs it too."
+            ),
+        ]
     )
 }
 

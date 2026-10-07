@@ -673,7 +673,7 @@ struct SnippetPaletteTests {
         #expect(fixture.clipboard.entries.isEmpty)
     }
 
-    @Test("Without Accessibility, ⌘Return copies instead of pasting and offers the setup")
+    @Test("Without Accessibility, ⌘P copies instead of pasting and offers the setup")
     func pasteWithoutAccessibilityCopies() throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
@@ -692,7 +692,7 @@ struct SnippetPaletteTests {
         #expect(offers == [.snippets], "Offered for Snippets")
     }
 
-    @Test("With Accessibility, ⌘Return hands the text to the shared paste step")
+    @Test("With Accessibility, ⌘P hands the text to the shared paste step")
     func pasteUsesTheSharedPasteStep() async throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
@@ -742,7 +742,7 @@ struct SnippetPaletteTests {
         #expect(fixture.snippets.snippets.count == 1, "Nothing is deleted until it's confirmed")
     }
 
-    @Test("⌘Return with Keybumps itself in front copies, and says there's no app to paste into")
+    @Test("⌘P with Keybumps itself in front copies, and says there's no app to paste into")
     func pasteWithKeybumpsInFrontCopies() throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
@@ -757,7 +757,7 @@ struct SnippetPaletteTests {
         #expect(fixture.notices.shown == [.init(message: "Copied · No app to paste into", isWarning: true)])
     }
 
-    @Test("If another app comes to the front during the wait, ⌘Return copies instead")
+    @Test("If another app comes to the front during the wait, ⌘P copies instead")
     func pasteIntoAChangedAppCopies() async throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
@@ -906,8 +906,8 @@ struct SnippetPaletteKeyTests {
     static let escapeKey = key(kVK_Escape, "\u{1b}")
     static let downKey = key(kVK_DownArrow)
 
-    @Test("Return copies the selected snippet and ⌘Return pastes it")
-    func returnAndCommandReturn() async throws {
+    @Test("Return and ⌘C copy the selected snippet, ⌘P pastes it, and ⌘Return only copies (#370)")
+    func returnCopyAndPaste() async throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
         fixture.palette.canPaste = { true }
@@ -918,9 +918,19 @@ struct SnippetPaletteKeyTests {
         #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
         #expect(fixture.notices.shown.map(\.message) == ["Copied to Clipboard"])
 
+        fixture.pasteboard.clearContents()
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        fixture.pasteboard.clearContents()
         #expect(fixture.palette.handleKeyDown(Self.commandReturn) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        #expect(fixture.notices.shown.map(\.message) == Array(repeating: "Copied to Clipboard", count: 3))
+        #expect(fixture.paster.pasted.isEmpty, "⌘Return doesn't paste")
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
         try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
         #expect(fixture.paster.pasted.map(\.text) == ["made-up text"])
+        #expect(fixture.palette.clipboardRestorer.pendingRestore == nil, "The snippet stays on the clipboard, as before")
     }
 
     @Test("⌘N makes a new snippet and ⌘E edits the selected one, in Settings")
@@ -1097,7 +1107,7 @@ struct SnippetPaletteKeyTests {
 @MainActor
 @Suite("Snippets: in Quick Search")
 struct SnippetQuickSearchTests {
-    @Test("Quick Search lists a snippet by keyword: Return copies it and ⌘Return pastes it")
+    @Test("Quick Search lists a snippet by keyword: Return and ⌘C copy it, ⌘P pastes it, and ⌘Return only copies")
     func copiesAndPastes() async throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }
@@ -1118,7 +1128,18 @@ struct SnippetQuickSearchTests {
 
         fixture.palette.state.select(.search)
         fixture.search.query = ";reply"
+        fixture.pasteboard.clearContents()
+        #expect(fixture.palette.handleKeyDown(SnippetPaletteKeyTests.key(kVK_ANSI_C, "c", command: true)) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up text")
+        fixture.palette.state.select(.search)
+        fixture.search.query = ";reply"
         #expect(fixture.palette.handleKeyDown(SnippetPaletteKeyTests.commandReturn) == nil)
+        #expect(fixture.notices.shown.map(\.message) == Array(repeating: "Copied to Clipboard", count: 3))
+        #expect(fixture.paster.pasted.isEmpty, "⌘Return copied; it doesn't paste")
+
+        fixture.palette.state.select(.search)
+        fixture.search.query = ";reply"
+        #expect(fixture.palette.handleKeyDown(SnippetPaletteKeyTests.key(kVK_ANSI_P, "p", command: true)) == nil)
         try await fixture.waitUntil { !fixture.paster.pasted.isEmpty }
         #expect(fixture.paster.pasted.map(\.text) == ["made-up text"])
     }

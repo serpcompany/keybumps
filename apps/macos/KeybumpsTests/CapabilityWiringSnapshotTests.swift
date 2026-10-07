@@ -50,7 +50,7 @@ struct CapabilityWiringSnapshot: Codable {
         let systemImage: String
         let prompt: String
         let primaryAction: String?
-        let secondaryAction: String?
+        let secondaryActions: [String]
     }
 
     struct Destination: Codable {
@@ -115,7 +115,7 @@ enum WiringRecorder {
                     systemImage: tab.systemImage,
                     prompt: tab.prompt,
                     primaryAction: tab.primaryActionTitle,
-                    secondaryAction: tab.secondaryActionTitle
+                    secondaryActions: tab.secondaryActions.map(\.description)
                 )
             },
             settingsDestinations: SettingsSection.allCases.map { .init(section: $0.rawValue, icon: $0.icon) },

@@ -9,11 +9,11 @@ import SwiftUI
 /// detected in my language also becomes Other language.
 ///
 /// Return saves the translation to recent translations (`RecentTranslations`, the last 50, kept on
-/// this Mac) and clears the field; ⌘Return saves it and pastes it into the app you were using,
-/// putting the clipboard back (#362). With the field empty, the tab lists them, newest first: Return
-/// copies one, kept out of Clipboard History; ⌘Return pastes it; Delete asks, then deletes it. Its
-/// speaker button reads it aloud (`TranslationSpeaking`) until the palette closes, the tab or the
-/// text changes, another is read, or it's deleted.
+/// this Mac) and clears the field; ⌘P saves it and pastes it into the app you were using, putting
+/// the clipboard back (#362, #370). With the field empty, the tab lists them, newest first: Return
+/// or ⌘C copies one, kept out of Clipboard History; ⌘P pastes it; Delete asks, then deletes it. Its
+/// speaker button, or Space, reads it aloud (`TranslationSpeaking`) until the palette closes, the tab
+/// or the text changes, another is read, or it's deleted.
 @MainActor
 @Observable
 final class TranslatePaletteContent: CapabilityPaletteContent {
@@ -334,23 +334,40 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     }
 
     /// On the translation: Return saves it and clears the field, leaving it highlighted at the top
-    /// of the list; ⌘Return saves it and pastes it, then puts the clipboard back. On a saved
-    /// translation: Return copies it, kept out of Clipboard History; ⌘Return pastes it.
-    func activate(row: Int, query: String, withCommand: Bool, palette: PaletteContentActions) {
+    /// of the list. On a saved translation: Return copies it, kept out of Clipboard History.
+    func activate(row: Int, query: String, palette: PaletteContentActions) {
+        if record(row: row, query: query) != nil {
+            copy(row: row, query: query, palette: palette)
+            return
+        }
+        guard row == 0, saveCurrentTranslation(query: query) != nil else { return }
+        palette.clearQuery()
+        palette.selectRow(0)
+    }
+
+    /// ⌘C copies a saved translation, kept out of Clipboard History. The translation being typed
+    /// isn't saved yet, so ⌘C there does nothing.
+    func copy(row: Int, query: String, palette: PaletteContentActions) {
+        guard let record = record(row: row, query: query) else { return }
+        palette.copy(record.translatedText)
+    }
+
+    /// ⌘P pastes a saved translation, or saves the translation being typed and pastes it, then
+    /// puts the clipboard back.
+    func paste(row: Int, query: String, palette: PaletteContentActions) {
         if let record = record(row: row, query: query) {
-            if withCommand {
-                palette.paste(record.translatedText, true)
-            } else {
-                palette.copy(record.translatedText)
-            }
+            palette.paste(record.translatedText, true)
             return
         }
         guard row == 0, let record = saveCurrentTranslation(query: query) else { return }
-        if withCommand {
-            palette.paste(record.translatedText, true)
-        } else {
-            palette.clearQuery()
-            palette.selectRow(0)
+        palette.paste(record.translatedText, true)
+    }
+
+    /// Space on a saved translation reads it aloud, or stops reading it.
+    func playback(row: Int, query: String) -> PalettePlayback? {
+        guard let id = record(row: row, query: query)?.id else { return nil }
+        return PalettePlayback(title: isReading(id) ? "Stop Reading" : "Read Aloud") { [weak self] in
+            self?.readAloud(id)
         }
     }
 
@@ -366,11 +383,11 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
 
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
         if record(row: row, query: query) != nil {
-            return PaletteFooterActions(primary: "Copy", secondary: "Paste")
+            return PaletteFooterActions(primary: "Copy", secondary: [.paste()])
         }
         return currentTranslation(query: query) == nil
-            ? PaletteFooterActions(primary: nil, secondary: nil)
-            : PaletteFooterActions(primary: "Save", secondary: "Save and Paste")
+            ? PaletteFooterActions(primary: nil)
+            : PaletteFooterActions(primary: "Save", secondary: [.paste("Save and Paste")])
     }
 
     /// ⌘T swaps the languages. It's the tab's even with nothing to swap, so it never reaches the
@@ -587,7 +604,7 @@ private struct RecentTranslationList: View {
                 content.readAloud(record.id)
             }
             .buttonStyle(PalettePillButtonStyle(isCircular: true))
-            .help(isReading ? "Stop reading" : "Read aloud")
+            .help(isReading ? "Stop reading (Space)" : "Read aloud (Space)")
             .accessibilityIdentifier("palette.translate.readAloud")
             .opacity(showsSpeaker ? 1 : 0)
             .allowsHitTesting(showsSpeaker)

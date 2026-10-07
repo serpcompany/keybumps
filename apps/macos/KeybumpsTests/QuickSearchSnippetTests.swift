@@ -80,13 +80,14 @@ struct QuickSearchSnippetTests {
         #expect(SnippetSearch.match(snippet, query: "mondays", includingText: false) == nil)
     }
 
-    @Test("A snippet row's footer says Copy and Paste; other rows keep the Search tab's")
+    @Test("A snippet row's footer says Copy ↵ and Paste ⌘P; other rows keep the Search tab's Open ↵")
     func footerActions() {
         let snippet = QuickSearchItem.snippet(Self.snippet("Made-up"))
         #expect(snippet.primaryActionTitle == "Copy")
-        #expect(snippet.secondaryActionTitle == "Paste")
+        #expect(snippet.secondaryActions == [.paste()])
         let app = QuickSearchItem.result(QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Made-up.app"), kind: .application))
         #expect(app.primaryActionTitle == CommandPaletteTab.search.primaryActionTitle)
-        #expect(app.secondaryActionTitle == CommandPaletteTab.search.secondaryActionTitle)
+        #expect(app.primaryActionTitle == "Open")
+        #expect(app.secondaryActions.isEmpty)
     }
 }

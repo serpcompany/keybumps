@@ -14,7 +14,7 @@ struct SnippetPaletteActions {
 }
 
 /// The Snippets tab: a Snippets header with New Snippet, then one row per snippet in the Clipboard
-/// tab's row layout. Return copies, ⌘Return pastes, ⌘E edits, and ⌘N makes a new one.
+/// tab's row layout. Return and ⌘C copy, ⌘P pastes, ⌘E edits, and ⌘N makes a new one.
 struct SnippetPaletteResults: View {
     static let symbol = "text.quote"
 
