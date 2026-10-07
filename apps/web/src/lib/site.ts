@@ -5,6 +5,12 @@ export const CUSTOMER_PORTAL_URL = 'https://polar.sh/serp/portal'
 
 export const LEGAL_UPDATED = 'October 7, 2026'
 
+/** A macOS version as the site writes it: 15 or 14.2, never empty. */
+export type MacOSVersion = `${number}` | `${number}.${number}`
+
+/** The oldest macOS Keybumps runs on: `deploymentTarget` in `apps/macos/project.yml`. */
+export const MINIMUM_MACOS: MacOSVersion = '14.2'
+
 export const site = {
   name: 'Keybumps',
   description:

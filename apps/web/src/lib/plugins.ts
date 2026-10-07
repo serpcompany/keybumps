@@ -6,10 +6,13 @@
  *
  * - `apps/macos/Keybumps/Capabilities/*Module.swift`: each `CapabilityDescriptor`'s title,
  *   Settings page summary, category, `systemImage`, `iconTint`, palette tab, required
- *   permissions, dependencies, and search keywords; Timer's and Emoji Picker's preferences;
- *   Snippets' and Emoji Picker's optional permissions.
+ *   permissions, dependencies, search keywords, and `minimumMacOS`; Timer's, Emoji Picker's, and
+ *   Translation's preferences; Snippets', Emoji Picker's, and Translation's optional permissions.
  * - `apps/macos/Keybumps/EmojiPicker/*.swift` and `emoji.json` (its `sources`): what the Emoji tab
  *   offers, searches, and keeps (`EmojiRecents.limit`).
+ * - `apps/macos/Keybumps/Translation/*.swift`: what the Translate tab does (its header comment in
+ *   `TranslatePaletteContent.swift`), the languages it offers (`TranslationLanguages.offered`), and
+ *   what it keeps (`RecentTranslations.limit`).
  * - `apps/macos/Keybumps/Capabilities/PluginManifest.swift`: `PluginCategory`, and the publisher
  *   (every plugin is official, by Keybumps).
  * - `apps/macos/Keybumps/Infrastructure/GlobalShortcutCoordinator.swift`: the `CapabilityShortcut`
@@ -25,6 +28,8 @@
  *   `Views/SnippetsSettingsView.swift`, the Timer preferences in `TimerModule.swift`), `README.md`,
  *   `CONTEXT.md`, and `docs/releases/*.md`.
  */
+
+import type { MacOSVersion } from './site'
 
 /** `PluginCategory`: the categories plugins are listed under. */
 export const pluginCategories = ['Productivity', 'Writing', 'Media'] as const
@@ -52,7 +57,8 @@ export const iconTints = {
   teal: '#6ac4dc',
   gray: '#98989d',
   green: '#32d74b',
-  yellow: '#ffd60a'
+  yellow: '#ffd60a',
+  indigo: '#5e5ce6'
 } as const
 export type IconTint = keyof typeof iconTints
 
@@ -67,6 +73,7 @@ export type PluginSystemImage =
   | 'text.quote'
   | 'timer'
   | 'face.smiling'
+  | 'translate'
 
 export type PluginShortcut = {
   title: string
@@ -115,6 +122,11 @@ export type Plugin = {
   isDefault: boolean
   /** The newest added capability, marked New on /plugins/. */
   isNew?: boolean
+  /**
+   * The descriptor's `minimumMacOS`, for a plugin that needs a newer macOS than Keybumps does
+   * (`MINIMUM_MACOS`).
+   */
+  minimumMacOS?: MacOSVersion
   /** Its page's Overview: one or two paragraphs. */
   overview: readonly string[]
   /** Its page's Key features, one line each. */
@@ -474,7 +486,7 @@ export const plugins: readonly Plugin[] = [
     keywords: ['hotkeys', 'hotkey', 'shortcuts', 'keyboard', 'history'],
     paletteTab: {
       name: 'Hotkeys',
-      commandKey: 8,
+      commandKey: 9,
       hiddenUnless: 'Show Hotkeys tab in the Command Palette'
     },
     shortcuts: [],
@@ -658,7 +670,6 @@ export const plugins: readonly Plugin[] = [
     ],
     requires: [],
     isDefault: false,
-    isNew: true,
     overview: [
       'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of the Command Palette with ⌘7 and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
       'Return copies the emoji, and ⌘Return pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
@@ -692,6 +703,83 @@ export const plugins: readonly Plugin[] = [
     ],
     keeps: [
       'Your 24 most recently used emoji are kept on this Mac. Turning off Remember recently used emoji in its Settings page clears them.'
+    ]
+  },
+  {
+    slug: 'translation',
+    capability: 'translation',
+    name: 'Translation',
+    summary: 'Translate what you type, then copy it or paste it where you’re typing.',
+    category: 'Writing',
+    systemImage: 'translate',
+    tint: 'indigo',
+    keywords: ['translate', 'translator', 'languages'],
+    paletteTab: { name: 'Translate', commandKey: 8 },
+    shortcuts: [{ title: 'Open Translate', keys: null }],
+    permissions: [],
+    optionalPermissions: [
+      {
+        permission: 'Accessibility',
+        reason:
+          'Lets ⌘Return paste the translation into the app you’re using. Without it, ⌘Return copies the translation instead.'
+      }
+    ],
+    requires: [],
+    isDefault: false,
+    isNew: true,
+    minimumMacOS: '15',
+    overview: [
+      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of the Command Palette with ⌘8, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
+      'Press Return to save the translation, or ⌘Return to save it and paste it into the app you were using. With the field empty, the tab lists your last 50 saved translations to copy, paste, or hear read aloud. Translation needs macOS 15 or later and ships turned off: turn it on in Settings › Plugins.'
+    ],
+    features: [
+      'Translates what you type or paste a moment after you stop typing',
+      'Text in your language goes to your other language, and anything else comes back to yours',
+      'Choose My language and Other language from 20 languages in Settings › Translation',
+      '⌘T swaps the two languages for the text in the field, and clicking the target language picks another',
+      'Return saves the translation and clears the field; ⌘Return saves it, pastes it into the app you were using, and puts your clipboard back',
+      'Your last 50 saved translations, listed while the field is empty: Return copies one without adding it to Clipboard History, ⌘Return pastes it, and Delete removes it after asking',
+      'A speaker button reads a saved translation aloud in a voice for its language',
+      'If a language isn’t downloaded yet, a button opens Language & Region in System Settings to download it',
+      'While it’s on, Dictation’s Translate goes between the same two languages',
+      'Optional Open Translate shortcut, unassigned until you set one'
+    ],
+    howTo: [
+      { text: 'Turn it on in Settings › Plugins. It needs macOS 15 or later.' },
+      {
+        text: 'Open the Command Palette, press ⌘8 for the Translate tab, and type or paste your text.',
+        keys: '⌘8'
+      },
+      {
+        text: 'Press Return to save the translation, or ⌘Return to save it and paste it where you were typing.',
+        keys: '↩'
+      }
+    ],
+    faq: [
+      {
+        q: 'Why can’t I find it?',
+        a: 'It ships turned off and needs macOS 15 or later. Turn it on in Settings › Plugins.'
+      },
+      {
+        q: 'Which language does it translate into?',
+        a: 'Text in your language goes to your other language, and text in any other language comes back to yours. Choose both in Settings › Translation. For the text in the field, ⌘T swaps them, and clicking the target language picks another.'
+      },
+      {
+        q: 'What if a language isn’t downloaded?',
+        a: 'The tab says so, with a button that opens Language & Region in System Settings, where you can download it.'
+      },
+      {
+        q: 'Can I find a translation again later?',
+        a: 'Yes, if you saved it with Return or ⌘Return. With the field empty, the Translate tab lists your last 50 saved translations to copy, paste, or hear read aloud.'
+      },
+      {
+        q: 'Does Dictation use the same languages?',
+        a: 'Yes. While Translation is on, Dictation’s Translate goes between your two languages. Turn Translation off and it goes back to English and Japanese.'
+      }
+    ],
+    keeps: [
+      'For the last 50 translations you save with Return or ⌘Return, the text you translated and its translation are kept on this Mac. Clear Recent Translations in Settings › Translation removes them; turning Translation off keeps them.',
+      'Text is translated on this Mac, with the languages you download in System Settings.'
     ]
   }
 ]

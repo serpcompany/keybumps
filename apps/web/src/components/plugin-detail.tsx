@@ -16,6 +16,7 @@ import {
   pluginFor,
   pluginPath
 } from '@/lib/plugins'
+import { MINIMUM_MACOS } from '@/lib/site'
 
 /**
  * A plugin's page, /plugins/<slug>/: a header in its tint, then its overview, features, commands,
@@ -161,7 +162,7 @@ export function PluginDetail({
               <ul className="sidebar-list">
                 <li className="sidebar-item">
                   <Laptop aria-hidden="true" size={16} className="muted-icon" />
-                  macOS 14.2 or later
+                  {`macOS ${plugin.minimumMacOS ?? MINIMUM_MACOS} or later`}
                 </li>
                 <li className="sidebar-item">
                   <Cpu aria-hidden="true" size={16} className="muted-icon" />
@@ -219,7 +220,9 @@ export function PluginDetail({
         </div>
 
         <div className="plugin-cta">
-          <CtaBand title={`Get ${plugin.name} with Keybumps.`} action={closingDownload} />
+          <CtaBand title={`Get ${plugin.name} with Keybumps.`} action={closingDownload}>
+            {plugin.minimumMacOS && `Apple silicon · macOS ${plugin.minimumMacOS} or later`}
+          </CtaBand>
         </div>
       </div>
     </main>

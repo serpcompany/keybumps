@@ -50,6 +50,11 @@ export default function PrivacyPage() {
           Remember recently used emoji in its settings clears them.
         </li>
         <li>
+          <strong>Translation</strong> keeps the text you translate and its translation on your Mac,
+          for the last 50 you save with Return or ⌘Return. Clear Recent Translations in its settings
+          removes them.
+        </li>
+        <li>
           <strong>Quick Search, Window Manager, and Shortcut Coach</strong> work from information
           already on your Mac and keep their settings and history locally.
         </li>
