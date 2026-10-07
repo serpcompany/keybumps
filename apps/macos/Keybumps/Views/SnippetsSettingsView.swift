@@ -48,35 +48,24 @@ struct SnippetsSettingsView: View {
                         }
                     }
                     ForEach(missing, id: \.self) { permission in
-                        LabeledContent {
-                            Button("Allow…") { Task { await model.recoverPermission(permission) } }
-                                .disabled(model.permissions.activeRequest != nil)
-                                .accessibilityLabel("Allow \(permission.title) so keywords expand")
-                        } label: {
+                        if permission == .accessibility {
+                            // Its row in Permissions below asks for it, so this only says why.
                             SettingsRowLabel(
-                                title: "Expanding needs \(permission.title)",
-                                subtitle: permission == .inputMonitoring
-                                    ? "Lets Keybumps notice when you type a keyword."
-                                    : "Lets Keybumps replace the keyword with the snippet."
+                                title: "Expanding needs Accessibility",
+                                subtitle: "Lets Keybumps replace the keyword with the snippet. Allow it in Permissions below."
                             )
+                        } else {
+                            LabeledContent {
+                                Button("Allow…") { Task { await model.recoverPermission(permission) } }
+                                    .disabled(model.permissions.activeRequest != nil)
+                                    .accessibilityLabel("Allow \(permission.title) so keywords expand")
+                            } label: {
+                                SettingsRowLabel(
+                                    title: "Expanding needs \(permission.title)",
+                                    subtitle: "Lets Keybumps notice when you type a keyword."
+                                )
+                            }
                         }
-                    }
-                }
-            }
-            // Accessibility is optional: without it, ⌘P copies instead of pasting. While
-            // auto-expansion is on, its own row above asks for it instead.
-            if model.preferences.enabledCapabilities.contains(.snippets), !model.preferences.expandsSnippetKeywords,
-               !model.permissions.accessibilityGranted {
-                SettingsGroup("Paste") {
-                    LabeledContent {
-                        Button("Allow…") { Task { await model.recoverPermission(.accessibility) } }
-                            .disabled(model.permissions.activeRequest != nil)
-                            .accessibilityLabel("Allow Accessibility so ⌘P pastes")
-                    } label: {
-                        SettingsRowLabel(
-                            title: "⌘P pastes with Accessibility",
-                            subtitle: "Without it, ⌘P in the Snippets tab copies the snippet instead of pasting it into the app you’re using. Copying needs no permission."
-                        )
                     }
                 }
             }
@@ -148,6 +137,10 @@ struct SnippetsSettingsView: View {
             if case .recovered(let copyName) = store.libraryState {
                 SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in its Application Support folder.", tint: .orange)
             }
+            // Last, so the snippets stay at the top of the page. Accessibility is optional: without
+            // it, ⌘P copies instead of pasting. Expanding needs it too; while auto-expansion is on,
+            // its section above says so but asks only here.
+            PluginPermissionsGroup(capability: .snippets)
         }
         .navigationTitle("Snippets")
         .alert("Start a new snippet library?", isPresented: $confirmsStartOver) {

@@ -10,7 +10,7 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
 - **Descriptor and module:** `Capabilities/<Name>Module.swift` declares its `CapabilityDescriptor` and its `CapabilityModule`.
   - **Basics:** the title, `systemImage`, and `iconTint`; search keywords, the category, and any `PluginPreference`s.
   - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs. Optional permissions carry their own reason. (The website entry's permission reasons come in §4.)
-  - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`.
+  - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`. A page drawn by hand shows the plugin's optional permissions with `PluginPermissionsGroup`, and `PluginManifestTests` fails if a page leaves one out (#379).
   - **Palette tab, if any:** the module's `paletteContent` supplies the rows, drawn with `PaletteRow` under a `PaletteListHeader` (or, for a grid, inset to `PaletteRowMetrics.wellX`), so switching tabs moves nothing (#381). The descriptor's `systemImage` is the tab's icon in the tab bar, so it must differ from the other tabs'. The tab takes the next Command-number, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7, then Translation took ⌘8 and Hotkeys moved to ⌘9. Moving Hotkeys also changes:
     - `KeyboardShortcutterModule`'s `commandKey`;
     - the README and architecture.md tab lists, and the release notes;
