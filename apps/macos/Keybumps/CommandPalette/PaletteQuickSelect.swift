@@ -82,6 +82,12 @@ extension View {
         modifier(PaletteQuickSelectRow(row: row, placement: .trailing))
     }
 
+    /// A row ⇧1–9 picks without a keycap: Hotkeys, whose rows show keyboard shortcuts that a ⇧N
+    /// beside them would read as part of (owner, 2026-10-07).
+    func paletteQuickSelectWithoutKeycap(row: Int) -> some View {
+        modifier(PaletteQuickSelectRow(row: row, placement: .none))
+    }
+
     /// A grid tile ⇧1–9 can pick, with its keycap over the top-leading corner.
     func paletteQuickSelectTile(row: Int) -> some View {
         modifier(PaletteQuickSelectRow(row: row, placement: .topLeading))
@@ -105,7 +111,7 @@ private struct PaletteQuickSelectViewport: ViewModifier {
 }
 
 private struct PaletteQuickSelectRow: ViewModifier {
-    enum Placement { case trailing, topLeading }
+    enum Placement { case trailing, topLeading, none }
 
     let row: Int
     let placement: Placement
@@ -143,6 +149,8 @@ private struct PaletteQuickSelectRow: ViewModifier {
             content.overlay(alignment: .topLeading) {
                 keycap.padding(8)
             }
+        case .none:
+            content
         }
     }
 
