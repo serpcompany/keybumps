@@ -11,20 +11,52 @@ struct PaletteTabBarTests {
     /// The palette window's content width (`CommandPaletteController.makePanel`).
     static let paletteWidth: CGFloat = 1040
 
-    func width(selected: CommandPaletteTab, showsShortcuts: Bool) -> CGFloat {
-        let bar = PaletteTabBar(tabs: CommandPaletteTab.allCases, selected: selected, showsShortcuts: showsShortcuts, select: { _ in })
-        let controller = NSHostingController(rootView: bar)
-        return controller.sizeThatFits(in: CGSize(width: Self.paletteWidth, height: 200)).width
+    func idealSize<V: View>(_ view: V) -> CGSize {
+        NSHostingController(rootView: view.fixedSize()).sizeThatFits(in: CGSize(width: 10_000, height: 10_000))
     }
 
-    @Test("Every tab, Hotkeys included, fits the palette, with or without ⌘ held")
+    func bar(_ tabs: [CommandPaletteTab], selected: CommandPaletteTab, showsShortcuts: Bool) -> PaletteTabBar {
+        PaletteTabBar(tabs: tabs, selected: selected, showsShortcuts: showsShortcuts, select: { _ in })
+    }
+
+    /// The bar's padding, spacing, and brand mark: its width without tabs.
+    var chromeWidth: CGFloat { idealSize(bar([], selected: .search, showsShortcuts: false)).width }
+
+    @Test("Every tab, Hotkeys included, fits the palette as icons, with or without ⌘ held")
     func fits() {
         #expect(CommandPaletteTab.allCases.count >= 9, "All tabs, so the bar is at its widest")
         for tab in CommandPaletteTab.allCases {
             for showsShortcuts in [false, true] {
-                #expect(width(selected: tab, showsShortcuts: showsShortcuts) <= Self.paletteWidth,
-                        "\(tab.rawValue), ⌘ held: \(showsShortcuts)")
+                let icons = idealSize(bar(CommandPaletteTab.allCases, selected: tab, showsShortcuts: showsShortcuts).tabRow(namesSelected: false))
+                #expect(icons.width + chromeWidth <= Self.paletteWidth, "\(tab.rawValue), ⌘ held: \(showsShortcuts)")
             }
+        }
+    }
+
+    @Test("With the plugins that start on, the open tab shows its name, with or without ⌘ held")
+    func defaultTabsShowTheOpenName() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: .search, enabled: preferences.enabledCapabilities)
+        for tab in tabs {
+            for showsShortcuts in [false, true] {
+                // `ViewThatFits` keeps the named row when its full width fits.
+                let named = idealSize(bar(tabs, selected: tab, showsShortcuts: showsShortcuts))
+                #expect(named.width <= Self.paletteWidth, "\(tab.rawValue), ⌘ held: \(showsShortcuts)")
+            }
+        }
+    }
+
+    @Test("Holding ⌘ doesn't change the bar's height, so the content below stays put")
+    func commandKeepsHeight() {
+        let tabs = CommandPaletteTab.allCases
+        #expect(idealSize(bar(tabs, selected: .search, showsShortcuts: true)).height
+            == idealSize(bar(tabs, selected: .search, showsShortcuts: false)).height)
+    }
+
+    @Test("Every tab's icon is a symbol this Mac has")
+    func iconsExist() {
+        for tab in CommandPaletteTab.allCases {
+            #expect(NSImage(systemSymbolName: tab.systemImage, accessibilityDescription: nil) != nil, "\(tab.rawValue): \(tab.systemImage)")
         }
     }
 
@@ -48,18 +80,25 @@ struct PaletteTabBarTests {
             pasteboard: pasteboard,
             search: QuickSearchModel.forTests(in: folder.url)
         )
-        func flags(_ modifiers: NSEvent.ModifierFlags) -> NSEvent {
-            try! #require(NSEvent.keyEvent(
+        func flags(_ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try #require(NSEvent.keyEvent(
                 with: .flagsChanged, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0,
                 context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55
             ))
         }
 
-        palette.handleFlagsChanged(flags(.command))
+        palette.handleFlagsChanged(try flags(.command))
         #expect(palette.state.isCommandHeld)
-        palette.handleFlagsChanged(flags([]))
+        palette.handleFlagsChanged(try flags([]))
         #expect(!palette.state.isCommandHeld)
-        palette.handleFlagsChanged(flags(.command))
+        palette.handleFlagsChanged(try flags([.command, .capsLock]))
+        #expect(palette.state.isCommandHeld, "Caps Lock doesn't stop ⌘-numbers, as it doesn't stop ⌘ keys")
+        palette.handleFlagsChanged(try flags([.command, .shift]))
+        #expect(!palette.state.isCommandHeld, "⇧⌘-number doesn't switch tabs, so it shows no numbers")
+        palette.handleFlagsChanged(try flags(.command))
+        palette.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+        #expect(!palette.state.isCommandHeld, "⌘ let go in another app doesn't leave the numbers up")
+        palette.handleFlagsChanged(try flags(.command))
         palette.dismiss()
         #expect(!palette.state.isCommandHeld, "Closing with ⌘ still down doesn't leave the numbers up")
     }

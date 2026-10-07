@@ -572,6 +572,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        // ⌘ let go in another app or window never reaches the palette's monitor.
+        state.isCommandHeld = false
         guard isHeldOpen else { return resignedKey(to: nil) }
         // While held, see where key focus went once it has moved: to a Keybumps window, such as
         // the download prompt, or to another app.
@@ -711,14 +713,20 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// ⌘ going down or up while the palette has the keys shows or hides the tabs' ⌘-numbers.
     func handleFlagsChanged(_ event: NSEvent) {
         let isHeld = CommandPaletteDismissalPolicy.palettesKey(eventWindow: event.window, panel: panel)
-            && event.modifierFlags.contains(.command)
+            && Self.isCommandOnly(event.modifierFlags)
         if state.isCommandHeld != isHeld { state.isCommandHeld = isHeld }
     }
 
     /// Command and no other modifier. Caps Lock, Fn and the keypad flag don't count, so Caps Lock
     /// doesn't stop the palette's Command keys (#182).
     static func isCommandKey(_ event: NSEvent) -> Bool {
-        event.modifierFlags.intersection([.shift, .control, .option, .command]) == .command
+        isCommandOnly(event.modifierFlags)
+    }
+
+    /// ⌘ without Shift, Option, or Control: the keys that switch tabs, so the only ones that show
+    /// the tabs' ⌘-numbers.
+    static func isCommandOnly(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.intersection([.shift, .control, .option, .command]) == .command
     }
 
     /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
@@ -1632,6 +1640,8 @@ struct PaletteTabBar: View {
     /// Whether ⌘ is held, which shows each tab's ⌘-number.
     var showsShortcuts = false
     let select: (CommandPaletteTab) -> Void
+    /// A tab's label height, with or without its ⌘-number keycaps.
+    static let labelHeight: CGFloat = 22
 
     var body: some View {
         HStack(spacing: 2) {
@@ -1653,7 +1663,8 @@ struct PaletteTabBar: View {
         .accessibilityLabel("Palette tabs")
     }
 
-    private func tabRow(namesSelected: Bool) -> some View {
+    /// The tabs with the open one named, or icons only: what `ViewThatFits` chooses between.
+    func tabRow(namesSelected: Bool) -> some View {
         HStack(spacing: 2) {
             ForEach(tabs) { tab in
                 tabButton(tab, showsName: namesSelected && tab == selected)
@@ -1679,10 +1690,12 @@ struct PaletteTabBar: View {
                         .fixedSize()
                 }
             }
+            // The keycaps' height, so holding ⌘ doesn't move the palette's content down.
+            .frame(height: PaletteTabBar.labelHeight)
             .font(.system(size: 14))
             .foregroundStyle(selected == tab ? .primary : .secondary)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
             .background(
                 selected == tab ? PaletteTheme.selection : .clear,
                 in: RoundedRectangle(cornerRadius: PaletteTheme.rowRadius - 2, style: .continuous)
@@ -1692,7 +1705,7 @@ struct PaletteTabBar: View {
         .buttonStyle(.plain)
         .help("\(label.name) (\(label.shortcut))")
         .accessibilityLabel(label.name)
-        .accessibilityHint("\(label.shortcut)")
+        .accessibilityHint(KeyboardShortcutRegistry.accessibilityCopy(for: label.shortcut))
         .accessibilityAddTraits(selected == tab ? .isSelected : [])
         .accessibilityIdentifier("palette.tab.\(tab.rawValue)")
     }
