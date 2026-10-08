@@ -7,11 +7,12 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "pnpm changelog:sources && next dev",
+    "build": "pnpm changelog:sources && next build",
     "format": "biome format --write",
     "lint": "biome check",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "pnpm changelog:sources && next typegen && tsc --noEmit",
+    "changelog:sources": "node scripts/changelog-sources.mjs",
     "test": "vitest run",
     "test:leak": "node scripts/leak-test.mjs",
     "check": "pnpm check:code && opennextjs-cloudflare build",

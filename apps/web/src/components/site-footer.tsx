@@ -12,7 +12,8 @@ export const footerGroups: readonly { title: string; links: readonly FooterLink[
     title: 'Product',
     links: [
       { href: '/plugins/', label: 'All plugins' },
-      { href: '/pricing/', label: 'Pricing' }
+      { href: '/pricing/', label: 'Pricing' },
+      { href: '/changelog/', label: 'Changelog' }
     ]
   },
   {

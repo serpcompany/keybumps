@@ -31,6 +31,11 @@ export const sitePages = [
     description: `${pricing.model.description}, with a ${pricing.guarantee}.`
   },
   {
+    path: '/changelog/',
+    title: 'Changelog',
+    description: "What's new and what's fixed in each Keybumps release, newest first."
+  },
+  {
     path: '/license/',
     title: 'Find your license key',
     description: 'Find your Keybumps license key and manage the Mac it is activated on.'

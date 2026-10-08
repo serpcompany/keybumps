@@ -31,6 +31,7 @@ export const headerMenus: readonly NavMenu[] = [
       {
         links: [
           { href: '/support/', label: 'Support', description: 'Get help with Keybumps' },
+          { href: '/changelog/', label: 'Changelog', description: "What's new in each release" },
           { href: '/license/', label: 'Lost your key?', description: 'Find your license key' },
           { href: '/contact/', label: 'Contact', description: 'Write to the team' },
           { href: '/about/', label: 'About', description: 'Who makes Keybumps' }
