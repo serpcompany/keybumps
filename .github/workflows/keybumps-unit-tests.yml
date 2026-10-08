@@ -1,16 +1,11 @@
 name: Keybumps unit tests
 
-# Runs on pull requests that touch app code, as the first gate of Release Keybumps, and
-# manually from Actions. No nightly schedule.
+# Runs on every pull request (its unit job only when the PR touches app code or the release
+# notes the tests read), as the first gate of Release Keybumps, and manually from Actions. No
+# nightly schedule. The `changes` job's pattern can't use APP_DIR; keep it in step with it.
 on:
   pull_request:
     branches: [main]
-    # Filters can't use APP_DIR; keep them in step with it. Outside it, the tests read only the
-    # release notes (UpdateVisibilityTests parses every docs/releases/v*.md).
-    paths:
-      - apps/macos/**
-      - docs/releases/v*.md
-      - .github/workflows/keybumps-unit-tests.yml
   workflow_call:
   workflow_dispatch:
 
@@ -29,8 +24,37 @@ env:
   APP_DIR: apps/macos
 
 jobs:
+  # Required checks must report on every pull request, so this workflow has no `paths:` filter.
+  # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      run: ${{ steps.touches.outputs.run }}
+    steps:
+      - name: Check out the scripts
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Does this PR touch app code?
+        id: touches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/pr-touches.sh '^(apps/macos/|docs/releases/v[^/]*\.md$|\.github/workflows/keybumps-unit-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
+
   unit:
     name: Unit tests (KeybumpsTests)
+    needs: changes
+    # Skipped (which counts as passing) only when the PR touches none of the files it checks.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
     defaults:
