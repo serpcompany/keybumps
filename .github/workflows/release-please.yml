@@ -42,7 +42,8 @@ jobs:
   # builds main's tip, so it can only stand in for a waiting deploy of something older, and it
   # shows in Web deploy's own runs; its result doesn't turn this run red. GITHUB_TOKEN may start
   # workflow_dispatch runs. `actions: write` also lets a job cancel, re-run, or delete runs and
-  # their logs, artifacts, and caches; this job's only step is a fixed command with no event input.
+  # their logs, artifacts, and caches, and disable or enable workflows; this job's only step is a
+  # fixed command with no event input.
   # If that step fails, re-run the failed jobs here, which re-runs this one.
   website:
     needs: release

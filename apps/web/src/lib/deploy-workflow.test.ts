@@ -120,7 +120,9 @@ describe('web.yml', () => {
     expect(pattern.test('CHANGELOG.md')).toBe(true)
     expect(pattern.test('docs/releases/sparkle-update-operations.md')).toBe(false)
   })
+})
 
+describe('release-please.yml', () => {
   it('starts a Web deploy on main only after a release publishes, with only the Actions permission', () => {
     const website = jobs(read('../../../../.github/workflows/release-please.yml')).website ?? ''
     expect(website).toMatch(/^ {4}needs: release$/m)

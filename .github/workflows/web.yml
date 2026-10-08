@@ -47,7 +47,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         # docs/releases/v*.md and CHANGELOG.md are what /changelog/ is built from (#427).
-        run: .github/scripts/pr-touches.sh '^(apps/web/|docs/releases/v[^/]*\.md$|CHANGELOG\.md$|\.github/workflows/(web|web-deploy|release-please|keybumps-unit-tests|keybumps-ui-tests)\.yml$|\.github/scripts/pr-touches\.sh$)'
+        run: .github/scripts/pr-touches.sh '^(apps/web/|docs/releases/v[^/]*\.md$|CHANGELOG\.md$|\.github/workflows/[^/]*\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   check:
     name: Website check (run pnpm check)
