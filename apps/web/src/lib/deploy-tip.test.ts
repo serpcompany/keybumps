@@ -27,6 +27,7 @@ function run(lines: string[], ghExit = 0): { status: number | null; deploy: stri
   writeFileSync(output, '')
   const result = spawnSync('bash', [script], {
     env: {
+      ...process.env,
       PATH: `${scratch}:${process.env.PATH}`,
       FAKE_GH_OUTPUT: lines.join('\n'),
       FAKE_GH_EXIT: String(ghExit),
