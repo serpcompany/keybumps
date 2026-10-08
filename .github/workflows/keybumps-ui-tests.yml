@@ -1,16 +1,13 @@
 name: Keybumps UI tests
 
 # UI tests launch an ad-hoc signed build with faked permissions and disabled global hot keys
-# (see docs/testing.md). Runs on pull requests that touch app code, as a gate of Release Keybumps,
-# and manually from Actions. No nightly schedule.
+# (see docs/testing.md). Runs on every pull request (its UI job only when the PR touches app code),
+# as a gate of Release Keybumps, and manually from Actions. No nightly schedule. The `changes` job's
+# pattern names apps/macos/ directly, as the guard test reads it; keep it in step with APP_DIR.
 
 on:
   pull_request:
     branches: [main]
-    # Filters can't use APP_DIR; keep them in step with it. The tests read nothing outside it.
-    paths:
-      - apps/macos/**
-      - .github/workflows/keybumps-ui-tests.yml
   workflow_call:
   workflow_dispatch:
 
@@ -29,8 +26,39 @@ env:
   APP_DIR: apps/macos
 
 jobs:
+  # Required checks must report on every pull request, so this workflow has no `paths:` filter.
+  # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
+  changes:
+    name: Changed paths
+    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      run: ${{ steps.touches.outputs.run }}
+    steps:
+      - name: Check out the scripts
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Does this PR touch app code?
+        id: touches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/pr-touches.sh '^(apps/macos/|\.github/workflows/keybumps-ui-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
+
   ui:
-    name: UI tests (with retries)
+    name: UI tests (run, with retries)
+    needs: changes
+    # Skipped (which counts as passing) only when the PR touches none of the files it checks.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
     defaults:
@@ -89,3 +117,30 @@ jobs:
           name: KeybumpsUITests-xcresult
           path: ${{ env.APP_DIR == '.' && 'KeybumpsUITests.xcresult' || format('{0}/KeybumpsUITests.xcresult', env.APP_DIR) }}
           retention-days: 7
+
+  # The required check. It always runs, and passes only if the UI suite passed, or was skipped because
+  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
+  ui-tests:
+    name: UI tests (with retries)
+    needs: [changes, ui]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require the UI suite to pass or be skipped on purpose
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          SUITE: ${{ needs.ui.result }}
+        run: |
+          if [ "$SUITE" = success ]; then exit 0; fi
+          if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
+            echo "This PR touches none of the files this check covers."
+            exit 0
+          fi
+          echo "::error::the UI suite didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."
+          exit 1
