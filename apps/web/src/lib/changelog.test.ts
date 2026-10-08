@@ -171,8 +171,9 @@ describe('released versions', () => {
     for (const partial of ['v0', 'v0.', 'v0.0.3-b']) {
       expect(versions(partial).length).toBeGreaterThan(0)
     }
-    // A number that's no version is text: beta.18 says "0.3 seconds instead of 0.9".
-    expect(versions('0.9')).toContain('0.0.3-beta.18')
+    // A number that's no version is text.
+    const timed = releasesFrom([note('0.0.3-beta.13', '- Ready in 0.9 seconds.')], changelog)
+    expect(searchReleases(timed, '0.9').shown.map(r => r.version)).toEqual(['0.0.3-beta.13'])
   })
 
   it('reads a date or month in any common form, in any year unless the query names one', () => {
