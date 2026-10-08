@@ -1188,7 +1188,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ReleaseNotes\"\nrm -rf \"$dir\"\nmkdir -p \"$dir\"\ncp \"${SRCROOT}\"/../../docs/releases/v*.md \"$dir\"/\n";
+			shellScript = "root=$(git -C \"$SRCROOT\" rev-parse --show-toplevel) || { echo \"error: release notes come from docs/releases, so build from a Git checkout\"; exit 1; }\nset -- \"$root\"/docs/releases/v*.md\n[ -f \"$1\" ] || { echo \"error: no release notes in $root/docs/releases\"; exit 1; }\ndir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ReleaseNotes\"\nrm -rf \"$dir\"\nmkdir -p \"$dir\"\ncp \"$@\" \"$dir\"/\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

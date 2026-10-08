@@ -20,7 +20,8 @@ enum UpdatePromptText {
 /// Asks to restart for a downloaded update, so nobody has to remember to (#225): as soon as an
 /// update is ready and restarting is safe (`UpdateInstallationSafetyPolicy`, so never during
 /// Dictation, an unsaved screenshot edit, or a window being moved) and the Command Palette is
-/// closed, then again an hour after each Later, every hour until the restart. Restart Now clicked
+/// closed, then again an hour after each Later, every hour until the restart, and at once from Check
+/// for Updates… (`showNow`, #420). Restart Now clicked
 /// while restarting isn't safe restarts once it is, within two minutes, or else asks again. It never
 /// restarts unasked.
 @MainActor
@@ -103,6 +104,20 @@ final class UpdateReminder {
         // being dragged or snapped) or the open palette only keep a new one from appearing.
         guard !presenter.isShowing, isSafe(), !isSuppressed() else { return }
         if let laterAt, laterVersion == version, now().timeIntervalSince(laterAt) < Self.interval { return }
+        present(version: version)
+    }
+
+    /// Check for Updates… while an update waits (#420): the prompt at once, even within an hour of
+    /// Later or while restarting isn't safe. Restart Now then waits for a safe moment, as always.
+    func showNow() {
+        let current = snapshot()
+        guard current.canRestart else { return }
+        restartRequestedAt = nil
+        guard !presenter.isShowing else { return }
+        present(version: current.status.pendingVersion)
+    }
+
+    private func present(version: String?) {
         presenter.show(
             version: version,
             restart: { [weak self] in

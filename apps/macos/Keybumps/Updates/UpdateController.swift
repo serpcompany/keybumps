@@ -36,7 +36,8 @@ enum UpdateStatus: Equatable {
         }
     }
 
-    /// The newer version Keybumps knows about, from finding it until it installs (#416).
+    /// The newer version this status names, from finding it until it installs (#416). A check, or a
+    /// failed check or download, names none; `UpdateSnapshot.knownUpdate` keeps it through them.
     var availableVersion: String? {
         switch self {
         case .available(let version), .downloading(let version): version
@@ -46,10 +47,29 @@ enum UpdateStatus: Equatable {
 }
 
 struct UpdateSnapshot: Equatable {
-    var status: UpdateStatus
+    /// Set through `setStatus`, which keeps `knownUpdate` in step.
+    private(set) var status: UpdateStatus
     var automaticallyChecks: Bool
     var canCheck: Bool
     var canRestart: Bool
+    /// The newer version found and not yet installed or skipped. It outlives checks and failed
+    /// checks or downloads, so the red dot stays until the update installs (#420).
+    var knownUpdate: String? = nil
+
+    /// The newer version to show: the one the status names, else the one found before it.
+    var newerVersion: String? { status.availableVersion ?? knownUpdate }
+
+    /// Sets the status. A check or a failure keeps the newer version found before it; Skip (idle),
+    /// an up-to-date result, or updates becoming unavailable clear it, and so does Sparkle's answer
+    /// that no update fits this Mac (`SparkleUpdateController.noUpdateFound`).
+    mutating func setStatus(_ status: UpdateStatus) {
+        self.status = status
+        switch status {
+        case .idle, .current, .unavailable: knownUpdate = nil
+        case .checking, .failed: break
+        case .available, .downloading, .downloaded, .readyToRestart, .deferred: knownUpdate = status.availableVersion
+        }
+    }
 }
 
 @MainActor

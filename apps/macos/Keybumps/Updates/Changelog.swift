@@ -1,6 +1,6 @@
 import Foundation
 
-/// Settings › Changelog's version history (#416): every release's What's New notes
+/// Settings › Changelog's notes (#416): every release's What's New
 /// (`docs/releases/v<version>.md`), which every build carries as `ReleaseNotes/v<version>.md`
 /// (`project.yml`), so the page works offline. It lists the installed version and older ones,
 /// newest first.
@@ -38,7 +38,8 @@ enum Changelog {
 }
 
 /// A Keybumps version such as `0.0.3` or `0.0.3-beta.23`, ordered the way SemVer orders releases.
-/// A QA candidate's `0.0.3-beta.23-dev.issue416` counts as the release it was built from.
+/// A QA candidate's `0.0.3-dev.issue416` counts as `0.0.3`, so it lists every 0.0.3 beta's notes
+/// and none as installed.
 struct ReleaseVersion: Comparable, CustomStringConvertible {
     let core: [Int]
     let prerelease: [String]

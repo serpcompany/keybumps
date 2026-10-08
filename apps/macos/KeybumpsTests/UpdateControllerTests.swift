@@ -56,7 +56,7 @@ final class FakeUpdateController: UpdateControlling {
     func restartWhenSafe() { restartCount += 1 }
 
     func emit(_ status: UpdateStatus, canCheck: Bool? = nil, canRestart: Bool? = nil) {
-        snapshot.status = status
+        snapshot.setStatus(status)
         if let canCheck { snapshot.canCheck = canCheck }
         if let canRestart { snapshot.canRestart = canRestart }
         onChange?(snapshot)
@@ -286,6 +286,26 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(controller.responds(to: NSSelectorFromString("standardUserDriverShowVersionHistoryForAppcastItem:")))
         controller.standardUserDriverShowVersionHistory(for: SUAppcastItem.empty())
         XCTAssertEqual(opens, 1)
+    }
+
+    func testSkippingAnUpdateClearsTheDotAndRestart() {
+        let controller = SparkleUpdateController(
+            configuration: SparkleUpdateConfiguration(feedURL: URL(string: "https://updates.keybumps.app/appcast.xml")!, publicKey: "test"),
+            safetyPolicy: UpdateInstallationSafetyPolicy()
+        )
+        XCTAssertTrue(controller.responds(to: NSSelectorFromString("updater:userDidMakeChoice:forUpdate:state:")))
+        controller.installCoordinator.captureImmediateInstall(version: "0.0.2") {}
+        XCTAssertTrue(controller.snapshot.canRestart)
+        XCTAssertTrue(MenuBarAttention.updateIsWaiting(controller.snapshot))
+
+        controller.userDidMake(.dismiss)
+        XCTAssertTrue(controller.snapshot.canRestart, "Remind Me Later keeps the update")
+        controller.userDidMake(.skip)
+        XCTAssertFalse(controller.snapshot.canRestart)
+        XCTAssertEqual(controller.snapshot.status, .idle)
+        XCTAssertFalse(MenuBarAttention.updateIsWaiting(controller.snapshot))
+        controller.installationSafetyDidChange()
+        XCTAssertEqual(controller.snapshot.status, .idle, "A later safety change doesn't bring the skipped update back")
     }
 
     func testRestartIsNotReadyUntilAnImmediateInstallHandlerExists() {
