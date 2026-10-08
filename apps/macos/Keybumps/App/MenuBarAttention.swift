@@ -20,11 +20,10 @@ final class MenuBarAttention {
 
     var showsDot: Bool { !phrases.isEmpty }
 
-    /// Whether the update state needs the dot: the status names a newer version (`availableVersion`)
-    /// or a restart is ready. It follows the latest result, so a failed check clears it until a check
-    /// finds the version again.
+    /// Whether the update state needs the dot: a newer version was found and hasn't installed or been
+    /// skipped, through checks and failures (#420), or a restart is ready.
     static func updateIsWaiting(_ snapshot: UpdateSnapshot) -> Bool {
-        snapshot.canRestart || snapshot.status.availableVersion != nil
+        snapshot.canRestart || snapshot.newerVersion != nil
     }
 
     /// What VoiceOver says for the update's dot.

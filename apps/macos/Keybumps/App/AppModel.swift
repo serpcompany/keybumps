@@ -428,7 +428,11 @@ final class AppModel {
         if shows, let notes { whatsNew.show(ReleaseNotesDocument(markdown: notes)) }
     }
 
-    func checkForUpdates() { updater.checkNow() }
+    /// Check for Updates… and Check now. While an update waits for a restart Sparkle can't check, so
+    /// it shows the restart prompt again instead, even after Later (#420).
+    func checkForUpdates() {
+        if updateSnapshot.canRestart { updateReminder.showNow() } else { updater.checkNow() }
+    }
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) { updater.setAutomaticallyChecks(enabled) }
     func restartToUpdate() { updater.restartWhenSafe() }
 

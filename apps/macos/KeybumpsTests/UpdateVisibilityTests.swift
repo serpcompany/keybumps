@@ -244,6 +244,66 @@ struct UpdateMenuBarTests {
         #expect(try #require(Self.checkItem(UpdateReminderTests.ready)).image?.accessibilityDescription == "Update ready")
     }
 
+    @Test("The dot stays through checks and failed checks or downloads, until the update installs or is skipped")
+    func dotStaysUntilInstalled() throws {
+        var snapshot = UpdateSnapshot(status: .idle, automaticallyChecks: true, canCheck: true, canRestart: false)
+        snapshot.setStatus(.available(version: "0.0.3-beta.24"))
+        for status in [UpdateStatus.checking, .failed("The update could not be downloaded. Try again."), .checking] {
+            snapshot.setStatus(status)
+            #expect(snapshot.knownUpdate == "0.0.3-beta.24", "\(status)")
+            #expect(MenuBarAttention.updateIsWaiting(snapshot), "\(status)")
+        }
+        let item = try #require(Self.checkItem(snapshot))
+        #expect(item.image != nil)
+        #expect(item.toolTip == "Version 0.0.3-beta.24 is available", "Not the failure's message")
+
+        snapshot.setStatus(.downloading(version: "0.0.3-beta.25"))
+        #expect(snapshot.knownUpdate == "0.0.3-beta.25", "A newer find replaces it")
+
+        for clearing in [UpdateStatus.current, .idle, .unavailable("Not configured")] {
+            var cleared = snapshot
+            cleared.setStatus(clearing)
+            #expect(cleared.knownUpdate == nil, "\(clearing)")
+            #expect(!MenuBarAttention.updateIsWaiting(cleared), "\(clearing)")
+        }
+    }
+
+    @Test("While a restart waits, Check for Updates… stays clickable, though Sparkle can't check")
+    func checkItemClickableWhileRestartWaits() throws {
+        #expect(!UpdateReminderTests.ready.canCheck)
+        #expect(try #require(Self.checkItem(UpdateReminderTests.ready)).isEnabled)
+        let nothing = UpdateSnapshot(status: .checking, automaticallyChecks: true, canCheck: false, canRestart: false)
+        #expect(try #require(Self.checkItem(nothing)).isEnabled == false)
+    }
+
+    @Test("Check for Updates… with a restart waiting shows the restart prompt, even within Later's hour, and doesn't check")
+    func checkShowsRestartPrompt() {
+        let presenter = RecordingPromptPresenter()
+        let fake = FakeUpdateController()
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+            presenceController: UpdaterTestPresenceController(),
+            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+            updater: fake,
+            updatePrompt: presenter
+        )
+        model.start()
+        fake.emit(.readyToRestart(version: "0.0.3-beta.24"), canCheck: false, canRestart: true)
+        if presenter.isShowing { presenter.chooseLater() }
+        let shownBefore = presenter.shown.count
+
+        model.checkForUpdates()
+        #expect(presenter.shown.count == shownBefore + 1)
+        #expect(presenter.shown.last == "0.0.3-beta.24")
+        #expect(fake.checkCount == 0, "Sparkle can't check while the update waits")
+
+        presenter.chooseLater()
+        fake.emit(.current, canCheck: true, canRestart: false)
+        model.checkForUpdates()
+        #expect(fake.checkCount == 1, "With nothing waiting, it checks")
+    }
+
     @Test("The menu's dot is drawn red, not tinted like a template image")
     func menuDotIsRed() throws {
         let dot = try #require(NativeStatusItemController.updateDot(saying: "update available"))

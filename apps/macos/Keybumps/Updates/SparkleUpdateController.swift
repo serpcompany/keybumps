@@ -257,7 +257,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     private func refresh(status: UpdateStatus? = nil) {
-        if let status { snapshot.status = status }
+        if let status { snapshot.setStatus(status) }
         if let updater = updaterController?.updater {
             snapshot.automaticallyChecks = updater.automaticallyChecksForUpdates
             snapshot.canCheck = updater.canCheckForUpdates
