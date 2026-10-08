@@ -1,5 +1,17 @@
 # Agent instructions
 
+Stage: ship
+Agents may merge: listed paths
+
+Set by the owner on 2026-10-08 (#399), under the SERP [verification cadence](https://github.com/serpcompany/serp/blob/main/docs/engineering/standards/verification-cadence.md#merging-and-deploys) standard. The Mac app has public releases and the site takes payments. So every PR waits for the owner's approval ("accept" or "merge" in chat counts), except a website PR whose every changed file is listed here. An agent merges such a PR once CI is green and the review has no open blocking findings, then confirms the staging and production deploys and their smoke test passed. A PR that removes or renames a page still waits for the owner.
+
+- `apps/web/src/app/(analytics)/page.tsx`, `home-visuals.tsx`, and `palette-demo.tsx`
+- `apps/web/src/app/(analytics)/about/**`, `contact/**`, `support/**`, and `plugins/**`
+- `apps/web/src/app/globals.css` and `apps/web/src/app/site.css`
+- `apps/web/src/components/**`, except `analytics.tsx`, `consent-banner.tsx`, `download-link.tsx`, `pricing-card.tsx`, `site-document.tsx`, and `strip-query*`
+- `apps/web/src/lib/plugins.ts` and `apps/web/src/lib/plugins.test.ts`
+- `apps/web/public/brand/**` (not `public/_headers`, which sets response headers)
+
 Across the repo, including the website, use `CONTEXT.md` terminology, preserve the module boundaries documented in `docs/architecture.md`, and follow the decisions recorded in `docs/adr/`.
 
 ## Repo-wide
