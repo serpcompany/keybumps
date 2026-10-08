@@ -65,4 +65,5 @@ The website lists every plugin on `/plugins/`, gives each its own page, and buil
   - its route folder `src/app/(analytics)/plugins/<slug>/page.tsx`, which `plugins.test.ts` requires;
   - a tile in the hero list in `src/app/(analytics)/plugins/page.tsx`;
   - the new symbol mapped in `src/components/plugin-icon.tsx`, and a new tint in `iconTints`;
-  - the plugin-count floor in `scripts/smoke.sh`.
+  - the plugin-count floor in `scripts/smoke.sh`;
+  - if release notes call it by another name too (a tab name, an older name), those words, exactly as the notes write them (tags match whole words and case), under its slug in `pluginAliases` in `src/lib/changelog.ts`, so `/changelog/` tags the releases that change it.
