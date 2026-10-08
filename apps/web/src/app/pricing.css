@@ -1,6 +1,7 @@
 /*
- * The pricing card (components/pricing-card.tsx), including its list and checkout button. Kept out of
- * site.css so the site's styles can change without touching checkout (root AGENTS.md, listed paths).
+ * The pricing card (components/pricing-card.tsx), including its list and checkout button. Kept out
+ * of site.css so the site's styles can change without touching checkout (root AGENTS.md, listed
+ * paths).
  */
 .price-card {
   max-width: 460px;

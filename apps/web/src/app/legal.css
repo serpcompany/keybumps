@@ -1,7 +1,7 @@
 /*
- * Text pages (components/page-shell.tsx): the legal documents, /license/, and the help pages and
- * sitemap that share their layout. Kept out of site.css so the site's styles can change without
- * touching legal or license text (root AGENTS.md, listed paths).
+ * Text pages (components/page-shell.tsx): the legal documents, /license/, and the help pages,
+ * sitemap, and 404 that share their layout. Kept out of site.css so the site's styles can change
+ * without touching legal or license text (root AGENTS.md, listed paths).
  */
 .legal a {
   text-decoration: underline;
