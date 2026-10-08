@@ -94,14 +94,16 @@ describe('scripts/deploy-tip.sh', () => {
     expect(run([], 1)).toEqual({ status: 1, deploy: undefined })
   })
 
-  it("treats exactly the workflow's push paths as the website", () => {
+  it("treats every path in the workflow's push filter as the website, and nothing else", () => {
     const site = new RegExp(readFileSync(script, 'utf8').match(/^site='(.+)'$/m)?.[1] ?? '$^')
     const paths =
       workflow.match(/push:\n {4}branches: \[main\]\n {4}paths:\n((?: {6}- .+\n)+)/)?.[1] ?? ''
     const listed = paths.match(/- (.+)/g)?.map(line => line.slice(2)) ?? []
-    expect(listed).toEqual(['apps/web/**', '.github/workflows/web-deploy.yml'])
-    expect(site.test('apps/web/src/app/page.tsx')).toBe(true)
-    expect(site.test('.github/workflows/web-deploy.yml')).toBe(true)
+    expect(listed.length).toBeGreaterThan(0)
+    // A file each listed path would match: `dir/**` stands for a file inside it.
+    for (const path of listed) {
+      expect(site.test(path.replace(/\*\*$/, 'some/file.ts')), path).toBe(true)
+    }
     expect(site.test('.github/workflows/web.yml')).toBe(false)
     expect(site.test('apps/macos/Keybumps/App/AppModel.swift')).toBe(false)
   })
