@@ -10,6 +10,7 @@ const web = join(dirname(fileURLToPath(import.meta.url)), '..')
 const root = join(web, '..', '..')
 const folder = join(root, 'docs', 'releases')
 
+// The same pattern as releaseNotesFile in src/lib/changelog.ts.
 const notes = readdirSync(folder)
   .filter(file => /^v\d+\.\d+\.\d+.*\.md$/.test(file))
   .sort()

@@ -7,7 +7,9 @@ import {
   parseNotes,
   plainText,
   pluginsNamed,
-  releasesFrom
+  releaseNotesFile,
+  releasesFrom,
+  searchReleases
 } from './changelog'
 
 const changelog = `# Changelog
@@ -113,34 +115,77 @@ describe('released versions', () => {
     expect(releases[2]).toMatchObject({ date: null, dateLabel: '', monthLabel: 'Earlier releases' })
   })
 
-  it('searches versions, dates, and the notes', () => {
-    const [release] = releasesFrom([note('0.0.3-beta.13', '- Fixed **Timer**.')], changelog)
+  it('keeps every word a release could be searched by: version, dates, notes, and plugin tags', () => {
+    const [release] = releasesFrom(
+      [note('0.0.3-beta.13', '- Fixed the **Clipboard tab**.')],
+      changelog
+    )
     for (const term of [
       'beta.13',
       'oct 2',
       'october 2',
       'october 2026',
       '2026-10-02',
-      'fixed timer',
-      'area'
+      'fixed',
+      'area',
+      'clipboard history'
     ]) {
       expect(release.searchText).toContain(term)
     }
   })
 
-  it('reads every release in the repository, newest first, each with a summary and a unique anchor', () => {
+  it('finds a whole phrase first, so a date, version, or plugin means just that, then every word', () => {
+    const releases = [
+      { id: 'a', searchText: '0.0.3-beta.1 oct 5, 2026 oct 5 a timer rings' },
+      { id: 'b', searchText: '0.0.3-beta.12 oct 25, 2026 oct 25 5 changes in october' },
+      { id: 'c', searchText: '0.0.3-beta.13 oct 2, 2026 oct 2 clipboard history' }
+    ]
+    const ids = (query: string) => searchReleases(releases, query).shown.map(r => r.id)
+    expect(ids('Oct 5')).toEqual(['a'])
+    expect(ids('oct  2')).toEqual(['c'])
+    expect(ids('beta.1')).toEqual(['a'])
+    expect(ids('Clipboard History')).toEqual(['c'])
+    expect(ids('rings timer')).toEqual(['a'])
+    expect(ids('tim')).toEqual(['a'])
+    expect(ids('')).toEqual(['a', 'b', 'c'])
+    expect(searchReleases(releases, 'Oct 5').terms).toEqual(['oct 5'])
+    expect(searchReleases(releases, 'rings timer').terms).toEqual(['rings', 'timer'])
+  })
+
+  it('counts a section written as prose by its paragraphs, and otherwise only its bullets', () => {
+    const { sections } = parseNotes(
+      '# T\n\nS.\n\n## Prose\n\nOne.\n\nTwo.\n\n## Mixed\n\nIntro.\n\n- A.\n- B.\n'
+    )
+    expect(sections.map(section => section.changes)).toEqual([2, 2])
+  })
+
+  it('fails without a dated CHANGELOG.md heading, rather than showing unreleased notes', () => {
+    expect(() => releasesFrom([note('0.0.3-beta.24')], '# Changelog\n')).toThrow(
+      /no dated release headings/
+    )
+  })
+
+  it('reads every release in the repository: newest first, none newer than CHANGELOG.md, each with a summary and a unique anchor', () => {
     const root = join(process.cwd(), '..', '..')
     const folder = join(root, 'docs', 'releases')
     const notes = readdirSync(folder)
-      .filter(file => /^v\d+\.\d+\.\d+.*\.md$/.test(file))
+      .filter(file => releaseNotesFile.test(file))
       .map(file => ({
         version: file.slice(1, -3),
         markdown: readFileSync(join(folder, file), 'utf8')
       }))
-    const releases = releasesFrom(notes, readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))
-    expect(releases.length).toBeGreaterThanOrEqual(18)
+    const history = readFileSync(join(root, 'CHANGELOG.md'), 'utf8')
+    const newest = [...changelogDates(history).keys()].sort(compareVersions).at(-1) as string
+    const releases = releasesFrom(notes, history)
     const versions = releases.map(r => r.version)
-    expect([...versions].sort(compareVersions).reverse()).toEqual(versions)
+    expect(versions).toEqual(
+      notes
+        .map(n => n.version)
+        .filter(v => compareVersions(v, newest) <= 0)
+        .sort(compareVersions)
+        .reverse()
+    )
+    expect(versions[0]).toBe(newest)
     expect(new Set(releases.map(r => r.id)).size).toBe(releases.length)
     for (const release of releases) expect(release.summary).not.toBe('')
   })

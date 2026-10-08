@@ -3,7 +3,7 @@
 import { CalendarDays, Check, ChevronDown, Link2, Search, X } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { PluginIcon } from '@/components/plugin-icon'
-import type { NoteBlock, Release } from '@/lib/changelog'
+import { type NoteBlock, type Release, searchReleases } from '@/lib/changelog'
 import { absoluteUrl } from '@/lib/site'
 
 /** Inline Markdown in the notes: **bold**, `code`, and [links](…). */
@@ -108,6 +108,9 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
   const [month, setMonth] = useState('all')
   const [copied, setCopied] = useState<string | null>(null)
   const search = useRef<HTMLInputElement>(null)
+  const list = useRef<HTMLOListElement>(null)
+  // A plugin tag's search scrolls to the results once they've rendered.
+  const [scrollToResults, setScrollToResults] = useState(false)
 
   // ⌘K, or Ctrl-K, focuses the search, as on /plugins/.
   useEffect(() => {
@@ -121,6 +124,12 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
   }, [])
 
   useEffect(() => {
+    if (!scrollToResults) return
+    setScrollToResults(false)
+    list.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [scrollToResults])
+
+  useEffect(() => {
     if (!copied) return
     const timer = window.setTimeout(() => setCopied(null), 2000)
     return () => window.clearTimeout(timer)
@@ -132,12 +141,8 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
     else list.push({ label: release.monthLabel, count: 1 })
     return list
   }, [])
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const shown = releases.filter(
-    release =>
-      (month === 'all' || release.monthLabel === month) &&
-      words.every(word => release.searchText.includes(word))
-  )
+  const { shown: found, terms: words } = searchReleases(releases, query)
+  const shown = found.filter(release => month === 'all' || release.monthLabel === month)
   const filtered = words.length > 0 || month !== 'all'
   const latest = releases[0]?.id
 
@@ -210,15 +215,16 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
               <ChevronDown aria-hidden="true" size={14} />
             </label>
           </div>
-          <p className="changelog-count" aria-live="polite">
-            {filtered && (
-              <>
-                Showing {shown.length} of {releases.length} releases
-                <button type="button" onClick={clear}>
-                  Clear
-                </button>
-              </>
-            )}
+          {filtered && (
+            <p className="changelog-count">
+              Showing {shown.length} of {releases.length} releases
+              <button type="button" onClick={clear}>
+                Clear
+              </button>
+            </p>
+          )}
+          <p className="sr-only" aria-live="polite">
+            {filtered ? `Showing ${shown.length} of ${releases.length} releases` : ''}
           </p>
         </div>
       </search>
@@ -236,7 +242,7 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
             </button>
           </div>
         )}
-        <ol className="changelog-timeline" aria-label="Releases, newest first">
+        <ol ref={list} className="changelog-timeline" aria-label="Releases, newest first">
           {shown.map((release, index) => {
             const startsMonth = release.monthLabel !== shown[index - 1]?.monthLabel
             const matching = release.sections.map(section =>
@@ -312,10 +318,7 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
                             onClick={() => {
                               setQuery(plugin.name)
                               setMonth('all')
-                              search.current?.scrollIntoView({
-                                block: 'center',
-                                behavior: 'smooth'
-                              })
+                              setScrollToResults(true)
                             }}
                           >
                             <PluginIcon
@@ -333,7 +336,8 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
                       <div className="changelog-sections">
                         {release.sections.map((section, sectionIndex) => (
                           <details
-                            key={section.heading}
+                            // A new search re-opens the sections that match it.
+                            key={`${section.heading}:${words.join(' ')}`}
                             className="changelog-section"
                             open={
                               words.length

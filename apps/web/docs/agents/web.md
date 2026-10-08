@@ -15,6 +15,7 @@ SERP standards this site follows:
 | `pnpm dev` | Next.js dev server. Cloudflare bindings come from `wrangler.jsonc` through `initOpenNextCloudflareForDev()`. |
 | `pnpm lint` | Biome lint and format check. `pnpm format` rewrites formatting. |
 | `pnpm typecheck` | `next typegen`, then `tsc --noEmit`. |
+| `pnpm changelog:sources` | Copies `docs/releases/v*.md` and `CHANGELOG.md`'s headings into `src/generated/changelog-sources.json` (not committed) for `/changelog/`. `dev`, `build`, and `typecheck` run it first, so the page carries the notes inside the Worker bundle. A release's notes reach the site only when it next deploys. |
 | `pnpm test` | Vitest, `src/**/*.test.ts`. |
 | `pnpm check` | lint, typecheck, test, then an OpenNext build (`opennextjs-cloudflare build`, which runs `next build`). CI runs this on pull requests (`.github/workflows/web.yml`). |
 | `pnpm preview` | OpenNext build, then the Worker in local workerd at `http://localhost:8787`. This is the closest local match to production. |

@@ -185,12 +185,13 @@ function parseSection(lines: string[]): NoteBlock[] {
   return blocks
 }
 
+/** A section's bullets, or its paragraphs when it has no bullets (a note written as prose). */
 function countChanges(blocks: NoteBlock[]): number {
-  return blocks.reduce(
-    (sum, block) =>
-      sum + (block.kind === 'list' ? block.items.length : block.kind === 'paragraph' ? 1 : 0),
+  const bullets = blocks.reduce(
+    (sum, block) => sum + (block.kind === 'list' ? block.items.length : 0),
     0
   )
+  return bullets || blocks.filter(block => block.kind === 'paragraph').length
 }
 
 function blockText(block: NoteBlock): string {
@@ -249,8 +250,10 @@ export function releasesFrom(
 ): Release[] {
   const dates = changelogDates(changelog)
   const newest = [...dates.keys()].sort(compareVersions).at(-1)
+  // Without it, unreleased notes would show: fail the build instead.
+  if (!newest) throw new Error('CHANGELOG.md has no dated release headings')
   return notes
-    .filter(note => !newest || compareVersions(note.version, newest) <= 0)
+    .filter(note => compareVersions(note.version, newest) <= 0)
     .sort((a, b) => compareVersions(b.version, a.version))
     .map(note => {
       const parsed = parseNotes(note.markdown)
@@ -276,6 +279,7 @@ export function releasesFrom(
             date
           ]
         : []
+      const plugins = pluginsNamed(text)
       return {
         version: note.version,
         id: `v${note.version.replace(/[^A-Za-z0-9]+/g, '-')}`,
@@ -283,8 +287,36 @@ export function releasesFrom(
         dateLabel,
         monthLabel,
         ...parsed,
-        plugins: pluginsNamed(text),
-        searchText: [note.version, ...dateWords, text].join(' ').toLowerCase()
+        plugins,
+        // Its plugin tags' names too, so clicking a tag (which searches its name) finds it.
+        searchText: [note.version, ...dateWords, text, ...plugins.map(plugin => plugin.name)]
+          .join(' ')
+          .toLowerCase()
       }
     })
+}
+
+/** A docs/releases file name: v<version>.md. scripts/changelog-sources.mjs uses the same pattern. */
+export const releaseNotesFile = /^v\d+\.\d+\.\d+.*\.md$/
+
+/**
+ * What a search shows. A query found as a whole phrase (so `Oct 5`, `beta.1`, or `Clipboard History`
+ * means that date, version, or plugin) shows only the releases with that phrase; otherwise every
+ * word must appear somewhere in a release, so a partly typed word still finds it. `terms` are what
+ * to highlight.
+ */
+export function searchReleases<T extends Pick<Release, 'searchText'>>(
+  releases: readonly T[],
+  query: string
+): { shown: T[]; terms: string[] } {
+  const phrase = query.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!phrase) return { shown: [...releases], terms: [] }
+  const whole = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(phrase)}(?:$|[^a-z0-9])`)
+  const byPhrase = releases.filter(release => whole.test(release.searchText))
+  if (byPhrase.length) return { shown: byPhrase, terms: [phrase] }
+  const words = phrase.split(' ')
+  return {
+    shown: releases.filter(release => words.every(word => release.searchText.includes(word))),
+    terms: words
+  }
 }

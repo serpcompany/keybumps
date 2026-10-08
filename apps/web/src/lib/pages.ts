@@ -33,8 +33,7 @@ export const sitePages = [
   {
     path: '/changelog/',
     title: 'Changelog',
-    description:
-      "Every Keybumps release's notes, newest first: what's new and what's fixed in each version."
+    description: "What's new and what's fixed in each Keybumps release, newest first."
   },
   {
     path: '/license/',

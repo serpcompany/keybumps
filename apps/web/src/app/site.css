@@ -2496,10 +2496,6 @@ body:has(#questions:target) .plugin-tabs a:first-child {
   font-variant-numeric: tabular-nums;
 }
 
-.changelog-count:empty {
-  display: none;
-}
-
 .changelog-count button,
 .changelog-empty button {
   padding: 4px 2px;
@@ -2525,6 +2521,7 @@ body:has(#questions:target) .plugin-tabs a:first-child {
 }
 
 .changelog-timeline {
+  scroll-margin-top: 140px;
   max-width: 960px;
   margin: 0 auto;
   padding: 32px 0 72px;
