@@ -12,6 +12,13 @@
  * components) can override them. Unlayered styles would beat every utility.
  */
 @import "./site.css" layer(components);
+/*
+ * The text pages, pricing card, and consent banner, kept out of site.css (#401, #405). They load
+ * after it, so at equal specificity their rules win over site.css's.
+ */
+@import "./legal.css" layer(components);
+@import "./pricing.css" layer(components);
+@import "./consent.css" layer(components);
 
 @custom-variant dark (&:is(.dark *));
 

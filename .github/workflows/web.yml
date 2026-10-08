@@ -1,14 +1,11 @@
 name: Website checks
 
 # Checks the keybumps.app website in apps/web with `pnpm check`: Biome, TypeScript, Vitest, and an
-# OpenNext build. Runs on pull requests to main that touch the site and manually from Actions. It
-# never deploys; web-deploy.yml deploys after merge.
+# OpenNext build. Runs on every pull request to main (its check only when the PR touches the site)
+# and manually from Actions. It never deploys; web-deploy.yml deploys after merge.
 on:
   pull_request:
     branches: [main]
-    paths:
-      - apps/web/**
-      - .github/workflows/web.yml
   workflow_dispatch:
 
 permissions:
@@ -23,8 +20,39 @@ defaults:
     working-directory: apps/web
 
 jobs:
+  # Required checks must report on every pull request, so this workflow has no `paths:` filter.
+  # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
+  changes:
+    name: Changed paths
+    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      run: ${{ steps.touches.outputs.run }}
+    steps:
+      - name: Check out the scripts
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Does this PR touch the website?
+        id: touches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: .github/scripts/pr-touches.sh '^(apps/web/|\.github/workflows/(web|web-deploy|keybumps-unit-tests|keybumps-ui-tests)\.yml$|\.github/scripts/pr-touches\.sh$)'
+
   check:
-    name: Website check (pnpm check)
+    name: Website check (run pnpm check)
+    needs: changes
+    # Skipped (which counts as passing) only when the PR touches none of the files it checks.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -48,3 +76,30 @@ jobs:
 
       - name: Run pnpm check
         run: pnpm check
+
+  # The required check. It always runs, and passes only if the website check passed, or was skipped because
+  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
+  website-check:
+    name: Website check (pnpm check)
+    needs: [changes, check]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require the website check to pass or be skipped on purpose
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          SUITE: ${{ needs.check.result }}
+        run: |
+          if [ "$SUITE" = success ]; then exit 0; fi
+          if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
+            echo "This PR touches none of the files this check covers."
+            exit 0
+          fi
+          echo "::error::the website check didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."
+          exit 1
