@@ -102,6 +102,17 @@ describe('web-deploy.yml', () => {
     }
   )
 
+  // A merge queue group's branch isn't main yet; the deploy waits for the merge's push to main.
+  it('deploys only from main, never from a merge queue group', () => {
+    const trigger = deployWorkflow.slice(
+      deployWorkflow.indexOf('\non:\n'),
+      deployWorkflow.indexOf('\npermissions:')
+    )
+    expect(trigger).toContain('  push:\n    branches: [main]\n')
+    expect(trigger).not.toContain('merge_group')
+    expect(trigger).not.toContain('pull_request')
+  })
+
   it('runs production only when staging deployed', () => {
     expect(deploy.staging).toMatch(/deployed: \$\{\{ steps\.tip\.outputs\.deploy \}\}/)
     expect(deploy.production).toContain("needs.staging.outputs.deployed == 'true'")

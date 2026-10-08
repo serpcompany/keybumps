@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 
-// .github/scripts/pr-touches.sh decides whether a required check's slow job runs on a pull request.
+// .github/scripts/pr-touches.sh decides whether a required check's slow job runs on a pull request
+// or a merge queue group.
 // When unsure it must say run=true: a wrong run=false skips a required suite and passes the check.
 // It runs here with a stub `gh` that prints a canned compare result, never the real API.
 const script = fileURLToPath(new URL('../../../../.github/scripts/pr-touches.sh', import.meta.url))
@@ -48,6 +49,14 @@ describe('.github/scripts/pr-touches.sh', () => {
 
   it('skips it when the PR touches none of them', () => {
     expect(run(changed(['AGENTS.md', 'apps/web/src/app/site.css']))).toBe('false')
+  })
+
+  it('decides the same way for a merge queue group', () => {
+    const event = 'merge_group'
+    expect(run(changed(['AGENTS.md', 'apps/web/src/app/site.css']), { event })).toBe('false')
+    expect(run(changed(['AGENTS.md', 'apps/macos/Keybumps/App/AppModel.swift']), { event })).toBe(
+      'true'
+    )
   })
 
   it('counts a file renamed out of the checked paths', () => {

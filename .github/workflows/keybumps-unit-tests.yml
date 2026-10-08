@@ -1,12 +1,14 @@
 name: Keybumps unit tests
 
-# Runs on every pull request (its unit job only when the PR touches app code or the release
-# notes the tests read), as the first gate of Release Keybumps, and manually from Actions. No
-# nightly schedule. The `changes` job's pattern names apps/macos/ directly, as the guard test
+# Runs on every pull request and in the merge queue (its unit job only when the change touches app
+# code or the release notes the tests read), as the first gate of Release Keybumps, and manually
+# from Actions. No nightly schedule. The `changes` job's pattern names apps/macos/ directly, as the guard test
 # reads it; keep it in step with APP_DIR.
 on:
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
   workflow_call:
   workflow_dispatch:
 
@@ -25,12 +27,14 @@ env:
   APP_DIR: apps/macos
 
 jobs:
-  # Required checks must report on every pull request, so this workflow has no `paths:` filter.
+  # Required checks must report on every pull request and merge queue group, so this workflow has
+  # no `paths:` filter.
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
-    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
-    if: github.event_name == 'pull_request'
+    # Only pull requests and merge queue groups choose; every other event (the release gate, a
+    # manual run) runs the suite.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -49,8 +53,8 @@ jobs:
         id: touches
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: .github/scripts/pr-touches.sh '^(apps/macos/|docs/releases/v[^/]*\.md$|\.github/workflows/keybumps-unit-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   unit:
