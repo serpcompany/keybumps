@@ -22,9 +22,10 @@ const excludedArea =
   /^app\/(\(sensitive-url\)|\(analytics\)\/legal|\(analytics\)\/pricing|buy|api)\/|^components\/(analytics|consent-banner|page-shell|pricing-card|strip-query)\.tsx$/
 
 /** Classes only excluded areas use, accepted as shared layout: the only selectors that may use them. */
-const acceptedShared: Record<string, { selectors: string[]; why: string }> = {
+const acceptedShared: Record<string, { rule: string; declarations: string; why: string }> = {
   first: {
-    selectors: ['.section.first'],
+    rule: '.section.first',
+    declarations: 'border-top: none; padding-top: 72px;',
     why: "It only removes the first section's top border and sets its padding (#404's review)"
   }
 }
@@ -65,7 +66,10 @@ function literalText(expression: string): string[] {
 function classUsers(): Map<string, Set<string>> {
   const users = new Map<string, Set<string>>()
   for (const file of files(src).filter(path => path.endsWith('.tsx'))) {
+    // Comments aren't uses: block and JSDoc comments, and whole-line `//` comments.
     const source = readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
     for (const attribute of source.matchAll(/className=/g)) {
       const value = attributeValue(source, (attribute.index ?? 0) + 'className='.length)
       for (const name of literalText(value)
@@ -79,24 +83,63 @@ function classUsers(): Map<string, Set<string>> {
   return users
 }
 
-/** A stylesheet's selectors, one per comma-separated part, without @-rule preludes. */
-function selectors(css: string): string[] {
-  const preludes = [...css.matchAll(/([^{};]+)\{/g)].map(match => match[1].trim())
-  return preludes
-    .filter(prelude => !prelude.startsWith('@'))
-    .flatMap(prelude => prelude.split(',').map(s => s.trim()))
+/** A stylesheet's rules: each block's prelude and its own declarations, and whether it nests. */
+function rules(css: string): { prelude: string; declarations: string; nested: boolean }[] {
+  const found: { prelude: string; declarations: string; nested: boolean }[] = []
+  const open: { prelude: string; declarations: string; nested: boolean }[] = []
+  let text = ''
+  for (const character of css) {
+    if (character === '{') {
+      const prelude = text.trim()
+      const parent = open.at(-1)
+      open.push({
+        prelude,
+        declarations: '',
+        nested: Boolean(parent && !parent.prelude.startsWith('@'))
+      })
+      text = ''
+    } else if (character === '}') {
+      const rule = open.pop()
+      if (rule) {
+        rule.declarations = (rule.declarations + text).replace(/\s+/g, ' ').trim()
+        found.push(rule)
+      }
+      text = ''
+    } else if (character === ';') {
+      const rule = open.at(-1)
+      if (rule) rule.declarations += `${text.trim()}; `
+      text = ''
+    } else {
+      text += character
+    }
+  }
+  return found
 }
+
+/** The selectors a rule applies, one per comma-separated part; `@scope`'s too. */
+function selectorsOf(prelude: string): string[] {
+  if (prelude.startsWith('@scope'))
+    return [...prelude.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim())
+  if (prelude.startsWith('@')) return []
+  return prelude.split(',').map(selector => selector.trim())
+}
+
+/** The classes a selector names, ignoring attribute selectors such as `[href$=".dmg"]`. */
+const classesIn = (selector: string) =>
+  [...selector.replace(/\[[^\]]*\]/g, '').matchAll(/\.([a-zA-Z][\w-]*)/g)].map(match => match[1])
 
 const users = classUsers()
 
 describe.each(listedStylesheets)('%s (a listed path)', stylesheet => {
   const css = readFileSync(join(src, stylesheet), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
-  const allSelectors = selectors(css)
+  const allRules = rules(css)
   const classes = [
-    ...new Set(
-      allSelectors.flatMap(selector => [...selector.matchAll(/\.([a-zA-Z][\w-]*)/g)]).map(m => m[1])
-    )
+    ...new Set(allRules.flatMap(rule => selectorsOf(rule.prelude).flatMap(classesIn)))
   ]
+
+  it('has no nested style rules, so every selector is checked as written', () => {
+    expect(allRules.filter(rule => rule.nested).map(rule => rule.prelude)).toEqual([])
+  })
 
   it('styles no class that only excluded areas use', () => {
     const onlyExcluded = classes.filter(name => {
@@ -119,16 +162,15 @@ describe.each(listedStylesheets)('%s (a listed path)', stylesheet => {
     ).toEqual([])
   })
 
-  it('uses each accepted shared class only in its accepted selectors', () => {
-    for (const [name, { selectors: accepted }] of Object.entries(acceptedShared)) {
-      const using = allSelectors.filter(selector =>
-        new RegExp(`\\.${name}(?![\\w-])`).test(selector)
+  it('uses each accepted shared class only in its one accepted rule, with its reviewed declarations', () => {
+    for (const [name, { rule, declarations }] of Object.entries(acceptedShared)) {
+      const using = allRules.filter(r =>
+        selectorsOf(r.prelude).some(selector => classesIn(selector).includes(name))
       )
-      expect(using, name).toEqual(expect.arrayContaining(accepted))
       expect(
-        using.filter(selector => !accepted.includes(selector)),
+        using.map(r => [r.prelude, r.declarations]),
         name
-      ).toEqual([])
+      ).toEqual([[rule, declarations]])
     }
   })
 
