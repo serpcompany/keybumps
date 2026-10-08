@@ -12,6 +12,13 @@
  * components) can override them. Unlayered styles would beat every utility.
  */
 @import "./site.css" layer(components);
+/*
+ * The pricing card and consent banner, kept out of site.css (#401). Loading them after it changes
+ * nothing: the consent rules were its last, and no later site.css rule sets the same properties on
+ * the pricing card.
+ */
+@import "./pricing.css" layer(components);
+@import "./consent.css" layer(components);
 
 @custom-variant dark (&:is(.dark *));
 
