@@ -125,7 +125,7 @@ robots_header_is() {
 }
 
 # Pages end in a slash and files never do (SERP URL trailing-slash standard).
-for path in / /plugins/ /pricing/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
+for path in / /plugins/ /pricing/ /changelog/ /license/ /thanks/ /about/ /support/ /contact/ /legal/ \
   /legal/privacy/ /legal/terms/ /legal/refunds/ /legal/dmca/ /legal/affiliate-disclosure/ \
   /sitemap/ /robots.txt /sitemap-index.xml /sitemaps/pages.xml; do
   eventually "200 $path" status_is "$base$path" 200 "${smoke[@]}"
