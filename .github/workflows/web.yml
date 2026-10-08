@@ -28,8 +28,8 @@ jobs:
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
-    # Only pull requests and merge queue groups choose; every other event (the release gate,
-    # a manual run) runs the suite.
+    # Only pull requests and merge queue groups choose; any other event (a manual run) runs the
+    # check.
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
