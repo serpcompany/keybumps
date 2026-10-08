@@ -30,7 +30,7 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general", "plugins", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation"] {
+        for section in ["permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }

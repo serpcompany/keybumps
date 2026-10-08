@@ -46,6 +46,14 @@ _Avoid_: Plugin, extension, add-on
 The Keybumps window where capabilities are turned on and configured. Quick Search and the Command Palette offer it as Keybumps Settings.
 _Avoid_: Preferences, Settings panel
 
+**What's New**:
+A release's notes for the people who use Keybumps, shown once in their own window after that release installs.
+_Avoid_: Release notes window, changelog
+
+**Changelog**:
+The Settings page with Keybumps' update status and every release's What's New, newest first. The Version History button in the up-to-date alert opens it. The repository's `CHANGELOG.md` is a different thing: the developers' commit log that release notes are drafted from.
+_Avoid_: Version history, release history, updates page
+
 **Crash report**:
 What Keybumps sends its developers through Sentry when it crashes or freezes, unless the person turned it off: versions, the Mac's model, which plugins are on, and stack traces, never user content (ADR 0007).
 _Avoid_: Telemetry, analytics, tracking

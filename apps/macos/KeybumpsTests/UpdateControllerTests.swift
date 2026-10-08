@@ -288,6 +288,24 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(opens, 1)
     }
 
+    func testSkippingAnUpdateSetToInstallClearsTheDotAndRestart() {
+        let controller = SparkleUpdateController(
+            configuration: SparkleUpdateConfiguration(feedURL: URL(string: "https://updates.keybumps.app/appcast.xml")!, publicKey: "test"),
+            safetyPolicy: UpdateInstallationSafetyPolicy()
+        )
+        XCTAssertTrue(controller.responds(to: NSSelectorFromString("updater:userDidMakeChoice:forUpdate:state:")))
+        controller.installCoordinator.captureImmediateInstall(version: "0.0.2") {}
+        XCTAssertTrue(controller.snapshot.canRestart)
+        XCTAssertTrue(MenuBarAttention.updateIsWaiting(controller.snapshot))
+
+        controller.userDidSkipUpdate()
+        XCTAssertFalse(controller.snapshot.canRestart)
+        XCTAssertEqual(controller.snapshot.status, .idle)
+        XCTAssertFalse(MenuBarAttention.updateIsWaiting(controller.snapshot))
+        controller.installationSafetyDidChange()
+        XCTAssertEqual(controller.snapshot.status, .idle, "A later safety change doesn't bring the skipped update back")
+    }
+
     func testRestartIsNotReadyUntilAnImmediateInstallHandlerExists() {
         let safety = UpdateInstallationSafetyPolicy()
         let coordinator = SafeUpdateInstallCoordinator(safetyPolicy: safety)

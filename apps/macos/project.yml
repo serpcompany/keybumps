@@ -105,10 +105,13 @@ targets:
       - name: Bundle every release's notes for Settings › Changelog
         # Every build carries docs/releases/v*.md, so the version history works offline (#416).
         script: |
+          root=$(git -C "$SRCROOT" rev-parse --show-toplevel) || { echo "error: release notes come from docs/releases, so build from a Git checkout"; exit 1; }
+          set -- "$root"/docs/releases/v*.md
+          [ -f "$1" ] || { echo "error: no release notes in $root/docs/releases"; exit 1; }
           dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ReleaseNotes"
           rm -rf "$dir"
           mkdir -p "$dir"
-          cp "${SRCROOT}"/../../docs/releases/v*.md "$dir"/
+          cp "$@" "$dir"/
         basedOnDependencyAnalysis: false
     preBuildScripts:
       - name: Validate Keybumps release configuration

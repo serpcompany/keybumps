@@ -230,7 +230,7 @@ struct UpdateMenuBarTests {
             #expect(MenuBarAttention.updateIsWaiting(snapshot), "\(status)")
             #expect(MenuBarAttention.updatePhrase(snapshot) == "update available")
             let item = try #require(Self.checkItem(snapshot))
-            #expect(item.image === NativeStatusItemController.updateDot)
+            #expect(item.image?.accessibilityDescription == "Update available")
             #expect(item.toolTip == status.summary)
         }
         for status in [UpdateStatus.idle, .checking, .current, .failed("offline"), .unavailable("Not configured")] {
@@ -241,11 +241,12 @@ struct UpdateMenuBarTests {
             #expect(item.toolTip == nil)
         }
         #expect(MenuBarAttention.updatePhrase(UpdateReminderTests.ready) == "update ready")
+        #expect(try #require(Self.checkItem(UpdateReminderTests.ready)).image?.accessibilityDescription == "Update ready")
     }
 
     @Test("The menu's dot is drawn red, not tinted like a template image")
     func menuDotIsRed() throws {
-        let dot = try #require(NativeStatusItemController.updateDot)
+        let dot = try #require(NativeStatusItemController.updateDot(saying: "update available"))
         #expect(!dot.isTemplate)
     }
 

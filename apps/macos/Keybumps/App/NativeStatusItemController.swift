@@ -305,7 +305,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         updates.isEnabled = snapshot.canCheck
         // The same red dot as the icon's, while a newer version is known (#416).
         if MenuBarAttention.updateIsWaiting(snapshot) {
-            updates.image = Self.updateDot
+            updates.image = Self.updateDot(saying: MenuBarAttention.updatePhrase(snapshot))
             updates.toolTip = snapshot.status.summary
         }
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -316,14 +316,17 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(withTitle: "Quit Keybumps", action: #selector(quit), keyEquivalent: "q").target = self
     }
 
-    /// A red dot in the menu's icon column, the size of the one on the menu bar icon.
-    static let updateDot: NSImage? = NSImage(
-        systemSymbolName: "circle.fill",
-        accessibilityDescription: "Update available"
-    )?.withSymbolConfiguration(
-        NSImage.SymbolConfiguration(pointSize: 7, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [.systemRed]))
-    )
+    /// A red dot in the menu's icon column, the size of the one on the menu bar icon, named as
+    /// the icon's VoiceOver label names it ("update available" or "update ready").
+    static func updateDot(saying phrase: String) -> NSImage? {
+        NSImage(
+            systemSymbolName: "circle.fill",
+            accessibilityDescription: phrase.prefix(1).uppercased() + phrase.dropFirst()
+        )?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: 7, weight: .regular)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [.systemRed]))
+        )
+    }
 
     @objc func toggleQuickSearch() {
         setQuickSearchVisible(!quickSearchWasVisibleWhenMenuOpened)

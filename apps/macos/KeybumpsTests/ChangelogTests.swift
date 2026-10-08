@@ -11,9 +11,10 @@ struct ChangelogTests {
         #expect(versions == versions.sorted())
         #expect(versions.shuffled().sorted().map(\.description) == ordered)
 
-        let candidate = try #require(ReleaseVersion("0.0.3-beta.23-dev.issue416"))
-        #expect(candidate.description == "0.0.3-beta.23")
-        #expect(candidate == ReleaseVersion("0.0.3-beta.23"))
+        // build-qa-candidate.sh's format: the marketing version, then -dev.issue<N>.
+        let candidate = try #require(ReleaseVersion("0.0.3-dev.issue416"))
+        #expect(candidate.description == "0.0.3")
+        #expect(candidate == ReleaseVersion("0.0.3"))
         #expect(ReleaseVersion("beta") == nil)
         #expect(ReleaseVersion("") == nil)
     }
@@ -35,8 +36,10 @@ struct ChangelogTests {
         #expect(all.map(\.version) == ["0.0.3-beta.13", "0.0.3-beta.12", "0.0.3-beta.3", "0.0.3-beta.2"])
         #expect(all.first?.notes.blocks == [.title("Keybumps 0.0.3-beta.13"), .paragraph("Summary."), .bullet("A change.")])
 
-        let installed = Changelog.entries(in: directory, upTo: ReleaseVersion("0.0.3-beta.12-dev.issue416"))
+        let installed = Changelog.entries(in: directory, upTo: ReleaseVersion("0.0.3-beta.12"))
         #expect(installed.map(\.version) == ["0.0.3-beta.12", "0.0.3-beta.3", "0.0.3-beta.2"])
+        let candidate = Changelog.entries(in: directory, upTo: ReleaseVersion("0.0.3-dev.issue416"))
+        #expect(candidate.map(\.version) == all.map(\.version), "A candidate lists every beta of its version")
 
         #expect(Changelog.entries(in: directory.appendingPathComponent("missing"), upTo: nil).isEmpty)
     }

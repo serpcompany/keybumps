@@ -1,6 +1,6 @@
 # Direct update operations
 
-Keybumps uses one Sparkle 2 controller owned by the app shell. Feature modules do not import Sparkle. The standard Sparkle window presents release notes and install choices; Keybumps mirrors structural status in General and its menu. Update requests never contain searches, filenames, Clipboard History, Dictation content, recordings, Shortcut Coach history, license data, or customer identity.
+Keybumps uses one Sparkle 2 controller owned by the app shell. Feature modules do not import Sparkle. The standard Sparkle window presents release notes and install choices; Keybumps mirrors structural status in Settings › Changelog and its menu, and the up-to-date alert's Version History button opens Changelog instead of a web page. Update requests never contain searches, filenames, Clipboard History, Dictation content, recordings, Shortcut Coach history, license data, or customer identity.
 
 ## Configuration
 

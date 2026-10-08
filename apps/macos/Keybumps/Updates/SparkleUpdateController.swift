@@ -92,7 +92,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     var onShowVersionHistory: (() -> Void)?
 
     private let configuration: SparkleUpdateConfiguration
-    private let installCoordinator: SafeUpdateInstallCoordinator
+    let installCoordinator: SafeUpdateInstallCoordinator
     private let telemetry: UpdateTelemetry
     private var updaterController: SPUStandardUpdaterController?
     private var started = false
@@ -174,14 +174,21 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         onShowVersionHistory?()
     }
 
-    /// A skipped version no longer counts as available, so its red dot goes (#416).
     func updater(
         _ updater: SPUUpdater,
         userDidMake choice: SPUUserUpdateChoice,
         forUpdate updateItem: SUAppcastItem,
         state: SPUUserUpdateState
     ) {
-        if choice == .skip { refresh(status: .idle) }
+        if choice == .skip { userDidSkipUpdate() }
+    }
+
+    /// A skipped version no longer counts as available, so its red dot goes (#416). Skipping one
+    /// already set to install on quit cancels that install without an error, so Restart to Update
+    /// goes too.
+    func userDidSkipUpdate() {
+        installCoordinator.reset()
+        refresh(status: .idle)
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {

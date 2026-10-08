@@ -37,7 +37,7 @@ struct ChangelogSettingsView: View {
                 }
             }
             if Self.entries.isEmpty {
-                SettingsGroup("Version history") {
+                SettingsGroup {
                     SettingsNote("This build doesn't include release notes.")
                 }
             }
