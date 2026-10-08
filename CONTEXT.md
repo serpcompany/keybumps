@@ -51,7 +51,7 @@ A release's notes for the people who use Keybumps, shown once in their own windo
 _Avoid_: Release notes window, changelog
 
 **Changelog**:
-The Settings page with Keybumps' update status and every release's What's New, newest first. The Version History button in the up-to-date alert opens it. The repository's `CHANGELOG.md` is a different thing: the developers' commit log that release notes are drafted from.
+The Settings page with Keybumps' update status and the What's New of the installed release and every earlier one, newest first. The Version History button in the up-to-date alert opens it. The repository's `CHANGELOG.md` is a different thing: the developers' commit log that release notes are drafted from.
 _Avoid_: Version history, release history, updates page
 
 **Crash report**:

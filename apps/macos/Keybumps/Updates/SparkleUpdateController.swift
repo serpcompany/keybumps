@@ -180,12 +180,15 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         forUpdate updateItem: SUAppcastItem,
         state: SPUUserUpdateState
     ) {
+        userDidMake(choice)
+    }
+
+    func userDidMake(_ choice: SPUUserUpdateChoice) {
         if choice == .skip { userDidSkipUpdate() }
     }
 
-    /// A skipped version no longer counts as available, so its red dot goes (#416). Skipping one
-    /// already set to install on quit cancels that install without an error, so Restart to Update
-    /// goes too.
+    /// A skipped version no longer counts as available, so its red dot goes (#416). The install
+    /// coordinator resets too, so no Restart to Update outlives a skipped version.
     func userDidSkipUpdate() {
         installCoordinator.reset()
         refresh(status: .idle)

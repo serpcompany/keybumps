@@ -218,7 +218,7 @@ struct UpdateMenuBarTests {
         #expect(!MenuBarAttention.updateIsWaiting(UpdateReminderTests.idle))
     }
 
-    @Test("A newer version puts the red dot on the icon and on Check for Updates…, from finding it until it installs")
+    @Test("A status that names a newer version puts the red dot on the icon and on Check for Updates…; a check or failure doesn't")
     func availableUpdateDot() throws {
         let known: [UpdateStatus] = [
             .available(version: "0.0.3-beta.24"), .downloading(version: "0.0.3-beta.24"),

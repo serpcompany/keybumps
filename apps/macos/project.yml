@@ -103,7 +103,7 @@ targets:
           fi
         basedOnDependencyAnalysis: false
       - name: Bundle every release's notes for Settings › Changelog
-        # Every build carries docs/releases/v*.md, so the version history works offline (#416).
+        # Every build carries docs/releases/v*.md, so Settings › Changelog works offline (#416).
         script: |
           root=$(git -C "$SRCROOT" rev-parse --show-toplevel) || { echo "error: release notes come from docs/releases, so build from a Git checkout"; exit 1; }
           set -- "$root"/docs/releases/v*.md

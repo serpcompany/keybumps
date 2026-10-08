@@ -288,7 +288,7 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(opens, 1)
     }
 
-    func testSkippingAnUpdateSetToInstallClearsTheDotAndRestart() {
+    func testSkippingAnUpdateClearsTheDotAndRestart() {
         let controller = SparkleUpdateController(
             configuration: SparkleUpdateConfiguration(feedURL: URL(string: "https://updates.keybumps.app/appcast.xml")!, publicKey: "test"),
             safetyPolicy: UpdateInstallationSafetyPolicy()
@@ -298,7 +298,9 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(controller.snapshot.canRestart)
         XCTAssertTrue(MenuBarAttention.updateIsWaiting(controller.snapshot))
 
-        controller.userDidSkipUpdate()
+        controller.userDidMake(.dismiss)
+        XCTAssertTrue(controller.snapshot.canRestart, "Remind Me Later keeps the update")
+        controller.userDidMake(.skip)
         XCTAssertFalse(controller.snapshot.canRestart)
         XCTAssertEqual(controller.snapshot.status, .idle)
         XCTAssertFalse(MenuBarAttention.updateIsWaiting(controller.snapshot))

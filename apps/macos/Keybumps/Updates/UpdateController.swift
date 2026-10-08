@@ -36,7 +36,8 @@ enum UpdateStatus: Equatable {
         }
     }
 
-    /// The newer version Keybumps knows about, from finding it until it installs (#416).
+    /// The newer version this status names, from finding it until it installs (#416). A check, or a
+    /// failed check or download, names none until the next result.
     var availableVersion: String? {
         switch self {
         case .available(let version), .downloading(let version): version
