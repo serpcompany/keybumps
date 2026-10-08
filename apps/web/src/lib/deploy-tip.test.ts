@@ -107,4 +107,12 @@ describe('scripts/deploy-tip.sh', () => {
     expect(site.test('.github/workflows/web.yml')).toBe(false)
     expect(site.test('apps/macos/Keybumps/App/AppModel.swift')).toBe(false)
   })
+
+  it('counts release notes as the website, but not the runbooks beside them', () => {
+    const site = new RegExp(readFileSync(script, 'utf8').match(/^site='(.+)'$/m)?.[1] ?? '$^')
+    expect(site.test('docs/releases/v0.0.3-beta.24.md')).toBe(true)
+    expect(site.test('docs/releases/sparkle-update-operations.md')).toBe(false)
+    expect(site.test('docs/releases/cloudflare.md')).toBe(false)
+    expect(site.test('CHANGELOG.md')).toBe(false)
+  })
 })

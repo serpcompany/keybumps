@@ -36,3 +36,20 @@ jobs:
       # with owner authorization while notarization is unavailable. Unset it to notarize again.
       notarize: ${{ vars.KEYBUMPS_NOTARIZE != 'false' }}
     secrets: inherit
+
+  # After the release publishes to production, start a Web deploy run on main so /changelog/ lists it
+  # (#427). Not when the release PR merges: that's before the build is published. A started run
+  # builds main's tip, so it can only stand in for a waiting deploy of something older, and it
+  # shows in Web deploy's own runs; its result doesn't turn this run red. GITHUB_TOKEN may start
+  # workflow_dispatch runs, which is all `actions: write` allows here.
+  website:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Start Web deploy on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run web-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main

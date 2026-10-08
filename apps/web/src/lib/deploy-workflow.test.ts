@@ -113,4 +113,22 @@ describe('web.yml', () => {
     const pr = jobs(prWorkflow)
     expect(Object.values(pr).reduce((total, job) => total + builds(job), 0)).toBe(1)
   })
+
+  it('runs the website check on the release notes and CHANGELOG.md /changelog/ is built from, not the runbooks', () => {
+    const pattern = new RegExp(prWorkflow.match(/pr-touches\.sh '([^']+)'/)?.[1] ?? '$^')
+    expect(pattern.test('docs/releases/v0.0.3-beta.24.md')).toBe(true)
+    expect(pattern.test('CHANGELOG.md')).toBe(true)
+    expect(pattern.test('docs/releases/sparkle-update-operations.md')).toBe(false)
+  })
+
+  it('starts a Web deploy on main only after a release publishes, with no permission beyond starting it', () => {
+    const website = jobs(read('../../../../.github/workflows/release-please.yml')).website ?? ''
+    expect(website).toContain('needs: release')
+    expect(website).toMatch(/permissions:\n {6}actions: write\n {4}steps:/)
+    expect(website).toContain(
+      'gh workflow run web-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main'
+    )
+    expect(deployWorkflow).toMatch(/\n {2}workflow_dispatch:\n/)
+    expect(deployWorkflow).not.toContain('workflow_call')
+  })
 })

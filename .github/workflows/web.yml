@@ -46,7 +46,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: .github/scripts/pr-touches.sh '^(apps/web/|\.github/workflows/(web|web-deploy|keybumps-unit-tests|keybumps-ui-tests)\.yml$|\.github/scripts/pr-touches\.sh$)'
+        # docs/releases/v*.md and CHANGELOG.md are what /changelog/ is built from (#427).
+        run: .github/scripts/pr-touches.sh '^(apps/web/|docs/releases/v[^/]*\.md$|CHANGELOG\.md$|\.github/workflows/(web|web-deploy|keybumps-unit-tests|keybumps-ui-tests)\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   check:
     name: Website check (run pnpm check)
