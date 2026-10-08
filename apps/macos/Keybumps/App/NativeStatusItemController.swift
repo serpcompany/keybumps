@@ -303,7 +303,8 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         let updates = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
         // While an update waits for a restart, Sparkle can't check; the item shows the restart prompt
-        // instead, so the dot never marks an item that can't be clicked (#420).
+        // instead, so a ready update's dot marks an item that works (#420). It's greyed out only
+        // while Sparkle downloads and prepares the update.
         updates.isEnabled = snapshot.canCheck || snapshot.canRestart
         // The same red dot as the icon's, until the update installs or is skipped (#416, #420).
         if MenuBarAttention.updateIsWaiting(snapshot) {

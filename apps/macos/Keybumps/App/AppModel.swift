@@ -429,7 +429,8 @@ final class AppModel {
     }
 
     /// Check for Updates… and Check now. While an update waits for a restart Sparkle can't check, so
-    /// it shows the restart prompt again instead, even after Later (#420).
+    /// Check for Updates… shows the restart prompt again instead, even after Later (#420); Settings
+    /// offers Restart to Update beside its disabled Check now then.
     func checkForUpdates() {
         if updateSnapshot.canRestart { updateReminder.showNow() } else { updater.checkNow() }
     }

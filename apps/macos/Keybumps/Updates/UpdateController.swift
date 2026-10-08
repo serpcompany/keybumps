@@ -47,7 +47,8 @@ enum UpdateStatus: Equatable {
 }
 
 struct UpdateSnapshot: Equatable {
-    var status: UpdateStatus
+    /// Set through `setStatus`, which keeps `knownUpdate` in step.
+    private(set) var status: UpdateStatus
     var automaticallyChecks: Bool
     var canCheck: Bool
     var canRestart: Bool
@@ -59,7 +60,8 @@ struct UpdateSnapshot: Equatable {
     var newerVersion: String? { status.availableVersion ?? knownUpdate }
 
     /// Sets the status. A check or a failure keeps the newer version found before it; Skip (idle),
-    /// an up-to-date result, or updates becoming unavailable clear it.
+    /// an up-to-date result, or updates becoming unavailable clear it, and so does Sparkle's answer
+    /// that no update fits this Mac (`SparkleUpdateController.noUpdateFound`).
     mutating func setStatus(_ status: UpdateStatus) {
         self.status = status
         switch status {

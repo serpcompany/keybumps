@@ -64,6 +64,29 @@ struct UpdateReminderTests {
         #expect(fixture.presenter.shown == ["0.0.3-beta.14", "0.0.3-beta.15"])
     }
 
+    @Test("Check for Updates… shows the prompt at once, within Later's hour and while restarting isn't safe; Restart Now still waits for a safe moment")
+    func showNow() {
+        let fixture = ReminderFixture(snapshot: Self.idle)
+        fixture.reminder.showNow()
+        #expect(fixture.presenter.shown.isEmpty, "Nothing waits")
+
+        fixture.snapshot = Self.ready
+        fixture.reminder.evaluate()
+        fixture.presenter.chooseLater()
+        fixture.now += 60
+        fixture.isSafe = false
+        fixture.reminder.showNow()
+        #expect(fixture.presenter.shown == ["0.0.3-beta.14", "0.0.3-beta.14"])
+        fixture.reminder.showNow()
+        #expect(fixture.presenter.shown.count == 2, "Not twice while it's showing")
+
+        fixture.presenter.chooseRestart()
+        #expect(fixture.restarts == 0, "Not during Dictation")
+        fixture.isSafe = true
+        fixture.reminder.evaluate()
+        #expect(fixture.restarts == 1, "Once restarting is safe")
+    }
+
     @Test("Restart Now restarts through the safe path and doesn't ask again while Keybumps quits")
     func restartNow() {
         let fixture = ReminderFixture(snapshot: Self.ready)
@@ -248,14 +271,14 @@ struct UpdateMenuBarTests {
     func dotStaysUntilInstalled() throws {
         var snapshot = UpdateSnapshot(status: .idle, automaticallyChecks: true, canCheck: true, canRestart: false)
         snapshot.setStatus(.available(version: "0.0.3-beta.24"))
-        for status in [UpdateStatus.checking, .failed("The update could not be downloaded. Try again."), .checking] {
+        for status in [UpdateStatus.checking, .failed("The update could not be downloaded. Try again.")] {
             snapshot.setStatus(status)
             #expect(snapshot.knownUpdate == "0.0.3-beta.24", "\(status)")
             #expect(MenuBarAttention.updateIsWaiting(snapshot), "\(status)")
+            let item = try #require(Self.checkItem(snapshot))
+            #expect(item.image != nil, "\(status)")
+            #expect(item.toolTip == "Version 0.0.3-beta.24 is available", "Not the check's or failure's message")
         }
-        let item = try #require(Self.checkItem(snapshot))
-        #expect(item.image != nil)
-        #expect(item.toolTip == "Version 0.0.3-beta.24 is available", "Not the failure's message")
 
         snapshot.setStatus(.downloading(version: "0.0.3-beta.25"))
         #expect(snapshot.knownUpdate == "0.0.3-beta.25", "A newer find replaces it")
@@ -276,7 +299,23 @@ struct UpdateMenuBarTests {
         #expect(try #require(Self.checkItem(nothing)).isEnabled == false)
     }
 
-    @Test("Check for Updates… with a restart waiting shows the restart prompt, even within Later's hour, and doesn't check")
+    @Test("Sparkle's answer that no update fits this Mac clears the dot; an unverifiable result keeps it")
+    func noUpdateAnswerClearsDot() {
+        let controller = SparkleUpdateController(
+            configuration: SparkleUpdateConfiguration(feedURL: URL(string: "https://updates.keybumps.app/appcast.xml")!, publicKey: "test"),
+            safetyPolicy: UpdateInstallationSafetyPolicy()
+        )
+        controller.installCoordinator.recordDownloaded(version: "0.0.3-beta.24")
+        controller.noUpdateFound(reasonCode: nil)
+        #expect(controller.snapshot.knownUpdate == "0.0.3-beta.24", "Unverifiable: still known")
+        controller.noUpdateFound(reasonCode: 3)
+        #expect(controller.snapshot.knownUpdate == nil, "Needs a newer macOS: nothing installable")
+        #expect(!MenuBarAttention.updateIsWaiting(controller.snapshot))
+        #expect((1...5).allSatisfy { NoUpdateStatusResolver.isAnswer(reasonCode: $0) })
+        #expect(!NoUpdateStatusResolver.isAnswer(reasonCode: 0) && !NoUpdateStatusResolver.isAnswer(reasonCode: nil))
+    }
+
+    @Test("Check for Updates… with a restart waiting shows the restart prompt and doesn't check")
     func checkShowsRestartPrompt() {
         let presenter = RecordingPromptPresenter()
         let fake = FakeUpdateController()
@@ -290,6 +329,7 @@ struct UpdateMenuBarTests {
         )
         model.start()
         fake.emit(.readyToRestart(version: "0.0.3-beta.24"), canCheck: false, canRestart: true)
+        // The prompt may already be up (restarting is safe); close it so the click's prompt counts.
         if presenter.isShowing { presenter.chooseLater() }
         let shownBefore = presenter.shown.count
 
