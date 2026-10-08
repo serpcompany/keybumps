@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: .github/scripts/pr-touches.sh '^(apps/web/|\.github/workflows/web\.yml$|\.github/scripts/pr-touches\.sh$)'
+        run: .github/scripts/pr-touches.sh '^(apps/web/|\.github/workflows/web(-deploy)?\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   check:
     name: Website check (pnpm check)
