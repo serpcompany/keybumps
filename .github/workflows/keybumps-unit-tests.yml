@@ -2,7 +2,8 @@ name: Keybumps unit tests
 
 # Runs on every pull request (its unit job only when the PR touches app code or the release
 # notes the tests read), as the first gate of Release Keybumps, and manually from Actions. No
-# nightly schedule. The `changes` job's pattern can't use APP_DIR; keep it in step with it.
+# nightly schedule. The `changes` job's pattern names apps/macos/ directly, as the guard test
+# reads it; keep it in step with APP_DIR.
 on:
   pull_request:
     branches: [main]

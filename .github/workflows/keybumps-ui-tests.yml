@@ -3,7 +3,7 @@ name: Keybumps UI tests
 # UI tests launch an ad-hoc signed build with faked permissions and disabled global hot keys
 # (see docs/testing.md). Runs on every pull request (its UI job only when the PR touches app code),
 # as a gate of Release Keybumps, and manually from Actions. No nightly schedule. The `changes` job's
-# pattern can't use APP_DIR; keep it in step with it.
+# pattern names apps/macos/ directly, as the guard test reads it; keep it in step with APP_DIR.
 
 on:
   pull_request:

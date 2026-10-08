@@ -59,6 +59,10 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
     expect(gateJob).toContain(`name: ${check}\n`)
     expect(gateJob).toContain(`needs: [changes, ${slow}]`)
     expect(gateJob).toMatch(/if: \$\{\{ always\(\) \}\}/)
+    // The gate reads these; a wrong one could pass a failing suite.
+    expect(gateJob).toMatch(/CHANGES: \$\{\{ needs\.changes\.result \}\}/)
+    expect(gateJob).toMatch(/RUN: \$\{\{ needs\.changes\.outputs\.run \}\}/)
+    expect(gateJob).toMatch(new RegExp(`SUITE: \\$\\{\\{ needs\\.${slow}\\.result \\}\\}`))
     expect(gateJob).toContain('if [ "$SUITE" = success ]; then exit 0; fi')
     expect(gateJob).toContain(
       'if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then'
