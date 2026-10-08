@@ -7,9 +7,9 @@ name: Web deploy
 # deploy path (apps/web/docs/agents/web.md, Deploys). The merge authorizes its production deploy:
 # the owner's, or an agent's under the root AGENTS.md's listed paths.
 #
-# It also runs when a published release's notes change (docs/releases/), and after a release
-# publishes (the Release Please run for a `release:` commit succeeding), so /changelog/ lists the
-# new version. Not when the release PR merges: that's before its build is published (#427).
+# It also runs when a release's notes change (docs/releases/v*.md), and release-please.yml calls it
+# after a release publishes to production, so /changelog/ lists the new version. Not when the
+# release PR merges: that's before its build is published (#427).
 #
 # Smoke tests use each Worker's workers.dev URL from the deploy log, with the smoke-test header,
 # because the zone's bot protection blocks CI runners on the branded domains.
@@ -22,12 +22,9 @@ on:
     branches: [main]
     paths:
       - apps/web/**
-      - docs/releases/**
+      - docs/releases/v*.md
       - .github/workflows/web-deploy.yml
-  workflow_run:
-    workflows: [Release Please]
-    types: [completed]
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -47,13 +44,8 @@ defaults:
 jobs:
   check:
     name: Website check (pnpm check:code)
-    # A manual run from another branch must not deploy it. After Release Please, deploy only when its
-    # run for a release commit succeeded, which means the release published to production.
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_commit.message, 'release: ')))
+    # A manual run from another branch must not deploy it.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

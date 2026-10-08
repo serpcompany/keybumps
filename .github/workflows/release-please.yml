@@ -36,3 +36,12 @@ jobs:
       # with owner authorization while notarization is unavailable. Unset it to notarize again.
       notarize: ${{ vars.KEYBUMPS_NOTARIZE != 'false' }}
     secrets: inherit
+
+  # After the release publishes to production, deploy the website so /changelog/ lists it (#427).
+  # Not when the release PR merges: that's before the build is published.
+  website:
+    needs: release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/web-deploy.yml
+    secrets: inherit

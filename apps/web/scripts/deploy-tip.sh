@@ -3,13 +3,13 @@
 # deploy=false to $GITHUB_OUTPUT, with a notice, when main has website changes newer than this
 # run's commit: each of those pushes starts its own web-deploy run, which deploys them, so a re-run
 # of an older run never deploys over newer code. Writes deploy=true when main is this commit, or
-# moved on only with changes outside the website (a Mac merge or a release), which start no deploy
-# and leave the site this commit built. Fails the step, so nothing deploys, when main can't be
+# moved on only with changes outside the website (such as a Mac merge), which start no deploy and
+# leave the site this commit built. A release starts one only after it publishes (release-please.yml). Fails the step, so nothing deploys, when main can't be
 # read, this commit isn't on main, or main is too far ahead to list its changes.
 set -euo pipefail
 
 # What a web-deploy run builds from; keep in step with web-deploy.yml's paths.
-site='^(apps/web/|docs/releases/|\.github/workflows/web-deploy\.yml$)'
+site='^(apps/web/|docs/releases/v[^/]*\.md$|\.github/workflows/web-deploy\.yml$)'
 
 compare="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...main" \
   --jq '.status, (.files | length), (.files[] | .filename, (.previous_filename // empty))')"

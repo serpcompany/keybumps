@@ -33,6 +33,6 @@ See [`docs/agents/web.md`](docs/agents/web.md) for what each command verifies an
 
 The site deploys to Cloudflare Workers through OpenNext. App releases and signed Sparkle update files are owned by `serpcompany/keybumps` and served separately from the R2-backed `updates.keybumps.app` origin.
 
-Deploys run only through CI: each push to `main` that touches `apps/web/` deploys, unless a newer website push has superseded it, `staging.keybumps.app` (Worker `keybumps-web-staging`), smoke-tests it, then deploys and smoke-tests production (Worker `keybumps-web-production`). See [Deploys](docs/agents/web.md#deploys).
+Deploys run only through CI: each push to `main` that touches `apps/web/` or a release's notes (`docs/releases/v*.md`), and each published release, deploys, unless a newer website push has superseded it, `staging.keybumps.app` (Worker `keybumps-web-staging`), smoke-tests it, then deploys and smoke-tests production (Worker `keybumps-web-production`). See [Deploys](docs/agents/web.md#deploys).
 
 `keybumps.app` and `www.keybumps.app` are served by `keybumps-web-production` since the [domain cutover](docs/agents/web.md#domain-cutover) on 2026-09-30 (serpcompany/keybumps#144). The old repository, `serpcompany/keybumps.app`, is archived, and its Worker is deleted.
