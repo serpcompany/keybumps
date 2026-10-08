@@ -1,0 +1,53 @@
+/*
+ * The pricing card (components/pricing-card.tsx), including its checkout button. Kept out of
+ * site.css so the site's styles can change without touching checkout (root AGENTS.md, listed paths).
+ */
+.price-card {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 32px;
+  border-radius: var(--kb-radius-lg);
+  border: 1px solid rgba(170, 156, 255, 0.35);
+  background:
+    radial-gradient(ellipse at top, rgba(170, 156, 255, 0.16), transparent 60%), var(--surface);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.price-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.price-head .pill {
+  margin: 0;
+}
+
+.price {
+  font-size: 3.2rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin: 12px 0 24px;
+}
+
+.price span {
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.price-card .checks {
+  font-size: 0.95rem;
+}
+
+.price-cta {
+  width: 100%;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.price-card .fine {
+  text-align: center;
+}
