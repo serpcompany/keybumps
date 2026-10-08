@@ -102,7 +102,6 @@ final class KeywordExpansionController {
     @ObservationIgnored private let snippets: SnippetStore
     @ObservationIgnored private let monitor: any KeyTypingMonitoring
     @ObservationIgnored private let replacer: any TextPasting
-    @ObservationIgnored private let pasteboard: NSPasteboard
     @ObservationIgnored private let notices: any PaletteNoticePresenting
     @ObservationIgnored private var buffer = KeywordBuffer()
     @ObservationIgnored private var appSwitchObserver: NSObjectProtocol?
@@ -140,7 +139,6 @@ final class KeywordExpansionController {
         self.snippets = snippets
         self.monitor = monitor
         self.replacer = replacer
-        self.pasteboard = pasteboard
         self.restorer = restorer ?? ClipboardRestorer(pasteboard: pasteboard)
         self.notices = notices ?? PaletteHUD.shared
         // The tap delivers on the main run loop.
@@ -195,16 +193,12 @@ final class KeywordExpansionController {
         } catch {
             return
         }
-        let previous = restorer.clipboardBeforePaste()
-        let changeCount = pasteboard.changeCount
         do {
-            try replacer.paste(text, concealed: snippet.isSensitive)
+            try restorer.restoreAfter { try replacer.paste(text, concealed: snippet.isSensitive) }
         } catch {
             notices.showNotice("Couldn’t paste the snippet", isWarning: true)
-            if pasteboard.changeCount != changeCount { restorer.restore(previous) }
             return
         }
         snippets.markUsed(snippet.id)
-        restorer.restore(previous)
     }
 }

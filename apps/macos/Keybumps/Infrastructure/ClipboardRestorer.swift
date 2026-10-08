@@ -1,9 +1,9 @@
 import AppKit
 
 /// Puts the clipboard back after Keybumps pastes through it, once the app in front has had time to
-/// read the paste, unless something else was copied meanwhile. Keyword expansion and the Command
-/// Palette's pastes share one restorer, so quick pastes in a row, from either, put back the
-/// clipboard from before the first.
+/// read the paste, unless something else was copied meanwhile. Keyword expansion, the Command
+/// Palette's pastes, and Dictation's insert share one restorer, so quick pastes in a row, from any
+/// of them, put back the clipboard from before the first.
 @MainActor
 final class ClipboardRestorer {
     private let pasteboard: NSPasteboard
@@ -28,6 +28,21 @@ final class ClipboardRestorer {
     func clipboardBeforePaste() -> PasteboardSnapshot {
         if pendingChangeCount == pasteboard.changeCount, let pendingSnapshot { return pendingSnapshot }
         return PasteboardSnapshot(pasteboard)
+    }
+
+    /// Runs `paste`, which writes the clipboard, then puts back the clipboard from before it, as
+    /// `restore` does. A paste that fails before writing leaves the clipboard alone; one that fails
+    /// after writing still puts it back.
+    func restoreAfter(_ paste: () throws -> Void) rethrows {
+        let previous = clipboardBeforePaste()
+        let changeCount = pasteboard.changeCount
+        do {
+            try paste()
+        } catch {
+            if pasteboard.changeCount != changeCount { restore(previous) }
+            throw error
+        }
+        restore(previous)
     }
 
     /// Puts `snapshot` back after `delay`, unless something else is copied first. Call it right

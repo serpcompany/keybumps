@@ -29,7 +29,18 @@ extension CapabilityDescriptor {
         searchKeywords: [
             "dictate", "voice", "speech", "transcribe", "transcription", "transcript", "recording", "recordings", "history"
         ],
-        category: .writing
+        category: .writing,
+        preferences: [.dictationRestoresClipboard]
+    )
+}
+
+extension PluginPreference {
+    static let dictationRestoresClipboard = PluginPreference(
+        key: "restoresClipboard",
+        title: "Put the clipboard back after inserting",
+        subtitle: "Dictation inserts your words through the clipboard. With this on, what you’d copied before comes back once they’re in, unless you copy something else first. Off, the transcript stays on the clipboard.",
+        group: "Inserting",
+        kind: .toggle(default: true)
     )
 }
 
