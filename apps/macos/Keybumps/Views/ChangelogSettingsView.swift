@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Settings › Changelog (#416): update status and controls, then every release's What's New notes,
-/// newest first. The up-to-date alert's Version History button opens it.
+/// Settings › Changelog (#416): update status and controls, then the latest releases' What's New
+/// notes, newest first, and a link to every release on keybumps.app (#430). The up-to-date alert's
+/// Version History button opens it.
 struct ChangelogSettingsView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
 
     /// Read once: the notes ship inside the app and don't change while it runs.
     private static let entries = Changelog.entries()
@@ -11,6 +13,7 @@ struct ChangelogSettingsView: View {
         .flatMap(ReleaseVersion.init)?.description
 
     var body: some View {
+        let layout = Changelog.settingsLayout(total: Self.entries.count)
         SettingsPage {
             SettingsGroup("Updates") {
                 LabeledContent {
@@ -41,7 +44,7 @@ struct ChangelogSettingsView: View {
                     SettingsNote("This build doesn't include release notes.")
                 }
             }
-            ForEach(Self.entries) { entry in
+            ForEach(Self.entries.prefix(layout.shown)) { entry in
                 SettingsGroup(entry.version, subtitle: entry.version == Self.installedVersion ? "Installed" : nil) {
                     // The group's title names the version, so the notes' own title is left out.
                     ReleaseNotesBlocksView(blocks: entry.notes.blocks.filter {
@@ -50,6 +53,23 @@ struct ChangelogSettingsView: View {
                     .padding(.vertical, 8)
                 }
                 .accessibilityIdentifier("settings.changelog.\(entry.version)")
+            }
+            if layout.more > 0 {
+                SettingsGroup {
+                    LabeledContent {
+                        Button { openURL(Changelog.website) } label: {
+                            Label("View all releases", systemImage: "arrow.up.right")
+                                .labelStyle(.titleAndIcon)
+                        }
+                        .help("Opens keybumps.app/changelog in your browser")
+                        .accessibilityIdentifier("settings.changelog.viewAll")
+                    } label: {
+                        SettingsRowLabel(
+                            title: "Older releases",
+                            subtitle: "\(layout.more) more on keybumps.app, with every release's notes"
+                        )
+                    }
+                }
             }
         }
         .navigationTitle("Changelog")
