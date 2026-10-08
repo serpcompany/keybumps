@@ -1,0 +1,38 @@
+/*
+ * Text pages (components/page-shell.tsx): the legal documents, /license/, and the help pages and
+ * sitemap that share their layout. Kept out of site.css so the site's styles can change without
+ * touching legal or license text (root AGENTS.md, listed paths).
+ */
+.legal a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.legal {
+  border-top: none;
+  padding-top: 64px;
+}
+
+.legal h1 {
+  font-size: clamp(2rem, 5vw, 2.8rem);
+}
+
+.legal h2 {
+  font-size: 1.2rem;
+  text-align: left;
+  margin: 36px 0 10px;
+  letter-spacing: -0.01em;
+}
+
+.legal p,
+.legal li {
+  color: #cfccd4;
+}
+
+.legal ul {
+  padding-left: 20px;
+}
+
+.legal li {
+  margin-bottom: 8px;
+}

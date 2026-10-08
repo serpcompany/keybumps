@@ -668,27 +668,6 @@ kbd {
   font-size: 0.95rem;
 }
 
-.checks {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 12px;
-}
-
-.checks li::before {
-  content: "✓";
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  margin-right: 12px;
-  border-radius: 50%;
-  background: var(--lavender-soft);
-  color: var(--lavender);
-  font-size: 0.75rem;
-}
-
 .faq {
   margin-top: 40px;
   display: grid;
@@ -825,7 +804,6 @@ kbd {
   }
 }
 
-.legal a,
 .section-lede a,
 .fine a {
   text-decoration: underline;
@@ -1692,36 +1670,6 @@ body:has(#questions:target) .plugin-tabs a:first-child {
   .plugin-card-meta > .meta-category {
     display: none;
   }
-}
-
-/* Legal pages */
-.legal {
-  border-top: none;
-  padding-top: 64px;
-}
-
-.legal h1 {
-  font-size: clamp(2rem, 5vw, 2.8rem);
-}
-
-.legal h2 {
-  font-size: 1.2rem;
-  text-align: left;
-  margin: 36px 0 10px;
-  letter-spacing: -0.01em;
-}
-
-.legal p,
-.legal li {
-  color: #cfccd4;
-}
-
-.legal ul {
-  padding-left: 20px;
-}
-
-.legal li {
-  margin-bottom: 8px;
 }
 
 @keyframes blink {
