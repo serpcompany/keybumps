@@ -13,9 +13,10 @@
  */
 @import "./site.css" layer(components);
 /*
- * The pricing card and consent banner, kept out of site.css (#401). They load after it, so at equal
- * specificity their rules win over site.css's.
+ * The text pages, pricing card, and consent banner, kept out of site.css (#401, #405). They load
+ * after it, so at equal specificity their rules win over site.css's.
  */
+@import "./legal.css" layer(components);
 @import "./pricing.css" layer(components);
 @import "./consent.css" layer(components);
 
