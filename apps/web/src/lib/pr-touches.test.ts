@@ -13,23 +13,29 @@ const script = fileURLToPath(new URL('../../../../.github/scripts/pr-touches.sh'
 const scratch = mkdtempSync(join(tmpdir(), 'pr-touches-'))
 writeFileSync(
   join(scratch, 'gh'),
-  '#!/usr/bin/env bash\nprintf "%s" "$FAKE_GH_OUTPUT"\nexit "$FAKE_GH_EXIT"\n'
+  '#!/usr/bin/env bash\nprintf "%s" "$*" >"$FAKE_GH_ARGS"\nprintf "%s" "$FAKE_GH_OUTPUT"\nexit "$FAKE_GH_EXIT"\n'
 )
 chmodSync(join(scratch, 'gh'), 0o755)
 afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
 const appCode = '^(apps/macos/|\\.github/workflows/keybumps-unit-tests\\.yml$)'
 
+/** The arguments the last run passed to `gh`, or '' if it didn't call it. */
+let ghArgs = ''
+
 /** Runs the script for a pull request (or another event) against a compare result's lines. */
 function run(lines: string[], { event = 'pull_request', ghExit = 0 } = {}): string | undefined {
   const output = join(scratch, `output-${Math.random()}`)
+  const args = join(scratch, `args-${Math.random()}`)
   writeFileSync(output, '')
+  writeFileSync(args, '')
   spawnSync('bash', [script, appCode], {
     env: {
       ...process.env,
       PATH: `${scratch}:${process.env.PATH}`,
       FAKE_GH_OUTPUT: lines.join('\n'),
       FAKE_GH_EXIT: String(ghExit),
+      FAKE_GH_ARGS: args,
       GITHUB_EVENT_NAME: event,
       GITHUB_REPOSITORY: 'example/repo',
       BASE: 'base123',
@@ -37,6 +43,7 @@ function run(lines: string[], { event = 'pull_request', ghExit = 0 } = {}): stri
       GITHUB_OUTPUT: output
     }
   })
+  ghArgs = readFileSync(args, 'utf8')
   return readFileSync(output, 'utf8').match(/^run=(\w+)$/m)?.[1]
 }
 
@@ -49,6 +56,13 @@ describe('.github/scripts/pr-touches.sh', () => {
 
   it('skips it when the PR touches none of them', () => {
     expect(run(changed(['AGENTS.md', 'apps/web/src/app/site.css']))).toBe('false')
+  })
+
+  // Swapped, the list would be what main has and the change lacks, and in the queue that can skip a
+  // suite the change needs.
+  it.each(['pull_request', 'merge_group'])('lists the files from BASE to HEAD_SHA on %s', event => {
+    run(changed(['AGENTS.md']), { event })
+    expect(ghArgs).toMatch(/^api repos\/example\/repo\/compare\/base123\.\.\.head456 /)
   })
 
   it('decides the same way for a merge queue group', () => {

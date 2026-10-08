@@ -126,7 +126,7 @@ jobs:
           retention-days: 7
 
   # The required check. It always runs, and passes only if the UI suite passed, or was skipped because
-  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # the changes job said this change touches none of its files. A cancelled or failed changes job,
   # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
   ui-tests:
     name: UI tests (with retries)
