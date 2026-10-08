@@ -88,6 +88,7 @@ it("runs the website check on every workflow file the site's tests read", () => 
   for (const file of [
     'web.yml',
     'web-deploy.yml',
+    'release-please.yml',
     'keybumps-unit-tests.yml',
     'keybumps-ui-tests.yml'
   ]) {
