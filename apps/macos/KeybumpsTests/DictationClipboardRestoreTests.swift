@@ -12,7 +12,9 @@ struct DictationClipboardRestoreTests {
     func restoresTheEarlierCopy() async throws {
         let fixture = RestoreFixture()
         defer { fixture.tearDown() }
-        fixture.copy("made-up A")
+        // Unseen by Clipboard History, which skips a copy matching its newest item, so recording the
+        // restore would show.
+        fixture.pasteboard.writeText("made-up A")
 
         try fixture.service.pasteTranscript("made-up B")
         #expect(fixture.commandVPresses == 1)
@@ -22,7 +24,7 @@ struct DictationClipboardRestoreTests {
         #expect(fixture.pasteboard.string(forType: .string) == "made-up A")
         #expect(fixture.restores == 1)
         fixture.clipboard.pollForTesting()
-        #expect(fixture.clipboard.entries.map(\.text) == ["made-up A"], "Neither the transcript nor the restore is recorded")
+        #expect(fixture.clipboard.entries.isEmpty, "Neither the transcript nor the restore is recorded")
     }
 
     @Test("Something copied while the restore waits is kept")

@@ -93,7 +93,7 @@ For changes that touch capability wiring or system integration, the hand-off inc
 
 1. Command-Space, Shift-Command-Space, and Option-Space from another app open or trigger the right surface.
 2. A window shortcut and one drag-to-snap work on a normal app window.
-3. Dictation inserts text into TextEdit; Escape cancels. With Keybumps's Accessibility turned off, the Dictation shortcut shows setup and no macOS alert appears.
+3. Dictation inserts text into TextEdit, and ⌘V afterwards pastes what was copied before; Escape cancels. With Keybumps's Accessibility turned off, the Dictation shortcut shows setup and no macOS alert appears.
 4. Shift-Command-2/3/4 capture from another app (Shift-Command-3 opens the editor), the shot appears in ⌘3, Shift-Command-2/4 shots paste into another app right away (with Copy new screenshots to the clipboard on), two shots in a row paste the second, text copied while a Shift-Command-5 thumbnail is showing still pastes as that text, the editor's Save shows Copied to Clipboard at the notch and pastes into another app, and macOS's own Shift-Command-3/4 work again with Screenshot Tools off.
 5. A Shortcut Coach action in Finder produces its notch notice; while Dictation is recording, the same action shows nothing in the notch but still appears in Shortcut Coach history.
 6. A denied permission shows System Settings recovery.

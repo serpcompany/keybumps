@@ -468,7 +468,8 @@ final class DictationService {
     /// `insert`'s paste, once the original app is in front again: writes the transcript, kept out of
     /// Clipboard History, and presses ⌘V. With Put the clipboard back on, what was on the clipboard
     /// comes back once the app has read the paste, unless something else was copied by then
-    /// (`ClipboardRestorer`); a paste that fails after writing puts it back too.
+    /// (`ClipboardRestorer`); a paste that fails after writing puts it back too. Only `insert` calls
+    /// it, after its checks; tests call it directly, with a paste step that never posts ⌘V.
     func pasteTranscript(_ text: String) throws {
         let paster = paster
         let paste = { try paster.paste(text, concealed: false) }
