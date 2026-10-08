@@ -70,7 +70,7 @@ Computer-use or other screen control drives the owner's real mouse, keyboard, an
 ## 5. Promote accepted work
 
 - Do not treat a local candidate as the new baseline merely because it was installed.
-- After owner acceptance and independent review, merge the accepted issue boundary into `main`.
+- After owner acceptance and independent review, merge the accepted issue boundary into `main`. Website PRs on the root `AGENTS.md`'s listed paths are the exception: an agent merges them after green CI and a clean review.
 - Update dependent branches from the new `main` before producing their next candidates.
 - While a candidate awaits acceptance, dependent work may continue on a branch stacked on it; rebase it onto `main` after the parent is promoted, and carry any fixes forward before building its candidate.
 - Delete superseded local candidates and derived build caches after preserving any required release or issue evidence.
