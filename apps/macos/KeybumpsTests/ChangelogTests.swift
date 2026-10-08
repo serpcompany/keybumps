@@ -44,6 +44,13 @@ struct ChangelogTests {
         #expect(Changelog.entries(in: directory.appendingPathComponent("missing"), upTo: nil).isEmpty)
     }
 
+    @Test("Settings shows the latest 10 releases and links to the website's changelog for the rest")
+    func settingsCapAndWebsite() {
+        #expect(Changelog.shownInSettings == 10)
+        #expect(Changelog.website.absoluteString == "https://keybumps.app/changelog/")
+        #expect(Changelog.entries(in: .main, isDebugBuild: true).count > Changelog.shownInSettings, "So the View all releases row shows")
+    }
+
     @Test("The app carries every release's notes, so the page works offline")
     func appCarriesReleaseNotes() {
         let entries = Changelog.entries(in: .main, isDebugBuild: true)

@@ -6,6 +6,10 @@ import Foundation
 /// newest first.
 enum Changelog {
     static let notesDirectoryName = "ReleaseNotes"
+    /// How many releases Settings › Changelog shows. Older ones are on the website (#430).
+    static let shownInSettings = 10
+    /// The website's changelog, which lists every published release.
+    static let website = URL(string: "https://keybumps.app/changelog/")!
 
     struct Entry: Equatable, Identifiable {
         let version: String
