@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -92,5 +92,17 @@ it("runs the website check on every workflow file the site's tests read", () => 
     'keybumps-ui-tests.yml'
   ]) {
     expect(pattern.test(`.github/workflows/${file}`), file).toBe(true)
+  }
+})
+
+it('gives no other job a required check name, which could report it without running the suite', () => {
+  const required = workflows.map(({ check }) => check)
+  const dir = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url))
+  for (const file of readdirSync(dir).filter(name => name.endsWith('.yml'))) {
+    const names = [...read(file).matchAll(/^ {4}name: (.+)$/gm)].map(match => match[1].trim())
+    const own = workflows.find(workflow => workflow.file === file)?.check
+    for (const name of names.filter(name => required.includes(name))) {
+      expect(name, `${file} has a job named "${name}"`).toBe(own)
+    }
   }
 })
