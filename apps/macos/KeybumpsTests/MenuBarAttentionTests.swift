@@ -11,14 +11,14 @@ struct MenuBarAttentionTests {
         attention.onChange = { redraws += 1 }
         #expect(!attention.showsDot)
 
-        attention.show(.updateReady, saying: "update ready")
-        attention.show(.updateReady, saying: "update ready")
+        attention.show(.update, saying: "update ready")
+        attention.show(.update, saying: "update ready")
         #expect(attention.showsDot)
         #expect(redraws == 1, "Showing the same reason again changes nothing")
 
         let snippets = CapabilityMenuBarAttention(attention: attention, capability: .snippets)
         snippets.show(saying: "snippets need you")
-        attention.clear(.updateReady)
+        attention.clear(.update)
         #expect(attention.showsDot, "The capability's reason keeps the dot")
 
         snippets.clear()
@@ -34,7 +34,7 @@ struct MenuBarAttentionTests {
 
         CapabilityMenuBarAttention(attention: attention, capability: .snippets).show(saying: "snippets need you")
         CapabilityMenuBarAttention(attention: attention, capability: .clipboardHistory).show(saying: "clipboard needs you")
-        attention.show(.updateReady, saying: "update ready")
+        attention.show(.update, saying: "update ready")
         #expect(
             attention.accessibilityLabel(productName: "Keybumps")
                 == "Keybumps, update ready, clipboard needs you, snippets need you"

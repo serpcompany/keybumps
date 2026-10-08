@@ -36,6 +36,13 @@ enum UpdateStatus: Equatable {
         }
     }
 
+    /// The newer version Keybumps knows about, from finding it until it installs (#416).
+    var availableVersion: String? {
+        switch self {
+        case .available(let version), .downloading(let version): version
+        default: pendingVersion
+        }
+    }
 }
 
 struct UpdateSnapshot: Equatable {
@@ -49,6 +56,8 @@ struct UpdateSnapshot: Equatable {
 protocol UpdateControlling: AnyObject {
     var snapshot: UpdateSnapshot { get }
     var onChange: ((UpdateSnapshot) -> Void)? { get set }
+    /// Runs when the up-to-date alert's Version History button is clicked (#416).
+    var onShowVersionHistory: (() -> Void)? { get set }
     func start()
     func checkNow()
     func setAutomaticallyChecks(_ enabled: Bool)
@@ -60,6 +69,7 @@ protocol UpdateControlling: AnyObject {
 final class DisabledUpdateController: UpdateControlling {
     private(set) var snapshot: UpdateSnapshot
     var onChange: ((UpdateSnapshot) -> Void)?
+    var onShowVersionHistory: (() -> Void)?
 
     init(reason: String) {
         snapshot = UpdateSnapshot(

@@ -7,16 +7,16 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
     case emojiPicker = "Emoji Picker", translation = "Translation"
-    case plugins = "Plugins", permissions = "Permissions", general = "General", account = "Account"
+    case plugins = "Plugins", permissions = "Permissions", general = "General", changelog = "Changelog", account = "Account"
     var id: String { rawValue }
 
     /// Capability pages in registry order, then the fixed shell destinations. Each capability page
     /// has its own sidebar row, and the Plugins page lists them all.
     static var allCases: [SettingsSection] {
-        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.plugins, .permissions, .general, .account]
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section) + [.plugins, .permissions, .general, .changelog, .account]
     }
 
-    /// The module whose Settings page this is; nil for the shell's Permissions and General.
+    /// The module whose Settings page this is; nil for the shell's own pages.
     var capability: Capability? {
         CapabilityCatalog.descriptors.first { $0.settingsPage?.section == self }?.capability
     }
@@ -27,6 +27,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .permissions: return "hand.raised"
         case .account: return "person.crop.circle"
         case .plugins: return "puzzlepiece.extension"
+        case .changelog: return "clock.arrow.circlepath"
         default: return "gearshape"
         }
     }
@@ -77,8 +78,8 @@ extension View {
     }
 }
 
-/// The Settings sidebar: the account row on top (outside these groups); General, Permissions, and
-/// Plugins; then a row per plugin, the default ones (Quick Search first, then by name) and the added
+/// The Settings sidebar: the account row on top (outside these groups); General, Permissions,
+/// Plugins, and Changelog; then a row per plugin, the default ones (Quick Search first, then by name) and the added
 /// ones in their own group below; filtered by search.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
@@ -95,7 +96,7 @@ enum SettingsSidebar {
         let matches: (SettingsSection) -> Bool = {
             trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
         }
-        let app = [SettingsSection.general, .permissions, .plugins].filter(matches)
+        let app = [SettingsSection.general, .permissions, .plugins, .changelog].filter(matches)
         let plugins = PluginsTable.sections.map { $0.plugins.filter(matches) }
         return ([app] + plugins).filter { !$0.isEmpty }
     }
@@ -159,6 +160,8 @@ struct SettingsRootView: View {
                     PermissionsView()
                 } else if visibleSelection == .account {
                     AccountView()
+                } else if visibleSelection == .changelog {
+                    ChangelogSettingsView()
                 } else {
                     GeneralView()
                 }
@@ -958,30 +961,6 @@ private struct GeneralView: View {
 
     var body: some View {
         SettingsPage {
-            SettingsGroup("Updates") {
-                LabeledContent {
-                    HStack(spacing: 8) {
-                        if model.updateSnapshot.canRestart {
-                            Button("Restart to Update") { model.restartToUpdate() }
-                        }
-                        Button("Check now") { model.checkForUpdates() }
-                            .disabled(!model.updateSnapshot.canCheck)
-                    }
-                } label: {
-                    SettingsRowLabel(title: "Keybumps Updates", subtitle: "\(AppVersionDisplay.title()) · \(model.updateSnapshot.status.summary)")
-                }
-                Toggle(
-                    "Automatically check for updates",
-                    isOn: Binding(
-                        get: { model.updateSnapshot.automaticallyChecks },
-                        set: model.setAutomaticallyChecksForUpdates
-                    )
-                )
-                .disabled(!model.updateSnapshot.canCheck)
-                if case .unavailable = model.updateSnapshot.status {
-                    SettingsNote("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
-                }
-            }
             SettingsGroup("Crash reports") {
                 Toggle("Send crash reports", isOn: Binding(
                     get: { model.preferences.sendsCrashReports },

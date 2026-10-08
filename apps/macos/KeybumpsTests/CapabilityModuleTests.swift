@@ -180,7 +180,8 @@ struct CapabilityModuleTests {
         }
         #expect(SettingsSection.permissions.capability == nil)
         #expect(SettingsSection.general.capability == nil)
-        #expect(Array(SettingsSection.allCases.suffix(3)) == [.permissions, .general, .account])
+        #expect(SettingsSection.changelog.capability == nil)
+        #expect(Array(SettingsSection.allCases.suffix(4)) == [.permissions, .general, .changelog, .account])
     }
 
     @Test("The Screenshots tab copies on Return or a click, like the Clipboard tab, and edits with Command")

@@ -113,13 +113,9 @@ struct WhatsNewView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(notes.blocks.enumerated()), id: \.offset) { _, block in
-                        blockView(block)
-                    }
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                ReleaseNotesBlocksView(blocks: notes.blocks)
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
             HStack {
@@ -130,6 +126,19 @@ struct WhatsNewView: View {
             .padding(16)
         }
         .frame(width: 560, height: 520)
+    }
+}
+
+/// Release notes' blocks, laid out the same in What's New and Settings › Changelog.
+struct ReleaseNotesBlocksView: View {
+    let blocks: [ReleaseNotesDocument.Block]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
     }
 
     @ViewBuilder

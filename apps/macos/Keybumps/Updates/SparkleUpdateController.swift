@@ -89,6 +89,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         canRestart: false
     )
     var onChange: ((UpdateSnapshot) -> Void)?
+    var onShowVersionHistory: (() -> Void)?
 
     private let configuration: SparkleUpdateConfiguration
     private let installCoordinator: SafeUpdateInstallCoordinator
@@ -165,6 +166,22 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         andInImmediateFocus immediateFocus: Bool
     ) -> Bool {
         ScheduledUpdatePresentationPolicy.usesSparkleStandardDriver
+    }
+
+    /// The up-to-date alert's Version History button opens Settings › Changelog instead of the
+    /// release notes website (#416).
+    func standardUserDriverShowVersionHistory(for item: SUAppcastItem) {
+        onShowVersionHistory?()
+    }
+
+    /// A skipped version no longer counts as available, so its red dot goes (#416).
+    func updater(
+        _ updater: SPUUpdater,
+        userDidMake choice: SPUUserUpdateChoice,
+        forUpdate updateItem: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        if choice == .skip { refresh(status: .idle) }
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {

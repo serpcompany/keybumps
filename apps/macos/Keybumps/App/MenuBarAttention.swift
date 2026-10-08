@@ -2,8 +2,8 @@ import Foundation
 
 /// Why the menu bar icon shows its red dot. One dot stands for every reason; VoiceOver names each.
 enum MenuBarAttentionReason: Hashable {
-    /// An update waits for a restart (#225).
-    case updateReady
+    /// A newer version is available, downloading, or waiting for a restart (#225, #416).
+    case update
     /// A capability has something waiting for you.
     case capability(Capability)
 }
@@ -20,9 +20,15 @@ final class MenuBarAttention {
 
     var showsDot: Bool { !phrases.isEmpty }
 
-    /// Whether the update state needs the dot: an update is waiting for a restart.
+    /// Whether the update state needs the dot: a newer version is known, from finding it until the
+    /// restart that installs it.
     static func updateIsWaiting(_ snapshot: UpdateSnapshot) -> Bool {
-        snapshot.canRestart
+        snapshot.canRestart || snapshot.status.availableVersion != nil
+    }
+
+    /// What VoiceOver says for the update's dot.
+    static func updatePhrase(_ snapshot: UpdateSnapshot) -> String {
+        snapshot.canRestart ? "update ready" : "update available"
     }
 
     func show(_ reason: MenuBarAttentionReason, saying phrase: String) {
@@ -45,7 +51,7 @@ final class MenuBarAttention {
 
     private static func rank(_ reason: MenuBarAttentionReason) -> Int {
         switch reason {
-        case .updateReady: -1
+        case .update: -1
         case .capability(let capability):
             CapabilityCatalog.descriptors.firstIndex { $0.capability == capability } ?? Int.max
         }

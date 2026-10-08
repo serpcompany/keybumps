@@ -102,6 +102,14 @@ targets:
             rm -f "$notes"
           fi
         basedOnDependencyAnalysis: false
+      - name: Bundle every release's notes for Settings › Changelog
+        # Every build carries docs/releases/v*.md, so the version history works offline (#416).
+        script: |
+          dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ReleaseNotes"
+          rm -rf "$dir"
+          mkdir -p "$dir"
+          cp "${SRCROOT}"/../../docs/releases/v*.md "$dir"/
+        basedOnDependencyAnalysis: false
     preBuildScripts:
       - name: Validate Keybumps release configuration
         script: |

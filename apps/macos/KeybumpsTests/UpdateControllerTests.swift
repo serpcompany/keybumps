@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 @testable import Keybumps
+import Sparkle
 
 final class UpdaterTestEventPersistence: EventPersistence {
     func load() throws -> [CoachingEvent] { [] }
@@ -30,6 +31,7 @@ struct UpdaterTestPermissions: DetectorPermissionProviding {
 final class FakeUpdateController: UpdateControlling {
     private(set) var snapshot = UpdateSnapshot(status: .idle, automaticallyChecks: true, canCheck: false, canRestart: false)
     var onChange: ((UpdateSnapshot) -> Void)?
+    var onShowVersionHistory: (() -> Void)?
     private(set) var startCount = 0
     private(set) var checkCount = 0
     private(set) var restartCount = 0
@@ -246,6 +248,44 @@ final class UpdateControllerTests: XCTestCase {
 
         fake.emit(.deferred(version: "0.0.2"))
         XCTAssertEqual(model.updateSnapshot.status, .deferred(version: "0.0.2"))
+    }
+
+    func testAvailableUpdateShowsTheDotAndVersionHistoryOpensChangelog() {
+        let fake = FakeUpdateController()
+        let model = AppModel(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+            presenceController: UpdaterTestPresenceController(),
+            detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+            updater: fake
+        )
+        var versionHistoryOpens = 0
+        model.openVersionHistory = { versionHistoryOpens += 1 }
+        model.start()
+
+        fake.emit(.available(version: "0.0.2"))
+        XCTAssertEqual(model.menuBarAttention.accessibilityLabel(productName: "Keybumps"), "Keybumps, update available")
+        fake.emit(.readyToRestart(version: "0.0.2"), canRestart: true)
+        XCTAssertEqual(model.menuBarAttention.accessibilityLabel(productName: "Keybumps"), "Keybumps, update ready")
+        fake.emit(.current, canRestart: false)
+        XCTAssertFalse(model.menuBarAttention.showsDot)
+
+        fake.onShowVersionHistory?()
+        XCTAssertEqual(versionHistoryOpens, 1)
+    }
+
+    func testVersionHistoryButtonIsHandledInsteadOfOpeningTheWebsite() throws {
+        let controller = SparkleUpdateController(
+            configuration: SparkleUpdateConfiguration(feedURL: URL(string: "https://updates.keybumps.app/appcast.xml")!, publicKey: "test"),
+            safetyPolicy: UpdateInstallationSafetyPolicy()
+        )
+        var opens = 0
+        controller.onShowVersionHistory = { opens += 1 }
+        // Sparkle shows its Version History button and asks the delegate, instead of opening the
+        // release notes link, only when the delegate responds to this selector.
+        XCTAssertTrue(controller.responds(to: NSSelectorFromString("standardUserDriverShowVersionHistoryForAppcastItem:")))
+        controller.standardUserDriverShowVersionHistory(for: SUAppcastItem.empty())
+        XCTAssertEqual(opens, 1)
     }
 
     func testRestartIsNotReadyUntilAnImmediateInstallHandlerExists() {

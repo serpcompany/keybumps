@@ -363,6 +363,7 @@ final class AppModel {
         commandPalette.offerPasteSetup = { [weak self] plugin in self?.offerPasteSetup(for: plugin) }
         screenshotModule.onNeedsScreenRecording = { [weak self] in self?.screenshotHotkeyNeedsScreenRecording() }
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
+        updater.onShowVersionHistory = { [weak self] in self?.openVersionHistory() }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
         refreshDetectorState()
         refreshUpdateAttention()
@@ -370,9 +371,9 @@ final class AppModel {
 
     private func refreshUpdateAttention() {
         if MenuBarAttention.updateIsWaiting(updateSnapshot) {
-            menuBarAttention.show(.updateReady, saying: "update ready")
+            menuBarAttention.show(.update, saying: MenuBarAttention.updatePhrase(updateSnapshot))
         } else {
-            menuBarAttention.clear(.updateReady)
+            menuBarAttention.clear(.update)
         }
     }
 
@@ -438,6 +439,8 @@ final class AppModel {
     func refreshLicense(force: Bool = false) async { await licensing.refresh(force: force) }
     /// What the Dock, the status menu, and the palette shortcuts open while Locked: Settings, which shows the License page.
     var openLicenseSettings: () -> Void = { MainWindowRouter.shared.open() }
+    /// What the up-to-date alert's Version History button opens: Settings › Changelog (#416).
+    var openVersionHistory: () -> Void = { MainWindowRouter.shared.open(.changelog) }
 
     private func licenseDidChange(_ snapshot: LicenseSnapshot) {
         let wasLicensed = isLicensed
