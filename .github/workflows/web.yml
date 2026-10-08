@@ -1,9 +1,9 @@
 name: Website checks
 
 # Checks the keybumps.app website in apps/web with `pnpm check`: Biome, TypeScript, Vitest, and an
-# OpenNext build. Runs on every pull request to main and in the merge queue (its check only when the
-# change touches the site) and manually from Actions. It never deploys; web-deploy.yml deploys after
-# merge.
+# OpenNext build. Runs on every pull request to main, in the merge queue (its check only when the
+# change touches the site), and manually from Actions. It never deploys; web-deploy.yml deploys
+# after merge.
 on:
   pull_request:
     branches: [main]
@@ -23,13 +23,13 @@ defaults:
     working-directory: apps/web
 
 jobs:
-  # Required checks must report on every pull request and merge queue group, so this workflow has
-  # no `paths:` filter.
+  # Required checks must report on every pull request and merge queue group, so this workflow
+  # has no `paths:` filter.
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
-    # Only pull requests and merge queue groups choose; every other event (the release gate, a
-    # manual run) runs the suite.
+    # Only pull requests and merge queue groups choose; every other event (the release gate,
+    # a manual run) runs the suite.
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -45,11 +45,13 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
 
-      - name: Does this PR touch the website?
+      - name: Does this change touch the website?
         id: touches
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          # In the queue, main itself, not the group's base_sha (the entry ahead's commit, if
+          # any), so the diff also covers every queued PR ahead that hasn't merged yet.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         # docs/releases/v*.md and CHANGELOG.md are what /changelog/ is built from (#427).
         run: .github/scripts/pr-touches.sh '^(apps/web/|docs/releases/v[^/]*\.md$|CHANGELOG\.md$|\.github/workflows/[^/]*\.yml$|\.github/scripts/pr-touches\.sh$)'
@@ -57,7 +59,7 @@ jobs:
   check:
     name: Website check (run pnpm check)
     needs: changes
-    # Skipped (which counts as passing) only when the PR touches none of the files it checks.
+    # Skipped (which counts as passing) only when the change touches none of the files it checks.
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -104,7 +106,7 @@ jobs:
         run: |
           if [ "$SUITE" = success ]; then exit 0; fi
           if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
-            echo "This PR touches none of the files this check covers."
+            echo "This change touches none of the files this check covers."
             exit 0
           fi
           echo "::error::the website check didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."

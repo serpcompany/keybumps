@@ -52,11 +52,13 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
     expect(changes).toContain(
       "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'"
     )
-    // A group's diff runs from its base to its merge commit; an empty SHA fails the lookup, which
-    // runs the suite, so a wrong field would only waste minutes.
+    // In the queue the diff starts at main, not at the group's base_sha (the commit of the entry
+    // ahead): otherwise a docs-only PR's group would skip a suite that an app-code PR ahead of it,
+    // not yet merged, still needs. An empty value fails the lookup, which runs the suite.
     expect(changes).toMatch(
-      /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \}\}/
+      /BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_ref \}\}/
     )
+    expect(changes).not.toContain('merge_group.base_sha')
     expect(changes).toMatch(
       /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}/
     )

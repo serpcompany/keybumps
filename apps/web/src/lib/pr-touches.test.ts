@@ -32,7 +32,7 @@ function run(lines: string[], { event = 'pull_request', ghExit = 0 } = {}): stri
       FAKE_GH_EXIT: String(ghExit),
       GITHUB_EVENT_NAME: event,
       GITHUB_REPOSITORY: 'example/repo',
-      BASE_SHA: 'base123',
+      BASE: 'base123',
       HEAD_SHA: 'head456',
       GITHUB_OUTPUT: output
     }
