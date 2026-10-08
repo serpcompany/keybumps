@@ -13,9 +13,8 @@
  */
 @import "./site.css" layer(components);
 /*
- * The pricing card and consent banner, kept out of site.css (#401). Loading them after it changes
- * nothing: the consent rules were its last, and no later site.css rule sets the same properties on
- * the pricing card.
+ * The pricing card and consent banner, kept out of site.css (#401). They load after it, so at equal
+ * specificity their rules win over site.css's.
  */
 @import "./pricing.css" layer(components);
 @import "./consent.css" layer(components);
