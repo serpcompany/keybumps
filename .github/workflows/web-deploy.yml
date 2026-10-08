@@ -135,7 +135,7 @@ jobs:
   production:
     name: Deploy production (keybumps-web-production)
     needs: staging
-    # Staging skipped its deploy when main had moved on; production does too.
+    # Staging skipped its deploy because main has newer website changes; production does too.
     if: github.ref == 'refs/heads/main' && needs.staging.outputs.deployed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20

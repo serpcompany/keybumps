@@ -26,7 +26,9 @@ ahead)
     echo "::error::main is too far ahead to tell whether it has newer website changes. Run Web deploy from Actions on main."
     exit 1
   fi
-  if tail -n +3 <<<"$compare" | grep -qE "$site"; then
+  # Not `tail | grep -q`: with pipefail, grep stopping at its first match can kill tail with
+  # SIGPIPE and fail the pipeline, which would read as "no website changes".
+  if grep -qE "$site" < <(tail -n +3 <<<"$compare"); then
     echo "::notice::main has website changes newer than ${GITHUB_SHA:0:7}; the run for them deploys instead."
     deploy=false
   else

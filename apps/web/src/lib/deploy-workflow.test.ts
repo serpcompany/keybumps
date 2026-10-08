@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 // The SERP ci-workflows standard: a deploy's own build is its build check, so the check job doesn't
-// build and each environment builds once; and a deploy goes out only while main's tip is still the
-// run's commit. This reads the workflows as text (no YAML parser is a dependency here).
+// build and each environment builds once; and a deploy goes out only when main has no newer website
+// changes (scripts/deploy-tip.sh, tested in deploy-tip.test.ts). This reads the workflows as text (no YAML parser is a dependency here).
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8')
 const deployWorkflow = read('../../../../.github/workflows/web-deploy.yml')
 const prWorkflow = read('../../../../.github/workflows/web.yml')
@@ -84,7 +84,7 @@ describe('web-deploy.yml', () => {
   })
 
   it.each(['staging', 'production'])(
-    'deploys and smoke-tests %s only while main is still this commit, checked after the build',
+    'deploys and smoke-tests %s only when the tip check allows it, checked after the build',
     env => {
       const job = deploy[env]
       expect(step(job, "Check main's tip")).toMatch(
