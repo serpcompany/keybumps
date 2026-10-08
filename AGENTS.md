@@ -14,7 +14,7 @@ Listed paths:
 
 - `apps/web/src/app/(analytics)/page.tsx`, `home-visuals.tsx`, and `palette-demo.tsx`
 - `apps/web/src/app/(analytics)/about/**`, `contact/**`, `support/**`, and `plugins/**`
-- `apps/web/src/app/favicon.ico` and `apple-icon.png` (not `globals.css` or `site.css`, which style the consent banner and the checkout button)
+- `apps/web/src/app/site.css`, `favicon.ico`, and `apple-icon.png` (not `pricing.css` or `consent.css`, which style the checkout button and the consent banner, or `globals.css`, which loads them)
 - `apps/web/src/components/**`, except `analytics.tsx`, `consent-banner.tsx`, `download-link.tsx`, `page-shell.tsx`, `plugin-browser.tsx`, `pricing-card.tsx`, `site-document.tsx`, `site-footer.tsx`, `site-header.tsx`, `site-nav.tsx`, and `strip-query*`
 - `apps/web/src/lib/plugins.ts`
 - `apps/web/public/brand/**`
