@@ -24,7 +24,7 @@ identical)
 ahead)
   # The compare API lists at most 300 files.
   if [ "$count" -ge 300 ]; then
-    echo "::error::main is too far ahead to tell whether it has newer website changes. Run Web deploy from Actions on main."
+    echo "::error::main is too far ahead to tell whether it has newer website changes. Run Web deploy from Actions on main (an agent, only with fresh owner authorization)."
     exit 1
   fi
   # Not `tail | grep -q`: with pipefail, grep stopping at its first match can kill tail with

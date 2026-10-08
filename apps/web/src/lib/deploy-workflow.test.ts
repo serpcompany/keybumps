@@ -120,10 +120,13 @@ describe('web.yml', () => {
     expect(pattern.test('CHANGELOG.md')).toBe(true)
     expect(pattern.test('docs/releases/sparkle-update-operations.md')).toBe(false)
   })
+})
 
-  it('starts a Web deploy on main only after a release publishes, with no permission beyond starting it', () => {
+describe('release-please.yml', () => {
+  it('starts a Web deploy on main only after a release publishes, with only the Actions permission', () => {
     const website = jobs(read('../../../../.github/workflows/release-please.yml')).website ?? ''
-    expect(website).toContain('needs: release')
+    expect(website).toMatch(/^ {4}needs: release$/m)
+    expect(website).not.toMatch(/^ {4}if:/m)
     expect(website).toMatch(/permissions:\n {6}actions: write\n {4}steps:/)
     expect(website).toContain(
       'gh workflow run web-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main'

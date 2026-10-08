@@ -83,14 +83,12 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
   })
 })
 
-it("runs the website check on every workflow file the site's tests read", () => {
+it("runs the website check on every workflow file, since the site's tests read them all", () => {
   const pattern = new RegExp(read('web.yml').match(/pr-touches\.sh '([^']+)'/)?.[1] ?? '$^')
-  for (const file of [
-    'web.yml',
-    'web-deploy.yml',
-    'keybumps-unit-tests.yml',
-    'keybumps-ui-tests.yml'
-  ]) {
+  const dir = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url))
+  const files = readdirSync(dir).filter(file => file.endsWith('.yml'))
+  expect(files.length).toBeGreaterThan(0)
+  for (const file of files) {
     expect(pattern.test(`.github/workflows/${file}`), file).toBe(true)
   }
 })
