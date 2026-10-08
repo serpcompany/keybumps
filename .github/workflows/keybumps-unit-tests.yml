@@ -28,6 +28,8 @@ jobs:
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
+    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -51,7 +53,7 @@ jobs:
         run: .github/scripts/pr-touches.sh '^(apps/macos/|docs/releases/v[^/]*\.md$|\.github/workflows/keybumps-unit-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   unit:
-    name: Unit tests (KeybumpsTests)
+    name: Unit tests (run)
     needs: changes
     # Skipped (which counts as passing) only when the PR touches none of the files it checks.
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
@@ -111,3 +113,30 @@ jobs:
           name: KeybumpsTests-xcresult
           path: ${{ env.APP_DIR == '.' && 'KeybumpsTests.xcresult' || format('{0}/KeybumpsTests.xcresult', env.APP_DIR) }}
           retention-days: 7
+
+  # The required check. It always runs, and passes only if the unit suite passed, or was skipped because
+  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
+  unit-tests:
+    name: Unit tests (KeybumpsTests)
+    needs: [changes, unit]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require the unit suite to pass or be skipped on purpose
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          SUITE: ${{ needs.unit.result }}
+        run: |
+          if [ "$SUITE" = success ]; then exit 0; fi
+          if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
+            echo "This PR touches none of the files this check covers."
+            exit 0
+          fi
+          echo "::error::the unit suite didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."
+          exit 1

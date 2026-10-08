@@ -16,7 +16,9 @@ if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ]; then
     --jq '(.files | length), (.files[] | .filename, (.previous_filename // empty))')"; then
     count="$(head -n 1 <<<"$diff")"
     # The compare API lists at most 300 files; with that many, run the check.
-    if [ "$count" -lt 300 ] && ! tail -n +2 <<<"$diff" | grep -qE "$pattern"; then
+    # Not `tail | grep -q`: with pipefail, grep stopping at its first match can kill tail with
+    # SIGPIPE and fail the pipeline, which would read as "no match" and skip the check.
+    if [ "$count" -lt 300 ] && ! grep -qE "$pattern" < <(tail -n +2 <<<"$diff"); then
       run=false
     fi
   else

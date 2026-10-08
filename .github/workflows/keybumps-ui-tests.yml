@@ -30,6 +30,8 @@ jobs:
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
+    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -53,7 +55,7 @@ jobs:
         run: .github/scripts/pr-touches.sh '^(apps/macos/|\.github/workflows/keybumps-ui-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   ui:
-    name: UI tests (with retries)
+    name: UI tests (run, with retries)
     needs: changes
     # Skipped (which counts as passing) only when the PR touches none of the files it checks.
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
@@ -115,3 +117,30 @@ jobs:
           name: KeybumpsUITests-xcresult
           path: ${{ env.APP_DIR == '.' && 'KeybumpsUITests.xcresult' || format('{0}/KeybumpsUITests.xcresult', env.APP_DIR) }}
           retention-days: 7
+
+  # The required check. It always runs, and passes only if the UI suite passed, or was skipped because
+  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
+  ui-tests:
+    name: UI tests (with retries)
+    needs: [changes, ui]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require the UI suite to pass or be skipped on purpose
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          SUITE: ${{ needs.ui.result }}
+        run: |
+          if [ "$SUITE" = success ]; then exit 0; fi
+          if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
+            echo "This PR touches none of the files this check covers."
+            exit 0
+          fi
+          echo "::error::the UI suite didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."
+          exit 1

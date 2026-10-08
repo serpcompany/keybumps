@@ -24,6 +24,8 @@ jobs:
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
+    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -44,10 +46,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: .github/scripts/pr-touches.sh '^(apps/web/|\.github/workflows/web(-deploy)?\.yml$|\.github/scripts/pr-touches\.sh$)'
+        run: .github/scripts/pr-touches.sh '^(apps/web/|\.github/workflows/(web|web-deploy|keybumps-unit-tests|keybumps-ui-tests)\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   check:
-    name: Website check (pnpm check)
+    name: Website check (run pnpm check)
     needs: changes
     # Skipped (which counts as passing) only when the PR touches none of the files it checks.
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
@@ -74,3 +76,30 @@ jobs:
 
       - name: Run pnpm check
         run: pnpm check
+
+  # The required check. It always runs, and passes only if the website check passed, or was skipped because
+  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
+  website-check:
+    name: Website check (pnpm check)
+    needs: [changes, check]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require the website check to pass or be skipped on purpose
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          SUITE: ${{ needs.check.result }}
+        run: |
+          if [ "$SUITE" = success ]; then exit 0; fi
+          if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
+            echo "This PR touches none of the files this check covers."
+            exit 0
+          fi
+          echo "::error::the website check didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."
+          exit 1
