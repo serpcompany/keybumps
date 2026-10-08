@@ -22,7 +22,9 @@ function escapeRegExp(text: string) {
 /** Plain text with each search word marked. */
 function marked(text: string, words: readonly string[]): ReactNode {
   if (!words.length) return text
-  const pattern = new RegExp(`(${words.map(escapeRegExp).join('|')})`, 'gi')
+  // Longest first, so "snippets tab" is marked whole rather than just "snippets".
+  const longestFirst = [...words].sort((a, b) => b.length - a.length)
+  const pattern = new RegExp(`(${longestFirst.map(escapeRegExp).join('|')})`, 'gi')
   const parts = text.split(pattern)
   return parts.map((part, index) =>
     index % 2 === 1 ? (

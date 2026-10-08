@@ -154,15 +154,26 @@ describe('released versions', () => {
   it('reads a version, whole or partly typed, as that version', () => {
     const releases = realReleases()
     const versions = (query: string) => searchReleases(releases, query).shown.map(r => r.version)
-    expect(versions('beta.1')).toEqual(['0.0.3-beta.1'])
+    expect(versions('beta.1')).toEqual(
+      releases.filter(r => r.version.endsWith('-beta.1')).map(r => r.version)
+    )
     expect(versions('0.0.3-beta.12')).toEqual(['0.0.3-beta.12'])
     expect(versions('v0.0.3-beta.12')).toEqual(['0.0.3-beta.12'])
     expect(versions('0.0.3-beta.1')).toEqual(['0.0.3-beta.1'])
     const betas = releases.filter(r => r.version.startsWith('0.0.3-beta')).map(r => r.version)
     expect(versions('0.0.3-beta')).toEqual(betas)
+    const exact = releases.filter(r => r.version === '0.0.3')
     expect(versions('0.0.3')).toEqual(
-      releases.filter(r => r.version.startsWith('0.0.3')).map(r => r.version)
+      (exact.length ? exact : releases.filter(r => r.version.startsWith('0.0.3'))).map(
+        r => r.version
+      )
     )
+    for (const partial of ['v0', 'v0.', 'v0.0.3-b']) {
+      expect(versions(partial).length).toBeGreaterThan(0)
+    }
+    // A number that's no version is text.
+    const timed = releasesFrom([note('0.0.3-beta.13', '- Ready in 0.9 seconds.')], changelog)
+    expect(searchReleases(timed, '0.9').shown.map(r => r.version)).toEqual(['0.0.3-beta.13'])
   })
 
   it('reads a date or month in any common form, in any year unless the query names one', () => {
@@ -179,6 +190,9 @@ describe('released versions', () => {
     }
     expect(versions('October')).toEqual(['0.1.0', '0.0.3-beta.13'])
     expect(versions('October 2027')).toEqual(['0.1.0'])
+    expect(versions('Oct.')).toEqual(versions('October'))
+    // A month alone with no releases that month is a word: May has none here.
+    expect(searchReleases(releases, 'may').terms).toEqual(['may'])
     expect(versions('Oct 3')).toEqual([])
     expect(searchReleases(releases, 'Oct 2 2026').terms).toEqual(['oct 2, 2026'])
     // A short month name alone is a word, not a month.

@@ -312,23 +312,29 @@ const FULL_MONTHS = new Set(MONTHS.map(name => name.toLowerCase()))
  * A date the query names: 2026-10-05, Oct 5, Oct 5 2026, October 5, 2026, 5 Oct, October 2026, or
  * October. A short month name alone isn't one: `mar` is more likely the start of `mark`.
  */
-function dateQuery(query: string): { year?: number; month: number; day?: number } | null {
+function dateQuery(
+  query: string
+): { year?: number; month: number; day?: number; monthOnly: boolean } | null {
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(query)
-  if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) }
-  const monthFirst = /^([a-z]+)\.?(?:\s+(\d{1,2}))?(?:,?\s+(\d{4}))?$/.exec(query)
+  if (iso) {
+    return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]), monthOnly: false }
+  }
+  const monthFirst = /^([a-z]+)(\.)?(?:\s+(\d{1,2}))?(?:,?\s+(\d{4}))?$/.exec(query)
   const dayFirst = /^(\d{1,2})\s+([a-z]+)\.?(?:,?\s+(\d{4}))?$/.exec(query)
-  const [word, day, year] = monthFirst
-    ? [monthFirst[1], monthFirst[2], monthFirst[3]]
+  const [word, dot, day, year] = monthFirst
+    ? [monthFirst[1], monthFirst[2], monthFirst[3], monthFirst[4]]
     : dayFirst
-      ? [dayFirst[2], dayFirst[1], dayFirst[3]]
+      ? [dayFirst[2], '', dayFirst[1], dayFirst[3]]
       : []
   const month = word ? MONTH_WORDS.get(word) : undefined
   if (!word || !month) return null
-  if (!day && !year && !FULL_MONTHS.has(word)) return null
+  // A short name alone needs its dot (Oct.) to be a month; otherwise it's a word being typed.
+  if (!day && !year && !dot && !FULL_MONTHS.has(word)) return null
   return {
     month,
     day: day ? Number(day) : undefined,
-    year: year ? Number(year) : undefined
+    year: year ? Number(year) : undefined,
+    monthOnly: !day && !year
   }
 }
 
@@ -347,15 +353,13 @@ export function searchReleases<T extends Searchable>(
   const q = query.trim().toLowerCase().replace(/\s+/g, ' ')
   if (!q) return { shown: [...releases], terms: [] }
 
-  // A version, whole or partly typed: that version when one matches exactly, else every version
-  // that starts with it (0.0.3-beta shows every 0.0.3 beta).
-  if (/^v?\d+\.\d+(?:\.\d+)?(?:-[0-9a-z.]*)?$/.test(q)) {
+  // A version, whole or partly typed (v0, 0.0.3-beta): that version when one matches exactly, else
+  // every version that starts with it. A number like 0.9 that's no version falls through to text.
+  if (/^v\d[\d.]*(?:-[0-9a-z.]*)?$/.test(q) || /^\d+\.\d+(?:\.\d+)?(?:-[0-9a-z.]*)?$/.test(q)) {
     const version = q.replace(/^v/, '')
     const exact = releases.filter(r => r.version === version)
-    return {
-      shown: exact.length ? exact : releases.filter(r => r.version.startsWith(version)),
-      terms: [version]
-    }
+    const shown = exact.length ? exact : releases.filter(r => r.version.startsWith(version))
+    if (shown.length) return { shown, terms: [version] }
   }
   if (/^(?:alpha|beta|rc)\.\d+$/.test(q)) {
     return { shown: releases.filter(r => r.version.endsWith(`-${q}`)), terms: [q] }
@@ -371,9 +375,12 @@ export function searchReleases<T extends Searchable>(
         (date.year === undefined || year === date.year)
       )
     })
-    const terms =
-      date.day === undefined ? [] : [...new Set(shown.map(r => r.dateLabel.toLowerCase()))]
-    return { shown, terms }
+    // A month name alone with no releases that month (may) is more likely a word.
+    if (shown.length || !date.monthOnly) {
+      const terms =
+        date.day === undefined ? [] : [...new Set(shown.map(r => r.dateLabel.toLowerCase()))]
+      return { shown, terms }
+    }
   }
   // A plugin's name means that plugin: the releases tagged with it, whatever word tagged them.
   const plugin = plugins.find(candidate => candidate.name.toLowerCase() === q)
