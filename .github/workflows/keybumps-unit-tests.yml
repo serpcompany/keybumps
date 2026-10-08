@@ -1,12 +1,14 @@
 name: Keybumps unit tests
 
-# Runs on every pull request (its unit job only when the PR touches app code or the release
-# notes the tests read), as the first gate of Release Keybumps, and manually from Actions. No
-# nightly schedule. The `changes` job's pattern names apps/macos/ directly, as the guard test
-# reads it; keep it in step with APP_DIR.
+# Runs on every pull request and in the merge queue (its unit job only when the change touches
+# app code or the release notes the tests read), as the first gate of Release Keybumps, and
+# manually from Actions. No nightly schedule. The `changes` job's pattern names apps/macos/
+# directly, as the guard test reads it; keep it in step with APP_DIR.
 on:
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
   workflow_call:
   workflow_dispatch:
 
@@ -25,12 +27,14 @@ env:
   APP_DIR: apps/macos
 
 jobs:
-  # Required checks must report on every pull request, so this workflow has no `paths:` filter.
+  # Required checks must report on every pull request and merge queue group, so this workflow
+  # has no `paths:` filter.
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
-    # Only pull requests choose; every other event (the release gate, a manual run) runs the suite.
-    if: github.event_name == 'pull_request'
+    # Only pull requests and merge queue groups choose; every other event (the release gate,
+    # a manual run) runs the suite.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -45,18 +49,20 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
 
-      - name: Does this PR touch app code?
+      - name: Does this change touch app code?
         id: touches
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # In the queue, main itself, not the group's base_sha (the entry ahead's commit, if
+          # any), so the diff also covers every queued PR ahead that hasn't merged yet.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: .github/scripts/pr-touches.sh '^(apps/macos/|docs/releases/v[^/]*\.md$|\.github/workflows/keybumps-unit-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   unit:
     name: Unit tests (run)
     needs: changes
-    # Skipped (which counts as passing) only when the PR touches none of the files it checks.
+    # Skipped (which counts as passing) only when the change touches none of the files it checks.
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
@@ -116,7 +122,7 @@ jobs:
           retention-days: 7
 
   # The required check. It always runs, and passes only if the unit suite passed, or was skipped because
-  # the changes job said this PR touches none of its files. A cancelled or failed changes job,
+  # the changes job said this change touches none of its files. A cancelled or failed changes job,
   # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
   unit-tests:
     name: Unit tests (KeybumpsTests)
@@ -136,7 +142,7 @@ jobs:
         run: |
           if [ "$SUITE" = success ]; then exit 0; fi
           if [ "$SUITE" = skipped ] && [ "$CHANGES" = success ] && [ "$RUN" = false ]; then
-            echo "This PR touches none of the files this check covers."
+            echo "This change touches none of the files this check covers."
             exit 0
           fi
           echo "::error::the unit suite didn't pass (result: $SUITE; changes: $CHANGES, run=$RUN)."

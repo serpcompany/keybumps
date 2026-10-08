@@ -2,12 +2,12 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// main requires these checks, and a required check must report on every pull request. A workflow
-// skipped by a `paths:` filter never reports, which would block every PR that doesn't touch its
-// files. So each workflow runs on all PRs: its `changes` job decides whether the slow job runs, and
-// a last gate job, which carries the required check's name, passes only if the suite passed or was
-// skipped because the PR touches none of its files (SERP ci-workflows: "Skip docs-only changes
-// inside the workflow").
+// main requires these checks, and a required check must report on every pull request and every
+// merge queue group. A workflow skipped by a `paths:` filter never reports, which would block every
+// PR that doesn't touch its files. So each workflow runs on all PRs and groups: its `changes` job
+// decides whether the slow job runs, and a last gate job, which carries the required check's name,
+// passes only if the suite passed or was skipped because the change touches none of its files (SERP
+// ci-workflows: "Skip docs-only changes inside the workflow").
 const workflows = [
   {
     file: 'keybumps-unit-tests.yml',
@@ -42,9 +42,26 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
     expect(trigger).not.toMatch(/^\s+paths(-ignore)?:/m)
   })
 
-  it('decides only on pull requests, in a changes job, whether the slow job runs', () => {
+  // Without the trigger the queue waits on a check that never reports, and no PR merges.
+  it('runs in the merge queue', () => {
+    expect(trigger).toContain('merge_group:\n    types: [checks_requested]')
+  })
+
+  it('decides only on pull requests and merge queue groups, in a changes job, whether the slow job runs', () => {
     const changes = job(workflow, 'changes')
-    expect(changes).toContain("if: github.event_name == 'pull_request'")
+    expect(changes).toContain(
+      "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'"
+    )
+    // In the queue the diff starts at main, not at the group's base_sha (the commit of the entry
+    // ahead): otherwise a docs-only PR's group would skip a suite that an app-code PR ahead of it,
+    // not yet merged, still needs. An empty value fails the lookup, which runs the suite.
+    expect(changes).toMatch(
+      /BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_ref \}\}/
+    )
+    expect(changes).not.toContain('merge_group.base_sha')
+    expect(changes).toMatch(
+      /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}/
+    )
     expect(changes).toContain('run: .github/scripts/pr-touches.sh ')
     const suite = job(workflow, slow)
     expect(suite).toMatch(/^ {4}needs: changes$/m)
