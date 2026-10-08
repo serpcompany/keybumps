@@ -218,6 +218,43 @@ struct UpdateMenuBarTests {
         #expect(!MenuBarAttention.updateIsWaiting(UpdateReminderTests.idle))
     }
 
+    @Test("A newer version puts the red dot on the icon and on Check for Updates…, from finding it until it installs")
+    func availableUpdateDot() throws {
+        let known: [UpdateStatus] = [
+            .available(version: "0.0.3-beta.24"), .downloading(version: "0.0.3-beta.24"),
+            .downloaded(version: "0.0.3-beta.24"), .readyToRestart(version: "0.0.3-beta.24"),
+            .deferred(version: "0.0.3-beta.24"),
+        ]
+        for status in known {
+            let snapshot = UpdateSnapshot(status: status, automaticallyChecks: true, canCheck: true, canRestart: false)
+            #expect(MenuBarAttention.updateIsWaiting(snapshot), "\(status)")
+            #expect(MenuBarAttention.updatePhrase(snapshot) == "update available")
+            let item = try #require(Self.checkItem(snapshot))
+            #expect(item.image === NativeStatusItemController.updateDot)
+            #expect(item.toolTip == status.summary)
+        }
+        for status in [UpdateStatus.idle, .checking, .current, .failed("offline"), .unavailable("Not configured")] {
+            let snapshot = UpdateSnapshot(status: status, automaticallyChecks: true, canCheck: true, canRestart: false)
+            #expect(!MenuBarAttention.updateIsWaiting(snapshot), "\(status)")
+            let item = try #require(Self.checkItem(snapshot))
+            #expect(item.image == nil)
+            #expect(item.toolTip == nil)
+        }
+        #expect(MenuBarAttention.updatePhrase(UpdateReminderTests.ready) == "update ready")
+    }
+
+    @Test("The menu's dot is drawn red, not tinted like a template image")
+    func menuDotIsRed() throws {
+        let dot = try #require(NativeStatusItemController.updateDot)
+        #expect(!dot.isTemplate)
+    }
+
+    private static func checkItem(_ snapshot: UpdateSnapshot) -> NSMenuItem? {
+        let controller = NativeStatusItemController(router: MainWindowRouter())
+        controller.configureUpdater(snapshot: { snapshot }, checkNow: {}, restartWhenSafe: {})
+        return controller.makeMenu().item(withTitle: "Check for Updates…")
+    }
+
     @Test("Keybumps checks for updates every hour, Sparkle's shortest interval")
     func hourlyChecks() {
         #expect(Bundle.main.object(forInfoDictionaryKey: "SUScheduledCheckInterval") as? Int == 3600)

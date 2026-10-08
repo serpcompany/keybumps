@@ -3,10 +3,10 @@ import Testing
 
 @Suite("Settings sidebar")
 struct SettingsSidebarTests {
-    @Test("General, Permissions, and Plugins come first, then a row per plugin: the default ones, then added ones")
+    @Test("General, Permissions, Plugins, and Changelog come first, then a row per plugin: the default ones, then added ones")
     func groupsAppPagesThenPlugins() {
         #expect(SettingsSidebar.groups(matching: "") == [
-            [.general, .permissions, .plugins],
+            [.general, .permissions, .plugins, .changelog],
             [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows],
             [.emojiPicker, .timer, .translation],
         ])
@@ -19,6 +19,7 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "zzz").isEmpty)
         #expect(SettingsSidebar.groups(matching: "tim") == [[.timer]])
         #expect(SettingsSidebar.groups(matching: "plug") == [[.plugins]])
+        #expect(SettingsSidebar.groups(matching: "change") == [[.changelog]])
     }
 
     @Test("The Plugins page lists the default plugins, Quick Search first, then added ones, and filters by name or keyword")
