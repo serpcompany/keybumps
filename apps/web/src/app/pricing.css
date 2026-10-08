@@ -1,6 +1,7 @@
 /*
- * The pricing card (components/pricing-card.tsx), including its checkout button. Kept out of
- * site.css so the site's styles can change without touching checkout (root AGENTS.md, listed paths).
+ * The pricing card (components/pricing-card.tsx), including its list and checkout button. Kept out
+ * of site.css so the site's styles can change without touching checkout (root AGENTS.md, listed
+ * paths).
  */
 .price-card {
   max-width: 460px;
@@ -36,6 +37,27 @@
   font-weight: 400;
   letter-spacing: 0;
   color: var(--text-muted);
+}
+
+.checks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.checks li::before {
+  content: "✓";
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 12px;
+  border-radius: 50%;
+  background: var(--lavender-soft);
+  color: var(--lavender);
+  font-size: 0.75rem;
 }
 
 .price-card .checks {
