@@ -302,11 +302,16 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(withTitle: "About Keybumps", action: #selector(showAbout), keyEquivalent: "").target = self
         let updates = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         updates.target = self
-        updates.isEnabled = snapshot.canCheck
-        // The same red dot as the icon's, while a newer version is known (#416).
+        // While an update waits for a restart, Sparkle can't check; the item shows the restart prompt
+        // instead, so a ready update's dot marks an item that works (#420). It's greyed out only
+        // while Sparkle downloads and prepares the update.
+        updates.isEnabled = snapshot.canCheck || snapshot.canRestart
+        // The same red dot as the icon's, until the update installs or is skipped (#416, #420).
         if MenuBarAttention.updateIsWaiting(snapshot) {
             updates.image = Self.updateDot(saying: MenuBarAttention.updatePhrase(snapshot))
-            updates.toolTip = snapshot.status.summary
+            updates.toolTip = snapshot.status.availableVersion == nil
+                ? snapshot.knownUpdate.map { UpdateStatus.available(version: $0).summary } ?? snapshot.status.summary
+                : snapshot.status.summary
         }
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self

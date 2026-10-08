@@ -48,6 +48,12 @@ struct SparkleUpdateConfiguration: Equatable {
 }
 
 enum NoUpdateStatusResolver {
+    /// Whether Sparkle answered (up to date, or no update fits this Mac) rather than failing to
+    /// verify the feed.
+    static func isAnswer(reasonCode: Int?) -> Bool {
+        (1...5).contains(reasonCode ?? 0)
+    }
+
     static func status(reasonCode: Int?) -> UpdateStatus {
         switch reasonCode {
         case 1, 2: .current
@@ -197,6 +203,13 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
         let nsError = error as NSError
         let reasonCode = (nsError.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)?.intValue
+        noUpdateFound(reasonCode: reasonCode)
+    }
+
+    /// Sparkle found no update. An answer (up to date, or nothing fits this Mac) means no newer
+    /// version is installable, so the dot goes even when the status reads as a failure (#420).
+    func noUpdateFound(reasonCode: Int?) {
+        if NoUpdateStatusResolver.isAnswer(reasonCode: reasonCode) { snapshot.knownUpdate = nil }
         apply(NoUpdateStatusResolver.status(reasonCode: reasonCode))
     }
 
@@ -218,7 +231,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         let nsError = error as NSError
         guard nsError.code != 1001 else { // Sparkle's documented SUNoUpdateError value.
             let reasonCode = (nsError.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)?.intValue
-            apply(NoUpdateStatusResolver.status(reasonCode: reasonCode))
+            noUpdateFound(reasonCode: reasonCode)
             return
         }
         telemetry.record(.failed, failureCategory: "update-cycle")
@@ -257,7 +270,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     }
 
     private func refresh(status: UpdateStatus? = nil) {
-        if let status { snapshot.status = status }
+        if let status { snapshot.setStatus(status) }
         if let updater = updaterController?.updater {
             snapshot.automaticallyChecks = updater.automaticallyChecksForUpdates
             snapshot.canCheck = updater.canCheckForUpdates

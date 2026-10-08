@@ -56,7 +56,7 @@ final class FakeUpdateController: UpdateControlling {
     func restartWhenSafe() { restartCount += 1 }
 
     func emit(_ status: UpdateStatus, canCheck: Bool? = nil, canRestart: Bool? = nil) {
-        snapshot.status = status
+        snapshot.setStatus(status)
         if let canCheck { snapshot.canCheck = canCheck }
         if let canRestart { snapshot.canRestart = canRestart }
         onChange?(snapshot)
