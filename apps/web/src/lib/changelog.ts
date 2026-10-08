@@ -306,17 +306,29 @@ const MONTH_WORDS = new Map<string, number>(
   ])
 ).set('sept', 9)
 
-/** A date the query names: 2026-10-05, Oct 5, Oct 5 2026, October 5, 2026, October 2026, or Oct. */
+const FULL_MONTHS = new Set(MONTHS.map(name => name.toLowerCase()))
+
+/**
+ * A date the query names: 2026-10-05, Oct 5, Oct 5 2026, October 5, 2026, 5 Oct, October 2026, or
+ * October. A short month name alone isn't one: `mar` is more likely the start of `mark`.
+ */
 function dateQuery(query: string): { year?: number; month: number; day?: number } | null {
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(query)
   if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) }
-  const named = /^([a-z]+)\.?(?:\s+(\d{1,2}))?(?:,?\s+(\d{4}))?$/.exec(query)
-  const month = named && MONTH_WORDS.get(named[1])
-  if (!named || !month) return null
+  const monthFirst = /^([a-z]+)\.?(?:\s+(\d{1,2}))?(?:,?\s+(\d{4}))?$/.exec(query)
+  const dayFirst = /^(\d{1,2})\s+([a-z]+)\.?(?:,?\s+(\d{4}))?$/.exec(query)
+  const [word, day, year] = monthFirst
+    ? [monthFirst[1], monthFirst[2], monthFirst[3]]
+    : dayFirst
+      ? [dayFirst[2], dayFirst[1], dayFirst[3]]
+      : []
+  const month = word ? MONTH_WORDS.get(word) : undefined
+  if (!word || !month) return null
+  if (!day && !year && !FULL_MONTHS.has(word)) return null
   return {
     month,
-    day: named[2] ? Number(named[2]) : undefined,
-    year: named[3] ? Number(named[3]) : undefined
+    day: day ? Number(day) : undefined,
+    year: year ? Number(year) : undefined
   }
 }
 
@@ -335,19 +347,18 @@ export function searchReleases<T extends Searchable>(
   const q = query.trim().toLowerCase().replace(/\s+/g, ' ')
   if (!q) return { shown: [...releases], terms: [] }
 
-  if (/^v?\d+\.\d+\.\d+$/.test(q)) {
-    const core = q.replace(/^v/, '')
-    return {
-      shown: releases.filter(r => r.version === core || r.version.startsWith(`${core}-`)),
-      terms: [core]
-    }
-  }
-  if (/^v?\d+\.\d+\.\d+-[0-9a-z.]+$/.test(q) || /^(?:alpha|beta|rc)\.\d+$/.test(q)) {
+  // A version, whole or partly typed: that version when one matches exactly, else every version
+  // that starts with it (0.0.3-beta shows every 0.0.3 beta).
+  if (/^v?\d+\.\d+(?:\.\d+)?(?:-[0-9a-z.]*)?$/.test(q)) {
     const version = q.replace(/^v/, '')
+    const exact = releases.filter(r => r.version === version)
     return {
-      shown: releases.filter(r => r.version === version || r.version.endsWith(`-${version}`)),
+      shown: exact.length ? exact : releases.filter(r => r.version.startsWith(version)),
       terms: [version]
     }
+  }
+  if (/^(?:alpha|beta|rc)\.\d+$/.test(q)) {
+    return { shown: releases.filter(r => r.version.endsWith(`-${q}`)), terms: [q] }
   }
   const date = dateQuery(q)
   if (date) {
@@ -364,16 +375,31 @@ export function searchReleases<T extends Searchable>(
       date.day === undefined ? [] : [...new Set(shown.map(r => r.dateLabel.toLowerCase()))]
     return { shown, terms }
   }
+  // A plugin's name means that plugin: the releases tagged with it, whatever word tagged them.
   const plugin = plugins.find(candidate => candidate.name.toLowerCase() === q)
   if (plugin) {
     return {
       shown: releases.filter(r => r.plugins.some(tag => tag.slug === plugin.slug)),
-      terms: [q]
+      terms: [q, ...(pluginAliases[plugin.slug] ?? []).map(alias => alias.toLowerCase())]
     }
   }
   const words = q.split(' ')
   return {
     shown: releases.filter(r => words.every(word => r.searchText.includes(word))),
     terms: words
+  }
+}
+
+/** The line under the search, and what the empty state says, for the query and month shown. */
+export function searchSummary(query: string, month: string, shown: number, total: number) {
+  const typed = query.trim()
+  const filtered = typed !== '' || month !== 'all'
+  const where = month === 'all' ? '' : ` in ${month}`
+  return {
+    filtered,
+    count: filtered ? `Showing ${shown} of ${total} releases` : '',
+    empty: typed
+      ? `No release${where} matches “${typed}”. Try a version such as beta.19, a date such as Oct 5, or a plugin's name.`
+      : `No releases${where}.`
   }
 }

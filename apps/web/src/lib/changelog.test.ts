@@ -9,7 +9,8 @@ import {
   pluginsNamed,
   releaseNotesFile,
   releasesFrom,
-  searchReleases
+  searchReleases,
+  searchSummary
 } from './changelog'
 
 const changelog = `# Changelog
@@ -150,26 +151,74 @@ describe('released versions', () => {
     }
   })
 
-  it('reads a version, a date or month, or a plugin name exactly, and anything else as words', () => {
+  it('reads a version, whole or partly typed, as that version', () => {
     const releases = realReleases()
     const versions = (query: string) => searchReleases(releases, query).shown.map(r => r.version)
     expect(versions('beta.1')).toEqual(['0.0.3-beta.1'])
     expect(versions('0.0.3-beta.12')).toEqual(['0.0.3-beta.12'])
-    expect(versions('0.0.3')).toEqual(releases.map(r => r.version))
-    expect(versions('Oct 5')).toEqual(['0.0.3-beta.16', '0.0.3-beta.15', '0.0.3-beta.14'])
-    expect(versions('Oct 5 2026')).toEqual(versions('Oct 5'))
-    expect(versions('October 5, 2026')).toEqual(versions('Oct 5'))
-    expect(versions('2026-10-05')).toEqual(versions('Oct 5'))
-    expect(versions('Oct 3')).toEqual([])
-    expect(versions('October')).toEqual(
-      releases.filter(r => r.monthLabel === 'October 2026').map(r => r.version)
+    expect(versions('v0.0.3-beta.12')).toEqual(['0.0.3-beta.12'])
+    expect(versions('0.0.3-beta.1')).toEqual(['0.0.3-beta.1'])
+    const betas = releases.filter(r => r.version.startsWith('0.0.3-beta')).map(r => r.version)
+    expect(versions('0.0.3-beta')).toEqual(betas)
+    expect(versions('0.0.3')).toEqual(
+      releases.filter(r => r.version.startsWith('0.0.3')).map(r => r.version)
     )
-    for (const r of releases.filter(r => r.plugins.length)) {
-      for (const tag of r.plugins) expect(versions(tag.name)).toContain(r.version)
+  })
+
+  it('reads a date or month in any common form, in any year unless the query names one', () => {
+    const releases = releasesFrom(
+      [note('0.0.3-beta.2'), note('0.0.3-beta.13'), note('0.1.0')],
+      `${changelog}\n## [0.1.0](https://example.invalid) (2027-10-02)\n`
+    )
+    const versions = (query: string) => searchReleases(releases, query).shown.map(r => r.version)
+    for (const query of ['Oct 2', 'oct 2', 'October 2', '2 Oct', 'Oct. 2']) {
+      expect(versions(query)).toEqual(['0.1.0', '0.0.3-beta.13'])
     }
-    expect(versions('Timer')).toEqual(
-      releases.filter(r => r.plugins.some(p => p.slug === 'timer')).map(r => r.version)
+    for (const query of ['Oct 2 2026', 'October 2, 2026', '2 October 2026', '2026-10-02']) {
+      expect(versions(query)).toEqual(['0.0.3-beta.13'])
+    }
+    expect(versions('October')).toEqual(['0.1.0', '0.0.3-beta.13'])
+    expect(versions('October 2027')).toEqual(['0.1.0'])
+    expect(versions('Oct 3')).toEqual([])
+    expect(searchReleases(releases, 'Oct 2 2026').terms).toEqual(['oct 2, 2026'])
+    // A short month name alone is a word, not a month.
+    expect(searchReleases(releases, 'oct').terms).toEqual(['oct'])
+  })
+
+  it("reads a plugin's name as that plugin, highlighting every word that tagged it", () => {
+    const releases = realReleases()
+    for (const r of releases) {
+      for (const tag of r.plugins) {
+        expect(searchReleases(releases, tag.name).shown.map(x => x.version)).toContain(r.version)
+      }
+    }
+    expect(
+      searchReleases(releases, 'Timer').shown.every(r => r.plugins.some(p => p.slug === 'timer'))
+    ).toBe(true)
+    expect(searchReleases(releases, 'Clipboard History').terms).toEqual([
+      'clipboard history',
+      'clipboard tab'
+    ])
+  })
+
+  it('says what a search or month shows, for every kind of query, even one with nothing to highlight', () => {
+    expect(searchSummary('', 'all', 18, 18)).toEqual({
+      filtered: false,
+      count: '',
+      empty: 'No releases.'
+    })
+    expect(searchSummary('October', 'all', 12, 18)).toMatchObject({
+      filtered: true,
+      count: 'Showing 12 of 18 releases'
+    })
+    expect(searchSummary(' Oct 3 ', 'all', 0, 18).empty).toMatch(/^No release matches “Oct 3”\./)
+    expect(searchSummary('timer', 'September 2026', 0, 18).empty).toMatch(
+      /^No release in September 2026 matches “timer”\./
     )
+    expect(searchSummary('', 'September 2026', 3, 18)).toMatchObject({
+      filtered: true,
+      count: 'Showing 3 of 18 releases'
+    })
   })
 
   it('lets text searches only narrow as you type, and finds words inside longer words', () => {
@@ -179,6 +228,7 @@ describe('released versions', () => {
     expect(count('sett')).toBeGreaterThanOrEqual(count('setting'))
     expect(count('setting')).toBeGreaterThanOrEqual(count('settings'))
     expect(count('fix')).toBeGreaterThan(1)
+    expect(count('mar')).toBe(releases.filter(r => r.searchText.includes('mar')).length)
     const permission = searchReleases(releases, 'permission').shown.map(r => r.version)
     expect(permission).toEqual(expect.arrayContaining(['0.0.3-beta.12', '0.0.3-beta.13']))
     expect(searchReleases(releases, 'rings alarm').terms).toEqual(['rings', 'alarm'])

@@ -3,7 +3,13 @@
 import { CalendarDays, Check, ChevronDown, Link2, Search, X } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { PluginIcon } from '@/components/plugin-icon'
-import { type NoteBlock, plainText, type Release, searchReleases } from '@/lib/changelog'
+import {
+  type NoteBlock,
+  plainText,
+  type Release,
+  searchReleases,
+  searchSummary
+} from '@/lib/changelog'
 import { absoluteUrl } from '@/lib/site'
 
 /** Inline Markdown in the notes: **bold**, `code`, and [links](…). */
@@ -143,7 +149,7 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
   }, [])
   const { shown: found, terms: words } = searchReleases(releases, query)
   const shown = found.filter(release => month === 'all' || release.monthLabel === month)
-  const filtered = words.length > 0 || month !== 'all'
+  const summary = searchSummary(query, month, shown.length, releases.length)
   const latest = releases[0]?.id
 
   function clear() {
@@ -215,16 +221,16 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
               <ChevronDown aria-hidden="true" size={14} />
             </label>
           </div>
-          {filtered && (
+          {summary.filtered && (
             <p className="changelog-count">
-              Showing {shown.length} of {releases.length} releases
+              {summary.count}
               <button type="button" onClick={clear}>
                 Clear
               </button>
             </p>
           )}
           <p className="sr-only" aria-live="polite">
-            {filtered ? `Showing ${shown.length} of ${releases.length} releases` : ''}
+            {summary.count}
           </p>
         </div>
       </search>
@@ -232,11 +238,7 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
       <div className="container">
         {shown.length === 0 && (
           <div className="changelog-empty">
-            <p>
-              {words.length
-                ? `No release${month === 'all' ? '' : ` in ${month}`} matches “${query.trim()}”. Try a version such as beta.19, a date such as Oct 5, or a plugin's name.`
-                : 'No releases in this month.'}
-            </p>
+            <p>{summary.empty}</p>
             <button type="button" onClick={clear}>
               Show every release
             </button>
