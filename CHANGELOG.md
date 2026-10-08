@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3-beta.23](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.22...v0.0.3-beta.23) (2026-10-08)
+
+
+### Features
+
+* **dictation:** put the clipboard back after inserting (setting, on by default) ([#396](https://github.com/serpcompany/keybumps/issues/396)) ([#397](https://github.com/serpcompany/keybumps/issues/397)) ([0a4fe13](https://github.com/serpcompany/keybumps/commit/0a4fe13569d6e540aa6fa8475d9c19ba22a0f645))
+
 ## [0.0.3-beta.22](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.21...v0.0.3-beta.22) (2026-10-07)
 
 
