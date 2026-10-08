@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.3-beta.24](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.23...v0.0.3-beta.24) (2026-10-08)
+
+
+### Features
+
+* red dot for available updates, and Version History opens Settings › Changelog ([#417](https://github.com/serpcompany/keybumps/issues/417)) ([5e40cce](https://github.com/serpcompany/keybumps/commit/5e40ccedcc8e2d5d2ab5af0f1e37761b9d5f6418))
+* Settings › Changelog shows the latest 10 releases, with View all releases on keybumps.app ([#431](https://github.com/serpcompany/keybumps/issues/431)) ([47f90fa](https://github.com/serpcompany/keybumps/commit/47f90fa97f75f453c6a6b48708b82e651606d0b5))
+
+
+### Fixes
+
+* the update dot stays until the update installs, and Check for Updates… reopens the restart prompt ([#421](https://github.com/serpcompany/keybumps/issues/421)) ([2212ec0](https://github.com/serpcompany/keybumps/commit/2212ec036e58964493b88faa7c2cf3291c138f9a))
+
 ## [0.0.3-beta.23](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.22...v0.0.3-beta.23) (2026-10-08)
 
 
