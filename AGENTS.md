@@ -5,16 +5,16 @@ Agents may merge: listed paths
 
 Set by the owner on 2026-10-08 (#399), under the SERP [verification cadence](https://github.com/serpcompany/serp/blob/main/docs/engineering/standards/verification-cadence.md#merging-and-deploys) standard: the Mac app has public releases and the site takes payments.
 
-- Every PR waits for the owner's approval ("accept" or "merge" in chat counts), except a website PR whose every changed file, including deleted and renamed ones, is on the list below.
+- Every PR waits for the owner's approval ("accept" or "merge" in chat counts), except a website PR whose every changed file is on the list below, counting deleted files and both names of a renamed one.
 - An agent merges such a PR one at a time, up to date with `main`, once CI is green and the review loop has ended with a round that had no blocking findings.
-- Before its next merge, the agent confirms the latest `web-deploy.yml` run that includes the commit passed staging, production, and their smoke tests.
-- It still waits for the owner if it adds a redirect; removes, renames, or moves a page; or changes where a download, buy, or legal link points.
+- Before its next merge, the agent confirms the latest `web-deploy.yml` run that includes the commit passed staging, production, and their smoke tests. If it failed, fixing it is the next task; a rollback needs the owner.
+- A listed-path PR still waits for the owner if it adds a redirect; removes, renames, or moves a page; or changes where a download, buy, license, or legal link points.
 
 Listed paths:
 
 - `apps/web/src/app/(analytics)/page.tsx`, `home-visuals.tsx`, and `palette-demo.tsx`
 - `apps/web/src/app/(analytics)/about/**`, `contact/**`, `support/**`, and `plugins/**`
-- `apps/web/src/app/globals.css`, `favicon.ico`, and `apple-icon.png`
+- `apps/web/src/app/favicon.ico` and `apple-icon.png` (not `globals.css` or `site.css`, which style the consent banner and the checkout button)
 - `apps/web/src/components/**`, except `analytics.tsx`, `consent-banner.tsx`, `download-link.tsx`, `page-shell.tsx`, `plugin-browser.tsx`, `pricing-card.tsx`, `site-document.tsx`, `site-footer.tsx`, `site-header.tsx`, `site-nav.tsx`, and `strip-query*`
 - `apps/web/src/lib/plugins.ts`
 - `apps/web/public/brand/**`

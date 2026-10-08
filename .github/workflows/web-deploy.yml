@@ -2,7 +2,8 @@ name: Web deploy
 
 # Deploys the keybumps.app website in apps/web after merge: `pnpm check`, then staging and its smoke
 # test, then production and its smoke test. This is the only deploy path (apps/web/docs/agents/
-# web.md, Deploys). The owner's approval of the pull request authorizes its production deploy.
+# web.md, Deploys). The merge authorizes its production deploy: the owner's, or an agent's under the
+# root AGENTS.md's listed paths.
 #
 # Smoke tests use each Worker's workers.dev URL from the deploy log, with the smoke-test header,
 # because the zone's bot protection blocks CI runners on the branded domains.
