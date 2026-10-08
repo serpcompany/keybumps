@@ -187,6 +187,11 @@ final class DictationService {
     private let allowsSystemAccess: Bool
     private let accessibilityTrusted: () -> Bool
     var durationLimit: DictationDurationLimit
+    /// Puts the clipboard back after an insert while `restoresClipboard` says so. The shell shares
+    /// the Command Palette's, which keyword expansion also uses; without one, the transcript stays.
+    @ObservationIgnored var clipboardRestorer: ClipboardRestorer?
+    /// Dictation's Put the clipboard back setting, read at each insert. On by default.
+    @ObservationIgnored var restoresClipboard: () -> Bool = { true }
 
     /// `allowsSystemAccess` gates the microphone, activating the destination app, and pasting.
     /// It's off in UI-test compositions and, unless a test opts in, in the unit-test host.
@@ -457,8 +462,23 @@ final class DictationService {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == destination.processIdentifier else {
             throw DictationInsertionError.destinationNotFocused
         }
+        try pasteTranscript(text)
+    }
+
+    /// `insert`'s paste, once the original app is in front again: writes the transcript, kept out of
+    /// Clipboard History, and presses ⌘V. With Put the clipboard back on, what was on the clipboard
+    /// comes back once the app has read the paste, unless something else was copied by then
+    /// (`ClipboardRestorer`); a paste that fails after writing puts it back too. Only `insert` calls
+    /// it, after its checks; tests call it directly, with a paste step that never posts ⌘V.
+    func pasteTranscript(_ text: String) throws {
+        let paster = paster
+        let paste = { try paster.paste(text, concealed: false) }
         do {
-            try paster.paste(text, concealed: false)
+            if restoresClipboard(), let clipboardRestorer {
+                try clipboardRestorer.restoreAfter(paste)
+            } else {
+                try paste()
+            }
         } catch TextPasteError.accessibilityRequired {
             throw DictationInsertionError.accessibilityRequired
         } catch {

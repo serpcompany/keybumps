@@ -89,7 +89,7 @@ The website a Clipboard History item was copied from, kept as its domain name on
 _Avoid_: Source URL, page address (the full address is never kept)
 
 **Dictation**:
-A session that records speech, transcribes it locally, and inserts the text at the original cursor.
+A session that records speech, transcribes it locally, and inserts the text at the original cursor. It inserts through the clipboard, kept out of Clipboard History, then puts the clipboard back unless something else was copied meanwhile; turning off Put the clipboard back after inserting, in Settings › Dictation, leaves the transcript there. The Dictation tab's ⌘P leaves the transcript on the clipboard either way.
 _Avoid_: Voice guide, assistant
 
 **Dictation History**:

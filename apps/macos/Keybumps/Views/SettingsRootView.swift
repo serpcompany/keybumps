@@ -568,6 +568,7 @@ struct DictationSettingsView: View {
                     )
                 }
             }
+            PluginPreferenceGroups(capability: .dictation)
         }.navigationTitle("Dictation")
     }
 }

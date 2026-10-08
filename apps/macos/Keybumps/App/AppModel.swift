@@ -299,6 +299,9 @@ final class AppModel {
             restorer: commandPalette.clipboardRestorer
         )
         self.keywordExpansion = keywordExpansion
+        // Dictation's insert shares it too, while its Put the clipboard back setting is on.
+        dictation.clipboardRestorer = commandPalette.clipboardRestorer
+        dictation.restoresClipboard = { preferences.bool(.dictationRestoresClipboard, for: .dictation) }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
         let screenshotModule = ScreenshotToolsModule(

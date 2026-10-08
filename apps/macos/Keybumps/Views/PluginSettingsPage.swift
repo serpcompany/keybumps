@@ -19,11 +19,7 @@ struct PluginSettingsPage<Custom: View>: View {
         SettingsPage {
             CapabilityControl(capability: capability, shortcuts: descriptor.shortcuts, byline: Self.byline(descriptor))
             PluginPermissionsGroup(capability: capability)
-            ForEach(descriptor.preferenceGroups, id: \.title) { group in
-                SettingsGroup(group.title) {
-                    ForEach(group.preferences) { PluginPreferenceRow(capability: capability, preference: $0) }
-                }
-            }
+            PluginPreferenceGroups(capability: capability)
             custom
         }
     }
@@ -65,6 +61,20 @@ struct PluginPermissionsGroup: View {
                 }
             }
             .task { await model.monitorSystemPermissionChanges() }
+        }
+    }
+}
+
+/// A plugin's declared preferences, a `SettingsGroup` for each of their groups. A page drawn by hand,
+/// as Dictation's is, lists them here too, so they move to the template unchanged.
+struct PluginPreferenceGroups: View {
+    let capability: Capability
+
+    var body: some View {
+        ForEach(capability.descriptor.preferenceGroups, id: \.title) { group in
+            SettingsGroup(group.title) {
+                ForEach(group.preferences) { PluginPreferenceRow(capability: capability, preference: $0) }
+            }
         }
     }
 }

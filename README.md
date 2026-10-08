@@ -12,7 +12,7 @@ On macOS 15 or newer, each expanded history card can open Keybumps's on-device t
 
 Keybumps sends crash and freeze reports to its developers through Sentry, never with user content, and Settings › General turns them off. Report a Problem… (Help menu, menu bar menu, Settings › General) sends a description the person writes, with the Mac's details ([ADR 0007](docs/adr/0007-crash-reports-to-sentry.md)).
 
-Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. Keybumps transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session.
+Dictation records for up to five minutes by default. Dictation settings provide 10, 15, 30, and 60-minute limits plus No Limit. Keybumps transcribes the completed local WAV so pauses or early live results do not truncate the remainder of the session. After inserting, Dictation puts back what was on the clipboard unless something else was copied meanwhile; Settings › Dictation turns that off.
 
 ## Brand assets
 
