@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Deploy only the newest website (SERP ci-workflows standard: deploy only the branch tip). Writes
 # deploy=false to $GITHUB_OUTPUT, with a notice, when main has website changes newer than this
-# run's commit: each of those pushes starts its own web-deploy run, which deploys them, so a re-run
+# run's commit: each of those pushes starts its own web-deploy run, which deploys main, so a re-run
 # of an older run never deploys over newer code. Writes deploy=true when main is this commit, or
 # moved on only with changes outside the website (such as a Mac merge), which start no deploy and
-# leave the site this commit built. A release starts one only after it publishes (release-please.yml). Fails the step, so nothing deploys, when main can't be
-# read, this commit isn't on main, or main is too far ahead to list its changes.
+# leave the site this commit built. (A published release starts a run on main from
+# release-please.yml.) Fails the step, so nothing deploys, when main can't be read, this commit
+# isn't on main, or main is too far ahead to list its changes.
 set -euo pipefail
 
 # What a web-deploy run builds from; keep in step with web-deploy.yml's paths.

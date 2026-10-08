@@ -7,9 +7,9 @@ name: Web deploy
 # deploy path (apps/web/docs/agents/web.md, Deploys). The merge authorizes its production deploy:
 # the owner's, or an agent's under the root AGENTS.md's listed paths.
 #
-# It also runs when a release's notes change (docs/releases/v*.md), and release-please.yml calls it
-# after a release publishes to production, so /changelog/ lists the new version. Not when the
-# release PR merges: that's before its build is published (#427).
+# It also runs when a release's notes change (docs/releases/v*.md), and release-please.yml starts it
+# (a manual-style run on main) after a release publishes to production, so /changelog/ lists the new
+# version. Not when the release PR merges: that's before its build is published (#427).
 #
 # Smoke tests use each Worker's workers.dev URL from the deploy log, with the smoke-test header,
 # because the zone's bot protection blocks CI runners on the branded domains.
@@ -24,7 +24,6 @@ on:
       - apps/web/**
       - docs/releases/v*.md
       - .github/workflows/web-deploy.yml
-  workflow_call:
   workflow_dispatch:
 
 permissions:
