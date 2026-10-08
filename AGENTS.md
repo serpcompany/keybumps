@@ -6,7 +6,8 @@ Agents may merge: listed paths
 Set by the owner on 2026-10-08 (#399), under the SERP [verification cadence](https://github.com/serpcompany/serp/blob/main/docs/engineering/standards/verification-cadence.md#merging-and-deploys) standard: the Mac app has public releases and the site takes payments.
 
 - Every PR waits for the owner's approval ("accept" or "merge" in chat counts), except a website PR whose every changed file is on the list below, counting deleted files and both names of a renamed one.
-- An agent merges such a PR one at a time, up to date with `main`, once CI is green and the review loop has ended with a round that had no blocking findings.
+- An agent merges such a PR one at a time, up to date with `main`, once CI is green and the review loop has ended with a round that had no blocking findings. It may arm auto-merge instead, under the SERP standard's "Agent-armed auto-merge" conditions: `main` requires `Unit tests (KeybumpsTests)`, `UI tests (with retries)`, and `Website check (pnpm check)`, and up-to-date branches.
+- Agents merge with `gh pr merge --squash`, never `--admin`. Release PRs, which release-please opens without CI, are the owner's to merge with the admin bypass.
 - Before its next merge, the agent confirms the latest `web-deploy.yml` run that includes the commit passed staging, production, and their smoke tests. If it failed, fixing it is the next task; a rollback needs the owner.
 - A listed-path PR still waits for the owner if it adds a redirect; removes, renames, or moves a page; or changes where a download, buy, license, or legal link points.
 
