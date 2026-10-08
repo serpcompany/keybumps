@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # What a web-deploy run builds from; keep in step with web-deploy.yml's paths.
-site='^(apps/web/|\.github/workflows/web-deploy\.yml$)'
+site='^(apps/web/|docs/releases/|\.github/workflows/web-deploy\.yml$)'
 
 compare="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_SHA}...main" \
   --jq '.status, (.files | length), (.files[] | .filename, (.previous_filename // empty))')"
