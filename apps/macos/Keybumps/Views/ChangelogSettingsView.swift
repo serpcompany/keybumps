@@ -13,6 +13,7 @@ struct ChangelogSettingsView: View {
         .flatMap(ReleaseVersion.init)?.description
 
     var body: some View {
+        let layout = Changelog.settingsLayout(total: Self.entries.count)
         SettingsPage {
             SettingsGroup("Updates") {
                 LabeledContent {
@@ -43,7 +44,7 @@ struct ChangelogSettingsView: View {
                     SettingsNote("This build doesn't include release notes.")
                 }
             }
-            ForEach(Self.entries.prefix(Changelog.shownInSettings)) { entry in
+            ForEach(Self.entries.prefix(layout.shown)) { entry in
                 SettingsGroup(entry.version, subtitle: entry.version == Self.installedVersion ? "Installed" : nil) {
                     // The group's title names the version, so the notes' own title is left out.
                     ReleaseNotesBlocksView(blocks: entry.notes.blocks.filter {
@@ -53,7 +54,7 @@ struct ChangelogSettingsView: View {
                 }
                 .accessibilityIdentifier("settings.changelog.\(entry.version)")
             }
-            if Self.entries.count > Changelog.shownInSettings {
+            if layout.more > 0 {
                 SettingsGroup {
                     LabeledContent {
                         Button { openURL(Changelog.website) } label: {
@@ -65,7 +66,7 @@ struct ChangelogSettingsView: View {
                     } label: {
                         SettingsRowLabel(
                             title: "Older releases",
-                            subtitle: "\(Self.entries.count - Changelog.shownInSettings) more on keybumps.app, with every release's notes"
+                            subtitle: "\(layout.more) more on keybumps.app, with every release's notes"
                         )
                     }
                 }

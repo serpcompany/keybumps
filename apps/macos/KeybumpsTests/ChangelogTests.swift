@@ -49,6 +49,10 @@ struct ChangelogTests {
         #expect(Changelog.shownInSettings == 10)
         #expect(Changelog.website.absoluteString == "https://keybumps.app/changelog/")
         #expect(Changelog.entries(in: .main, isDebugBuild: true).count > Changelog.shownInSettings, "So the View all releases row shows")
+        #expect(Changelog.settingsLayout(total: 3) == (3, 0), "No Older releases row")
+        #expect(Changelog.settingsLayout(total: 10) == (10, 0), "No Older releases row")
+        #expect(Changelog.settingsLayout(total: 11) == (10, 1), "1 more")
+        #expect(Changelog.settingsLayout(total: 0) == (0, 0))
     }
 
     @Test("The app carries every release's notes, so the page works offline")

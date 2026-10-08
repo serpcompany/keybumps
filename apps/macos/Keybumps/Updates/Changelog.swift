@@ -11,6 +11,12 @@ enum Changelog {
     /// The website's changelog, which lists every published release.
     static let website = URL(string: "https://keybumps.app/changelog/")!
 
+    /// How many of `total` releases Settings › Changelog shows, and how many more the website has.
+    static func settingsLayout(total: Int) -> (shown: Int, more: Int) {
+        let shown = min(total, shownInSettings)
+        return (shown, total - shown)
+    }
+
     struct Entry: Equatable, Identifiable {
         let version: String
         let notes: ReleaseNotesDocument
