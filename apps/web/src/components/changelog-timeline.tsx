@@ -3,7 +3,7 @@
 import { CalendarDays, Check, ChevronDown, Link2, Search, X } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { PluginIcon } from '@/components/plugin-icon'
-import { type NoteBlock, type Release, searchReleases } from '@/lib/changelog'
+import { type NoteBlock, plainText, type Release, searchReleases } from '@/lib/changelog'
 import { absoluteUrl } from '@/lib/site'
 
 /** Inline Markdown in the notes: **bold**, `code`, and [links](…). */
@@ -95,7 +95,7 @@ function sectionText(section: Release['sections'][number]): string {
       : block.kind === 'list'
         ? block.items.join(' ')
         : block.blocks.map(text).join(' ')
-  return `${section.heading} ${section.blocks.map(text).join(' ')}`.toLowerCase()
+  return plainText(`${section.heading} ${section.blocks.map(text).join(' ')}`).toLowerCase()
 }
 
 /**

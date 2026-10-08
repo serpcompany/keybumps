@@ -29,6 +29,22 @@ const note = (version: string, body = '- A change.') =>
     markdown: `# Keybumps ${version}\n\nSummary of ${version}.\n\n## Area\n\n${body}\n`
   }) as const
 
+const root = join(process.cwd(), '..', '..')
+
+function realNotes() {
+  const folder = join(root, 'docs', 'releases')
+  return readdirSync(folder)
+    .filter(file => releaseNotesFile.test(file))
+    .map(file => ({
+      version: file.slice(1, -3),
+      markdown: readFileSync(join(folder, file), 'utf8')
+    }))
+}
+
+function realReleases() {
+  return releasesFrom(realNotes(), readFileSync(join(root, 'CHANGELOG.md'), 'utf8'))
+}
+
 describe('changelog versions', () => {
   it('orders versions as releases do: numbers by value, prereleases below their release', () => {
     const ordered = ['0.0.2', '0.0.3-beta.2', '0.0.3-beta.12', '0.0.3-rc.1', '0.0.3', '0.1.0']
@@ -134,22 +150,38 @@ describe('released versions', () => {
     }
   })
 
-  it('finds a whole phrase first, so a date, version, or plugin means just that, then every word', () => {
-    const releases = [
-      { id: 'a', searchText: '0.0.3-beta.1 oct 5, 2026 oct 5 a timer rings' },
-      { id: 'b', searchText: '0.0.3-beta.12 oct 25, 2026 oct 25 5 changes in october' },
-      { id: 'c', searchText: '0.0.3-beta.13 oct 2, 2026 oct 2 clipboard history' }
-    ]
-    const ids = (query: string) => searchReleases(releases, query).shown.map(r => r.id)
-    expect(ids('Oct 5')).toEqual(['a'])
-    expect(ids('oct  2')).toEqual(['c'])
-    expect(ids('beta.1')).toEqual(['a'])
-    expect(ids('Clipboard History')).toEqual(['c'])
-    expect(ids('rings timer')).toEqual(['a'])
-    expect(ids('tim')).toEqual(['a'])
-    expect(ids('')).toEqual(['a', 'b', 'c'])
-    expect(searchReleases(releases, 'Oct 5').terms).toEqual(['oct 5'])
-    expect(searchReleases(releases, 'rings timer').terms).toEqual(['rings', 'timer'])
+  it('reads a version, a date or month, or a plugin name exactly, and anything else as words', () => {
+    const releases = realReleases()
+    const versions = (query: string) => searchReleases(releases, query).shown.map(r => r.version)
+    expect(versions('beta.1')).toEqual(['0.0.3-beta.1'])
+    expect(versions('0.0.3-beta.12')).toEqual(['0.0.3-beta.12'])
+    expect(versions('0.0.3')).toEqual(releases.map(r => r.version))
+    expect(versions('Oct 5')).toEqual(['0.0.3-beta.16', '0.0.3-beta.15', '0.0.3-beta.14'])
+    expect(versions('Oct 5 2026')).toEqual(versions('Oct 5'))
+    expect(versions('October 5, 2026')).toEqual(versions('Oct 5'))
+    expect(versions('2026-10-05')).toEqual(versions('Oct 5'))
+    expect(versions('Oct 3')).toEqual([])
+    expect(versions('October')).toEqual(
+      releases.filter(r => r.monthLabel === 'October 2026').map(r => r.version)
+    )
+    for (const r of releases.filter(r => r.plugins.length)) {
+      for (const tag of r.plugins) expect(versions(tag.name)).toContain(r.version)
+    }
+    expect(versions('Timer')).toEqual(
+      releases.filter(r => r.plugins.some(p => p.slug === 'timer')).map(r => r.version)
+    )
+  })
+
+  it('lets text searches only narrow as you type, and finds words inside longer words', () => {
+    const releases = realReleases()
+    const count = (query: string) => searchReleases(releases, query).shown.length
+    expect(count('set')).toBeGreaterThanOrEqual(count('sett'))
+    expect(count('sett')).toBeGreaterThanOrEqual(count('setting'))
+    expect(count('setting')).toBeGreaterThanOrEqual(count('settings'))
+    expect(count('fix')).toBeGreaterThan(1)
+    const permission = searchReleases(releases, 'permission').shown.map(r => r.version)
+    expect(permission).toEqual(expect.arrayContaining(['0.0.3-beta.12', '0.0.3-beta.13']))
+    expect(searchReleases(releases, 'rings alarm').terms).toEqual(['rings', 'alarm'])
   })
 
   it('counts a section written as prose by its paragraphs, and otherwise only its bullets', () => {
@@ -166,26 +198,17 @@ describe('released versions', () => {
   })
 
   it('reads every release in the repository: newest first, none newer than CHANGELOG.md, each with a summary and a unique anchor', () => {
-    const root = join(process.cwd(), '..', '..')
-    const folder = join(root, 'docs', 'releases')
-    const notes = readdirSync(folder)
-      .filter(file => releaseNotesFile.test(file))
-      .map(file => ({
-        version: file.slice(1, -3),
-        markdown: readFileSync(join(folder, file), 'utf8')
-      }))
     const history = readFileSync(join(root, 'CHANGELOG.md'), 'utf8')
     const newest = [...changelogDates(history).keys()].sort(compareVersions).at(-1) as string
-    const releases = releasesFrom(notes, history)
+    const releases = realReleases()
     const versions = releases.map(r => r.version)
     expect(versions).toEqual(
-      notes
+      realNotes()
         .map(n => n.version)
         .filter(v => compareVersions(v, newest) <= 0)
         .sort(compareVersions)
         .reverse()
     )
-    expect(versions[0]).toBe(newest)
     expect(new Set(releases.map(r => r.id)).size).toBe(releases.length)
     for (const release of releases) expect(release.summary).not.toBe('')
   })

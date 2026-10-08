@@ -17,7 +17,7 @@ export type NoteBlock =
 export type ReleaseSection = {
   heading: string
   blocks: NoteBlock[]
-  /** How many changes it lists: its bullets and paragraphs. */
+  /** How many changes it lists: its bullets, or its paragraphs when it has none. */
   changes: number
   /** Fixes, new things, or anything else, for the tag beside its heading. */
   kind: 'fix' | 'new' | 'area'
@@ -47,7 +47,7 @@ export type Release = {
   sections: ReleaseSection[]
   /** The plugins its notes name, in src/lib/plugins.ts order. */
   plugins: ReleasePlugin[]
-  /** Everything the page's search matches, in lowercase: version, dates, and the notes as text. */
+  /** What the page's text search matches, in lowercase: version, dates, the notes as plain text, and its plugin tags' names. */
   searchText: string
 }
 
@@ -299,24 +299,81 @@ export function releasesFrom(
 /** A docs/releases file name: v<version>.md. scripts/changelog-sources.mjs uses the same pattern. */
 export const releaseNotesFile = /^v\d+\.\d+\.\d+.*\.md$/
 
+const MONTH_WORDS = new Map<string, number>(
+  MONTHS.flatMap((name, index) => [
+    [name.toLowerCase(), index + 1],
+    [name.slice(0, 3).toLowerCase(), index + 1]
+  ])
+).set('sept', 9)
+
+/** A date the query names: 2026-10-05, Oct 5, Oct 5 2026, October 5, 2026, October 2026, or Oct. */
+function dateQuery(query: string): { year?: number; month: number; day?: number } | null {
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(query)
+  if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) }
+  const named = /^([a-z]+)\.?(?:\s+(\d{1,2}))?(?:,?\s+(\d{4}))?$/.exec(query)
+  const month = named && MONTH_WORDS.get(named[1])
+  if (!named || !month) return null
+  return {
+    month,
+    day: named[2] ? Number(named[2]) : undefined,
+    year: named[3] ? Number(named[3]) : undefined
+  }
+}
+
+type Searchable = Pick<Release, 'version' | 'date' | 'dateLabel' | 'searchText' | 'plugins'>
+
 /**
- * What a search shows. A query found as a whole phrase (so `Oct 5`, `beta.1`, or `Clipboard History`
- * means that date, version, or plugin) shows only the releases with that phrase; otherwise every
- * word must appear somewhere in a release, so a partly typed word still finds it. `terms` are what
- * to highlight.
+ * What a search shows, and the words to highlight. A query that names a version (beta.19, 0.0.3),
+ * a date or month (Oct 5, 2026-10-05, October), or a plugin by its name (Timer, what a plugin tag
+ * searches) shows exactly those releases. Anything else is text: every word must appear somewhere
+ * in a release, as typed or inside a longer word, so results only narrow as you type.
  */
-export function searchReleases<T extends Pick<Release, 'searchText'>>(
+export function searchReleases<T extends Searchable>(
   releases: readonly T[],
   query: string
 ): { shown: T[]; terms: string[] } {
-  const phrase = query.trim().toLowerCase().replace(/\s+/g, ' ')
-  if (!phrase) return { shown: [...releases], terms: [] }
-  const whole = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(phrase)}(?:$|[^a-z0-9])`)
-  const byPhrase = releases.filter(release => whole.test(release.searchText))
-  if (byPhrase.length) return { shown: byPhrase, terms: [phrase] }
-  const words = phrase.split(' ')
+  const q = query.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!q) return { shown: [...releases], terms: [] }
+
+  if (/^v?\d+\.\d+\.\d+$/.test(q)) {
+    const core = q.replace(/^v/, '')
+    return {
+      shown: releases.filter(r => r.version === core || r.version.startsWith(`${core}-`)),
+      terms: [core]
+    }
+  }
+  if (/^v?\d+\.\d+\.\d+-[0-9a-z.]+$/.test(q) || /^(?:alpha|beta|rc)\.\d+$/.test(q)) {
+    const version = q.replace(/^v/, '')
+    return {
+      shown: releases.filter(r => r.version === version || r.version.endsWith(`-${version}`)),
+      terms: [version]
+    }
+  }
+  const date = dateQuery(q)
+  if (date) {
+    const shown = releases.filter(r => {
+      if (!r.date) return false
+      const [year, month, day] = r.date.split('-').map(Number)
+      return (
+        month === date.month &&
+        (date.day === undefined || day === date.day) &&
+        (date.year === undefined || year === date.year)
+      )
+    })
+    const terms =
+      date.day === undefined ? [] : [...new Set(shown.map(r => r.dateLabel.toLowerCase()))]
+    return { shown, terms }
+  }
+  const plugin = plugins.find(candidate => candidate.name.toLowerCase() === q)
+  if (plugin) {
+    return {
+      shown: releases.filter(r => r.plugins.some(tag => tag.slug === plugin.slug)),
+      terms: [q]
+    }
+  }
+  const words = q.split(' ')
   return {
-    shown: releases.filter(release => words.every(word => release.searchText.includes(word))),
+    shown: releases.filter(r => words.every(word => r.searchText.includes(word))),
     terms: words
   }
 }
