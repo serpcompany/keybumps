@@ -9,6 +9,8 @@ on:
     paths:
       - apps/web/**
       - .github/workflows/web.yml
+      # src/lib/deploy-workflow.test.ts reads it.
+      - .github/workflows/web-deploy.yml
   workflow_dispatch:
 
 permissions:

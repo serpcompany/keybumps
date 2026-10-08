@@ -2,10 +2,10 @@ name: Web deploy
 
 # Deploys the keybumps.app website in apps/web after merge: `pnpm check:code` (lint, typecheck,
 # tests), then staging and its smoke test, then production and its smoke test. Each deploy job's
-# build is the build check, so the check job doesn't build (SERP ci-workflows standard), and each
-# deploys only if main's tip is still this commit. This is the only deploy path (apps/web/docs/
-# agents/web.md, Deploys). The merge authorizes its production deploy: the owner's, or an agent's under the
-# root AGENTS.md's listed paths.
+# build is the build check, so the check job doesn't build (SERP ci-workflows standard). Each
+# deploys only if main has no newer website changes (scripts/deploy-tip.sh). This is the only
+# deploy path (apps/web/docs/agents/web.md, Deploys). The merge authorizes its production deploy:
+# the owner's, or an agent's under the root AGENTS.md's listed paths.
 #
 # Smoke tests use each Worker's workers.dev URL from the deploy log, with the smoke-test header,
 # because the zone's bot protection blocks CI runners on the branded domains.
@@ -106,7 +106,8 @@ jobs:
           NEXT_PUBLIC_GTM_ID: GTM-STAGING0
         run: pnpm build:staging
 
-      # Deploy only main's tip: a re-run of an older run must not deploy over newer code.
+      # Deploy only the newest website: skip when main has newer website changes, whose own run
+      # deploys them, so a re-run of an older run never deploys over newer code.
       - name: Check main's tip
         id: tip
         env:

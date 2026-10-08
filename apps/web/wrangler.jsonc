@@ -5,7 +5,7 @@
  * which only CI deploys (.github/workflows/web-deploy.yml). Bindings, `vars`, `routes`, and
  * `services` are not inherited, so each environment repeats them. See docs/agents/web.md.
  *
- * SITE_ENV is set twice for each deployed environment: at build time by the `deploy:*` script,
+ * SITE_ENV is set twice for each deployed environment: at build time by the `build:*` script,
  * and at runtime by the environment's `vars`. OpenNext renders robots.txt and pages on the Worker,
  * so without the runtime var, production would serve `Disallow: /` and no analytics.
  */
