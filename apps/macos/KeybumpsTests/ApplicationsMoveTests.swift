@@ -82,54 +82,120 @@ struct ApplicationsMoveTests {
         let folder = try ApplicationsMoveFolder()
         let source = try folder.makeApp("Source/Keybumps.app", build: "2", quarantined: true)
         let destination = folder.url.appendingPathComponent("Applications/Keybumps.app")
-        var trashed: [URL] = []
-        try ApplicationsInstaller(trash: { trashed.append($0) }).install(source, at: destination)
+        let installer = ApplicationsInstaller(trash: { _ in Issue.record("Nothing to trash") })
+        try installer.swap(try installer.stage(source, for: destination), into: destination)
 
         #expect(ApplicationsMove.buildNumber(of: destination) == "2")
         #expect(!folder.hasQuarantine(destination.appendingPathComponent("Contents/Info.plist")))
         #expect(FileManager.default.fileExists(atPath: source.path), "The source is the caller's to trash")
-        #expect(trashed.isEmpty)
     }
 
-    @Test("Replacing swaps the new copy in and sends the old one to the Trash")
+    @Test("Staging leaves the installed copy alone until the swap, which sends the old one to the Trash")
     func replacesOlder() throws {
         let folder = try ApplicationsMoveFolder()
         let source = try folder.makeApp("Source/Keybumps.app", build: "2")
         let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
         var trashed: [String] = []
-        try ApplicationsInstaller(trash: { url in
+        let installer = ApplicationsInstaller(trash: { url in
             trashed.append(ApplicationsMove.buildNumber(of: url))
             try FileManager.default.removeItem(at: url)
-        }).install(source, at: destination)
+        })
+        let staged = try installer.stage(source, for: destination)
+        #expect(ApplicationsMove.buildNumber(of: destination) == "1")
+        try installer.swap(staged, into: destination)
 
         #expect(ApplicationsMove.buildNumber(of: destination) == "2")
         #expect(trashed == ["1"])
         #expect(try FileManager.default.contentsOfDirectory(atPath: destination.deletingLastPathComponent().path) == ["Keybumps.app"])
+        #expect(!FileManager.default.fileExists(atPath: staged.deletingLastPathComponent().path))
     }
 
-    @Test("A failed copy leaves the installed one untouched")
+    @Test("A failed copy stages nothing and leaves the installed one untouched")
     func failedCopyKeepsInstalled() throws {
         let folder = try ApplicationsMoveFolder()
         let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
         let missing = folder.url.appendingPathComponent("Source/Keybumps.app")
         #expect(throws: (any Error).self) {
-            try ApplicationsInstaller(trash: { _ in Issue.record("Nothing to trash") }).install(missing, at: destination)
+            _ = try ApplicationsInstaller(trash: { _ in Issue.record("Nothing to trash") }).stage(missing, for: destination)
         }
         #expect(ApplicationsMove.buildNumber(of: destination) == "1")
     }
 
-    @Test("When the Trash refuses the old copy, it's kept rather than deleted")
+    @Test("When the Trash refuses the old copy, it's kept beside the new one rather than deleted")
     func keepsOldCopyWhenTrashFails() throws {
         let folder = try ApplicationsMoveFolder()
         let source = try folder.makeApp("Source/Keybumps.app", build: "2")
         let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
-        var refused: URL?
-        try ApplicationsInstaller(trash: { refused = $0; throw CocoaError(.fileWriteNoPermission) }).install(source, at: destination)
+        let installer = ApplicationsInstaller(trash: { _ in throw CocoaError(.fileWriteNoPermission) })
+        try installer.swap(try installer.stage(source, for: destination), into: destination)
 
         #expect(ApplicationsMove.buildNumber(of: destination) == "2")
-        let kept = try #require(refused)
-        #expect(ApplicationsMove.buildNumber(of: kept) == "1")
-        try? FileManager.default.removeItem(at: kept.deletingLastPathComponent())
+        #expect(ApplicationsMove.buildNumber(of: destination.deletingLastPathComponent().appendingPathComponent("Keybumps (previous).app")) == "1")
+    }
+
+    @Test("The default Trash is inert under the unit-test host")
+    func defaultTrashIsInert() throws {
+        let folder = try ApplicationsMoveFolder()
+        let app = try folder.makeApp("Keybumps.app", build: "1")
+        #expect(throws: (any Error).self) { try ApplicationsInstaller().trash(app) }
+        #expect(FileManager.default.fileExists(atPath: app.path))
+    }
+
+    @Test("Sparkle's installer counts as running only with its own pid line")
+    func sparkleInstallerProcess() {
+        #expect(SparkleInstaller.jobLabel == "com.serp.keybumps-sparkle-updater")
+        #expect(SparkleInstaller.hasProcess(launchctlPrint: "gui/501/com.serp.keybumps-sparkle-updater = {\n\tstate = running\n\tpid = 4242\n}"))
+        #expect(!SparkleInstaller.hasProcess(launchctlPrint: "gui/501/com.serp.keybumps-sparkle-updater = {\n\tstate = not running\n\tendpoints = {\n\t\tpid = 1\n\t}\n}"))
+        #expect(!SparkleInstaller.hasProcess(launchctlPrint: ""))
+    }
+
+    @Test("Install: stage, quit the old copy, wait for Sparkle, swap, start the helper, then trash")
+    func installSteps() {
+        let log = StepLog()
+        let steps = recordingSteps(log, installed: "4027")
+        let plan = makePlan(installedBuild: "4027", diskImage: diskImage, trashesSource: false)
+        #expect(steps.perform(plan, ownBuild: "4028", trashesDiskImage: true) == .relaunching)
+        #expect(log.entries == ["stage", "quit", "wait", "build", "swap", "helper /Volumes/Keybumps", "trash Keybumps-1.0.dmg"])
+    }
+
+    @Test("If Sparkle installed the same build or newer meanwhile, it opens that copy instead of swapping")
+    func sparkleInstalledMeanwhile() {
+        let log = StepLog()
+        let steps = recordingSteps(log, installed: "4028")
+        #expect(steps.perform(makePlan(installedBuild: "4027", trashesSource: true), ownBuild: "4028", trashesDiskImage: false) == .relaunching)
+        #expect(log.entries == ["stage", "quit", "wait", "build", "discard", "helper -", "trash Keybumps.app"])
+    }
+
+    @Test("A copy that won't quit stops before anything is swapped or trashed")
+    func stillOpen() {
+        let log = StepLog()
+        let steps = recordingSteps(log, installed: "4027", quitFails: true)
+        #expect(steps.perform(makePlan(installedBuild: "4027", diskImage: diskImage), ownBuild: "4028", trashesDiskImage: true) == .installedCopyStillOpen)
+        #expect(log.entries == ["stage", "quit", "discard"])
+    }
+
+    @Test("A failed copy stops before the old copy is asked to quit")
+    func stageFailsFirst() {
+        let log = StepLog()
+        let steps = recordingSteps(log, installed: "4027", stageFails: true)
+        #expect(steps.perform(makePlan(installedBuild: "4027"), ownBuild: "4028", trashesDiskImage: true) == .failed)
+        #expect(log.entries == ["stage"])
+    }
+
+    @Test("If the helper can't start, nothing goes to the Trash")
+    func helperFailsKeepsEverything() {
+        let log = StepLog()
+        let steps = recordingSteps(log, installed: nil, helperFails: true)
+        #expect(steps.perform(makePlan(installedBuild: nil, diskImage: diskImage, trashesSource: true), ownBuild: "4028", trashesDiskImage: true) == .helperFailed)
+        #expect(!log.entries.contains { $0.hasPrefix("trash") })
+    }
+
+    @Test("Opening the installed copy skips installing, but still ejects and trashes the disk image")
+    func openInstalledSteps() {
+        let log = StepLog()
+        let steps = recordingSteps(log, installed: "4029")
+        #expect(steps.perform(makePlan(installedBuild: "4029", diskImage: diskImage, trashesSource: true), ownBuild: "4028", trashesDiskImage: true) == .relaunching)
+        #expect(log.entries == ["helper /Volumes/Keybumps", "trash Keybumps-1.0.dmg"])
     }
 
     @Test("The disk image comes from hdiutil's mount table")
@@ -171,7 +237,9 @@ struct ApplicationsMoveTests {
         destination: URL? = URL(fileURLWithPath: "/Applications/Keybumps.app"),
         ownBuild: String = "4028",
         installedBuild: String?,
-        installedIsReplaceable: Bool = true
+        installedIsReplaceable: Bool = true,
+        diskImage: DiskImage? = nil,
+        trashesSource: Bool = false
     ) -> ApplicationsMovePlan {
         ApplicationsMovePlan(
             source: source,
@@ -179,10 +247,46 @@ struct ApplicationsMoveTests {
             ownBuild: ownBuild,
             installedBuild: installedBuild,
             installedIsReplaceable: installedIsReplaceable,
-            diskImage: nil,
-            trashesSource: false
+            diskImage: diskImage,
+            trashesSource: trashesSource
         )
     }
+
+    /// Steps that only record what they were asked to do, in order.
+    private func recordingSteps(
+        _ log: StepLog,
+        installed: String?,
+        stageFails: Bool = false,
+        quitFails: Bool = false,
+        helperFails: Bool = false
+    ) -> ApplicationsMoveSteps {
+        let staged = URL(fileURLWithPath: "/tmp/staging/Keybumps.app")
+        return ApplicationsMoveSteps(
+            stage: { _, _ in
+                log.entries.append("stage")
+                if stageFails { throw CocoaError(.fileReadNoSuchFile) }
+                return staged
+            },
+            discard: { _ in log.entries.append("discard") },
+            quitInstalledCopy: { _ in
+                log.entries.append("quit")
+                if quitFails { throw ApplicationsMoveSteps.StillOpen() }
+            },
+            waitForSparkle: { log.entries.append("wait") },
+            installedBuild: { _ in log.entries.append("build"); return installed },
+            swap: { _, _ in log.entries.append("swap") },
+            startHelper: { _, mountPoint in
+                log.entries.append("helper \(mountPoint?.path ?? "-")")
+                if helperFails { throw CocoaError(.executableNotLoadable) }
+            },
+            trash: { log.entries.append("trash \($0.lastPathComponent)") }
+        )
+    }
+}
+
+/// What `ApplicationsMoveSteps` was asked to do, in order.
+private final class StepLog {
+    var entries: [String] = []
 }
 
 /// A folder under the test's temporary directory, removed when it goes out of scope.

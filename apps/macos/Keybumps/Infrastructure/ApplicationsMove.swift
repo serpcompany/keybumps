@@ -57,12 +57,16 @@ enum ApplicationsMove {
             destination: destination,
             ownBuild: buildNumber(of: running),
             installedBuild: destination.flatMap { files.fileExists(atPath: $0.path) ? buildNumber(of: $0) : nil },
-            installedIsReplaceable: destination.map { !files.fileExists(atPath: $0.path) || files.isWritableFile(atPath: $0.path) } ?? false,
+            // Renaming a bundle out needs write access to both the bundle and its folder.
+            installedIsReplaceable: destination.map {
+                !files.fileExists(atPath: $0.path)
+                    || (files.isWritableFile(atPath: $0.path) && files.isWritableFile(atPath: $0.deletingLastPathComponent().path))
+            } ?? false,
             diskImage: diskImage,
             trashesSource: diskImage == nil && source.standardizedFileURL.path.hasPrefix(downloads)
                 && files.isWritableFile(atPath: source.deletingLastPathComponent().path)
         )
-        ApplicationsMovePrompt.run(plan, home: home)
+        ApplicationsMovePrompt.run(plan, ownBuild: buildNumber(of: running))
         #endif
     }
 
@@ -135,14 +139,21 @@ struct BuildNumber: Equatable {
     }
 }
 
-/// Puts a copy of Keybumps in place without ever leaving a half-copied bundle there: it copies
-/// into a staging folder on the destination's volume, then swaps it in by renaming. A copy
-/// already there goes to the Trash.
+/// Puts a copy of Keybumps in place without ever leaving a half-copied bundle there: `stage`
+/// copies it into a staging folder on the destination's volume, and `swap` renames it into place.
+/// A copy already there goes to the Trash.
 struct ApplicationsInstaller {
     var files = FileManager.default
-    var trash: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    /// Inert under the unit-test host, so a test that forgets to inject one never reaches the
+    /// owner's Trash.
+    var trash: (URL) throws -> Void = { url in
+        guard !UnitTestHost.isActive else { throw CocoaError(.featureUnsupported) }
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
 
-    func install(_ source: URL, at destination: URL) throws {
+    /// Returns the staged copy, its quarantine cleared: the person already chose to open it, so
+    /// the installed one opens without asking again.
+    func stage(_ source: URL, for destination: URL) throws -> URL {
         try files.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         let staging = try files.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: destination, create: true)
         let staged = staging.appendingPathComponent(destination.lastPathComponent)
@@ -152,9 +163,12 @@ struct ApplicationsInstaller {
             try? files.removeItem(at: staging)
             throw error
         }
-        // The person already chose to open this copy, so the installed one opens without asking
-        // again.
         Self.removeQuarantine(under: staged)
+        return staged
+    }
+
+    func swap(_ staged: URL, into destination: URL) throws {
+        let staging = staged.deletingLastPathComponent()
         guard files.fileExists(atPath: destination.path) else {
             try files.moveItem(at: staged, to: destination)
             try? files.removeItem(at: staging)
@@ -168,10 +182,21 @@ struct ApplicationsInstaller {
             try? files.moveItem(at: previous, to: destination)
             throw error
         }
-        // If the Trash refuses it, the old copy stays in the staging folder rather than being deleted.
         if (try? trash(previous)) != nil {
             try? files.removeItem(at: staging)
+            return
         }
+        // The Trash refused it. The staging folder is temporary and macOS clears it, so keep the
+        // old copy beside the new one instead.
+        let kept = destination.deletingLastPathComponent()
+            .appendingPathComponent(destination.deletingPathExtension().lastPathComponent + " (previous).app")
+        if (try? files.moveItem(at: previous, to: kept)) != nil {
+            try? files.removeItem(at: staging)
+        }
+    }
+
+    func discard(_ staged: URL) {
+        try? files.removeItem(at: staged.deletingLastPathComponent())
     }
 
     static func removeQuarantine(under root: URL) {
@@ -181,6 +206,31 @@ struct ApplicationsInstaller {
         while let item = items?.nextObject() as? URL {
             removexattr(item.path, attribute, XATTR_NOFOLLOW)
         }
+    }
+}
+
+/// Whether Sparkle's installer for Keybumps is running: its launchd job (`SUInstallerLauncher`'s
+/// `<bundle id>-sparkle-updater`) has a process. It starts once an update is downloaded and
+/// installs when Keybumps quits, so while it runs the installed copy may still change.
+enum SparkleInstaller {
+    static let jobLabel = "\(ProductIdentity.bundleIdentifier)-sparkle-updater"
+
+    static func isRunning() -> Bool {
+        let launchctl = Process()
+        launchctl.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        launchctl.arguments = ["print", "gui/\(getuid())/\(jobLabel)"]
+        let output = Pipe()
+        launchctl.standardOutput = output
+        launchctl.standardError = FileHandle.nullDevice
+        guard (try? launchctl.run()) != nil else { return false }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        launchctl.waitUntilExit()
+        return launchctl.terminationStatus == 0 && hasProcess(launchctlPrint: String(decoding: data, as: UTF8.self))
+    }
+
+    /// The job's own `pid = …` line, one tab in; nested sections are indented further.
+    static func hasProcess(launchctlPrint output: String) -> Bool {
+        output.split(separator: "\n").contains { $0.hasPrefix("\tpid = ") }
     }
 }
 
@@ -267,13 +317,70 @@ struct ApplicationsMoveRelaunchPlan: Equatable {
     }
 }
 
-@MainActor
-enum ApplicationsMovePrompt {
-    private enum Failure: Error {
+/// What happens after the person says yes, with every side effect injected so the order is
+/// tested: the new copy is staged before anything quits, and nothing goes to the Trash until the
+/// helper that reopens Keybumps is running.
+struct ApplicationsMoveSteps {
+    enum Outcome: Equatable {
+        case relaunching
+        /// The Keybumps already open didn't quit (it may be asking about unsaved work).
         case installedCopyStillOpen
+        case failed
+        /// Keybumps is installed, but the helper that reopens it didn't start.
+        case helperFailed
     }
 
-    static func run(_ plan: ApplicationsMovePlan, home: URL) {
+    struct StillOpen: Error {}
+
+    var stage: (_ source: URL, _ destination: URL) throws -> URL
+    var discard: (_ staged: URL) -> Void
+    /// Throws `StillOpen` when a running copy doesn't quit.
+    var quitInstalledCopy: (_ destination: URL) throws -> Void
+    var waitForSparkle: () -> Void
+    var installedBuild: (_ destination: URL) -> String?
+    var swap: (_ staged: URL, _ destination: URL) throws -> Void
+    var startHelper: (_ open: URL, _ eject: URL?) throws -> Void
+    var trash: (URL) -> Void
+
+    func perform(_ plan: ApplicationsMovePlan, ownBuild: String, trashesDiskImage: Bool) -> Outcome {
+        guard let destination = plan.destination else { return .failed }
+        if case .install = plan.action {
+            guard let staged = try? stage(plan.source, destination) else { return .failed }
+            do {
+                try quitInstalledCopy(destination)
+            } catch {
+                discard(staged)
+                return .installedCopyStillOpen
+            }
+            // An older copy may have had an update waiting to install as it quit. Let it finish,
+            // and open that copy instead if it's now this build or newer.
+            waitForSparkle()
+            if let installed = installedBuild(destination), !BuildNumber(ownBuild).isNewer(than: BuildNumber(installed)) {
+                discard(staged)
+            } else {
+                do {
+                    try swap(staged, destination)
+                } catch {
+                    discard(staged)
+                    return .failed
+                }
+            }
+        }
+        do {
+            try startHelper(destination, plan.diskImage?.mountPoint)
+        } catch {
+            return .helperFailed
+        }
+        // A mounted image's file can go to the Trash; the helper ejects it after we exit.
+        if trashesDiskImage, let image = plan.diskImage?.imageFile { trash(image) }
+        if case .install = plan.action, plan.trashesSource { trash(plan.source) }
+        return .relaunching
+    }
+}
+
+@MainActor
+enum ApplicationsMovePrompt {
+    static func run(_ plan: ApplicationsMovePlan, ownBuild: String) {
         NSApplication.shared.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.icon = NSImage(named: NSImage.applicationIconName)
@@ -289,7 +396,7 @@ enum ApplicationsMovePrompt {
             alert.informativeText = "Open that copy instead. It's the one that installs updates and keeps your permissions."
             alert.addButton(withTitle: "Open Keybumps")
         case .cannotInstall:
-            show("Drag Keybumps into your Applications folder", "This Mac account can't add or replace apps in Applications. Ask an administrator to drag Keybumps there, then open it from Applications.")
+            show("Drag Keybumps into your Applications folder", "This Mac account can't add Keybumps to Applications or replace the copy there. Ask an administrator to drag Keybumps into Applications, then open it from there.")
             return
         }
         alert.addButton(withTitle: "Not Now")
@@ -298,54 +405,38 @@ enum ApplicationsMovePrompt {
             alert.suppressionButton?.title = "Move the downloaded disk image to the Trash"
             alert.suppressionButton?.state = .on
         }
-        guard alert.runModal() == .alertFirstButtonReturn, let destination = plan.destination else { return }
-        let trashesDiskImage = alert.suppressionButton?.state == .on
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        if case .install = plan.action {
-            do {
-                // An older copy that was open may have an update waiting to install as it quits;
-                // let that finish, and open it instead if it's now the same build or newer.
-                if try quitInstalledCopy(at: destination) {
-                    waitForPendingUpdate(home: home)
-                }
-                let installedBuild = FileManager.default.fileExists(atPath: destination.path)
-                    ? ApplicationsMove.buildNumber(of: destination) : nil
-                let ownBuild = ApplicationsMove.buildNumber(of: Bundle.main.bundleURL)
-                if installedBuild == nil || BuildNumber(ownBuild).isNewer(than: BuildNumber(installedBuild ?? "")) {
-                    try ApplicationsInstaller().install(plan.source, at: destination)
-                }
-            } catch Failure.installedCopyStillOpen {
-                show("Quit the open Keybumps first", "The Keybumps that's already open didn't quit. Quit it, then open this copy again.")
-                return
-            } catch {
-                show("Keybumps couldn't move itself", "Drag Keybumps into your Applications folder instead, then open it from there.")
-                return
-            }
-        }
-
-        let relaunch = ApplicationsMoveRelaunchPlan(
-            open: destination,
-            eject: plan.diskImage?.mountPoint,
-            after: ProcessInfo.processInfo.processIdentifier
+        let progress = plan.action == .openInstalled ? nil : MovingPanel()
+        let installer = ApplicationsInstaller()
+        let steps = ApplicationsMoveSteps(
+            stage: installer.stage(_:for:),
+            discard: installer.discard,
+            quitInstalledCopy: quitInstalledCopy(at:),
+            waitForSparkle: { wait(seconds: 60) { !SparkleInstaller.isRunning() } },
+            installedBuild: { FileManager.default.fileExists(atPath: $0.path) ? ApplicationsMove.buildNumber(of: $0) : nil },
+            swap: installer.swap(_:into:),
+            startHelper: { app, mountPoint in
+                let plan = ApplicationsMoveRelaunchPlan(open: app, eject: mountPoint, after: ProcessInfo.processInfo.processIdentifier)
+                let helper = Process()
+                helper.executableURL = plan.executableURL
+                helper.arguments = plan.arguments
+                try helper.run()
+            },
+            trash: { try? FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
         )
-        let helper = Process()
-        helper.executableURL = relaunch.executableURL
-        helper.arguments = relaunch.arguments
-        do {
-            try helper.run()
-        } catch {
-            // Nothing has gone to the Trash yet, so this copy can keep running.
+        let outcome = steps.perform(plan, ownBuild: ownBuild, trashesDiskImage: alert.suppressionButton?.state == .on)
+        progress?.close()
+        switch outcome {
+        case .relaunching:
+            exit(0)
+        case .installedCopyStillOpen:
+            show("Quit the open Keybumps first", "The Keybumps that's already open didn't quit. Quit it, then open this copy again.")
+        case .failed:
+            show("Keybumps couldn't move itself", "Drag Keybumps into your Applications folder instead, then open it from there.")
+        case .helperFailed:
             show("Keybumps is in your Applications folder", "Quit this copy, then open Keybumps from Applications.")
-            return
         }
-        // A mounted image's file can go to the Trash; the helper ejects it after we exit.
-        if trashesDiskImage, let image = plan.diskImage?.imageFile {
-            try? FileManager.default.trashItem(at: image, resultingItemURL: nil)
-        }
-        if case .install = plan.action, plan.trashesSource {
-            try? FileManager.default.trashItem(at: plan.source, resultingItemURL: nil)
-        }
-        exit(0)
     }
 
     private static func show(_ title: String, _ message: String) {
@@ -355,30 +446,48 @@ enum ApplicationsMovePrompt {
         alert.runModal()
     }
 
-    /// Asks a copy running from `destination` to quit. Returns whether one was running.
-    private static func quitInstalledCopy(at destination: URL) throws -> Bool {
+    /// Asks a copy running from `destination` to quit, and waits for it.
+    private static func quitInstalledCopy(at destination: URL) throws {
         let installed = NSRunningApplication.runningApplications(withBundleIdentifier: ProductIdentity.bundleIdentifier)
             .filter { $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL }
-        guard !installed.isEmpty else { return false }
+        guard !installed.isEmpty else { return }
         installed.forEach { $0.terminate() }
         // It may ask its own question first (unsaved Screenshot Editor changes, Dictation).
         wait(seconds: 30) { installed.allSatisfy(\.isTerminated) }
-        guard installed.allSatisfy(\.isTerminated) else { throw Failure.installedCopyStillOpen }
-        return true
-    }
-
-    /// Sparkle stages a downloaded update here and clears it once installed.
-    private static func waitForPendingUpdate(home: URL) {
-        let staged = home.appendingPathComponent("Library/Caches/\(ProductIdentity.bundleIdentifier)/org.sparkle-project.Sparkle/Installation")
-        let isEmpty = { ((try? FileManager.default.contentsOfDirectory(atPath: staged.path)) ?? []).isEmpty }
-        guard !isEmpty() else { return }
-        wait(seconds: 60, until: isEmpty)
+        guard installed.allSatisfy(\.isTerminated) else { throw ApplicationsMoveSteps.StillOpen() }
     }
 
     private static func wait(seconds: TimeInterval, until done: () -> Bool) {
         let deadline = Date().addingTimeInterval(seconds)
         while !done(), Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+    }
+
+    /// A small panel while Keybumps copies itself and waits for the old copy to quit.
+    @MainActor
+    private final class MovingPanel {
+        private let panel: NSPanel
+
+        init() {
+            panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 76), styleMask: [.titled], backing: .buffered, defer: false)
+            panel.title = "Keybumps"
+            let spinner = NSProgressIndicator()
+            spinner.style = .spinning
+            spinner.controlSize = .small
+            spinner.startAnimation(nil)
+            let label = NSTextField(labelWithString: "Moving Keybumps to Applications…")
+            let row = NSStackView(views: [spinner, label])
+            row.spacing = 10
+            row.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+            panel.contentView = row
+            panel.center()
+            panel.makeKeyAndOrderFront(nil)
+            panel.displayIfNeeded()
+        }
+
+        func close() {
+            panel.orderOut(nil)
         }
     }
 }
