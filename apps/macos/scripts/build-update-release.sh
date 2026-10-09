@@ -75,8 +75,9 @@ cp "$release_notes" "$output_directory/feed/Keybumps-$release_version.md"
 # The disk image opens to Keybumps, an arrow, and an Applications link (#437).
 python3 -m venv "$output_directory/dmgbuild"
 "$output_directory/dmgbuild/bin/pip" install --quiet --disable-pip-version-check --require-hashes --only-binary :all: -r "$app_root/scripts/dmg/requirements.txt"
-# Hosted macOS runners sometimes report "Resource busy" on detach, so retry it for longer.
-"$output_directory/dmgbuild/bin/dmgbuild" --detach-retries 30 -s "$app_root/scripts/dmg/dmg-settings.py" \
+# Hosted macOS runners sometimes report "Resource busy" on detach. dmgbuild's retries back off
+# by 1.5x each time, so 12 waits about 6 minutes in all (its default 5 is about 20 seconds).
+"$output_directory/dmgbuild/bin/dmgbuild" --detach-retries 12 -s "$app_root/scripts/dmg/dmg-settings.py" \
   -D app="$app_path" -D background="$app_root/scripts/dmg/background.png" \
   Keybumps "$output_directory/Keybumps-$release_version.dmg"
 typeset -a dmg_check_mode
