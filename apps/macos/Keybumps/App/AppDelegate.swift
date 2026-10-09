@@ -32,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Before anything starts, so a copy on the disk image never asks for permissions.
+        ApplicationsMove.offerIfNeeded()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.configureWindowBehavior()
         Self.clearLegacyBannersOnce(defaults: .standard)
