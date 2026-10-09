@@ -171,7 +171,7 @@ struct ApplicationsInstaller {
         let staging = staged.deletingLastPathComponent()
         guard files.fileExists(atPath: destination.path) else {
             try files.moveItem(at: staged, to: destination)
-            try? files.removeItem(at: staging)
+            removeIfEmpty(staging)
             return
         }
         let previous = staging.appendingPathComponent("Previous " + destination.lastPathComponent)
@@ -179,24 +179,38 @@ struct ApplicationsInstaller {
         do {
             try files.moveItem(at: staged, to: destination)
         } catch {
-            try? files.moveItem(at: previous, to: destination)
+            if (try? files.moveItem(at: previous, to: destination)) == nil {
+                keepBeside(previous, destination)
+            }
             throw error
         }
-        if (try? trash(previous)) != nil {
-            try? files.removeItem(at: staging)
-            return
+        if (try? trash(previous)) == nil {
+            keepBeside(previous, destination)
         }
-        // The Trash refused it. The staging folder is temporary and macOS clears it, so keep the
-        // old copy beside the new one instead.
-        let kept = destination.deletingLastPathComponent()
-            .appendingPathComponent(destination.deletingPathExtension().lastPathComponent + " (previous).app")
-        if (try? files.moveItem(at: previous, to: kept)) != nil {
-            try? files.removeItem(at: staging)
+        removeIfEmpty(staging)
+    }
+
+    /// Removes only the staged copy; the staging folder goes too once nothing else is in it.
+    func discard(_ staged: URL) {
+        try? files.removeItem(at: staged)
+        removeIfEmpty(staged.deletingLastPathComponent())
+    }
+
+    /// The staging folder is temporary and macOS clears it, so an old copy that can't go back or
+    /// to the Trash is kept beside the destination as "Keybumps (previous).app" instead.
+    private func keepBeside(_ previous: URL, _ destination: URL) {
+        let folder = destination.deletingLastPathComponent()
+        let name = destination.deletingPathExtension().lastPathComponent
+        for number in 1...20 {
+            let kept = folder.appendingPathComponent("\(name) (previous\(number == 1 ? "" : " \(number)")).app")
+            guard !files.fileExists(atPath: kept.path) else { continue }
+            if (try? files.moveItem(at: previous, to: kept)) != nil { return }
         }
     }
 
-    func discard(_ staged: URL) {
-        try? files.removeItem(at: staged.deletingLastPathComponent())
+    /// Never deletes contents: an old copy that couldn't be kept anywhere else stays put.
+    private func removeIfEmpty(_ folder: URL) {
+        rmdir(folder.path)
     }
 
     static func removeQuarantine(under root: URL) {
@@ -251,7 +265,13 @@ struct DiskImage: Equatable {
         guard (try? hdiutil.run()) != nil else { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         hdiutil.waitUntilExit()
-        return parse(hdiutilInfo: data, volume: volume)
+        return parse(hdiutilInfo: data, volume: volume).flatMap { isKeybumpsDownload($0.imageFile) ? $0 : nil }
+    }
+
+    /// Only Keybumps' own download is ejected or offered to the Trash, never another image someone
+    /// happens to run it from.
+    static func isKeybumpsDownload(_ imageFile: URL) -> Bool {
+        imageFile.pathExtension.lowercased() == "dmg" && imageFile.lastPathComponent.lowercased().hasPrefix("keybumps")
     }
 
     static func parse(hdiutilInfo data: Data, volume: URL) -> DiskImage? {
@@ -475,15 +495,20 @@ enum ApplicationsMovePrompt {
             let spinner = NSProgressIndicator()
             spinner.style = .spinning
             spinner.controlSize = .small
+            // The copy blocks the main thread, so the spinner animates on its own.
+            spinner.usesThreadedAnimation = true
             spinner.startAnimation(nil)
             let label = NSTextField(labelWithString: "Moving Keybumps to Applications…")
             let row = NSStackView(views: [spinner, label])
             row.spacing = 10
             row.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
             panel.contentView = row
+            panel.hidesOnDeactivate = false
             panel.center()
             panel.makeKeyAndOrderFront(nil)
-            panel.displayIfNeeded()
+            // Draw it now: on most paths nothing else returns to the run loop before the copy.
+            panel.display()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
 
         func close() {

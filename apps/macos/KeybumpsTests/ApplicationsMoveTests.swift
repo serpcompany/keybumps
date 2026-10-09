@@ -80,6 +80,7 @@ struct ApplicationsMoveTests {
     @Test("A fresh install copies the bundle in and clears its quarantine")
     func installsFresh() throws {
         let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
         let source = try folder.makeApp("Source/Keybumps.app", build: "2", quarantined: true)
         let destination = folder.url.appendingPathComponent("Applications/Keybumps.app")
         let installer = ApplicationsInstaller(trash: { _ in Issue.record("Nothing to trash") })
@@ -93,6 +94,7 @@ struct ApplicationsMoveTests {
     @Test("Staging leaves the installed copy alone until the swap, which sends the old one to the Trash")
     func replacesOlder() throws {
         let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
         let source = try folder.makeApp("Source/Keybumps.app", build: "2")
         let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
         var trashed: [String] = []
@@ -113,6 +115,7 @@ struct ApplicationsMoveTests {
     @Test("A failed copy stages nothing and leaves the installed one untouched")
     func failedCopyKeepsInstalled() throws {
         let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
         let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
         let missing = folder.url.appendingPathComponent("Source/Keybumps.app")
         #expect(throws: (any Error).self) {
@@ -124,6 +127,7 @@ struct ApplicationsMoveTests {
     @Test("When the Trash refuses the old copy, it's kept beside the new one rather than deleted")
     func keepsOldCopyWhenTrashFails() throws {
         let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
         let source = try folder.makeApp("Source/Keybumps.app", build: "2")
         let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
         let installer = ApplicationsInstaller(trash: { _ in throw CocoaError(.fileWriteNoPermission) })
@@ -133,9 +137,37 @@ struct ApplicationsMoveTests {
         #expect(ApplicationsMove.buildNumber(of: destination.deletingLastPathComponent().appendingPathComponent("Keybumps (previous).app")) == "1")
     }
 
+    @Test("If the new copy can't move in and the old one can't go back, the old one is kept beside it, never deleted")
+    func keepsOldCopyWhenRollbackFails() throws {
+        let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
+        let source = try folder.makeApp("Source/Keybumps.app", build: "2")
+        let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
+        _ = try folder.makeApp("Applications/Keybumps (previous).app", build: "0")
+        let files = RefusingFileManager(refusedDestination: destination)
+        let installer = ApplicationsInstaller(files: files, trash: { _ in Issue.record("Nothing to trash") })
+        let staged = try installer.stage(source, for: destination)
+        #expect(throws: (any Error).self) { try installer.swap(staged, into: destination) }
+        installer.discard(staged)
+
+        let applications = destination.deletingLastPathComponent()
+        #expect(ApplicationsMove.buildNumber(of: applications.appendingPathComponent("Keybumps (previous 2).app")) == "1")
+        #expect(ApplicationsMove.buildNumber(of: applications.appendingPathComponent("Keybumps (previous).app")) == "0")
+        #expect(!FileManager.default.fileExists(atPath: staged.deletingLastPathComponent().path))
+    }
+
+    @Test("Only Keybumps' own download counts as the disk image to eject and trash")
+    func ownDiskImageOnly() {
+        #expect(DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Downloads/Keybumps-0.0.3-beta.24.dmg")))
+        #expect(DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Downloads/Keybumps-0.0.3-beta.24 (1).dmg")))
+        #expect(!DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Work.dmg")))
+        #expect(!DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Keybumps.sparseimage")))
+    }
+
     @Test("The default Trash is inert under the unit-test host")
     func defaultTrashIsInert() throws {
         let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
         let app = try folder.makeApp("Keybumps.app", build: "1")
         #expect(throws: (any Error).self) { try ApplicationsInstaller().trash(app) }
         #expect(FileManager.default.fileExists(atPath: app.path))
@@ -215,6 +247,7 @@ struct ApplicationsMoveTests {
     @Test("An app that isn't translocated keeps its own location")
     func untranslocatedURL() throws {
         let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
         let app = try folder.makeApp("Keybumps.app", build: "1")
         #expect(AppTranslocation.originalURL(for: app) == app)
     }
@@ -284,12 +317,29 @@ struct ApplicationsMoveTests {
     }
 }
 
+/// Refuses every move onto one path, as when the destination can't be written at that moment.
+private final class RefusingFileManager: FileManager {
+    let refusedDestination: URL
+
+    init(refusedDestination: URL) {
+        self.refusedDestination = refusedDestination
+        super.init()
+    }
+
+    override func moveItem(at srcURL: URL, to dstURL: URL) throws {
+        if dstURL.standardizedFileURL.path == refusedDestination.standardizedFileURL.path {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        try super.moveItem(at: srcURL, to: dstURL)
+    }
+}
+
 /// What `ApplicationsMoveSteps` was asked to do, in order.
 private final class StepLog {
     var entries: [String] = []
 }
 
-/// A folder under the test's temporary directory, removed when it goes out of scope.
+/// A folder under the test's temporary directory; each test removes it with `defer`.
 private final class ApplicationsMoveFolder {
     let url: URL
 
@@ -298,7 +348,7 @@ private final class ApplicationsMoveFolder {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }
 
-    deinit { try? FileManager.default.removeItem(at: url) }
+    func remove() { try? FileManager.default.removeItem(at: url) }
 
     /// A minimal bundle with a `CFBundleVersion`, optionally carrying a quarantine flag.
     func makeApp(_ path: String, build: String, quarantined: Bool = false) throws -> URL {
