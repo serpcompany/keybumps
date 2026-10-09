@@ -79,6 +79,12 @@ jobs:
       - name: Check out Keybumps
         uses: actions/checkout@v7.0.1
 
+      # The disk image's layout tool, dmgbuild, needs Python 3.10+ (#437).
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+
       - name: Check required secrets
         env:
           DEVELOPER_ID_CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
