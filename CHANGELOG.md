@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.3-beta.25](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.24...v0.0.3-beta.25) (2026-10-09)
+
+
+### Features
+
+* Keybumps offers to move itself to Applications when opened from the disk image or Downloads ([#439](https://github.com/serpcompany/keybumps/issues/439)) ([666a043](https://github.com/serpcompany/keybumps/commit/666a043a0188ad769c1be8fa96a695775e1da176))
+* the download disk image opens to Keybumps and Applications side by side, to drag Keybumps in ([#438](https://github.com/serpcompany/keybumps/issues/438)) ([e11da55](https://github.com/serpcompany/keybumps/commit/e11da55f6dc6794d5761ef3afaa7b72582b83d0c))
+
 ## [0.0.3-beta.24](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.23...v0.0.3-beta.24) (2026-10-08)
 
 
