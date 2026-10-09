@@ -75,10 +75,13 @@ cp "$release_notes" "$output_directory/feed/Keybumps-$release_version.md"
 # The disk image opens to Keybumps, an arrow, and an Applications link (#437).
 python3 -m venv "$output_directory/dmgbuild"
 "$output_directory/dmgbuild/bin/pip" install --quiet --disable-pip-version-check --require-hashes --only-binary :all: -r "$app_root/scripts/dmg/requirements.txt"
-"$output_directory/dmgbuild/bin/dmgbuild" -s "$app_root/scripts/dmg/dmg-settings.py" \
+# Hosted macOS runners sometimes report "Resource busy" on detach, so retry it for longer.
+"$output_directory/dmgbuild/bin/dmgbuild" --detach-retries 30 -s "$app_root/scripts/dmg/dmg-settings.py" \
   -D app="$app_path" -D background="$app_root/scripts/dmg/background.png" \
   Keybumps "$output_directory/Keybumps-$release_version.dmg"
-"$app_root/scripts/check-dmg-layout.sh" "$output_directory/Keybumps-$release_version.dmg"
+typeset -a dmg_check_mode
+[[ "${KEYBUMPS_SKIP_NOTARIZATION:-}" == 1 ]] || dmg_check_mode=(--notarized)
+"$app_root/scripts/check-dmg-layout.sh" $dmg_check_mode "$output_directory/Keybumps-$release_version.dmg"
 /usr/bin/shasum -a 256 "$output_directory/Keybumps-$release_version.dmg" > "$output_directory/Keybumps-$release_version.dmg.sha256"
 
 # Production and staging feeds share immutable assets under releases/<build>/ (see docs/releases/cloudflare.md).

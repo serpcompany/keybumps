@@ -20,7 +20,8 @@ icon = os.path.join(app, "Contents", "Resources", "Keybumps.icns")
 
 # background.png has a background@2x.png beside it, which dmgbuild combines into a Retina image.
 background = defines["background"]  # noqa: F821
-window_rect = ((200, 120), (640, 400))
+# The frame includes the title bar (28pt), so the content area matches the 640x400 background.
+window_rect = ((200, 120), (640, 428))
 default_view = "icon-view"
 show_status_bar = False
 show_tab_view = False
