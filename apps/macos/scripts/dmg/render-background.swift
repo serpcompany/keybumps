@@ -14,10 +14,10 @@ guard arguments.count == 2 else {
 let output = URL(fileURLWithPath: arguments[1])
 
 // The window's content size in points, and the icon centers dmg-settings.py uses. Finder's tab
-// bar and path bar are global settings that a disk image can't turn off, and they take about 58pt
-// from the bottom, so everything that matters sits in the top 306pt.
+// bar and path bar are global settings that a disk image can't turn off, and on macOS 26 they take
+// about 70pt from the bottom, so everything that matters sits in the top 330pt and the rest is sky.
 let width: CGFloat = 640
-let height: CGFloat = 360
+let height: CGFloat = 410
 let iconY: CGFloat = 200
 let appX: CGFloat = 170
 let applicationsX: CGFloat = 470
@@ -77,17 +77,13 @@ func render(scale: CGFloat) throws {
     // Copy.
     let center = NSMutableParagraphStyle()
     center.alignment = .center
-    NSAttributedString(string: "KEYBUMPS", attributes: [
-        .font: NSFont.systemFont(ofSize: 10.5, weight: .bold), .foregroundColor: lavender,
-        .kern: 2.6, .paragraphStyle: center,
-    ]).draw(in: CGRect(x: 0, y: 24, width: width, height: 14))
     NSAttributedString(string: "Drag Keybumps into your Applications folder", attributes: [
         .font: NSFont.systemFont(ofSize: 22, weight: .semibold), .foregroundColor: powder,
         .kern: -0.4, .paragraphStyle: center,
-    ]).draw(in: CGRect(x: 0, y: 40, width: width, height: 32))
+    ]).draw(in: CGRect(x: 0, y: 30, width: width, height: 30))
     NSAttributedString(string: "The last time you’ll ever have to use your mouse", attributes: [
         .font: NSFont.systemFont(ofSize: 13), .foregroundColor: muted, .paragraphStyle: center,
-    ]).draw(in: CGRect(x: 0, y: 75, width: width, height: 18))
+    ]).draw(in: CGRect(x: 0, y: 64, width: width, height: 18))
 
     // The tray: a lit powder slab with a lavender halo and a deep drop shadow.
     let tray = CGRect(x: 44, y: 110, width: width - 88, height: 196)

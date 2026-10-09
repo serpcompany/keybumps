@@ -20,9 +20,9 @@ icon = os.path.join(app, "Contents", "Resources", "Keybumps.icns")
 
 # background.png has a background@2x.png beside it, which dmgbuild combines into a Retina image.
 background = defines["background"]  # noqa: F821
-# The frame includes the title bar (28pt), so the content area matches the 640x360 background.
-# A Finder with its tab bar or path bar on shows less, which the art leaves room for.
-window_rect = ((200, 120), (640, 388))
+# The frame includes the title bar (28pt), so the content area matches the 640x410 background.
+# A Finder with its tab bar or path bar on shows about 70pt less, which the art leaves room for.
+window_rect = ((200, 120), (640, 438))
 default_view = "icon-view"
 show_status_bar = False
 show_tab_view = False
