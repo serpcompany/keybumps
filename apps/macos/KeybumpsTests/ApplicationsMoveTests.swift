@@ -156,11 +156,32 @@ struct ApplicationsMoveTests {
         #expect(!FileManager.default.fileExists(atPath: staged.deletingLastPathComponent().path))
     }
 
+    @Test("If the old copy can't be kept anywhere, discarding the staged copy still leaves it in place")
+    func discardNeverDeletesOldCopy() throws {
+        let folder = try ApplicationsMoveFolder()
+        defer { folder.remove() }
+        let source = try folder.makeApp("Source/Keybumps.app", build: "2")
+        let destination = try folder.makeApp("Applications/Keybumps.app", build: "1")
+        let files = RefusingFileManager(refusedFolder: destination.deletingLastPathComponent())
+        let installer = ApplicationsInstaller(files: files, trash: { _ in Issue.record("Nothing to trash") })
+        let staged = try installer.stage(source, for: destination)
+        // Moving the old copy out goes into staging, which isn't refused; every move back into
+        // Applications is.
+        #expect(throws: (any Error).self) { try installer.swap(staged, into: destination) }
+        installer.discard(staged)
+
+        let staging = staged.deletingLastPathComponent()
+        #expect(ApplicationsMove.buildNumber(of: staging.appendingPathComponent("Previous Keybumps.app")) == "1")
+        #expect(!FileManager.default.fileExists(atPath: staged.path))
+        try? FileManager.default.removeItem(at: staging)
+    }
+
     @Test("Only Keybumps' own download counts as the disk image to eject and trash")
     func ownDiskImageOnly() {
         #expect(DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Downloads/Keybumps-0.0.3-beta.24.dmg")))
         #expect(DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Downloads/Keybumps-0.0.3-beta.24 (1).dmg")))
         #expect(!DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Work.dmg")))
+        #expect(!DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/KeybumpsBackups.dmg")))
         #expect(!DiskImage.isKeybumpsDownload(URL(fileURLWithPath: "/Users/example/Keybumps.sparseimage")))
     }
 
@@ -317,19 +338,24 @@ struct ApplicationsMoveTests {
     }
 }
 
-/// Refuses every move onto one path, as when the destination can't be written at that moment.
+/// Refuses every move onto one path, or into one folder, as when it can't be written at that moment.
 private final class RefusingFileManager: FileManager {
-    let refusedDestination: URL
+    private let refuses: (URL) -> Bool
 
     init(refusedDestination: URL) {
-        self.refusedDestination = refusedDestination
+        let path = refusedDestination.standardizedFileURL.path
+        refuses = { $0.standardizedFileURL.path == path }
+        super.init()
+    }
+
+    init(refusedFolder: URL) {
+        let path = refusedFolder.standardizedFileURL.path
+        refuses = { $0.deletingLastPathComponent().standardizedFileURL.path == path }
         super.init()
     }
 
     override func moveItem(at srcURL: URL, to dstURL: URL) throws {
-        if dstURL.standardizedFileURL.path == refusedDestination.standardizedFileURL.path {
-            throw CocoaError(.fileWriteNoPermission)
-        }
+        if refuses(dstURL) { throw CocoaError(.fileWriteNoPermission) }
         try super.moveItem(at: srcURL, to: dstURL)
     }
 }

@@ -271,7 +271,7 @@ struct DiskImage: Equatable {
     /// Only Keybumps' own download is ejected or offered to the Trash, never another image someone
     /// happens to run it from.
     static func isKeybumpsDownload(_ imageFile: URL) -> Bool {
-        imageFile.pathExtension.lowercased() == "dmg" && imageFile.lastPathComponent.lowercased().hasPrefix("keybumps")
+        imageFile.pathExtension.lowercased() == "dmg" && imageFile.lastPathComponent.lowercased().hasPrefix("keybumps-")
     }
 
     static func parse(hdiutilInfo data: Data, volume: URL) -> DiskImage? {
@@ -447,16 +447,19 @@ enum ApplicationsMovePrompt {
         )
         let outcome = steps.perform(plan, ownBuild: ownBuild, trashesDiskImage: alert.suppressionButton?.state == .on)
         progress?.close()
+        // Each message sends the person to another copy, so this one quits rather than going on
+        // to ask for permissions that would attach to it.
         switch outcome {
         case .relaunching:
-            exit(0)
+            break
         case .installedCopyStillOpen:
             show("Quit the open Keybumps first", "The Keybumps that's already open didn't quit. Quit it, then open this copy again.")
         case .failed:
-            show("Keybumps couldn't move itself", "Drag Keybumps into your Applications folder instead, then open it from there.")
+            show("Keybumps couldn't move itself", "Drag Keybumps into your Applications folder, then open it from there.")
         case .helperFailed:
-            show("Keybumps is in your Applications folder", "Quit this copy, then open Keybumps from Applications.")
+            show("Keybumps is in your Applications folder", "Open Keybumps from Applications.")
         }
+        exit(0)
     }
 
     private static func show(_ title: String, _ message: String) {
