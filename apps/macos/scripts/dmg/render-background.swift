@@ -12,10 +12,12 @@ guard arguments.count == 2 else {
 }
 let output = URL(fileURLWithPath: arguments[1])
 
-// The window's content size in points, and the icon centers dmg-settings.py uses.
+// The window's content size in points, and the icon centers dmg-settings.py uses. Finder's tab
+// bar and path bar are global settings that a disk image can't turn off, and they take about 58pt
+// from the bottom, so everything that matters sits in the top 300pt.
 let width: CGFloat = 640
-let height: CGFloat = 400
-let iconY: CGFloat = 190
+let height: CGFloat = 360
+let iconY: CGFloat = 200
 let appX: CGFloat = 170
 let applicationsX: CGFloat = 470
 
@@ -59,11 +61,11 @@ func render(scale: CGFloat) throws {
     let title = NSAttributedString(string: "Install Keybumps", attributes: [
         .font: NSFont.systemFont(ofSize: 22, weight: .semibold), .foregroundColor: ink, .paragraphStyle: paragraph,
     ])
-    title.draw(in: NSRect(x: 0, y: flipped(68), width: width, height: 30))
+    title.draw(in: NSRect(x: 0, y: flipped(64), width: width, height: 30))
     let instruction = NSAttributedString(string: "Drag Keybumps onto Applications.", attributes: [
         .font: NSFont.systemFont(ofSize: 15), .foregroundColor: ink.withAlphaComponent(0.7), .paragraphStyle: paragraph,
     ])
-    instruction.draw(in: NSRect(x: 0, y: flipped(352), width: width, height: 22))
+    instruction.draw(in: NSRect(x: 0, y: flipped(94), width: width, height: 22))
 
     NSGraphicsContext.restoreGraphicsState()
     let name = scale == 1 ? "background.png" : "background@\(Int(scale))x.png"
