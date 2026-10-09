@@ -15,7 +15,7 @@ let output = URL(fileURLWithPath: arguments[1])
 
 // The window's content size in points, and the icon centers dmg-settings.py uses. Finder's tab
 // bar and path bar are global settings that a disk image can't turn off, and on macOS 26 they take
-// about 70pt from the bottom, so everything that matters sits in the top 330pt and the rest is sky.
+// about 70pt from the bottom, so everything that matters sits in the top 340pt; the tray ends at 306.
 let width: CGFloat = 640
 let height: CGFloat = 410
 let iconY: CGFloat = 200

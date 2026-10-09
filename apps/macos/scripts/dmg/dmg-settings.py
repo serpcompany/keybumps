@@ -1,6 +1,6 @@
 # dmgbuild settings for the release disk image (#437): a fixed window with Keybumps on the left
 # and an Applications link on the right, over background.png. render-background.swift draws the
-# arrow between these icon positions, so keep the two in step.
+# tray, chevrons, and shadows around these icon positions, so keep the two in step.
 #
 # build-update-release.sh passes: -D app=<Keybumps.app> -D background=<background.png>
 import os.path

@@ -72,7 +72,7 @@ fi
 update_archive="$output_directory/feed/Keybumps-$release_version.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$update_archive"
 cp "$release_notes" "$output_directory/feed/Keybumps-$release_version.md"
-# The disk image opens to Keybumps, an arrow, and an Applications link (#437).
+# The disk image opens to Keybumps and an Applications link on a lit tray, to drag one onto the other (#437).
 python3 -m venv "$output_directory/dmgbuild"
 "$output_directory/dmgbuild/bin/pip" install --quiet --disable-pip-version-check --require-hashes --only-binary :all: -r "$app_root/scripts/dmg/requirements.txt"
 # Hosted macOS runners sometimes report "Resource busy" on detach. dmgbuild's retries back off
