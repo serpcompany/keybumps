@@ -27,8 +27,10 @@ repository_root=$(git -C "$app_root" rev-parse --show-toplevel) || { print -u2 "
 release_notes="$repository_root/docs/releases/v$release_version.md"
 [[ -f "$release_notes" ]] || { print -u2 "missing release notes: $release_notes"; exit 66; }
 [[ ! -e "$output_directory" ]] || { print -u2 "refusing to overwrite output directory: $output_directory"; exit 73; }
+# The disk image's layout tool (scripts/dmg/requirements.txt) needs Python 3.10+; check before the long build.
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null || { print -u2 "packaging the disk image needs python3 3.10 or later on PATH"; exit 69; }
 
-mkdir -p "$output_directory/archive" "$output_directory/export" "$output_directory/feed" "$output_directory/dmg-root" "$output_directory/publication/assets" "$output_directory/publication/publish-last"
+mkdir -p "$output_directory/archive" "$output_directory/export" "$output_directory/feed" "$output_directory/publication/assets" "$output_directory/publication/publish-last"
 cd "$app_root"
 # CI (KEYBUMPS_MANUAL_SIGNING=1) signs explicitly with the imported Developer ID certificate;
 # local builds keep Xcode automatic signing.
@@ -70,8 +72,13 @@ fi
 update_archive="$output_directory/feed/Keybumps-$release_version.zip"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$app_path" "$update_archive"
 cp "$release_notes" "$output_directory/feed/Keybumps-$release_version.md"
-cp -R "$app_path" "$output_directory/dmg-root/Keybumps.app"
-hdiutil create -volname Keybumps -srcfolder "$output_directory/dmg-root" -format ULFO "$output_directory/Keybumps-$release_version.dmg"
+# The disk image opens to Keybumps, an arrow, and an Applications link (#437).
+python3 -m venv "$output_directory/dmgbuild"
+"$output_directory/dmgbuild/bin/pip" install --quiet --disable-pip-version-check --require-hashes --only-binary :all: -r "$app_root/scripts/dmg/requirements.txt"
+"$output_directory/dmgbuild/bin/dmgbuild" -s "$app_root/scripts/dmg/dmg-settings.py" \
+  -D app="$app_path" -D background="$app_root/scripts/dmg/background.png" \
+  Keybumps "$output_directory/Keybumps-$release_version.dmg"
+"$app_root/scripts/check-dmg-layout.sh" "$output_directory/Keybumps-$release_version.dmg"
 /usr/bin/shasum -a 256 "$output_directory/Keybumps-$release_version.dmg" > "$output_directory/Keybumps-$release_version.dmg.sha256"
 
 # Production and staging feeds share immutable assets under releases/<build>/ (see docs/releases/cloudflare.md).
