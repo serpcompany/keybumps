@@ -160,12 +160,14 @@ struct PluginManifestTests {
         #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
     }
 
-    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), and Translation (#322)")
-    func onlyTheEmojiPickerAndTranslationShipOff() {
-        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker, .translation])
+    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), Translation (#322), and Keystrokes (#443)")
+    func onlyTheEmojiPickerTranslationAndKeystrokesShipOff() {
+        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker, .translation, .keystrokes])
         #expect(CapabilityDescriptor.emojiPicker.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(CapabilityDescriptor.translation.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(CapabilityDescriptor.translation.requiredPermissions.isEmpty)
+        #expect(CapabilityDescriptor.keystrokes.requiredPermissions == [.inputMonitoring], "Its keyboard tap needs it")
+        #expect(CapabilityDescriptor.keystrokes.optionalPermissions.isEmpty)
     }
 
     @Test("Only Translation needs a newer macOS than Keybumps does (#322)")
