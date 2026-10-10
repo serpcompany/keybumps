@@ -15,7 +15,7 @@ struct CapabilityWiringSnapshotTests {
         .deletingLastPathComponent()
         .appendingPathComponent("Fixtures/capability-wiring.json")
 
-    @Test("Wiring for every capability combination matches the recorded fixture")
+    @Test("Wiring for each recorded capability combination matches the fixture")
     func wiringMatchesFixture() throws {
         let actual = try WiringRecorder.renderSnapshot()
         let environment = ProcessInfo.processInfo.environment
@@ -83,6 +83,7 @@ struct CapabilityWiringSnapshot: Codable {
 
     let paletteTabs: [PaletteTab]
     let settingsDestinations: [Destination]
+    /// Keyed by the capabilities that are on (`WiringRecorder.key(for:)`).
     let combinations: [String: Combination]
 }
 
@@ -96,11 +97,7 @@ enum WiringRecorder {
         defer { try? FileManager.default.removeItem(at: root) }
 
         var combinations: [String: CapabilityWiringSnapshot.Combination] = [:]
-        for mask in 0..<(1 << Capability.allCases.count) {
-            let enabled = Set(Capability.allCases.enumerated().compactMap { index, capability in
-                mask & (1 << index) != 0 ? capability : nil
-            })
-            let key = String(format: "%02d", mask) + " " + (enabled.isEmpty ? "none" : Capability.allCases.filter(enabled.contains).map(\.rawValue).joined(separator: "+"))
+        for (key, enabled) in recordedCombinations().sorted(by: { $0.key < $1.key }) {
             combinations[key] = record(enabled: enabled, root: root)
         }
 
@@ -124,6 +121,43 @@ enum WiringRecorder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
         return String(decoding: try encoder.encode(snapshot), as: UTF8.self) + "\n"
+    }
+
+    /// The combinations the snapshot records, keyed by `key(for:)` (#455). It covers every combination
+    /// of the default capabilities, where capabilities interact most, but stays linear in added ones,
+    /// so each new capability adds about 130 combinations instead of doubling them:
+    /// - every combination of the default capabilities, alone and with each added capability on;
+    /// - every pair of added capabilities, with every default capability on;
+    /// - everything on, and everything on but one, for each capability.
+    static func recordedCombinations() -> [String: Set<Capability>] {
+        let defaults = Capability.allCases.filter(CapabilityCatalog.defaultCapabilities.contains)
+        let added = Capability.allCases.filter { !CapabilityCatalog.defaultCapabilities.contains($0) }
+        var sets: [Set<Capability>] = []
+        for subset in everyCombination(of: defaults) {
+            sets.append(subset)
+            sets += added.map { subset.union([$0]) }
+        }
+        for (index, first) in added.enumerated() {
+            sets += added[(index + 1)...].map { Set(defaults + [first, $0]) }
+        }
+        let everything = Set(Capability.allCases)
+        sets.append(everything)
+        sets += Capability.allCases.map { everything.subtracting([$0]) }
+        return Dictionary(sets.map { (key(for: $0), $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// The enabled capabilities' raw values in `Capability.allCases` order, or `none`. Adding a
+    /// capability leaves every existing combination's key as it was.
+    static func key(for enabled: Set<Capability>) -> String {
+        enabled.isEmpty ? "none" : Capability.allCases.filter(enabled.contains).map(\.rawValue).joined(separator: "+")
+    }
+
+    private static func everyCombination(of capabilities: [Capability]) -> [Set<Capability>] {
+        (0..<(1 << capabilities.count)).map { mask in
+            Set(capabilities.enumerated().compactMap { index, capability in
+                mask & (1 << index) != 0 ? capability : nil
+            })
+        }
     }
 
     private static func record(enabled: Set<Capability>, root: URL) -> CapabilityWiringSnapshot.Combination {
