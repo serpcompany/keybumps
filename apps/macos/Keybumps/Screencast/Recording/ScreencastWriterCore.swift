@@ -1,5 +1,6 @@
 import CoreMedia
 import Foundation
+import QuartzCore
 
 /// A track in a screencast file.
 enum ScreencastTrack: Hashable, Sendable {
@@ -25,20 +26,28 @@ protocol ScreencastMovieSink: AnyObject {
 /// audio buffer lands, what's dropped while paused, silence for a sound that's switched off or
 /// late, and noticing once that the writer failed.
 ///
+/// An input that isn't ready never costs real sound. While recording, a sound's buffers wait in
+/// order behind the silence still owed to its track, and are written as the input takes more; the
+/// capture queue is never held. When the file ends, the core waits for the inputs, so every track
+/// reaches the end however much silence it's owed.
+///
 /// Adapted from Shotnix's `RecordingWriterCore` (MIT, see LICENSE.shotnix), with the health check
 /// from Screendrop's `ScreenRecordingWriter` (CC0-1.0, see LICENSE.screendrop).
 final class ScreencastWriterCore {
-    /// About three seconds of buffers per sound, kept while waiting for the first video frame.
-    static let maximumPendingAudioBuffers = 150
+    /// About three seconds of buffers per sound, kept while waiting for the first video frame or
+    /// for the input to take more. Beyond it, the oldest go.
+    static let maximumWaitingAudioBuffers = 150
 
     private let sink: ScreencastMovieSink
     private let frameDuration: CMTime
     private let onFailure: () -> Void
+    private let stallTimeout: TimeInterval
     private var timeline = ScreencastTimeline()
     private var switchedOff: [ScreencastAudioSource: ScreencastHostIntervals] = [:]
     private var lastVideoTime: Double?
     private var lastVideoSample: CMSampleBuffer?
-    private var pendingAudio: [ScreencastAudioSource: [CMSampleBuffer]] = [:]
+    /// Before the first frame: everything heard. After it: what the input couldn't take yet.
+    private var waitingAudio: [ScreencastAudioSource: [CMSampleBuffer]] = [:]
     private var audioWritten: [ScreencastAudioSource: Double] = [:]
     private var audioFormats: [ScreencastAudioSource: CMAudioFormatDescription] = [:]
     private var isActive = true
@@ -46,11 +55,17 @@ final class ScreencastWriterCore {
 
     /// Frames the encoder couldn't take in time.
     private(set) var droppedFrameCount = 0
+    /// Audio buffers that waited too long and were dropped.
+    private(set) var droppedAudioBufferCount = 0
 
-    /// `onFailure` runs once, on the writer's queue, the first time the sink reports it failed.
-    init(sink: ScreencastMovieSink, framesPerSecond: Int, onFailure: @escaping () -> Void) {
+    /// - Parameters:
+    ///   - onFailure: Runs once, on the writer's queue, the first time the sink reports it failed.
+    ///   - stallTimeout: When finishing, how long an input may stay not ready before the core gives
+    ///     up on it.
+    init(sink: ScreencastMovieSink, framesPerSecond: Int, stallTimeout: TimeInterval = 2, onFailure: @escaping () -> Void) {
         self.sink = sink
         frameDuration = CMTime(value: 1, timescale: CMTimeScale(max(framesPerSecond, 1)))
+        self.stallTimeout = stallTimeout
         self.onFailure = onFailure
     }
 
@@ -97,7 +112,6 @@ final class ScreencastWriterCore {
             guard !timeline.isPaused(at: host) else { return }
             timeline.start(at: host)
             sink.startSession()
-            flushPendingAudio()
         }
         guard let time = timeline.time(at: host), time >= 0 else { return }
         if let lastVideoTime, time <= lastVideoTime { return }
@@ -120,45 +134,61 @@ final class ScreencastWriterCore {
 
     func appendAudio(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
         guard isActive, sink.audioSources.contains(source), checkHealth() else { return }
-        guard timeline.hasStarted else {
-            var pending = pendingAudio[source, default: []]
-            pending.append(sample)
-            if pending.count > Self.maximumPendingAudioBuffers { pending.removeFirst() }
-            pendingAudio[source] = pending
-            return
-        }
-        appendReadyAudio(sample, from: source)
+        enqueue(sample, from: source)
+        // Before the first frame there's nowhere to put it yet; anything heard before t=0 is
+        // trimmed away by the placement once there is.
+        guard timeline.hasStarted else { return }
+        writeWaitingAudio(from: source, waits: false)
     }
 
-    /// Anything captured before t=0 is trimmed away by the placement.
-    private func flushPendingAudio() {
-        for source in sink.audioSources {
-            pendingAudio[source]?.forEach { appendReadyAudio($0, from: source) }
+    private func enqueue(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
+        var waiting = waitingAudio[source, default: []]
+        waiting.append(sample)
+        if waiting.count > Self.maximumWaitingAudioBuffers {
+            waiting.removeFirst()
+            droppedAudioBufferCount += 1
         }
-        pendingAudio.removeAll()
+        waitingAudio[source] = waiting
     }
 
-    private func appendReadyAudio(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
+    /// Writes `source`'s waiting buffers in order, stopping where its input isn't ready unless
+    /// `waits`. Returns whether none are left.
+    @discardableResult
+    private func writeWaitingAudio(from source: ScreencastAudioSource, waits: Bool) -> Bool {
+        while let next = waitingAudio[source]?.first {
+            if place(next, from: source) {
+                waitingAudio[source]?.removeFirst()
+            } else if !waits || !waitUntilReady(.audio(source)) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// Writes one buffer where it belongs, after any silence its track is owed. False when the input
+    /// wasn't ready to take it all yet; true once it's written, or dropped because it was captured
+    /// while paused or lies before what's written.
+    private func place(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) -> Bool {
         let host = sample.presentationTimeStamp.seconds
         guard let format = CMSampleBufferGetFormatDescription(sample),
               let rate = ScreencastAudioBuffers.sampleRate(of: format),
               // Captured while paused: not part of the recording.
-              let start = timeline.time(at: host) else { return }
+              let start = timeline.time(at: host) else { return true }
         audioFormats[source] = format
         let frames = CMSampleBufferGetNumSamples(sample)
         let duration = Double(frames) / rate
-        guard var placement = ScreencastAudioPlacement.place(start: start, duration: duration, written: writtenAudio(for: source)),
-              sink.isReady(for: .audio(source)) else { return }
+        guard var placement = ScreencastAudioPlacement.place(start: start, duration: duration, written: writtenAudio(for: source)) else {
+            return true
+        }
         if placement.silence > 0 {
-            writeSilence(placement.silence, format: format, to: source)
-            // The encoder filled up before the gap closed: skip this buffer, the next one
-            // continues the silence.
-            guard let caughtUp = ScreencastAudioPlacement.place(start: start, duration: duration, written: writtenAudio(for: source)),
-                  caughtUp.silence == 0 else { return }
+            guard writeSilence(placement.silence, format: format, to: source) else { return false }
+            guard let caughtUp = ScreencastAudioPlacement.place(start: start, duration: duration, written: writtenAudio(for: source)) else {
+                return true
+            }
             placement = caughtUp
         }
         let trimFrames = Int((placement.trim * rate).rounded())
-        guard trimFrames < frames else { return }
+        guard trimFrames < frames else { return true }
         let position = writtenAudio(for: source)
         let time = CMTime(value: CMTimeValue((position * rate).rounded()), timescale: CMTimeScale(rate))
         let kept: CMSampleBuffer?
@@ -169,63 +199,86 @@ final class ScreencastWriterCore {
         } else {
             kept = Self.copy(sample, at: time, duration: CMTime(value: 1, timescale: CMTimeScale(rate)))
         }
-        guard let kept, sink.isReady(for: .audio(source)) else { return }
+        guard let kept else { return true }
+        guard sink.isReady(for: .audio(source)) else { return false }
         if sink.append(kept, to: .audio(source)) {
             audioWritten[source] = position + Double(frames - trimFrames) / rate
         } else {
             _ = checkHealth()
         }
+        return true
     }
 
     /// A sound that goes quiet (a microphone unplugged, no system sound being sent) is padded
     /// with silence as the video moves on, so its track never falls far behind and there's no
     /// minutes-long gap to fill at once when it comes back. Half a second of slack leaves room for
-    /// buffers still on their way.
+    /// buffers still on their way. Buffers left waiting for the input go first.
     private func keepAudioUp(with videoTime: Double) {
         for source in sink.audioSources {
-            guard let format = audioFormats[source] else { continue }
+            guard writeWaitingAudio(from: source, waits: false), let format = audioFormats[source] else { continue }
             let written = writtenAudio(for: source)
             guard videoTime - written > 1 else { continue }
             writeSilence(videoTime - 0.5 - written, format: format, to: source)
         }
     }
 
-    private func writeSilence(_ seconds: Double, format: CMAudioFormatDescription, to source: ScreencastAudioSource) {
-        guard let rate = ScreencastAudioBuffers.sampleRate(of: format) else { return }
+    /// Appends `seconds` of silence, a second at a time so a long gap never allocates minutes of
+    /// zeros. Stops where the input isn't ready; returns whether it wrote it all.
+    @discardableResult
+    private func writeSilence(_ seconds: Double, format: CMAudioFormatDescription, to source: ScreencastAudioSource) -> Bool {
+        guard let rate = ScreencastAudioBuffers.sampleRate(of: format) else { return true }
         var remaining = Int((seconds * rate).rounded())
-        while remaining > 0, sink.isReady(for: .audio(source)) {
-            // A second at a time keeps a long dropout from allocating minutes of zeros.
+        while remaining > 0 {
+            guard sink.isReady(for: .audio(source)) else { return false }
             let frames = min(remaining, Int(rate))
             let position = writtenAudio(for: source)
             let time = CMTime(value: CMTimeValue((position * rate).rounded()), timescale: CMTimeScale(rate))
-            guard let silence = ScreencastAudioBuffers.silence(frames: frames, format: format, at: time),
-                  sink.append(silence, to: .audio(source)) else { return }
+            guard let silence = ScreencastAudioBuffers.silence(frames: frames, format: format, at: time) else { return true }
+            guard sink.append(silence, to: .audio(source)) else {
+                _ = checkHealth()
+                return true
+            }
             audioWritten[source] = position + Double(frames) / rate
             remaining -= frames
         }
+        return true
+    }
+
+    /// Waits for `track`'s input to take more, for as long as it keeps stalling under the timeout.
+    /// Only when the file ends: never on a capture queue.
+    private func waitUntilReady(_ track: ScreencastTrack) -> Bool {
+        let started = CACurrentMediaTime()
+        while !sink.isReady(for: track) {
+            guard !sink.hasFailed, CACurrentMediaTime() - started < stallTimeout else { return false }
+            usleep(2_000)
+        }
+        return true
     }
 
     // MARK: Finishing
 
     /// Ends the file at `host`: the last frame is repeated so the video runs to the moment the
-    /// person stopped (or paused, if it ended paused), and every audio track is filled with silence
-    /// to the same point, so a sound that went quiet or never started still spans the recording.
-    /// Works after `deactivate()`. Returns the end, in recording seconds.
+    /// person stopped (or paused, if it ended paused), the sound still waiting is written, and every
+    /// audio track is filled with silence to the same point, so a sound that went quiet or never
+    /// started still spans the recording. Waits for the inputs as it goes. Works after
+    /// `deactivate()`. Returns the end, in recording seconds.
     @discardableResult
     func finish(at host: Double) -> Double {
         let end = timeline.duration(at: host)
         guard !didReportFailure, !sink.hasFailed, let lastVideoTime, let lastVideoSample else { return videoDuration }
-        if end > lastVideoTime + frameDuration.seconds, sink.isReady(for: .video),
+        if end > lastVideoTime + frameDuration.seconds, waitUntilReady(.video),
            let retimed = Self.copy(lastVideoSample, at: CMTime(seconds: end, preferredTimescale: 60_000), duration: frameDuration),
            sink.append(retimed, to: .video) {
             self.lastVideoTime = end
         }
         for source in sink.audioSources {
-            let written = writtenAudio(for: source)
-            guard end - written > ScreencastAudioPlacement.tolerance,
-                  let format = audioFormats[source]
+            writeWaitingAudio(from: source, waits: true)
+            guard let format = audioFormats[source]
                     ?? ScreencastAudioBuffers.defaultFormat(channels: source == .systemAudio ? 2 : 1) else { continue }
-            writeSilence(end - written, format: format, to: source)
+            while end - writtenAudio(for: source) > ScreencastAudioPlacement.tolerance,
+                  !writeSilence(end - writtenAudio(for: source), format: format, to: source) {
+                guard waitUntilReady(.audio(source)) else { break }
+            }
         }
         return videoDuration
     }

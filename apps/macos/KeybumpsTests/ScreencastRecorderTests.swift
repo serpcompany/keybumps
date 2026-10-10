@@ -17,7 +17,7 @@ struct ScreencastRecorderTests {
     let startDate = Date(timeIntervalSince1970: 1_791_000_000)
 
     @available(macOS 15, *)
-    func makeRecorder() -> ScreencastRecorder {
+    func makeRecorder(microphoneGranted: Bool = true) -> ScreencastRecorder {
         let clock = clock
         let startDate = startDate
         return ScreencastRecorder(
@@ -26,6 +26,7 @@ struct ScreencastRecorderTests {
             hostClock: { clock.now },
             now: { startDate },
             ownProcessID: Screens.ownProcess,
+            microphoneGranted: { microphoneGranted },
             tickInterval: nil
         )
     }
@@ -171,8 +172,8 @@ struct ScreencastRecorderTests {
         try await start(recorder, .window(10))
 
         let (plan, configuration) = try #require(videoKind(system.videoStreams.first))
-        #expect(plan == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30, 31]),
-                "no overlay is registered, so every Keybumps window stays out")
+        #expect(plan == .applications(1, includedProcesses: [Screens.browser], exceptingWindows: [12]),
+                "no overlay is registered, so nothing of Keybumps is in the filter")
         #expect(configuration.sourceRect == CGRect(x: 100, y: 100, width: 800, height: 600))
         #expect(configuration.pixelWidth == 1600 && configuration.pixelHeight == 1200)
         #expect(configuration.scalesToFit)
@@ -242,6 +243,8 @@ struct ScreencastRecorderTests {
         try await start(recorder)
         #expect(recorder.state == .recording)
         #expect(recorder.microphone == .failed && recorder.systemAudio == .failed)
+        #expect(system.audioStreams.count == 2, "tried with both sounds, then with the Mac's alone")
+        #expect(writers.writers.first?.audioSources == [], "no track for a sound that never started")
         recorder.setAudio(.microphone, on: false)
         #expect(recorder.microphone == .failed)
     }
@@ -260,7 +263,25 @@ struct ScreencastRecorderTests {
             .audio(ScreencastAudio(microphone: false, systemAudio: true))
         ])
         #expect(system.audioStreams.last?.isRunning == true)
-        #expect(writers.writers.first?.audioSources == [.microphone, .systemAudio], "the microphone's track stays, silent")
+        #expect(writers.writers.first?.audioSources == [.systemAudio], "no track for the microphone that didn't start")
+    }
+
+    @available(macOS 15, *)
+    @Test("Without Microphone access it asks only for the Mac's sound, and says the microphone failed")
+    func noMicrophoneAccess() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(microphoneGranted: false)
+        try await start(recorder)
+        #expect(recorder.state == .recording)
+        #expect(recorder.microphone == .failed && recorder.systemAudio == .on)
+        #expect(system.audioStreams.map { $0.kind } == [.audio(ScreencastAudio(microphone: false, systemAudio: true))])
+        #expect(writers.writers.first?.audioSources == [.systemAudio])
+        let capture = try await recorder.stop()
+        #expect(capture.videos.first?.mixdown == nil, "one sound needs no mixdown")
+
+        try await start(recorder, audio: ScreencastAudio(microphone: true, systemAudio: false))
+        #expect(system.audioStreams.count == 1, "nothing to ask for")
+        #expect(recorder.microphone == .failed && recorder.systemAudio == .notRecorded)
     }
 
     @available(macOS 15, *)
@@ -414,6 +435,49 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("Restarts are queued: a second one while the first deletes its take starts afresh, and nothing is left behind")
+    func restartTwice() async throws {
+        defer { captures.remove() }
+        writers.configure = { [writers] writer in writer.holdsCancel = writers.writers.isEmpty }
+        let recorder = makeRecorder()
+        try await start(recorder)
+        let first = Task { try await recorder.restart() }
+        #expect(await eventually { writers.writers[0].isHoldingCancel })
+        #expect(writers.writers.count == 2, "the first restart's new files are already recording")
+        try await recorder.restart()
+        #expect(writers.writers.count == 3)
+        #expect(writers.writers[1].calls.last == .cancel && !writers.writers[1].fileExists)
+        writers.writers[0].releaseCancel()
+        try await first.value
+
+        #expect(writers.writers[0].calls.last == .cancel && !writers.writers[0].fileExists)
+        #expect(captures.captureFolders().count == 1, "only the newest take's folder")
+        #expect(recorder.state == .recording)
+        let capture = try await recorder.stop()
+        #expect(capture.videos.map { $0.file } == [writers.writers[2].fileURL])
+    }
+
+    @available(macOS 15, *)
+    @Test("Stopping while a restart deletes the old take stops the new one, and keeps it")
+    func stopDuringRestart() async throws {
+        defer { captures.remove() }
+        writers.configure = { [writers] writer in writer.holdsCancel = writers.writers.isEmpty }
+        let recorder = makeRecorder()
+        try await start(recorder)
+        let restarting = Task { try await recorder.restart() }
+        #expect(await eventually { writers.writers[0].isHoldingCancel })
+        let capture = try await recorder.stop()
+        #expect(capture.videos.map { $0.file } == [writers.writers[1].fileURL])
+        writers.writers[0].releaseCancel()
+        try await restarting.value
+
+        #expect(recorder.state == .idle, "the restart's end changes nothing")
+        #expect(captures.captureFolders().map { $0.lastPathComponent } == [capture.folder.lastPathComponent])
+        #expect(FileManager.default.fileExists(atPath: capture.metadataURL.path))
+        #expect(writers.writers.count == 2)
+    }
+
+    @available(macOS 15, *)
     @Test("Discarding stops the streams and deletes the folder")
     func discard() async throws {
         defer { captures.remove() }
@@ -436,12 +500,20 @@ struct ScreencastRecorderTests {
         let starting = Task { try await start(recorder) }
         #expect(await eventually { system.videoStreams.first?.isHoldingStart == true })
         #expect(recorder.state == .starting)
-        await recorder.discard()
-        #expect(recorder.state == .idle)
+        var discarded = false
+        let discarding = Task {
+            await recorder.discard()
+            discarded = true
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!discarded, "it waits for the start to stop its streams")
+        #expect(recorder.state == .stopping)
         system.videoStreams[0].releaseStart()
+        await discarding.value
+        #expect(discarded && recorder.state == .idle)
+        #expect(system.videoStreams[0].stopCount == 1 && system.audioStreams[0].stopCount == 1, "stopped before discard returned")
         await #expect(throws: CancellationError.self) { try await starting.value }
         #expect(recorder.state == .idle)
-        #expect(system.videoStreams[0].stopCount == 1)
         #expect(captures.captureFolders().isEmpty)
     }
 
@@ -468,6 +540,98 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("Stop Sharing on every display at once ends the recording once, and keeps it")
+    func everyStreamStopsAtOnce() async throws {
+        defer { captures.remove() }
+        system.screen = ScreencastContent(
+            displays: Screens.content().displays + [ScreencastContent.Display(id: 3, frame: CGRect(x: -1440, y: 0, width: 1440, height: 900), scale: 2)],
+            windows: Screens.content().windows,
+            applicationProcessIDs: Screens.content().applicationProcessIDs
+        )
+        let recorder = makeRecorder()
+        var ends: [(ScreencastCapture?, ScreencastFailure)] = []
+        recorder.onEndedEarly = { ends.append(($0, $1)) }
+        try await start(recorder, .everyDisplay)
+        #expect(system.videoStreams.count == 3)
+        for stream in system.videoStreams { stream.handler.stopped(.stoppedByMacOS) }
+
+        #expect(await eventually { !ends.isEmpty })
+        for _ in 0..<50 { await Task.yield() }
+        #expect(ends.count == 1, "onEndedEarly fires once")
+        let capture = try #require(ends.first?.0)
+        #expect(capture.videos.count == 3 && capture.endedEarly == .stoppedByMacOS)
+        #expect(FileManager.default.fileExists(atPath: capture.folder.path), "the footage is kept")
+        #expect(writers.writers.allSatisfy { $0.fileExists })
+        #expect(try ScreencastMetadata.read(from: capture.metadataURL).displayCount == 3)
+        #expect(writers.writers.allSatisfy { $0.calls.filter { if case .finish = $0 { true } else { false } }.count == 1 })
+        #expect(recorder.state == .failed(.stoppedByMacOS))
+    }
+
+    @available(macOS 15, *)
+    @Test("A full disk failing every file and a stream at once ends it once, and keeps it")
+    func everyFileFailsAtOnce() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        var ends: [ScreencastFailure] = []
+        recorder.onEndedEarly = { _, failure in ends.append(failure) }
+        try await start(recorder, .everyDisplay)
+        writers.writers.forEach { $0.onFailure() }
+        system.videoStreams[1].handler.stopped(.captureFailed)
+
+        #expect(await eventually { !ends.isEmpty })
+        for _ in 0..<50 { await Task.yield() }
+        #expect(ends == [.writerFailed])
+        #expect(captures.captureFolders().count == 1)
+        #expect(writers.writers.allSatisfy { $0.fileExists })
+        #expect(recorder.state == .failed(.writerFailed))
+    }
+
+    @available(macOS 15, *)
+    @Test("A failure reported after stop() began is ignored: the stop keeps the recording and goes idle")
+    func failureAfterStop() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        var ended = false
+        recorder.onEndedEarly = { _, _ in ended = true }
+        try await start(recorder)
+        system.videoStreams[0].handler.stopped(.stoppedByMacOS)
+        writers.writers[0].onFailure()
+        let capture = try await recorder.stop()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!ended && recorder.state == .idle)
+        #expect(capture.endedEarly == nil && FileManager.default.fileExists(atPath: capture.metadataURL.path))
+    }
+
+    @available(macOS 15, *)
+    @Test("A failure reported after discard() began is ignored: nothing is reported and it stays idle")
+    func failureAfterDiscard() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        var ended = false
+        recorder.onEndedEarly = { _, _ in ended = true }
+        try await start(recorder)
+        system.videoStreams[0].handler.stopped(.stoppedByMacOS)
+        await recorder.discard()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!ended && recorder.state == .idle)
+        #expect(writers.writers[0].calls == [.cancel])
+    }
+
+    @available(macOS 15, *)
+    @Test("A file of a take a restart threw away can't end the new one")
+    func failureFromAnOldTake() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        var ended = false
+        recorder.onEndedEarly = { _, _ in ended = true }
+        try await start(recorder)
+        try await recorder.restart()
+        writers.writers[0].onFailure()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!ended && recorder.state == .recording)
+    }
+
+    @available(macOS 15, *)
     @Test("A file that fails mid-recording ends it and keeps its footage")
     func writerFails() async throws {
         defer { captures.remove() }
@@ -485,14 +649,24 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("Losing the sound stream keeps the recording going, with both sounds failed")
+    @Test("Losing the shared sound stream costs the microphone; the Mac's sound gets a stream of its own")
     func soundStreamStops() async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
         try await start(recorder)
         system.audioStreams[0].handler.stopped(.captureFailed)
-        #expect(await eventually { recorder.microphone == .failed })
-        #expect(recorder.systemAudio == .failed && recorder.state == .recording)
+        #expect(await eventually { system.audioStreams.count == 2 && system.audioStreams[1].isRunning })
+        #expect(system.audioStreams[1].kind == .audio(ScreencastAudio(microphone: false, systemAudio: true)))
+        #expect(recorder.microphone == .failed && recorder.systemAudio == .on && recorder.state == .recording)
+
+        system.audioStreams[0].handler.stopped(.captureFailed)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(recorder.systemAudio == .on, "a report from the replaced stream is ignored")
+
+        system.audioStreams[1].handler.stopped(.captureFailed)
+        #expect(await eventually { recorder.systemAudio == .failed })
+        #expect(system.audioStreams.count == 2, "the Mac's sound alone isn't tried again")
+        #expect(recorder.state == .recording)
     }
 
     @available(macOS 15, *)
@@ -538,12 +712,14 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("A window recording leaves out a Keybumps window that opens mid-recording")
+    @Test("A window recording with an overlay leaves out a Keybumps window that opens mid-recording")
     func ownWindowOpens() async throws {
         defer { captures.remove() }
         system.ownWindows = [30, 31]
         let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
         try await start(recorder, .window(10))
+        #expect(videoKind(system.videoStreams.first)?.0 == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30]))
         recorder.tick()
         #expect(system.videoStreams[0].plans.isEmpty, "nothing changed")
 
@@ -552,7 +728,53 @@ struct ScreencastRecorderTests {
         system.ownWindows = [30, 31, 40]
         recorder.tick()
         #expect(await eventually { !system.videoStreams[0].plans.isEmpty })
-        #expect(system.videoStreams[0].plans.last == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30, 31, 40]))
+        #expect(system.videoStreams[0].plans.last == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30, 40]))
+    }
+
+    @available(macOS 15, *)
+    @Test("A Keybumps window that opens while the snapshot is read, like the control bar during the start, is caught by the next tick")
+    func ownWindowOpensDuringTheSnapshot() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [30, 31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        let bar = ScreencastContent.Window(id: 40, frame: CGRect(x: 500, y: 900, width: 300, height: 44), layer: 3, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        system.afterContentRead = {
+            self.system.screen = Screens.content(windows: Screens.content().windows + [bar])
+            self.system.ownWindows = [30, 31, 40]
+        }
+        try await start(recorder, .window(10))
+        #expect(videoKind(system.videoStreams.first)?.0 == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30]),
+                "the snapshot was taken before the bar opened")
+        recorder.tick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30, 40]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("Without an overlay, a window recording never rebuilds for Keybumps's windows: none can show")
+    func ownWindowOpensWithoutOverlays() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        system.ownWindows = [30, 40]
+        recorder.tick()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(system.videoStreams[0].plans.isEmpty && system.contentReads == 1)
+    }
+
+    @available(macOS 15, *)
+    @Test("An overlay registered before its window is on screen joins the video when it appears")
+    func overlayAppearsLater() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(50)
+        try await start(recorder)
+        #expect(videoKind(system.videoStreams.first)?.0 == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: []))
+        let drawing = ScreencastContent.Window(id: 50, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [drawing])
+        system.ownWindows = [50]
+        recorder.tick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [50]) })
     }
 
     @available(macOS 15, *)
@@ -569,18 +791,44 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("Following a dragged window keeps one update in flight, and jumps to its latest frame")
+    func followingIsCoalesced() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        stream.holdsUpdates = true
+        for step in 1...10 {
+            system.windowFrames[10] = CGRect(x: 100 + Double(step) * 10, y: 100, width: 800, height: 600)
+            recorder.followTick()
+            await Task.yield()
+        }
+        #expect(await eventually { stream.heldUpdateCount == 1 })
+        let including = Task { await recorder.includeOverlayWindow(31) }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(stream.heldUpdateCount == 1, "the filter rebuild waits its turn")
+        stream.holdsUpdates = false
+        stream.releaseUpdates()
+        await including.value
+        #expect(await eventually { stream.sourceRects.last == CGRect(x: 200, y: 100, width: 800, height: 600) })
+        #expect(stream.mostUpdatesInFlight == 1)
+        #expect(stream.plans.count == 1)
+        #expect(stream.sourceRects.count == 2, "the frames in between were skipped")
+    }
+
+    @available(macOS 15, *)
     @Test("A window recording follows its window as it moves, and onto another display")
     func followsTheWindow() async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
         try await start(recorder, .window(10))
         system.windowFrames[10] = CGRect(x: 100, y: 100, width: 800, height: 600)
-        recorder.tick()
+        recorder.followTick()
         for _ in 0..<20 { await Task.yield() }
         #expect(system.videoStreams[0].sourceRects.isEmpty, "it hasn't moved")
 
         system.windowFrames[10] = CGRect(x: 250, y: 150, width: 800, height: 600)
-        recorder.tick()
+        recorder.followTick()
         #expect(await eventually { system.videoStreams[0].sourceRects == [CGRect(x: 250, y: 150, width: 800, height: 600)] })
 
         let moved = CGRect(x: 1700, y: 200, width: 800, height: 600)
@@ -588,7 +836,7 @@ struct ScreencastRecorderTests {
         windows[0] = ScreencastContent.Window(id: 10, frame: moved, layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true)
         system.screen = Screens.content(windows: windows)
         system.windowFrames[10] = moved
-        recorder.tick()
+        recorder.followTick()
         #expect(await eventually { system.videoStreams[0].plans.last?.displayID == 2 })
         #expect(await eventually { system.videoStreams[0].sourceRects.last == CGRect(x: 188, y: 200, width: 800, height: 600) })
     }

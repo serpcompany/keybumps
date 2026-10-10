@@ -52,18 +52,25 @@ private struct CaptureFeed {
 
 @Suite("Screencast: writing a file's samples")
 struct ScreencastWriterCoreTests {
-    private func makeCore(audio: [ScreencastAudioSource] = [.microphone, .systemAudio], onFailure: @escaping () -> Void = {}) -> (ScreencastWriterCore, RecordingSink) {
-        let sink = RecordingSink(audio: audio)
+    private func makeCore(
+        audio: [ScreencastAudioSource] = [.microphone, .systemAudio],
+        audioNotReadyAfter: Int? = nil,
+        onFailure: @escaping () -> Void = {}
+    ) -> (ScreencastWriterCore, RecordingSink) {
+        let sink = RecordingSink(audio: audio, audioNotReadyAfter: audioNotReadyAfter)
         return (ScreencastWriterCore(sink: sink, framesPerSecond: 30, onFailure: onFailure), sink)
     }
+
+    /// An input that's always ready, and one that stops after every few buffers, as a real one does.
+    static let readiness: [Int?] = [nil, 3]
 
     private func near(_ value: Double, _ expected: Double, within tolerance: Double = 0.03) -> Bool {
         abs(value - expected) <= tolerance
     }
 
-    @Test("Every track starts with the picture: a late microphone is padded with silence, early system audio is trimmed")
-    func tracksStartWithThePicture() throws {
-        let (core, sink) = makeCore()
+    @Test("Every track starts with the picture: a late microphone is padded with silence, early system audio is trimmed", arguments: readiness)
+    func tracksStartWithThePicture(audioNotReadyAfter: Int?) throws {
+        let (core, sink) = makeCore(audioNotReadyAfter: audioNotReadyAfter)
         let feed = CaptureFeed(video: 100...102, audio: [.microphone: 100.3...102, .systemAudio: 99.9...102])
         feed.run(core, from: 99, to: 102)
         let end = core.finish(at: 102)
@@ -73,16 +80,17 @@ struct ScreencastWriterCoreTests {
         #expect(near(end, 2))
         let mic = sink.audio(.microphone)
         let lead = try #require(mic.first)
-        #expect(lead.start == 0 && lead.isSilent && near(lead.duration, 0.3, within: 0.001))
+        #expect(lead.start == 0 && lead.isSilent)
+        #expect(near(sink.sound(.microphone, from: 0, to: 0.3), 0, within: 0.001))
         #expect(near(sink.sound(.microphone, from: 0.3, to: 2), 1.7))
         let system = sink.audio(.systemAudio)
         #expect(system.first?.start == 0 && system.first?.isSilent == false, "trimmed to start on the first frame")
         #expect(near(core.writtenAudio(for: .systemAudio), 2) && near(core.writtenAudio(for: .microphone), 2))
     }
 
-    @Test("A pause drops what's captured during it, and the sound stays in step with the picture after it")
-    func pause() {
-        let (core, sink) = makeCore()
+    @Test("A pause drops what's captured during it, and the sound stays in step with the picture after it", arguments: readiness)
+    func pause(audioNotReadyAfter: Int?) {
+        let (core, sink) = makeCore(audioNotReadyAfter: audioNotReadyAfter)
         // Offset from the pause's edges, so no frame lands exactly on one.
         let feed = CaptureFeed(video: 100.01...106, audio: [.microphone: 100.005...106, .systemAudio: 100.005...106])
         feed.run(core, from: 100, to: 102)
@@ -113,9 +121,9 @@ struct ScreencastWriterCoreTests {
         #expect(near(core.videoDuration, 0.5, within: 0.05))
     }
 
-    @Test("A sound switched off mid-recording keeps running and is written as silence until it's back on")
-    func switchingASoundOff() {
-        let (core, sink) = makeCore()
+    @Test("A sound switched off mid-recording keeps running and is written as silence until it's back on", arguments: readiness)
+    func switchingASoundOff(audioNotReadyAfter: Int?) {
+        let (core, sink) = makeCore(audioNotReadyAfter: audioNotReadyAfter)
         let feed = CaptureFeed(video: 100...104, audio: [.microphone: 100...104, .systemAudio: 100...104])
         feed.run(core, from: 100, to: 101)
         core.setAudio(.microphone, on: false, at: 101)
@@ -141,13 +149,25 @@ struct ScreencastWriterCoreTests {
         #expect(near(sink.sound(.systemAudio, from: 0, to: 4), 1, within: 0.05))
     }
 
-    @Test("A track that never heard anything is silence for the whole recording")
-    func silentTrack() {
-        let (core, sink) = makeCore(audio: [.microphone])
-        CaptureFeed(video: 100...103).run(core, from: 100, to: 103)
-        core.finish(at: 103)
-        #expect(near(core.writtenAudio(for: .microphone), 3))
+    @Test("A track that never heard anything is silence for the whole recording, however often its input stalls", arguments: readiness)
+    func silentTrack(audioNotReadyAfter: Int?) {
+        let (core, sink) = makeCore(audio: [.microphone], audioNotReadyAfter: audioNotReadyAfter)
+        CaptureFeed(video: 100...130).run(core, from: 100, to: 130)
+        core.finish(at: 130)
+        #expect(near(core.writtenAudio(for: .microphone), 30))
         #expect(sink.audio(.microphone).allSatisfy { $0.isSilent })
+        #expect(audioNotReadyAfter == nil || sink.notReadyAnswers >= 9, "the input stalled and the core waited")
+    }
+
+    @Test("A sound that starts late keeps its first moments: its buffers wait behind the silence its track is owed", arguments: readiness)
+    func lateSoundKeepsItsStart(audioNotReadyAfter: Int?) {
+        let (core, sink) = makeCore(audio: [.microphone], audioNotReadyAfter: audioNotReadyAfter)
+        CaptureFeed(video: 100...115, audio: [.microphone: 110...115]).run(core, from: 100, to: 115)
+        #expect(core.droppedAudioBufferCount == 0)
+        core.finish(at: 115)
+        #expect(sink.sound(.microphone, from: 0, to: 10) == 0)
+        #expect(near(sink.sound(.microphone, from: 10, to: 15), 5), "none of the sound is lost")
+        #expect(near(core.writtenAudio(for: .microphone), 15))
     }
 
     @Test("Stopping repeats the last frame, so a still screen's video runs to the stop")

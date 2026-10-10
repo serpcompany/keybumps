@@ -74,12 +74,12 @@ enum ScreencastFilterPlan: Equatable, Sendable {
         }
     }
 
-    /// Whether a window Keybumps opens later would show until the filter is rebuilt: the plan
-    /// names Keybumps's windows one by one instead of leaving out the whole app.
-    var dependsOnOwnWindows: Bool {
+    /// Whether a window Keybumps (`ownProcessID`) opens later would show until the filter is
+    /// rebuilt: the plan names Keybumps's windows one by one instead of leaving out the whole app.
+    func dependsOnWindows(of ownProcessID: pid_t) -> Bool {
         switch self {
         case .display(_, let excluded, _): excluded == nil
-        case .applications: true
+        case .applications(_, let processes, _): processes.contains(ownProcessID)
         }
     }
 }
@@ -113,8 +113,9 @@ enum ScreencastCaptureFilter {
     }
 
     /// A window recording, on the display showing most of it: the window's app, without its other
-    /// ordinary windows, which would cover the chosen one where they overlap it, and Keybumps's
-    /// overlays, without the rest of Keybumps. Nil when the window or its display is gone.
+    /// ordinary windows, which would cover the chosen one where they overlap it. Keybumps joins
+    /// only while one of its overlays is on screen, and then without the rest of its windows; with
+    /// none, nothing of Keybumps can show. Nil when the window or its display is gone.
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
@@ -126,11 +127,16 @@ enum ScreencastCaptureFilter {
         let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
         var hidden = windowsToHide(recording: window, others: siblings)
         var processes = [window.processID]
-        if window.processID != ownProcessID, content.applicationProcessIDs.contains(ownProcessID) {
+        let ownWindows = content.windows.filter { $0.processID == ownProcessID && $0.id != window.id }
+        let ownNonOverlays = ownWindows.filter { !overlays.contains($0.id) }.map(\.id)
+        if window.processID == ownProcessID {
+            // Recording one of Keybumps's own windows: its others stay out, overlays apart.
+            hidden.formUnion(ownNonOverlays)
+        } else if ownWindows.contains(where: { overlays.contains($0.id) }), content.applicationProcessIDs.contains(ownProcessID) {
             processes.append(ownProcessID)
             // A window Keybumps opens after this is built shows until the recorder rebuilds the
             // filter, which it does whenever Keybumps's own windows change.
-            hidden.formUnion(content.windows.filter { $0.processID == ownProcessID && !overlays.contains($0.id) }.map(\.id))
+            hidden.formUnion(ownNonOverlays)
         }
         return .applications(display.id, includedProcesses: processes, exceptingWindows: hidden.sorted())
     }

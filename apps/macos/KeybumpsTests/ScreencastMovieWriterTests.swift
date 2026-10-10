@@ -78,6 +78,67 @@ struct ScreencastMovieWriterTests {
         #expect(abs(try await mixdown.load(.duration).seconds - 3) < 0.1)
     }
 
+    @Test("Tracks that never heard a sound still run the whole recording", arguments: [30.0, 120.0])
+    func silentTracksRunToTheEnd(seconds: Double) async throws {
+        defer { folder.remove() }
+        let writer = try makeWriter("silent-\(Int(seconds)).mov")
+        // A frame a second is enough picture; the sound never comes.
+        for second in 0...Int(seconds) {
+            writer.appendVideo(ScreencastSamples.video(at: 100 + Double(second), width: 320, height: 180))
+        }
+        let result = await writer.finish(at: 100 + seconds)
+        #expect(!result.failed && abs(result.duration - seconds) < 0.05)
+        let audioTracks = try await AVURLAsset(url: result.fileURL).loadTracks(withMediaType: .audio)
+        #expect(audioTracks.count == 2)
+        for track in audioTracks {
+            let length = try await track.load(.timeRange).duration.seconds
+            #expect(abs(length - seconds) < 0.1, "a silent track \(length) s long in a \(seconds) s recording")
+        }
+    }
+
+    @Test("The mixdown plays two sounds at full scale without clipping")
+    func mixdownDoesNotClip() async throws {
+        defer { folder.remove() }
+        let writer = try makeWriter("loud.mov")
+        var next = 100.0
+        for frame in 0..<60 {
+            let host = 100 + Double(frame) / 30
+            writer.appendVideo(ScreencastSamples.video(at: host, width: 320, height: 180))
+            while next < host + 1.0 / 30 {
+                writer.appendAudio(ScreencastSamples.tone(at: next, channels: 1, amplitude: 0.8), from: .microphone)
+                writer.appendAudio(ScreencastSamples.tone(at: next, channels: 2, amplitude: 0.8), from: .systemAudio)
+                next += ScreencastSamples.audioBufferSeconds
+            }
+            usleep(2_000)
+        }
+        let result = await writer.finish(at: 102)
+        let mixdownURL = folder.url.appendingPathComponent("loud-mixdown.mp4")
+        try await ScreencastAudioMixdown.write(from: result.fileURL, to: mixdownURL)
+
+        let peak = try await Self.peak(ofAudioIn: mixdownURL)
+        #expect(peak > 0.5 && peak < 0.95, "two sounds at 0.8 mix to about 0.8, not 1.6")
+    }
+
+    /// The loudest decoded sample in a file's audio.
+    private static func peak(ofAudioIn url: URL) async throws -> Float {
+        let asset = AVURLAsset(url: url)
+        let track = try #require(try await asset.loadTracks(withMediaType: .audio).first)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: false
+        ])
+        reader.add(output)
+        reader.startReading()
+        var peak: Float = 0
+        while let sample = output.copyNextSampleBuffer() {
+            peak = max(peak, ScreencastSamples.peak(of: sample))
+        }
+        return peak
+    }
+
     @Test("A writer that never finishes, as when Keybumps is killed, leaves a file that plays up to its last fragment")
     func unfinishedFilePlays() async throws {
         defer { folder.remove() }

@@ -59,6 +59,32 @@ enum ScreencastSamples {
         return sample!
     }
 
+    /// A 440 Hz sine of `amplitude` in every channel, continuous from one buffer to the next because
+    /// each sample's value comes from its host time.
+    static func tone(at host: Double, frames: Int = audioFrames, channels: Int, amplitude: Float) -> CMSampleBuffer {
+        let format = ScreencastAudioBuffers.defaultFormat(channels: channels)!
+        let pcm = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(cmAudioFormatDescription: format), frameCapacity: AVAudioFrameCount(frames))!
+        pcm.frameLength = AVAudioFrameCount(frames)
+        let first = (host * sampleRate).rounded()
+        for channel in 0..<channels {
+            let samples = pcm.floatChannelData![channel]
+            for index in 0..<frames {
+                samples[index] = amplitude * Float(sin(2 * Double.pi * 440 * (first + Double(index)) / sampleRate))
+            }
+        }
+        var sample: CMSampleBuffer?
+        CMAudioSampleBufferCreateWithPacketDescriptions(
+            allocator: nil, dataBuffer: nil, dataReady: false, makeDataReadyCallback: nil, refcon: nil,
+            formatDescription: format, sampleCount: frames, presentationTimeStamp: time(host),
+            packetDescriptions: nil, sampleBufferOut: &sample
+        )
+        CMSampleBufferSetDataBufferFromAudioBufferList(
+            sample!, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, bufferList: pcm.audioBufferList
+        )
+        CMSampleBufferSetDataReady(sample!)
+        return sample!
+    }
+
     static var audioBufferSeconds: Double { Double(audioFrames) / sampleRate }
 
     static func time(_ host: Double) -> CMTime {
@@ -107,11 +133,17 @@ final class RecordingSink: ScreencastMovieSink {
     let audioSources: [ScreencastAudioSource]
     var hasFailed = false
     var isReady = true
+    /// Like a real encoder, an audio input that's taken this many buffers in a row isn't ready the
+    /// next time it's asked, then is again. Nil: always ready.
+    var audioNotReadyAfter: Int?
+    private var appendsSinceNotReady: [ScreencastTrack: Int] = [:]
+    private(set) var notReadyAnswers = 0
     private(set) var sessionStarted = false
     private(set) var appends: [Append] = []
 
-    init(audio: [ScreencastAudioSource]) {
+    init(audio: [ScreencastAudioSource], audioNotReadyAfter: Int? = nil) {
         audioSources = audio
+        self.audioNotReadyAfter = audioNotReadyAfter
     }
 
     func startSession() {
@@ -119,11 +151,18 @@ final class RecordingSink: ScreencastMovieSink {
     }
 
     func isReady(for track: ScreencastTrack) -> Bool {
-        isReady
+        guard isReady else { return false }
+        if track != .video, let limit = audioNotReadyAfter, appendsSinceNotReady[track, default: 0] >= limit {
+            appendsSinceNotReady[track] = 0
+            notReadyAnswers += 1
+            return false
+        }
+        return true
     }
 
     func append(_ sample: CMSampleBuffer, to track: ScreencastTrack) -> Bool {
         guard !hasFailed else { return false }
+        appendsSinceNotReady[track, default: 0] += 1
         let start = sample.presentationTimeStamp.seconds
         switch track {
         case .video:
@@ -172,6 +211,9 @@ final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
     let onFailure: @Sendable () -> Void
     var finishDuration = 5.0
     var finishFailed = false
+    /// Holds `cancel()` until `releaseCancel()`, on the main actor.
+    var holdsCancel = false
+    private var heldCancel: CheckedContinuation<Void, Never>?
     private let lock = NSLock()
     private var recorded: [Call] = []
 
@@ -206,10 +248,25 @@ final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
         return ScreencastWriterResult(fileURL: fileURL, duration: finishDuration, failed: finishFailed)
     }
 
+    var isHoldingCancel: Bool { lock.withLock { heldCancel != nil } }
+
     func cancel() async {
         record(.cancel)
+        if holdsCancel {
+            await withCheckedContinuation { continuation in lock.withLock { heldCancel = continuation } }
+        }
         try? FileManager.default.removeItem(at: fileURL)
     }
+
+    func releaseCancel() {
+        let held = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { heldCancel = nil }
+            return heldCancel
+        }
+        held?.resume()
+    }
+
+    var fileExists: Bool { FileManager.default.fileExists(atPath: fileURL.path) }
 }
 
 final class FakeWriterFactory: ScreencastWriterFactory, @unchecked Sendable {
@@ -262,6 +319,11 @@ final class FakeStream: ScreencastStream {
     private(set) var stopCount = 0
     private(set) var plans: [ScreencastFilterPlan] = []
     private(set) var sourceRects: [CGRect] = []
+    /// Holds each update until `releaseUpdates()`, to see how many are in flight at once.
+    var holdsUpdates = false
+    private var heldUpdates: [CheckedContinuation<Void, Never>] = []
+    private var updatesInFlight = 0
+    private(set) var mostUpdatesInFlight = 0
 
     init(kind: Kind, handler: ScreencastSampleHandler) {
         self.kind = kind
@@ -290,11 +352,28 @@ final class FakeStream: ScreencastStream {
     }
 
     func update(plan: ScreencastFilterPlan, content: ScreencastContent) async throws {
+        await holdUpdate()
         plans.append(plan)
     }
 
     func update(sourceRect: CGRect) async throws {
+        await holdUpdate()
         sourceRects.append(sourceRect)
+    }
+
+    var heldUpdateCount: Int { heldUpdates.count }
+
+    func releaseUpdates() {
+        let held = heldUpdates
+        heldUpdates = []
+        held.forEach { $0.resume() }
+    }
+
+    private func holdUpdate() async {
+        updatesInFlight += 1
+        mostUpdatesInFlight = max(mostUpdatesInFlight, updatesInFlight)
+        if holdsUpdates { await withCheckedContinuation { heldUpdates.append($0) } }
+        updatesInFlight -= 1
     }
 
     /// Delivers a frame stamped `host`, as ScreenCaptureKit would on its queue.
@@ -327,10 +406,17 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
         screen = content
     }
 
+    /// Runs once, right after the next snapshot is taken: what changes on screen meanwhile.
+    var afterContentRead: (() -> Void)?
+
     func content() async throws -> ScreencastContent {
         contentReads += 1
         if let contentError { throw contentError }
-        return screen
+        let snapshot = screen
+        let after = afterContentRead
+        afterContentRead = nil
+        after?()
+        return snapshot
     }
 
     func makeVideoStream(

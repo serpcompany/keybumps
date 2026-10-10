@@ -22,6 +22,12 @@ enum ScreencastAudioMixdown {
         audioTrackCount > 1
     }
 
+    /// Each sound's volume in the mix: 1/N, so the voice and the Mac's sound at full scale together
+    /// can't clip, as Snapzy's `mixdownInputVolume` does.
+    static func inputVolume(audioTrackCount: Int) -> Float {
+        audioTrackCount > 1 ? 1 / Float(audioTrackCount) : 1
+    }
+
     static func write(from source: URL, to destination: URL) async throws {
         let asset = AVURLAsset(url: source)
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
@@ -93,7 +99,6 @@ enum ScreencastAudioMixdown {
 
         var pairs: [(AVAssetReaderOutput, AVAssetWriterInput)] = [(videoOutput, videoInput)]
         if !inputs.audioTracks.isEmpty {
-            // Each sound at full volume, as it was recorded.
             let audioOutput = AVAssetReaderAudioMixOutput(audioTracks: inputs.audioTracks, audioSettings: [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVSampleRateKey: 48_000,
@@ -103,6 +108,13 @@ enum ScreencastAudioMixdown {
                 AVLinearPCMIsBigEndianKey: false,
                 AVLinearPCMIsNonInterleaved: false
             ])
+            let mix = AVMutableAudioMix()
+            mix.inputParameters = inputs.audioTracks.map { track in
+                let parameters = AVMutableAudioMixInputParameters(track: track)
+                parameters.setVolume(inputVolume(audioTrackCount: inputs.audioTracks.count), at: .zero)
+                return parameters
+            }
+            audioOutput.audioMix = mix
             guard reader.canAdd(audioOutput) else { throw MixdownError.cannotAddOutput }
             reader.add(audioOutput)
             var layout = AudioChannelLayout()

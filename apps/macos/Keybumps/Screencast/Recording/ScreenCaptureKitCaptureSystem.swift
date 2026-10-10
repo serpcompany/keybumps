@@ -215,7 +215,7 @@ private final class ScreenCaptureKitStream: ScreencastStream {
     }
 
     func stop() async {
-        output.isStopping = true
+        output.markStopping()
         // A stream that already stopped on its own throws here, which is what was wanted.
         try? await stream.stopCapture()
     }
@@ -247,8 +247,14 @@ private final class ScreenCaptureKitStreamOutput: NSObject, SCStreamOutput, SCSt
     let deliversVideo: Bool
     let videoQueue: DispatchQueue
     let audioQueue = DispatchQueue(label: "com.serp.keybumps.screencast.audio", qos: .userInteractive)
-    /// Set before `stopCapture`, so the error a deliberate stop may raise isn't reported.
-    var isStopping = false
+    /// Set on the main actor before `stopCapture` and read on ScreenCaptureKit's delegate queue, so
+    /// the error a deliberate stop may raise isn't reported.
+    private let lock = NSLock()
+    private var isStopping = false
+
+    func markStopping() {
+        lock.withLock { isStopping = true }
+    }
 
     init(handler: ScreencastSampleHandler, deliversVideo: Bool) {
         self.handler = handler
@@ -275,7 +281,7 @@ private final class ScreenCaptureKitStreamOutput: NSObject, SCStreamOutput, SCSt
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        guard !isStopping else { return }
+        guard !lock.withLock({ isStopping }) else { return }
         handler.stopped(ScreenCaptureKitCaptureSystem.failure(for: error))
     }
 

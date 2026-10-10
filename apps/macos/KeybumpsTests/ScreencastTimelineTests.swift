@@ -159,7 +159,7 @@ struct ScreencastCaptureFilterTests {
         let content = Screens.content()
         let plan = ScreencastCaptureFilter.displayPlan(display: 1, ownProcessID: Screens.ownProcess, overlays: [31, 99], content: content)
         #expect(plan == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31]))
-        #expect(!plan.dependsOnOwnWindows, "excluding the app keeps windows it opens later out too")
+        #expect(!plan.dependsOnWindows(of: Screens.ownProcess), "excluding the app keeps windows it opens later out too")
 
         let noOverlays = ScreencastCaptureFilter.displayPlan(display: 1, ownProcessID: Screens.ownProcess, overlays: [], content: content)
         #expect(noOverlays == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: []))
@@ -169,14 +169,23 @@ struct ScreencastCaptureFilterTests {
     func ownAppNotListed() {
         let plan = ScreencastCaptureFilter.displayPlan(display: 2, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(includesOwnApp: false))
         #expect(plan == .display(2, excludingProcess: nil, exceptingWindows: []))
-        #expect(plan.dependsOnOwnWindows)
+        #expect(plan.dependsOnWindows(of: Screens.ownProcess))
     }
 
     @Test("A window shows its app without its other windows, keeps its sheet and menus, and adds only Keybumps's overlays")
     func window() throws {
         let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()))
         #expect(plan == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30]))
-        #expect(plan.dependsOnOwnWindows)
+        #expect(plan.dependsOnWindows(of: Screens.ownProcess))
+    }
+
+    @Test("Without an overlay on screen, nothing of Keybumps is in a window recording's filter")
+    func windowWithoutOverlays() throws {
+        for overlays: Set<CGWindowID> in [[], [99]] {
+            let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: overlays, content: Screens.content()))
+            #expect(plan == .applications(1, includedProcesses: [Screens.browser], exceptingWindows: [12]))
+            #expect(!plan.dependsOnWindows(of: Screens.ownProcess), "a window Keybumps opens can't show")
+        }
     }
 
     @Test("A window on the right display records there; a closed one can't be recorded")
@@ -186,10 +195,12 @@ struct ScreencastCaptureFilterTests {
         #expect(ScreencastCaptureFilter.windowPlan(window: 77, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content()) == nil)
     }
 
-    @Test("Recording one of Keybumps's own windows doesn't add Keybumps twice")
+    @Test("Recording one of Keybumps's own windows leaves its other windows out, overlays apart")
     func ownWindow() {
         let plan = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content())
-        #expect(plan == .applications(1, includedProcesses: [Screens.ownProcess], exceptingWindows: []))
+        #expect(plan == .applications(1, includedProcesses: [Screens.ownProcess], exceptingWindows: [31]))
+        let withOverlay = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content())
+        #expect(withOverlay == .applications(1, includedProcesses: [Screens.ownProcess], exceptingWindows: []))
     }
 
     @Test("Of the app's other windows, only ordinary ones are hidden, and an untitled one over the window stays")
@@ -253,6 +264,13 @@ struct ScreencastVideoFormatTests {
         #expect(ScreencastVideoFormat.plan(pixelWidth: 3456, pixelHeight: 2234, framesPerSecond: 60).codec == .h264)
         #expect(ScreencastVideoFormat.plan(pixelWidth: 5120, pixelHeight: 2880, framesPerSecond: 30).codec == .hevc)
         #expect(ScreencastVideoFormat.plan(pixelWidth: 4096, pixelHeight: 2304, framesPerSecond: 60).codec == .hevc, "too many macroblocks a second")
+    }
+
+    @Test("The mixdown plays each sound at 1/N, so two at full scale can't clip")
+    func mixdownVolume() {
+        #expect(ScreencastAudioMixdown.inputVolume(audioTrackCount: 1) == 1)
+        #expect(ScreencastAudioMixdown.inputVolume(audioTrackCount: 2) == 0.5)
+        #expect(abs(ScreencastAudioMixdown.inputVolume(audioTrackCount: 3) - 1.0 / 3) < 1e-6)
     }
 
     @Test("The bit rate grows with the picture and stays between 2 and 40 Mbit/s")
