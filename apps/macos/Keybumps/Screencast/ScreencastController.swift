@@ -24,6 +24,11 @@ enum ScreencastPhase: Equatable, Sendable {
     }
 }
 
+/// One observer added with `ScreencastController.addPhaseObserver(_:)`, to remove it with.
+struct ScreencastPhaseObservation: Hashable, Sendable {
+    let id: Int
+}
+
 /// A capture saved in the captures folder, for the review panel (#450).
 enum ScreencastCaptureResult: Equatable, Sendable {
     case video(ScreencastCapture)
@@ -87,7 +92,7 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 /// each saved capture to `onCaptureFinished`.
 ///
 /// The pieces around a recording hang on it:
-/// - **#448, the control bar,** shows while `phase.isRecording`, reads `recorder` for the elapsed
+/// - **#448, the control bar,** shows from `.starting` until the recording ends, reads `recorder` for the elapsed
 ///   time, the sounds, and the microphone level, and acts through `pause()`, `resume()`,
 ///   `restart()`, `setAudio(_:on:)`, `stop()`, and `discard()`, never the recorder's own, so the
 ///   phase, the highlight, and the finished capture stay right.
@@ -97,8 +102,9 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 ///   before it starts, so the first frame has them. They come down when the phase is `.idle` again.
 /// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved video and screenshot.
 ///
-/// `onPhaseChange` reports each phase as it's entered. Escape cancels while picking, counting down,
-/// or starting; once recording, only `discard()` throws it away.
+/// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
+/// whatever order they're added in; `onPhaseChange` reports it too. Escape cancels while picking,
+/// counting down, or starting; once recording, only `discard()` throws it away.
 ///
 /// A recording that ends on its own (macOS stopped it, its display went away, the disk filled)
 /// leaves `.recording` for `.finishing` as soon as the recorder starts saving what it has, and its
@@ -113,7 +119,9 @@ final class ScreencastController {
 
     private(set) var phase: ScreencastPhase = .idle {
         didSet {
-            if phase != oldValue { onPhaseChange?(phase) }
+            guard phase != oldValue else { return }
+            onPhaseChange?(phase)
+            for (_, observer) in phaseObservers { observer(phase) }
         }
     }
 
@@ -123,6 +131,9 @@ final class ScreencastController {
     private(set) var choice: ScreencastChoice?
 
     @ObservationIgnored var onPhaseChange: ((ScreencastPhase) -> Void)?
+    /// `addPhaseObserver(_:)`'s observers, in the order they were added.
+    @ObservationIgnored private var phaseObservers: [(ScreencastPhaseObservation, (ScreencastPhase) -> Void)] = []
+    @ObservationIgnored private var nextPhaseObservation = 0
     /// A video or screenshot was saved: the review panel takes it from here. A recording that
     /// ended early comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
@@ -200,6 +211,23 @@ final class ScreencastController {
             self?.recordingEndedEarly(capture, failure)
         }
         followRecorderState()
+    }
+
+    // MARK: Watching the phase
+
+    /// Calls `observer` with each phase as it's entered, after `onPhaseChange` and the observers
+    /// added before it. The control bar, the overlays, and the review panel each add their own, so
+    /// adding one never replaces another. Keep the observation to remove it.
+    @discardableResult
+    func addPhaseObserver(_ observer: @escaping (ScreencastPhase) -> Void) -> ScreencastPhaseObservation {
+        nextPhaseObservation += 1
+        let observation = ScreencastPhaseObservation(id: nextPhaseObservation)
+        phaseObservers.append((observation, observer))
+        return observation
+    }
+
+    func removePhaseObserver(_ observation: ScreencastPhaseObservation) {
+        phaseObservers.removeAll { $0.0 == observation }
     }
 
     // MARK: Picking

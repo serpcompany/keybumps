@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import SwiftUI
 import Testing
 @testable import Keybumps
 
@@ -23,8 +24,13 @@ final class FakeBarRecording: ScreencastBarRecording {
     /// `stop()` waits for `releaseStop()`, so a test sees the bar while it stops.
     @ObservationIgnored var holdsStop = false
     @ObservationIgnored private var heldStop: CheckedContinuation<Void, Never>?
+    /// `restart()` waits for `releaseRestart()`, still recording, as the controller does while the
+    /// recorder opens new files.
+    @ObservationIgnored var holdsRestart = false
+    @ObservationIgnored private var heldRestart: CheckedContinuation<Void, Never>?
 
     var isHoldingStop: Bool { heldStop != nil }
+    var isHoldingRestart: Bool { heldRestart != nil }
 
     func pause() {
         calls.append(.pause)
@@ -47,8 +53,14 @@ final class FakeBarRecording: ScreencastBarRecording {
 
     func restart() async {
         calls.append(.restart)
+        if holdsRestart { await withCheckedContinuation { heldRestart = $0 } }
         elapsed = 0
         phase = .recording
+    }
+
+    func releaseRestart() {
+        heldRestart?.resume()
+        heldRestart = nil
     }
 
     func stop() async {
@@ -378,6 +390,37 @@ struct ScreencastControlBarTests {
         #expect(!bar.isWorking)
     }
 
+    @Test("While Restart opens new files, still recording, every other action waits")
+    func everythingWaitsForRestart() async {
+        recording.holdsRestart = true
+        let bar = makeBar()
+        var drew = false
+        bar.onToggleDrawing = { drew = true }
+        bar.askToRestart()
+        let restarting = Task { await bar.confirm() }
+        #expect(await eventually { recording.isHoldingRestart })
+        #expect(recording.phase == .recording, "The flow is still recording")
+        #expect(bar.isWorking && !bar.acceptsActions)
+
+        bar.togglePause()
+        bar.toggleAudio(.microphone)
+        bar.toggleAudio(.systemAudio)
+        bar.toggleDrawing()
+        bar.askToDiscard()
+        bar.askToRestart()
+        await bar.discardFromShortcut()
+        await bar.confirm()
+        await bar.stop()
+        #expect(recording.calls == [.restart], "Only the one restart")
+        #expect(!drew && bar.question == nil)
+
+        recording.releaseRestart()
+        await restarting.value
+        #expect(!bar.isWorking && bar.acceptsActions)
+        bar.togglePause()
+        #expect(recording.calls == [.restart, .pause], "The buttons work again")
+    }
+
     @Test("Before recording, and once it ends, the buttons do nothing")
     func outsideARecording() async {
         let bar = makeBar()
@@ -644,14 +687,20 @@ struct ScreencastRecordingControlsTests {
         let bar = try #require(controls.bar)
         #expect(!bar.isShown)
 
-        for phase in [ScreencastPhase.picking, .countingDown(remaining: 1), .starting] {
+        for phase in [ScreencastPhase.picking, .countingDown(remaining: 1)] {
             recording.phase = phase
             controls.phaseChanged(phase)
             #expect(!bar.isShown, "\(phase)")
         }
+        // Up as the recording starts, before the recorder reads what to leave out, with its
+        // buttons waiting.
+        recording.phase = .starting
+        controls.phaseChanged(.starting)
+        #expect(bar.isShown && !bar.model.acceptsActions)
+        #expect(status.title == nil, "The menu bar waits for the recording")
         recording.phase = .recording
         controls.phaseChanged(.recording)
-        #expect(bar.isShown)
+        #expect(bar.isShown && bar.model.acceptsActions)
         #expect(bar.panel.frame.minY == Self.area.maxY + ScreencastControlBarPlacement.margin, "Above the area")
         #expect(abs(bar.panel.frame.midX - Self.laptop.visibleFrame.midX) < 1)
 
@@ -752,28 +801,126 @@ struct ScreencastRecordingControlsTests {
     }
 
     @available(macOS 15, *)
-    @Test("Attached to the capture flow, the controls follow its recording, and whatever else watches its phase still hears")
+    @Test("Attached to the capture flow, the controls follow its recording, whatever watches its phase before or after them")
     func throughTheFlow() async throws {
         let flow = ScreencastFlow()
         defer { flow.captures.remove() }
-        var phases: [ScreencastPhase] = []
-        flow.controller.onPhaseChange = { phases.append($0) }
+        var before: [ScreencastPhase] = []
+        flow.controller.addPhaseObserver { before.append($0) }
         var finished = 0
         flow.controller.onCaptureFinished = { _ in finished += 1 }
         let controls = makeControls()
         controls.attach(to: flow.controller)
+        // Added after the controls, as the overlays and the review panel may be.
+        var after: [ScreencastPhase] = []
+        flow.controller.addPhaseObserver { after.append($0) }
+        flow.controller.onPhaseChange = { _ in }
         let bar = try #require(controls.bar)
         #expect(!bar.isShown && status.title == nil)
 
         try await flow.record()
         #expect(bar.isShown)
         #expect(status.title == "00:00")
-        #expect(phases.contains(.recording), "The earlier watcher still hears")
+        #expect(before.contains(.recording) && after.contains(.recording), "Every observer hears")
 
         await bar.model.stop()
         #expect(!bar.isShown && finished == 1)
         #expect(await eventually { status.title == nil })
-        #expect(phases.last == .idle)
+        #expect(before.last == .idle && after.last == .idle)
+    }
+
+    @available(macOS 15, *)
+    @Test("Through Screencast's module, the bar, the menu bar, and the shortcuts follow a recording, with another phase observer added after them")
+    func throughTheModule() async throws {
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
+        let pause = ShortcutBinding(keyCode: 35, modifiers: UInt32(256 | 512), displayName: "⇧⌘P")
+        _ = preferences.setCapabilityShortcut(pause, for: .screencastPause)
+        let module = ScreencastModule(
+            preferences: preferences,
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { _ in },
+            menuBar: CapabilityMenuBarStatus(status: status, capability: .screencast),
+            seams: ScreencastSeams(
+                captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
+                pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
+                presenter: FakeOverlays(),
+                screens: { PickerScreens.both },
+                sleep: { _ in },
+                revealCapture: { _ in }
+            )
+        )
+        module.apply(CapabilityContext(
+            enabledCapabilities: [.screencast],
+            preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: hotKeys),
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            permissionReadiness: { capabilities in
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
+            }
+        ))
+
+        module.start()
+        let controller = try #require(module.controller)
+        // What the overlays or the review panel do once the module has made its controller.
+        var heard: [ScreencastPhase] = []
+        controller.addPhaseObserver { heard.append($0) }
+        controller.onPhaseChange = { _ in }
+
+        let picker = try #require(controller.picker)
+        picker.target = .screen
+        picker.clickScreen(PickerScreens.left)
+        controller.confirm()
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let bar = try #require(module.recordingControls.bar)
+        #expect(bar.isShown && heard.contains(.recording))
+        #expect(status.title == "00:00")
+        #expect(hotKeys.registered.values.contains(pause))
+
+        hotKeys.press(pause)
+        #expect(controller.phase == .paused)
+        #expect(await ScreencastWait.until { status.sections.first?.last?.title == "Resume Recording" })
+
+        await controller.discard()
+        #expect(!bar.isShown && hotKeys.registered.isEmpty)
+        #expect(await ScreencastWait.until { status.title == nil })
+    }
+
+    @available(macOS 15, *)
+    @Test("The controller tells its phase observers in the order added, after onPhaseChange, until one is removed")
+    func phaseObservers() {
+        let flow = ScreencastFlow()
+        defer { flow.captures.remove() }
+        var heard: [String] = []
+        flow.controller.onPhaseChange = { heard.append("handler \($0)") }
+        let first = flow.controller.addPhaseObserver { heard.append("first \($0)") }
+        flow.controller.addPhaseObserver { heard.append("second \($0)") }
+
+        flow.controller.open()
+        #expect(heard == ["handler picking", "first picking", "second picking"])
+        flow.controller.removePhaseObserver(first)
+        flow.controller.cancel()
+        #expect(Array(heard.dropFirst(3)) == ["handler idle", "second idle"])
+    }
+
+    @Test("While recording, Screencast's time and items come before Timer's in the menu bar")
+    func menuBarPrecedence() async throws {
+        let timer = CapabilityMenuBarStatus(status: status, capability: .timer)
+        let timerItem = MenuBarItem(id: "tea", title: "Tea — 4:00", systemImage: "timer") {}
+        timer.set(title: "4:00", spoken: "Tea, 4 minutes left", items: [timerItem])
+        #expect(status.title == "4:00")
+
+        recording.elapsed = 7
+        let controls = makeControls()
+        attach(controls)
+        #expect(status.title == "00:07", "The recording's time, not the timer's")
+        #expect(status.spokenTitle == "Screencast recording, 7 seconds")
+        #expect(status.sections.map { $0.map(\.title) } == [["Stop Recording", "Pause Recording"], ["Tea — 4:00"]])
+
+        recording.phase = .finishing
+        controls.phaseChanged(.finishing)
+        #expect(await eventually { status.title == "4:00" }, "The timer's again once it ends")
+        #expect(status.sections.map { $0.map(\.title) } == [["Tea — 4:00"]])
     }
 }
 
@@ -794,7 +941,28 @@ struct ScreencastControlBarPlacementTests {
     func defaultSpot() {
         let origin = placement.origin(for: Self.size, on: Self.laptop)
         #expect(origin == CGPoint(x: 756 - 180, y: 70 + ScreencastControlBarPlacement.bottomInset))
-        #expect(placement.origin(for: Self.size, on: Self.external) == CGPoint(x: 1512 + 960 - 180, y: 24))
+        #expect(placement.origin(for: Self.size, on: Self.external) == CGPoint(
+            x: 1512 + 960 - 180, y: ScreencastControlBarPlacement.bottomInset
+        ))
+    }
+
+    @Test("The default spot clears every line of keys a recording shows at the bottom centre, at their largest")
+    func clearsTheKeys() {
+        // The newest line at Large, with keycaps and an action's name, and the two smaller lines
+        // above it, as `KeystrokeStack` lays them out.
+        let metrics = KeystrokeMetrics(.large)
+        let entry = KeystrokeTimeline.Entry(
+            id: 1, keycaps: ["⇧", "⌘", "4"], text: "⇧⌘4", name: "Screenshot Area", isTyping: false, lastPress: Date()
+        )
+        func height(_ line: KeystrokeLine) -> CGFloat { NSHostingView(rootView: line).fittingSize.height }
+        let newest = height(KeystrokeLine(entry: entry, style: .keycaps, metrics: metrics))
+        let older = height(KeystrokeLine(entry: entry, style: .keycaps, metrics: metrics.history))
+        let bezel = height(KeystrokeLine(entry: entry, style: .bezel, metrics: metrics))
+        let gap = metrics.keycap * 0.25
+        let keys = KeyDisplayOverlayView.margin + max(newest, bezel) + CGFloat(KeystrokeTimeline.visibleEntries - 1) * (gap + older)
+        #expect(newest > 80 && older > 60, "Measured: \(newest), \(older)")
+        #expect(ScreencastControlBarPlacement.bottomInset >= keys + 12, "Keys reach \(keys) above the bottom")
+        #expect(ScreencastControlBarPlacement.bottomInset <= keys + 40, "Not much higher than it must")
     }
 
     @Test("The default spot moves above an area being recorded, when there's room")
@@ -803,9 +971,12 @@ struct ScreencastControlBarPlacementTests {
         // An area reaching down to the Dock: the bar goes just above it, still centered.
         let bottom = CGRect(x: 400, y: 70, width: 700, height: 400)
         #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: bottom) == CGPoint(x: 576, y: 470 + margin))
-        // One just touching the default spot moves it too.
-        let low = CGRect(x: 400, y: 130, width: 700, height: 300)
-        #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: low).y == 430 + margin)
+        // One just reaching the default spot moves it too.
+        let low = CGRect(x: 400, y: 130, width: 700, height: 310)
+        #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: low).y == 440 + margin)
+        // One that stays below it doesn't.
+        let short = CGRect(x: 400, y: 70, width: 700, height: 300)
+        #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: short) == placement.origin(for: Self.size, on: Self.laptop))
         // One reaching nearly to the top leaves no room above: the bar stays put.
         let tall = CGRect(x: 400, y: 70, width: 700, height: 850)
         #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: tall) == placement.origin(for: Self.size, on: Self.laptop))

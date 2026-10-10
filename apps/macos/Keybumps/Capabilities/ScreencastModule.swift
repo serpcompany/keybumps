@@ -45,6 +45,9 @@ struct ScreencastSeams {
     var sleep: ((TimeInterval) async throws -> Void)?
     /// Shows a saved capture's files, until the review panel (#450) takes them.
     var revealCapture: (@MainActor ([URL]) -> Void)?
+    /// How long the control bar's Restart? and Discard? wait for an answer before going back as
+    /// Keep; the UI-test composition makes it long, so a slow runner never sees one give up.
+    var barConfirmationTimeout: Duration?
 
     init(
         captureSystem: (any ScreencastCaptureSystem)? = nil,
@@ -52,7 +55,8 @@ struct ScreencastSeams {
         presenter: (any ScreencastOverlayPresenting)? = nil,
         screens: (@MainActor () -> ScreencastScreenLayout)? = nil,
         sleep: ((TimeInterval) async throws -> Void)? = nil,
-        revealCapture: (@MainActor ([URL]) -> Void)? = nil
+        revealCapture: (@MainActor ([URL]) -> Void)? = nil,
+        barConfirmationTimeout: Duration? = nil
     ) {
         self.captureSystem = captureSystem
         self.pickerSystem = pickerSystem
@@ -60,6 +64,7 @@ struct ScreencastSeams {
         self.screens = screens
         self.sleep = sleep
         self.revealCapture = revealCapture
+        self.barConfirmationTimeout = barConfirmationTimeout
     }
 }
 
@@ -83,7 +88,7 @@ final class ScreencastModule: CapabilityModule {
     private let permissions: PermissionCoordinator
     private let seams: ScreencastSeams
     /// The control bar, the menu bar's time, and the recording shortcuts.
-    private let recordingControls: ScreencastRecordingControls
+    let recordingControls: ScreencastRecordingControls
     private var isOn = false
     /// The `ScreencastController`, made the first time Start Screencast opens the picker. Stored
     /// untyped because the controller needs macOS 15.
@@ -100,7 +105,11 @@ final class ScreencastModule: CapabilityModule {
         self.permissions = permissions
         self.openSettings = openSettings
         self.seams = seams
-        recordingControls = ScreencastRecordingControls(menuBar: menuBar, placement: preferences.screencastBarPlacement)
+        recordingControls = ScreencastRecordingControls(
+            menuBar: menuBar,
+            placement: preferences.screencastBarPlacement,
+            confirmationTimeout: seams.barConfirmationTimeout ?? ScreencastControlBarModel.confirmationTimeout
+        )
     }
 
     func apply(_ context: CapabilityContext) {

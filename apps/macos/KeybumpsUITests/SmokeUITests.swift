@@ -252,7 +252,7 @@ final class SmokeUITests: XCTestCase {
 
     func testScreencastPickerOpensAndSwitchesModes() {
         // The UI-test composition's made-up screens: the main screen split into two displays, two
-        // made-up windows, and a recorder that never starts.
+        // made-up windows, and a recorder that records them but captures nothing.
         launchScreencastPicker()
         XCTAssertEqual(pickerWindows.count, 2, "One picker window per screen")
         let confirm = element("screencast.picker.confirm")

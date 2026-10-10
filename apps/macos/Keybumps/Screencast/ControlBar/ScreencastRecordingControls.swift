@@ -6,6 +6,10 @@ import Observation
 /// & Resume, Stop, Discard, and Draw), which are registered only while it records, so their keys
 /// work normally the rest of the time. `ScreencastModule` holds one and attaches it to its
 /// `ScreencastController` once it makes it; everything here acts through the controller.
+///
+/// The bar goes up as the recording starts (`.starting`), before the recorder reads what's on
+/// screen, so even a filter that names Keybumps's windows one by one leaves it out from the first
+/// frame. Its buttons wait until it's recording. It stays hidden during the countdown.
 @MainActor
 final class ScreencastRecordingControls {
     /// The shortcuts that act on a recording, in the order Settings lists them.
@@ -15,6 +19,7 @@ final class ScreencastRecordingControls {
     private let placement: ScreencastControlBarPlacement
     private let barDisplay: @MainActor (ScreencastChoice.Region) -> ScreencastBarDisplay?
     private let ordersPanelIn: Bool
+    private let confirmationTimeout: Duration
     /// The bar, once attached to a recording.
     private(set) var bar: ScreencastControlBar?
     /// The screens being recorded, and the area when only part of one is: where the bar goes.
@@ -32,29 +37,28 @@ final class ScreencastRecordingControls {
     ///   - placement: Where the bar's positions are kept.
     ///   - barDisplay: The display to show the bar on for a recorded screen; tests pass their own.
     ///   - ordersPanelIn: False keeps the bar's panel off screen, as under the unit-test host.
+    ///   - confirmationTimeout: How long Restart's and Discard's questions wait for an answer.
     init(
         menuBar: CapabilityMenuBarStatus?,
         placement: ScreencastControlBarPlacement,
-        barDisplay: @escaping @MainActor (ScreencastChoice.Region) -> ScreencastBarDisplay? = ScreencastRecordingControls.display(for:),
-        ordersPanelIn: Bool = !UnitTestHost.isActive
+        barDisplay: @escaping @MainActor (ScreencastChoice.Region) -> ScreencastBarDisplay = ScreencastRecordingControls.display(for:),
+        ordersPanelIn: Bool = !UnitTestHost.isActive,
+        confirmationTimeout: Duration = ScreencastControlBarModel.confirmationTimeout
     ) {
         self.menuBar = menuBar
         self.placement = placement
         self.barDisplay = barDisplay
         self.ordersPanelIn = ordersPanelIn
+        self.confirmationTimeout = confirmationTimeout
     }
 
     // MARK: Attaching
 
-    /// Hangs the controls on `controller`'s recording phase. Whatever else watches its phase keeps
-    /// being told first.
+    /// Hangs the controls on `controller`'s phase, as one of its phase observers, so whatever else
+    /// watches the phase, added before or after, is told too.
     @available(macOS 15, *)
     func attach(to controller: ScreencastController) {
-        let previous = controller.onPhaseChange
-        controller.onPhaseChange = { [weak self] phase in
-            previous?(phase)
-            self?.phaseChanged(phase)
-        }
+        controller.addPhaseObserver { [weak self] phase in self?.phaseChanged(phase) }
         attach(
             to: controller,
             regions: { [weak controller] in controller?.choice?.regions ?? [] },
@@ -69,16 +73,22 @@ final class ScreencastRecordingControls {
         area: @escaping @MainActor () -> CGRect?
     ) {
         bar?.hide()
-        bar = ScreencastControlBar(recording: recording, placement: placement, ordersPanelIn: ordersPanelIn)
+        bar = ScreencastControlBar(
+            recording: recording,
+            placement: placement,
+            ordersPanelIn: ordersPanelIn,
+            confirmationTimeout: confirmationTimeout
+        )
         recordedRegions = regions
         recordedArea = area
         phaseChanged(recording.phase)
     }
 
-    /// While recording or paused, the bar shows and the shortcuts work; otherwise neither.
+    /// From the start until the recording ends, the bar shows; while recording or paused, the
+    /// shortcuts work and the menu bar has the time.
     func phaseChanged(_ phase: ScreencastPhase) {
         guard let bar else { return }
-        if phase.isRecording {
+        if Self.showsBar(in: phase) {
             if !bar.isShown, let display = displayForBar() {
                 bar.show(on: display, avoiding: recordedArea())
             }
@@ -87,6 +97,12 @@ final class ScreencastRecordingControls {
         }
         updateShortcuts()
         refreshMenuBar()
+    }
+
+    /// Whether the bar is up: from `.starting`, so it's on screen before the recorder reads what to
+    /// leave out, through recording and paused. Not while picking or counting down.
+    static func showsBar(in phase: ScreencastPhase) -> Bool {
+        phase == .starting || phase.isRecording
     }
 
     /// The recorded screen under the pointer, or the first one recorded.
@@ -98,14 +114,14 @@ final class ScreencastRecordingControls {
     }
 
     /// The screen a region is on: the display it names, or, for the UI-test composition's made-up
-    /// displays, the screen holding its middle.
-    static func display(for region: ScreencastChoice.Region) -> ScreencastBarDisplay? {
+    /// displays, the screen holding its middle. Without one, the region's own frame stands in.
+    static func display(for region: ScreencastChoice.Region) -> ScreencastBarDisplay {
         let screens = NSScreen.screens
         let middle = CGPoint(x: region.frame.midX, y: region.frame.midY)
         let screen = screens.first { ScreencastBarDisplay.displayID(of: $0) == region.display }
             ?? screens.first { $0.frame.contains(middle) }
-            ?? NSScreen.main
         return screen.flatMap(ScreencastBarDisplay.init(screen:))
+            ?? ScreencastBarDisplay(key: ScreencastBarDisplay.key(for: region.display), visibleFrame: region.frame)
     }
 
     // MARK: Shortcuts
@@ -180,7 +196,8 @@ final class ScreencastRecordingControls {
             menuBar.clear()
             return
         }
-        menuBar.set(title: model.timerText, spoken: model.spokenTime, items: Self.menuItems(for: model))
+        // Ahead of Timer's countdown and timers: what's recording is what to see.
+        menuBar.set(title: model.timerText, spoken: model.spokenTime, items: Self.menuItems(for: model), takesPrecedence: true)
     }
 
     /// Stop Recording, then Pause or Resume Recording.

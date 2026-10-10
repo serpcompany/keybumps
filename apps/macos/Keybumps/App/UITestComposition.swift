@@ -161,7 +161,9 @@ extension AppModel {
                 captureSystem: UITestScreencastCaptureSystem(),
                 pickerSystem: UITestScreencastScreen(),
                 screens: { UITestScreencastScreen.layout },
-                revealCapture: { _ in }
+                revealCapture: { _ in },
+                // The control bar's questions wait for the test's Keep, however slow the runner.
+                barConfirmationTimeout: .seconds(600)
             )
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {

@@ -34,13 +34,16 @@ extension ScreencastBarDisplay {
 }
 
 /// Where the control bar sits: where it was last left on that display, kept inside its visible
-/// frame, or else centered near the bottom, away from the notch notices at the top, and above an
-/// area being recorded when there's room. Positions are kept per display, relative to its visible
+/// frame, or else centered in the lower part of the screen, above the keys a recording shows and
+/// away from the notch notices at the top, and above an area being recorded when there's room. Positions are kept per display, relative to its visible
 /// frame, in the injected defaults.
 struct ScreencastControlBarPlacement {
     static let defaultsKey = "screencast.controlBarPositions"
-    /// The default spot's height above the bottom of the visible frame, clear of the Dock.
-    static let bottomInset: CGFloat = 24
+    /// The default spot's height above the bottom of the visible frame, which the Dock is already
+    /// above: clear of the keys a recording shows at the bottom centre (`KeyDisplayOverlayView`) at
+    /// their largest, all three lines of them, with room to spare, so keycaps, which are in the
+    /// video, never cover the bar, which isn't. `ScreencastControlBarPlacementTests` measures them.
+    static let bottomInset: CGFloat = 368
     /// Room the default spot keeps from the visible frame's edges, and from an area it moves off.
     static let margin: CGFloat = 12
 
