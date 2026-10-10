@@ -42,6 +42,9 @@ final class AppModel {
     let recentTranslations: RecentTranslations
     /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
     let keywordExpansion: KeywordExpansionController
+    /// The on-screen key display (#443). The Keystrokes plugin holds it while it's on, and a
+    /// Screencast recording holds it for the recording, with the plugin on or off.
+    let keyDisplay: KeyDisplay
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
@@ -161,6 +164,7 @@ final class AppModel {
         snippets injectedSnippets: SnippetStore? = nil,
         textPaster injectedTextPaster: (any TextPasting)? = nil,
         keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
+        keyDisplay injectedKeyDisplay: KeyDisplay? = nil,
         updatePrompt injectedUpdatePrompt: (any UpdatePromptPresenting)? = nil,
         whatsNew injectedWhatsNew: (any WhatsNewPresenting)? = nil,
         problemReports injectedProblemReports: (any ProblemReportPresenting)? = nil,
@@ -299,6 +303,9 @@ final class AppModel {
             restorer: commandPalette.clipboardRestorer
         )
         self.keywordExpansion = keywordExpansion
+        // Unit tests never hear the keyboard or the pointer, or draw the display.
+        let keyDisplay = injectedKeyDisplay ?? KeyDisplay.makeDefault()
+        self.keyDisplay = keyDisplay
         // Dictation's insert shares it too, while its Put the clipboard back setting is on.
         dictation.clipboardRestorer = commandPalette.clipboardRestorer
         dictation.restoresClipboard = { preferences.bool(.dictationRestoresClipboard, for: .dictation) }
@@ -356,8 +363,13 @@ final class AppModel {
                 speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
+            KeystrokesModule(display: keyDisplay),
         ])
         commandPalette.tabContents = capabilities.paletteContents
+        // The key display names a Keybumps shortcut while it's registered.
+        keyDisplay.registeredShortcutName = { [shortcuts] press in
+            KeystrokeActionNames.keybumpsName(for: press, bindings: shortcuts.desiredBindings)
+        }
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         commandPalette.offerPasteSetup = { [weak self] plugin in self?.offerPasteSetup(for: plugin) }
@@ -803,6 +815,8 @@ final class AppModel {
         permissionDragAssistant.dismissIfGranted(using: permissions)
         advancePermissionWalkthroughIfNeeded()
         capabilities.permissionsDidRefresh(capabilityContext)
+        // The key display can be held with the Keystrokes plugin off, so the shell retries its tap.
+        keyDisplay.permissionsDidRefresh()
         refreshDetectorState()
         updateMissingPermissionBadge()
     }

@@ -29,7 +29,7 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
     var explanation: String {
         switch self {
         case .accessibility: "Lets Window Manager resize other apps, Dictation return text to the original cursor, Snippets expand keywords, and ⌘P in the Command Palette paste into the app you’re using."
-        case .inputMonitoring: "Lets Shortcut Coach recognize supported mouse and keyboard actions outside Keybumps, and Snippets notice when you type a keyword."
+        case .inputMonitoring: "Lets Shortcut Coach recognize supported mouse and keyboard actions outside Keybumps, Snippets notice when you type a keyword, and Keystrokes show the shortcuts you press."
         case .microphone: "Lets Dictation record only while its recording indicator is visible."
         case .speechRecognition: "Lets Apple transcribe Dictation locally on this Mac."
         case .screenRecording: "Lets Screenshot Tools take screenshots with its hotkeys."

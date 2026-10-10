@@ -113,6 +113,8 @@ extension AppModel {
             textPaster: InertTextPaster(),
             // Never listens to the keyboard.
             keyTypingMonitor: InertKeyTypingMonitor(),
+            // The key display never hears the keyboard or the pointer, and draws nothing.
+            keyDisplay: KeyDisplay(keys: InertKeyTypingMonitor(), pointer: InertPointerEventMonitor(), presenter: InertKeyDisplayPresenter()),
             // Never shows the restart prompt or What's New.
             updatePrompt: InertUpdatePromptPresenter(),
             whatsNew: InertWhatsNewPresenter(),
@@ -174,13 +176,6 @@ enum UITestSandbox {
               (try? data.write(to: url)) != nil else { return nil }
         return url
     }
-}
-
-private final class InertPointerEventMonitor: PointerEventMonitoring {
-    var onSample: ((PointerSample) -> Void)?
-    var onTapRecovered: (() -> Void)?
-    func start() -> Bool { true }
-    func stop() {}
 }
 
 private struct FakeDetectorPermissions: DetectorPermissionProviding {

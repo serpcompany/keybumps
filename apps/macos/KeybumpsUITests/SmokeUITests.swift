@@ -30,7 +30,7 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation"] {
+        for section in ["permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes"] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -206,6 +206,24 @@ final class SmokeUITests: XCTestCase {
         element("capability.offBanner.turnOn.translation").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
         XCTAssertTrue(element("capability.offBanner.translation").waitForNonExistence(timeout: 5))
+    }
+
+    func testKeystrokesShipsOffAndTurnsOnInSettings() {
+        // Its page is drawn by the plugin template, with Input Monitoring, which its keyboard tap
+        // needs, and its preferences. The UI-test composition's key display never listens or draws.
+        launch(permissions: "denied", ["-KBOpenSettings", "keystrokes"])
+        let toggle = element("capability.toggle.keystrokes")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForValue(of: toggle, 0), "Keystrokes ships off")
+        XCTAssertTrue(app.staticTexts["Input Monitoring"].exists)
+        for key in ["style", "position", "size", "duration", "keys", "namesActions", "showsClicks"] {
+            XCTAssertTrue(element("plugin.keystrokes.\(key)").exists, key)
+        }
+        XCTAssertTrue(element("capability.offBanner.keystrokes").exists, "Its page says it's off")
+
+        element("capability.offBanner.turnOn.keystrokes").click()
+        XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.keystrokes").waitForNonExistence(timeout: 5))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
