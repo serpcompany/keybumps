@@ -80,6 +80,9 @@ final class ScreencastReviewModel {
 
     /// Called once, when the panel is done with the capture.
     @ObservationIgnored var onFinish: ((ScreencastReviewOutcome) -> Void)?
+    /// Called when the editor finishes while the panel is still open, so it takes the keyboard back
+    /// from the app the editor returned to.
+    @ObservationIgnored var onEditorFinished: (() -> Void)?
 
     @ObservationIgnored private let repositories: ScreencastRepositoryMemory
     @ObservationIgnored private let fileManager: FileManager
@@ -275,7 +278,11 @@ final class ScreencastReviewModel {
                 editedImages[display] = edited
                 refreshImage()
             }
-            if isFinished { recordLateEdit(edited, original: files[display]) }
+            if isFinished {
+                recordLateEdit(edited, original: files[display])
+            } else {
+                onEditorFinished?()
+            }
         }
         if !opened {
             editingDisplay = nil

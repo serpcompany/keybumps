@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 import Testing
 @testable import Keybumps
@@ -151,33 +152,115 @@ struct ScreencastReviewLifecycleTests {
         #expect(ScreencastReview.read(from: input.metadataURL)?.note == "mid-trim")
     }
 
-    @Test("At launch, what an interrupted trim left aside is put back or removed, and nothing else is touched")
-    func recoversInterruptedTrims() throws {
+    @Test("At launch, a folder a trim was swapping is rolled back whole, its lengths read again; a stray cut is removed")
+    func recoversInterruptedTrims() async throws {
         defer { fixture.tearDown() }
-        let folder = fixture.folder.url.appendingPathComponent("1791000000", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        func write(_ name: String, _ text: String) throws { try Data(text.utf8).write(to: folder.appendingPathComponent(name)) }
-        try write("video-1.mov", "cut 1")
-        try write(".video-1.untrimmed.mov", "original 1")
-        try write(".video-2.untrimmed.mov", "original 2")
-        try write(".video-1-mixdown.trimmed.mp4", "cut mixdown")
-        try write(".DS_Store", "finder")
-        try write("meta.json", "{}")
+        // A folder caught between two files' swaps: the recording already swapped for its cut, its
+        // original aside, and the mixdown's cut not yet in. meta.json was written meanwhile.
+        let swapping = fixture.folder.url.appendingPathComponent("1791000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: swapping, withIntermediateDirectories: true)
+        try await ReviewFixture.writeMovie(to: swapping.appendingPathComponent("video-1.mov"), seconds: 1)
+        try await ReviewFixture.writeMovie(to: swapping.appendingPathComponent(".video-1.untrimmed.mov"), seconds: 3)
+        func write(_ name: String, _ text: String, in folder: URL) throws { try Data(text.utf8).write(to: folder.appendingPathComponent(name)) }
+        try write("video-1-mixdown.mp4", "original mixdown", in: swapping)
+        try write(".video-1-mixdown.trimmed.mp4", "cut mixdown", in: swapping)
+        try write(".DS_Store", "finder", in: swapping)
+        try write("meta.json", #"{"duration":1,"videos":[{"file":"video-1.mov","duration":1}],"review":{"note":"kept"}}"#, in: swapping)
+        // A folder with only a cut left behind, never swapped in.
+        let cutOnly = fixture.folder.url.appendingPathComponent("1791000100", isDirectory: true)
+        try FileManager.default.createDirectory(at: cutOnly, withIntermediateDirectories: true)
+        try write("video-1.mov", "original 2", in: cutOnly)
+        try write(".video-1.trimmed.mov", "cut 2", in: cutOnly)
+        try write("meta.json", #"{"duration":4}"#, in: cutOnly)
         try Data("loose".utf8).write(to: fixture.folder.url.appendingPathComponent(".video-9.trimmed.mov"))
 
-        ScreencastReviewFiles.recoverInterruptedTrims(in: fixture.folder.url, fileManager: .default)
+        await ScreencastReviewFiles.recoverInterruptedTrims(in: fixture.folder.url, fileManager: .default)
 
-        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
-        #expect(names == [".DS_Store", "meta.json", "video-1.mov", "video-2.mov"])
-        #expect(try String(contentsOf: folder.appendingPathComponent("video-1.mov"), encoding: .utf8) == "cut 1",
-                "a cut already swapped in stays, as the trim would have left it")
-        #expect(try String(contentsOf: folder.appendingPathComponent("video-2.mov"), encoding: .utf8) == "original 2",
-                "an original with nothing in its place goes back")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: swapping.path).sorted()
+                == [".DS_Store", "meta.json", "video-1-mixdown.mp4", "video-1.mov"])
+        #expect(abs(try await AVURLAsset(url: swapping.appendingPathComponent("video-1.mov")).load(.duration).seconds - 3) < 0.1,
+                "the original recording is back, not the cut")
+        #expect(try String(contentsOf: swapping.appendingPathComponent("video-1-mixdown.mp4"), encoding: .utf8) == "original mixdown")
+        let metadata = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: swapping.appendingPathComponent("meta.json"))) as? [String: Any])
+        #expect(abs((metadata["duration"] as? Double ?? 0) - 3) < 0.1, "meta.json's lengths match the files again")
+        #expect(abs(((metadata["videos"] as? [[String: Any]])?.first?["duration"] as? Double ?? 0) - 3) < 0.1)
+        #expect((metadata["review"] as? [String: Any])?["note"] as? String == "kept", "and nothing else in it changes")
+
+        #expect(try FileManager.default.contentsOfDirectory(atPath: cutOnly.path).sorted() == ["meta.json", "video-1.mov"])
+        #expect(try String(contentsOf: cutOnly.appendingPathComponent("video-1.mov"), encoding: .utf8) == "original 2")
+        #expect(try String(contentsOf: cutOnly.appendingPathComponent("meta.json"), encoding: .utf8) == #"{"duration":4}"#)
         #expect(FileManager.default.fileExists(atPath: fixture.folder.url.appendingPathComponent(".video-9.trimmed.mov").path),
                 "only capture folders are looked in")
         #expect(ScreencastReviewFiles.visibleName(ofSideFile: ".video-1.trimmed.mov", tag: "trimmed") == "video-1.mov")
         #expect(ScreencastReviewFiles.visibleName(ofSideFile: ".trimmed.mov", tag: "trimmed") == nil)
         #expect(ScreencastReviewFiles.visibleName(ofSideFile: "video-1.trimmed.mov", tag: "trimmed") == nil)
+    }
+
+    // MARK: Trims of every display
+
+    @Test("A display that ended before the trim's start is left as it was, and the others are cut")
+    func displayEndedBeforeTheTrim() async throws {
+        defer { fixture.tearDown() }
+        guard case .video(let capture) = try fixture.video(displays: 2, mixdown: false) else { return }
+        let ended = ScreencastVideo(
+            file: capture.videos[1].file, mixdown: nil, pixelWidth: 64, pixelHeight: 36, audioTracks: [], duration: 1
+        )
+        let mixed = ScreencastCapture(folder: capture.folder, videos: [capture.videos[0], ended], duration: 4, endedEarly: nil)
+        let trimmer = FakeTrimmer()
+        let trimmed = try await ScreencastReviewFiles.trim(
+            mixed, to: try #require(ScreencastTrimRange(start: 2, end: 3, within: 4)), trimmer: trimmer, fileManager: .default
+        )
+        #expect(trimmer.cutCount == 1)
+        #expect(try String(contentsOf: capture.videos[0].file, encoding: .utf8) == "cut of video-1.mov")
+        #expect(try String(contentsOf: capture.videos[1].file, encoding: .utf8) == "original video-2.mov")
+        #expect(trimmed.videos.map(\.duration) == [1, 1] && trimmed.duration == 1)
+    }
+
+    @Test("A trim keeps which displays stopped early")
+    func trimKeepsDisplaysEndedEarly() async throws {
+        defer { fixture.tearDown() }
+        guard case .video(let capture) = try fixture.video(displays: 2, mixdown: false) else { return }
+        var withEnd = capture
+        withEnd.displaysEndedEarly = [ScreencastDisplayEnd(index: 1, reason: .targetUnavailable, file: capture.videos[1].file)]
+        let trimmed = try await ScreencastReviewFiles.trim(
+            withEnd, to: try #require(ScreencastTrimRange(start: 1, end: 3, within: 4)), trimmer: FakeTrimmer(), fileManager: .default
+        )
+        #expect(trimmed.displaysEndedEarly == withEnd.displaysEndedEarly)
+    }
+
+    // MARK: The keyboard after the editor
+
+    @Test("When the editor closes with the panel open, the panel takes the keyboard back; after the panel closed, it doesn't")
+    func keyboardComesBackAfterTheEditor() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let editor = FakeScreenshotEditor()
+        var keyboardTaken = 0
+        let panel = ScreencastReviewPanel(
+            repositories: fixture.repositories,
+            pasteboard: fixture.pasteboard,
+            keepOutOfClipboardHistory: {},
+            editor: { editor },
+            screenshots: { nil },
+            settings: ScreencastReviewSettings(defaults: fixture.defaults),
+            screen: { nil },
+            takeKeyboard: { _ in keyboardTaken += 1 }
+        )
+        panel.onFinish = { outcomes.outcomes.append($0) }
+        await panel.show(try fixture.screenshot(name: "1791000000"))
+        panel.model?.edit()
+        #expect(keyboardTaken == 0)
+        editor.finishEditing(savedAt: nil)
+        #expect(keyboardTaken >= 1, "Return goes to the panel, not the app the editor gave the front back to")
+        await panel.close()
+
+        keyboardTaken = 0
+        await panel.show(try fixture.screenshot(name: "1791000100", seed: "b"))
+        panel.model?.edit()
+        panel.shutDown()
+        try await eventually { !panel.isShown }
+        editor.finishEditing(savedAt: nil)
+        #expect(keyboardTaken == 0, "no panel to take it")
     }
 
     // MARK: Turning Screencast off, and captures taking turns

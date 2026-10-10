@@ -7,8 +7,13 @@ import AVFoundation
 /// again with the recorder's settings (`ScreencastMovieWriter.videoSettings`, `audioSettings`), so
 /// the file holds nothing from before the trim:
 /// - the picture: frames from the trim on, plus the one frame on screen at the trim point, which
-///   starts at zero;
+///   starts at zero, and, as the recorder ends a recording, the last frame again at the cut's end,
+///   so a still screen lasts as long as the sound;
 /// - each sound: cut to the sample at the trim, and at its end.
+///
+/// The encoder runs at the recorder's frame rate, not the file's average: the recorder writes a
+/// frame only when the screen changes, so a mostly still recording averages a few a second, and
+/// planning with that would cut the bitrate and space keyframes by it.
 enum ScreencastTrimEncoder {
     /// The picture the trimmed file starts with, and its tracks' encoders.
     struct Plan: Sendable {
@@ -28,7 +33,7 @@ enum ScreencastTrimEncoder {
         }
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
         let size = try await videoTrack.load(.naturalSize)
-        let frameRate = try await videoTrack.load(.nominalFrameRate)
+        let shortestFrame = try await videoTrack.load(.minFrameDuration)
         let transform = try await videoTrack.load(.preferredTransform)
         var channels: [Int] = []
         for track in audioTracks {
@@ -40,7 +45,7 @@ enum ScreencastTrimEncoder {
             range: range,
             pixelWidth: Int(size.width.rounded()),
             pixelHeight: Int(size.height.rounded()),
-            framesPerSecond: frameRate > 0 ? Int(frameRate.rounded()) : 30,
+            framesPerSecond: framesPerSecond(shortestFrame: shortestFrame),
             transform: transform,
             audioChannels: channels
         )
@@ -61,6 +66,13 @@ enum ScreencastTrimEncoder {
             try? FileManager.default.removeItem(at: destination)
             throw ScreencastReviewFailure.trimFailed
         }
+    }
+
+    /// The recorder's rate (`ScreencastOptions`), or the file's fastest stretch when that's faster.
+    static func framesPerSecond(shortestFrame: CMTime) -> Int {
+        let recorder = ScreencastOptions().framesPerSecond
+        guard shortestFrame.isNumeric, shortestFrame.seconds > 0 else { return recorder }
+        return min(max(recorder, Int((1 / shortestFrame.seconds).rounded())), 120)
     }
 
     /// AVFoundation's asset objects, confined to the encoder's own queue once handed over.
@@ -114,7 +126,8 @@ enum ScreencastTrimEncoder {
         guard reader.canAdd(videoOutput), writer.canAdd(videoInput) else { throw ScreencastReviewFailure.trimFailed }
         reader.add(videoOutput)
         writer.add(videoInput)
-        lanes.append(Lane(output: videoOutput, input: videoInput, cut: VideoCut(start: start, end: end)))
+        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(plan.framesPerSecond))
+        lanes.append(Lane(output: videoOutput, input: videoInput, cut: VideoCut(start: start, end: end, frameDuration: frameDuration)))
 
         for (track, channels) in zip(inputs.audioTracks, plan.audioChannels) {
             let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
@@ -142,7 +155,7 @@ enum ScreencastTrimEncoder {
         writer.startSession(atSourceTime: .zero)
         try pump(lanes, reader: reader, writer: writer)
         guard reader.status == .completed else { throw ScreencastReviewFailure.trimFailed }
-        writer.endSession(atSourceTime: CMTime(seconds: plan.range.duration, preferredTimescale: 48_000))
+        // No end to the session: as in a recording, the picture's last frame carries it to the end.
         let finished = DispatchSemaphore(value: 0)
         writer.finishWriting { finished.signal() }
         finished.wait()
@@ -212,17 +225,22 @@ private protocol TrackCut: AnyObject {
 }
 
 /// The picture: frames from the trim point on, and the latest frame before it, which is the one on
-/// screen at the trim point, moved to zero. Nothing earlier.
+/// screen at the trim point, moved to zero. Nothing earlier. The last frame kept goes again at the
+/// cut's end, as `ScreencastWriterCore.finish(at:)` ends a recording.
 private final class VideoCut: TrackCut {
     private let start: CMTime
     private let end: CMTime
+    private let frameDuration: CMTime
     /// The latest frame before the trim point, until a frame after it shows whether it's needed.
     private var onScreenAtStart: CMSampleBuffer?
     private var hasStarted = false
+    /// The last frame kept, and where it starts in the cut.
+    private var lastKept: (sample: CMSampleBuffer, time: CMTime)?
 
-    init(start: CMTime, end: CMTime) {
+    init(start: CMTime, end: CMTime, frameDuration: CMTime) {
         self.start = start
         self.end = end
+        self.frameDuration = frameDuration
     }
 
     func take(_ sample: CMSampleBuffer) -> [CMSampleBuffer] {
@@ -235,19 +253,31 @@ private final class VideoCut: TrackCut {
         var kept: [CMSampleBuffer] = []
         if !hasStarted {
             hasStarted = true
-            if time > start, let frame = onScreenAtStart, let moved = ScreencastSampleTiming.retimed(frame, to: .zero) {
-                kept.append(moved)
-            }
+            if time > start, let frame = onScreenAtStart { kept += keep(frame, at: .zero) }
             onScreenAtStart = nil
         }
-        if let moved = ScreencastSampleTiming.retimed(sample, to: time - start) { kept.append(moved) }
+        kept += keep(sample, at: time - start)
         return kept
     }
 
     func rest() -> [CMSampleBuffer] {
+        var kept: [CMSampleBuffer] = []
         // A still screen may have no frame after the trim point: the one on screen then is the picture.
-        guard !hasStarted, let frame = onScreenAtStart, let moved = ScreencastSampleTiming.retimed(frame, to: .zero) else { return [] }
-        onScreenAtStart = nil
+        if !hasStarted, let frame = onScreenAtStart {
+            kept += keep(frame, at: .zero)
+            onScreenAtStart = nil
+        }
+        let length = end - start
+        if let last = lastKept, length > last.time + frameDuration,
+           let copy = ScreencastWriterCore.copy(last.sample, at: length, duration: frameDuration) {
+            kept.append(copy)
+        }
+        return kept
+    }
+
+    private func keep(_ sample: CMSampleBuffer, at time: CMTime) -> [CMSampleBuffer] {
+        guard let moved = ScreencastSampleTiming.retimed(sample, to: time) else { return [] }
+        lastKept = (sample, time)
         return [moved]
     }
 }
