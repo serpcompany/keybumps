@@ -510,9 +510,27 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
 
     /// The next this many snapshots fail.
     var contentFailures = 0
+    /// Each read's `onScreenOnly`, in order.
+    private(set) var readKinds: [Bool] = []
+    /// Holds each snapshot until `releaseContent()`.
+    var holdsContent = false
+    private var heldContent: [CheckedContinuation<Void, Never>] = []
+    var heldContentCount: Int { heldContent.count }
+
+    func releaseContent() {
+        let held = heldContent
+        heldContent = []
+        held.forEach { $0.resume() }
+    }
 
     func content() async throws -> ScreencastContent {
+        try await content(onScreenOnly: false)
+    }
+
+    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
         contentReads += 1
+        readKinds.append(onScreenOnly)
+        if holdsContent { await withCheckedContinuation { heldContent.append($0) } }
         if let contentError { throw contentError }
         if contentFailures > 0 {
             contentFailures -= 1

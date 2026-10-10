@@ -14,6 +14,10 @@ struct ScreencastStreamConfiguration: Equatable, Sendable {
     /// A window recording: a resized window scales into the fixed-size video instead of being
     /// cropped.
     let scalesToFit: Bool
+    /// ScreenCaptureKit's `includeChildWindows`. Off for window recordings, whose filter names
+    /// every window it shows (sheets and popovers included), so a child window nobody named, such as
+    /// one an overlay attaches, stays out. Left at ScreenCaptureKit's default, on, elsewhere.
+    var includesChildWindows = true
 }
 
 /// Where a stream delivers its samples, on its own queue. A stream that stops on its own (the
@@ -43,6 +47,10 @@ protocol ScreencastStream: AnyObject {
 protocol ScreencastCaptureSystem: AnyObject {
     /// What's on screen now.
     func content() async throws -> ScreencastContent
+
+    /// What's on screen now, with `onScreenOnly` leaving out windows that aren't: minimized,
+    /// hidden, or on other Spaces. Smaller and faster, which is all a window recording needs.
+    func content(onScreenOnly: Bool) async throws -> ScreencastContent
 
     /// A stream showing `plan`, delivering frames sized by `configuration`, with no sound.
     func makeVideoStream(
@@ -76,4 +84,9 @@ extension ScreencastCaptureSystem {
     /// A capture system that can't tell: window recordings then pick up an app's new windows only
     /// when something else rebuilds the filter.
     func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
+
+    /// A capture system with one kind of read gives it whatever's asked.
+    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
+        try await content()
+    }
 }
