@@ -247,7 +247,7 @@ struct ScreencastTests {
 
     @available(macOS 15, *)
     @Test("Turning Screencast off closes the picker")
-    func turningOffCancels() throws {
+    func turningOffCancels() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastOff-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
@@ -256,7 +256,8 @@ struct ScreencastTests {
         let controller = try #require(Self.module(of: harness).controller)
         #expect(controller.phase == .picking)
         harness.model.setCapability(.screencast, enabled: false)
-        #expect(controller.phase == .idle && controller.picker == nil)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(controller.picker == nil)
         harness.model.startScreencast()
         #expect(controller.phase == .idle, "Off, Start Screencast opens its page instead")
     }

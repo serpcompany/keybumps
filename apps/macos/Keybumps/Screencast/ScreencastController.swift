@@ -94,6 +94,12 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 ///
 /// `onPhaseChange` reports each phase as it's entered. Escape cancels while picking, counting down,
 /// or starting; once recording, only `discard()` throws it away.
+///
+/// A recording that ends on its own (macOS stopped it, its display went away, the disk filled)
+/// leaves `.recording` for `.finishing` as soon as the recorder starts saving what it has, and its
+/// capture reaches `onCaptureFinished` once saved. Meanwhile `stop()` waits for that capture,
+/// `discard()` deletes it when it arrives (it never reaches `onCaptureFinished`), and `restart()`
+/// does nothing.
 @available(macOS 15, *)
 @MainActor
 @Observable
@@ -134,6 +140,15 @@ final class ScreencastController {
     @ObservationIgnored private var windowsLoad: Task<Void, Never>?
     /// Bumped by every open and cancel, so a cancelled countdown, start, or window read does nothing.
     @ObservationIgnored private var generation = 0
+    /// The recorder is saving a recording that ended on its own, until `recordingEndedEarly`.
+    @ObservationIgnored private var isEndingEarly = false
+    /// `discard()` came while it was: the capture it saves is deleted.
+    @ObservationIgnored private var discardsEarlyEnd = false
+    @ObservationIgnored private var earlyEndWaiters: [CheckedContinuation<Void, Never>] = []
+    /// While `restart()` waits on the recorder, which may end the recording itself if it fails.
+    @ObservationIgnored private var isRestarting = false
+    /// False after `shutDown()`: what's saved stays in the captures folder and nothing opens.
+    @ObservationIgnored private var opensFinishedCaptures = true
 
     /// - Parameters:
     ///   - recorder: The recording engine; a new one, inert in the unit-test host, unless given.
@@ -172,6 +187,7 @@ final class ScreencastController {
         self.recorder.onEndedEarly = { [weak self] capture, failure in
             self?.recordingEndedEarly(capture, failure)
         }
+        followRecorderState()
     }
 
     // MARK: Picking
@@ -192,22 +208,31 @@ final class ScreencastController {
         )
         picker = model
         choice = nil
+        opensFinishedCaptures = true
         phase = .picking
         presenter.watchEscape { [weak self] in self?.cancel() }
-        presenter.showPicker(model, confirm: { [weak self] in self?.confirm() }, cancel: { [weak self] in self?.cancel() })
-        logger.info("screencast picker opened displays=\(layout.screens.count, privacy: .public)")
 
+        // The screen is read before the picker covers it, so an alert macOS shows for the read
+        // (such as its monthly question about apps that record the screen) is never under it.
         let generation = generation
         windowsLoad = Task { [weak self] in
             guard let self else { return }
             do {
                 let content = try await self.system.content()
-                guard self.generation == generation, self.picker === model else { return }
-                model.windows = ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: self.ownProcessID)
+                if self.generation == generation, self.picker === model {
+                    model.windows = ScreencastWindowPicking.pickableWindows(
+                        in: content,
+                        ownProcessID: self.ownProcessID,
+                        transparent: self.system.transparentWindows()
+                    )
+                }
             } catch {
                 // Window picking offers nothing; Record says why if the screen can't be read.
                 self.logger.error("screencast picker windows unavailable category=\(Self.category(of: error), privacy: .public)")
             }
+            guard self.generation == generation, self.picker === model, self.phase == .picking else { return }
+            self.presenter.showPicker(model, confirm: { [weak self] in self?.confirm() }, cancel: { [weak self] in self?.cancel() })
+            self.logger.info("screencast picker opened displays=\(layout.screens.count, privacy: .public)")
         }
     }
 
@@ -302,36 +327,54 @@ final class ScreencastController {
     // MARK: Recording
 
     func pause() {
-        guard phase == .recording else { return }
+        guard !noticeEarlyEnd(), phase == .recording else { return }
         recorder.pause()
         if recorder.state == .paused { phase = .paused }
     }
 
     func resume() {
-        guard phase == .paused else { return }
+        guard !noticeEarlyEnd(), phase == .paused else { return }
         recorder.resume()
         if recorder.state == .recording { phase = .recording }
     }
 
     /// Switches a recorded sound off or back on (`ScreencastRecorder.setAudio`).
     func setAudio(_ source: ScreencastAudioSource, on: Bool) {
-        guard phase.isRecording else { return }
+        guard !noticeEarlyEnd(), phase.isRecording else { return }
         recorder.setAudio(source, on: on)
     }
 
-    /// Throws away what's recorded and starts again at once, recording.
+    /// Throws away what's recorded and starts again at once, recording, or paused if `pause()`
+    /// came meanwhile. Refused while a recording that ended on its own is saving; a `stop()` or
+    /// `discard()` that comes while it waits on the recorder wins.
     func restart() async {
-        guard phase.isRecording else { return }
+        guard !noticeEarlyEnd(), phase.isRecording else { return }
+        isRestarting = true
         do {
             try await recorder.restart()
-            phase = .recording
+            isRestarting = false
         } catch {
+            isRestarting = false
+            // A stop or discard took over meanwhile.
+            guard phase.isRecording else { return }
             end(showing: error)
+            return
+        }
+        guard !noticeEarlyEnd(), phase.isRecording else { return }
+        switch recorder.state {
+        case .recording: phase = .recording
+        case .paused: phase = .paused
+        default: break
         }
     }
 
-    /// Stops and keeps the recording, then hands it to `onCaptureFinished`.
+    /// Stops and keeps the recording, then hands it to `onCaptureFinished`. While a recording that
+    /// ended on its own is saving, it waits for that capture instead.
     func stop() async {
+        if noticeEarlyEnd() {
+            await earlyEndSaved()
+            return
+        }
         guard phase.isRecording else { return }
         phase = .finishing
         presenter.closeAreaHighlight()
@@ -343,8 +386,14 @@ final class ScreencastController {
         }
     }
 
-    /// Stops and deletes the recording.
+    /// Stops and deletes the recording. While a recording that ended on its own is saving, it
+    /// deletes that capture once it's saved, and nothing opens for it.
     func discard() async {
+        if noticeEarlyEnd() {
+            discardsEarlyEnd = true
+            await earlyEndSaved()
+            return
+        }
         guard phase.isRecording else { return }
         phase = .finishing
         presenter.closeAreaHighlight()
@@ -353,16 +402,79 @@ final class ScreencastController {
         phase = .idle
     }
 
+    /// Screencast turned off, or Keybumps Locked: the picker closes, and a countdown or a start is
+    /// cancelled. A recording stops and is kept, and a capture being saved finishes; neither opens
+    /// anything: they stay in the captures folder. Footage is never thrown away here.
+    func shutDown() async {
+        opensFinishedCaptures = false
+        switch phase {
+        case .picking, .countingDown, .starting:
+            cancel()
+        case .recording, .paused:
+            await stop()
+        case .finishing:
+            if isEndingEarly { await earlyEndSaved() }
+        case .idle:
+            break
+        }
+    }
+
+    /// Whether the recorder is saving a recording that ended on its own. The first time it's seen
+    /// while still showing a recording, the phase becomes `.finishing` and the highlight closes;
+    /// `recordingEndedEarly` completes it.
+    @discardableResult
+    private func noticeEarlyEnd() -> Bool {
+        if !isEndingEarly, !isRestarting, phase.isRecording, recorder.state == .stopping {
+            isEndingEarly = true
+            presenter.closeAreaHighlight()
+            phase = .finishing
+        }
+        return isEndingEarly
+    }
+
+    /// Notices an early end as soon as the recorder starts saving one, not only when the control
+    /// bar acts.
+    private func followRecorderState() {
+        withObservationTracking {
+            _ = recorder.state
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.noticeEarlyEnd()
+                self?.followRecorderState()
+            }
+        }
+    }
+
+    /// Returns once the capture a recording that ended on its own saves has been handled.
+    private func earlyEndSaved() async {
+        guard isEndingEarly else { return }
+        await withCheckedContinuation { earlyEndWaiters.append($0) }
+    }
+
     private func recordingEndedEarly(_ capture: ScreencastCapture?, _ failure: ScreencastFailure) {
         guard phase.isRecording || phase == .finishing else { return }
+        let discards = discardsEarlyEnd
+        isEndingEarly = false
+        discardsEarlyEnd = false
         presenter.closeAreaHighlight()
-        presenter.showMessage(ScreencastMessages.endedEarly(failure, kept: capture != nil))
-        if let capture {
-            finish(with: .video(capture))
-        } else {
+        if discards {
+            // Asked for while it saved: nothing is kept, and nothing says it was.
+            if let capture { try? fileManager.removeItem(at: capture.folder) }
+            logger.info("screencast discarded after it ended early category=\(failure.rawValue, privacy: .public)")
             choice = nil
             phase = .idle
+        } else {
+            presenter.showMessage(ScreencastMessages.endedEarly(failure, kept: capture != nil))
+            if let capture {
+                finish(with: .video(capture))
+            } else {
+                choice = nil
+                phase = .idle
+            }
         }
+        let waiters = earlyEndWaiters
+        earlyEndWaiters = []
+        waiters.forEach { $0.resume() }
     }
 
     // MARK: Screenshots
@@ -391,17 +503,26 @@ final class ScreencastController {
     private func finish(with result: ScreencastCaptureResult) {
         choice = nil
         phase = .idle
-        onCaptureFinished?(result)
+        if opensFinishedCaptures {
+            onCaptureFinished?(result)
+        } else {
+            logger.info("screencast capture kept while turned off")
+        }
     }
 
-    /// Something failed: everything closes, and the message says why.
+    /// Something failed: everything closes, and the message says why. A call the recorder refused
+    /// (`ScreencastRecorderError`) has nothing to tell the person, so it closes quietly.
     private func end(showing error: Error) {
-        let failure = (error as? ScreencastFailure) ?? .captureFailed
-        logger.error("screencast failed category=\(failure.rawValue, privacy: .public)")
         presenter.closeCountdown()
         presenter.closeAreaHighlight()
         presenter.stopWatchingEscape()
-        presenter.showMessage(ScreencastMessages.text(for: failure, kind: choice?.kind ?? .video))
+        if error is ScreencastRecorderError {
+            logger.error("screencast ended category=\(Self.category(of: error), privacy: .public)")
+        } else {
+            let failure = (error as? ScreencastFailure) ?? .captureFailed
+            logger.error("screencast failed category=\(failure.rawValue, privacy: .public)")
+            presenter.showMessage(ScreencastMessages.text(for: failure, kind: choice?.kind ?? .video))
+        }
         choice = nil
         phase = .idle
     }

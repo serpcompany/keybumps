@@ -172,6 +172,16 @@ struct ScreencastPickerTests {
         #expect(pickable.map(\.id) == [10, 20])
     }
 
+    @Test("A window drawn with alpha 0 can't be picked, so the window under it takes the click")
+    func transparentWindows() {
+        let invisible = ScreencastContent.Window(id: 50, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 0, processID: Screens.otherApp, isUntitled: true, isOnScreen: true)
+        let content = Screens.content(windows: [invisible, Screens.browserWindow])
+        #expect(ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: Screens.ownProcess).map(\.id) == [50, 10])
+        let pickable = ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: Screens.ownProcess, transparent: [50])
+        #expect(pickable.map(\.id) == [10])
+        #expect(ScreencastWindowPicking.window(at: CGPoint(x: 150, y: 150), in: pickable)?.id == 10)
+    }
+
     @Test("The window under the pointer is the frontmost one there")
     func windowUnderPointer() {
         let windows = [Screens.browserOtherWindow, Screens.browserWindow]

@@ -272,11 +272,11 @@ final class AppPreferences {
         loadPluginValues()
     }
 
-    /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     /// The last area Screencast's picker recorded or captured (`screencast.lastArea`), kept with
     /// the other settings.
     var screencastAreaMemory: ScreencastAreaMemory { ScreencastAreaMemory(defaults: defaults) }
 
+    /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {
         if enabled { enabledCapabilities.insert(capability) }
         else { enabledCapabilities.remove(capability) }

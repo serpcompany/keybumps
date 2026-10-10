@@ -89,6 +89,13 @@ final class FakePickerSystem: ScreencastPickerSystem {
     var screen: ScreencastContent
     var contentError: ScreencastFailure?
     var screenshotError: ScreencastFailure?
+    /// Windows drawn with alpha 0.
+    var transparent: Set<CGWindowID> = []
+    /// Runs as the screen is read.
+    var onContent: () -> Void = {}
+    /// Holds each screenshot until `releaseScreenshots()`.
+    var holdsScreenshots = false
+    private var heldScreenshots: [CheckedContinuation<Void, Never>] = []
     private(set) var plans: [ScreencastScreenshotPlan] = []
     private(set) var contentReads = 0
 
@@ -96,14 +103,26 @@ final class FakePickerSystem: ScreencastPickerSystem {
         screen = content
     }
 
+    var isHoldingScreenshot: Bool { !heldScreenshots.isEmpty }
+
     func content() async throws -> ScreencastContent {
         contentReads += 1
+        onContent()
         if let contentError { throw contentError }
         return screen
     }
 
+    func transparentWindows() -> Set<CGWindowID> { transparent }
+
+    func releaseScreenshots() {
+        let held = heldScreenshots
+        heldScreenshots = []
+        held.forEach { $0.resume() }
+    }
+
     func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
         plans.append(plan)
+        if holdsScreenshots { await withCheckedContinuation { heldScreenshots.append($0) } }
         if let screenshotError { throw screenshotError }
         return ScreencastImages.blank(width: plan.configuration.pixelWidth, height: plan.configuration.pixelHeight)
     }
@@ -214,5 +233,48 @@ enum ScreencastWait {
             try? await Task.sleep(nanoseconds: 2_000_000)
         }
         return condition()
+    }
+}
+
+/// The recorder's fake writers, with every mixdown held until `release()`: a recording that ends
+/// on its own stays in the middle of saving (the recorder `.stopping`) for as long as a test needs.
+final class HoldingMixdownWriters: ScreencastWriterFactory, @unchecked Sendable {
+    let base = FakeWriterFactory()
+    private let lock = NSLock()
+    private var holds = true
+    private var held: [CheckedContinuation<Void, Never>] = []
+
+    var isHolding: Bool { lock.withLock { !held.isEmpty } }
+
+    func makeWriter(
+        at url: URL,
+        pixelWidth: Int,
+        pixelHeight: Int,
+        audio: [ScreencastAudioSource],
+        options: ScreencastOptions,
+        onFailure: @escaping @Sendable () -> Void
+    ) throws -> any ScreencastMovieWriting {
+        try base.makeWriter(at: url, pixelWidth: pixelWidth, pixelHeight: pixelHeight, audio: audio, options: options, onFailure: onFailure)
+    }
+
+    func writeMixdown(of source: URL, to destination: URL) async throws {
+        await withCheckedContinuation { continuation in
+            let resumesNow = lock.withLock { () -> Bool in
+                if holds { held.append(continuation) }
+                return !holds
+            }
+            if resumesNow { continuation.resume() }
+        }
+        try await base.writeMixdown(of: source, to: destination)
+    }
+
+    /// Lets every mixdown through, from now on too.
+    func release() {
+        let continuations = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            defer { held = [] }
+            holds = false
+            return held
+        }
+        continuations.forEach { $0.resume() }
     }
 }

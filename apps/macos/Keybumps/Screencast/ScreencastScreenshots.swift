@@ -12,14 +12,31 @@ protocol ScreencastPickerSystem: AnyObject {
     /// What's on screen now, windows front to back.
     func content() async throws -> ScreencastContent
 
+    /// The windows on screen the window server draws fully transparent (alpha 0), which can't be
+    /// picked: some apps keep invisible ordinary windows over others.
+    func transparentWindows() -> Set<CGWindowID>
+
     /// A still image of what `plan` shows, read from `content`.
     func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage
 }
 
-/// What one screenshot image shows and its size: like one video stream's filter and geometry,
-/// without the pointer.
+/// What one screenshot image shows and its size, without the pointer.
 struct ScreencastScreenshotPlan: Equatable, Sendable {
-    let filter: ScreencastFilterPlan
+    enum Filter: Equatable, Sendable {
+        /// A display, or part of it (`configuration.sourceRect`), as a recording's filter reads it,
+        /// with all of Keybumps left out.
+        case display(ScreencastFilterPlan)
+        /// One window on its own, whole, with its transparent corners, wherever it is, even across
+        /// displays (`SCContentFilter(desktopIndependentWindow:)`). Nothing else shows: not its
+        /// app's other windows, menus, or palettes, and never Keybumps.
+        case window(CGWindowID)
+
+        var displayID: CGDirectDisplayID? {
+            if case .display(let plan) = self { plan.displayID } else { nil }
+        }
+    }
+
+    let filter: Filter
     let configuration: ScreencastStreamConfiguration
 }
 
@@ -117,7 +134,7 @@ enum ScreencastScreenshots {
                 ?? .display(size: display.frame.size, scale: display.scale)
             return ScreencastScreenshotPlan(
                 // No overlays: all of Keybumps stays out.
-                filter: ScreencastCaptureFilter.displayPlan(display: display.id, ownProcessID: ownProcessID, overlays: [], content: content),
+                filter: .display(ScreencastCaptureFilter.displayPlan(display: display.id, ownProcessID: ownProcessID, overlays: [], content: content)),
                 configuration: configuration(geometry)
             )
         }
@@ -134,15 +151,22 @@ enum ScreencastScreenshots {
             guard let display = content.display(id) else { throw ScreencastFailure.targetUnavailable }
             return [displayPlan(display, area: rect)]
         case .window(let id):
-            // Only the window's app, without its other ordinary windows, and never Keybumps.
+            // The window alone, whole, at the scale of the display showing most of it; never one of
+            // Keybumps's.
             guard let window = content.window(id), window.processID != ownProcessID,
                   let display = content.display(mostOverlapping: window.frame) else { throw ScreencastFailure.targetUnavailable }
-            let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
-            let hidden = ScreencastCaptureFilter.windowsToHide(recording: window, others: siblings).sorted()
-            let geometry = ScreencastCaptureGeometry.window(frame: window.frame, displayFrame: display.frame, scale: display.scale)
+            let scale = max(display.scale, 1)
             return [ScreencastScreenshotPlan(
-                filter: .applications(display.id, includedProcesses: [window.processID], exceptingWindows: hidden),
-                configuration: configuration(geometry)
+                filter: .window(id),
+                configuration: ScreencastStreamConfiguration(
+                    pixelWidth: Int((window.frame.width * scale).rounded(.up)),
+                    pixelHeight: Int((window.frame.height * scale).rounded(.up)),
+                    sourceRect: CGRect(origin: .zero, size: window.frame.size),
+                    framesPerSecond: 1,
+                    showsCursor: false,
+                    showsMouseClicks: false,
+                    scalesToFit: false
+                )
             )]
         }
     }
@@ -214,7 +238,7 @@ final class ScreenCaptureKitPickerSystem: ScreencastPickerSystem {
 
     func content() async throws -> ScreencastContent {
         let content = try await ScreenCaptureKitCaptureSystem().content()
-        let order = Dictionary(Self.windowNumbersFrontToBack().enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        let order = Dictionary(Self.windowList().enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
         // Windows the window server doesn't list on screen go last; the picker skips them anyway.
         let windows = content.windows.enumerated()
             .sorted { (order[$0.element.id] ?? Int.max, $0.offset) < (order[$1.element.id] ?? Int.max, $1.offset) }
@@ -227,9 +251,27 @@ final class ScreenCaptureKitPickerSystem: ScreencastPickerSystem {
         )
     }
 
+    func transparentWindows() -> Set<CGWindowID> {
+        Set(Self.windowList().filter { $0.alpha == 0 }.map(\.id))
+    }
+
     func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
-        let filter = try ScreenCaptureKitCaptureSystem.filter(for: plan.filter, in: content)
+        let filter: SCContentFilter
         let configuration = ScreenCaptureKitCaptureSystem.streamConfiguration(plan.configuration)
+        switch plan.filter {
+        case .display(let displayPlan):
+            filter = try ScreenCaptureKitCaptureSystem.filter(for: displayPlan, in: content)
+        case .window(let id):
+            guard let window = (content.source as? SCShareableContent)?.windows.first(where: { $0.windowID == id }) else {
+                throw ScreencastFailure.targetUnavailable
+            }
+            filter = SCContentFilter(desktopIndependentWindow: window)
+            // The window's own size and scale, as ScreenCaptureKit measures them now.
+            let scale = CGFloat(max(filter.pointPixelScale, 1))
+            configuration.width = Int((filter.contentRect.width * scale).rounded(.up))
+            configuration.height = Int((filter.contentRect.height * scale).rounded(.up))
+            configuration.sourceRect = .zero
+        }
         do {
             return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
         } catch {
@@ -237,12 +279,15 @@ final class ScreenCaptureKitPickerSystem: ScreencastPickerSystem {
         }
     }
 
-    /// The window server's on-screen windows, front to back: their numbers only, never a name or
-    /// an owner.
-    static func windowNumbersFrontToBack() -> [CGWindowID] {
+    /// The window server's on-screen windows, front to back: their numbers and alpha only, never a
+    /// name or an owner.
+    static func windowList() -> [(id: CGWindowID, alpha: Double)] {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
                 as? [[String: Any]] else { return [] }
-        return list.compactMap { ($0[kCGWindowNumber as String] as? NSNumber).map { CGWindowID($0.uint32Value) } }
+        return list.compactMap { info in
+            guard let number = info[kCGWindowNumber as String] as? NSNumber else { return nil }
+            return (CGWindowID(number.uint32Value), (info[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1)
+        }
     }
 }
 
@@ -252,6 +297,8 @@ final class InertScreencastPickerSystem: ScreencastPickerSystem {
     func content() async throws -> ScreencastContent {
         throw ScreencastFailure.captureFailed
     }
+
+    func transparentWindows() -> Set<CGWindowID> { [] }
 
     func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
         throw ScreencastFailure.captureFailed

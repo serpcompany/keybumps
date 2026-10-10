@@ -243,17 +243,24 @@ struct ScreencastAreaEditor: Equatable {
 ///
 /// After Snapzy's `WindowSelectionQueryService` and `WindowCaptureSelectionPolicy`
 /// (BSD-3-Clause, see LICENSE.snapzy): ordinary windows only (layer 0, so not the menu bar, the
-/// Dock, menus, or the desktop), more than 32 points each way, on a display, front to back, and
-/// never Keybumps's own, such as the picker itself.
+/// Dock, menus, or the desktop), drawn (alpha above 0), more than 32 points each way, on a display,
+/// front to back, and never Keybumps's own, such as the picker itself.
 enum ScreencastWindowPicking {
     static let minimumSize: CGFloat = 32
 
     /// The windows in `content` that can be picked, in its order (front to back, as
-    /// `ScreencastPickerSystem.content()` lists them).
-    static func pickableWindows(in content: ScreencastContent, ownProcessID: pid_t) -> [ScreencastContent.Window] {
+    /// `ScreencastPickerSystem.content()` lists them). `transparent` are the windows the window
+    /// server draws with alpha 0 (`ScreencastPickerSystem.transparentWindows()`): one over another
+    /// window would otherwise take its hover and click.
+    static func pickableWindows(
+        in content: ScreencastContent,
+        ownProcessID: pid_t,
+        transparent: Set<CGWindowID> = []
+    ) -> [ScreencastContent.Window] {
         content.windows.filter { window in
             window.isOnScreen
                 && window.layer == 0
+                && !transparent.contains(window.id)
                 && window.processID != ownProcessID
                 && window.frame.width > minimumSize
                 && window.frame.height > minimumSize

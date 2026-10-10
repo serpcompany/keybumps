@@ -70,8 +70,9 @@ struct ScreencastSeams {
 ///
 /// Start Screencast opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
 /// until then it opens Screencast's page, so the picker never makes macOS ask. Turning Screencast
-/// off cancels a capture in progress, or discards a recording. A saved capture is shown in Finder
-/// until the review panel (#450) takes its place.
+/// off, or Keybumps becoming Locked, cancels a capture that hasn't started and keeps a recording
+/// in the captures folder. A saved capture is shown in Finder until the review panel (#450) takes
+/// its place.
 @MainActor
 final class ScreencastModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screencast
@@ -108,15 +109,13 @@ final class ScreencastModule: CapabilityModule {
         }
     }
 
-    /// Cancels a capture in progress, or discards a recording.
+    /// Turned off, or Keybumps Locked: the picker closes and a countdown is cancelled, but a
+    /// recording stops and is kept, and a screenshot being saved finishes. Neither opens anything;
+    /// they stay in the captures folder (`ScreencastController.shutDown`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         guard #available(macOS 15, *), let controller else { return }
-        if controller.phase.isRecording {
-            Task { await controller.discard() }
-        } else {
-            controller.cancel()
-        }
+        Task { await controller.shutDown() }
     }
 
     /// Settings attention while it's on and Screen Recording isn't granted.

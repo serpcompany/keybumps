@@ -31,13 +31,17 @@ struct ScreencastControllerTests {
     let onBrowserWindow = CGPoint(x: 150, y: 832)
 
     @available(macOS 15, *)
-    func makeController(countdown: Int = 3, microphoneAvailable: Bool = true) -> ScreencastController {
+    func makeController(
+        countdown: Int = 3,
+        microphoneAvailable: Bool = true,
+        writers: (any ScreencastWriterFactory)? = nil
+    ) -> ScreencastController {
         let clock = clock
         let startDate = startDate
         let sleeper = sleeper
         let recorder = ScreencastRecorder(
             system: captureSystem,
-            writers: writers,
+            writers: writers ?? self.writers,
             hostClock: { clock.now },
             now: { startDate },
             ownProcessID: Screens.ownProcess,
@@ -73,7 +77,8 @@ struct ScreencastControllerTests {
     ) async throws {
         controller.open()
         let model = try #require(controller.picker)
-        #expect(await ScreencastWait.until { !model.windows.isEmpty })
+        #expect(await ScreencastWait.until { overlays.picker === model })
+        #expect(!model.windows.isEmpty)
         model.kind = kind
         model.target = target
         if target == .window { model.clickWindow(at: onBrowserWindow) }
@@ -101,16 +106,21 @@ struct ScreencastControllerTests {
         let controller = makeController(microphoneAvailable: false)
         var phases: [ScreencastPhase] = []
         controller.onPhaseChange = { phases.append($0) }
+        var pickerShownAtRead: Bool?
+        pickerSystem.onContent = { pickerShownAtRead = overlays.picker != nil }
         controller.open()
 
         #expect(controller.phase == .picking)
+        // The screen is read before the picker covers it, so a macOS alert is never under it.
+        #expect(overlays.events == [.watchEscape])
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        #expect(pickerShownAtRead == false)
         #expect(overlays.events == [.watchEscape, .showPicker])
         let model = try #require(overlays.picker)
         #expect(model === controller.picker)
         #expect(model.area == rightArea)
         #expect(!model.recordsMicrophone && model.recordsSystemAudio && model.showsShortcuts && !model.highlightsClicks)
-        #expect(await ScreencastWait.until { !model.windows.isEmpty })
-        // Not Keybumps's control bar or drawing layer, and not the browser's menu.
+        // Read before it showed: not Keybumps's control bar or drawing layer, and not the browser's menu.
         #expect(model.windows.map(\.id) == [10, 11, 12, 20])
 
         controller.open()
@@ -125,18 +135,41 @@ struct ScreencastControllerTests {
         pickerSystem.contentError = .screenRecordingDenied
         let controller = makeController()
         controller.open()
-        #expect(await ScreencastWait.until { pickerSystem.contentReads == 1 })
-        for _ in 0..<20 { await Task.yield() }
+        #expect(await ScreencastWait.until { overlays.picker != nil })
         #expect(controller.phase == .picking)
         #expect(controller.picker?.windows.isEmpty == true)
     }
 
     @available(macOS 15, *)
-    @Test("Record does nothing until something is chosen")
-    func nothingChosen() {
+    @Test("A window the window server draws transparent can't be picked")
+    func transparentWindow() async throws {
+        defer { captures.remove() }
+        pickerSystem.transparent = [Screens.browserWindow.id]
+        let controller = makeController()
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        #expect(controller.picker?.windows.map(\.id) == [11, 12, 20])
+    }
+
+    @available(macOS 15, *)
+    @Test("Escape while the screen is still being read never shows the picker")
+    func escapeBeforeThePickerShows() async {
         defer { captures.remove() }
         let controller = makeController()
         controller.open()
+        overlays.pressEscape()
+        #expect(controller.phase == .idle)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!overlays.events.contains(.showPicker))
+    }
+
+    @available(macOS 15, *)
+    @Test("Record does nothing until something is chosen")
+    func nothingChosen() async {
+        defer { captures.remove() }
+        let controller = makeController()
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
         overlays.record()
         #expect(controller.phase == .picking)
         #expect(!overlays.events.contains(.closePicker))
@@ -245,10 +278,11 @@ struct ScreencastControllerTests {
 
     @available(macOS 15, *)
     @Test("Escape, or the bar's close button, closes the picker and keeps nothing")
-    func cancelPicking() {
+    func cancelPicking() async {
         defer { captures.remove() }
         let controller = makeController()
         controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
         let model = controller.picker
         model?.pressArea(at: CGPoint(x: 1612, y: 300), on: PickerScreens.right)
         model?.dragArea(to: CGPoint(x: 2012, y: 0))
@@ -260,7 +294,7 @@ struct ScreencastControllerTests {
         #expect(ScreencastAreaMemory(defaults: defaults).area(in: PickerScreens.both) == nil)
 
         controller.open()
-        #expect(controller.phase == .picking)
+        #expect(await ScreencastWait.until { overlays.picker != nil })
         overlays.cancel()
         #expect(controller.phase == .idle && !overlays.isWatchingEscape)
         #expect(captures.captureFolders().isEmpty)
@@ -441,6 +475,205 @@ struct ScreencastControllerTests {
         #expect(overlays.events.contains(.closeHighlight))
     }
 
+    // MARK: Ending on its own while the control bar acts
+
+    /// Records every screen with both sounds, then makes the recording end on its own and holds its
+    /// save at the mixdown.
+    @available(macOS 15, *)
+    private func endEarlyAndHold(_ controller: ScreencastController, _ holding: HoldingMixdownWriters) async throws {
+        try await record(controller, .screen)
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        clock.advance(3)
+        captureSystem.videoStreams[0].handler.stopped(.stoppedByMacOS)
+        #expect(await ScreencastWait.until { holding.isHolding })
+        #expect(controller.recorder.state == .stopping)
+        // It leaves `.recording` as soon as the recorder starts saving, before any button.
+        #expect(await ScreencastWait.until { controller.phase == .finishing })
+    }
+
+    @available(macOS 15, *)
+    @Test("Stop while a recording that ended on its own is saving waits for that capture")
+    func stopDuringEarlyEnd() async throws {
+        defer { captures.remove() }
+        let holding = HoldingMixdownWriters()
+        let controller = makeController(countdown: 0, writers: holding)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        try await endEarlyAndHold(controller, holding)
+
+        let stopping = Task { await controller.stop() }
+        for _ in 0..<50 { await Task.yield() }
+        #expect(controller.phase == .finishing && finished.isEmpty)
+        holding.release()
+        await stopping.value
+
+        #expect(controller.phase == .idle)
+        guard case .video(let capture) = finished.first else {
+            Issue.record("expected the capture it saved")
+            return
+        }
+        #expect(finished.count == 1 && capture.endedEarly == .stoppedByMacOS)
+        #expect(FileManager.default.fileExists(atPath: capture.folder.path))
+        #expect(overlays.messages == ["macOS stopped the recording. What was recorded is saved."])
+    }
+
+    @available(macOS 15, *)
+    @Test("Discard while a recording that ended on its own is saving deletes that capture, and nothing opens")
+    func discardDuringEarlyEnd() async throws {
+        defer { captures.remove() }
+        let holding = HoldingMixdownWriters()
+        let controller = makeController(countdown: 0, writers: holding)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        try await endEarlyAndHold(controller, holding)
+
+        let discarding = Task { await controller.discard() }
+        for _ in 0..<50 { await Task.yield() }
+        #expect(controller.phase == .finishing)
+        holding.release()
+        await discarding.value
+
+        #expect(controller.phase == .idle)
+        #expect(finished.isEmpty)
+        #expect(overlays.messages.isEmpty)
+        #expect(await ScreencastWait.until { captures.captureFolders().isEmpty })
+    }
+
+    @available(macOS 15, *)
+    @Test("Restart while a recording that ended on its own is saving is refused")
+    func restartDuringEarlyEnd() async throws {
+        defer { captures.remove() }
+        let holding = HoldingMixdownWriters()
+        let controller = makeController(countdown: 0, writers: holding)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        try await endEarlyAndHold(controller, holding)
+
+        await controller.restart()
+        controller.pause()
+        #expect(controller.phase == .finishing)
+        #expect(holding.base.writers.count == 2, "No new take's files")
+        holding.release()
+        #expect(await ScreencastWait.until { !finished.isEmpty })
+        #expect(controller.phase == .idle)
+        #expect(overlays.messages == ["macOS stopped the recording. What was recorded is saved."])
+    }
+
+    // MARK: Restarting
+
+    /// Starts a restart whose old take is still being deleted.
+    @available(macOS 15, *)
+    private func holdRestart(_ controller: ScreencastController) async throws -> Task<Void, Never> {
+        try await record(controller, .screen)
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        // The first old file's deletion waits; the restart is still under way.
+        writers.writers.first?.holdsCancel = true
+        let restarting = Task { await controller.restart() }
+        #expect(await ScreencastWait.until { writers.writers.first?.isHoldingCancel == true })
+        return restarting
+    }
+
+    private func releaseRestart() {
+        writers.writers.first?.releaseCancel()
+    }
+
+    @available(macOS 15, *)
+    @Test("A pause while a restart finishes stays paused")
+    func pauseDuringRestart() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        let restarting = try await holdRestart(controller)
+        controller.pause()
+        #expect(controller.phase == .paused)
+        releaseRestart()
+        await restarting.value
+        #expect(controller.phase == .paused && controller.recorder.state == .paused)
+    }
+
+    @available(macOS 15, *)
+    @Test("A stop while a restart finishes wins: the new take is saved and the phase stays idle")
+    func stopDuringRestart() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        let restarting = try await holdRestart(controller)
+        await controller.stop()
+        #expect(controller.phase == .idle && finished.count == 1)
+        releaseRestart()
+        await restarting.value
+        #expect(controller.phase == .idle)
+        #expect(overlays.messages.isEmpty)
+    }
+
+    // MARK: Turning off
+
+    @available(macOS 15, *)
+    @Test("Turned off while recording, the recording stops and is kept, and nothing opens")
+    func shutDownWhileRecording() async throws {
+        defer { captures.remove() }
+        remember(rightArea)
+        let controller = makeController(countdown: 0)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        try await record(controller)
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        clock.advance(4)
+        await controller.shutDown()
+
+        #expect(controller.phase == .idle && controller.recorder.state == .idle)
+        #expect(finished.isEmpty)
+        #expect(overlays.events.contains(.closeHighlight))
+        let folder = try #require(captures.captureFolders().first)
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("video-1.mov").path))
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent(ScreencastMetadata.fileName).path))
+
+        // Opened again, captures open as before.
+        try await record(controller, .screen)
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        await controller.stop()
+        #expect(finished.count == 1)
+    }
+
+    @available(macOS 15, *)
+    @Test("Turned off while a screenshot is saving, it's saved, and nothing opens")
+    func shutDownWhileSavingAScreenshot() async throws {
+        defer { captures.remove() }
+        pickerSystem.holdsScreenshots = true
+        let controller = makeController()
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        try await record(controller, .screen, kind: .screenshot)
+        #expect(await ScreencastWait.until { pickerSystem.isHoldingScreenshot })
+        #expect(controller.phase == .finishing)
+        await controller.shutDown()
+        pickerSystem.releaseScreenshots()
+        // The second display's screenshot is held too.
+        #expect(await ScreencastWait.until { pickerSystem.isHoldingScreenshot })
+        pickerSystem.releaseScreenshots()
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(finished.isEmpty)
+        let folder = try #require(captures.captureFolders().first)
+        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("screenshot-2.png").path))
+    }
+
+    @available(macOS 15, *)
+    @Test("Turned off while picking or counting down, nothing is kept")
+    func shutDownBeforeRecording() async throws {
+        defer { captures.remove() }
+        remember(rightArea)
+        let controller = makeController()
+        controller.open()
+        await controller.shutDown()
+        #expect(controller.phase == .idle)
+        try await record(controller)
+        #expect(await ScreencastWait.until { sleeper.pending == 1 })
+        await controller.shutDown()
+        #expect(controller.phase == .idle)
+        #expect(await ScreencastWait.until { sleeper.pending == 0 })
+        #expect(captureSystem.videoStreams.isEmpty && captures.captureFolders().isEmpty)
+    }
+
     // MARK: Screenshots
 
     @available(macOS 15, *)
@@ -459,7 +692,7 @@ struct ScreencastControllerTests {
         #expect(sleeper.requested.isEmpty && overlays.countdowns.isEmpty && !showedHighlight)
         #expect(captureSystem.contentReads == 0 && captureSystem.videoStreams.isEmpty)
         #expect(pickerSystem.plans == [ScreencastScreenshotPlan(
-            filter: .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: []),
+            filter: .display(.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [])),
             configuration: ScreencastStreamConfiguration(
                 pixelWidth: 1600, pixelHeight: 1200, sourceRect: CGRect(x: 100, y: 100, width: 800, height: 600),
                 framesPerSecond: 1, showsCursor: false, showsMouseClicks: false, scalesToFit: false
@@ -505,7 +738,7 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
-    @Test("A window's screenshot shows only its app, without its other windows, and never Keybumps")
+    @Test("A window's screenshot is the window on its own, whole, at its display's scale")
     func screenshotWindow() async throws {
         defer { captures.remove() }
         let controller = makeController()
@@ -514,10 +747,12 @@ struct ScreencastControllerTests {
         try await record(controller, .window, kind: .screenshot)
         #expect(await ScreencastWait.until { !finished.isEmpty })
         let plan = try #require(pickerSystem.plans.first)
-        // Its sheet and menus stay; its other ordinary window goes.
-        #expect(plan.filter == .applications(1, includedProcesses: [Screens.browser], exceptingWindows: [12]))
-        #expect(plan.configuration.sourceRect == CGRect(x: 100, y: 100, width: 800, height: 600))
-        #expect(plan.configuration.pixelWidth == 1600 && !plan.configuration.showsCursor)
+        // Not its app's other windows, menus, or palettes, and not cut to one display.
+        #expect(plan.filter == .window(10))
+        #expect(plan.filter.displayID == nil)
+        #expect(plan.configuration.sourceRect == CGRect(x: 0, y: 0, width: 800, height: 600))
+        #expect(plan.configuration.pixelWidth == 1600 && plan.configuration.pixelHeight == 1200)
+        #expect(!plan.configuration.showsCursor)
     }
 
     @available(macOS 15, *)

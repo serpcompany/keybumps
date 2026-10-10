@@ -245,6 +245,8 @@ final class UITestScreencastScreen: ScreencastPickerSystem {
         return ScreencastContent(displays: displays, windows: windows, applicationProcessIDs: [Self.madeUpProcess])
     }
 
+    func transparentWindows() -> Set<CGWindowID> { [] }
+
     func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
         let width = max(plan.configuration.pixelWidth, 2)
         let height = max(plan.configuration.pixelHeight, 2)
