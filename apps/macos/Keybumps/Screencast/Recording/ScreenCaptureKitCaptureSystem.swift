@@ -114,31 +114,10 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         })
     }
 
-    func onScreenPanelServiceWindows() -> Set<CGWindowID>? {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
-            return nil
-        }
-        return Set(list.compactMap { info in
-            guard let owner = info[kCGWindowOwnerPID as String] as? pid_t, isPanelService(owner) else { return nil }
-            return info[kCGWindowNumber as String] as? CGWindowID
-        })
-    }
-
     func windowExists(_ id: CGWindowID) -> Bool? {
         // Listed whatever its on-screen state; a closed window isn't.
         guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]] else { return nil }
         return !list.isEmpty
-    }
-
-    /// Process IDs already told apart, so the 20 Hz read looks each one up once.
-    private var panelServiceProcesses: [pid_t: Bool] = [:]
-
-    private func isPanelService(_ processID: pid_t) -> Bool {
-        if let known = panelServiceProcesses[processID] { return known }
-        let bundleID = NSRunningApplication(processIdentifier: processID)?.bundleIdentifier
-        let isService = bundleID.map(ScreencastContent.panelServiceBundleIDs.contains) ?? false
-        panelServiceProcesses[processID] = isService
-        return isService
     }
 
     func ownVisibleWindows() -> Set<CGWindowID> {
@@ -171,8 +150,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                     processID: processID,
                     isUntitled: (window.title ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
                     isOnScreen: window.isOnScreen,
-                    order: order[window.windowID],
-                    isPanelService: window.owningApplication.map { ScreencastContent.panelServiceBundleIDs.contains($0.bundleIdentifier) } ?? false
+                    order: order[window.windowID]
                 )
             },
             applicationProcessIDs: Set(content.applications.map(\.processID)),
