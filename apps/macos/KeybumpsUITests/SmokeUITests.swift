@@ -357,13 +357,16 @@ final class SmokeUITests: XCTestCase {
         blue.click()
         XCTAssertTrue(waitForValue(of: blue, equalTo: "Selected"))
 
-        // An arrow on the drawing layer, which takes the pointer while drawing.
+        // An arrow on the drawing layer, which takes the pointer while drawing. macOS reports the
+        // non-activating panels as dialogs. The drag is relative to the layer, which covers the
+        // recorded made-up screen: in its left part, clear of the bar and the tools (centered
+        // near the bottom of the real screen) and of the menu bar.
         let clear = element("screencast.draw.clear")
         XCTAssertFalse(clear.isEnabled, "Nothing to clear yet")
-        let layer = app.windows.matching(identifier: "screencastDrawing").firstMatch
+        let layer = app.dialogs.matching(identifier: "screencastDrawing").firstMatch
         XCTAssertTrue(layer.waitForExistence(timeout: 5))
-        layer.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.25))
-            .press(forDuration: 0.1, thenDragTo: layer.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.4)))
+        layer.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.3))
+            .press(forDuration: 0.1, thenDragTo: layer.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)))
         XCTAssertTrue(waitForEnabled(clear, true), "The arrow is there to clear")
         clear.click()
         XCTAssertTrue(waitForEnabled(clear, false), "Clear took it away")
@@ -378,7 +381,7 @@ final class SmokeUITests: XCTestCase {
         let stop = element("screencast.bar.stop")
         stop.click()
         XCTAssertTrue(stop.waitForNonExistence(timeout: 10))
-        XCTAssertFalse(app.windows.matching(identifier: "screencastDrawing").firstMatch.exists, "The drawing goes with the recording")
+        XCTAssertTrue(app.dialogs.matching(identifier: "screencastDrawing").firstMatch.waitForNonExistence(timeout: 5), "The drawing goes with the recording")
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
