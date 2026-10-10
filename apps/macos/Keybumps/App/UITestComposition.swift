@@ -28,6 +28,13 @@ extension AppModel {
             DispatchQueue.main.async { [weak self] in self?.startScreencast() }
             return
         }
+        #if DEBUG
+        if configuration.startsScreencastRecording {
+            Self.didPerformUITestLaunchActions = true
+            DispatchQueue.main.async { [weak self] in self?.startScreencastRecordingForUITesting() }
+            return
+        }
+        #endif
         guard let tab = configuration.openPalette else { return }
         Self.didPerformUITestLaunchActions = true
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -69,6 +76,9 @@ extension AppModel {
         let preferences = AppPreferences(defaults: defaults)
         for capability in configuration.enabledCapabilities {
             preferences.setCapability(capability, enabled: true)
+        }
+        if configuration.startsScreencastRecording {
+            preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
         }
 
         let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard, sourceApps: .inert)
@@ -145,10 +155,10 @@ extension AppModel {
             allowsDictationSystemAccess: false,
             screenshotEditorFallbackFolder: { sandbox.screenshots },
             symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences(),
-            // Screencast's picker opens on made-up screens and windows; a recording never starts,
-            // and a capture is never shown in Finder.
+            // Screencast's picker opens on made-up screens and windows; a recording runs on them but
+            // captures nothing, and a capture is never shown in Finder.
             screencast: ScreencastSeams(
-                captureSystem: InertScreencastCaptureSystem(),
+                captureSystem: UITestScreencastCaptureSystem(),
                 pickerSystem: UITestScreencastScreen(),
                 screens: { UITestScreencastScreen.layout },
                 revealCapture: { _ in }

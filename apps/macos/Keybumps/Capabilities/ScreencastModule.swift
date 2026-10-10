@@ -71,8 +71,9 @@ struct ScreencastSeams {
 /// Start Screencast opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
 /// until then it opens Screencast's page, so the picker never makes macOS ask. Turning Screencast
 /// off, or Keybumps becoming Locked, cancels a capture that hasn't started and keeps a recording
-/// in the captures folder. A saved capture is shown in Finder until the review panel (#450) takes
-/// its place.
+/// in the captures folder. While it records, `ScreencastRecordingControls` shows the control bar
+/// and the time in the menu bar, and registers the recording shortcuts. A saved capture is shown
+/// in Finder until the review panel (#450) takes its place.
 @MainActor
 final class ScreencastModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screencast
@@ -81,6 +82,8 @@ final class ScreencastModule: CapabilityModule {
     private let preferences: AppPreferences
     private let permissions: PermissionCoordinator
     private let seams: ScreencastSeams
+    /// The control bar, the menu bar's time, and the recording shortcuts.
+    private let recordingControls: ScreencastRecordingControls
     private var isOn = false
     /// The `ScreencastController`, made the first time Start Screencast opens the picker. Stored
     /// untyped because the controller needs macOS 15.
@@ -90,12 +93,14 @@ final class ScreencastModule: CapabilityModule {
         preferences: AppPreferences,
         permissions: PermissionCoordinator,
         openSettings: @escaping @MainActor (SettingsSection) -> Void,
+        menuBar: CapabilityMenuBarStatus? = nil,
         seams: ScreencastSeams = ScreencastSeams()
     ) {
         self.preferences = preferences
         self.permissions = permissions
         self.openSettings = openSettings
         self.seams = seams
+        recordingControls = ScreencastRecordingControls(menuBar: menuBar, placement: preferences.screencastBarPlacement)
     }
 
     func apply(_ context: CapabilityContext) {
@@ -107,6 +112,7 @@ final class ScreencastModule: CapabilityModule {
         ) { [weak self] in
             self?.start()
         }
+        recordingControls.apply(context)
     }
 
     /// Turned off, or Keybumps Locked: the picker closes and a countdown is cancelled, but a
@@ -114,6 +120,7 @@ final class ScreencastModule: CapabilityModule {
     /// they stay in the captures folder (`ScreencastController.shutDown`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
+        recordingControls.deactivate()
         guard #available(macOS 15, *), let controller else { return }
         Task { await controller.shutDown() }
     }
@@ -163,6 +170,7 @@ final class ScreencastModule: CapabilityModule {
         )
         let reveal = seams.revealCapture ?? Self.revealInFinder
         controller.onCaptureFinished = { result in reveal(Self.files(of: result)) }
+        recordingControls.attach(to: controller)
         controllerStorage = controller
         return controller
     }

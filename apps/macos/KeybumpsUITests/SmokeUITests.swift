@@ -300,6 +300,38 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(element("screencast.picker.bar").exists)
     }
 
+    func testScreencastControlBarButtonsChangeState() {
+        // A recording of a made-up screen that captures nothing, with the control bar showing.
+        launchScreencastRecording()
+
+        let pause = element("screencast.bar.pause")
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"))
+        pause.click()
+        XCTAssertTrue(waitForLabel(of: pause, "Resume"), "Pause becomes Resume")
+        pause.click()
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Resume becomes Pause")
+
+        let microphone = element("screencast.bar.microphone")
+        XCTAssertTrue(waitForValue(of: microphone, equalTo: "On"))
+        microphone.click()
+        XCTAssertTrue(waitForValue(of: microphone, equalTo: "Off"), "The microphone mutes")
+
+        // Discard and Restart each ask in the bar first, and Keep goes back to the controls.
+        for (button, confirm) in [("discard", "confirmDiscard"), ("restart", "confirmRestart")] {
+            element("screencast.bar.\(button)").click()
+            XCTAssertTrue(element("screencast.bar.\(confirm)").waitForExistence(timeout: 5), button)
+            element("screencast.bar.keep").click()
+            XCTAssertTrue(element("screencast.bar.\(confirm)").waitForNonExistence(timeout: 5), button)
+            XCTAssertTrue(element("screencast.bar.stop").waitForExistence(timeout: 5), "Keep brings the controls back")
+        }
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Still recording")
+
+        let stop = element("screencast.bar.stop")
+        stop.click()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 10), "Stop ends the recording, and the bar closes")
+        XCTAssertFalse(app.windows.matching(identifier: "screencastControlBar").firstMatch.exists)
+    }
+
     func testHotkeysTabShowsShortcutCoachHistory() {
         // Its rows come from Shortcut Coach's module (`KeyboardShortcutterPaletteContent`).
         launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])
@@ -581,6 +613,12 @@ final class SmokeUITests: XCTestCase {
     private func launchScreencastPicker() {
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES"])
         XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 20))
+    }
+
+    /// Turns Screencast on and starts a recording of a made-up screen, as Record would.
+    private func launchScreencastRecording() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES"])
+        XCTAssertTrue(element("screencast.bar.stop").waitForExistence(timeout: 20))
     }
 
     private var pickerWindows: XCUIElementQuery {
