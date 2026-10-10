@@ -199,6 +199,18 @@ _Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
 The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and shows on a recording's screens while one holds it. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
+**Screencast**:
+Recording what's on screen, as a screenshot or a video with the microphone and the Mac's sound, then keeping each capture on this Mac or sending it to a destination (ADR 0009). It ships off, and needs macOS 15: on an older Mac it's listed with "Requires macOS 15" and can't be turned on.
+_Avoid_: Screen recorder, screen recording (macOS's permission), Clipy (a destination)
+
+**Capture**:
+One screenshot or video Screencast took, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted. A screenshot taken with Screenshot Tools isn't one.
+_Avoid_: Recording (Dictation's), clip, screencast (the plugin)
+
+**Destination**:
+An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
+_Avoid_: Integration, upload target, share service
+
 ### Licensing
 
 **License Check**:

@@ -8,7 +8,7 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "") == [
             [.general, .permissions, .plugins, .changelog],
             [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows],
-            [.emojiPicker, .keystrokes, .timer, .translation],
+            [.emojiPicker, .keystrokes, .screencast, .timer, .translation],
         ])
     }
 
@@ -26,7 +26,7 @@ struct SettingsSidebarTests {
     func pluginsTable() {
         #expect(PluginsTable.sections == [
             .init(title: "Default", plugins: [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows]),
-            .init(title: "Added", plugins: [.emojiPicker, .keystrokes, .timer, .translation]),
+            .init(title: "Added", plugins: [.emojiPicker, .keystrokes, .screencast, .timer, .translation]),
         ])
         #expect(PluginsTable.sections(matching: "countdown") == [.init(title: "Added", plugins: [.timer])])
         #expect(PluginsTable.sections(matching: "translate") == [.init(title: "Added", plugins: [.translation])])
@@ -44,6 +44,7 @@ struct SettingsSidebarTests {
         #expect(PluginsTable.tabKey(for: .emojiPicker, showsHotkeysTab: false) == "⌘7")
         #expect(PluginsTable.tabKey(for: .translation, showsHotkeysTab: false) == "⌘8")
         #expect(PluginsTable.tabKey(for: .keystrokes, showsHotkeysTab: true) == "", "No tab")
+        #expect(PluginsTable.tabKey(for: .screencast, showsHotkeysTab: true) == "", "No tab")
 
         let key = ShortcutBinding(keyCode: 1, modifiers: 0, displayName: "⇧⌘2")
         #expect(PluginsTable.shortcutText(for: .screenshotTools) { _ in key } == "⇧⌘2 +2")

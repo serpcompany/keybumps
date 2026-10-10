@@ -275,6 +275,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case emojiPicker
     case translation
     case keystrokes
+    case screencast
 
     var id: String { rawValue }
     var ownerID: String { rawValue }
@@ -294,6 +295,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .emojiPicker: .emojiPicker
         case .translation: .translation
         case .keystrokes: .keystrokes
+        case .screencast: .screencast
         }
     }
 
@@ -311,6 +313,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .emojiPicker: "Open Emoji Picker"
         case .translation: "Open Translate"
         case .keystrokes: "Show & Hide Keystrokes"
+        case .screencast: "Start Screencast"
         }
     }
 
@@ -336,7 +339,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea
-        case .snippets, .timer, .emojiPicker, .translation, .keystrokes: nil
+        case .snippets, .timer, .emojiPicker, .translation, .keystrokes, .screencast: nil
         }
     }
 }

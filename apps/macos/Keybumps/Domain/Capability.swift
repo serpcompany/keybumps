@@ -12,6 +12,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
     case emojiPicker
     case translation
     case keystrokes
+    case screencast
 
     var id: String { rawValue }
 

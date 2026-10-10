@@ -54,6 +54,7 @@
 		2A8AB69147465E7317BD467B /* SettingsWindowFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42501921E7CCB58551B43098 /* SettingsWindowFrameTests.swift */; };
 		2AEDDDA2780DAD6306D3212D /* MainWindowRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572DC6E9C68A567BE460ED2F /* MainWindowRoutingTests.swift */; };
 		2D40D00D8A5F1C8CF2AFF8F6 /* CapabilityPaletteContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC80479B99FBFBAE0AA7A0F6 /* CapabilityPaletteContent.swift */; };
+		2DD27821D802BC4B7ACAEBAA /* ScreencastPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09CE5FD0DE58BCA11FD4018F /* ScreencastPreferences.swift */; };
 		2F09653BB3F1285B6E8E2137 /* KeywordExpansionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76645A043DE2214E303541A5 /* KeywordExpansionTests.swift */; };
 		3059D8E4728CF39B1A21420A /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9636E42DE45DDFF11098A73 /* WindowGeometry.swift */; };
 		30969CFBA6428F79100205AF /* DictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79A769F22A9F51BA885B76F1 /* DictationService.swift */; };
@@ -111,6 +112,7 @@
 		6982BCBBA9213F7F0E4D9805 /* SnippetImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50556BFC52088CFDE4E7F2D8 /* SnippetImport.swift */; };
 		69D9ACEE4E0642D8CB042CD8 /* ScreenshotToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C85AC05704376F0356083E /* ScreenshotToolsService.swift */; };
 		6A9CD25220129616C6F0A833 /* DictationTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093E9573AD23AF63BB1C065C /* DictationTranscriptionEngine.swift */; };
+		6BD60639AA2CD03A11678859 /* ScreencastTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2BB0C976BC7058C632D0BB /* ScreencastTests.swift */; };
 		6D5FEC708B529450EB85EDEE /* TimerItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8225D646846A30ACE4D44904 /* TimerItem.swift */; };
 		6F23825B3EA824162AA012F6 /* WhisperCpp in Frameworks */ = {isa = PBXBuildFile; productRef = 5FCD45E9BCD257EACB13FDC8 /* WhisperCpp */; };
 		713E9A8F6D1DC841FE032B7B /* DictationWarmRuntimeBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD492B963F2E1C378C206508 /* DictationWarmRuntimeBenchmarkTests.swift */; };
@@ -196,6 +198,7 @@
 		C6B99BA39BBA147D692C0FCB /* AppPresenceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF370D4AAE4252C8026A77E /* AppPresenceController.swift */; };
 		C7157AB7AED3B3817EC8732C /* ProblemReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E6D0F41D0758060E6979DF6 /* ProblemReport.swift */; };
 		C7BA0E484216B7DE0A03D3BC /* ManualActionDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5BF9D381E60300D7928A29E /* ManualActionDetector.swift */; };
+		CA2667F7C8770937CAB7F89F /* ScreencastCapturesSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B004FB7A2954A79900D58DE0 /* ScreencastCapturesSettings.swift */; };
 		CAF0D8445DF2139E92F3C873 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = B51FAB2B198D5DDDE9DB256B /* WhisperKit */; };
 		CBC867F62D30E8C568A35C78 /* LICENSE.argmax-oss-swift in Resources */ = {isa = PBXBuildFile; fileRef = E157807C893115811A044F4A /* LICENSE.argmax-oss-swift */; };
 		CC9C3B70B132461EB151193B /* DictationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */; };
@@ -207,6 +210,7 @@
 		D4D345A2AFE81AD61B274909 /* issue-31-live-shortcuts.json in Resources */ = {isa = PBXBuildFile; fileRef = DFF0A12F7876C599C9C3433E /* issue-31-live-shortcuts.json */; };
 		D4DEEBF4171345BD5B6CA972 /* EmojiPickerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407EBDABF81402A19EE518A6 /* EmojiPickerTests.swift */; };
 		D5736E16211556716BF00BDF /* KeyDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087930A23B6E4CBC7FEECFC5 /* KeyDisplay.swift */; };
+		D5CC7B03A9D871D6F1CCDAA1 /* ScreencastModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10FCF05EAEDC457B3E2CF2D /* ScreencastModule.swift */; };
 		D6100F1569ACF6BE6203DF22 /* SnippetImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECE6B9E14DFA9ECBBE25EF8 /* SnippetImportTests.swift */; };
 		D6A968F55CA67D1A1BB90941 /* TranslatedSpeechPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06540DC321A150343B3C752 /* TranslatedSpeechPlayer.swift */; };
 		DA6481ADC8A9E29EC587CC91 /* LICENSE.unicode in Resources */ = {isa = PBXBuildFile; fileRef = E77DA4F512B8AB702043230A /* LICENSE.unicode */; };
@@ -275,6 +279,7 @@
 		087930A23B6E4CBC7FEECFC5 /* KeyDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDisplay.swift; sourceTree = "<group>"; };
 		093A8B131F4ABF0818CA0F98 /* ChangelogSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChangelogSettingsView.swift; sourceTree = "<group>"; };
 		093E9573AD23AF63BB1C065C /* DictationTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTranscriptionEngine.swift; sourceTree = "<group>"; };
+		09CE5FD0DE58BCA11FD4018F /* ScreencastPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastPreferences.swift; sourceTree = "<group>"; };
 		0A1892ED7941254B63C36A71 /* chrome-153-settings-failing-trace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "chrome-153-settings-failing-trace.json"; sourceTree = "<group>"; };
 		0C53D92EB611917B9E44212C /* Capability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capability.swift; sourceTree = "<group>"; };
 		0CF1124EE4DF4E49757D9D27 /* ScreenshotEditorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotEditorPresenter.swift; sourceTree = "<group>"; };
@@ -357,6 +362,7 @@
 		57C59BE7810BB3FA985BCA74 /* AXShortcutEvidenceReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXShortcutEvidenceReader.swift; sourceTree = "<group>"; };
 		58C85AC05704376F0356083E /* ScreenshotToolsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotToolsService.swift; sourceTree = "<group>"; };
 		5C6764E3032BB803A72829A5 /* DictationTranslationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationTranslationTests.swift; sourceTree = "<group>"; };
+		5E2BB0C976BC7058C632D0BB /* ScreencastTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastTests.swift; sourceTree = "<group>"; };
 		5E95566CA99E435438AFA108 /* KeyboardShortcutRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutRegistry.swift; sourceTree = "<group>"; };
 		5FCA808667D04E21123AEA59 /* TextTranslator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextTranslator.swift; sourceTree = "<group>"; };
 		5FDAE3FD036C017D04992475 /* LICENSE.openai-whisper */ = {isa = PBXFileReference; path = "LICENSE.openai-whisper"; sourceTree = "<group>"; };
@@ -443,6 +449,7 @@
 		AF3482EA5975104D852E8A6E /* LicenseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseModels.swift; sourceTree = "<group>"; };
 		AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainTextInput.swift; sourceTree = "<group>"; };
 		AFF70B9542E1EC86EB3239F6 /* ClipboardRestorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardRestorer.swift; sourceTree = "<group>"; };
+		B004FB7A2954A79900D58DE0 /* ScreencastCapturesSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastCapturesSettings.swift; sourceTree = "<group>"; };
 		B19CB2A313982E002E9097B7 /* SnippetsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsModule.swift; sourceTree = "<group>"; };
 		B1ED8E35E4A6E4E820AE1AFB /* FinderTrashMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderTrashMonitor.swift; sourceTree = "<group>"; };
 		B59F298F120874DF78C6CF86 /* WAVHeaderRepairTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WAVHeaderRepairTests.swift; sourceTree = "<group>"; };
@@ -468,6 +475,7 @@
 		CF128185C76235C3DC5BD990 /* SnippetTableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetTableTests.swift; sourceTree = "<group>"; };
 		CFB34CE86E16904D984C10A1 /* SettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
 		D08ACA2A4D6A27464FA118FC /* DetectionAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectionAccessibility.swift; sourceTree = "<group>"; };
+		D10FCF05EAEDC457B3E2CF2D /* ScreencastModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastModule.swift; sourceTree = "<group>"; };
 		D450749EEC98D8F5A3CE94D2 /* ShortcutConflictTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutConflictTests.swift; sourceTree = "<group>"; };
 		D46E853B6F0195DE8D0C0031 /* WhisperKitCompletedAudioTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitCompletedAudioTranscriber.swift; sourceTree = "<group>"; };
 		D5476B898673F924A8C2C5BF /* MenuBarStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarStatusTests.swift; sourceTree = "<group>"; };
@@ -618,6 +626,7 @@
 				F84A100C7F15BBD0CA0E7B59 /* Permissions */,
 				22D139DE7DF47178EB5EB2AA /* QuickSearch */,
 				F90E6AAF76609E0D3777911B /* Resources */,
+				13332EE2CFBB3E59DD4E87D3 /* Screencast */,
 				1A1DDE105F8F582E1CA0C46E /* ScreenshotTools */,
 				F0D84CC66357129773E259E1 /* Snippets */,
 				70C15B86C1B9CC0E077A17F7 /* Timer */,
@@ -643,6 +652,15 @@
 				D93E712317CAB0EF41AA01B2 /* SnippetPaletteResults.swift */,
 			);
 			path = CommandPalette;
+			sourceTree = "<group>";
+		};
+		13332EE2CFBB3E59DD4E87D3 /* Screencast */ = {
+			isa = PBXGroup;
+			children = (
+				B004FB7A2954A79900D58DE0 /* ScreencastCapturesSettings.swift */,
+				09CE5FD0DE58BCA11FD4018F /* ScreencastPreferences.swift */,
+			);
+			path = Screencast;
 			sourceTree = "<group>";
 		};
 		1A1DDE105F8F582E1CA0C46E /* ScreenshotTools */ = {
@@ -729,6 +747,7 @@
 				A41A122C43A19C05BBC61663 /* QuickSearchSnippetTests.swift */,
 				43B4EE6BAF61588E4C4FAB26 /* QuickSearchTestIsolationTests.swift */,
 				523C2D07125B9545845933E3 /* QuitConfirmationTests.swift */,
+				5E2BB0C976BC7058C632D0BB /* ScreencastTests.swift */,
 				6B518401410853A3A68180C2 /* ScreenshotCaptureTests.swift */,
 				C530DAE49C425F656DAF0256 /* ScreenshotClipboardTests.swift */,
 				97EC39D6B2BEB686F101C4A9 /* ScreenshotEditorTests.swift */,
@@ -819,6 +838,7 @@
 				0349AB433EFD24A7FB497CD2 /* KeystrokesModule.swift */,
 				A9E51DAD29FE4265EDDF9389 /* PluginManifest.swift */,
 				8D99F0722FE7F7F683012428 /* QuickSearchModule.swift */,
+				D10FCF05EAEDC457B3E2CF2D /* ScreencastModule.swift */,
 				F63DBB997EBF672EB4A1A306 /* ScreenshotToolsModule.swift */,
 				B19CB2A313982E002E9097B7 /* SnippetsModule.swift */,
 				4FF95B166919DD786B7F8E68 /* TimerModule.swift */,
@@ -1329,6 +1349,9 @@
 				4F3E2FE9F33B1CF0F9DA36F1 /* RaycastSettingsStyle.swift in Sources */,
 				FB1EF3A045635D619E187E8D /* RecentItemStore.swift in Sources */,
 				0504539E3FF036E64AEBCAD5 /* RecentTranslations.swift in Sources */,
+				CA2667F7C8770937CAB7F89F /* ScreencastCapturesSettings.swift in Sources */,
+				D5CC7B03A9D871D6F1CCDAA1 /* ScreencastModule.swift in Sources */,
+				2DD27821D802BC4B7ACAEBAA /* ScreencastPreferences.swift in Sources */,
 				E997BE984EF0D51BCBF3B621 /* ScreenshotAnnotation.swift in Sources */,
 				AC51777E49844030C638FFDB /* ScreenshotAnnotationRenderer.swift in Sources */,
 				B3F274083A2B748371F28BE5 /* ScreenshotCapture.swift in Sources */,
@@ -1437,6 +1460,7 @@
 				72A30A4FB7B63A670CCF9A5F /* QuickSearchSnippetTests.swift in Sources */,
 				5008231D6CAE07EE7F478A25 /* QuickSearchTestIsolationTests.swift in Sources */,
 				58DF94D7D131F11A8D5D15F0 /* QuitConfirmationTests.swift in Sources */,
+				6BD60639AA2CD03A11678859 /* ScreencastTests.swift in Sources */,
 				A16D2BF906A9A5E577CCD9DA /* ScreenshotCaptureTests.swift in Sources */,
 				AABBFA0F893683A6FD3FD8B3 /* ScreenshotClipboardTests.swift in Sources */,
 				4484A3EEE07C1E235F2E433F /* ScreenshotEditorTests.swift in Sources */,

@@ -30,7 +30,10 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes"] {
+        for section in [
+            "permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows",
+            "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+        ] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -224,6 +227,27 @@ final class SmokeUITests: XCTestCase {
         element("capability.offBanner.turnOn.keystrokes").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
         XCTAssertTrue(element("capability.offBanner.keystrokes").waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastShipsOffAndTurnsOnInSettings() {
+        // Its page is drawn by the plugin template: Screen Recording, the Microphone as an optional
+        // permission, its preferences, and its captures folder. CI's Mac runs macOS 15 or later, so
+        // it can be turned on. Nothing records yet (#446).
+        launch(permissions: "denied", ["-KBOpenSettings", "screencast"])
+        let toggle = element("capability.toggle.screencast")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForValue(of: toggle, 0), "Screencast ships off")
+        XCTAssertTrue(app.staticTexts["Screen Recording"].exists)
+        XCTAssertTrue(app.staticTexts["Microphone (Optional)"].exists)
+        for key in ["recordsMicrophone", "recordsSystemAudio", "countdown", "showsShortcuts", "highlightsClicks"] {
+            XCTAssertTrue(element("plugin.screencast.\(key)").exists, key)
+        }
+        XCTAssertTrue(element("plugin.screencast.showCaptures").exists)
+        XCTAssertTrue(element("capability.offBanner.screencast").exists, "Its page says it's off")
+
+        element("capability.offBanner.turnOn.screencast").click()
+        XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.screencast").waitForNonExistence(timeout: 5))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {

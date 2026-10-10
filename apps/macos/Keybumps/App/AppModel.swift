@@ -364,6 +364,8 @@ final class AppModel {
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
             KeystrokesModule(display: keyDisplay),
+            // Start Screencast opens its page until there's a recorder to start; never under unit tests.
+            ScreencastModule(openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) }),
         ])
         commandPalette.tabContents = capabilities.paletteContents
         // The key display names a Keybumps shortcut only while it's registered, and in the Command
