@@ -6,8 +6,8 @@ import Testing
 @testable import Keybumps
 
 /// Screencast's plugin shell (#445, ADR 0009): its manifest, its preferences and their defaults,
-/// the macOS 15 gate, and Start Screencast. Nothing here records, asks for a permission, or opens
-/// Settings or Finder.
+/// the macOS 15 gate, and Start Screencast, which opens the picker (#447). Nothing here records,
+/// reads the screen, asks for a permission, or opens Settings or Finder.
 @MainActor
 @Suite("Screencast: the plugin shell")
 struct ScreencastTests {
@@ -207,12 +207,76 @@ struct ScreencastTests {
         #expect(old.shortcuts()[owner] == nil, "It's never on before macOS 15")
     }
 
-    @Test("Start Screencast opens Screencast's page, as nothing records yet")
-    func startOpensItsPage() {
+    @Test("Start Screencast opens Screencast's page while it's off")
+    func startWhileOffOpensItsPage() {
         var opened: [SettingsSection] = []
-        let module = ScreencastModule(openSettings: { opened.append($0) })
+        let module = ScreencastModule(
+            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { opened.append($0) }
+        )
         module.start()
         #expect(opened == [.screencast])
+    }
+
+    @available(macOS 15, *)
+    @Test("Start Screencast opens the picker with Screen Recording, and never reads the screen without it")
+    func startOpensThePicker() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastStart-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let missing = WiringHarness(enabled: [.screencast], missing: .screenRecording, root: root)
+        missing.model.start()
+        missing.model.startScreencast()
+        #expect(Self.module(of: missing).controller == nil, "No picker, so macOS never asks")
+
+        let granted = WiringHarness(enabled: [.screencast], missing: nil, root: root)
+        granted.model.start()
+        granted.model.startScreencast()
+        let controller = try #require(Self.module(of: granted).controller)
+        #expect(controller.phase == .picking)
+        #expect(controller.picker?.microphoneAvailable == true)
+        controller.cancel()
+
+        let noMicrophone = WiringHarness(enabled: [.screencast], missing: .microphone, root: root)
+        noMicrophone.model.start()
+        noMicrophone.model.startScreencast()
+        let picker = try #require(Self.module(of: noMicrophone).controller?.picker)
+        #expect(!picker.microphoneAvailable && !picker.recordsMicrophone, "Its switch stays off; nothing asks for it")
+    }
+
+    @available(macOS 15, *)
+    @Test("Turning Screencast off closes the picker")
+    func turningOffCancels() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastOff-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
+        harness.model.start()
+        harness.model.startScreencast()
+        let controller = try #require(Self.module(of: harness).controller)
+        #expect(controller.phase == .picking)
+        harness.model.setCapability(.screencast, enabled: false)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(controller.picker == nil)
+        harness.model.startScreencast()
+        #expect(controller.phase == .idle, "Off, Start Screencast opens its page instead")
+    }
+
+    @Test("A saved capture shows its videos to share, or its screenshots")
+    func filesShown() {
+        let folder = URL(fileURLWithPath: "/captures/1791000000", isDirectory: true)
+        let video = ScreencastVideo(
+            file: folder.appendingPathComponent("video-1.mov"), mixdown: folder.appendingPathComponent("video-1-mixdown.mp4"),
+            pixelWidth: 2, pixelHeight: 2, audioTracks: [.microphone, .systemAudio], duration: 1
+        )
+        let capture = ScreencastCapture(folder: folder, videos: [video], duration: 1, endedEarly: nil)
+        #expect(ScreencastModule.files(of: .video(capture)) == [folder.appendingPathComponent("video-1-mixdown.mp4")])
+        let screenshot = ScreencastScreenshot(folder: folder, images: [.init(file: folder.appendingPathComponent("screenshot-1.png"), pixelWidth: 2, pixelHeight: 2)])
+        #expect(ScreencastModule.files(of: .screenshot(screenshot)) == [folder.appendingPathComponent("screenshot-1.png")])
+    }
+
+    private static func module(of harness: WiringHarness) -> ScreencastModule {
+        harness.model.capabilities.module(for: .screencast) as! ScreencastModule
     }
 
     // MARK: Settings attention

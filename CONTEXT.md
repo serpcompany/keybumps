@@ -207,6 +207,10 @@ _Avoid_: Screen recorder, screen recording (macOS's permission), Clipy (a destin
 One screenshot or one recording Screencast took, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted; a recording of every screen holds one video per display. A screenshot taken with Screenshot Tools isn't one.
 _Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
 
+**Screencast picker**:
+What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one clicked, or every screen), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens with the last area drawn.
+_Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
+
 **Destination**:
 An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
 _Avoid_: Integration, upload target, share service
