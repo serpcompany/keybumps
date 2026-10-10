@@ -43,7 +43,7 @@ These name plugins on purpose. Update every one. Some fail when a plugin is miss
 - **Palette layout:** `PaletteRowMetricsTests` lays out every tab and fails until a new one is in its list tabs or grid tabs; give the fixture made-up rows for it.
 - **Upgrades:** `ScreenshotToolsTests` lists the plugins an upgrade turns on, so a plugin that ships on changes it.
 - **Smoke tests:** `SmokeUITests`' section list in `testEverySettingsPageOpens`, and `testPaletteCommandNumberSwitchesTabs`, which expects the number after the last visible tab to do nothing.
-- **Wiring snapshot:** `KeybumpsTests/Fixtures/capability-wiring.json`. Re-record it with `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` in `xcodebuild`'s environment, before the command (after it, it's a build setting and never reaches the tests), and review the diff. It records every combination of plugins, so each new plugin roughly doubles it.
+- **Wiring snapshot:** `KeybumpsTests/Fixtures/capability-wiring.json`. Re-record it with `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1` in `xcodebuild`'s environment, before the command (after it, it's a build setting and never reaches the tests), and review the diff. It records every combination of the default capabilities, alone and with each added one, so a new plugin adds about 130 combinations instead of doubling them (#455). Combinations are named by the plugins that are on, so a re-record keeps every existing name and adds the new plugin's steps to each, except the everything-on-but-one entries, which it replaces with ones whose names include the new plugin.
 
 Add the plugin's own tests in Swift Testing (`docs/testing.md`).
 
