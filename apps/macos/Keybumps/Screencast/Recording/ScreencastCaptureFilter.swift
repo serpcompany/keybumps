@@ -1,0 +1,148 @@
+import CoreGraphics
+import Foundation
+
+/// What's on screen, as the recorder needs it: plain facts read from `SCShareableContent`, so the
+/// filter rules can be tested without ScreenCaptureKit. No window title or app name is kept.
+struct ScreencastContent {
+    struct Display: Equatable, Sendable {
+        let id: CGDirectDisplayID
+        /// In the global top-left space, in points.
+        let frame: CGRect
+        /// Pixels per point.
+        let scale: CGFloat
+    }
+
+    struct Window: Equatable, Sendable {
+        let id: CGWindowID
+        /// In the global top-left space, in points.
+        let frame: CGRect
+        /// The window server layer: 0 for ordinary windows, higher for menus and panels.
+        let layer: Int
+        let processID: pid_t
+        /// Untitled: a sheet, popover, or panel rather than a document window. The title itself is
+        /// never read into this.
+        let isUntitled: Bool
+        let isOnScreen: Bool
+    }
+
+    let displays: [Display]
+    let windows: [Window]
+    /// The processes ScreenCaptureKit lists as apps, which a filter can include or exclude whole.
+    let applicationProcessIDs: Set<pid_t>
+    /// The `SCShareableContent` this came from, which the app's capture system builds filters
+    /// from. Nil in tests.
+    let source: AnyObject?
+
+    init(displays: [Display], windows: [Window], applicationProcessIDs: Set<pid_t>, source: AnyObject? = nil) {
+        self.displays = displays
+        self.windows = windows
+        self.applicationProcessIDs = applicationProcessIDs
+        self.source = source
+    }
+
+    func display(_ id: CGDirectDisplayID) -> Display? {
+        displays.first { $0.id == id }
+    }
+
+    func window(_ id: CGWindowID) -> Window? {
+        windows.first { $0.id == id }
+    }
+
+    /// The display showing the largest part of `frame`.
+    func display(mostOverlapping frame: CGRect) -> Display? {
+        displays
+            .map { (display: $0, overlap: $0.frame.intersection(frame)) }
+            .filter { !$0.overlap.isNull && !$0.overlap.isEmpty }
+            .max { $0.overlap.width * $0.overlap.height < $1.overlap.width * $1.overlap.height }?
+            .display
+    }
+}
+
+/// What one video stream shows: a `SCContentFilter`, described with window and process IDs.
+enum ScreencastFilterPlan: Equatable, Sendable {
+    /// The display without `excludedProcess`'s windows (Keybumps), except `exceptingWindows`
+    /// (its overlays), which come back. Display and area recordings. Excluding the whole app keeps
+    /// windows it opens mid-recording out too.
+    case display(CGDirectDisplayID, excludingProcess: pid_t?, exceptingWindows: [CGWindowID])
+    /// Only `includedProcesses`' windows on the display, minus `exceptingWindows`. Window
+    /// recordings: the window's app with its menus and sheets, plus Keybumps's overlays.
+    case applications(CGDirectDisplayID, includedProcesses: [pid_t], exceptingWindows: [CGWindowID])
+
+    var displayID: CGDirectDisplayID {
+        switch self {
+        case .display(let id, _, _), .applications(let id, _, _): id
+        }
+    }
+
+    /// Whether a window Keybumps opens later would show until the filter is rebuilt: the plan
+    /// names Keybumps's windows one by one instead of leaving out the whole app.
+    var dependsOnOwnWindows: Bool {
+        switch self {
+        case .display(_, let excluded, _): excluded == nil
+        case .applications: true
+        }
+    }
+}
+
+/// Which windows a recording shows: never Keybumps's own (the control bar, the picker's dimming,
+/// notices, Settings), except the overlays registered with the recorder (drawing, click rings,
+/// shortcuts), which are in the video on purpose.
+///
+/// Adapted from Shotnix's `RecordingCaptureFilter` (`Sources/ShotnixCore/Capture/RecordingCaptureFilter.swift`,
+/// MIT, see LICENSE.shotnix) and Snapzy's `makeContentFilter` and `addExceptedWindow`
+/// (`Snapzy/Services/Capture/ScreenRecordingManager.swift`, BSD-3-Clause, see LICENSE.snapzy).
+enum ScreencastCaptureFilter {
+    /// A display or area recording.
+    static func displayPlan(
+        display: CGDirectDisplayID,
+        ownProcessID: pid_t,
+        overlays: Set<CGWindowID>,
+        content: ScreencastContent
+    ) -> ScreencastFilterPlan {
+        let ownWindows = content.windows.filter { $0.processID == ownProcessID }
+        guard content.applicationProcessIDs.contains(ownProcessID) else {
+            // ScreenCaptureKit doesn't list Keybumps (no windows yet), so there's nothing of it to
+            // exclude now, and nothing to except either.
+            return .display(display, excludingProcess: nil, exceptingWindows: [])
+        }
+        return .display(
+            display,
+            excludingProcess: ownProcessID,
+            exceptingWindows: ownWindows.map(\.id).filter(overlays.contains).sorted()
+        )
+    }
+
+    /// A window recording, on the display showing most of it: the window's app, without its other
+    /// ordinary windows, which would cover the chosen one where they overlap it, and Keybumps's
+    /// overlays, without the rest of Keybumps. Nil when the window or its display is gone.
+    static func windowPlan(
+        window windowID: CGWindowID,
+        ownProcessID: pid_t,
+        overlays: Set<CGWindowID>,
+        content: ScreencastContent
+    ) -> ScreencastFilterPlan? {
+        guard let window = content.window(windowID),
+              let display = content.display(mostOverlapping: window.frame) else { return nil }
+        let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
+        var hidden = windowsToHide(recording: window, others: siblings)
+        var processes = [window.processID]
+        if window.processID != ownProcessID, content.applicationProcessIDs.contains(ownProcessID) {
+            processes.append(ownProcessID)
+            // A window Keybumps opens after this is built shows until the recorder rebuilds the
+            // filter, which it does whenever Keybumps's own windows change.
+            hidden.formUnion(content.windows.filter { $0.processID == ownProcessID && !overlays.contains($0.id) }.map(\.id))
+        }
+        return .applications(display.id, includedProcesses: processes, exceptingWindows: hidden.sorted())
+    }
+
+    /// The other windows of a recorded window's app to leave out: its ordinary windows (layer 0).
+    /// Menus, popovers, and sheets that open later still come through, and so does an untitled
+    /// window already over the chosen one when recording starts: that's its sheet or popover.
+    static func windowsToHide(recording chosen: ScreencastContent.Window, others: [ScreencastContent.Window]) -> Set<CGWindowID> {
+        Set(others.compactMap { other -> CGWindowID? in
+            guard other.id != chosen.id, other.layer == 0 else { return nil }
+            if other.isUntitled, other.frame.intersects(chosen.frame) { return nil }
+            return other.id
+        })
+    }
+}

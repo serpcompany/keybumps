@@ -1,0 +1,431 @@
+import AVFoundation
+import CoreGraphics
+import CoreMedia
+import Foundation
+@testable import Keybumps
+
+// Stand-ins for Screencast's recording seams: sample buffers made up in memory, a writer sink
+// that records what it's given, and a capture system and writers that never touch
+// ScreenCaptureKit, the microphone, or the screen.
+
+enum ScreencastSamples {
+    static let sampleRate = 48_000.0
+    /// Frames in one made-up audio buffer: about 21 ms, as ScreenCaptureKit delivers.
+    static let audioFrames = 1_024
+
+    /// A small BGRA frame stamped `host` seconds on the host clock.
+    static func video(at host: Double, width: Int = 64, height: Int = 36, shade: UInt8 = 0x80) -> CMSampleBuffer {
+        var pixelBuffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, [
+            kCVPixelBufferIOSurfacePropertiesKey: [:]
+        ] as CFDictionary, &pixelBuffer)
+        let pixels = pixelBuffer!
+        CVPixelBufferLockBaseAddress(pixels, [])
+        memset(CVPixelBufferGetBaseAddress(pixels), Int32(shade), CVPixelBufferGetDataSize(pixels))
+        CVPixelBufferUnlockBaseAddress(pixels, [])
+        var format: CMVideoFormatDescription?
+        CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pixels, formatDescriptionOut: &format)
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 1, timescale: 30),
+            presentationTimeStamp: time(host),
+            decodeTimeStamp: .invalid
+        )
+        var sample: CMSampleBuffer?
+        CMSampleBufferCreateReadyWithImageBuffer(
+            allocator: nil, imageBuffer: pixels, formatDescription: format!, sampleTiming: &timing, sampleBufferOut: &sample
+        )
+        return sample!
+    }
+
+    /// `frames` of float PCM in `channels`, every sample `value`, stamped `host`.
+    static func audio(at host: Double, frames: Int = audioFrames, channels: Int = 2, value: Float = 0.5) -> CMSampleBuffer {
+        let format = ScreencastAudioBuffers.defaultFormat(channels: channels)!
+        let pcm = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(cmAudioFormatDescription: format), frameCapacity: AVAudioFrameCount(frames))!
+        pcm.frameLength = AVAudioFrameCount(frames)
+        for channel in 0..<channels {
+            let samples = pcm.floatChannelData![channel]
+            for index in 0..<frames { samples[index] = value }
+        }
+        var sample: CMSampleBuffer?
+        CMAudioSampleBufferCreateWithPacketDescriptions(
+            allocator: nil, dataBuffer: nil, dataReady: false, makeDataReadyCallback: nil, refcon: nil,
+            formatDescription: format, sampleCount: frames, presentationTimeStamp: time(host),
+            packetDescriptions: nil, sampleBufferOut: &sample
+        )
+        CMSampleBufferSetDataBufferFromAudioBufferList(
+            sample!, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, bufferList: pcm.audioBufferList
+        )
+        CMSampleBufferSetDataReady(sample!)
+        return sample!
+    }
+
+    static var audioBufferSeconds: Double { Double(audioFrames) / sampleRate }
+
+    static func time(_ host: Double) -> CMTime {
+        CMTime(seconds: host, preferredTimescale: 1_000_000_000)
+    }
+
+    /// The largest absolute sample in a float PCM buffer.
+    static func peak(of sample: CMSampleBuffer) -> Float {
+        var sizeNeeded = 0
+        CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sample, bufferListSizeNeededOut: &sizeNeeded, bufferListOut: nil, bufferListSize: 0,
+            blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: nil
+        )
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: sizeNeeded, alignment: 16)
+        defer { raw.deallocate() }
+        let list = raw.bindMemory(to: AudioBufferList.self, capacity: 1)
+        var block: CMBlockBuffer?
+        CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sample, bufferListSizeNeededOut: nil, bufferListOut: list, bufferListSize: sizeNeeded,
+            blockBufferAllocator: nil, blockBufferMemoryAllocator: nil,
+            flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment, blockBufferOut: &block
+        )
+        return withExtendedLifetime(block) {
+            UnsafeMutableAudioBufferListPointer(list).reduce(Float(0)) { peak, buffer in
+                let samples = UnsafeBufferPointer(
+                    start: buffer.mData!.assumingMemoryBound(to: Float.self),
+                    count: Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
+                )
+                return max(peak, samples.map(abs).max() ?? 0)
+            }
+        }
+    }
+}
+
+/// A writer sink that keeps what it's given, in order.
+final class RecordingSink: ScreencastMovieSink {
+    struct Append: Equatable {
+        let track: ScreencastTrack
+        /// Recording seconds.
+        let start: Double
+        /// Seconds of audio; zero for video.
+        let duration: Double
+        let isSilent: Bool
+    }
+
+    let audioSources: [ScreencastAudioSource]
+    var hasFailed = false
+    var isReady = true
+    private(set) var sessionStarted = false
+    private(set) var appends: [Append] = []
+
+    init(audio: [ScreencastAudioSource]) {
+        audioSources = audio
+    }
+
+    func startSession() {
+        sessionStarted = true
+    }
+
+    func isReady(for track: ScreencastTrack) -> Bool {
+        isReady
+    }
+
+    func append(_ sample: CMSampleBuffer, to track: ScreencastTrack) -> Bool {
+        guard !hasFailed else { return false }
+        let start = sample.presentationTimeStamp.seconds
+        switch track {
+        case .video:
+            appends.append(Append(track: track, start: start, duration: 0, isSilent: false))
+        case .audio:
+            let duration = Double(CMSampleBufferGetNumSamples(sample)) / ScreencastSamples.sampleRate
+            appends.append(Append(track: track, start: start, duration: duration, isSilent: ScreencastSamples.peak(of: sample) == 0))
+        }
+        return true
+    }
+
+    func audio(_ source: ScreencastAudioSource) -> [Append] {
+        appends.filter { $0.track == .audio(source) }
+    }
+
+    var video: [Append] {
+        appends.filter { $0.track == .video }
+    }
+
+    /// Seconds of real sound (not silence) on `source`'s track between `start` and `end`.
+    func sound(_ source: ScreencastAudioSource, from start: Double, to end: Double) -> Double {
+        audio(source).filter { !$0.isSilent }.reduce(0) { sum, append in
+            sum + max(0, min(append.start + append.duration, end) - max(append.start, start))
+        }
+    }
+}
+
+// MARK: - The recorder's seams
+
+/// A writer that keeps every call, and finishes as told.
+final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
+    enum Call: Equatable {
+        case video(host: Double)
+        case audio(ScreencastAudioSource, host: Double)
+        case pause(Double)
+        case resume(Double)
+        case setAudio(ScreencastAudioSource, on: Bool, host: Double)
+        case finish(Double)
+        case cancel
+    }
+
+    let fileURL: URL
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let audioSources: [ScreencastAudioSource]
+    let onFailure: @Sendable () -> Void
+    var finishDuration = 5.0
+    var finishFailed = false
+    private let lock = NSLock()
+    private var recorded: [Call] = []
+
+    init(url: URL, pixelWidth: Int, pixelHeight: Int, audio: [ScreencastAudioSource], onFailure: @escaping @Sendable () -> Void) {
+        fileURL = url
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        audioSources = audio
+        self.onFailure = onFailure
+        FileManager.default.createFile(atPath: url.path, contents: Data("movie".utf8))
+    }
+
+    var calls: [Call] { lock.withLock { recorded } }
+    var videoHosts: [Double] {
+        calls.compactMap { if case .video(let host) = $0 { host } else { nil } }
+    }
+
+    private func record(_ call: Call) {
+        lock.withLock { recorded.append(call) }
+    }
+
+    func appendVideo(_ sample: CMSampleBuffer) { record(.video(host: sample.presentationTimeStamp.seconds)) }
+    func appendAudio(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
+        record(.audio(source, host: sample.presentationTimeStamp.seconds))
+    }
+    func pause(at host: Double) { record(.pause(host)) }
+    func resume(at host: Double) { record(.resume(host)) }
+    func setAudio(_ source: ScreencastAudioSource, on: Bool, at host: Double) { record(.setAudio(source, on: on, host: host)) }
+
+    func finish(at host: Double) async -> ScreencastWriterResult {
+        record(.finish(host))
+        return ScreencastWriterResult(fileURL: fileURL, duration: finishDuration, failed: finishFailed)
+    }
+
+    func cancel() async {
+        record(.cancel)
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+}
+
+final class FakeWriterFactory: ScreencastWriterFactory, @unchecked Sendable {
+    private let lock = NSLock()
+    private var made: [FakeMovieWriter] = []
+    private var mixed: [(URL, URL)] = []
+    var mixdownFails = false
+    /// Applied to each writer as it's made.
+    var configure: (FakeMovieWriter) -> Void = { _ in }
+
+    var writers: [FakeMovieWriter] { lock.withLock { made } }
+    var mixdowns: [(source: URL, destination: URL)] { lock.withLock { mixed } }
+
+    func makeWriter(
+        at url: URL,
+        pixelWidth: Int,
+        pixelHeight: Int,
+        audio: [ScreencastAudioSource],
+        options: ScreencastOptions,
+        onFailure: @escaping @Sendable () -> Void
+    ) throws -> any ScreencastMovieWriting {
+        let writer = FakeMovieWriter(url: url, pixelWidth: pixelWidth, pixelHeight: pixelHeight, audio: audio, onFailure: onFailure)
+        configure(writer)
+        lock.withLock { made.append(writer) }
+        return writer
+    }
+
+    func writeMixdown(of source: URL, to destination: URL) async throws {
+        if mixdownFails { throw ScreencastAudioMixdown.MixdownError.writerFailed }
+        lock.withLock { mixed.append((source, destination)) }
+        FileManager.default.createFile(atPath: destination.path, contents: Data("mixdown".utf8))
+    }
+}
+
+@MainActor
+final class FakeStream: ScreencastStream {
+    enum Kind: Equatable {
+        case video(ScreencastFilterPlan, ScreencastStreamConfiguration)
+        case audio(ScreencastAudio)
+    }
+
+    let kind: Kind
+    let handler: ScreencastSampleHandler
+    var startError: ScreencastFailure?
+    /// Holds `start()` until `releaseStart()`.
+    var holdsStart = false
+    private var heldStart: CheckedContinuation<Void, Never>?
+    private(set) var isRunning = false
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private(set) var plans: [ScreencastFilterPlan] = []
+    private(set) var sourceRects: [CGRect] = []
+
+    init(kind: Kind, handler: ScreencastSampleHandler) {
+        self.kind = kind
+        self.handler = handler
+    }
+
+    var isHoldingStart: Bool { heldStart != nil }
+
+    func start() async throws {
+        startCount += 1
+        if holdsStart {
+            await withCheckedContinuation { heldStart = $0 }
+        }
+        if let startError { throw startError }
+        isRunning = true
+    }
+
+    func releaseStart() {
+        heldStart?.resume()
+        heldStart = nil
+    }
+
+    func stop() async {
+        stopCount += 1
+        isRunning = false
+    }
+
+    func update(plan: ScreencastFilterPlan, content: ScreencastContent) async throws {
+        plans.append(plan)
+    }
+
+    func update(sourceRect: CGRect) async throws {
+        sourceRects.append(sourceRect)
+    }
+
+    /// Delivers a frame stamped `host`, as ScreenCaptureKit would on its queue.
+    func deliverFrame(at host: Double) {
+        handler.video(ScreencastSamples.video(at: host))
+    }
+
+    func deliverAudio(_ source: ScreencastAudioSource, at host: Double, value: Float = 0.5) {
+        handler.audio(ScreencastSamples.audio(at: host, channels: source == .systemAudio ? 2 : 1, value: value), source)
+    }
+}
+
+@MainActor
+final class FakeCaptureSystem: ScreencastCaptureSystem {
+    var screen: ScreencastContent
+    var contentError: ScreencastFailure?
+    var videoStartError: ScreencastFailure?
+    var audioStartError: ScreencastFailure?
+    var windowFrames: [CGWindowID: CGRect] = [:]
+    var ownWindows: Set<CGWindowID> = []
+    /// Video streams made from now on hold their start until released.
+    var holdsVideoStart = false
+    private(set) var videoStreams: [FakeStream] = []
+    private(set) var audioStreams: [FakeStream] = []
+    private(set) var contentReads = 0
+
+    init(content: ScreencastContent) {
+        screen = content
+    }
+
+    func content() async throws -> ScreencastContent {
+        contentReads += 1
+        if let contentError { throw contentError }
+        return screen
+    }
+
+    func makeVideoStream(
+        plan: ScreencastFilterPlan,
+        configuration: ScreencastStreamConfiguration,
+        content: ScreencastContent,
+        handler: ScreencastSampleHandler
+    ) throws -> any ScreencastStream {
+        let stream = FakeStream(kind: .video(plan, configuration), handler: handler)
+        stream.startError = videoStartError
+        stream.holdsStart = holdsVideoStart
+        videoStreams.append(stream)
+        return stream
+    }
+
+    func makeAudioStream(audio: ScreencastAudio, content: ScreencastContent, handler: ScreencastSampleHandler) throws -> any ScreencastStream {
+        let stream = FakeStream(kind: .audio(audio), handler: handler)
+        stream.startError = audioStartError
+        audioStreams.append(stream)
+        return stream
+    }
+
+    func windowFrame(_ id: CGWindowID) -> CGRect? {
+        windowFrames[id]
+    }
+
+    func ownVisibleWindows() -> Set<CGWindowID> {
+        ownWindows
+    }
+}
+
+/// A host clock tests move by hand.
+@MainActor
+final class FakeHostClock {
+    var now = 1_000.0
+
+    func advance(_ seconds: Double) {
+        now += seconds
+    }
+}
+
+/// Made-up screens: two displays side by side, a browser window with a sheet and another
+/// window, and Keybumps with a control bar and an overlay.
+enum ScreencastScreens {
+    static let ownProcess: pid_t = 900
+    static let browser: pid_t = 501
+    static let otherApp: pid_t = 502
+
+    static let leftDisplay = ScreencastContent.Display(id: 1, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), scale: 2)
+    static let rightDisplay = ScreencastContent.Display(id: 2, frame: CGRect(x: 1512, y: 0, width: 1920, height: 1080), scale: 1)
+
+    static let browserWindow = ScreencastContent.Window(
+        id: 10, frame: CGRect(x: 100, y: 100, width: 800, height: 600), layer: 0, processID: browser, isUntitled: false, isOnScreen: true
+    )
+    static let browserSheet = ScreencastContent.Window(
+        id: 11, frame: CGRect(x: 300, y: 130, width: 400, height: 200), layer: 0, processID: browser, isUntitled: true, isOnScreen: true
+    )
+    static let browserOtherWindow = ScreencastContent.Window(
+        id: 12, frame: CGRect(x: 200, y: 200, width: 800, height: 600), layer: 0, processID: browser, isUntitled: false, isOnScreen: true
+    )
+    static let browserMenu = ScreencastContent.Window(
+        id: 13, frame: CGRect(x: 120, y: 120, width: 200, height: 300), layer: 101, processID: browser, isUntitled: true, isOnScreen: true
+    )
+    static let otherAppWindow = ScreencastContent.Window(
+        id: 20, frame: CGRect(x: 1600, y: 100, width: 800, height: 600), layer: 0, processID: otherApp, isUntitled: false, isOnScreen: true
+    )
+    static let controlBar = ScreencastContent.Window(
+        id: 30, frame: CGRect(x: 600, y: 900, width: 300, height: 44), layer: 3, processID: ownProcess, isUntitled: true, isOnScreen: true
+    )
+    static let drawingLayer = ScreencastContent.Window(
+        id: 31, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: ownProcess, isUntitled: true, isOnScreen: true
+    )
+
+    static func content(windows: [ScreencastContent.Window]? = nil, includesOwnApp: Bool = true) -> ScreencastContent {
+        ScreencastContent(
+            displays: [rightDisplay, leftDisplay],
+            windows: windows ?? [browserWindow, browserSheet, browserOtherWindow, browserMenu, otherAppWindow, controlBar, drawingLayer],
+            applicationProcessIDs: includesOwnApp ? [browser, otherApp, ownProcess] : [browser, otherApp]
+        )
+    }
+}
+
+/// A temporary captures folder, removed by `remove()`.
+struct TemporaryCapturesFolder {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("ScreencastTests-\(UUID().uuidString)", isDirectory: true)
+
+    init() {
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    func remove() {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    func captureFolders() -> [URL] {
+        ((try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+}

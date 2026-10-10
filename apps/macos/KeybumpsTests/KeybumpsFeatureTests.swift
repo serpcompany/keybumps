@@ -491,6 +491,8 @@ final class KeybumpsFeatureTests: XCTestCase {
             "LICENSE.sentry-cocoa",
             "LICENSE.whisper-cpp",
             "LICENSE.keycastr",
+            "LICENSE.screendrop",
+            "LICENSE.bettercapture",
             "LICENSE.snapzy"
         ] {
             XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil), resource)
