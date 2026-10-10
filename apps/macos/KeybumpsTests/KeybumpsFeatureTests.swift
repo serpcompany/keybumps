@@ -493,7 +493,8 @@ final class KeybumpsFeatureTests: XCTestCase {
             "LICENSE.keycastr",
             "LICENSE.screendrop",
             "LICENSE.bettercapture",
-            "LICENSE.snapzy"
+            "LICENSE.snapzy",
+            "LICENSE.hop"
         ] {
             XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil), resource)
         }

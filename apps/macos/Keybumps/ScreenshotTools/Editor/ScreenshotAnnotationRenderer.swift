@@ -245,11 +245,18 @@ final class ScreenshotAnnotationRenderer {
         return CGSize(width: ceil(rect.width) + 2, height: ceil(rect.height))
     }
 
-    private static func drawArrow(from start: CGPoint, to end: CGPoint, lineWidth: CGFloat, color: CGColor, in ctx: CGContext) {
+    /// How long an arrow's head is for a line this wide.
+    nonisolated static func arrowHeadLength(lineWidth: CGFloat) -> CGFloat {
+        max(lineWidth * 4.5, 14)
+    }
+
+    /// An arrow from `start` to `end`: a round-capped shaft and a filled head. Screencast's drawing
+    /// draws its arrows with it too, so both look the same.
+    static func drawArrow(from start: CGPoint, to end: CGPoint, lineWidth: CGFloat, color: CGColor, in ctx: CGContext) {
         let dx = end.x - start.x, dy = end.y - start.y
         let length = hypot(dx, dy)
         guard length > 0 else { return }
-        let headLength = max(lineWidth * 4.5, 14)
+        let headLength = arrowHeadLength(lineWidth: lineWidth)
         let headAngle: CGFloat = .pi / 6
         let inset = min(headLength * cos(headAngle), length * 0.7)
         let shaftEnd = CGPoint(x: end.x - dx / length * inset, y: end.y - dy / length * inset)
