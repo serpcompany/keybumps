@@ -69,6 +69,10 @@ targets:
         buildPhase: resources
       - path: LICENSE.keycastr
         buildPhase: resources
+      - path: LICENSE.screendrop
+        buildPhase: resources
+      - path: LICENSE.bettercapture
+        buildPhase: resources
       - path: LICENSE.snapzy
         buildPhase: resources
     settings:
