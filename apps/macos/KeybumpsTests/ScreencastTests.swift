@@ -32,7 +32,7 @@ struct ScreencastTests {
         #expect(descriptor.criticalOperations.isEmpty)
         #expect(descriptor.settingsPage?.section == .screencast)
         #expect(!CapabilityCatalog.defaultCapabilities.contains(.screencast), "An added capability")
-        #expect(descriptor.shortcuts == [.screencast])
+        #expect(descriptor.shortcuts == [.screencast, .screencastPause, .screencastStop, .screencastDiscard], "Draw While Recording waits for drawing (#449)")
         #expect(PluginSettingsPage<EmptyView>.byline(descriptor) == "Official plugin by Keybumps · Media")
     }
 

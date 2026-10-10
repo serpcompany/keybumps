@@ -211,6 +211,10 @@ _Avoid_: Clip, video (one display's file in a recording), screencast (the plugin
 What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one clicked, or every screen), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens with the last area drawn.
 _Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
 
+**Control bar**:
+The floating bar on the recorded screen while Screencast records, never in the video: the time recorded, Pause and Resume, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
+_Avoid_: HUD, toolbar, recording panel, status bar (macOS's menu bar)
+
 **Destination**:
 An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
 _Avoid_: Integration, upload target, share service

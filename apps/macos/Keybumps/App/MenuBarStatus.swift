@@ -19,28 +19,39 @@ final class MenuBarStatus {
         var title: String?
         var spokenTitle: String?
         var items: [MenuBarItem] = []
+        /// Comes before the others, whatever the registry order: Screencast's while it records.
+        var takesPrecedence = false
     }
 
     private(set) var parts: [Capability: Part] = [:]
     /// Runs whenever the text or a menu section changes, so the status item redraws.
     var onChange: () -> Void = {}
 
-    /// The text beside the icon: the first capability's in registry order that has any.
+    /// The text beside the icon: the first capability's that has any, those that take precedence
+    /// first, then in registry order.
     var title: String? { ordered.lazy.compactMap(\.title).first }
 
     /// What VoiceOver says for that text.
     var spokenTitle: String? { ordered.first { $0.title != nil }?.spokenTitle }
 
-    /// The menu's sections at its top, in registry order, leaving out empty ones.
+    /// The menu's sections at its top, those that take precedence first, then in registry order,
+    /// leaving out empty ones.
     var sections: [[MenuBarItem]] { ordered.map(\.items).filter { !$0.isEmpty } }
 
     /// Sets a capability's text and menu section at once, redrawing once if either changed.
-    func set(title: String?, spoken: String?, items: [MenuBarItem], for capability: Capability) {
+    func set(
+        title: String?,
+        spoken: String?,
+        items: [MenuBarItem],
+        takesPrecedence: Bool = false,
+        for capability: Capability
+    ) {
         let old = parts[capability] ?? Part()
         let changed = old.title != title || old.spokenTitle != spoken
             || old.items.map(\.id) != items.map(\.id) || old.items.map(\.title) != items.map(\.title)
             || old.items.map(\.systemImage) != items.map(\.systemImage)
-        parts[capability] = Part(title: title, spokenTitle: spoken, items: items)
+            || old.takesPrecedence != takesPrecedence
+        parts[capability] = Part(title: title, spokenTitle: spoken, items: items, takesPrecedence: takesPrecedence)
         if changed { onChange() }
     }
 
@@ -50,7 +61,8 @@ final class MenuBarStatus {
     }
 
     private var ordered: [Part] {
-        CapabilityCatalog.descriptors.compactMap { parts[$0.capability] }
+        let inRegistryOrder = CapabilityCatalog.descriptors.compactMap { parts[$0.capability] }
+        return inRegistryOrder.filter(\.takesPrecedence) + inRegistryOrder.filter { !$0.takesPrecedence }
     }
 }
 
@@ -61,9 +73,10 @@ struct CapabilityMenuBarStatus {
     let capability: Capability
 
     /// Shows `title` beside the icon (nil for none), which VoiceOver says as `spoken`, and `items`
-    /// as the capability's section at the top of the Keybumps menu (empty for none).
-    func set(title: String?, spoken: String?, items: [MenuBarItem]) {
-        status.set(title: title, spoken: spoken, items: items, for: capability)
+    /// as the capability's section at the top of the Keybumps menu (empty for none). A part that
+    /// `takesPrecedence` comes before the other capabilities', as a recording's does.
+    func set(title: String?, spoken: String?, items: [MenuBarItem], takesPrecedence: Bool = false) {
+        status.set(title: title, spoken: spoken, items: items, takesPrecedence: takesPrecedence, for: capability)
     }
 
     func clear() {
