@@ -226,6 +226,45 @@ struct ScreencastControlBarTests {
         await flow.controller.discard()
     }
 
+    @Test("The dot pulses only while recording: still as it starts, dim while paused")
+    func dot() {
+        let bar = makeBar()
+        for (phase, live, paused) in [
+            (ScreencastPhase.starting, false, false), (.recording, true, false), (.paused, false, true), (.finishing, false, false),
+        ] {
+            recording.phase = phase
+            #expect(bar.isLive == live && bar.isPaused == paused, "\(phase)")
+        }
+    }
+
+    @available(macOS 15, *)
+    @Test("While the recording starts, the sounds show as the picker chose them, the buttons wait, and the dot holds still")
+    func whileStarting() async throws {
+        let flow = ScreencastFlow(systemAudio: false)
+        defer { flow.captures.remove() }
+        flow.captureSystem.holdsVideoStart = true
+        flow.controller.open()
+        let picker = try #require(flow.controller.picker)
+        picker.target = .screen
+        picker.clickScreen(PickerScreens.left)
+        flow.controller.confirm()
+        #expect(await ScreencastWait.until { flow.captureSystem.videoStreams.first?.isHoldingStart == true })
+        #expect(flow.controller.phase == .starting)
+        #expect(flow.controller.recorder.microphone == .notRecorded, "The recorder hasn't its sounds yet")
+
+        let bar = ScreencastControlBarModel(recording: flow.controller)
+        #expect(bar.audioButton(for: .microphone).value == "On", "As chosen, not \"Not recorded\"")
+        #expect(bar.audioButton(for: .microphone).systemImage == "mic.fill")
+        #expect(bar.audioButton(for: .systemAudio).value == "Not recorded", "Switched off in the picker")
+        #expect(!bar.isLive && !bar.acceptsActions)
+
+        flow.captureSystem.videoStreams.first?.releaseStart()
+        #expect(await ScreencastWait.until { flow.controller.phase == .recording })
+        #expect(bar.isLive && bar.acceptsActions)
+        #expect(bar.audioButton(for: .microphone).value == "On" && bar.audioButton(for: .systemAudio).value == "Not recorded")
+        await flow.controller.discard()
+    }
+
     // MARK: Sound
 
     @Test("The microphone and the Mac's sound mute and unmute")
@@ -901,6 +940,58 @@ struct ScreencastRecordingControlsTests {
         flow.controller.removePhaseObserver(first)
         flow.controller.cancel()
         #expect(Array(heard.dropFirst(3)) == ["handler idle", "second idle"])
+    }
+
+    @available(macOS 15, *)
+    @Test("An observer that changes the phase while it's told: every observer still hears every phase once, in order")
+    func phaseChangedWhileTelling() throws {
+        let flow = ScreencastFlow()
+        defer { flow.captures.remove() }
+        let controller = flow.controller
+        var handler: [ScreencastPhase] = []
+        var first: [ScreencastPhase] = []
+        var second: [ScreencastPhase] = []
+        controller.onPhaseChange = { handler.append($0) }
+        var reopened = false
+        controller.addPhaseObserver { phase in
+            first.append(phase)
+            // "Record again": opens the picker as soon as the last capture ends.
+            if phase == .idle, !reopened {
+                reopened = true
+                controller.open()
+            }
+        }
+        controller.addPhaseObserver { second.append($0) }
+
+        controller.open()
+        controller.cancel()
+        #expect(controller.phase == .picking)
+        let expected: [ScreencastPhase] = [.picking, .idle, .picking]
+        #expect(handler == expected && first == expected && second == expected)
+        controller.cancel()
+    }
+
+    @available(macOS 15, *)
+    @Test("An observer removed by another while they're told hears nothing more, and one added then starts with the next phase")
+    func observersChangedWhileTelling() {
+        let flow = ScreencastFlow()
+        defer { flow.captures.remove() }
+        let controller = flow.controller
+        var removed: [ScreencastPhase] = []
+        var added: [ScreencastPhase] = []
+        var removable: ScreencastPhaseObservation?
+        controller.addPhaseObserver { phase in
+            guard phase == .picking, let observation = removable else { return }
+            controller.removePhaseObserver(observation)
+            removable = nil
+            controller.addPhaseObserver { added.append($0) }
+        }
+        removable = controller.addPhaseObserver { removed.append($0) }
+
+        controller.open()
+        controller.cancel()
+        #expect(removed.isEmpty, "Removed before its turn")
+        #expect(added == [.idle], "Added during .picking, so it starts with .idle")
     }
 
     @Test("While recording, Screencast's time and items come before Timer's in the menu bar")
