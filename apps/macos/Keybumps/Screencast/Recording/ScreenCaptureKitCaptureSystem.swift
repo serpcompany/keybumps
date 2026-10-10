@@ -114,6 +114,33 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         })
     }
 
+    func onScreenPanelServiceWindows() -> Set<CGWindowID>? {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        return Set(list.compactMap { info in
+            guard let owner = info[kCGWindowOwnerPID as String] as? pid_t, isPanelService(owner) else { return nil }
+            return info[kCGWindowNumber as String] as? CGWindowID
+        })
+    }
+
+    func windowExists(_ id: CGWindowID) -> Bool? {
+        // Listed whatever its on-screen state; a closed window isn't.
+        guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]] else { return nil }
+        return !list.isEmpty
+    }
+
+    /// Process IDs already told apart, so the 20 Hz read looks each one up once.
+    private var panelServiceProcesses: [pid_t: Bool] = [:]
+
+    private func isPanelService(_ processID: pid_t) -> Bool {
+        if let known = panelServiceProcesses[processID] { return known }
+        let bundleID = NSRunningApplication(processIdentifier: processID)?.bundleIdentifier
+        let isService = bundleID.map(ScreencastContent.panelServiceBundleIDs.contains) ?? false
+        panelServiceProcesses[processID] = isService
+        return isService
+    }
+
     func ownVisibleWindows() -> Set<CGWindowID> {
         Set(NSApplication.shared.windows.filter { $0.isVisible && $0.windowNumber > 0 }.map { CGWindowID($0.windowNumber) })
     }
@@ -121,7 +148,13 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     // MARK: Building ScreenCaptureKit objects
 
     static func snapshot(of content: SCShareableContent) -> ScreencastContent {
-        ScreencastContent(
+        // Front to back, numbers only, for telling a sheet in front of its window.
+        let onScreen = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+        var order: [CGWindowID: Int] = [:]
+        for (index, info) in onScreen.enumerated() {
+            if let id = info[kCGWindowNumber as String] as? CGWindowID, order[id] == nil { order[id] = index }
+        }
+        return ScreencastContent(
             displays: content.displays.map { display in
                 ScreencastContent.Display(
                     id: display.displayID,
@@ -137,7 +170,9 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                     layer: window.windowLayer,
                     processID: processID,
                     isUntitled: (window.title ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
-                    isOnScreen: window.isOnScreen
+                    isOnScreen: window.isOnScreen,
+                    order: order[window.windowID],
+                    isPanelService: window.owningApplication.map { ScreencastContent.panelServiceBundleIDs.contains($0.bundleIdentifier) } ?? false
                 )
             },
             applicationProcessIDs: Set(content.applications.map(\.processID)),

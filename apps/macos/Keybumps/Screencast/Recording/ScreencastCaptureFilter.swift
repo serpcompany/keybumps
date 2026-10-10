@@ -23,7 +23,16 @@ struct ScreencastContent {
         /// never read into this.
         let isUntitled: Bool
         let isOnScreen: Bool
+        /// Its place front to back among the windows on screen, 0 in front; nil when it isn't on
+        /// screen or that isn't known.
+        var order: Int?
+        /// One of the system services that show sandboxed apps' Open and Save panels, told by its
+        /// owner's bundle ID (`ScreencastContent.panelServiceBundleIDs`).
+        var isPanelService = false
     }
+
+    /// The processes that show Open and Save panels for sandboxed apps.
+    static let panelServiceBundleIDs: Set<String> = ["com.apple.appkit.xpc.openAndSavePanelService"]
 
     let displays: [Display]
     let windows: [Window]
@@ -114,13 +123,19 @@ enum ScreencastCaptureFilter {
         )
     }
 
-    /// A window recording, on the display showing most of it, as a list of windows: the window;
-    /// its app's other windows on screen on that display, except its ordinary windows, which would
-    /// cover the chosen one where they overlap it, so its menus, sheets, and popovers show; and
-    /// Keybumps's registered overlays. Keybumps itself is never included whole: none of its other
-    /// windows (a notice, the Command Palette, typed keys) can be in the video, even for a frame.
-    /// The recorder rebuilds it when the app's windows change. Nil when the window or its display
-    /// is gone.
+    /// A window recording, on the display showing most of it, as a list of windows:
+    /// - the window;
+    /// - its app's other windows on screen on that display, except its ordinary windows, which
+    ///   would cover the chosen one where they overlap it, so its menus, sheets, and popovers show.
+    ///   An ordinary window that sits within the chosen one and in front of it is its sheet (a
+    ///   titled Save or Open panel), and shows;
+    /// - a system panel service's window over it, the Open or Save panel of a sandboxed app;
+    /// - Keybumps's registered overlays, on screen or not, so one shows the moment it's ordered in.
+    ///
+    /// Keybumps itself is never included whole: none of its other windows (a notice, the Command
+    /// Palette, typed keys) can be in the video, even for a frame, and no other app's ordinary
+    /// window is named. The recorder rebuilds it when the app's windows change. Nil when the window
+    /// or its display isn't in `content` (closed, or not on screen in an on-screen read).
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
@@ -131,13 +146,26 @@ enum ScreencastCaptureFilter {
               let display = content.display(mostOverlapping: window.frame) else { return nil }
         let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
         let hidden = windowsToHide(recording: window, others: siblings)
+        /// In front of the window, when both places are known.
+        func inFront(_ other: ScreencastContent.Window) -> Bool {
+            guard let otherOrder = other.order, let windowOrder = window.order else { return true }
+            return otherOrder < windowOrder
+        }
+        /// A sheet sits within its window, in front of it.
+        func isSheet(_ other: ScreencastContent.Window) -> Bool {
+            inFront(other) && window.frame.insetBy(dx: -2, dy: -2).contains(other.frame)
+        }
         let appWindows = siblings.filter { sibling in
-            sibling.isOnScreen && !hidden.contains(sibling.id) && sibling.frame.intersects(display.frame)
+            sibling.isOnScreen && sibling.frame.intersects(display.frame)
+                && (!hidden.contains(sibling.id) || isSheet(sibling))
                 // Recording one of Keybumps's own windows: its others only when they're overlays.
                 && (window.processID != ownProcessID || overlays.contains(sibling.id))
         }
+        let panels = content.windows.filter { other in
+            other.isPanelService && other.isOnScreen && other.frame.intersects(window.frame) && inFront(other)
+        }
         let ownOverlays = content.windows.filter { $0.processID == ownProcessID && $0.id != window.id && overlays.contains($0.id) }
-        let included = Set([window.id] + appWindows.map(\.id) + ownOverlays.map(\.id))
+        let included = Set([window.id] + appWindows.map(\.id) + panels.map(\.id) + ownOverlays.map(\.id))
         return .windows(display.id, includingWindows: included.sorted())
     }
 
