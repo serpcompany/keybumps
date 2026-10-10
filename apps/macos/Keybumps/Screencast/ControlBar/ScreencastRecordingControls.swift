@@ -8,8 +8,8 @@ import Observation
 /// `ScreencastController` once it makes it; everything here acts through the controller.
 ///
 /// The bar goes up as the recording starts (`.starting`), before the recorder reads what's on
-/// screen, so even a filter that names Keybumps's windows one by one leaves it out from the first
-/// frame. Its buttons wait until it's recording. It stays hidden during the countdown.
+/// screen, so it's already there when the recorder decides what to leave out. Its buttons wait until
+/// it's recording. It stays hidden during the countdown.
 @MainActor
 final class ScreencastRecordingControls {
     /// The shortcuts that act on a recording, in the order Settings lists them.
