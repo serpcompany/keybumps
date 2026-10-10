@@ -332,10 +332,13 @@ final class SmokeUITests: XCTestCase {
         }
         XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Still recording")
 
+        // macOS reports the bar's panel as a dialog, not a window.
+        let controlBar = app.dialogs.matching(identifier: "screencastControlBar").firstMatch
+        XCTAssertTrue(controlBar.exists, "The bar's panel is there while recording")
         let stop = element("screencast.bar.stop")
         stop.click()
-        XCTAssertTrue(stop.waitForNonExistence(timeout: 10), "Stop ends the recording, and the bar closes")
-        XCTAssertFalse(app.windows.matching(identifier: "screencastControlBar").firstMatch.exists)
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 10), "Stop ends the recording")
+        XCTAssertTrue(controlBar.waitForNonExistence(timeout: 10), "The bar closes")
     }
 
     func testScreencastDrawingFromTheControlBar() {
