@@ -946,23 +946,21 @@ struct ScreencastControlBarPlacementTests {
         ))
     }
 
-    @Test("The default spot clears every line of keys a recording shows at the bottom centre, at their largest")
+    @Test("The default spot clears the newest line of keys a recording shows at the bottom centre, at their largest")
     func clearsTheKeys() {
-        // The newest line at Large, with keycaps and an action's name, and the two smaller lines
-        // above it, as `KeystrokeStack` lays them out.
+        // The newest line at Large, with keycaps and an action's name, or as KeyCastr's bezel. The
+        // older lines above it are smaller and fade quickly, so they may pass over the bar.
         let metrics = KeystrokeMetrics(.large)
         let entry = KeystrokeTimeline.Entry(
             id: 1, keycaps: ["⇧", "⌘", "4"], text: "⇧⌘4", name: "Screenshot Area", isTyping: false, lastPress: Date()
         )
         func height(_ line: KeystrokeLine) -> CGFloat { NSHostingView(rootView: line).fittingSize.height }
-        let newest = height(KeystrokeLine(entry: entry, style: .keycaps, metrics: metrics))
-        let older = height(KeystrokeLine(entry: entry, style: .keycaps, metrics: metrics.history))
+        let keycaps = height(KeystrokeLine(entry: entry, style: .keycaps, metrics: metrics))
         let bezel = height(KeystrokeLine(entry: entry, style: .bezel, metrics: metrics))
-        let gap = metrics.keycap * 0.25
-        let keys = KeyDisplayOverlayView.margin + max(newest, bezel) + CGFloat(KeystrokeTimeline.visibleEntries - 1) * (gap + older)
-        #expect(newest > 80 && older > 60, "Measured: \(newest), \(older)")
-        #expect(ScreencastControlBarPlacement.bottomInset >= keys + 12, "Keys reach \(keys) above the bottom")
-        #expect(ScreencastControlBarPlacement.bottomInset <= keys + 40, "Not much higher than it must")
+        let newest = KeyDisplayOverlayView.margin + max(keycaps, bezel)
+        #expect(keycaps > 80, "Measured: \(keycaps)")
+        #expect(ScreencastControlBarPlacement.bottomInset >= newest + 12, "The newest line reaches \(newest) above the bottom")
+        #expect(ScreencastControlBarPlacement.bottomInset <= newest + 30, "Not much higher than it must")
     }
 
     @Test("The default spot moves above an area being recorded, when there's room")
@@ -975,7 +973,7 @@ struct ScreencastControlBarPlacementTests {
         let low = CGRect(x: 400, y: 130, width: 700, height: 310)
         #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: low).y == 440 + margin)
         // One that stays below it doesn't.
-        let short = CGRect(x: 400, y: 70, width: 700, height: 300)
+        let short = CGRect(x: 400, y: 70, width: 700, height: 150)
         #expect(placement.origin(for: Self.size, on: Self.laptop, avoiding: short) == placement.origin(for: Self.size, on: Self.laptop))
         // One reaching nearly to the top leaves no room above: the bar stays put.
         let tall = CGRect(x: 400, y: 70, width: 700, height: 850)

@@ -64,7 +64,7 @@ final class ScreencastControlBar {
 
     // MARK: Showing
 
-    /// Shows the bar on `screen`: where it was left there last, or centered above the keys a
+    /// Shows the bar on `screen`: where it was left there last, or centered above the newest keys a
     /// recording shows, and above `area` (in AppKit's global space) when only part of the screen
     /// is recorded.
     func show(on screen: NSScreen, avoiding area: CGRect? = nil) {
