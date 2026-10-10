@@ -311,6 +311,76 @@ struct ScreencastTests {
         await module.review.panel?.close()
     }
 
+    @available(macOS 15, *)
+    @Test("Through the module, a screenshot taken with the picker reaches the review panel once")
+    func screenshotReachesTheReviewOnce() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastOnce-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsScreencastOnce-\(UUID().uuidString)"))
+        defer {
+            pasteboard.releaseGlobally()
+            try? FileManager.default.removeItem(at: root)
+        }
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let clipboard = ClipboardHistoryService(
+            storageURL: root.appendingPathComponent("history.json"), pasteboard: pasteboard,
+            mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true), sourceApps: .inert
+        )
+        let module = ScreencastModule(
+            preferences: preferences,
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { _ in },
+            seams: ScreencastSeams(
+                captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
+                pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
+                presenter: FakeOverlays(),
+                screens: { PickerScreens.both },
+                sleep: { _ in },
+                contextReader: .inert
+            ),
+            review: ScreencastReviewServices(
+                clipboard: clipboard,
+                isClipboardHistoryOn: { false },
+                editor: { nil },
+                settings: ScreencastReviewSettings(defaults: InMemoryDefaults()),
+                notices: nil,
+                repositories: { ScreencastRepositoryMemory(storageURL: root.appendingPathComponent("repositories.json")) }
+            )
+        )
+        module.apply(CapabilityContext(
+            enabledCapabilities: [.screencast],
+            preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            permissionReadiness: { capabilities in
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
+            }
+        ))
+        var outcomes: [ScreencastReviewOutcome] = []
+        module.review.onFinish = { outcomes.append($0) }
+
+        module.start()
+        let controller = try #require(module.controller)
+        let picker = try #require(controller.picker)
+        picker.kind = .screenshot
+        picker.target = .screen
+        picker.clickScreen(PickerScreens.left)
+        controller.confirm()
+        try await Self.waitUntil { module.review.panel?.isShown == true }
+        let panel = try #require(module.review.panel)
+        guard case .screenshot(let screenshot) = panel.model?.input else {
+            Issue.record("the panel shows the screenshot")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: screenshot.folder) }
+        #expect(controller.phase == .idle)
+
+        await panel.close()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(outcomes == [.saved(.screenshot(screenshot))], "once, and saved")
+        #expect(!panel.isShown)
+    }
+
     /// Lets the main actor run until `condition` holds, for two seconds at most.
     private static func waitUntil(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         for _ in 0..<200 where !condition() {
