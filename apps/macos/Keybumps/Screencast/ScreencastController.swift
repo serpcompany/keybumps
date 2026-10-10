@@ -100,7 +100,8 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 ///   (`.countingDown` or `.starting`), as `choice` says (`showsShortcuts`, `highlightsClicks`, and
 ///   the `regions` it shows on), and register their windows with `recorder.includeOverlayWindow`
 ///   before it starts, so the first frame has them. A restart clears the drawing
-///   (`addRestartObserver(_:)`), and they come down when the phase is `.idle` again.
+///   just before a restart (`addWillRestartObserver(_:)`), and they come down when the phase is
+///   `.idle` again.
 /// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved video and screenshot.
 ///
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
@@ -134,8 +135,8 @@ final class ScreencastController {
     /// `addPhaseObserver(_:)`'s observers, in the order they were added.
     @ObservationIgnored private var phaseObservers: [(ScreencastPhaseObservation, (ScreencastPhase) -> Void)] = []
     @ObservationIgnored private var nextPhaseObservation = 0
-    /// `addRestartObserver(_:)`'s observers, in the order they were added.
-    @ObservationIgnored private var restartObservers: [() -> Void] = []
+    /// `addWillRestartObserver(_:)`'s observers, in the order they were added.
+    @ObservationIgnored private var willRestartObservers: [() -> Void] = []
     /// Phases entered while the observers are being told of an earlier one, told next, in order.
     @ObservationIgnored private var unannouncedPhases: [ScreencastPhase] = []
     @ObservationIgnored private var isAnnouncingPhase = false
@@ -241,10 +242,12 @@ final class ScreencastController {
         phaseObservers.removeAll { $0.0 == observation }
     }
 
-    /// Calls `observer` each time a restart has started a new take, which stays in the same phase:
-    /// the overlays clear the drawing then (#449).
-    func addRestartObserver(_ observer: @escaping () -> Void) {
-        restartObservers.append(observer)
+    /// Calls `observer` each time a restart is about to throw the take away and start a new one,
+    /// which stays in the same phase: just before the recorder swaps its files, so what the
+    /// overlays clear then (#449: the drawing and the keys) is gone before the new take's first
+    /// frame.
+    func addWillRestartObserver(_ observer: @escaping () -> Void) {
+        willRestartObservers.append(observer)
     }
 
     /// Tells `onPhaseChange` and the observers about `phase`, or, while they're being told about an
@@ -440,6 +443,7 @@ final class ScreencastController {
         guard !noticeEarlyEnd(), phase.isRecording, !restartInFlight else { return }
         restartInFlight = true
         defer { restartInFlight = false }
+        for observer in willRestartObservers { observer() }
         do {
             try await recorder.restart()
         } catch {
@@ -449,7 +453,6 @@ final class ScreencastController {
             return
         }
         guard !noticeEarlyEnd(), phase.isRecording else { return }
-        for observer in restartObservers { observer() }
         switch recorder.state {
         case .recording: phase = .recording
         case .paused: phase = .paused

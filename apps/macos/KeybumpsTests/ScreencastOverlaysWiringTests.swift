@@ -11,6 +11,8 @@ import Testing
 final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
     var onWindowsChange: (() -> Void)?
     private(set) var last: KeyDisplayContent?
+    /// Whether the last change was animated: a fade, rather than at once.
+    private(set) var lastAnimated: Bool?
     private(set) var everWindowIDs: Set<CGWindowID> = []
     private var byDisplay: [CGDirectDisplayID: NSWindow] = [:]
 
@@ -18,6 +20,7 @@ final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
 
     func show(_ content: KeyDisplayContent, animated: Bool) {
         last = content
+        lastAnimated = animated
         // 0 stands for the pointer's screen, for a configuration that names none.
         let screens = content.configuration.displays ?? [0]
         let hasSomething = !content.entries.isEmpty || !content.clicks.isEmpty
@@ -46,7 +49,7 @@ final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
 }
 
 /// Types the same letter whatever the key: enough for the display to show typing.
-private final class LetterLayout: KeyboardLayoutTranslating {
+final class FakeLetterLayout: KeyboardLayoutTranslating {
     func character(for keyCode: UInt16, with modifiers: KeyModifiers) -> String? { "a" }
 }
 
@@ -85,7 +88,7 @@ struct OverlaysFlow {
             keys: InertKeyTypingMonitor(),
             pointer: InertPointerEventMonitor(),
             presenter: presenter,
-            layout: LetterLayout(),
+            layout: FakeLetterLayout(),
             scheduler: KeyDisplayManualScheduler(),
             secureInput: { false }
         )
@@ -497,8 +500,8 @@ struct ScreencastOverlaysWiringTests {
     }
 
     @available(macOS 15, *)
-    @Test("A restart's new take starts with no marks")
-    func restartClearsTheMarks() async throws {
+    @Test("A restart clears the marks and the keys on screen before the recorder starts the new take")
+    func restartClearsFirst() async throws {
         let flows = OverlaysFlow()
         defer { flows.flow.captures.remove() }
         try await flows.record()
@@ -507,13 +510,59 @@ struct ScreencastOverlaysWiringTests {
         overlays.startDrawing()
         overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
         overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
-        #expect(overlays.hasMarks)
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(overlays.hasMarks && flows.presenter.last?.entries.isEmpty == false)
+        flows.flow.clock.advance(5)
+        flows.recorder.refreshElapsed()
+        #expect(flows.recorder.elapsed > 0)
 
+        // Told after the overlays, which were attached first.
+        var atRestart: (hasMarks: Bool, lines: Int?, elapsed: TimeInterval)?
+        flows.controller.addWillRestartObserver {
+            atRestart = (overlays.hasMarks, flows.presenter.last?.entries.count, flows.recorder.elapsed)
+        }
         await flows.controller.restart()
+        let seen = try #require(atRestart)
+        #expect(!seen.hasMarks, "the marks went first")
+        #expect(seen.lines == 0, "and the keys")
+        #expect(seen.elapsed > 0, "while the recorder still had the old take")
+        #expect(flows.recorder.elapsed == 0, "then it restarted")
         #expect(flows.controller.phase == .recording)
         #expect(!overlays.hasMarks && overlays.drawing.isEmpty)
         #expect(overlays.isDrawing, "drawing stays on for the new take")
         #expect(flows.wiring.overlays === overlays, "the same windows, so the recorder keeps them")
+
+        flows.type(kVK_ANSI_V, modifiers: [.command])
+        #expect(flows.presenter.last?.entries.count == 1, "the new take's keys show")
+        await flows.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("When the drawing follows a window to another screen, the marks it left go, so Undo and Clear count only what shows")
+    func marksLeftBehindGo() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.recordBrowserWindow()
+        let overlays = try #require(flows.wiring.overlays)
+        overlays.style.lifetime = .stays
+        overlays.startDrawing()
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
+        #expect(overlays.hasMarks)
+
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = CGRect(x: 1600, y: 200, width: 800, height: 600)
+        flows.wiring.followWindow()
+        #expect(!overlays.hasMarks && overlays.drawing.isEmpty)
+
+        overlays.pointerDown(at: CGPoint(x: 50, y: 50), on: PickerScreens.right.id)
+        overlays.pointerUp(at: CGPoint(x: 250, y: 150), on: PickerScreens.right.id)
+        overlays.undo()
+        #expect(overlays.drawing.isEmpty, "⌘Z takes the mark that shows")
+
+        // Back on the left screen, the old mark doesn't come back.
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = OverlaysFlow.browserFrame
+        flows.wiring.followWindow()
+        #expect(overlays.visibleMarks(on: PickerScreens.left.id).isEmpty)
         await flows.stop()
     }
 

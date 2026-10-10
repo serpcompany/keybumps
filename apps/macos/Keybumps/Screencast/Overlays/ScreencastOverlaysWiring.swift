@@ -38,13 +38,13 @@ struct ScreencastDrawingMemory {
 
 /// Puts Screencast's overlays up around each video it records, and into the video (#449).
 /// `ScreencastModule` attaches it to its `ScreencastController`, which tells it each phase
-/// (`addPhaseObserver`) and each restart (`addRestartObserver`).
+/// (`addPhaseObserver`) and each restart, just before it (`addWillRestartObserver`).
 ///
 /// - When a video's phase leaves `.picking` (counting down or starting), the drawing goes up on the
 ///   recorded displays (`ScreencastOverlays`) with the tools as they were last left, and its
 ///   windows go to the recorder (`includeOverlayWindow`) before it starts, so the first frame can
 ///   have them. The control bar's Draw button and the Draw shortcut toggle it, and a restart
-///   clears it, so a new take starts clean.
+///   clears it and the keys on screen just before the new take starts, so it starts clean.
 /// - With Show shortcuts on for the recording, it holds the key display (`KeyDisplay`) on the
 ///   recorded displays for the whole recording, showing shortcuts only, in the Keystrokes plugin's
 ///   style while the plugin is on, and gives the recorder those windows too. The keys sit inside
@@ -52,8 +52,10 @@ struct ScreencastDrawingMemory {
 ///   screen recording (`KeyDisplayConfiguration.anchor`). With Show shortcuts off it never holds
 ///   the display, and the display's windows never go to the recorder, so keys the plugin shows
 ///   (typing included, in All keys) stay out of the video.
-/// - A window recording follows its window (`followWindow()`, a few times a second): the keys
-///   move with it, and when it moves to another display, so do the drawing and the keys.
+/// - A window recording follows its window (`followWindow()`, 20 times a second, as often as the
+///   recorder follows it): the keys move with it, and when it moves to another display, so do the
+///   drawing and the keys. The two read the frame on their own timers, so for a moment after a
+///   move the video can be on the new display before the overlays are.
 /// - Click highlights are ScreenCaptureKit's, drawn into the video only
 ///   (`ScreencastOptions.showsMouseClicks`, which the controller sets from the choice); the key
 ///   display's rings stay off while recording, so a click isn't highlighted twice.
@@ -111,7 +113,7 @@ final class ScreencastOverlaysWiring {
         displays: @escaping @MainActor () -> [ScreencastOverlayDisplay] = { ScreencastOverlayDisplay.connected },
         ordersWindowsIn: Bool = !UnitTestHost.isActive,
         watchesOwnKeys: Bool = !UnitTestHost.isActive,
-        followInterval: TimeInterval? = 0.1
+        followInterval: TimeInterval? = 0.05
     ) {
         self.keyDisplay = keyDisplay
         self.drawingMemory = drawingMemory
@@ -134,7 +136,7 @@ final class ScreencastOverlaysWiring {
         windowFrame: @escaping @MainActor (CGWindowID) -> CGRect? = { _ in nil }
     ) {
         controller.addPhaseObserver { [weak self] phase in self?.phaseChanged(phase) }
-        controller.addRestartObserver { [weak self] in self?.restarted() }
+        controller.addWillRestartObserver { [weak self] in self?.willRestart() }
         let recorder = controller.recorder
         attach(
             choice: { [weak controller] in controller?.choice },
@@ -147,7 +149,7 @@ final class ScreencastOverlaysWiring {
     }
 
     /// The pieces of a capture flow the overlays follow. Its phase changes then come through
-    /// `phaseChanged(_:)`, and its restarts through `restarted()`.
+    /// `phaseChanged(_:)`, and its restarts through `willRestart()`.
     func attach(
         choice: @escaping @MainActor () -> ScreencastChoice?,
         bar: @escaping @MainActor () -> ScreencastControlBar?,
@@ -185,9 +187,11 @@ final class ScreencastOverlaysWiring {
         }
     }
 
-    /// A restart started a new take: it starts with no marks.
-    func restarted() {
+    /// A restart is about to start a new take: the marks and the keys on screen go now, so its
+    /// first frame has none.
+    func willRestart() {
         overlays?.clear()
+        if holdsKeyDisplay { keyDisplay?.clearLines() }
     }
 
     private func begin() {

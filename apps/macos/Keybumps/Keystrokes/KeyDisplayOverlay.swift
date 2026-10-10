@@ -183,16 +183,24 @@ extension KeyDisplayScreen {
     var insets: EdgeInsets { insets(to: visibleFrame) }
 
     /// Where the keys go on this screen, in AppKit's global space: inside the visible frame by
-    /// `KeyDisplayOverlayView.margin`, or, for an `anchor` on this screen, inside the part of it
-    /// that's visible here by `KeyDisplayOverlayView.anchorMargin`. An anchor too small, or not on
-    /// this screen, leaves them where they'd be without one.
+    /// `KeyDisplayOverlayView.margin`, or, for an `anchor` on this screen, inside it, so they're in
+    /// what a recording records:
+    /// - inside its part clear of the menu bar and the Dock, by `KeyDisplayOverlayView.anchorMargin`;
+    /// - when that part is too small (a thin strip, or an area mostly over the Dock or the menu
+    ///   bar), inside its part on the screen at all, by a margin it has room for: the overlay is
+    ///   above the menu bar and the Dock.
+    /// Only an anchor that isn't on this screen leaves them where they'd be without one.
     func keyArea(anchor: CGRect?) -> CGRect {
         let plain = visibleFrame.insetBy(dx: KeyDisplayOverlayView.margin, dy: KeyDisplayOverlayView.margin)
-        guard let anchor else { return plain }
-        let shown = anchor.standardized.intersection(visibleFrame)
+        guard let anchor = anchor?.standardized else { return plain }
         let margin = KeyDisplayOverlayView.anchorMargin
-        guard !shown.isNull, shown.width > margin * 4, shown.height > margin * 4 else { return plain }
-        return shown.insetBy(dx: margin, dy: margin)
+        let clear = anchor.intersection(visibleFrame)
+        if !clear.isNull, clear.width > margin * 4, clear.height > margin * 4 {
+            return clear.insetBy(dx: margin, dy: margin)
+        }
+        let onScreen = anchor.intersection(frame)
+        guard !onScreen.isNull, onScreen.width > 0, onScreen.height > 0 else { return plain }
+        return onScreen.insetBy(dx: min(margin, onScreen.width / 4), dy: min(margin, onScreen.height / 4))
     }
 
     /// How far `rect` is from each edge of the screen.
