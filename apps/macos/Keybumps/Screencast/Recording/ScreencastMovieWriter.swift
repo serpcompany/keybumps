@@ -156,24 +156,10 @@ final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         writer.movieFragmentInterval = fragmentInterval
 
-        let format = ScreencastVideoFormat.plan(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: options.framesPerSecond)
-        let video = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: format.codec,
-            AVVideoWidthKey: pixelWidth,
-            AVVideoHeightKey: pixelHeight,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: format.averageBitRate,
-                AVVideoExpectedSourceFrameRateKey: options.framesPerSecond,
-                AVVideoMaxKeyFrameIntervalKey: options.framesPerSecond,
-                AVVideoAllowFrameReorderingKey: false
-            ] as [String: Any],
-            // ScreenCaptureKit is asked for sRGB frames; tag the file to match.
-            AVVideoColorPropertiesKey: [
-                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
-                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
-                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
-            ]
-        ])
+        let video = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: Self.videoSettings(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: options.framesPerSecond)
+        )
         video.expectsMediaDataInRealTime = true
         guard writer.canAdd(video) else { throw ScreencastFailure.writerFailed }
         writer.add(video)
@@ -196,10 +182,36 @@ final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
         core = ScreencastWriterCore(sink: sink, framesPerSecond: options.framesPerSecond, onFailure: onFailure)
     }
 
+    /// The picture's encoder: H.264, or HEVC past H.264's limits (`ScreencastVideoFormat`), a
+    /// keyframe a second, no reordered frames. A trim that re-encodes uses it too.
+    static func videoSettings(pixelWidth: Int, pixelHeight: Int, framesPerSecond: Int) -> [String: Any] {
+        let format = ScreencastVideoFormat.plan(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: framesPerSecond)
+        return [
+            AVVideoCodecKey: format.codec,
+            AVVideoWidthKey: pixelWidth,
+            AVVideoHeightKey: pixelHeight,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: format.averageBitRate,
+                AVVideoExpectedSourceFrameRateKey: framesPerSecond,
+                AVVideoMaxKeyFrameIntervalKey: framesPerSecond,
+                AVVideoAllowFrameReorderingKey: false
+            ] as [String: Any],
+            // ScreenCaptureKit is asked for sRGB frames; tag the file to match.
+            AVVideoColorPropertiesKey: [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+            ]
+        ]
+    }
+
     /// AAC at 48 kHz: the microphone in mono, system audio in stereo.
     static func audioSettings(for source: ScreencastAudioSource) -> [String: Any] {
-        let channels = source == .systemAudio ? 2 : 1
-        return [
+        audioSettings(channels: source == .systemAudio ? 2 : 1)
+    }
+
+    static func audioSettings(channels: Int) -> [String: Any] {
+        [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 48_000,
             AVNumberOfChannelsKey: channels,

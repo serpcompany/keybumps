@@ -31,16 +31,17 @@ final class ScreenshotEditorPresenter {
     }
 
     /// Opens the editor on an image file of its own, as Screencast's review panel does for a
-    /// screenshot (#450); Save writes the `(edited)` copy beside it. While another image is being
-    /// edited, it brings that editor forward and returns false. `onFinish` gets the edited copy's
-    /// location after Save, and nil after Cancel or when the copy couldn't be saved.
-    func editScreenshot(at url: URL, onFinish: @escaping (URL?) -> Void) -> Bool {
+    /// screenshot (#450); Save writes the `(edited)` copy beside it, and copies it only with
+    /// `copiesToClipboard`. While another image is being edited, it brings that editor forward and
+    /// returns false. `onFinish` gets the edited copy's location after Save, and nil after Cancel or
+    /// when the copy couldn't be saved.
+    func editScreenshot(at url: URL, copiesToClipboard: Bool, onFinish: @escaping (URL?) -> Void) -> Bool {
         if let controller {
             controller.present()
             return false
         }
         guard let data = try? Data(contentsOf: url), let source = ScreenshotRenderSource(imageData: data) else { return false }
-        present(source, sourceURL: url) { onFinish($0?.savedURL) }
+        present(source, sourceURL: url, copiesToClipboard: copiesToClipboard) { onFinish($0?.savedURL) }
         return true
     }
 
@@ -51,6 +52,7 @@ final class ScreenshotEditorPresenter {
     private func present(
         _ source: ScreenshotRenderSource,
         sourceURL: URL?,
+        copiesToClipboard: Bool = true,
         then finished: ((ScreenshotEditorWindowController.Result?) -> Void)? = nil
     ) {
         let previousApp = NSWorkspace.shared.frontmostApplication
@@ -58,7 +60,8 @@ final class ScreenshotEditorPresenter {
         let controller = ScreenshotEditorWindowController(
             source: source,
             sourceURL: sourceURL,
-            fallbackFolder: fallbackFolder()
+            fallbackFolder: fallbackFolder(),
+            copiesToClipboard: copiesToClipboard
         )
         controller.onFinish = { [weak self] result in
             self?.controller = nil

@@ -8,6 +8,9 @@ struct ScreencastTrimRange: Equatable, Sendable {
 
     var duration: TimeInterval { end - start }
 
+    /// Whether it cuts the start, which a passthrough cut can't do cleanly.
+    var cutsStart: Bool { start > Self.tolerance }
+
     /// Within this of either end, a trim keeps that end.
     static let tolerance: TimeInterval = 0.05
 
@@ -34,15 +37,37 @@ struct ScreencastTrimRange: Equatable, Sendable {
     }
 }
 
-/// Cuts a movie file to a time range. Tests pass a fake that fails on purpose.
+/// Cuts a recording's files to a time range. Tests pass a fake that fails on purpose.
 protocol ScreencastTrimming: Sendable {
-    func trim(_ source: URL, to destination: URL, range: ScreencastTrimRange) async throws
+    /// Cuts a display's full recording.
+    func cut(_ recording: URL, to destination: URL, range: ScreencastTrimRange) async throws
+    /// Cuts its mixdown: `cutRecording` is the recording's cut, already written.
+    func cutMixdown(_ mixdown: URL, cutRecording: URL, to destination: URL, range: ScreencastTrimRange) async throws
 }
 
-/// Cuts without re-encoding: every track is copied as it was, so the recording keeps a track per
-/// sound and the mixdown its one stereo track.
-struct ScreencastPassthroughTrimmer: ScreencastTrimming {
-    func trim(_ source: URL, to destination: URL, range: ScreencastTrimRange) async throws {
+/// The app's cuts. One that keeps the start copies every track as it was (passthrough), which ends
+/// cleanly at any frame. One that cuts the start re-encodes the recording from the trim point
+/// (`ScreencastTrimEncoder`), since a passthrough cut would keep up to a second before it hidden in
+/// the file, and makes the mixdown again from that cut, as the recorder makes it
+/// (`ScreencastAudioMixdown`).
+struct ScreencastFileTrimmer: ScreencastTrimming {
+    func cut(_ recording: URL, to destination: URL, range: ScreencastTrimRange) async throws {
+        if range.cutsStart {
+            try await ScreencastTrimEncoder.encode(recording, to: destination, range: range)
+        } else {
+            try await Self.passthrough(recording, to: destination, range: range)
+        }
+    }
+
+    func cutMixdown(_ mixdown: URL, cutRecording: URL, to destination: URL, range: ScreencastTrimRange) async throws {
+        if range.cutsStart {
+            try await ScreencastAudioMixdown.write(from: cutRecording, to: destination)
+        } else {
+            try await Self.passthrough(mixdown, to: destination, range: range)
+        }
+    }
+
+    private static func passthrough(_ source: URL, to destination: URL, range: ScreencastTrimRange) async throws {
         // Screencast needs macOS 15, as `export(to:as:)` does.
         guard #available(macOS 15, *),
               let session = AVAssetExportSession(asset: AVURLAsset(url: source), presetName: AVAssetExportPresetPassthrough)
@@ -71,16 +96,23 @@ enum ScreencastReviewFiles {
         trimmer: any ScreencastTrimming,
         fileManager: FileManager
     ) async throws -> ScreencastCapture {
+        // Each display's recording, then its mixdown, which a start cut makes from the recording's cut.
         let files = capture.videos.flatMap { video in
-            ([video.file] + [video.mixdown].compactMap { $0 }).map { (url: $0, duration: video.duration) }
+            [(url: video.file, duration: video.duration, cutRecording: URL?.none)]
+                + [video.mixdown].compactMap { $0 }.map { (url: $0, duration: video.duration, cutRecording: Optional(sideFile(for: video.file, tag: cutTag))) }
         }
-        let cuts = files.map { sideFile(for: $0.url, tag: "trimmed") }
-        let originals = files.map { sideFile(for: $0.url, tag: "untrimmed") }
+        let cuts = files.map { sideFile(for: $0.url, tag: cutTag) }
+        let originals = files.map { sideFile(for: $0.url, tag: originalTag) }
 
         do {
             for (index, file) in files.enumerated() {
                 try? fileManager.removeItem(at: cuts[index])
-                try await trimmer.trim(file.url, to: cuts[index], range: range.limited(to: file.duration))
+                let fileRange = range.limited(to: file.duration)
+                if let cutRecording = file.cutRecording {
+                    try await trimmer.cutMixdown(file.url, cutRecording: cutRecording, to: cuts[index], range: fileRange)
+                } else {
+                    try await trimmer.cut(file.url, to: cuts[index], range: fileRange)
+                }
             }
         } catch {
             for cut in cuts { try? fileManager.removeItem(at: cut) }
@@ -133,6 +165,46 @@ enum ScreencastReviewFiles {
     static func sideFile(for url: URL, tag: String) -> URL {
         let name = url.deletingPathExtension().lastPathComponent
         return url.deletingLastPathComponent().appendingPathComponent(".\(name).\(tag).\(url.pathExtension)")
+    }
+
+    static let cutTag = "trimmed"
+    static let originalTag = "untrimmed"
+
+    /// What a trim interrupted by a quit or a crash left in each capture's folder: a cut not swapped
+    /// in is deleted, and an original moved aside goes back where it was when nothing took its place;
+    /// one whose cut did take its place is deleted, as the trim would have.
+    static func recoverInterruptedTrims(in capturesFolder: URL, fileManager: FileManager) {
+        guard let folders = try? fileManager.contentsOfDirectory(
+            at: capturesFolder, includingPropertiesForKeys: [.isDirectoryKey], options: []
+        ) else { return }
+        for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            guard let names = try? fileManager.contentsOfDirectory(atPath: folder.path) else { continue }
+            for name in names where name.hasPrefix(".") {
+                let file = folder.appendingPathComponent(name)
+                if visibleName(ofSideFile: name, tag: cutTag) != nil {
+                    try? fileManager.removeItem(at: file)
+                } else if let visible = visibleName(ofSideFile: name, tag: originalTag) {
+                    let original = folder.appendingPathComponent(visible)
+                    if fileManager.fileExists(atPath: original.path) {
+                        try? fileManager.removeItem(at: file)
+                    } else {
+                        try? fileManager.moveItem(at: file, to: original)
+                    }
+                }
+            }
+        }
+    }
+
+    /// `video-1.mov` for `.video-1.trimmed.mov` with the tag `trimmed`; nil for any other name.
+    static func visibleName(ofSideFile name: String, tag: String) -> String? {
+        guard name.hasPrefix(".") else { return nil }
+        let rest = name.dropFirst()
+        guard let dot = rest.lastIndex(of: ".") else { return nil }
+        let stem = rest[..<dot]
+        let fileExtension = rest[rest.index(after: dot)...]
+        let suffix = ".\(tag)"
+        guard stem.hasSuffix(suffix), stem.count > suffix.count, !fileExtension.isEmpty else { return nil }
+        return "\(stem.dropLast(suffix.count)).\(fileExtension)"
     }
 
     /// Puts the capture on `pasteboard`: a recording as its files, each display's mixdown when it

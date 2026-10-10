@@ -137,9 +137,10 @@ enum ScreencastBrowsers {
 
 /// The address of the page in an app's focused window, through Accessibility: the window's
 /// `AXDocument`, or else the `AXURL` of the first web area inside it. Bounded, so an app that's slow
-/// to answer can't hold up a capture: each answer waits at most `messagingTimeout`, and the search
-/// stops after `searchLimit` elements or `deadline`. The address is only reduced to a domain by the
-/// caller, never kept.
+/// to answer can't hold up the review: every element read waits at most `messagingTimeout` (macOS
+/// applies a timeout to the one element it's set on, so each gets its own), never past `deadline`
+/// for the whole read, and the search stops after `searchLimit` elements. The address is only
+/// reduced to a host by the caller, never kept.
 enum ScreencastPageAddress {
     static let messagingTimeout: Float = 0.2
     static let searchLimit = 400
@@ -147,36 +148,45 @@ enum ScreencastPageAddress {
     static let deadline: TimeInterval = 1
 
     static func read(processIdentifier: pid_t) -> String? {
+        let budget = Budget(until: Date().addingTimeInterval(deadline))
         let app = AXUIElementCreateApplication(processIdentifier)
-        AXUIElementSetMessagingTimeout(app, messagingTimeout)
-        guard let window = element(kAXFocusedWindowAttribute, of: app) else { return nil }
-        if let document = value(kAXDocumentAttribute, of: window) as? String, !document.isEmpty {
+        guard let window = budget.element(kAXFocusedWindowAttribute, of: app) else { return nil }
+        if let document = budget.value(kAXDocumentAttribute, of: window) as? String, !document.isEmpty {
             return document
         }
-        let stop = Date().addingTimeInterval(deadline)
         var queue: [(element: AXUIElement, depth: Int)] = [(window, 0)]
         var next = 0
-        while next < queue.count, next < searchLimit, Date() < stop {
+        while next < queue.count, next < searchLimit, budget.hasTimeLeft {
             let (element, depth) = queue[next]
             next += 1
-            if value(kAXRoleAttribute, of: element) as? String == "AXWebArea",
-               let address = value(kAXURLAttribute, of: element) as? URL {
+            if budget.value(kAXRoleAttribute, of: element) as? String == "AXWebArea",
+               let address = budget.value(kAXURLAttribute, of: element) as? URL {
                 return address.absoluteString
             }
-            guard depth < maximumDepth, let children = value(kAXChildrenAttribute, of: element) as? [AXUIElement] else { continue }
+            guard depth < maximumDepth, let children = budget.value(kAXChildrenAttribute, of: element) as? [AXUIElement] else { continue }
             queue.append(contentsOf: children.map { ($0, depth + 1) })
         }
         return nil
     }
 
-    private static func value(_ attribute: String, of element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
-        return value
-    }
+    /// What's left of the read's time; each element read gets `messagingTimeout`, or less near the end.
+    private struct Budget {
+        let until: Date
 
-    private static func element(_ attribute: String, of element: AXUIElement) -> AXUIElement? {
-        guard let value = value(attribute, of: element), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-        return unsafeBitCast(value, to: AXUIElement.self)
+        var hasTimeLeft: Bool { until.timeIntervalSinceNow > 0 }
+
+        func value(_ attribute: String, of element: AXUIElement) -> CFTypeRef? {
+            let left = until.timeIntervalSinceNow
+            guard left > 0 else { return nil }
+            AXUIElementSetMessagingTimeout(element, min(ScreencastPageAddress.messagingTimeout, Float(left)))
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+            return value
+        }
+
+        func element(_ attribute: String, of element: AXUIElement) -> AXUIElement? {
+            guard let value = value(attribute, of: element), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return unsafeBitCast(value, to: AXUIElement.self)
+        }
     }
 }

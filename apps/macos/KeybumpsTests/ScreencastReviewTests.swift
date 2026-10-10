@@ -359,6 +359,8 @@ struct ScreencastReviewTests {
         #expect(model.isFinished)
 
         #expect(trimmer.cutCount == 4)
+        #expect(trimmer.cutRecordingsForMixdowns == [".video-1.trimmed.mov", ".video-2.trimmed.mov"],
+                "each mixdown's cut can be made from its recording's")
         for name in ["video-1.mov", "video-1-mixdown.mp4", "video-2.mov", "video-2-mixdown.mp4"] {
             #expect(try String(contentsOf: input.folder.appendingPathComponent(name), encoding: .utf8) == "cut of \(name)")
         }
@@ -430,25 +432,41 @@ struct ScreencastReviewTests {
         #expect(model.failure == .editorUnavailable && !model.isEditing)
     }
 
-    @Test("Closing while the editor is open cancels the edit, then saves")
+    @Test("Closing while the editor is open saves the review and leaves the editor, whose later Save is recorded")
     func closeCancelsTheEditor() async throws {
         defer { fixture.tearDown() }
         let input = try fixture.screenshot()
         let editor = FakeScreenshotEditor()
-        let model = fixture.model(input, editor: editor)
+        let model = fixture.model(input, editor: editor, screenshots: fixture.clipboard)
         model.edit()
         await model.save()
         #expect(!model.isFinished, "Save does nothing while the editor is open")
         await model.close()
-        #expect(model.isFinished)
-        #expect(editor.closes == 1 && fixture.outcomes == [.saved(input)])
+        #expect(model.isFinished && fixture.outcomes == [.saved(input)])
+        #expect(editor.isOpen, "the editor stays open with its markup")
+        #expect(ScreencastReview.read(from: input.metadataURL)?.editedImages == nil)
+        #expect(fixture.clipboard.entries.isEmpty, "the image being edited waits for the editor")
+
+        let edited = input.folder.appendingPathComponent("screenshot-1 (edited).png")
+        try ReviewFixture.png(seed: "late").write(to: edited)
+        editor.finishEditing(savedAt: edited)
+        #expect(ScreencastReview.read(from: input.metadataURL)?.editedImages == ["screenshot-1.png": "screenshot-1 (edited).png"],
+                "a Save in the editor after the panel closed is still recorded")
+        #expect(fixture.clipboard.entries.map(\.sourcePath) == [edited.path], "and goes to ⌘3, marked up")
     }
 
     @Test("Return saves and Escape closes; the discard question, the trim controls, and composing text keep their keys")
     func keys() {
-        func action(_ key: UInt16, _ modifiers: NSEvent.ModifierFlags = [], trimming: Bool = false, composing: Bool = false, confirming: Bool = false) -> ScreencastReviewKey {
-            ScreencastReviewKey.action(keyCode: key, modifiers: modifiers, isTrimming: trimming, isComposing: composing, isConfirmingDiscard: confirming)
+        func action(
+            _ key: UInt16, _ modifiers: NSEvent.ModifierFlags = [], trimming: Bool = false, composing: Bool = false,
+            confirming: Bool = false, editing: Bool = false
+        ) -> ScreencastReviewKey {
+            ScreencastReviewKey.action(
+                keyCode: key, modifiers: modifiers, isTrimming: trimming, isComposing: composing,
+                isConfirmingDiscard: confirming, isEditing: editing
+            )
         }
+        #expect(action(53, editing: true) == .ignore && action(36, editing: true) == .ignore, "the editor's markup is never thrown away")
         #expect(action(36) == .save && action(76) == .save && action(36, .shift) == .save)
         #expect(action(53) == .close)
         #expect(action(53, confirming: true) == .keep && action(36, confirming: true) == .ignore)
@@ -520,10 +538,9 @@ struct ScreencastReviewTests {
 struct ScreencastReviewTrimFileTests {
     let fixture = ReviewFixture()
 
-    @available(macOS 15, *)
-    @Test("A trimmed recording keeps its picture and a track per sound, its mixdown one track, both cut to the range")
-    func trimsRealMedia() async throws {
-        defer { fixture.tearDown() }
+    /// A three-second recording from the recorder's own writer (a keyframe a second, frame N a gray
+    /// of N), with the microphone and the Mac's sound, its mixdown, and its meta.json.
+    private func recording() async throws -> ScreencastCapture {
         let folder = fixture.folder.url.appendingPathComponent("1791000000", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent("video-1.mov")
@@ -543,21 +560,97 @@ struct ScreencastReviewTrimFileTests {
             endedEarly: nil
         )
         try ScreencastMetadata(capture: capture, target: .display(1), startedAt: ReviewFixture.reviewDate).write(to: capture.metadataURL)
+        return capture
+    }
 
-        let model = fixture.model(.video(capture), trimmer: ScreencastPassthroughTrimmer())
-        model.setTrim(ScreencastTrimRange(start: 1, end: 2, within: result.duration))
+    /// Every sample's presentation time in a track, in decode order, and where its edit list starts
+    /// in the media.
+    private func samples(of track: AVAssetTrack) async throws -> (times: [Double], editStart: Double) {
+        let editStart = try await track.load(.segments).first?.timeMapping.source.start.seconds ?? 0
+        guard let cursor = track.makeSampleCursorAtFirstSampleInDecodeOrder() else { return ([], editStart) }
+        var times = [cursor.presentationTimeStamp.seconds]
+        while cursor.stepInDecodeOrder(byCount: 1) == 1 { times.append(cursor.presentationTimeStamp.seconds) }
+        return (times, editStart)
+    }
+
+    /// The gray of the frame shown at `seconds`, as a player decodes it.
+    private func gray(of url: URL, at seconds: Double) async throws -> Int {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let image = try await generator.image(at: CMTime(seconds: seconds, preferredTimescale: 600)).image
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = try #require(CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        return Int(pixel[1])
+    }
+
+    @available(macOS 15, *)
+    @Test("A trim that cuts the start leaves nothing from before it: no sample earlier, no hidden edit, in the file and its mixdown")
+    func startCutKeepsNothingBeforeTheTrim() async throws {
+        defer { fixture.tearDown() }
+        let capture = try await recording()
+        let file = capture.videos[0].file
+        let mixdown = try #require(capture.videos[0].mixdown)
+        // What a player showed at the trim point and at the keyframe before it, in the original.
+        let atTrim = try await gray(of: file, at: 1.5)
+        let atKeyframe = try await gray(of: file, at: 1.0)
+        #expect(abs(atTrim - atKeyframe) > 8, "the frames differ enough to tell apart")
+
+        let model = fixture.model(.video(capture), trimmer: ScreencastFileTrimmer())
+        model.setTrim(ScreencastTrimRange(start: 1.5, end: 2.5, within: capture.duration))
         await model.save()
         #expect(model.isFinished && model.failure == nil)
 
-        let trimmed = AVURLAsset(url: file)
-        #expect(abs(try await trimmed.load(.duration).seconds - 1) < 0.15)
-        #expect(try await trimmed.loadTracks(withMediaType: .video).count == 1)
-        #expect(try await trimmed.loadTracks(withMediaType: .audio).count == 2)
-        let mixed = AVURLAsset(url: mixdown)
-        #expect(abs(try await mixed.load(.duration).seconds - 1) < 0.15)
-        #expect(try await mixed.loadTracks(withMediaType: .audio).count == 1)
-        #expect(try fixture.hiddenFiles(in: folder).isEmpty)
+        for url in [file, mixdown] {
+            let asset = AVURLAsset(url: url)
+            #expect(abs(try await asset.load(.duration).seconds - 1) < 0.1, "\(url.lastPathComponent)")
+            let video = try #require(try await asset.loadTracks(withMediaType: .video).first)
+            let (times, editStart) = try await samples(of: video)
+            #expect(abs(editStart) < 0.001, "\(url.lastPathComponent): no edit list hides media before the trim")
+            #expect((times.min() ?? -1) >= -0.001, "\(url.lastPathComponent): no frame before the trim point")
+            #expect((29...32).contains(times.count), "\(url.lastPathComponent): about a second of frames, not the second before")
+            #expect(abs(try await gray(of: url, at: 0) - atTrim) <= 4, "\(url.lastPathComponent) starts on the trim point's frame")
+        }
+        let audio = try await AVURLAsset(url: file).loadTracks(withMediaType: .audio)
+        #expect(audio.count == 2, "a track per sound")
+        for track in audio {
+            let (times, _) = try await samples(of: track)
+            #expect((times.min() ?? -1) >= -0.001)
+            #expect(abs(try await track.load(.timeRange).duration.seconds - 1) < 0.1)
+        }
+        #expect(try await AVURLAsset(url: mixdown).loadTracks(withMediaType: .audio).count == 1)
+        #expect(try fixture.hiddenFiles(in: capture.folder).isEmpty)
         #expect(abs(try ScreencastMetadata.read(from: capture.metadataURL).duration - 1) < 0.01)
+    }
+
+    @available(macOS 15, *)
+    @Test("A trim of the end alone stays passthrough: the same frames from the start, cut cleanly at the end")
+    func endCutStaysPassthrough() async throws {
+        defer { fixture.tearDown() }
+        let capture = try await recording()
+        let file = capture.videos[0].file
+        let original = try await samples(of: try #require(try await AVURLAsset(url: file).loadTracks(withMediaType: .video).first))
+
+        let model = fixture.model(.video(capture), trimmer: ScreencastFileTrimmer())
+        model.setTrim(ScreencastTrimRange(start: 0, end: 2, within: capture.duration))
+        await model.save()
+        #expect(model.isFinished && model.failure == nil)
+
+        for url in [file, try #require(capture.videos[0].mixdown)] {
+            let asset = AVURLAsset(url: url)
+            #expect(abs(try await asset.load(.duration).seconds - 2) < 0.1, "\(url.lastPathComponent)")
+            let video = try #require(try await asset.loadTracks(withMediaType: .video).first)
+            let (times, editStart) = try await samples(of: video)
+            #expect(abs(editStart) < 0.001 && (times.min() ?? -1) >= -0.001)
+            #expect(Array(times.prefix(5)) == Array(original.times.prefix(5)), "\(url.lastPathComponent): copied as it was")
+            #expect((times.max() ?? 99) < 2.0, "\(url.lastPathComponent): nothing after the end")
+        }
+        #expect(try await AVURLAsset(url: file).loadTracks(withMediaType: .audio).count == 2)
+        #expect(abs(try ScreencastMetadata.read(from: capture.metadataURL).duration - 2) < 0.01)
     }
 }
 
@@ -589,6 +682,7 @@ final class ReviewFixture {
     func model(
         _ input: ScreencastReviewInput,
         context: ScreencastCaptureContext = .none,
+        contextRead: Task<ScreencastCaptureContext, Never>? = nil,
         fileManager: FileManager = .default,
         editor: (any ScreencastScreenshotEditing)? = nil,
         trimmer: any ScreencastTrimming = FakeTrimmer(),
@@ -599,6 +693,7 @@ final class ReviewFixture {
         let model = ScreencastReviewModel(
             input: input,
             context: context,
+            contextRead: contextRead,
             repositories: repositories,
             fileManager: fileManager,
             pasteboard: pasteboard,
@@ -697,19 +792,45 @@ final class ReviewFixture {
     }
 }
 
-/// Writes "cut of <name>" for each cut, and fails every cut from `failingFrom` (counting from 0) on.
+/// Writes "cut of <name>" for each cut, fails every cut from `failingFrom` (counting from 0) on,
+/// and holds each cut until `release()` while `holds` is set.
 final class FakeTrimmer: ScreencastTrimming, @unchecked Sendable {
     private let lock = NSLock()
     private var cuts = 0
+    private var mixdownSources: [String] = []
     private let failingFrom: Int?
+    private let holds: Bool
+    private var held: [CheckedContinuation<Void, Never>] = []
 
-    init(failingFrom: Int? = nil) {
+    init(failingFrom: Int? = nil, holds: Bool = false) {
         self.failingFrom = failingFrom
+        self.holds = holds
     }
 
     var cutCount: Int { lock.withLock { cuts } }
+    /// The recording cut each mixdown cut was given.
+    var cutRecordingsForMixdowns: [String] { lock.withLock { mixdownSources } }
+    var isHolding: Bool { lock.withLock { !held.isEmpty } }
 
-    func trim(_ source: URL, to destination: URL, range: ScreencastTrimRange) async throws {
+    func release() {
+        let waiting = lock.withLock {
+            defer { held = [] }
+            return held
+        }
+        waiting.forEach { $0.resume() }
+    }
+
+    func cut(_ recording: URL, to destination: URL, range: ScreencastTrimRange) async throws {
+        try await write(recording, to: destination)
+    }
+
+    func cutMixdown(_ mixdown: URL, cutRecording: URL, to destination: URL, range: ScreencastTrimRange) async throws {
+        lock.withLock { mixdownSources.append(cutRecording.lastPathComponent) }
+        try await write(mixdown, to: destination)
+    }
+
+    private func write(_ source: URL, to destination: URL) async throws {
+        if holds { await withCheckedContinuation { continuation in lock.withLock { held.append(continuation) } } }
         let index = lock.withLock {
             defer { cuts += 1 }
             return cuts
@@ -719,16 +840,21 @@ final class FakeTrimmer: ScreencastTrimming, @unchecked Sendable {
     }
 }
 
+/// The Screenshot Editor, opened and finished by the test. It never touches the pasteboard, as the
+/// real one doesn't when `copiesToClipboard` is off (`editorSaveWithoutCopy` checks that one).
 @MainActor
 final class FakeScreenshotEditor: ScreencastScreenshotEditing {
     var opens = true
     private(set) var opened: [URL] = []
-    private(set) var closes = 0
+    private(set) var copyRequests: [Bool] = []
     private var onFinish: ((URL?) -> Void)?
 
-    func editScreenshot(at image: URL, onFinish: @escaping (URL?) -> Void) -> Bool {
+    var isOpen: Bool { onFinish != nil }
+
+    func editScreenshot(at image: URL, copiesToClipboard: Bool, onFinish: @escaping (URL?) -> Void) -> Bool {
         guard opens else { return false }
         opened.append(image)
+        copyRequests.append(copiesToClipboard)
         self.onFinish = onFinish
         return true
     }
@@ -736,11 +862,6 @@ final class FakeScreenshotEditor: ScreencastScreenshotEditing {
     func finishEditing(savedAt url: URL?) {
         onFinish?(url)
         onFinish = nil
-    }
-
-    func close() {
-        closes += 1
-        finishEditing(savedAt: nil)
     }
 }
 
