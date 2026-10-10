@@ -25,7 +25,8 @@ struct KeystrokesTests {
         #expect(name(kVK_F5, [.control])?.text == "⌃F5")
         #expect(name(kVK_Return, [.command])?.text == "⌘↩")
         #expect(name(kVK_Escape, [.option, .command])?.text == "⌥⌘⎋")
-        #expect(name(kVK_ANSI_A, [.option])?.text == "⌥A", "⌥ alone is a shortcut, shown by its key rather than the å it types")
+        #expect(name(kVK_LeftArrow, [.option])?.text == "⌥←", "⌥ with a key that types nothing is a shortcut")
+        #expect(name(kVK_Delete, [.option, .shift])?.text == "⌥⇧⌫")
         #expect(name(kVK_ANSI_C, [.command, .capsLock])?.text == "⌘C", "Caps Lock isn't shown")
     }
 
@@ -52,6 +53,31 @@ struct KeystrokesTests {
         #expect(name(kVK_Tab, [.shift])?.key == "⇤", "As KeyCastr shows ⇧⇥")
         #expect(name(kVK_JIS_Eisu, [])?.key == "英数")
         #expect(name(kVK_ANSI_Q, []) == nil, "A key the layout types nothing for isn't shown")
+        #expect(name(kVK_ANSI_A, [.option]) == Keystroke(modifiers: [], key: "å", isShortcut: false), "⌥ with a letter types a character")
+        #expect(name(kVK_Space, [.option])?.isShortcut == false)
+    }
+
+    @Test("⌥ with a key that types a character is typing on any layout, so Shortcuts only never shows a German @ or a Polish ż")
+    func optionTyping() throws {
+        // German: ⌥L types @ and ⌥5 types [. Polish Pro: ⌥Z types ż.
+        let german = FixedKeyboardLayout(option: [kVK_ANSI_L: "@", kVK_ANSI_5: "[", kVK_ANSI_Z: "ż"])
+        let harness = DisplayHarness(layout: german)
+        harness.display.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
+        for code in [kVK_ANSI_L, kVK_ANSI_5, kVK_ANSI_Z] {
+            harness.keys.press(press(code, [.option]))
+            harness.keys.press(press(code, [.option, .shift]))
+        }
+        #expect(harness.presenter.last?.entries.isEmpty ?? true, "Nothing typed shows")
+        harness.keys.press(press(kVK_LeftArrow, [.option]))
+        harness.keys.press(press(kVK_ANSI_L, [.option, .command]))
+        #expect(harness.presenter.last?.entries.map(\.text) == ["⌥←", "⌥⌘L"])
+
+        var allKeys = KeyDisplayConfiguration()
+        allKeys.keys = .allKeys
+        harness.display.acquire(.keystrokes, configuration: allKeys)
+        harness.keys.press(press(kVK_ANSI_L, [.option]))
+        #expect(harness.presenter.last?.entries.last?.text == "@", "With All keys it shows as what it typed")
+        #expect(KeystrokeNaming.keystroke(for: press(kVK_ANSI_Z, [.option]), layout: german)?.key == "ż")
     }
 
     @Test("A key-down is read as its code, its modifiers, a repeat, and Keybumps' own marker, never its characters")
@@ -70,18 +96,28 @@ struct KeystrokesTests {
 
     // MARK: Filter
 
-    @Test("Shortcuts only shows presses with ⌘, ⌃, or ⌥, never plain typing or ⇧ alone; All keys shows both")
+    @Test("Shortcuts only shows presses with ⌘ or ⌃, and ⌥ only with a key that types nothing; never plain typing or ⇧ alone. All keys shows both")
     func shortcutsOnly() {
-        for modifiers: KeyModifiers in [[.command], [.control], [.option], [.option, .shift]] {
+        for modifiers: KeyModifiers in [[.command], [.control], [.option, .command], [.option, .control], [.option, .shift, .command]] {
             #expect(KeystrokeFilter.shows(press(kVK_ANSI_A, modifiers), keys: .shortcutsOnly, secureInput: false), "\(modifiers)")
         }
-        for modifiers: KeyModifiers in [[], [.shift], [.capsLock]] {
+        for modifiers: KeyModifiers in [[], [.shift], [.capsLock], [.option], [.option, .shift]] {
             #expect(!KeystrokeFilter.shows(press(kVK_ANSI_A, modifiers), keys: .shortcutsOnly, secureInput: false), "\(modifiers)")
             #expect(KeystrokeFilter.shows(press(kVK_ANSI_A, modifiers), keys: .allKeys, secureInput: false), "\(modifiers)")
         }
+        let typesNothing = [
+            kVK_LeftArrow, kVK_RightArrow, kVK_UpArrow, kVK_DownArrow, kVK_Delete, kVK_ForwardDelete, kVK_Return, kVK_ANSI_KeypadEnter,
+            kVK_Tab, kVK_Escape, kVK_Home, kVK_End, kVK_PageUp, kVK_PageDown, kVK_F1, kVK_F12,
+        ]
+        for code in typesNothing {
+            #expect(KeystrokeFilter.shows(press(code, [.option]), keys: .shortcutsOnly, secureInput: false), "⌥ \(code)")
+        }
+        for code in [kVK_Space, kVK_ANSI_1, kVK_ANSI_Slash, kVK_ANSI_Grave] {
+            #expect(!KeystrokeFilter.shows(press(code, [.option]), keys: .shortcutsOnly, secureInput: false), "⌥ \(code) types a character")
+        }
     }
 
-    @Test("Nothing shows while secure input is on, or that Keybumps posted itself, whatever Show says")
+    @Test("Nothing shows while secure input is on, ⌘ and ⌃ shortcuts included, or that Keybumps posted itself, whatever Show says")
     func secureInputAndSyntheticKeys() {
         for keys in KeyDisplayConfiguration.Keys.allCases {
             #expect(!KeystrokeFilter.shows(press(kVK_ANSI_A, [.option]), keys: keys, secureInput: true), "A password typed with ⌥")
@@ -113,6 +149,34 @@ struct KeystrokesTests {
         #expect(KeystrokeActionNames.keybumpsName(for: press(kVK_Space, [.command, .capsLock]), bindings: bindings) == "Open Quick Search")
         #expect(KeystrokeActionNames.keybumpsName(for: press(kVK_LeftArrow, [.control, .option, .command]), bindings: bindings) == "Left")
         #expect(KeystrokeActionNames.keybumpsName(for: press(kVK_Space, [.command, .shift]), bindings: bindings) == nil)
+    }
+
+    @Test("In the Command Palette, standard shortcuts get the palette's own names, or none")
+    func paletteNames() throws {
+        let palette = KeystrokeActionNames.paletteNames([.paste(), .edit, .space("Play")])
+        #expect(palette == ["⌘P": "Paste", "⌘↩": "Edit", "Space": "Play"])
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_P, [.command])), keybumps: nil, palette: palette) == "Paste", "Not Print")
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_Return, [.command])), keybumps: nil, palette: palette) == "Edit")
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_Z, [.command])), keybumps: nil, palette: palette) == nil, "Not Undo")
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_P, [.command])), keybumps: nil, palette: nil) == "Print")
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_Space, [.command])), keybumps: "Open Quick Search", palette: palette) == "Open Quick Search")
+    }
+
+    @Test("Only shortcuts registered with macOS now are named: not one that failed, and none while a shortcut is being recorded")
+    func registeredBindingsOnly() {
+        let backend = RefusingHotKeys(refused: DefaultShortcut.quickSearch)
+        let coordinator = GlobalShortcutCoordinator(backend: backend)
+        coordinator.register(owner: CapabilityShortcut.quickSearch.ownerID, binding: DefaultShortcut.quickSearch) {}
+        coordinator.register(owner: CapabilityShortcut.clipboardHistory.ownerID, binding: DefaultShortcut.clipboard) {}
+        #expect(coordinator.desiredBindings.count == 2)
+        #expect(Array(coordinator.registeredBindings.keys) == [CapabilityShortcut.clipboardHistory.ownerID], "Spotlight owns ⌘Space")
+        #expect(KeystrokeActionNames.keybumpsName(for: press(kVK_Space, [.command]), bindings: coordinator.registeredBindings) == nil)
+        #expect(KeystrokeActionNames.keybumpsName(for: press(kVK_Space, [.shift, .command]), bindings: coordinator.registeredBindings) == "Open Clipboard History")
+
+        coordinator.suspendForRecording()
+        #expect(coordinator.registeredBindings.isEmpty)
+        coordinator.resumeAfterRecording()
+        #expect(coordinator.registeredBindings.count == 1)
     }
 
     // MARK: Timeline
@@ -217,6 +281,49 @@ struct KeystrokesTests {
         #expect(!reacquired, "Nothing changed")
     }
 
+    @Test("A recording's screens win while it holds the display, even when the plugin is turned on after it started")
+    func recordingScreensWin() {
+        var recording = KeyDisplayConfiguration()
+        recording.displays = [2]
+        var holds = KeyDisplayHolds()
+        holds.acquire(Self.recording, configuration: recording, keepsWindowsOnScreen: true)
+        holds.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
+        #expect(holds.configuration?.displays == [2], "The plugin's look, the recording's screen")
+        #expect(holds.keepsWindowsOnScreen)
+        holds.release(Self.recording)
+        #expect(holds.configuration?.displays == nil, "The pointer's screen again")
+        #expect(!holds.keepsWindowsOnScreen)
+    }
+
+    @Test("Lines show on the configuration's screens or the pointer's; rings on the clicked screen if it's allowed; windows only where there's something to show, unless a holder keeps them up")
+    func screensForContent() {
+        let screens = [
+            KeyDisplayScreen(display: 1, frame: CGRect(x: 0, y: 0, width: 100, height: 100), visibleFrame: CGRect(x: 0, y: 0, width: 100, height: 90)),
+            KeyDisplayScreen(display: 2, frame: CGRect(x: 100, y: 0, width: 100, height: 100), visibleFrame: CGRect(x: 100, y: 0, width: 100, height: 90)),
+        ]
+        let now = Date()
+        let line = KeystrokeTimeline.Entry(id: 1, keycaps: ["⌘", "C"], text: "⌘C", isTyping: false, lastPress: now)
+        let clickOn2 = KeystrokeTimeline.Click(id: 2, location: CGPoint(x: 150, y: 50), time: now)
+
+        var content = KeyDisplayContent(configuration: KeyDisplayConfiguration(), entries: [], clicks: [], pointerDisplay: 1)
+        #expect(content.displaysNeedingWindows(on: screens).isEmpty, "Nothing to show")
+        content.entries = [line]
+        #expect(content.lineDisplays == [1])
+        #expect(content.displaysNeedingWindows(on: screens) == [1], "The pointer's screen")
+        content.clicks = [clickOn2]
+        #expect(content.displaysNeedingWindows(on: screens) == [1, 2], "A ring on the clicked screen")
+
+        content.configuration.displays = [1]
+        #expect(!content.showsClicks(on: 2))
+        #expect(content.displaysNeedingWindows(on: screens) == [1], "No ring off the recorded screen")
+        content.entries = []
+        content.clicks = []
+        content.keepsWindowsOnScreen = true
+        #expect(content.displaysNeedingWindows(on: screens) == [1], "Kept up on the recorded screen with nothing to show")
+        content.configuration.displays = nil
+        #expect(content.displaysNeedingWindows(on: screens) == [1, 2])
+    }
+
     // MARK: The display
 
     @Test("The first holder starts the keyboard tap and puts the windows up; only the last one's release stops both")
@@ -230,17 +337,18 @@ struct KeystrokesTests {
         #expect(display.isShowing)
         #expect(harness.keys.isRunning)
         #expect(display.isListening)
-        #expect(display.overlayWindows.count == 1, "Up before the first key, so a recording can add it")
+        #expect(display.overlayWindows.isEmpty, "The plugin alone keeps no window up with nothing to show")
+
+        display.acquire(Self.recording, configuration: KeyDisplayConfiguration(), keepsWindowsOnScreen: true)
+        #expect(harness.keys.starts == 1, "One display, one tap")
+        #expect(display.overlayWindows.count == 1, "Up before the first key, so the recording can add it")
         #expect(display.overlayWindowIDs.count == 1)
         #expect(display.overlayWindowIDs.map(Int.init) == display.overlayWindows.map(\.windowNumber), "As SCWindow.windowID")
-
-        display.acquire(Self.recording, configuration: KeyDisplayConfiguration())
-        #expect(harness.keys.starts == 1, "One display, one tap")
-        #expect(harness.presenter.windowSets == 1, "The recording reuses the plugin's windows")
 
         display.release(.keystrokes)
         #expect(display.isShowing, "The recording still holds it")
         #expect(harness.keys.isRunning)
+        #expect(display.overlayWindows.count == 1)
         display.release(Self.recording)
         #expect(!display.isShowing)
         #expect(!harness.keys.isRunning)
@@ -284,7 +392,7 @@ struct KeystrokesTests {
         let display = harness.display
         display.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
         var heard: [[NSWindow]] = []
-        display.acquire(Self.recording, configuration: KeyDisplayConfiguration()) { heard.append($0) }
+        display.acquire(Self.recording, configuration: KeyDisplayConfiguration(), keepsWindowsOnScreen: true) { heard.append($0) }
         #expect(heard.map(\.count) == [1], "At once, with the windows already up")
 
         harness.presenter.addDisplay()
@@ -301,6 +409,7 @@ struct KeystrokesTests {
         let harness = DisplayHarness()
         let display = harness.display
         display.registeredShortcutName = { $0.keyCode == UInt16(kVK_Space) ? "Open Quick Search" : nil }
+        display.pointerDisplay = { 7 }
         display.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
 
         harness.keys.press(press(kVK_ANSI_C, [.command]))
@@ -309,6 +418,8 @@ struct KeystrokesTests {
         let content = try #require(harness.presenter.last)
         #expect(content.entries.map(\.text) == ["⌘C", "⌘Space"], "Shortcuts only by default")
         #expect(content.entries.map(\.name) == ["Copy", "Open Quick Search"])
+        #expect(content.pointerDisplay == 7, "On the pointer's screen")
+        #expect(harness.presenter.animations.last == true)
         #expect(harness.scheduler.pending?.date == harness.clock.now + 1.5)
 
         harness.clock.now += 1.5
@@ -345,6 +456,67 @@ struct KeystrokesTests {
 
         harness.display.acquire(Self.recording, configuration: KeyDisplayConfiguration())
         #expect(harness.presenter.last?.entries.map(\.text) == ["⌘C"], "The recording never shows what was typed")
+        #expect(harness.presenter.animations.last == false, "Gone at once, with no fade")
+    }
+
+    @Test("A screenshot shortcut never shows: it clears the screen at once, and nothing, rings included, shows until a key that isn't part of the screenshot")
+    func screenshotsClearTheDisplay() throws {
+        let harness = DisplayHarness()
+        let display = harness.display
+        var configuration = KeyDisplayConfiguration()
+        configuration.keys = .allKeys
+        configuration.showsClicks = true
+        display.acquire(.keystrokes, configuration: configuration)
+        harness.keys.press(press(kVK_ANSI_C, [.command]))
+        harness.pointer.send(.down, at: CGPoint(x: 5, y: 5))
+        #expect(harness.presenter.last?.entries.count == 1)
+
+        harness.keys.press(press(kVK_ANSI_4, [.shift, .command]))
+        #expect(display.isPausedForScreenshot)
+        #expect(harness.presenter.last?.entries.isEmpty == true)
+        #expect(harness.presenter.last?.clicks.isEmpty == true)
+        #expect(harness.presenter.animations.last == false, "No fade into the screenshot")
+
+        harness.pointer.send(.down, at: CGPoint(x: 5, y: 5))
+        for key in [kVK_Escape, kVK_Space, kVK_Return] { harness.keys.press(press(key, [])) }
+        harness.keys.press(press(kVK_ANSI_3, [.control, .shift, .command]))
+        harness.keys.press(press(kVK_ANSI_5, [.shift, .command]))
+        #expect(harness.presenter.last?.entries.isEmpty == true, "The drag's click, Escape, Space, Return, and more screenshots show nothing")
+        #expect(harness.presenter.last?.clicks.isEmpty == true)
+        #expect(display.isPausedForScreenshot)
+
+        harness.keys.press(press(kVK_ANSI_H, []))
+        #expect(!display.isPausedForScreenshot)
+        #expect(harness.presenter.last?.entries.map(\.text) == ["h"], "The next other key ends it, and shows")
+    }
+
+    @Test("Screenshot shortcuts: macOS's, with or without ⌃, on any layout, and Screenshot Tools' hotkeys as they're set now")
+    func screenshotShortcuts() throws {
+        for code in [kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6] {
+            #expect(KeystrokeFilter.isScreenshotShortcut(press(code, [.shift, .command])))
+            #expect(KeystrokeFilter.isScreenshotShortcut(press(code, [.control, .shift, .command])))
+            #expect(KeystrokeFilter.isScreenshotShortcut(press(code, [.shift, .command, .capsLock])))
+            #expect(!KeystrokeFilter.isScreenshotShortcut(press(code, [.command])), "⌘\(code)")
+        }
+        #expect(!KeystrokeFilter.isScreenshotShortcut(press(kVK_ANSI_2, [.shift, .command])), "Not macOS's")
+        #expect(KeystrokeFilter.isScreenshotShortcut(press(kVK_ANSI_2, [.shift, .command]), keybumps: [DefaultShortcut.screenshotScreen]))
+        let moved = ShortcutBinding(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(controlKey | optionKey), displayName: "⌃⌥S")
+        #expect(KeystrokeFilter.isScreenshotShortcut(press(kVK_ANSI_S, [.control, .option]), keybumps: [moved]))
+        #expect(!KeystrokeFilter.isScreenshotShortcut(press(kVK_ANSI_S, [.control, .option])))
+    }
+
+    @Test("Screenshot Tools clears the display before its hotkey captures, in case the tap never hears the hotkey")
+    func screenshotToolsPausesTheDisplay() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsKeystrokesScreenshot-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [.keystrokes, .screenshotTools, .clipboardHistory], missing: .screenRecording, root: root)
+        harness.model.start()
+        let module = try #require(harness.model.capabilities.module(for: .screenshotTools) as? ScreenshotToolsModule)
+        module.willCapture?()
+        #expect(harness.model.keyDisplay.isPausedForScreenshot)
+        let press = KeyPress(keyCode: UInt16(kVK_ANSI_2), modifiers: [.shift, .command])
+        #expect(harness.model.keyDisplay.isScreenshotShortcut(press), "Its default ⇧⌘2, read from its binding")
     }
 
     @Test("The pointer tap runs only while clicks show, and a click becomes a ring in AppKit's coordinates")
@@ -490,25 +662,196 @@ struct KeystrokesTests {
     }
 }
 
+/// The overlay windows themselves, on made-up screens. The windows are real but stay invisible and
+/// click-through under the unit-test host (`hideDuringUnitTests`); the fade's wait is a manual
+/// wake-up.
+@MainActor
+@Suite("Key display overlay")
+struct KeyDisplayOverlayControllerTests {
+    final class Screens { var list: [KeyDisplayScreen] = [] }
+
+    static func screen(_ display: CGDirectDisplayID, x: CGFloat) -> KeyDisplayScreen {
+        KeyDisplayScreen(
+            display: display,
+            frame: CGRect(x: x, y: 0, width: 200, height: 120),
+            visibleFrame: CGRect(x: x, y: 20, width: 200, height: 90)
+        )
+    }
+
+    static func content(lines: Int = 0, pointer: CGDirectDisplayID? = 1, displays: Set<CGDirectDisplayID>? = nil, keepsWindows: Bool = false) -> KeyDisplayContent {
+        var configuration = KeyDisplayConfiguration()
+        configuration.displays = displays
+        let entries = (0..<lines).map { KeystrokeTimeline.Entry(id: $0, keycaps: ["⌘", "C"], text: "⌘C", isTyping: false, lastPress: Date()) }
+        return KeyDisplayContent(configuration: configuration, entries: entries, clicks: [], pointerDisplay: pointer, keepsWindowsOnScreen: keepsWindows)
+    }
+
+    @MainActor
+    final class Harness {
+        let screens = Screens()
+        let scheduler = KeyDisplayManualScheduler()
+        let notifications = KeyDisplayNotificationCenter()
+        let controller: KeyDisplayOverlayController
+        var changes = 0
+
+        init(_ screens: [KeyDisplayScreen]) {
+            self.screens.list = screens
+            let provider = self.screens
+            controller = KeyDisplayOverlayController(
+                screens: { provider.list },
+                scheduler: scheduler,
+                notificationCenter: notifications,
+                reduceMotion: { false }
+            )
+            controller.onWindowsChange = { [unowned self] in self.changes += 1 }
+        }
+    }
+
+    @Test("With only the plugin, no window is up until there's something to show, then one on the pointer's screen until it fades")
+    func windowsComeAndGo() throws {
+        let harness = Harness([Self.screen(1, x: 0), Self.screen(2, x: 200)])
+        let controller = harness.controller
+        defer { controller.hide() }
+
+        controller.show(Self.content(), animated: true)
+        #expect(controller.windows.isEmpty, "Nothing to show")
+        #expect(harness.changes == 0)
+
+        controller.show(Self.content(lines: 1, pointer: 2), animated: true)
+        let window = try #require(controller.windows.first)
+        #expect(controller.windows.count == 1)
+        #expect(window.frame == Self.screen(2, x: 200).frame, "The pointer's screen")
+        #expect(window.isVisible)
+        #expect(window.level == .statusBar)
+        #expect(window.ignoresMouseEvents)
+        #expect(!window.canBecomeKey)
+        #expect(harness.changes == 1)
+
+        controller.show(Self.content(), animated: true)
+        #expect(controller.windows.count == 1, "Still up while the line fades")
+        #expect(harness.scheduler.pending != nil)
+        harness.scheduler.fire()
+        #expect(controller.windows.isEmpty, "Taken down after the fade")
+        #expect(!window.isVisible)
+        #expect(harness.changes == 2)
+
+        controller.show(Self.content(lines: 1, pointer: 2), animated: false)
+        #expect(controller.windows.first === window, "The same window comes back")
+        controller.show(Self.content(), animated: false)
+        #expect(controller.windows.isEmpty, "Without animation, down at once")
+        #expect(harness.scheduler.pending == nil)
+    }
+
+    @Test("A holder that keeps windows up gets one on each of its screens for the whole hold, the same one as screens change")
+    func keptWindows() throws {
+        let harness = Harness([Self.screen(1, x: 0), Self.screen(2, x: 200)])
+        let controller = harness.controller
+        defer { controller.hide() }
+
+        controller.show(Self.content(displays: [1], keepsWindows: true), animated: true)
+        let first = try #require(controller.windows.first)
+        #expect(controller.windows.count == 1, "Only the recorded screen")
+        #expect(first.frame == Self.screen(1, x: 0).frame)
+
+        controller.show(Self.content(lines: 1, displays: [1], keepsWindows: true), animated: true)
+        controller.show(Self.content(displays: [1], keepsWindows: true), animated: true)
+        #expect(harness.scheduler.pending == nil, "Never taken down while kept")
+
+        harness.screens.list = [Self.screen(1, x: 50), Self.screen(2, x: 250)]
+        controller.screensDidChange()
+        #expect(controller.windows.first === first, "A screen that stays keeps its window, and its number")
+        #expect(first.frame == Self.screen(1, x: 50).frame, "Moved with its screen")
+
+        controller.show(Self.content(keepsWindows: true), animated: true)
+        #expect(controller.windows.count == 2, "Every screen when none is named")
+        let changes = harness.changes
+        harness.screens.list = [Self.screen(1, x: 50)]
+        controller.screensDidChange()
+        #expect(controller.windows.map(ObjectIdentifier.init) == [ObjectIdentifier(first)], "A screen that's gone loses its window")
+        #expect(harness.changes == changes + 1)
+        harness.screens.list = [Self.screen(1, x: 50), Self.screen(3, x: 250)]
+        controller.screensDidChange()
+        #expect(controller.windows.count == 2, "A screen that's added gets one")
+        #expect(harness.changes == changes + 2)
+    }
+
+    @Test("Show and hide work with no screens; the screen observer is added once and removed by hide, after which nothing comes back")
+    func screenObserver() {
+        let harness = Harness([])
+        let controller = harness.controller
+        controller.show(Self.content(lines: 1), animated: true)
+        controller.show(Self.content(lines: 1), animated: true)
+        #expect(controller.windows.isEmpty)
+        #expect(harness.notifications.added == 1)
+        #expect(controller.isWatchingScreens)
+
+        controller.hide()
+        #expect(harness.notifications.removed == 1)
+        #expect(!controller.isWatchingScreens)
+
+        harness.screens.list = [Self.screen(1, x: 0)]
+        harness.notifications.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        controller.screensDidChange()
+        #expect(controller.windows.isEmpty, "No windows while nobody holds the display")
+        #expect(harness.changes == 0)
+    }
+
+    @Test("Hiding takes every window down and says so")
+    func hideClosesWindows() throws {
+        let harness = Harness([Self.screen(1, x: 0)])
+        let controller = harness.controller
+        controller.show(Self.content(keepsWindows: true), animated: true)
+        let window = try #require(controller.windows.first)
+        controller.hide()
+        #expect(controller.windows.isEmpty)
+        #expect(!window.isVisible)
+        #expect(harness.changes == 2)
+    }
+}
+
+/// Counts the observers added and removed.
+final class KeyDisplayNotificationCenter: NotificationCenter, @unchecked Sendable {
+    private(set) var added = 0
+    private(set) var removed = 0
+
+    override func addObserver(
+        forName name: NSNotification.Name?, object obj: Any?, queue: OperationQueue?,
+        using block: @escaping @Sendable (Notification) -> Void
+    ) -> NSObjectProtocol {
+        added += 1
+        return super.addObserver(forName: name, object: obj, queue: queue, using: block)
+    }
+
+    override func removeObserver(_ observer: Any) {
+        removed += 1
+        super.removeObserver(observer)
+    }
+}
+
 /// A US layout's letters, digits, and a few symbols, plus keys a test changes.
 @MainActor
 private final class FixedKeyboardLayout: KeyboardLayoutTranslating {
     private static let us: [Int: (String, String)] = [
         kVK_ANSI_A: ("a", "A"), kVK_ANSI_C: ("c", "C"), kVK_ANSI_H: ("h", "H"), kVK_ANSI_K: ("k", "K"),
         kVK_ANSI_R: ("r", "R"), kVK_ANSI_S: ("s", "S"), kVK_ANSI_V: ("v", "V"), kVK_ANSI_Z: ("z", "Z"),
+        kVK_ANSI_L: ("l", "L"), kVK_ANSI_P: ("p", "P"), kVK_ANSI_5: ("5", "%"),
         kVK_ANSI_4: ("4", "$"), kVK_ANSI_Slash: ("/", "?"), kVK_ANSI_Minus: ("-", "_"),
     ]
+    /// US ⌥ characters.
+    private static let usOption: [Int: String] = [kVK_ANSI_A: "å", kVK_ANSI_C: "ç", kVK_ANSI_L: "¬", kVK_ANSI_5: "∞", kVK_ANSI_Z: "Ω"]
     private let plain: [Int: String]
     private let command: [Int: String]
+    private let option: [Int: String]
 
-    init(plain: [Int: String] = [:], command: [Int: String] = [:]) {
+    init(plain: [Int: String] = [:], command: [Int: String] = [:], option: [Int: String] = [:]) {
         self.plain = plain
         self.command = command
+        self.option = option
     }
 
     func character(for keyCode: UInt16, with modifiers: KeyModifiers) -> String? {
         let code = Int(keyCode)
         if modifiers.contains(.command), let character = command[code] { return character }
+        if modifiers.contains(.option) { return option[code] ?? Self.usOption[code] }
         if let character = plain[code] { return modifiers.contains(.shift) ? character.uppercased() : character }
         guard let (lower, upper) = Self.us[code] else { return nil }
         let capsLock = modifiers.contains(.capsLock) && lower.first?.isLetter == true
@@ -525,20 +868,20 @@ private final class DisplayHarness {
     let keys = FakeKeyPresses()
     let pointer = FakePointer()
     let presenter = RecordingPresenter()
-    let scheduler = ManualScheduler()
+    let scheduler = KeyDisplayManualScheduler()
     let clock = Clock()
     let secureInput = SecureInput()
     let display: KeyDisplay
     private let shortcuts = GlobalShortcutCoordinator(backend: QuietHotKeys())
 
-    init() {
+    init(layout: FixedKeyboardLayout? = nil) {
         let clock = clock
         let secureInput = secureInput
         display = KeyDisplay(
             keys: keys,
             pointer: pointer,
             presenter: presenter,
-            layout: FixedKeyboardLayout(),
+            layout: layout ?? FixedKeyboardLayout(),
             now: { clock.now },
             scheduler: scheduler,
             secureInput: { secureInput.isOn }
@@ -600,25 +943,25 @@ private final class FakePointer: PointerEventMonitoring {
     }
 }
 
-/// Records what it's asked to show, with windows the Window Server makes (so they have window
+/// Records what it's asked to show, with or without animation. Like the real one, it keeps a
+/// window up while a holder asks; those are windows the Window Server makes (so they have window
 /// numbers) but never puts on screen.
 @MainActor
 private final class RecordingPresenter: KeyDisplayPresenting {
     private(set) var windows: [NSWindow] = []
     var onWindowsChange: (() -> Void)?
     private(set) var shown: [KeyDisplayContent] = []
+    private(set) var animations: [Bool] = []
     private(set) var hides = 0
-    /// How many times it put windows up from none.
-    private(set) var windowSets = 0
     var last: KeyDisplayContent? { shown.last }
 
-    func show(_ content: KeyDisplayContent) {
-        if windows.isEmpty {
+    func show(_ content: KeyDisplayContent, animated: Bool) {
+        if content.keepsWindowsOnScreen, windows.isEmpty {
             windows = [Self.window()]
-            windowSets += 1
             onWindowsChange?()
         }
         shown.append(content)
+        animations.append(animated)
     }
 
     func hide() {
@@ -641,13 +984,18 @@ private final class RecordingPresenter: KeyDisplayPresenting {
     }
 }
 
-/// Keeps the wake-ups the display asks for, which the test fires by calling `expire()`.
+/// Keeps the wake-ups asked for: the display's, which a test runs by calling `expire()`, and the
+/// overlay's, which it runs with `fire()`.
 @MainActor
-private final class ManualScheduler: TimerScheduling {
+final class KeyDisplayManualScheduler: TimerScheduling {
     final class Wake: TimerScheduledAction {
         let date: Date
+        let action: @MainActor () -> Void
         private(set) var isCancelled = false
-        init(date: Date) { self.date = date }
+        init(date: Date, action: @escaping @MainActor () -> Void) {
+            self.date = date
+            self.action = action
+        }
         func cancel() { isCancelled = true }
     }
 
@@ -656,9 +1004,16 @@ private final class ManualScheduler: TimerScheduling {
     var pending: Wake? { wakes.last.flatMap { $0.isCancelled ? nil : $0 } }
 
     func schedule(at date: Date, _ action: @escaping @MainActor () -> Void) -> any TimerScheduledAction {
-        let wake = Wake(date: date)
+        let wake = Wake(date: date, action: action)
         wakes.append(wake)
         return wake
+    }
+
+    /// Runs the wake-up still to come.
+    func fire() {
+        guard let wake = pending else { return }
+        wake.cancel()
+        wake.action()
     }
 }
 
@@ -666,6 +1021,17 @@ private final class ManualScheduler: TimerScheduling {
 private final class RecordingNotices: PaletteNoticePresenting {
     private(set) var messages: [String] = []
     func showNotice(_ message: String, isWarning: Bool) { messages.append(message) }
+}
+
+/// Refuses one binding, as macOS does when another app owns it.
+@MainActor
+private final class RefusingHotKeys: GlobalHotKeyRegistering {
+    let registrationScope = GlobalHotKeyRegistrationScope.systemWide
+    let refused: ShortcutBinding
+    init(refused: ShortcutBinding) { self.refused = refused }
+    func installHandler(_ handler: @escaping (UInt32) -> Void) {}
+    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { !binding.usesSameKeys(as: refused) }
+    func unregister(identifier: UInt32) {}
 }
 
 @MainActor

@@ -9,7 +9,7 @@ struct Keystroke: Equatable, Sendable {
     /// A shortcut's key, uppercased as on a keycap ("C") or its symbol ("←", "Space", "F5"); for
     /// typing, what the key typed ("h", "H", "␣", "⌫").
     let key: String
-    /// Whether ⌘, ⌃, or ⌥ was held (`KeyPress.isShortcut`).
+    /// Whether it's a shortcut (`KeyPress.isShortcut`).
     let isShortcut: Bool
 
     /// One keycap per key.
@@ -22,8 +22,8 @@ struct Keystroke: Equatable, Sendable {
 /// pass a fixed one.
 @MainActor
 protocol KeyboardLayoutTranslating: AnyObject {
-    /// The character `keyCode` types with these modifiers (only ⇧, Caps Lock, and ⌘ are passed),
-    /// or nil when it types none.
+    /// The character `keyCode` types with these modifiers (only ⇧, Caps Lock, ⌥, and ⌘ are
+    /// passed), or nil when it types none.
     func character(for keyCode: UInt16, with modifiers: KeyModifiers) -> String?
 }
 
@@ -35,8 +35,9 @@ protocol KeyboardLayoutTranslating: AnyObject {
 ///   without ⇧ (⇧⌘/ rather than ⌘?) and keeps a character whose capital is longer (ß, not SS). Unlike
 ///   KeyCastr it reads a ⌘ shortcut's key through the layout's ⌘ keys, so ⌘C on a Dvorak – QWERTY ⌘
 ///   layout is ⌘C;
-/// - typing (no ⌘, ⌃, or ⌥) is what the key typed with ⇧ and Caps Lock, a space as ␣, and a
-///   special key's symbol, with ⇧ before it when held (⇧⇥ is ⇤, as in KeyCastr).
+/// - typing (not a shortcut) is what the key typed with ⇧, Caps Lock, and ⌥ (⌥L is @ on a German
+///   layout), a space as ␣, and a special key's symbol, with ⇧ before it when held (⇧⇥ is ⇤, as in
+///   KeyCastr).
 ///
 /// It returns nil for a key it can't name, which the display then leaves out.
 @MainActor
@@ -57,7 +58,7 @@ enum KeystrokeNaming {
         if let special = specialKey(press.keyCode) {
             return Keystroke(modifiers: [], key: (shift ? "⇧" : "") + special, isShortcut: false)
         }
-        guard let typed = layout.character(for: press.keyCode, with: modifiers.intersection([.shift, .capsLock])),
+        guard let typed = layout.character(for: press.keyCode, with: modifiers.intersection([.shift, .capsLock, .option])),
               isPrintable(typed) else { return nil }
         return Keystroke(modifiers: [], key: typed, isShortcut: false)
     }

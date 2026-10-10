@@ -13,9 +13,26 @@ struct KeyPress: Equatable, Sendable {
     /// Keybumps posted it itself, such as its paste step's ⌘V (`SystemTextPaster.syntheticEventMarker`).
     var isSynthetic = false
 
-    /// Whether ⌘, ⌃, or ⌥ is held: a shortcut, which "Shortcuts only" shows. KeyCastr's "command
-    /// keys" (`isCommand` in `KCKeycastrEvent.m`) are ⌃ and ⌘; Keybumps counts ⌥ too (#443).
-    var isShortcut: Bool { !modifiers.isDisjoint(with: [.command, .control, .option]) }
+    /// Whether it's a shortcut, which "Shortcuts only" shows: ⌘ or ⌃ held, or ⌥ with a key that
+    /// types nothing (`typesNothing`). KeyCastr's "command keys" (`isCommand` in `KCKeycastrEvent.m`)
+    /// are ⌃ and ⌘. Keybumps counts ⌥ too (#443), but only for those keys: with a letter, digit, or
+    /// symbol, ⌥ types a character on most layouts (a German @ is ⌥L, Polish ż is ⌥Z), so it's typing.
+    var isShortcut: Bool {
+        if !modifiers.isDisjoint(with: [.command, .control]) { return true }
+        return modifiers.contains(.option) && Self.typesNothing(keyCode)
+    }
+
+    /// Arrows, ⌫, ⌦, Return, Enter, Tab, Escape, Home, End, Page Up and Down, and the function keys:
+    /// keys that type no character with ⌥ held on any layout.
+    static func typesNothing(_ keyCode: UInt16) -> Bool {
+        switch KeyboardShortcutRegistry.specialKey(forVirtualKey: Int(keyCode))?.semanticKey {
+        case .upArrow, .downArrow, .leftArrow, .rightArrow, .delete, .forwardDelete, .returnKey, .enter, .tabRight,
+             .escape, .home, .end, .pageUp, .pageDown, .function:
+            true
+        default:
+            false
+        }
+    }
 }
 
 extension KeyPress {
@@ -78,10 +95,12 @@ protocol KeyPressMonitoring: AnyObject {
 
 /// Which presses the key display shows (#443):
 /// - nothing while secure input is on (a password field, or an app that asked for it), whatever
-///   Show is set to, so a password typed with ⌥ never shows either;
+///   Show is set to, ⌘ and ⌃ shortcuts included (the owner's decision, 2026-10-10);
 /// - nothing Keybumps posted itself;
-/// - with Shortcuts only, a press only while ⌘, ⌃, or ⌥ is held. Plain typing, and ⇧ alone, never
-///   show then.
+/// - never a screenshot shortcut (`isScreenshotShortcut`), which `KeyDisplay` answers by clearing
+///   the screen instead;
+/// - with Shortcuts only, a press only when it's a shortcut (`KeyPress.isShortcut`). Plain typing,
+///   ⇧ alone, and ⌥ with a key that types a character never show then.
 enum KeystrokeFilter {
     static func shows(_ press: KeyPress, keys: KeyDisplayConfiguration.Keys, secureInput: Bool) -> Bool {
         guard !secureInput, !press.isSynthetic else { return false }
@@ -89,5 +108,27 @@ enum KeystrokeFilter {
         case .shortcutsOnly: return press.isShortcut
         case .allKeys: return true
         }
+    }
+
+    /// macOS's screenshot shortcuts, by key code so they match on any layout: ⇧⌘3, ⇧⌘4, ⇧⌘5, and
+    /// ⇧⌘6 (the Touch Bar), and each with ⌃, which copies the shot instead of saving it.
+    static let systemScreenshotKeys: Set<Int> = [kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6]
+
+    /// Whether `press` takes a screenshot: one of macOS's (`systemScreenshotKeys`), or one of
+    /// `keybumps`, Screenshot Tools' hotkeys as they're set now. Caps Lock doesn't matter.
+    static func isScreenshotShortcut(_ press: KeyPress, keybumps: [ShortcutBinding] = []) -> Bool {
+        let modifiers = press.modifiers.subtracting(.capsLock)
+        if systemScreenshotKeys.contains(Int(press.keyCode)),
+           modifiers == [.shift, .command] || modifiers == [.control, .shift, .command] {
+            return true
+        }
+        return keybumps.contains { $0.keyCode == UInt32(press.keyCode) && $0.modifiers == modifiers.carbonFlags }
+    }
+
+    /// Keys of macOS's own screenshot controls, which keep the display clear after a screenshot
+    /// shortcut: Escape cancels, Space switches ⇧⌘4 to a window, and Return or Enter takes ⇧⌘5's shot.
+    static func continuesScreenshot(_ press: KeyPress) -> Bool {
+        guard press.modifiers.subtracting([.capsLock, .shift]).isEmpty else { return false }
+        return [kVK_Escape, kVK_Space, kVK_Return, kVK_ANSI_KeypadEnter].contains(Int(press.keyCode))
     }
 }

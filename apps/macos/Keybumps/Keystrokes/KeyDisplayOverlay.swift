@@ -2,71 +2,139 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Draws the key display on screen: one overlay window on each display, covering it, so the keys
-/// show on whichever display is being shared or recorded, and a click's ring shows on the display
-/// it was on. The windows stay for as long as the display is held, even with nothing in them, and a
-/// display that's still there keeps its window (and its window number) when displays change.
+/// Draws the key display on screen: an overlay window covering each screen that has something to
+/// show (`KeyDisplayContent.displaysNeedingWindows`), put up when there is and taken down once it
+/// has faded, or, while a holder keeps them up, one on each of its screens for the whole hold. A
+/// screen that stays connected keeps its window, and its window number, when screens change. It
+/// watches for screen changes only between the first `show` and `hide`.
 @MainActor
 final class KeyDisplayOverlayController: KeyDisplayPresenting {
+    /// How long lines take to fade, before an unneeded window is taken down.
+    static let fadeDuration: TimeInterval = 0.2
+
     var onWindowsChange: (() -> Void)?
-    var windows: [NSWindow] { panels.map(\.window) }
+    var windows: [NSWindow] { onScreen.compactMap { panels[$0]?.window } }
 
     private let state = KeyDisplayOverlayState()
-    private var panels: [(display: CGDirectDisplayID, geometry: KeyDisplayScreenGeometry, window: KeyDisplayOverlayWindow)] = []
+    private let screens: () -> [KeyDisplayScreen]
+    private let scheduler: any TimerScheduling
+    private let notificationCenter: NotificationCenter
+    private let reduceMotion: () -> Bool
+    /// A window for each screen that has needed one, kept until the screen goes or `hide`.
+    private var panels: [CGDirectDisplayID: (screen: KeyDisplayScreen, window: KeyDisplayOverlayWindow)] = [:]
+    /// The screens whose windows are on screen, in screen order.
+    private var onScreen: [CGDirectDisplayID] = []
     private var screenObserver: NSObjectProtocol?
+    private var pendingTakeDown: (any TimerScheduledAction)?
 
-    func show(_ content: KeyDisplayContent) {
-        if panels.isEmpty {
-            layOutWindows()
-            screenObserver = NotificationCenter.default.addObserver(
+    init(
+        screens: (() -> [KeyDisplayScreen])? = nil,
+        scheduler: (any TimerScheduling)? = nil,
+        notificationCenter: NotificationCenter = .default,
+        reduceMotion: (() -> Bool)? = nil
+    ) {
+        self.screens = screens ?? { KeyDisplayScreen.current() }
+        self.scheduler = scheduler ?? MonotonicTickScheduler()
+        self.notificationCenter = notificationCenter
+        self.reduceMotion = reduceMotion ?? { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    }
+
+    /// Whether it's watching for screen changes: between the first `show` and `hide`.
+    var isWatchingScreens: Bool { screenObserver != nil }
+
+    func show(_ content: KeyDisplayContent, animated: Bool) {
+        if screenObserver == nil {
+            screenObserver = notificationCenter.addObserver(
                 forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
             ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.layOutWindows() }
+                MainActor.assumeIsolated { self?.screensDidChange() }
             }
         }
-        // With Reduce Motion, lines appear and go without fading.
-        let animation: Animation? = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeOut(duration: 0.2)
-        withAnimation(animation) { state.content = content }
+        let animates = animated && !reduceMotion()
+        if animates {
+            withAnimation(.easeOut(duration: Self.fadeDuration)) { state.content = content }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { state.content = content }
+        }
+        arrange(animated: animates)
+        if !animates {
+            // Draw the change now, not at the next display cycle.
+            for window in windows {
+                window.contentView?.layoutSubtreeIfNeeded()
+                window.displayIfNeeded()
+            }
+        }
     }
 
     func hide() {
-        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let screenObserver { notificationCenter.removeObserver(screenObserver) }
         screenObserver = nil
+        pendingTakeDown?.cancel()
+        pendingTakeDown = nil
         state.content = nil
-        guard !panels.isEmpty else { return }
-        for panel in panels { close(panel.window) }
-        panels = []
-        onWindowsChange?()
+        let hadWindows = !onScreen.isEmpty
+        for panel in panels.values { close(panel.window) }
+        panels = [:]
+        onScreen = []
+        if hadWindows { onWindowsChange?() }
     }
 
-    /// One window per display: kept and moved for a display that's still there, made for a new one,
-    /// and closed for one that's gone.
-    private func layOutWindows() {
-        var laidOut: [(display: CGDirectDisplayID, geometry: KeyDisplayScreenGeometry, window: KeyDisplayOverlayWindow)] = []
-        var changed = false
-        for screen in NSScreen.screens {
-            guard let display = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { continue }
-            let geometry = KeyDisplayScreenGeometry(frame: screen.frame, visibleFrame: screen.visibleFrame)
-            if let existing = panels.first(where: { $0.display == display }) {
-                if existing.geometry != geometry {
-                    existing.window.setFrame(screen.frame, display: false)
-                    existing.window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, geometry: geometry))
-                }
-                laidOut.append((display, geometry, existing.window))
-            } else {
-                let window = KeyDisplayOverlayWindow(frame: screen.frame)
-                window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, geometry: geometry))
-                window.orderFrontRegardless()
-                laidOut.append((display, geometry, window))
-                changed = true
+    /// Screens came, went, or changed: windows follow, while the display shows.
+    func screensDidChange() {
+        guard state.content != nil else { return }
+        arrange(animated: false)
+    }
+
+    /// Puts up a window on each screen that needs one, and takes the rest down: after the fade, or
+    /// at once.
+    private func arrange(animated: Bool) {
+        guard let content = state.content else { return }
+        let before = windows.map(ObjectIdentifier.init)
+        let screens = screens()
+        for display in Array(panels.keys) where !screens.contains(where: { $0.display == display }) {
+            if let window = panels[display]?.window { close(window) }
+            panels[display] = nil
+        }
+        let needed = content.displaysNeedingWindows(on: screens)
+        var shown: [CGDirectDisplayID] = []
+        for screen in screens {
+            let isUp = onScreen.contains(screen.display)
+            guard needed.contains(screen.display) || (isUp && animated) else {
+                if isUp, let window = panels[screen.display]?.window { window.orderOut(nil) }
+                continue
+            }
+            let window = panel(for: screen)
+            if !isUp { window.orderFrontRegardless() }
+            shown.append(screen.display)
+        }
+        onScreen = shown
+        pendingTakeDown?.cancel()
+        pendingTakeDown = nil
+        if onScreen.contains(where: { !needed.contains($0) }) {
+            pendingTakeDown = scheduler.schedule(at: Date().addingTimeInterval(Self.fadeDuration)) { [weak self] in
+                self?.pendingTakeDown = nil
+                self?.arrange(animated: false)
             }
         }
-        for panel in panels where !laidOut.contains(where: { $0.window === panel.window }) {
-            close(panel.window)
-            changed = true
+        if windows.map(ObjectIdentifier.init) != before { onWindowsChange?() }
+    }
+
+    /// The window for `screen`, made if there's none, and moved if the screen changed.
+    private func panel(for screen: KeyDisplayScreen) -> KeyDisplayOverlayWindow {
+        if let existing = panels[screen.display] {
+            if existing.screen != screen {
+                existing.window.setFrame(screen.frame, display: false)
+                existing.window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
+                panels[screen.display] = (screen, existing.window)
+            }
+            return existing.window
         }
-        panels = laidOut
-        if changed { onWindowsChange?() }
+        let window = KeyDisplayOverlayWindow(frame: screen.frame)
+        window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
+        panels[screen.display] = (screen, window)
+        return window
     }
 
     private func close(_ window: NSWindow) {
@@ -76,17 +144,19 @@ final class KeyDisplayOverlayController: KeyDisplayPresenting {
     }
 }
 
-/// A borderless, click-through panel covering one display: above everything, on every Space and
-/// beside full-screen apps, and never key, main, or active. Adapted from Snapzy's
-/// `KeystrokeOverlayWindow`. It ignores the mouse, so Shortcut Coach's click detection treats it as
-/// Keybumps's click-through window and looks past it.
+/// A borderless, click-through panel covering one screen: above full-screen apps, the menu bar, and
+/// the Dock, on every Space, and never key, main, or active. Adapted from Snapzy's
+/// `KeystrokeOverlayWindow`. Its level is `.statusBar`, the lowest standard level above the menu
+/// bar (`.mainMenu`) and the Dock; full-screen apps' windows are at the normal level in their own
+/// Space, which `.fullScreenAuxiliary` lets it join. It ignores the mouse, so Shortcut Coach's click
+/// detection treats it as Keybumps's click-through window and looks past it.
 final class KeyDisplayOverlayWindow: NSPanel {
     init(frame: CGRect) {
         super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
-        level = .screenSaver
+        level = .statusBar
         ignoresMouseEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         isReleasedWhenClosed = false
@@ -102,23 +172,13 @@ final class KeyDisplayOverlayWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// What every display's overlay draws.
+/// What every screen's overlay draws.
 @MainActor @Observable
 final class KeyDisplayOverlayState {
     var content: KeyDisplayContent?
 }
 
-/// A display's frame and the part of it the menu bar and the Dock leave, in AppKit's screen
-/// coordinates.
-struct KeyDisplayScreenGeometry: Equatable {
-    let frame: CGRect
-    let visibleFrame: CGRect
-
-    /// A screen point in the overlay's own coordinates, from its top left.
-    func local(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y)
-    }
-
+extension KeyDisplayScreen {
     /// How far the visible frame is from each edge, so the keys sit above the Dock.
     var insets: EdgeInsets {
         EdgeInsets(
@@ -130,35 +190,39 @@ struct KeyDisplayScreenGeometry: Equatable {
     }
 }
 
-/// One display's overlay: the lines at the configured position, and rings where the pointer
-/// clicked on this display.
+/// One screen's overlay: the lines at the configured position, if they show on this screen, and
+/// rings where the pointer clicked on it, if rings may show here.
 struct KeyDisplayOverlayView: View {
     /// How far the keys sit from the visible frame's edges.
     static let margin: CGFloat = 32
 
     let state: KeyDisplayOverlayState
-    let geometry: KeyDisplayScreenGeometry
+    let screen: KeyDisplayScreen
 
     var body: some View {
         ZStack {
             Color.clear
             if let content = state.content {
                 let metrics = KeystrokeMetrics(content.configuration.size)
-                ForEach(content.clicks.filter { geometry.frame.contains($0.location) }) { click in
-                    ClickRing(diameter: metrics.ring).position(geometry.local(click.location))
+                if content.showsClicks(on: screen.display) {
+                    ForEach(content.clicks.filter { screen.frame.contains($0.location) }) { click in
+                        ClickRing(diameter: metrics.ring).position(screen.local(click.location))
+                    }
                 }
-                let insets = geometry.insets
-                KeystrokeStack(content: content, metrics: metrics)
-                    .padding(EdgeInsets(
-                        top: insets.top + Self.margin,
-                        leading: insets.leading + Self.margin,
-                        bottom: insets.bottom + Self.margin,
-                        trailing: insets.trailing + Self.margin
-                    ))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: content.configuration.position.alignment)
+                if content.lineDisplays.contains(screen.display) {
+                    let insets = screen.insets
+                    KeystrokeStack(content: content, metrics: metrics)
+                        .padding(EdgeInsets(
+                            top: insets.top + Self.margin,
+                            leading: insets.leading + Self.margin,
+                            bottom: insets.bottom + Self.margin,
+                            trailing: insets.trailing + Self.margin
+                        ))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: content.configuration.position.alignment)
+                }
             }
         }
-        .frame(width: geometry.frame.width, height: geometry.frame.height)
+        .frame(width: screen.frame.width, height: screen.frame.height)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

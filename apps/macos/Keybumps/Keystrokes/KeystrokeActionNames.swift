@@ -4,13 +4,24 @@ import Foundation
 /// Keybumps shortcut while it's registered, then the standard macOS shortcut it is. It stays local
 /// and cheap: no Accessibility lookups of other apps' menus, so an app's own shortcuts go unnamed.
 enum KeystrokeActionNames {
-    static func name(for stroke: Keystroke, keybumps: String?) -> String? {
+    /// `palette` is the Command Palette's own key names while it's the key window (`paletteNames`),
+    /// where a standard shortcut may do something else (⌘P pastes there), or nil when it isn't.
+    static func name(for stroke: Keystroke, keybumps: String?, palette: [String: String]? = nil) -> String? {
         guard stroke.isShortcut else { return nil }
-        return keybumps ?? standard[stroke.text]
+        if let keybumps { return keybumps }
+        if let palette { return palette[stroke.text] }
+        return standard[stroke.text]
+    }
+
+    /// The names a palette tab's footer gives its keys, as the display writes them: "⌘P": "Paste".
+    static func paletteNames(_ actions: [PaletteKeyAction]) -> [String: String] {
+        Dictionary(actions.map { ($0.keys.joined().replacingOccurrences(of: "↵", with: "↩"), $0.title) }) { first, _ in first }
     }
 
     /// The Keybumps action a press triggers: a plugin's shortcut (`CapabilityShortcut`) or a Window
-    /// Manager action, among the bindings `GlobalShortcutCoordinator` has registered, by owner.
+    /// Manager action, among the bindings `GlobalShortcutCoordinator` has registered and isn't
+    /// holding back (`registeredBindings`), by owner. A binding macOS or another app owns, or one
+    /// suspended while a shortcut is being recorded, triggers nothing of Keybumps's, so it isn't named.
     static func keybumpsName(for press: KeyPress, bindings: [String: ShortcutBinding]) -> String? {
         func matches(_ owner: String) -> Bool {
             guard let binding = bindings[owner] else { return false }
@@ -60,8 +71,5 @@ enum KeystrokeActionNames {
         "⌥⌘D": "Show or Hide the Dock",
         "⌘⇥": "Switch Apps",
         "⌘`": "Next Window",
-        "⇧⌘3": "Screenshot",
-        "⇧⌘4": "Screenshot Area",
-        "⇧⌘5": "Screenshot and Recording",
     ]
 }

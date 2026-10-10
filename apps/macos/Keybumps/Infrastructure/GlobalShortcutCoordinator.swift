@@ -171,6 +171,9 @@ final class GlobalShortcutCoordinator {
     var activeOwners: Set<String> { Set(activeIdentifiers.keys) }
     var desiredOwners: Set<String> { Set(desiredRegistrations.keys) }
     var desiredBindings: [String: ShortcutBinding] { desiredRegistrations.mapValues(\.binding) }
+    /// The bindings registered with macOS now: not those that failed, and none while suspended for
+    /// recording a shortcut.
+    var registeredBindings: [String: ShortcutBinding] { desiredBindings.filter { activeIdentifiers[$0.key] != nil } }
     var registrationScope: GlobalHotKeyRegistrationScope { backend.registrationScope }
 
     init(backend: (any GlobalHotKeyRegistering)? = nil) {

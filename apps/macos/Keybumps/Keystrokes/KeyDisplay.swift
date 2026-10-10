@@ -27,7 +27,7 @@ struct KeyDisplayConfiguration: Equatable, Sendable {
     }
 
     enum Keys: String, CaseIterable, Sendable {
-        /// Only presses with ⌘, ⌃, or ⌥ (`KeystrokeFilter`).
+        /// Only shortcuts (`KeyPress.isShortcut`, `KeystrokeFilter`).
         case shortcutsOnly = "shortcuts"
         /// Typing too, except while secure input is on.
         case allKeys = "all"
@@ -47,18 +47,34 @@ struct KeyDisplayConfiguration: Equatable, Sendable {
     var linger: TimeInterval = 1.5
     /// Whether a ring shows where the pointer clicks.
     var showsClicks = false
+    /// The screens the keys show on, such as the ones a recording records, and the only ones a click
+    /// shows a ring on. Nil means the screen the pointer is on when a key is pressed, and a ring on
+    /// whichever screen is clicked.
+    var displays: Set<CGDirectDisplayID>?
 }
 
 /// Who holds the key display, in the order they took it, and what each asked for. The display
-/// shows while anyone holds it, and only one shows however many do. The configuration in effect
-/// is the most recent holder's, with one exception: Show is Shortcuts only if any holder asks for
-/// it, so starting a recording that shows shortcuts only never records typing the plugin was set
-/// to show. A holder that acquires again keeps its place and changes only what it asked for.
+/// shows while anyone holds it, and only one shows however many do. The configuration in effect is
+/// the most recent holder's, with two exceptions:
+/// - Show is Shortcuts only if any holder asks for it, so a recording that shows shortcuts only
+///   never records typing the plugin was set to show;
+/// - the screens are the most recent holder's that names some, so a recording's screens win for
+///   as long as it holds the display, even if the plugin is turned on after it started.
+///
+/// The windows stay on screen for the whole hold if any holder asks (`keepsWindowsOnScreen`). A
+/// holder that acquires again keeps its place and changes only what it asked for.
 struct KeyDisplayHolds: Equatable {
-    private(set) var holders: [(owner: KeyDisplayOwner, configuration: KeyDisplayConfiguration)] = []
+    struct Holder: Equatable {
+        let owner: KeyDisplayOwner
+        var configuration: KeyDisplayConfiguration
+        var keepsWindowsOnScreen: Bool
+    }
+
+    private(set) var holders: [Holder] = []
 
     var owners: [KeyDisplayOwner] { holders.map(\.owner) }
     var isHeld: Bool { !holders.isEmpty }
+    var keepsWindowsOnScreen: Bool { holders.contains(where: \.keepsWindowsOnScreen) }
 
     func holds(_ owner: KeyDisplayOwner) -> Bool { holders.contains { $0.owner == owner } }
 
@@ -66,17 +82,19 @@ struct KeyDisplayHolds: Equatable {
     var configuration: KeyDisplayConfiguration? {
         guard var configuration = holders.last?.configuration else { return nil }
         if holders.contains(where: { $0.configuration.keys == .shortcutsOnly }) { configuration.keys = .shortcutsOnly }
+        configuration.displays = holders.last(where: { $0.configuration.displays != nil })?.configuration.displays
         return configuration
     }
 
     /// Adds `owner`, or changes what it asked for. Returns whether anything changed.
     @discardableResult
-    mutating func acquire(_ owner: KeyDisplayOwner, configuration: KeyDisplayConfiguration) -> Bool {
+    mutating func acquire(_ owner: KeyDisplayOwner, configuration: KeyDisplayConfiguration, keepsWindowsOnScreen: Bool = false) -> Bool {
+        let holder = Holder(owner: owner, configuration: configuration, keepsWindowsOnScreen: keepsWindowsOnScreen)
         if let index = holders.firstIndex(where: { $0.owner == owner }) {
-            guard holders[index].configuration != configuration else { return false }
-            holders[index].configuration = configuration
+            guard holders[index] != holder else { return false }
+            holders[index] = holder
         } else {
-            holders.append((owner, configuration))
+            holders.append(holder)
         }
         return true
     }
@@ -88,30 +106,85 @@ struct KeyDisplayHolds: Equatable {
         holders.remove(at: index)
         return true
     }
+}
 
-    static func == (lhs: KeyDisplayHolds, rhs: KeyDisplayHolds) -> Bool {
-        lhs.owners == rhs.owners && lhs.holders.map(\.configuration) == rhs.holders.map(\.configuration)
+/// A screen the overlay can cover, in AppKit's screen coordinates.
+struct KeyDisplayScreen: Equatable {
+    let display: CGDirectDisplayID
+    let frame: CGRect
+    /// The part the menu bar and the Dock leave.
+    let visibleFrame: CGRect
+
+    /// Every screen, in `NSScreen.screens` order.
+    @MainActor
+    static func current() -> [KeyDisplayScreen] {
+        NSScreen.screens.compactMap { screen in
+            guard let display = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else { return nil }
+            return KeyDisplayScreen(display: display, frame: screen.frame, visibleFrame: screen.visibleFrame)
+        }
+    }
+
+    /// The screen the pointer is on.
+    @MainActor
+    static func pointerDisplay() -> CGDirectDisplayID? {
+        let location = NSEvent.mouseLocation
+        return current().first { NSMouseInRect(location, $0.frame, false) }?.display
+    }
+
+    /// A screen point in the overlay's own coordinates, from its top left.
+    func local(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y)
     }
 }
 
-/// What the overlay draws: the configuration in effect, the lines on screen, oldest first, and the
-/// clicks' rings.
+/// What the overlay draws: the configuration in effect, the lines on screen, oldest first, the
+/// clicks' rings, and which screens show them.
 struct KeyDisplayContent: Equatable {
     var configuration: KeyDisplayConfiguration
     var entries: [KeystrokeTimeline.Entry]
     var clicks: [KeystrokeTimeline.Click]
+    /// The screen the pointer was on at the newest key, for a configuration that names no screens.
+    var pointerDisplay: CGDirectDisplayID?
+    /// Whether a holder keeps the windows on screen for the whole hold.
+    var keepsWindowsOnScreen = false
+
+    /// The screens the lines show on.
+    var lineDisplays: Set<CGDirectDisplayID> {
+        configuration.displays ?? Set(pointerDisplay.map { [$0] } ?? [])
+    }
+
+    /// Whether a ring may show on `display`.
+    func showsClicks(on display: CGDirectDisplayID) -> Bool {
+        configuration.displays?.contains(display) ?? true
+    }
+
+    /// The screens that need an overlay window now: every screen the configuration names (all of
+    /// them if it names none) while a holder keeps the windows up; otherwise only the screens with
+    /// lines or rings to show.
+    func displaysNeedingWindows(on screens: [KeyDisplayScreen]) -> Set<CGDirectDisplayID> {
+        let all = Set(screens.map(\.display))
+        if keepsWindowsOnScreen { return all.intersection(configuration.displays ?? all) }
+        var needed: Set<CGDirectDisplayID> = entries.isEmpty ? [] : lineDisplays
+        for click in clicks {
+            if let screen = screens.first(where: { $0.frame.contains(click.location) }), showsClicks(on: screen.display) {
+                needed.insert(screen.display)
+            }
+        }
+        return needed.intersection(all)
+    }
 }
 
-/// Draws the key display. `KeyDisplayOverlayController` puts one overlay window on each display;
-/// unit tests use `InertKeyDisplayPresenter` or a fake, so nothing appears on screen.
+/// Draws the key display. `KeyDisplayOverlayController` puts an overlay window on each screen that
+/// needs one; unit tests use `InertKeyDisplayPresenter` or a fake, so nothing appears on screen.
 @MainActor
 protocol KeyDisplayPresenting: AnyObject {
-    /// The overlay windows, one per display, while the display shows; empty otherwise.
+    /// The overlay windows on screen now.
     var windows: [NSWindow] { get }
-    /// Called after `windows` changes: created, replaced as displays come and go, or closed.
+    /// Called after `windows` changes: put up, taken down, or replaced as displays come and go.
     var onWindowsChange: (() -> Void)? { get set }
-    /// Shows `content`, putting the windows on screen first if they aren't.
-    func show(_ content: KeyDisplayContent)
+    /// Shows `content`. Without `animated`, what leaves goes at once, with no fade, as when typing
+    /// must not reach a recording's first frames.
+    func show(_ content: KeyDisplayContent, animated: Bool)
     /// Closes the windows.
     func hide()
 }
@@ -121,7 +194,7 @@ protocol KeyDisplayPresenting: AnyObject {
 final class InertKeyDisplayPresenter: KeyDisplayPresenting {
     var windows: [NSWindow] { [] }
     var onWindowsChange: (() -> Void)?
-    func show(_ content: KeyDisplayContent) {}
+    func show(_ content: KeyDisplayContent, animated: Bool) {}
     func hide() {}
 }
 
@@ -137,11 +210,16 @@ final class InertKeyDisplayPresenter: KeyDisplayPresenting {
 /// `PointerEventMonitoring`. Nothing it hears is logged or stored: a keystroke stays in memory only
 /// while it's on screen.
 ///
-/// It puts one overlay window on each display, covering it, for as long as anyone holds it, even
-/// before the first key: Screencast records with ScreenCaptureKit, which excludes Keybumps's own
-/// windows, and adds these back with `SCContentFilter(…exceptingWindows:)`, matching each
-/// `SCWindow.windowID` to `overlayWindowIDs`. A holder hears when they're created or replaced
+/// The keys show on the configuration's screens, or the pointer's. An overlay window covers each
+/// screen that has something to show, and goes after it fades. A holder that records the screen
+/// passes `keepsWindowsOnScreen`, which keeps a window on each of its screens for the whole hold,
+/// even before the first key: Screencast records with ScreenCaptureKit, which excludes Keybumps's
+/// own windows, and adds these back with `SCContentFilter(…exceptingWindows:)`, matching each
+/// `SCWindow.windowID` to `overlayWindowIDs`. A holder hears when they're put up or replaced
 /// through the handler it passes to `acquire`.
+///
+/// A screenshot shortcut never shows: it clears the screen at once (`pauseForScreenshot`), and
+/// nothing shows until a key that isn't part of taking the screenshot.
 @MainActor
 final class KeyDisplay {
     private(set) var holds = KeyDisplayHolds()
@@ -151,8 +229,17 @@ final class KeyDisplay {
     private(set) var isListening = false
     /// Whether the pointer tap is running, while the configuration shows clicks.
     private(set) var isWatchingClicks = false
+    /// Whether a screenshot shortcut cleared the screen, which stays clear until a key that isn't
+    /// part of taking the screenshot (`KeystrokeFilter.continuesScreenshot`).
+    private(set) var isPausedForScreenshot = false
     /// The name of the Keybumps shortcut a press triggers, while it's registered. `AppModel` sets it.
     var registeredShortcutName: (KeyPress) -> String? = { _ in nil }
+    /// The Command Palette's own key names while it's the key window, or nil. `AppModel` sets it.
+    var paletteKeyNames: () -> [String: String]? = { nil }
+    /// Whether a press takes a screenshot. `AppModel` adds Screenshot Tools' hotkeys.
+    var isScreenshotShortcut: (KeyPress) -> Bool = { KeystrokeFilter.isScreenshotShortcut($0) }
+    /// The screen the pointer is on.
+    var pointerDisplay: () -> CGDirectDisplayID? = { KeyDisplayScreen.pointerDisplay() }
     /// The main display's height, to turn the pointer tap's top-left coordinates into AppKit's.
     var mainDisplayHeight: () -> CGFloat = { NSScreen.screens.first?.frame.height ?? 0 }
 
@@ -165,6 +252,8 @@ final class KeyDisplay {
     private let secureInput: () -> Bool
     private var windowHandlers: [KeyDisplayOwner: ([NSWindow]) -> Void] = [:]
     private var wakeUp: (any TimerScheduledAction)?
+    /// The pointer's screen at the newest key.
+    private var lastPointerDisplay: CGDirectDisplayID?
 
     init(
         keys: any KeyPressMonitoring,
@@ -205,16 +294,19 @@ final class KeyDisplay {
     var configuration: KeyDisplayConfiguration? { holds.configuration }
     func holds(_ owner: KeyDisplayOwner) -> Bool { holds.holds(owner) }
 
-    /// Holds the display for `owner` with its configuration, showing it if it wasn't. Acquiring
-    /// again changes the configuration and replaces the handler, keeping the owner's place.
-    /// `onOverlayWindowsChange` is called at once with `overlayWindows`, then whenever they're
-    /// created or replaced, until `owner` releases the display.
+    /// Holds the display for `owner` with its configuration, showing it if it wasn't. With
+    /// `keepsWindowsOnScreen`, as a recording passes, a window covers each of its screens for the
+    /// whole hold; otherwise windows come and go with what there is to show. Acquiring again changes
+    /// all of these and replaces the handler, keeping the owner's place. `onOverlayWindowsChange` is
+    /// called at once with `overlayWindows`, then whenever they're put up or replaced, until `owner`
+    /// releases the display.
     func acquire(
         _ owner: KeyDisplayOwner,
         configuration: KeyDisplayConfiguration,
+        keepsWindowsOnScreen: Bool = false,
         onOverlayWindowsChange: (([NSWindow]) -> Void)? = nil
     ) {
-        let changed = holds.acquire(owner, configuration: configuration)
+        let changed = holds.acquire(owner, configuration: configuration, keepsWindowsOnScreen: keepsWindowsOnScreen)
         if changed { apply() }
         windowHandlers[owner] = onOverlayWindowsChange
         onOverlayWindowsChange?(overlayWindows)
@@ -236,9 +328,20 @@ final class KeyDisplay {
         if configuration.showsClicks, !isWatchingClicks { isWatchingClicks = pointer.start() }
     }
 
+    /// Clears the screen at once, with no fade, and keeps it clear, rings included, until a key
+    /// that isn't part of taking a screenshot: a screenshot shouldn't show the keys that took it.
+    /// A screenshot shortcut heard by the tap calls it, and so does Screenshot Tools before it
+    /// captures, in case the tap never hears a hotkey Keybumps registered.
+    func pauseForScreenshot() {
+        guard holds.isHeld else { return }
+        isPausedForScreenshot = true
+        timeline.removeAll()
+        present(animated: false)
+    }
+
     // MARK: Overlay windows
 
-    /// The overlay windows while anyone holds the display: one per display, each covering it.
+    /// The overlay windows on screen now.
     var overlayWindows: [NSWindow] { presenter.windows }
     /// Their window numbers, as ScreenCaptureKit's `SCWindow.windowID`. A window the Window Server
     /// hasn't made yet has none.
@@ -257,6 +360,7 @@ final class KeyDisplay {
             pointer.stop()
             isListening = false
             isWatchingClicks = false
+            isPausedForScreenshot = false
             timeline.removeAll()
             wakeUp?.cancel()
             wakeUp = nil
@@ -270,25 +374,37 @@ final class KeyDisplay {
             pointer.stop()
             isWatchingClicks = false
         }
-        // What the new configuration wouldn't show leaves at once.
+        // What the new configuration wouldn't show leaves at once, with no fade, so a recording
+        // that starts now never has it in its first frames.
+        let before = timeline
         if configuration.keys == .shortcutsOnly { timeline.removeTyping() }
         if !configuration.showsClicks { timeline.removeClicks() }
-        present()
+        present(animated: timeline == before)
     }
 
     func receive(_ press: KeyPress) {
-        guard let configuration = holds.configuration,
-              KeystrokeFilter.shows(press, keys: configuration.keys, secureInput: secureInput()),
+        guard let configuration = holds.configuration else { return }
+        if isScreenshotShortcut(press) {
+            pauseForScreenshot()
+            return
+        }
+        if isPausedForScreenshot {
+            if KeystrokeFilter.continuesScreenshot(press) { return }
+            isPausedForScreenshot = false
+        }
+        guard KeystrokeFilter.shows(press, keys: configuration.keys, secureInput: secureInput()),
               let stroke = KeystrokeNaming.keystroke(for: press, layout: layout) else { return }
         let name = configuration.namesActions
-            ? KeystrokeActionNames.name(for: stroke, keybumps: registeredShortcutName(press))
+            ? KeystrokeActionNames.name(for: stroke, keybumps: registeredShortcutName(press), palette: paletteKeyNames())
             : nil
+        lastPointerDisplay = pointerDisplay()
         timeline.record(stroke, name: name, at: now(), linger: configuration.linger)
         present()
     }
 
     func receive(_ sample: PointerSample) {
-        guard let configuration = holds.configuration, configuration.showsClicks, sample.phase == .down else { return }
+        guard let configuration = holds.configuration, configuration.showsClicks, !isPausedForScreenshot,
+              sample.phase == .down else { return }
         timeline.recordClick(at: Self.appKitLocation(of: sample.location, mainDisplayHeight: mainDisplayHeight()), time: now())
         present()
     }
@@ -301,9 +417,18 @@ final class KeyDisplay {
         present()
     }
 
-    private func present() {
+    private func present(animated: Bool = true) {
         guard let configuration = holds.configuration else { return }
-        presenter.show(KeyDisplayContent(configuration: configuration, entries: timeline.entries, clicks: timeline.clicks))
+        presenter.show(
+            KeyDisplayContent(
+                configuration: configuration,
+                entries: timeline.entries,
+                clicks: timeline.clicks,
+                pointerDisplay: lastPointerDisplay,
+                keepsWindowsOnScreen: holds.keepsWindowsOnScreen
+            ),
+            animated: animated
+        )
         wakeUp?.cancel()
         wakeUp = timeline.nextExpiry(linger: configuration.linger).map { date in
             scheduler.schedule(at: date) { [weak self] in self?.expire() }

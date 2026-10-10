@@ -366,10 +366,23 @@ final class AppModel {
             KeystrokesModule(display: keyDisplay),
         ])
         commandPalette.tabContents = capabilities.paletteContents
-        // The key display names a Keybumps shortcut while it's registered.
+        // The key display names a Keybumps shortcut only while it's registered, and in the Command
+        // Palette, the palette's own keys rather than what they do elsewhere.
         keyDisplay.registeredShortcutName = { [shortcuts] press in
-            KeystrokeActionNames.keybumpsName(for: press, bindings: shortcuts.desiredBindings)
+            KeystrokeActionNames.keybumpsName(for: press, bindings: shortcuts.registeredBindings)
         }
+        keyDisplay.paletteKeyNames = { [commandPalette] in
+            commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
+        }
+        // A screenshot never shows the keys that took it: macOS's shortcuts, and Screenshot Tools'
+        // hotkeys as they're set now, which also clear the display just before they capture.
+        keyDisplay.isScreenshotShortcut = { [preferences] press in
+            KeystrokeFilter.isScreenshotShortcut(
+                press,
+                keybumps: ScreenshotToolsModule.captureShortcuts.compactMap { preferences.capabilityShortcut(for: $0.shortcut) }
+            )
+        }
+        screenshotModule.willCapture = { [keyDisplay] in keyDisplay.pauseForScreenshot() }
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         commandPalette.offerPasteSetup = { [weak self] plugin in self?.offerPasteSetup(for: plugin) }
