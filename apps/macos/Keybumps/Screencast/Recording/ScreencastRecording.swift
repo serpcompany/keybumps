@@ -151,8 +151,20 @@ struct ScreencastCapture: Equatable, Sendable {
     let duration: TimeInterval
     /// Why it ended without `stop()`, if it did. Everything captured until then is kept.
     let endedEarly: ScreencastFailure?
+    /// Displays of an every-display recording whose stream stopped while the others recorded on.
+    var displaysEndedEarly: [ScreencastDisplayEnd] = []
 
     var metadataURL: URL { folder.appendingPathComponent(ScreencastMetadata.fileName) }
+}
+
+/// A display whose stream stopped (it was disconnected, or macOS stopped it) while the recording's
+/// other displays went on. Its file ends there, and is kept when it has footage.
+struct ScreencastDisplayEnd: Equatable, Sendable {
+    /// Its place among the recording's displays, from 0: `video-<index + 1>.mov`.
+    let index: Int
+    let reason: ScreencastFailure
+    /// Its file, when it recorded anything before it stopped.
+    let file: URL?
 }
 
 /// One display's file in a capture.

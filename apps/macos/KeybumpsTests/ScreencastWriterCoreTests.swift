@@ -170,6 +170,66 @@ struct ScreencastWriterCoreTests {
         #expect(near(core.writtenAudio(for: .microphone), 15))
     }
 
+    @Test("On a still screen, the clock keeps every track up, heard or not, so little is owed at the stop")
+    func keptUpOnAStillScreen() {
+        let (core, sink) = makeCore()
+        CaptureFeed(video: 100...100).run(core, from: 100, to: 101)
+        core.keepUp(at: 105)
+        #expect(near(core.writtenAudio(for: .microphone), 4.5, within: 0.001), "up to the clock, less half a second of slack")
+        #expect(near(core.writtenAudio(for: .systemAudio), 4.5, within: 0.001))
+        #expect(sink.video.count == 1, "no frames are made up")
+        core.pause(at: 105)
+        core.keepUp(at: 120)
+        #expect(near(core.writtenAudio(for: .microphone), 4.5, within: 0.001), "nothing is padded while paused")
+        #expect(sink.audio(.systemAudio).allSatisfy { $0.sampleRate == 48_000 && $0.channels == 2 })
+        #expect(sink.audio(.microphone).allSatisfy { $0.sampleRate == 48_000 && $0.channels == 1 })
+    }
+
+    @Test("Before the first frame, and after deactivating, the clock pads nothing")
+    func keepUpNeedsARecording() {
+        let (core, sink) = makeCore()
+        core.keepUp(at: 105)
+        #expect(sink.appends.isEmpty)
+        CaptureFeed(video: 100...100).run(core, from: 100, to: 101)
+        core.deactivate()
+        core.keepUp(at: 110)
+        #expect(sink.audio(.microphone).isEmpty)
+    }
+
+    @Test("A track keeps one format: a sound that arrives in another layout after padding is converted, its sound kept", arguments: [
+        (44_100.0, 2, false), (48_000.0, 2, true), (24_000.0, 1, false)
+    ] as [(Double, Int, Bool)])
+    func oneFormatPerTrack(sampleRate: Double, channels: Int, interleaved: Bool) {
+        let (core, sink) = makeCore(audio: [.microphone])
+        CaptureFeed(video: 100...104).run(core, from: 100, to: 102)
+        #expect(core.writtenAudio(for: .microphone) > 0.4, "padded before the microphone was heard")
+        var host = 102.0
+        while host < 104 {
+            let frames = Int(sampleRate * ScreencastSamples.audioBufferSeconds)
+            core.appendAudio(ScreencastSamples.audio(at: host, frames: frames, channels: channels, value: 0.25, sampleRate: sampleRate, interleaved: interleaved), from: .microphone)
+            host += Double(frames) / sampleRate
+        }
+        CaptureFeed(video: 100...104).run(core, from: 102, to: 104)
+        core.finish(at: 104)
+        let mic = sink.audio(.microphone)
+        #expect(mic.allSatisfy { $0.sampleRate == 48_000 && $0.channels == 1 }, "the padding's format throughout")
+        #expect(near(sink.sound(.microphone, from: 2, to: 4), 2, within: 0.01), "the sound is converted, not dropped, by one converter that stays warm")
+        #expect(near(core.writtenAudio(for: .microphone), 4))
+    }
+
+    @Test("A track keeps its first sound's format when that came first")
+    func firstSoundSetsTheFormat() {
+        let (core, sink) = makeCore(audio: [.systemAudio])
+        let feed = CaptureFeed(video: 100...103)
+        feed.run(core, from: 100, to: 100.5)
+        core.appendAudio(ScreencastSamples.audio(at: 100.4, channels: 2, value: 0.25, interleaved: true), from: .systemAudio)
+        core.appendAudio(ScreencastSamples.audio(at: 100.45, channels: 2, value: 0.25), from: .systemAudio)
+        feed.run(core, from: 100.5, to: 103)
+        core.finish(at: 103)
+        #expect(sink.audio(.systemAudio).allSatisfy { $0.channels == 2 })
+        #expect(sink.sound(.systemAudio, from: 0, to: 1) > 0.04, "both buffers kept")
+    }
+
     @Test("Stopping repeats the last frame, so a still screen's video runs to the stop")
     func lastFrameRunsToTheStop() {
         let (core, sink) = makeCore(audio: [])

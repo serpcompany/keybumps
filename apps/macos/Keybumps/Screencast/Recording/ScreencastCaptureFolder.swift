@@ -45,6 +45,16 @@ struct ScreencastMetadata: Codable, Equatable {
         var duration: Double
     }
 
+    /// A display that stopped while the others recorded on.
+    struct DisplayEnd: Codable, Equatable {
+        /// From 1, as in `video-1.mov`.
+        var display: Int
+        /// A `ScreencastFailure` category.
+        var reason: String
+        /// Its file, when it kept footage.
+        var file: String?
+    }
+
     var version = Self.currentVersion
     var startedAt: Date
     /// `display`, `everyDisplay`, `window`, or `area`.
@@ -54,12 +64,15 @@ struct ScreencastMetadata: Codable, Equatable {
     var videos: [Video]
     /// A `ScreencastFailure` category when the recording ended without being stopped.
     var endedEarly: String?
+    /// Left out when every display recorded to the end.
+    var displaysEndedEarly: [DisplayEnd]?
 
     init(capture: ScreencastCapture, target: ScreencastTarget, startedAt: Date) {
         self.startedAt = startedAt
         self.target = target.kind
         duration = capture.duration
-        displayCount = capture.videos.count
+        // A display that stopped before it recorded anything still counts.
+        displayCount = capture.videos.count + capture.displaysEndedEarly.filter { $0.file == nil }.count
         videos = capture.videos.map { video in
             Video(
                 file: video.file.lastPathComponent,
@@ -71,6 +84,10 @@ struct ScreencastMetadata: Codable, Equatable {
             )
         }
         endedEarly = capture.endedEarly?.rawValue
+        let ends = capture.displaysEndedEarly.map { end in
+            DisplayEnd(display: end.index + 1, reason: end.reason.rawValue, file: end.file?.lastPathComponent)
+        }
+        displaysEndedEarly = ends.isEmpty ? nil : ends
     }
 
     func write(to url: URL) throws {

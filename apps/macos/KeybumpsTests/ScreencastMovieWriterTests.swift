@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import QuartzCore
 import Testing
 @testable import Keybumps
 
@@ -93,6 +94,56 @@ struct ScreencastMovieWriterTests {
         for track in audioTracks {
             let length = try await track.load(.timeRange).duration.seconds
             #expect(abs(length - seconds) < 0.1, "a silent track \(length) s long in a \(seconds) s recording")
+        }
+    }
+
+    @Test("A recording the clock kept up stops at once: its silent tracks are already written")
+    func keptUpRecordingStopsAtOnce() async throws {
+        defer { folder.remove() }
+        let writer = try makeWriter("kept-up.mov")
+        let seconds = 120.0
+        // The recorder's tick, at about 125 times real time; a frame every 5 s, nothing heard.
+        for quarter in stride(from: 0.0, through: seconds, by: 0.25) {
+            if quarter.truncatingRemainder(dividingBy: 5) == 0 {
+                writer.appendVideo(ScreencastSamples.video(at: 100 + quarter, width: 320, height: 180))
+            }
+            writer.keepUp(at: 100 + quarter)
+            usleep(2_000)
+        }
+        let started = CACurrentMediaTime()
+        let result = await writer.finish(at: 100 + seconds)
+        let took = CACurrentMediaTime() - started
+        #expect(took < 1, "finishing took \(took) s")
+        #expect(!result.failed && abs(result.duration - seconds) < 0.05)
+        for track in try await AVURLAsset(url: result.fileURL).loadTracks(withMediaType: .audio) {
+            #expect(abs(try await track.load(.timeRange).duration.seconds - seconds) < 0.1)
+        }
+    }
+
+    @Test("A microphone heard only after padding, in another layout, is converted and the file stays whole")
+    func convertedMicrophone() async throws {
+        defer { folder.remove() }
+        let writer = try makeWriter("converted.mov")
+        for frame in 0..<120 {
+            let host = 100 + Double(frame) / 30
+            writer.appendVideo(ScreencastSamples.video(at: host, width: 320, height: 180))
+            if frame == 60 { writer.keepUp(at: host) }
+            usleep(1_000)
+        }
+        // From 4 s, a 44.1 kHz stereo interleaved microphone.
+        var host = 104.0
+        while host < 106 {
+            writer.appendAudio(ScreencastSamples.audio(at: host, frames: 941, channels: 2, value: 0.3, sampleRate: 44_100, interleaved: true), from: .microphone)
+            writer.appendVideo(ScreencastSamples.video(at: host, width: 320, height: 180))
+            host += 941.0 / 44_100
+            usleep(500)
+        }
+        let result = await writer.finish(at: 106)
+        #expect(!result.failed)
+        let tracks = try await AVURLAsset(url: result.fileURL).loadTracks(withMediaType: .audio)
+        #expect(tracks.count == 2)
+        for track in tracks {
+            #expect(abs(try await track.load(.timeRange).duration.seconds - 6) < 0.1)
         }
     }
 

@@ -57,6 +57,7 @@ final class ScreencastRecorder {
     @ObservationIgnored private let microphoneGranted: () -> Bool
     @ObservationIgnored private let tickInterval: TimeInterval?
     @ObservationIgnored private let followInterval: TimeInterval
+    @ObservationIgnored private let retryDelays: [TimeInterval]
     @ObservationIgnored private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
     @ObservationIgnored private var session: Session?
@@ -65,6 +66,9 @@ final class ScreencastRecorder {
     @ObservationIgnored private var generation = 0
     /// Fired once the start in progress is over, whichever way, so `discard()` can wait for it.
     @ObservationIgnored private var startFinished: Signal?
+    /// The session a start in progress is building: a stream that stops before it goes live is
+    /// noted on it and handled once it does.
+    @ObservationIgnored private var startingSession: Session?
 
     /// - Parameters:
     ///   - system: ScreenCaptureKit; inert in the unit-test host unless a test passes a fake.
@@ -75,6 +79,7 @@ final class ScreencastRecorder {
     ///   - tickInterval: How often `elapsed` and Keybumps's own windows are checked while recording;
     ///     nil for no timers (tests call `tick()` and `followTick()`).
     ///   - followInterval: How often a window recording checks where its window is.
+    ///   - retryDelays: The waits before trying a failed stream update again, one per attempt.
     init(
         system: (any ScreencastCaptureSystem)? = nil,
         writers: any ScreencastWriterFactory = AVAssetScreencastWriterFactory(),
@@ -84,7 +89,8 @@ final class ScreencastRecorder {
         ownProcessID: pid_t = ProcessInfo.processInfo.processIdentifier,
         microphoneGranted: @escaping () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         tickInterval: TimeInterval? = 0.25,
-        followInterval: TimeInterval = 1.0 / 20
+        followInterval: TimeInterval = 1.0 / 20,
+        retryDelays: [TimeInterval] = [0.2, 0.5, 1]
     ) {
         self.system = system ?? ScreenCaptureKitCaptureSystem.current
         self.writers = writers
@@ -95,6 +101,7 @@ final class ScreencastRecorder {
         self.microphoneGranted = microphoneGranted
         self.tickInterval = tickInterval
         self.followInterval = followInterval
+        self.retryDelays = retryDelays
     }
 
     // MARK: Starting
@@ -145,6 +152,7 @@ final class ScreencastRecorder {
             )
             session.ownWindows = ownWindows
             started = session
+            startingSession = session
 
             var asked = audio
             if audio.microphone, !microphoneGranted() {
@@ -173,6 +181,13 @@ final class ScreencastRecorder {
             }
 
             if case .window(let id) = target { session.followedFrame = content.window(id)?.frame }
+            // A stream that stopped while the others started: with no display left to record, the
+            // start fails; otherwise it's handled below as it would be mid-recording.
+            let stopped = session.pendingVideoStops.sorted { $0.key < $1.key }
+            if stopped.count == session.streams.count, let first = stopped.first {
+                throw first.value
+            }
+            startingSession = nil
             self.session = session
             session.timeline.start(at: hostClock())
             session.activity = ProcessInfo.processInfo.beginActivity(
@@ -186,8 +201,11 @@ final class ScreencastRecorder {
                 // An overlay was added or removed while the streams were starting.
                 scheduleFilterRebuild(for: session)
             }
+            for (index, failure) in stopped { displayStopped(index, failure, in: session) }
+            if let token = session.pendingAudioStopToken { audioStreamStopped(generation: generation, token: token) }
             logger.info("screencast started target=\(target.kind, privacy: .public) displays=\(session.streams.count, privacy: .public) microphone=\(self.microphone == .on, privacy: .public) systemAudio=\(self.systemAudio == .on, privacy: .public)")
         } catch {
+            if startingSession === started { startingSession = nil }
             if let started { await tearDown(started, deletingFolder: true) }
             guard !(error is CancellationError) else { throw error }
             let failure = (error as? ScreencastFailure) ?? .captureFailed
@@ -302,10 +320,11 @@ final class ScreencastRecorder {
         let generation = session.generation
         let take = session.take
         let sources = session.audio.sources.filter { !session.failedAudio.contains($0) }
-        var files: [any ScreencastMovieWriting] = []
+        var files: [Int: any ScreencastMovieWriting] = [:]
         do {
-            for (index, stream) in session.streams.enumerated() {
-                files.append(try writers.makeWriter(
+            // A display that stopped gets no new file.
+            for (index, stream) in session.streams.enumerated() where session.endedDisplays[index] == nil {
+                files[index] = try writers.makeWriter(
                     at: folder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: index)),
                     pixelWidth: stream.configuration.pixelWidth,
                     pixelHeight: stream.configuration.pixelHeight,
@@ -314,15 +333,15 @@ final class ScreencastRecorder {
                     onFailure: { [weak self] in
                         Task { @MainActor in self?.endEarly(.writerFailed, generation: generation, take: take) }
                     }
-                ))
+                )
             }
         } catch {
-            for file in files { Task { await file.cancel() } }
+            for file in files.values { Task { await file.cancel() } }
             throw ScreencastFailure.writerFailed
         }
         if let host {
             for (source, isOff) in session.switchedOff where isOff {
-                files.forEach { $0.setAudio(source, on: false, at: host) }
+                files.values.forEach { $0.setAudio(source, on: false, at: host) }
             }
         }
         session.router.attach(files)
@@ -383,7 +402,12 @@ final class ScreencastRecorder {
     /// the Mac's sound, if it was recording, gets a stream of its own, and the video goes on. A
     /// stream that carried only the Mac's sound isn't tried again; its track is silent from here.
     private func audioStreamStopped(generation: Int, token: Int) {
-        guard generation == self.generation, let session, session.phase == .live, state.isActive,
+        guard generation == self.generation else { return }
+        if let starting = startingSession, starting.generation == generation {
+            if token == starting.audioStreamToken { starting.pendingAudioStopToken = token }
+            return
+        }
+        guard let session, session.phase == .live, state.isActive,
               token == session.audioStreamToken else { return }
         let carried = session.audioStreamSources
         session.audioStream = nil
@@ -429,9 +453,11 @@ final class ScreencastRecorder {
     // Every change to a running stream (a rebuilt filter, a followed window's crop) goes through
     // one queue per recording, so at most one `updateContentFilter` or `updateConfiguration` is in
     // flight. Requests made meanwhile are coalesced: one rebuild for all of them, and only the
-    // window's latest frame.
+    // window's latest frame. One that fails (the snapshot couldn't be read, ScreenCaptureKit
+    // refused the update) is tried again after each of `retryDelays`, through the same queue.
 
-    /// Rebuilds the filters, returning once a rebuild that began after this call is done.
+    /// Rebuilds the filters, returning once a rebuild that began after this call is done, or its
+    /// last attempt failed.
     private func rebuildFilters(for session: Session) async {
         guard session.phase == .live else { return }
         await withCheckedContinuation { continuation in
@@ -457,11 +483,26 @@ final class ScreencastRecorder {
                 session.needsFilterRebuild = false
                 let waiters = session.rebuildWaiters
                 session.rebuildWaiters = []
-                await applyFilters(to: session)
-                waiters.forEach { $0.resume() }
+                if await applyFilters(to: session) || session.rebuildFailures >= retryDelays.count {
+                    session.rebuildFailures = 0
+                    waiters.forEach { $0.resume() }
+                } else {
+                    // Its callers wait for the next attempt.
+                    session.rebuildWaiters = waiters + session.rebuildWaiters
+                    retry(after: retryDelays[session.rebuildFailures], in: session) { $0.needsFilterRebuild = true }
+                    session.rebuildFailures += 1
+                }
             } else if let frame = session.pendingWindowFrame {
                 session.pendingWindowFrame = nil
-                await follow(windowFrame: frame, in: session)
+                if await follow(windowFrame: frame, in: session) || session.followFailures >= retryDelays.count {
+                    session.followFailures = 0
+                } else {
+                    retry(after: retryDelays[session.followFailures], in: session) { session in
+                        // Unless the window has moved on since.
+                        if session.pendingWindowFrame == nil { session.pendingWindowFrame = frame }
+                    }
+                    session.followFailures += 1
+                }
             } else {
                 break
             }
@@ -474,13 +515,32 @@ final class ScreencastRecorder {
         }
     }
 
-    /// Re-reads what's on screen and gives every stream its filter again, if it changed.
-    private func applyFilters(to session: Session) async {
+    /// Queues `request` again after `delay`, while the recording goes on.
+    private func retry(after delay: TimeInterval, in session: Session, _ request: @escaping (Session) -> Void) {
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(delay, 0) * 1_000_000_000))
+            guard let self, session === self.session, session.phase == .live else { return }
+            request(session)
+            self.runUpdates(for: session)
+        }
+    }
+
+    /// Re-reads what's on screen and gives every stream its filter again, if it changed. False
+    /// when the snapshot couldn't be read or a stream refused its new filter.
+    private func applyFilters(to session: Session) async -> Bool {
         let ownWindows = system.ownVisibleWindows()
-        guard let content = try? await system.content(), session === self.session, session.phase == .live else { return }
+        let content: ScreencastContent
+        do {
+            content = try await system.content()
+        } catch {
+            logger.error("screencast filter rebuild couldn't read the screen category=\(Self.category(of: error), privacy: .public)")
+            return false
+        }
+        guard session === self.session, session.phase == .live else { return true }
         session.content = content
         session.ownWindows = ownWindows
-        for index in session.streams.indices {
+        var succeeded = true
+        for index in session.streams.indices where session.endedDisplays[index] == nil {
             let stream = session.streams[index]
             let plan: ScreencastFilterPlan?
             switch stream.source {
@@ -500,26 +560,27 @@ final class ScreencastRecorder {
                     try await running.update(sourceRect: geometry.sourceRect)
                 }
             } catch {
-                // Try again at the next change of Keybumps's windows.
-                session.ownWindows = []
+                succeeded = false
                 logger.error("screencast filter update failed category=\(Self.category(of: error), privacy: .public)")
             }
         }
+        return succeeded
     }
 
     /// Moves a window recording's crop with its window. A resized window scales into the video; a
-    /// window dragged to another display moves the stream there.
-    private func follow(windowFrame frame: CGRect, in session: Session) async {
-        guard let stream = session.streams.first, let running = stream.stream else { return }
+    /// window dragged to another display moves the stream there. False when the update failed.
+    private func follow(windowFrame frame: CGRect, in session: Session) async -> Bool {
+        guard let stream = session.streams.first, let running = stream.stream else { return true }
         guard let display = session.content.display(mostOverlapping: frame), display.id == stream.plan.displayID else {
-            await applyFilters(to: session)
-            return
+            return await applyFilters(to: session)
         }
         let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale)
         do {
             try await running.update(sourceRect: geometry.sourceRect)
+            return true
         } catch {
             logger.error("screencast window follow failed category=\(Self.category(of: error), privacy: .public)")
+            return false
         }
     }
 
@@ -541,12 +602,17 @@ final class ScreencastRecorder {
         return timer
     }
 
-    /// Updates `elapsed`, and rebuilds the filters when Keybumps opened or closed a window while a
-    /// filter names its windows one by one, or while overlays are registered (one may have just
-    /// appeared).
+    /// Updates `elapsed`, keeps every file's sound tracks up with the recording (a still screen
+    /// sends no frames to do it), and rebuilds the filters when Keybumps opened or closed a window
+    /// while a filter names its windows one by one, or while overlays are registered (one may have
+    /// just appeared).
     func tick() {
         guard let session, state.isActive, session.phase == .live else { return }
         refreshElapsed()
+        if state == .recording {
+            let host = hostClock()
+            session.router.writers.forEach { $0.keepUp(at: host) }
+        }
         let watches = !overlayWindows.isEmpty || session.streams.contains { $0.plan.dependsOnWindows(of: ownProcessID) }
         // Compared with the list the last rebuild read, which only a rebuild updates, so a rebuild
         // that failed is tried again.
@@ -562,6 +628,7 @@ final class ScreencastRecorder {
               frame.width >= 2, frame.height >= 2 else { return }
         session.followedFrame = frame
         session.pendingWindowFrame = frame
+        session.followFailures = 0
         runUpdates(for: session)
     }
 
@@ -580,17 +647,24 @@ final class ScreencastRecorder {
     /// take: restarts are queued, each starting afresh, and nothing is left behind.
     func restart() async throws {
         guard state.isActive, let session, session.phase == .live else { throw ScreencastRecorderError.notRecording }
-        let previousFiles = session.router.detach()
+        let previousFiles = Array(session.router.detach().values)
+        let previousEarlyFiles = Array(session.earlyFinishes.values)
+        session.earlyFinishes = [:]
         let previousFolder = session.folder
         let host = hostClock()
         session.take += 1
+        /// The take thrown away, once its files are closed.
+        func deletePrevious() async {
+            for file in previousFiles { await file.cancel() }
+            for early in previousEarlyFiles { await early.value.0.cancel() }
+            if let previousFolder { try? fileManager.removeItem(at: previousFolder) }
+        }
         do {
             try openFiles(for: session, switchedOffAt: host)
         } catch {
             let failure = (error as? ScreencastFailure) ?? .writerFailed
             _ = claimEnding(session)
-            for file in previousFiles { await file.cancel() }
-            if let previousFolder { try? fileManager.removeItem(at: previousFolder) }
+            await deletePrevious()
             await tearDown(session, deletingFolder: session.folder != previousFolder)
             if session === self.session { self.session = nil }
             resetPresentation()
@@ -606,8 +680,7 @@ final class ScreencastRecorder {
         state = .recording
         publishAudioStates(of: session)
         logger.info("screencast restarted")
-        for file in previousFiles { await file.cancel() }
-        if let previousFolder { try? fileManager.removeItem(at: previousFolder) }
+        await deletePrevious()
     }
 
     // MARK: Stopping
@@ -661,39 +734,74 @@ final class ScreencastRecorder {
         let files = session.router.detach()
         await stopStreams(of: session)
 
-        var results: [ScreencastWriterResult] = []
-        for file in files { results.append(await file.finish(at: end)) }
-        var videos: [ScreencastVideo] = []
-        for (index, (file, result)) in zip(files, results).enumerated() {
-            guard result.hasFootage else {
-                try? fileManager.removeItem(at: result.fileURL)
-                continue
+        // Every display's file at once, then every mixdown at once: each takes time of its own.
+        var finished: [Int: (file: any ScreencastMovieWriting, result: ScreencastWriterResult)] = [:]
+        await withTaskGroup(of: (Int, any ScreencastMovieWriting, ScreencastWriterResult).self) { group in
+            for (index, file) in files {
+                group.addTask { (index, file, await file.finish(at: end)) }
             }
-            var mixdown: URL?
-            if ScreencastAudioMixdown.isNeeded(audioTrackCount: file.audioSources.count), let folder = session.folder {
-                let url = folder.appendingPathComponent(ScreencastCaptureFolder.mixdownName(index: index))
-                do {
-                    try await writers.writeMixdown(of: result.fileURL, to: url)
-                    mixdown = url
-                } catch {
-                    // The full file still has every sound.
-                    logger.error("screencast mixdown failed category=\(Self.category(of: error), privacy: .public)")
+            for await (index, file, result) in group { finished[index] = (file, result) }
+        }
+        for (index, early) in session.earlyFinishes {
+            let (file, result) = await early.value
+            finished[index] = (file, result)
+        }
+        session.earlyFinishes = [:]
+        for (_, ended) in finished where !ended.result.hasFootage {
+            try? fileManager.removeItem(at: ended.result.fileURL)
+        }
+
+        var mixdowns: [Int: URL] = [:]
+        if let folder = session.folder {
+            let writers = self.writers
+            await withTaskGroup(of: (Int, URL?).self) { group in
+                for (index, ended) in finished where ended.result.hasFootage
+                    && ScreencastAudioMixdown.isNeeded(audioTrackCount: ended.file.audioSources.count) {
+                    let url = folder.appendingPathComponent(ScreencastCaptureFolder.mixdownName(index: index))
+                    let source = ended.result.fileURL
+                    group.addTask {
+                        do {
+                            try await writers.writeMixdown(of: source, to: url)
+                            return (index, url)
+                        } catch {
+                            return (index, nil)
+                        }
+                    }
+                }
+                for await (index, url) in group {
+                    if let url {
+                        mixdowns[index] = url
+                    } else {
+                        // The full file still has every sound.
+                        logger.error("screencast mixdown failed")
+                    }
                 }
             }
-            videos.append(ScreencastVideo(
-                file: result.fileURL,
-                mixdown: mixdown,
-                pixelWidth: file.pixelWidth,
-                pixelHeight: file.pixelHeight,
-                audioTracks: file.audioSources,
-                duration: result.duration
-            ))
+        }
+
+        let videos = finished.sorted { $0.key < $1.key }.compactMap { index, ended -> ScreencastVideo? in
+            guard ended.result.hasFootage else { return nil }
+            return ScreencastVideo(
+                file: ended.result.fileURL,
+                mixdown: mixdowns[index],
+                pixelWidth: ended.file.pixelWidth,
+                pixelHeight: ended.file.pixelHeight,
+                audioTracks: ended.file.audioSources,
+                duration: ended.result.duration
+            )
+        }
+        let displaysEndedEarly = session.endedDisplays.sorted { $0.key < $1.key }.map { index, reason in
+            ScreencastDisplayEnd(
+                index: index,
+                reason: reason,
+                file: finished[index].flatMap { $0.result.hasFootage ? $0.result.fileURL : nil }
+            )
         }
         endActivity(of: session)
         if session === self.session { self.session = nil }
         resetPresentation()
 
-        let writerFailed = results.contains { $0.failed }
+        let writerFailed = finished.values.contains { $0.result.failed }
         guard let folder = session.folder, !videos.isEmpty else {
             if let folder = session.folder { try? fileManager.removeItem(at: folder) }
             let failure = endedEarly ?? (writerFailed ? .writerFailed : .noFootage)
@@ -705,7 +813,8 @@ final class ScreencastRecorder {
             folder: folder,
             videos: videos,
             duration: videos.map(\.duration).max() ?? 0,
-            endedEarly: endedEarly ?? (writerFailed ? .writerFailed : nil)
+            endedEarly: endedEarly ?? (writerFailed ? .writerFailed : nil),
+            displaysEndedEarly: displaysEndedEarly
         )
         do {
             try ScreencastMetadata(capture: capture, target: session.target, startedAt: session.startedAt ?? now())
@@ -731,6 +840,35 @@ final class ScreencastRecorder {
         }
     }
 
+    /// A display's stream stopped. While other displays still record, its file ends here and is
+    /// kept, and the recording goes on; the last display to stop ends the recording early.
+    private func videoStreamStopped(_ failure: ScreencastFailure, generation: Int, index: Int) {
+        guard generation == self.generation else { return }
+        if let starting = startingSession, starting.generation == generation {
+            if starting.pendingVideoStops[index] == nil { starting.pendingVideoStops[index] = failure }
+            return
+        }
+        guard let session, session.phase == .live, state.isActive else { return }
+        displayStopped(index, failure, in: session)
+    }
+
+    private func displayStopped(_ index: Int, _ failure: ScreencastFailure, in session: Session) {
+        guard session.endedDisplays[index] == nil else { return }
+        let recording = session.streams.indices.filter { session.endedDisplays[$0] == nil }
+        guard recording.count > 1 else {
+            endEarly(failure, generation: generation, take: nil)
+            return
+        }
+        session.endedDisplays[index] = failure
+        let end = hostClock()
+        if let file = session.router.detach(display: index) {
+            session.earlyFinishes[index] = Task { (file, await file.finish(at: end)) }
+        }
+        let stream = session.streams[index].stream
+        Task { await stream?.stop() }
+        logger.error("screencast display stopped category=\(failure.rawValue, privacy: .public) still_recording=\(recording.count - 1, privacy: .public)")
+    }
+
     private func stopStreams(of session: Session) async {
         for stream in session.streams { await stream.stream?.stop() }
         await session.audioStream?.stop()
@@ -740,7 +878,9 @@ final class ScreencastRecorder {
         session.timers.forEach { $0.invalidate() }
         let files = session.router.detach()
         await stopStreams(of: session)
-        for file in files { await file.cancel() }
+        for file in files.values { await file.cancel() }
+        for early in session.earlyFinishes.values { await early.value.0.cancel() }
+        session.earlyFinishes = [:]
         if deletingFolder, let folder = session.folder { try? fileManager.removeItem(at: folder) }
         endActivity(of: session)
     }
@@ -774,7 +914,7 @@ final class ScreencastRecorder {
         return ScreencastSampleHandler(
             video: { router.video($0, display: index) },
             stopped: { [weak self] failure in
-                Task { @MainActor in self?.endEarly(failure, generation: generation, take: nil) }
+                Task { @MainActor in self?.videoStreamStopped(failure, generation: generation, index: index) }
             }
         )
     }
@@ -857,11 +997,19 @@ extension ScreencastRecorder {
         var ownWindows: Set<CGWindowID> = []
         var timers: [Timer] = []
         var activity: NSObjectProtocol?
+        /// Displays whose stream stopped while others recorded on, and their files' ending.
+        var endedDisplays: [Int: ScreencastFailure] = [:]
+        var earlyFinishes: [Int: Task<(any ScreencastMovieWriting, ScreencastWriterResult), Never>] = [:]
+        /// Stops reported while the start was still running, handled once it's live.
+        var pendingVideoStops: [Int: ScreencastFailure] = [:]
+        var pendingAudioStopToken: Int?
         // The stream update queue.
         var isUpdating = false
         var needsFilterRebuild = false
         var pendingWindowFrame: CGRect?
         var rebuildWaiters: [CheckedContinuation<Void, Never>] = []
+        var rebuildFailures = 0
+        var followFailures = 0
 
         init(
             generation: Int,
@@ -906,14 +1054,16 @@ extension ScreencastRecorder {
 // MARK: - Routing samples
 
 /// Hands each stream's samples to the current files, on the capture queues: a display's frames to
-/// its own file, and the sound to every file. Restarting swaps the files and stopping detaches
-/// them, under the lock; a sample already on its way to a detached file is dropped by it.
+/// its own file, and the sound to every file. Restarting swaps the files, a display that stopped
+/// gives up its own, and stopping detaches them all, under the lock; a sample already on its way to
+/// a detached file is dropped by it.
 final class ScreencastSampleRouter: @unchecked Sendable {
     /// How often the microphone meter updates.
     static let meteringInterval = 1.0 / 15
 
     private let lock = NSLock()
-    private var files: [any ScreencastMovieWriting] = []
+    /// By display, in the recording's display order.
+    private var files: [Int: any ScreencastMovieWriting] = [:]
     private var lastFrames: [Int: CMSampleBuffer] = [:]
     private var isMetering = false
     private var lastMeteredAt = -Double.infinity
@@ -923,32 +1073,38 @@ final class ScreencastSampleRouter: @unchecked Sendable {
         self.onMicrophoneLevel = onMicrophoneLevel
     }
 
+    /// The attached files, in display order.
     var writers: [any ScreencastMovieWriting] {
-        lock.withLock { files }
+        lock.withLock { files.sorted { $0.key < $1.key }.map(\.value) }
     }
 
-    func attach(_ files: [any ScreencastMovieWriting]) {
+    func attach(_ files: [Int: any ScreencastMovieWriting]) {
         lock.withLock { self.files = files }
     }
 
-    /// Takes the files away from the streams and returns them.
-    func detach() -> [any ScreencastMovieWriting] {
+    /// Takes the files away from the streams and returns them, by display.
+    func detach() -> [Int: any ScreencastMovieWriting] {
         lock.withLock {
-            defer { files = [] }
+            defer { files = [:] }
             return files
         }
+    }
+
+    /// Takes one display's file away.
+    func detach(display index: Int) -> (any ScreencastMovieWriting)? {
+        lock.withLock { files.removeValue(forKey: index) }
     }
 
     /// Gives each file the last frame its stream delivered, stamped `host`.
     func reseed(at host: Double) {
         let (files, frames) = lock.withLock { (self.files, lastFrames) }
-        for (index, frame) in frames where files.indices.contains(index) {
-            guard let restamped = ScreencastWriterCore.copy(
+        for (index, frame) in frames {
+            guard let file = files[index], let restamped = ScreencastWriterCore.copy(
                 frame,
                 at: CMTime(seconds: host, preferredTimescale: 1_000_000_000),
                 duration: .invalid
             ) else { continue }
-            files[index].appendVideo(restamped)
+            file.appendVideo(restamped)
         }
     }
 
@@ -959,7 +1115,7 @@ final class ScreencastSampleRouter: @unchecked Sendable {
     func video(_ sample: CMSampleBuffer, display index: Int) {
         let file: (any ScreencastMovieWriting)? = lock.withLock {
             lastFrames[index] = sample
-            return files.indices.contains(index) ? files[index] : nil
+            return files[index]
         }
         file?.appendVideo(sample)
     }
@@ -969,7 +1125,7 @@ final class ScreencastSampleRouter: @unchecked Sendable {
         let (files, meters): ([any ScreencastMovieWriting], Bool) = lock.withLock {
             let meters = source == .microphone && isMetering && host - lastMeteredAt >= Self.meteringInterval
             if meters { lastMeteredAt = host }
-            return (self.files, meters)
+            return (Array(self.files.values), meters)
         }
         for file in files { file.appendAudio(sample, from: source) }
         if meters { onMicrophoneLevel(ScreencastAudioBuffers.level(of: sample)) }

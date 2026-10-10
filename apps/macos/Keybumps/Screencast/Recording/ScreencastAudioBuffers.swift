@@ -22,7 +22,7 @@ enum ScreencastAudioBuffers {
         for buffer in UnsafeMutableAudioBufferListPointer(pcm.mutableAudioBufferList) {
             if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) }
         }
-        return make(frames: frames, format: format, at: time, list: pcm.audioBufferList)
+        return sampleBuffer(frames: frames, format: format, at: time, list: pcm.audioBufferList)
     }
 
     /// `buffer` without its first `frames` frames, starting at `time`.
@@ -38,7 +38,7 @@ enum ScreencastAudioBuffers {
                 list[index].mData = data + offset
                 list[index].mDataByteSize -= UInt32(offset)
             }
-            return make(frames: total - frames, format: format, at: time, list: UnsafePointer(list.unsafePointer))
+            return sampleBuffer(frames: total - frames, format: format, at: time, list: UnsafePointer(list.unsafePointer))
         }
     }
 
@@ -61,6 +61,15 @@ enum ScreencastAudioBuffers {
             magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format
         )
         return format
+    }
+
+    /// Whether two PCM formats lay out samples the same way: rate, channels, and sample format.
+    static func samePCMLayout(_ first: CMAudioFormatDescription, _ second: CMAudioFormatDescription) -> Bool {
+        guard let a = pcmDescription(first), let b = pcmDescription(second) else { return false }
+        return a.mSampleRate == b.mSampleRate && a.mFormatFlags == b.mFormatFlags
+            && a.mBytesPerPacket == b.mBytesPerPacket && a.mFramesPerPacket == b.mFramesPerPacket
+            && a.mBytesPerFrame == b.mBytesPerFrame && a.mChannelsPerFrame == b.mChannelsPerFrame
+            && a.mBitsPerChannel == b.mBitsPerChannel
     }
 
     static func sampleRate(of format: CMAudioFormatDescription) -> Double? {
@@ -148,7 +157,7 @@ enum ScreencastAudioBuffers {
     }
 
     /// A ready sample buffer of `frames` from `list`, whose data is copied in.
-    private static func make(
+    static func sampleBuffer(
         frames: Int,
         format: CMAudioFormatDescription,
         at time: CMTime,
@@ -165,5 +174,54 @@ enum ScreencastAudioBuffers {
         ) == noErr else { return nil }
         CMSampleBufferSetDataReady(sample)
         return sample
+    }
+}
+
+/// Converts one sound's PCM buffers into its track's format, so a track keeps the single format it
+/// started with: the first buffer's, or the silence the writer padded it with before any came. A
+/// microphone that starts late, or changes device mid-recording, then never changes the format an
+/// `AVAssetWriterInput` was fed. Keeps its converter, so a resampled sound stays continuous.
+final class ScreencastAudioConformer {
+    private var converter: AVAudioConverter?
+    private var converterInput: CMAudioFormatDescription?
+
+    /// `sample` in `format`, stamped as it was; itself when it's already laid out that way. Nil when
+    /// it can't be converted.
+    func conform(_ sample: CMSampleBuffer, to format: CMAudioFormatDescription) -> CMSampleBuffer? {
+        guard let input = CMSampleBufferGetFormatDescription(sample) else { return nil }
+        if ScreencastAudioBuffers.samePCMLayout(input, format) { return sample }
+        let from = AVAudioFormat(cmAudioFormatDescription: input)
+        let to = AVAudioFormat(cmAudioFormatDescription: format)
+        if converter == nil || converterInput.map({ !ScreencastAudioBuffers.samePCMLayout($0, input) }) == true {
+            converter = AVAudioConverter(from: from, to: to)
+            converterInput = input
+        }
+        let frames = CMSampleBufferGetNumSamples(sample)
+        guard let converter, frames > 0, from.sampleRate > 0,
+              let source = AVAudioPCMBuffer(pcmFormat: from, frameCapacity: AVAudioFrameCount(frames)) else { return nil }
+        source.frameLength = AVAudioFrameCount(frames)
+        guard CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            sample, at: 0, frameCount: Int32(frames), into: source.mutableAudioBufferList
+        ) == noErr else { return nil }
+        let capacity = AVAudioFrameCount((Double(frames) * to.sampleRate / from.sampleRate).rounded(.up)) + 64
+        guard let converted = AVAudioPCMBuffer(pcmFormat: to, frameCapacity: capacity) else { return nil }
+        var handedOver = false
+        var error: NSError?
+        let status = converter.convert(to: converted, error: &error) { _, inputStatus in
+            guard !handedOver else {
+                inputStatus.pointee = .noDataNow
+                return nil
+            }
+            handedOver = true
+            inputStatus.pointee = .haveData
+            return source
+        }
+        guard status != .error, converted.frameLength > 0 else { return nil }
+        return ScreencastAudioBuffers.sampleBuffer(
+            frames: Int(converted.frameLength),
+            format: format,
+            at: sample.presentationTimeStamp,
+            list: converted.audioBufferList
+        )
     }
 }

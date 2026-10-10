@@ -37,14 +37,22 @@ enum ScreencastSamples {
         return sample!
     }
 
-    /// `frames` of float PCM in `channels`, every sample `value`, stamped `host`.
-    static func audio(at host: Double, frames: Int = audioFrames, channels: Int = 2, value: Float = 0.5) -> CMSampleBuffer {
-        let format = ScreencastAudioBuffers.defaultFormat(channels: channels)!
+    /// `frames` of float PCM in `channels`, every sample `value`, stamped `host`: non-interleaved
+    /// at 48 kHz, as the writer pads with, unless `sampleRate` or `interleaved` say otherwise.
+    static func audio(
+        at host: Double,
+        frames: Int = audioFrames,
+        channels: Int = 2,
+        value: Float = 0.5,
+        sampleRate rate: Double = sampleRate,
+        interleaved: Bool = false
+    ) -> CMSampleBuffer {
+        let format = pcmFormat(channels: channels, sampleRate: rate, interleaved: interleaved)
         let pcm = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(cmAudioFormatDescription: format), frameCapacity: AVAudioFrameCount(frames))!
         pcm.frameLength = AVAudioFrameCount(frames)
-        for channel in 0..<channels {
-            let samples = pcm.floatChannelData![channel]
-            for index in 0..<frames { samples[index] = value }
+        for buffer in UnsafeMutableAudioBufferListPointer(pcm.mutableAudioBufferList) {
+            let samples = buffer.mData!.assumingMemoryBound(to: Float.self)
+            for index in 0..<(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size) { samples[index] = value }
         }
         var sample: CMSampleBuffer?
         CMAudioSampleBufferCreateWithPacketDescriptions(
@@ -57,6 +65,28 @@ enum ScreencastSamples {
         )
         CMSampleBufferSetDataReady(sample!)
         return sample!
+    }
+
+    /// Float PCM in any layout.
+    static func pcmFormat(channels: Int, sampleRate rate: Double, interleaved: Bool) -> CMAudioFormatDescription {
+        let bytesPerFrame = UInt32(interleaved ? 4 * channels : 4)
+        var description = AudioStreamBasicDescription(
+            mSampleRate: rate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | (interleaved ? 0 : kAudioFormatFlagIsNonInterleaved),
+            mBytesPerPacket: bytesPerFrame,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: bytesPerFrame,
+            mChannelsPerFrame: UInt32(channels),
+            mBitsPerChannel: 32,
+            mReserved: 0
+        )
+        var format: CMAudioFormatDescription?
+        CMAudioFormatDescriptionCreate(
+            allocator: nil, asbd: &description, layoutSize: 0, layout: nil,
+            magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format
+        )
+        return format!
     }
 
     /// A 440 Hz sine of `amplitude` in every channel, continuous from one buffer to the next because
@@ -128,6 +158,9 @@ final class RecordingSink: ScreencastMovieSink {
         /// Seconds of audio; zero for video.
         let duration: Double
         let isSilent: Bool
+        /// Audio only: its format's sample rate and channels.
+        var sampleRate: Double = 0
+        var channels = 0
     }
 
     let audioSources: [ScreencastAudioSource]
@@ -168,8 +201,12 @@ final class RecordingSink: ScreencastMovieSink {
         case .video:
             appends.append(Append(track: track, start: start, duration: 0, isSilent: false))
         case .audio:
-            let duration = Double(CMSampleBufferGetNumSamples(sample)) / ScreencastSamples.sampleRate
-            appends.append(Append(track: track, start: start, duration: duration, isSilent: ScreencastSamples.peak(of: sample) == 0))
+            let description = CMAudioFormatDescriptionGetStreamBasicDescription(CMSampleBufferGetFormatDescription(sample)!)!.pointee
+            let duration = Double(CMSampleBufferGetNumSamples(sample)) / description.mSampleRate
+            appends.append(Append(
+                track: track, start: start, duration: duration, isSilent: ScreencastSamples.peak(of: sample) == 0,
+                sampleRate: description.mSampleRate, channels: Int(description.mChannelsPerFrame)
+            ))
         }
         return true
     }
@@ -242,6 +279,9 @@ final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
     func pause(at host: Double) { record(.pause(host)) }
     func resume(at host: Double) { record(.resume(host)) }
     func setAudio(_ source: ScreencastAudioSource, on: Bool, at host: Double) { record(.setAudio(source, on: on, host: host)) }
+    /// Kept apart from `calls`: the recorder's tick calls it.
+    private(set) var keptUpAt: [Double] = []
+    func keepUp(at host: Double) { lock.withLock { keptUpAt.append(host) } }
 
     func finish(at host: Double) async -> ScreencastWriterResult {
         record(.finish(host))
@@ -356,8 +396,15 @@ final class FakeStream: ScreencastStream {
         plans.append(plan)
     }
 
+    /// The next this many crop updates throw, as ScreenCaptureKit can.
+    var sourceRectFailures = 0
+
     func update(sourceRect: CGRect) async throws {
         await holdUpdate()
+        if sourceRectFailures > 0 {
+            sourceRectFailures -= 1
+            throw ScreencastFailure.captureFailed
+        }
         sourceRects.append(sourceRect)
     }
 
@@ -409,9 +456,16 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
     /// Runs once, right after the next snapshot is taken: what changes on screen meanwhile.
     var afterContentRead: (() -> Void)?
 
+    /// The next this many snapshots fail.
+    var contentFailures = 0
+
     func content() async throws -> ScreencastContent {
         contentReads += 1
         if let contentError { throw contentError }
+        if contentFailures > 0 {
+            contentFailures -= 1
+            throw ScreencastFailure.captureFailed
+        }
         let snapshot = screen
         let after = afterContentRead
         afterContentRead = nil

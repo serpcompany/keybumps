@@ -16,6 +16,9 @@ protocol ScreencastMovieWriting: AnyObject, Sendable {
     func pause(at host: Double)
     func resume(at host: Double)
     func setAudio(_ source: ScreencastAudioSource, on: Bool, at host: Double)
+    /// Pads the sound tracks up to the recording's time at `host`, for a still screen that sends no
+    /// frames. Never blocks.
+    func keepUp(at host: Double)
     /// Ends the file at `host` (host clock) and closes it.
     func finish(at host: Double) async -> ScreencastWriterResult
     /// Stops writing and deletes the file.
@@ -228,6 +231,10 @@ final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
 
     func setAudio(_ source: ScreencastAudioSource, on: Bool, at host: Double) {
         queue.async { self.core.setAudio(source, on: on, at: host) }
+    }
+
+    func keepUp(at host: Double) {
+        queue.async { self.core.keepUp(at: host) }
     }
 
     func finish(at host: Double) async -> ScreencastWriterResult {
