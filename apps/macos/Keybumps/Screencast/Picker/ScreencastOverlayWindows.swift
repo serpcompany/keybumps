@@ -241,6 +241,9 @@ final class ScreencastPickerView: NSView {
         NSLayoutConstraint.activate([
             host.centerXAnchor.constraint(equalTo: centerXAnchor),
             host.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -bottomInset),
+            // Kept inside a narrow screen, where the bar's options drop their titles to fit.
+            host.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
+            host.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
         ])
         bar = host
     }
