@@ -453,7 +453,9 @@ final class ScreencastRecorder {
 
     /// Shows one of Keybumps's windows in the video, such as the drawing layer. The control bar,
     /// the picker's dimming, and every other Keybumps window stay out. Returns once the running
-    /// streams show it, or once a failed screen read has been tried again and given up on.
+    /// streams show it, or once a failing screen read's quick retries have given up. While a
+    /// rebuild keeps failing after those, it returns at once, and the next rebuild that succeeds
+    /// shows it: it never waits out the slow retry.
     ///
     /// Only the window registered here is recorded, not its child windows (a toolbar or popover
     /// it attaches): register each of those too. A window recording names every window it shows
@@ -480,9 +482,15 @@ final class ScreencastRecorder {
     // it starts failing and one when it recovers. A crop waits for the window's next move instead.
 
     /// Rebuilds the filters, returning once a rebuild that began after this call is done, or its
-    /// last quick retry failed; it goes on being tried every `slowRetryDelay` after that.
+    /// last quick retry failed; it goes on being tried every `slowRetryDelay` after that. Called
+    /// while it's being tried slowly, it returns at once, and the next attempt that succeeds
+    /// applies the change.
     private func rebuildFilters(for session: Session) async {
         guard session.phase == .live else { return }
+        guard session.rebuildFailures <= retryDelays.count else {
+            session.needsFilterRebuild = true
+            return
+        }
         await withCheckedContinuation { continuation in
             session.rebuildWaiters.append(continuation)
             scheduleFilterRebuild(for: session)

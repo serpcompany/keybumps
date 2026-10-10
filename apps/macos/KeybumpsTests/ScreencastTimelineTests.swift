@@ -222,6 +222,15 @@ struct ScreencastCaptureFilterTests {
         #expect(plan == .windows(1, includingWindows: [10, 11, 13, 16, 18]))
     }
 
+    @Test("A sheet below an expanded or labelled toolbar, or a tab bar, still counts; one much lower doesn't", arguments: [
+        (78.0, true), (120.0, true), (150.0, true), (200.0, false)
+    ] as [(Double, Bool)])
+    func sheetBelowAToolbar(below: Double, isSheet: Bool) {
+        let window = Screens.with(Screens.browserWindow, order: 3)
+        let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 100 + below, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
+        #expect(ScreencastCaptureFilter.isSheet(sheet, on: window) == isSheet)
+    }
+
     @Test("Unknown order counts as behind, so a window out of sight names no sheet")
     func unknownOrderIsBehind() {
         let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 122, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)

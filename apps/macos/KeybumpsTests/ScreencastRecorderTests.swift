@@ -807,7 +807,8 @@ struct ScreencastRecorderTests {
         system.contentFailures = 0
         await recorder.removeOverlayWindow(31)
         await recorder.includeOverlayWindow(31)
-        #expect(system.videoStreams[0].plans == [.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])])
+        #expect(await eventually { system.videoStreams[0].plans == [.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])] },
+                "the slow retry's next attempt applies it")
     }
 
     @available(macOS 15, *)
@@ -1100,6 +1101,29 @@ struct ScreencastRecorderTests {
         system.screen = Screens.content(windows: Screens.content().windows + [panel, menu])
         recorder.followTick()
         #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("While a rebuild is retried slowly, adding or removing an overlay returns at once, and the next good rebuild applies it")
+    func overlayCallsDuringASlowRetry() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(slowRetryDelay: 0.5)
+        try await start(recorder)
+        system.contentFailures = 1_000
+        await recorder.includeOverlayWindow(31)
+        #expect(system.contentReads == 1 + 4, "the first call waited out the quick retries")
+
+        let started = Date()
+        await recorder.includeOverlayWindow(50)
+        await recorder.removeOverlayWindow(31)
+        #expect(Date().timeIntervalSince(started) < 0.1, "neither waits for the slow retry")
+        #expect(system.contentReads == 5, "nor reads the screen")
+        #expect(recorder.overlayWindows == [50])
+
+        let drawing = ScreencastContent.Window(id: 50, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [drawing])
+        system.contentFailures = 0
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [50]) })
     }
 
     @available(macOS 15, *)
