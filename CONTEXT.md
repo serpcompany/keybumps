@@ -192,11 +192,11 @@ Translation's My language and Other language, never the same: text in my languag
 _Avoid_: Source and target (one translation's languages), target language setting
 
 **Keystrokes**:
-Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut clears it. Its Show & Hide Keystrokes shortcut hides the keys until it's pressed again.
+Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut macOS or Keybumps knows clears it. Its Show & Hide Keystrokes shortcut hides the keys until it's pressed again.
 _Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
 
 **Key display**:
-The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and shows on a recording's screens while one holds it. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and shows on a recording's screens while one holds it. Pressing a screenshot shortcut macOS or Keybumps knows clears it at once. A keystroke stays in memory only while it's on screen, and is never logged or stored.
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 ### Licensing
