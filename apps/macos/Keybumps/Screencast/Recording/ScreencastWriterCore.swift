@@ -153,8 +153,10 @@ final class ScreencastWriterCore {
 
     /// `sample` in its track's format, which the first buffer sets when nothing else has.
     private func conformed(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) -> CMSampleBuffer? {
+        // A format no converter could take (the recorder's router drops these first) never
+        // becomes a track's format.
         guard let format = CMSampleBufferGetFormatDescription(sample),
-              ScreencastAudioBuffers.sampleRate(of: format) != nil else { return nil }
+              ScreencastAudioBuffers.canConvert(format) else { return nil }
         guard let trackFormat = trackFormats[source] else {
             trackFormats[source] = format
             return sample

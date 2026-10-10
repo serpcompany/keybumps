@@ -17,7 +17,7 @@ struct ScreencastRecorderTests {
     let startDate = Date(timeIntervalSince1970: 1_791_000_000)
 
     @available(macOS 15, *)
-    func makeRecorder(microphoneGranted: Bool = true) -> ScreencastRecorder {
+    func makeRecorder(microphoneGranted: Bool = true, retryDelays: [TimeInterval] = [0.005, 0.005, 0.005]) -> ScreencastRecorder {
         let clock = clock
         let startDate = startDate
         return ScreencastRecorder(
@@ -28,7 +28,7 @@ struct ScreencastRecorderTests {
             ownProcessID: Screens.ownProcess,
             microphoneGranted: { microphoneGranted },
             tickInterval: nil,
-            retryDelays: [0.005, 0.005, 0.005]
+            retryDelays: retryDelays
         )
     }
 
@@ -178,8 +178,8 @@ struct ScreencastRecorderTests {
         try await start(recorder, .window(10))
 
         let (plan, configuration) = try #require(videoKind(system.videoStreams.first))
-        #expect(plan == .applications(1, includedProcesses: [Screens.browser], exceptingWindows: [12]),
-                "no overlay is registered, so nothing of Keybumps is in the filter")
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13]),
+                "the window, its sheet and menu; no overlay is registered, so nothing of Keybumps")
         #expect(configuration.sourceRect == CGRect(x: 100, y: 100, width: 800, height: 600))
         #expect(configuration.pixelWidth == 1600 && configuration.pixelHeight == 1200)
         #expect(configuration.scalesToFit)
@@ -824,6 +824,120 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("A filter rebuild waiting out a retry returns when the recording stops, is discarded, or ends early", arguments: ["stop", "discard", "early"])
+    func rebuildWaiterReturnsWhenTheRecordingEnds(ending: String) async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(retryDelays: [0.5, 0.5, 0.5])
+        try await start(recorder)
+        system.contentFailures = 100
+        var returned = false
+        let including = Task {
+            await recorder.includeOverlayWindow(31)
+            returned = true
+        }
+        #expect(await eventually { system.contentReads == 2 }, "the first attempt failed and waits to try again")
+        switch ending {
+        case "stop": _ = try await recorder.stop()
+        case "discard": await recorder.discard()
+        default: system.videoStreams[0].handler.stopped(.stoppedByMacOS)
+        }
+        #expect(await eventually { returned }, "it returns at once, not after the backoff")
+        await including.value
+        #expect(system.contentReads == 2, "no retry once the recording is over")
+    }
+
+    @available(macOS 15, *)
+    @Test("A crop retry never puts back a frame the window has since left")
+    func cropRetryAfterTheWindowMoved() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(retryDelays: [0.05, 0.05, 0.05])
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        stream.sourceRectFailures = 1
+        system.windowFrames[10] = CGRect(x: 250, y: 150, width: 800, height: 600)
+        recorder.followTick()
+        #expect(await eventually { stream.sourceRectFailures == 0 }, "the first crop failed")
+        system.windowFrames[10] = CGRect(x: 400, y: 200, width: 800, height: 600)
+        recorder.followTick()
+        #expect(await eventually { stream.sourceRects == [CGRect(x: 400, y: 200, width: 800, height: 600)] })
+        for _ in 0..<10 {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            recorder.followTick()
+        }
+        #expect(stream.sourceRects == [CGRect(x: 400, y: 200, width: 800, height: 600)], "the old frame's retry was dropped")
+    }
+
+    @available(macOS 15, *)
+    @Test("A microphone in a format no file can take fails cleanly: it's dropped, and the Mac's sound records on")
+    func unusableMicrophone() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder)
+        system.audioStreams[0].handler.audio(ScreencastSamples.audio(at: 1_000.1, channelValues: [0.5, 0.5, 0.5, 0.5]), .microphone)
+        #expect(await eventually { recorder.microphone == .failed })
+        #expect(recorder.systemAudio == .on && recorder.state == .recording)
+        system.audioStreams[0].deliverAudio(.systemAudio, at: 1_000.2)
+        let calls = writers.writers[0].calls
+        #expect(calls == [.audio(.systemAudio, host: 1_000.2)], "no microphone buffer reached the file")
+    }
+
+    @available(macOS 15, *)
+    @Test("endingEarly says an early end owns the recording's end while its files close")
+    func endingEarlyDuringAnEarlyEnd() async throws {
+        defer { captures.remove() }
+        writers.configure = { $0.holdsFinish = true }
+        let recorder = makeRecorder()
+        var stateWhenReported: ScreencastRecorderState?
+        var endingWhenReported: ScreencastFailure?
+        recorder.onEndedEarly = { _, _ in
+            stateWhenReported = recorder.state
+            endingWhenReported = recorder.endingEarly
+        }
+        try await start(recorder)
+        #expect(recorder.endingEarly == nil)
+        system.videoStreams[0].handler.stopped(.stoppedByMacOS)
+        #expect(await eventually { recorder.state == .stopping })
+        #expect(recorder.endingEarly == .stoppedByMacOS, "set in the same step as .stopping")
+        #expect(await eventually { writers.writers[0].isHoldingFinish })
+        #expect(recorder.endingEarly == .stoppedByMacOS)
+        writers.writers[0].releaseFinish()
+        #expect(await eventually { stateWhenReported != nil })
+        #expect(stateWhenReported == .failed(.stoppedByMacOS) && endingWhenReported == nil)
+
+        writers.configure = { _ in }
+        try await start(recorder)
+        #expect(recorder.endingEarly == nil)
+    }
+
+    @available(macOS 15, *)
+    @Test("stop(), discard(), and restart() never set endingEarly", arguments: ["stop", "discard", "restart"])
+    func notEndingEarly(action: String) async throws {
+        defer { captures.remove() }
+        writers.configure = { writer in
+            writer.holdsFinish = true
+            writer.holdsCancel = true
+        }
+        let recorder = makeRecorder()
+        try await start(recorder)
+        let acting = Task {
+            switch action {
+            case "stop": _ = try? await recorder.stop()
+            case "discard": await recorder.discard()
+            default: try? await recorder.restart()
+            }
+        }
+        #expect(await eventually { writers.writers[0].isHoldingFinish || writers.writers[0].isHoldingCancel })
+        #expect(recorder.state == (action == "restart" ? .recording : .stopping))
+        #expect(recorder.endingEarly == nil)
+        writers.writers.forEach {
+            $0.releaseFinish()
+            $0.releaseCancel()
+        }
+        await acting.value
+        #expect(recorder.endingEarly == nil)
+    }
+
+    @available(macOS 15, *)
     @Test("A file that fails mid-recording ends it and keeps its footage")
     func writerFails() async throws {
         defer { captures.remove() }
@@ -904,42 +1018,48 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("A window recording with an overlay leaves out a Keybumps window that opens mid-recording")
-    func ownWindowOpens() async throws {
+    @Test("A Keybumps window opening mid-window-recording is never in any filter; its overlays are, from the first")
+    func ownWindowsNeverInAWindowRecording() async throws {
         defer { captures.remove() }
         system.ownWindows = [30, 31]
         let recorder = makeRecorder()
         await recorder.includeOverlayWindow(31)
         try await start(recorder, .window(10))
-        #expect(videoKind(system.videoStreams.first)?.0 == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30]))
-        recorder.tick()
-        #expect(system.videoStreams[0].plans.isEmpty, "nothing changed")
+        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 11, 13, 31]))
 
+        // A notch notice and the Command Palette open, then the app opens a popover.
         let notice = ScreencastContent.Window(id: 40, frame: CGRect(x: 500, y: 0, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
-        system.screen = Screens.content(windows: Screens.content().windows + [notice])
-        system.ownWindows = [30, 31, 40]
+        let palette = ScreencastContent.Window(id: 41, frame: CGRect(x: 300, y: 200, width: 700, height: 450), layer: 8, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        let popover = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [notice, palette])
+        system.ownWindows = [30, 31, 40, 41]
         recorder.tick()
-        #expect(await eventually { !system.videoStreams[0].plans.isEmpty })
-        #expect(system.videoStreams[0].plans.last == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30, 40]))
+        recorder.followTick()
+        system.screen = Screens.content(windows: Screens.content().windows + [notice, palette, popover])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14, 31]) })
+        let every = [videoKind(system.videoStreams[0])?.0].compactMap { $0 } + system.videoStreams[0].plans
+        for plan in every {
+            guard case .windows(_, let windows) = plan else { Issue.record("not a window list"); continue }
+            #expect(Set(windows).isDisjoint(with: [30, 40, 41]), "Keybumps's other windows are never named")
+        }
     }
 
     @available(macOS 15, *)
-    @Test("A Keybumps window that opens while the snapshot is read, like the control bar during the start, is caught by the next tick")
-    func ownWindowOpensDuringTheSnapshot() async throws {
+    @Test("The recorded app's new window joins at the next follow tick, and leaves when it closes")
+    func appWindowJoins() async throws {
         defer { captures.remove() }
-        system.ownWindows = [30, 31]
         let recorder = makeRecorder()
-        await recorder.includeOverlayWindow(31)
-        let bar = ScreencastContent.Window(id: 40, frame: CGRect(x: 500, y: 900, width: 300, height: 44), layer: 3, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
-        system.afterContentRead = {
-            self.system.screen = Screens.content(windows: Screens.content().windows + [bar])
-            self.system.ownWindows = [30, 31, 40]
-        }
         try await start(recorder, .window(10))
-        #expect(videoKind(system.videoStreams.first)?.0 == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30]),
-                "the snapshot was taken before the bar opened")
-        recorder.tick()
-        #expect(await eventually { system.videoStreams[0].plans.last == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30, 40]) })
+        recorder.followTick()
+        for _ in 0..<20 { await Task.yield() }
+        let menu = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [menu])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+        system.screen = Screens.content()
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13]) })
     }
 
     @available(macOS 15, *)

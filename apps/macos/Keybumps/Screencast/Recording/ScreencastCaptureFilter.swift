@@ -64,22 +64,24 @@ enum ScreencastFilterPlan: Equatable, Sendable {
     /// (its overlays), which come back. Display and area recordings. Excluding the whole app keeps
     /// windows it opens mid-recording out too.
     case display(CGDirectDisplayID, excludingProcess: pid_t?, exceptingWindows: [CGWindowID])
-    /// Only `includedProcesses`' windows on the display, minus `exceptingWindows`. Window
-    /// recordings: the window's app with its menus and sheets, plus Keybumps's overlays.
-    case applications(CGDirectDisplayID, includedProcesses: [pid_t], exceptingWindows: [CGWindowID])
+    /// Only these windows on the display. Window recordings: the window, its app's menus, sheets,
+    /// and popovers on screen, and Keybumps's overlays, each named; no app is included whole, so a
+    /// window opened later shows only once a rebuild names it.
+    case windows(CGDirectDisplayID, includingWindows: [CGWindowID])
 
     var displayID: CGDirectDisplayID {
         switch self {
-        case .display(let id, _, _), .applications(let id, _, _): id
+        case .display(let id, _, _), .windows(let id, _): id
         }
     }
 
     /// Whether a window Keybumps (`ownProcessID`) opens later would show until the filter is
-    /// rebuilt: the plan names Keybumps's windows one by one instead of leaving out the whole app.
+    /// rebuilt: only a display plan that couldn't leave out the whole app. A window plan names
+    /// every window it shows, so none of Keybumps's can slip in.
     func dependsOnWindows(of ownProcessID: pid_t) -> Bool {
         switch self {
         case .display(_, let excluded, _): excluded == nil
-        case .applications(_, let processes, _): processes.contains(ownProcessID)
+        case .windows: false
         }
     }
 }
@@ -112,10 +114,13 @@ enum ScreencastCaptureFilter {
         )
     }
 
-    /// A window recording, on the display showing most of it: the window's app, without its other
-    /// ordinary windows, which would cover the chosen one where they overlap it. Keybumps joins
-    /// only while one of its overlays is on screen, and then without the rest of its windows; with
-    /// none, nothing of Keybumps can show. Nil when the window or its display is gone.
+    /// A window recording, on the display showing most of it, as a list of windows: the window;
+    /// its app's other windows on screen on that display, except its ordinary windows, which would
+    /// cover the chosen one where they overlap it, so its menus, sheets, and popovers show; and
+    /// Keybumps's registered overlays. Keybumps itself is never included whole: none of its other
+    /// windows (a notice, the Command Palette, typed keys) can be in the video, even for a frame.
+    /// The recorder rebuilds it when the app's windows change. Nil when the window or its display
+    /// is gone.
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
@@ -125,20 +130,15 @@ enum ScreencastCaptureFilter {
         guard let window = content.window(windowID),
               let display = content.display(mostOverlapping: window.frame) else { return nil }
         let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
-        var hidden = windowsToHide(recording: window, others: siblings)
-        var processes = [window.processID]
-        let ownWindows = content.windows.filter { $0.processID == ownProcessID && $0.id != window.id }
-        let ownNonOverlays = ownWindows.filter { !overlays.contains($0.id) }.map(\.id)
-        if window.processID == ownProcessID {
-            // Recording one of Keybumps's own windows: its others stay out, overlays apart.
-            hidden.formUnion(ownNonOverlays)
-        } else if ownWindows.contains(where: { overlays.contains($0.id) }), content.applicationProcessIDs.contains(ownProcessID) {
-            processes.append(ownProcessID)
-            // A window Keybumps opens after this is built shows until the recorder rebuilds the
-            // filter, which it does whenever Keybumps's own windows change.
-            hidden.formUnion(ownNonOverlays)
+        let hidden = windowsToHide(recording: window, others: siblings)
+        let appWindows = siblings.filter { sibling in
+            sibling.isOnScreen && !hidden.contains(sibling.id) && sibling.frame.intersects(display.frame)
+                // Recording one of Keybumps's own windows: its others only when they're overlays.
+                && (window.processID != ownProcessID || overlays.contains(sibling.id))
         }
-        return .applications(display.id, includedProcesses: processes, exceptingWindows: hidden.sorted())
+        let ownOverlays = content.windows.filter { $0.processID == ownProcessID && $0.id != window.id && overlays.contains($0.id) }
+        let included = Set([window.id] + appWindows.map(\.id) + ownOverlays.map(\.id))
+        return .windows(display.id, includingWindows: included.sorted())
     }
 
     /// The other windows of a recorded window's app to leave out: its ordinary windows (layer 0).

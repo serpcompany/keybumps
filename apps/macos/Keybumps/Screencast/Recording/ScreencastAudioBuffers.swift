@@ -11,7 +11,7 @@ enum ScreencastAudioBuffers {
     /// `frames` of silence in `format`, starting at `time`, so the writer appends it to the same
     /// track without a format change. Nil when the format isn't uncompressed PCM.
     static func silence(frames: Int, format: CMAudioFormatDescription, at time: CMTime) -> CMSampleBuffer? {
-        guard frames > 0, pcmDescription(format) != nil else { return nil }
+        guard frames > 0, canConvert(format) else { return nil }
         let audioFormat = AVAudioFormat(cmAudioFormatDescription: format)
         guard audioFormat.sampleRate > 0,
               let pcm = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: AVAudioFrameCount(frames)) else {
@@ -61,6 +61,15 @@ enum ScreencastAudioBuffers {
             magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format
         )
         return format
+    }
+
+    /// Whether `AVAudioFormat` and `AVAudioConverter` can take this format: uncompressed PCM with a
+    /// rate and channels, and more than two channels only with a channel layout saying which is
+    /// which. Without one, `AVAudioFormat` can't describe it, and a converter made from it crashes.
+    static func canConvert(_ format: CMAudioFormatDescription) -> Bool {
+        guard let description = pcmDescription(format), description.mSampleRate > 0,
+              description.mChannelsPerFrame > 0 else { return false }
+        return description.mChannelsPerFrame <= 2 || CMAudioFormatDescriptionGetChannelLayout(format, sizeOut: nil) != nil
     }
 
     /// Whether two PCM formats lay out samples the same way: rate, channels, and sample format.
@@ -180,24 +189,31 @@ enum ScreencastAudioBuffers {
 /// Converts one sound's PCM buffers into its track's format, so a track keeps the single format it
 /// started with: the first buffer's, or the silence the writer padded it with before any came. A
 /// microphone that starts late, or changes device mid-recording, then never changes the format an
-/// `AVAssetWriterInput` was fed. Keeps its converter, so a resampled sound stays continuous.
+/// `AVAssetWriterInput` was fed. Keeps its converter, so a resampled sound stays continuous. Fewer
+/// channels are a mix of all of them (`downmix`), so a microphone on a stereo interface's second
+/// input isn't lost.
 final class ScreencastAudioConformer {
     private var converter: AVAudioConverter?
     private var converterInput: CMAudioFormatDescription?
 
     /// `sample` in `format`, stamped as it was; itself when it's already laid out that way. Nil when
-    /// it can't be converted.
+    /// it can't be converted, such as more than two channels with no layout.
     func conform(_ sample: CMSampleBuffer, to format: CMAudioFormatDescription) -> CMSampleBuffer? {
         guard let input = CMSampleBufferGetFormatDescription(sample) else { return nil }
         if ScreencastAudioBuffers.samePCMLayout(input, format) { return sample }
+        // Checked before AVFoundation sees either: `AVAudioFormat` is nil for a format it can't
+        // describe, though Swift types it as never nil.
+        guard ScreencastAudioBuffers.canConvert(input), ScreencastAudioBuffers.canConvert(format) else { return nil }
         let from = AVAudioFormat(cmAudioFormatDescription: input)
         let to = AVAudioFormat(cmAudioFormatDescription: format)
+        guard from.channelCount > 0, to.channelCount > 0, from.sampleRate > 0, to.sampleRate > 0 else { return nil }
         if converter == nil || converterInput.map({ !ScreencastAudioBuffers.samePCMLayout($0, input) }) == true {
             converter = AVAudioConverter(from: from, to: to)
+            converter?.downmix = true
             converterInput = input
         }
         let frames = CMSampleBufferGetNumSamples(sample)
-        guard let converter, frames > 0, from.sampleRate > 0,
+        guard let converter, frames > 0,
               let source = AVAudioPCMBuffer(pcmFormat: from, frameCapacity: AVAudioFrameCount(frames)) else { return nil }
         source.frameLength = AVAudioFrameCount(frames)
         guard CMSampleBufferCopyPCMDataIntoAudioBufferList(

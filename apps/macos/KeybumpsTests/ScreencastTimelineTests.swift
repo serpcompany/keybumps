@@ -172,20 +172,28 @@ struct ScreencastCaptureFilterTests {
         #expect(plan.dependsOnWindows(of: Screens.ownProcess))
     }
 
-    @Test("A window shows its app without its other windows, keeps its sheet and menus, and adds only Keybumps's overlays")
+    @Test("A window recording names its windows: the window, its sheet and menu, and Keybumps's overlays, never Keybumps's others")
     func window() throws {
         let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()))
-        #expect(plan == .applications(1, includedProcesses: [Screens.browser, Screens.ownProcess], exceptingWindows: [12, 30]))
-        #expect(plan.dependsOnWindows(of: Screens.ownProcess))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31]), "the app's other window (12) and the control bar (30) stay out")
+        #expect(!plan.dependsOnWindows(of: Screens.ownProcess), "a window Keybumps opens can't show, not even for a frame")
     }
 
     @Test("Without an overlay on screen, nothing of Keybumps is in a window recording's filter")
     func windowWithoutOverlays() throws {
         for overlays: Set<CGWindowID> in [[], [99]] {
             let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: overlays, content: Screens.content()))
-            #expect(plan == .applications(1, includedProcesses: [Screens.browser], exceptingWindows: [12]))
-            #expect(!plan.dependsOnWindows(of: Screens.ownProcess), "a window Keybumps opens can't show")
+            #expect(plan == .windows(1, includingWindows: [10, 11, 13]))
         }
+    }
+
+    @Test("The app's windows off screen or on another display aren't named")
+    func windowOffScreen() throws {
+        let hidden = ScreencastContent.Window(id: 14, frame: CGRect(x: 150, y: 150, width: 200, height: 100), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: false)
+        let elsewhere = ScreencastContent.Window(id: 15, frame: CGRect(x: 1800, y: 150, width: 200, height: 100), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        let content = Screens.content(windows: Screens.content().windows + [hidden, elsewhere])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13]))
     }
 
     @Test("A window on the right display records there; a closed one can't be recorded")
@@ -198,9 +206,9 @@ struct ScreencastCaptureFilterTests {
     @Test("Recording one of Keybumps's own windows leaves its other windows out, overlays apart")
     func ownWindow() {
         let plan = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content())
-        #expect(plan == .applications(1, includedProcesses: [Screens.ownProcess], exceptingWindows: [31]))
+        #expect(plan == .windows(1, includingWindows: [30]))
         let withOverlay = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content())
-        #expect(withOverlay == .applications(1, includedProcesses: [Screens.ownProcess], exceptingWindows: []))
+        #expect(withOverlay == .windows(1, includingWindows: [30, 31]))
     }
 
     @Test("Of the app's other windows, only ordinary ones are hidden, and an untitled one over the window stays")
@@ -242,6 +250,31 @@ struct ScreencastAudioBufferTests {
         #expect(CMSampleBufferGetNumSamples(trimmed) == 1_000)
         #expect(ScreencastSamples.peak(of: trimmed) == 0.25)
         #expect(ScreencastAudioBuffers.dropping(frames: 1_024, from: buffer, at: .zero) == nil)
+    }
+
+    @Test("Converting stereo to mono mixes both channels, so a microphone on the second input is kept")
+    func downmix() throws {
+        let mono = try #require(ScreencastAudioBuffers.defaultFormat(channels: 1))
+        let rightOnly = ScreencastSamples.audio(at: 0, channelValues: [0, 0.5])
+        let converted = try #require(ScreencastAudioConformer().conform(rightOnly, to: mono))
+        #expect(ScreencastSamples.peak(of: converted) > 0.2)
+        let leftOnly = ScreencastSamples.audio(at: 0, channelValues: [0.5, 0])
+        #expect(ScreencastSamples.peak(of: try #require(ScreencastAudioConformer().conform(leftOnly, to: mono))) > 0.2)
+    }
+
+    @Test("More than two channels with no layout can't be converted, and nothing crashes; with a layout they can")
+    func multichannel() throws {
+        let mono = try #require(ScreencastAudioBuffers.defaultFormat(channels: 1))
+        let noLayout = ScreencastSamples.audio(at: 0, channelValues: [0.5, 0.5, 0.5, 0.5])
+        let noLayoutFormat = try #require(CMSampleBufferGetFormatDescription(noLayout))
+        #expect(!ScreencastAudioBuffers.canConvert(noLayoutFormat))
+        #expect(ScreencastAudioConformer().conform(noLayout, to: mono) == nil)
+        #expect(ScreencastAudioBuffers.silence(frames: 10, format: noLayoutFormat, at: .zero) == nil)
+
+        let withLayout = ScreencastSamples.audio(at: 0, channelValues: [0.5, 0.5, 0.5, 0.5], discreteLayout: true)
+        #expect(ScreencastAudioBuffers.canConvert(try #require(CMSampleBufferGetFormatDescription(withLayout))))
+        let converted = try #require(ScreencastAudioConformer().conform(withLayout, to: mono))
+        #expect(CMSampleBufferGetNumSamples(converted) == ScreencastSamples.audioFrames)
     }
 
     @Test("The meter reads silence as 0, loud speech as 1, and quiet speech in between")

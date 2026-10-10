@@ -100,6 +100,16 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         return frame
     }
 
+    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? {
+        // Window numbers and owners only; no window's name is read.
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        return Set(list.compactMap { info in
+            (info[kCGWindowOwnerPID as String] as? pid_t) == processID ? info[kCGWindowNumber as String] as? CGWindowID : nil
+        })
+    }
+
     func ownVisibleWindows() -> Set<CGWindowID> {
         Set(NSApplication.shared.windows.filter { $0.isVisible && $0.windowNumber > 0 }.map { CGWindowID($0.windowNumber) })
     }
@@ -143,12 +153,8 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                 excludingApplications: source.applications.filter { $0.processID == excludedProcess },
                 exceptingWindows: source.windows.filter { exceptingWindows.contains($0.windowID) }
             )
-        case .applications(_, let processes, let exceptingWindows):
-            return SCContentFilter(
-                display: display,
-                including: source.applications.filter { processes.contains($0.processID) },
-                exceptingWindows: source.windows.filter { exceptingWindows.contains($0.windowID) }
-            )
+        case .windows(_, let windows):
+            return SCContentFilter(display: display, including: source.windows.filter { windows.contains($0.windowID) })
         }
     }
 
@@ -317,6 +323,8 @@ final class InertScreencastCaptureSystem: ScreencastCaptureSystem {
     }
 
     func windowFrame(_ id: CGWindowID) -> CGRect? { nil }
+
+    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
 
     func ownVisibleWindows() -> Set<CGWindowID> { [] }
 }

@@ -217,6 +217,32 @@ struct ScreencastWriterCoreTests {
         #expect(near(core.writtenAudio(for: .microphone), 4))
     }
 
+    @Test("A stereo microphone heard after the padding chose mono keeps both channels, mixed")
+    func stereoMicrophoneAfterPadding() {
+        let (core, sink) = makeCore(audio: [.microphone])
+        CaptureFeed(video: 100...104).run(core, from: 100, to: 102)
+        var host = 102.0
+        while host < 104 {
+            // Only the second input has the voice.
+            core.appendAudio(ScreencastSamples.audio(at: host, channelValues: [0, 0.5]), from: .microphone)
+            host += ScreencastSamples.audioBufferSeconds
+        }
+        CaptureFeed(video: 100...104).run(core, from: 102, to: 104)
+        core.finish(at: 104)
+        #expect(near(sink.sound(.microphone, from: 2, to: 4), 2, within: 0.01))
+    }
+
+    @Test("A sound in a format no converter can take is dropped, and its track stays padded")
+    func unconvertibleSound() {
+        let (core, sink) = makeCore(audio: [.microphone])
+        CaptureFeed(video: 100...103).run(core, from: 100, to: 100.5)
+        core.appendAudio(ScreencastSamples.audio(at: 100.4, channelValues: [0.5, 0.5, 0.5, 0.5]), from: .microphone)
+        CaptureFeed(video: 100...103).run(core, from: 100.5, to: 103)
+        core.finish(at: 103)
+        #expect(sink.audio(.microphone).allSatisfy { $0.isSilent && $0.channels == 1 })
+        #expect(near(core.writtenAudio(for: .microphone), 3))
+    }
+
     @Test("A track keeps its first sound's format when that came first")
     func firstSoundSetsTheFormat() {
         let (core, sink) = makeCore(audio: [.systemAudio])

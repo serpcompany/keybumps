@@ -66,4 +66,14 @@ protocol ScreencastCaptureSystem: AnyObject {
 
     /// The window numbers of Keybumps's visible windows, to notice when one opens or closes.
     func ownVisibleWindows() -> Set<CGWindowID>
+
+    /// The window numbers of a process's windows on screen now, read cheaply many times a second
+    /// to notice a recorded app opening a menu or sheet; nil when they can't be read.
+    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>?
+}
+
+extension ScreencastCaptureSystem {
+    /// A capture system that can't tell: window recordings then pick up an app's new windows only
+    /// when something else rebuilds the filter.
+    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
 }

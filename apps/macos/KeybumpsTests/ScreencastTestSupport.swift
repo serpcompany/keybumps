@@ -67,6 +67,43 @@ enum ScreencastSamples {
         return sample!
     }
 
+    /// Non-interleaved float PCM with a value per channel, built without `AVAudioFormat`, so any
+    /// channel count works, with or without a layout (`discreteLayout`).
+    static func audio(at host: Double, frames: Int = audioFrames, channelValues: [Float], discreteLayout: Bool = false) -> CMSampleBuffer {
+        let channels = channelValues.count
+        var description = AudioStreamBasicDescription(
+            mSampleRate: sampleRate, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
+            mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4, mChannelsPerFrame: UInt32(channels),
+            mBitsPerChannel: 32, mReserved: 0
+        )
+        var layout = AudioChannelLayout()
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels)
+        var format: CMAudioFormatDescription?
+        if discreteLayout {
+            CMAudioFormatDescriptionCreate(
+                allocator: nil, asbd: &description, layoutSize: MemoryLayout<AudioChannelLayout>.size, layout: &layout,
+                magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format
+            )
+        } else {
+            CMAudioFormatDescriptionCreate(
+                allocator: nil, asbd: &description, layoutSize: 0, layout: nil,
+                magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format
+            )
+        }
+        let list = AudioBufferList.allocate(maximumBuffers: channels)
+        defer {
+            for buffer in list { buffer.mData?.deallocate() }
+            free(list.unsafeMutablePointer)
+        }
+        for (index, value) in channelValues.enumerated() {
+            let samples = UnsafeMutablePointer<Float>.allocate(capacity: frames)
+            samples.initialize(repeating: value, count: frames)
+            list[index] = AudioBuffer(mNumberChannels: 1, mDataByteSize: UInt32(frames * 4), mData: samples)
+        }
+        return ScreencastAudioBuffers.sampleBuffer(frames: frames, format: format!, at: time(host), list: list.unsafePointer)!
+    }
+
     /// Float PCM in any layout.
     static func pcmFormat(channels: Int, sampleRate rate: Double, interleaved: Bool) -> CMAudioFormatDescription {
         let bytesPerFrame = UInt32(interleaved ? 4 * channels : 4)
@@ -248,8 +285,10 @@ final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
     let onFailure: @Sendable () -> Void
     var finishDuration = 5.0
     var finishFailed = false
-    /// Holds `cancel()` until `releaseCancel()`, on the main actor.
+    /// Holds `cancel()` until `releaseCancel()`, and `finish(at:)` until `releaseFinish()`.
     var holdsCancel = false
+    var holdsFinish = false
+    private var heldFinish: CheckedContinuation<Void, Never>?
     private var heldCancel: CheckedContinuation<Void, Never>?
     private let lock = NSLock()
     private var recorded: [Call] = []
@@ -285,7 +324,20 @@ final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
 
     func finish(at host: Double) async -> ScreencastWriterResult {
         record(.finish(host))
+        if holdsFinish {
+            await withCheckedContinuation { continuation in lock.withLock { heldFinish = continuation } }
+        }
         return ScreencastWriterResult(fileURL: fileURL, duration: finishDuration, failed: finishFailed)
+    }
+
+    var isHoldingFinish: Bool { lock.withLock { heldFinish != nil } }
+
+    func releaseFinish() {
+        let held = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { heldFinish = nil }
+            return heldFinish
+        }
+        held?.resume()
     }
 
     var isHoldingCancel: Bool { lock.withLock { heldCancel != nil } }
@@ -499,6 +551,11 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
 
     func ownVisibleWindows() -> Set<CGWindowID> {
         ownWindows
+    }
+
+    /// From the screen as it is, like `CGWindowList`.
+    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? {
+        Set(screen.windows.filter { $0.processID == processID && $0.isOnScreen }.map(\.id))
     }
 }
 
