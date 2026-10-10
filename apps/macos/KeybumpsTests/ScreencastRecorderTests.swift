@@ -247,6 +247,43 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("A microphone that can't start costs only the microphone: the Mac's sound still records")
+    func microphoneWontStart() async throws {
+        defer { captures.remove() }
+        system.microphoneStartError = .captureFailed
+        let recorder = makeRecorder()
+        try await start(recorder)
+        #expect(recorder.state == .recording)
+        #expect(recorder.microphone == .failed && recorder.systemAudio == .on)
+        #expect(system.audioStreams.map { $0.kind } == [
+            .audio(ScreencastAudio(microphone: true, systemAudio: true)),
+            .audio(ScreencastAudio(microphone: false, systemAudio: true))
+        ])
+        #expect(system.audioStreams.last?.isRunning == true)
+        #expect(writers.writers.first?.audioSources == [.microphone, .systemAudio], "the microphone's track stays, silent")
+    }
+
+    @available(macOS 15, *)
+    @Test("By default captures go to Keybumps's captures folder, in this run's own folder under the unit-test host")
+    func defaultCapturesFolder() async throws {
+        let recorder = makeRecorder()
+        try await recorder.start(target: .display(1), audio: .none)
+        let captures = ProductPaths.keybumps().captures.standardizedFileURL.path
+        let file = try #require(writers.writers.first?.fileURL.standardizedFileURL.path)
+        #expect(captures.hasSuffix("/Documents/Keybumps/captures"))
+        #expect(captures.hasPrefix(UnitTestHost.dataDirectory.standardizedFileURL.path))
+        #expect(file.hasPrefix(captures + "/"))
+        await recorder.discard()
+    }
+
+    @Test("The microphone prompt names Dictation and Screencast, and says a screencast stays on this Mac")
+    func microphoneUsageDescription() throws {
+        let text = try #require(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") as? String)
+        #expect(text.contains("dictate") && text.contains("screencast"))
+        #expect(text.contains("stays on this Mac unless you choose to send it"))
+    }
+
+    @available(macOS 15, *)
     @Test("Calls in the wrong state are refused or do nothing")
     func wrongState() async throws {
         defer { captures.remove() }

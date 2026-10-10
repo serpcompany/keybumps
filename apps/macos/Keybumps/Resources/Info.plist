@@ -35,7 +35,7 @@
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 SERP. All rights reserved.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Keybumps records audio only while Dictation is visibly active and transcribes it on this Mac.</string>
+    <string>Keybumps uses the microphone only while you dictate or record a screencast. Dictation is transcribed on this Mac, and a screencast stays on this Mac unless you choose to send it.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Keybumps uses Apple's on-device speech recognition for Dictation.</string>
     <key>SUAutomaticallyUpdate</key>

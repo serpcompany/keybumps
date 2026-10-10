@@ -313,6 +313,8 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
     var contentError: ScreencastFailure?
     var videoStartError: ScreencastFailure?
     var audioStartError: ScreencastFailure?
+    /// Fails a sound stream only while it asks for the microphone, as when Microphone access is off.
+    var microphoneStartError: ScreencastFailure?
     var windowFrames: [CGWindowID: CGRect] = [:]
     var ownWindows: Set<CGWindowID> = []
     /// Video streams made from now on hold their start until released.
@@ -346,7 +348,7 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
 
     func makeAudioStream(audio: ScreencastAudio, content: ScreencastContent, handler: ScreencastSampleHandler) throws -> any ScreencastStream {
         let stream = FakeStream(kind: .audio(audio), handler: handler)
-        stream.startError = audioStartError
+        stream.startError = audio.microphone ? (microphoneStartError ?? audioStartError) : audioStartError
         audioStreams.append(stream)
         return stream
     }

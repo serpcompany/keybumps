@@ -84,14 +84,14 @@ final class ScreencastRecorder {
 
     // MARK: Starting
 
-    /// Starts recording `target` with `audio` into a new `<timestamp>` folder in `capturesFolder`,
-    /// once every stream is running. Throws a `ScreencastFailure` (and the state becomes
-    /// `.failed`), `ScreencastRecorderError.alreadyRecording`, or `CancellationError` when
-    /// `discard()` cancelled it.
+    /// Starts recording `target` with `audio` into a new `<timestamp>` folder in `capturesFolder`
+    /// (`~/Documents/Keybumps/captures/` by default), once every stream is running. Throws a
+    /// `ScreencastFailure` (and the state becomes `.failed`), `ScreencastRecorderError.alreadyRecording`,
+    /// or `CancellationError` when `discard()` cancelled it.
     func start(
         target: ScreencastTarget,
         audio: ScreencastAudio,
-        capturesFolder: URL,
+        capturesFolder: URL = ProductPaths.keybumps().captures,
         options: ScreencastOptions = ScreencastOptions()
     ) async throws {
         switch state {
@@ -125,15 +125,7 @@ final class ScreencastRecorder {
             if !audio.sources.isEmpty {
                 // Started before the picture, so a microphone that's slow to start has warmed up by
                 // the first frame; anything it hears before that is trimmed.
-                do {
-                    let audioStream = try system.makeAudioStream(audio: audio, content: content, handler: audioHandler(session: session))
-                    session.audioStream = audioStream
-                    try await audioStream.start()
-                } catch {
-                    // The video matters more than the sound: record on without it.
-                    session.audioFailed = true
-                    logger.error("screencast audio stream failed category=\(Self.category(of: error), privacy: .public)")
-                }
+                await startAudio(audio, for: session, content: content)
                 try ensureCurrent(generation)
             }
             for (index, stream) in session.streams.enumerated() {
@@ -156,8 +148,8 @@ final class ScreencastRecorder {
                 options: [.userInitiated, .idleSystemSleepDisabled],
                 reason: "Recording a screencast"
             )
-            microphone = audio.microphone ? (session.audioFailed ? .failed : .on) : .notRecorded
-            systemAudio = audio.systemAudio ? (session.audioFailed ? .failed : .on) : .notRecorded
+            microphone = audio.microphone ? (session.failedAudio.contains(.microphone) ? .failed : .on) : .notRecorded
+            systemAudio = audio.systemAudio ? (session.failedAudio.contains(.systemAudio) ? .failed : .on) : .notRecorded
             session.router.setMetering(microphone == .on)
             state = .recording
             startTicking()
@@ -177,6 +169,28 @@ final class ScreencastRecorder {
             logger.error("screencast start failed category=\(failure.rawValue, privacy: .public)")
             throw failure
         }
+    }
+
+    /// Starts the sound stream. A microphone that can't start (no Microphone access, no device)
+    /// costs only the microphone: the Mac's sound is tried again on its own. The video matters
+    /// more than either, so it records on without them; their tracks are silent.
+    private func startAudio(_ audio: ScreencastAudio, for session: Session, content: ScreencastContent) async {
+        var attempt = audio
+        while !attempt.sources.isEmpty {
+            do {
+                let stream = try system.makeAudioStream(audio: attempt, content: content, handler: audioHandler(session: session))
+                session.audioStream = stream
+                try await stream.start()
+                return
+            } catch {
+                session.audioStream = nil
+                logger.error("screencast audio stream failed microphone=\(attempt.microphone, privacy: .public) category=\(Self.category(of: error), privacy: .public)")
+                guard attempt.microphone, attempt.systemAudio else { break }
+                session.failedAudio.insert(.microphone)
+                attempt.microphone = false
+            }
+        }
+        session.failedAudio.formUnion(attempt.sources)
     }
 
     /// The streams a target needs, one per display, with what each shows and reads.
@@ -567,7 +581,7 @@ final class ScreencastRecorder {
     /// The sound stream stopped: the recording goes on, its tracks silent from here.
     private func audioStreamStopped(generation: Int) {
         guard generation == self.generation, let session, state.isActive else { return }
-        session.audioFailed = true
+        session.failedAudio.formUnion(session.audio.sources)
         if microphone != .notRecorded { microphone = .failed }
         if systemAudio != .notRecorded { systemAudio = .failed }
         session.router.setMetering(false)
@@ -676,7 +690,7 @@ extension ScreencastRecorder {
         var streams: [StreamPlan]
         var content: ScreencastContent
         var audioStream: (any ScreencastStream)?
-        var audioFailed = false
+        var failedAudio: Set<ScreencastAudioSource> = []
         var folder: URL?
         var startedAt: Date?
         var timeline = ScreencastTimeline()
