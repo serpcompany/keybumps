@@ -191,6 +191,14 @@ _Avoid_: Translation history, favorites, phrasebook
 Translation's My language and Other language, never the same: text in my language is translated into the other, and text in any other language into mine. Dictation's Translate uses it while Translation is on, and English and Japanese otherwise.
 _Avoid_: Source and target (one translation's languages), target language setting
 
+**Keystrokes**:
+Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display. It ships off, and needs Input Monitoring. It shows only presses with ⌘, ⌃, or ⌥ unless Show is All keys, and nothing while you type a password. Its Show & Hide Keystrokes shortcut hides the keys until it's pressed again.
+_Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
+
+**Key display**:
+The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, and shows only shortcuts if any holder asks for that. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+_Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
+
 ### Licensing
 
 **License Check**:
