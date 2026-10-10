@@ -71,6 +71,17 @@ struct KeyModifiers: OptionSet, Hashable, Sendable {
         self = modifiers
     }
 
+    /// From the Cocoa mask the symbolic hotkeys store (`NSEvent.ModifierFlags`).
+    init(cocoa mask: Int) {
+        let flags = NSEvent.ModifierFlags(rawValue: UInt(truncatingIfNeeded: mask))
+        var modifiers: KeyModifiers = []
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        if flags.contains(.command) { modifiers.insert(.command) }
+        self = modifiers
+    }
+
     /// The Carbon mask a `ShortcutBinding` stores; Caps Lock isn't part of a shortcut.
     var carbonFlags: UInt32 {
         var flags = 0
@@ -99,29 +110,65 @@ protocol KeyPressMonitoring: AnyObject {
 /// - nothing Keybumps posted itself;
 /// - never a screenshot shortcut (`isScreenshotShortcut`), which `KeyDisplay` answers by clearing
 ///   the screen instead;
-/// - with Shortcuts only, a press only when it's a shortcut (`KeyPress.isShortcut`). Plain typing,
-///   ⇧ alone, and ⌥ with a key that types a character never show then.
+/// - with Shortcuts only, a press only when it's a shortcut (`KeyPress.isShortcut`), or a
+///   Keybumps shortcut that's registered now, which types nothing whatever its keys, such as
+///   Dictation's ⌥Space. Plain typing, ⇧ alone, and ⌥ with a key that types a character never
+///   show then.
 enum KeystrokeFilter {
-    static func shows(_ press: KeyPress, keys: KeyDisplayConfiguration.Keys, secureInput: Bool) -> Bool {
+    static func shows(_ press: KeyPress, keys: KeyDisplayConfiguration.Keys, secureInput: Bool, isKeybumpsShortcut: Bool = false) -> Bool {
         guard !secureInput, !press.isSynthetic else { return false }
         switch keys {
-        case .shortcutsOnly: return press.isShortcut
+        case .shortcutsOnly: return press.isShortcut || isKeybumpsShortcut
         case .allKeys: return true
         }
     }
 
-    /// macOS's screenshot shortcuts, by key code so they match on any layout: ⇧⌘3, ⇧⌘4, ⇧⌘5, and
-    /// ⇧⌘6 (the Touch Bar), and each with ⌃, which copies the shot instead of saving it.
-    static let systemScreenshotKeys: Set<Int> = [kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6]
+    /// A key and the modifiers that make it a screenshot shortcut.
+    struct ScreenshotKey: Hashable, Sendable {
+        let keyCode: UInt16
+        let modifiers: KeyModifiers
+    }
 
-    /// Whether `press` takes a screenshot: one of macOS's (`systemScreenshotKeys`), or one of
-    /// `keybumps`, Screenshot Tools' hotkeys as they're set now. Caps Lock doesn't matter.
-    static func isScreenshotShortcut(_ press: KeyPress, keybumps: [ShortcutBinding] = []) -> Bool {
-        let modifiers = press.modifiers.subtracting(.capsLock)
-        if systemScreenshotKeys.contains(Int(press.keyCode)),
-           modifiers == [.shift, .command] || modifiers == [.control, .shift, .command] {
-            return true
+    /// macOS's screenshot shortcuts by their symbolic hotkey IDs, with their defaults, by key code so
+    /// they match on any layout: save (⇧⌘3) and copy (⌃⇧⌘3) the screen, save (⇧⌘4) and copy (⌃⇧⌘4)
+    /// an area, and the Screenshot toolbar (⇧⌘5).
+    static let systemScreenshotDefaults: [(id: String, key: ScreenshotKey)] = [
+        ("28", ScreenshotKey(keyCode: UInt16(kVK_ANSI_3), modifiers: [.shift, .command])),
+        ("29", ScreenshotKey(keyCode: UInt16(kVK_ANSI_3), modifiers: [.control, .shift, .command])),
+        ("30", ScreenshotKey(keyCode: UInt16(kVK_ANSI_4), modifiers: [.shift, .command])),
+        ("31", ScreenshotKey(keyCode: UInt16(kVK_ANSI_4), modifiers: [.control, .shift, .command])),
+        ("184", ScreenshotKey(keyCode: UInt16(kVK_ANSI_5), modifiers: [.shift, .command])),
+    ]
+
+    /// The Touch Bar's screenshot shortcuts, ⇧⌘6 and ⌃⇧⌘6, which aren't read from the symbolic hotkeys.
+    static let touchBarScreenshotKeys: [ScreenshotKey] = [
+        ScreenshotKey(keyCode: UInt16(kVK_ANSI_6), modifiers: [.shift, .command]),
+        ScreenshotKey(keyCode: UInt16(kVK_ANSI_6), modifiers: [.control, .shift, .command]),
+    ]
+
+    /// macOS's screenshot shortcuts as the person has them: each in `systemScreenshotDefaults` as
+    /// set in `com.apple.symbolichotkeys` (none if turned off, its default if it isn't listed), or
+    /// every default when they can't be read; and the Touch Bar's. Only read, never written.
+    static func systemScreenshotKeys(symbolicHotKeys: [String: Any]?) -> [ScreenshotKey] {
+        let keys = systemScreenshotDefaults.compactMap { id, key -> ScreenshotKey? in
+            guard let symbolicHotKeys, let entry = symbolicHotKeys[id] as? [String: Any] else { return key }
+            guard (entry["enabled"] as? NSNumber)?.boolValue ?? true else { return nil }
+            guard let parameters = (entry["value"] as? [String: Any])?["parameters"] as? [Int], parameters.count >= 3,
+                  let keyCode = UInt16(exactly: parameters[1]), keyCode != UInt16.max else { return nil }
+            return ScreenshotKey(keyCode: keyCode, modifiers: KeyModifiers(cocoa: parameters[2]))
         }
+        return keys + touchBarScreenshotKeys
+    }
+
+    /// Whether `press` takes a screenshot: one of `system` (`systemScreenshotKeys`), or one of
+    /// `keybumps`, Screenshot Tools' hotkeys while they're registered. Caps Lock doesn't matter.
+    static func isScreenshotShortcut(
+        _ press: KeyPress,
+        system: [ScreenshotKey] = systemScreenshotKeys(symbolicHotKeys: nil),
+        keybumps: [ShortcutBinding] = []
+    ) -> Bool {
+        let modifiers = press.modifiers.subtracting(.capsLock)
+        if system.contains(ScreenshotKey(keyCode: press.keyCode, modifiers: modifiers)) { return true }
         return keybumps.contains { $0.keyCode == UInt32(press.keyCode) && $0.modifiers == modifiers.carbonFlags }
     }
 

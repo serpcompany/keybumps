@@ -374,14 +374,14 @@ final class AppModel {
         keyDisplay.paletteKeyNames = { [commandPalette] in
             commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
         }
-        // A screenshot never shows the keys that took it: macOS's shortcuts, and Screenshot Tools'
-        // hotkeys as they're set now, which also clear the display just before they capture.
-        keyDisplay.isScreenshotShortcut = { [preferences] press in
-            KeystrokeFilter.isScreenshotShortcut(
-                press,
-                keybumps: ScreenshotToolsModule.captureShortcuts.compactMap { preferences.capabilityShortcut(for: $0.shortcut) }
-            )
+        // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
+        // only), and Screenshot Tools' hotkeys while they're registered, which also clear it just
+        // before they capture.
+        keyDisplay.keybumpsScreenshotBindings = { [shortcuts] in
+            let registered = shortcuts.registeredBindings
+            return ScreenshotToolsModule.captureShortcuts.compactMap { registered[$0.shortcut.ownerID] }
         }
+        keyDisplay.symbolicHotKeys = { [symbolicHotKeys] in try? symbolicHotKeys.readSymbolicHotKeys() }
         screenshotModule.willCapture = { [keyDisplay] in keyDisplay.pauseForScreenshot() }
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
