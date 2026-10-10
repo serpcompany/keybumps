@@ -203,31 +203,52 @@ struct ScreencastCaptureFilterTests {
         #expect(ScreencastCaptureFilter.windowPlan(window: 77, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content()) == nil)
     }
 
-    @Test("A titled Save sheet within the window and in front of it shows; another document window doesn't")
+    @Test("A titled window laid out as the window's sheet shows, a tall one too; a window merely inside it, behind it, or of unknown place doesn't")
     func titledSheets() throws {
+        // The window runs from (100, 100) to (900, 700): centred on x 500.
         let target = Screens.with(Screens.browserWindow, order: 3)
-        // A Save sheet: titled, at the normal layer, within the window, in front of it.
-        let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 122, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
-        // The same shape, but behind the window: another document window, hidden by it.
-        let behind = ScreencastContent.Window(id: 17, frame: CGRect(x: 250, y: 122, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 5)
-        // In front, overlapping but not within it: another document window.
+        func titled(_ id: CGWindowID, _ frame: CGRect, order: Int?) -> ScreencastContent.Window {
+            ScreencastContent.Window(id: id, frame: frame, layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: order)
+        }
+        let sheet = titled(16, CGRect(x: 250, y: 122, width: 500, height: 300), order: 1)
+        let tallSheet = titled(18, CGRect(x: 300, y: 128, width: 400, height: 900), order: 2)
+        let behind = titled(17, CGRect(x: 250, y: 122, width: 500, height: 300), order: 5)
+        let inside = titled(19, CGRect(x: 600, y: 300, width: 200, height: 150), order: 0)
+        let centredLow = titled(20, CGRect(x: 400, y: 400, width: 200, height: 150), order: 0)
+        let unknownPlace = titled(21, CGRect(x: 250, y: 122, width: 500, height: 300), order: nil)
         let other = Screens.with(Screens.browserOtherWindow, order: 0)
-        let content = Screens.content(windows: [target, Screens.browserSheet, other, Screens.browserMenu, sheet, behind, Screens.controlBar, Screens.drawingLayer])
+        let content = Screens.content(windows: [target, Screens.browserSheet, other, Screens.browserMenu, sheet, tallSheet, behind, inside, centredLow, unknownPlace, Screens.controlBar])
         let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 16]))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 16, 18]))
     }
 
-    @Test("A sandboxed app's Open or Save panel, shown by a system service over the window, shows; nothing else of other apps does")
-    func panelService() throws {
+    @Test("A sheet below an expanded or labelled toolbar, or a tab bar, still counts; one much lower doesn't", arguments: [
+        (78.0, true), (120.0, true), (150.0, true), (200.0, false)
+    ] as [(Double, Bool)])
+    func sheetBelowAToolbar(below: Double, isSheet: Bool) {
+        let window = Screens.with(Screens.browserWindow, order: 3)
+        let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 100 + below, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
+        #expect(ScreencastCaptureFilter.isSheet(sheet, on: window) == isSheet)
+    }
+
+    @Test("Unknown order counts as behind, so a window out of sight names no sheet")
+    func unknownOrderIsBehind() {
+        let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 122, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
+        #expect(ScreencastCaptureFilter.isSheet(sheet, on: Screens.with(Screens.browserWindow, order: 3)))
+        #expect(!ScreencastCaptureFilter.isSheet(sheet, on: Screens.with(Screens.browserWindow, order: .some(nil))), "the window's place unknown")
+        #expect(!ScreencastCaptureFilter.isSheet(Screens.with(sheet, order: .some(nil)), on: Screens.with(Screens.browserWindow, order: 3)))
+    }
+
+    @Test("A sandboxed app's Open or Save panel, drawn by a system service, is never named, nor any other app's window or Keybumps's notice")
+    func panelServiceNeverNamed() throws {
         let target = Screens.with(Screens.browserWindow, order: 4)
-        let service: pid_t = 777
-        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: service, isUntitled: false, isOnScreen: true, order: 1, isPanelService: true)
-        let farPanel = ScreencastContent.Window(id: 51, frame: CGRect(x: 1000, y: 700, width: 300, height: 200), layer: 0, processID: service, isUntitled: false, isOnScreen: true, order: 2, isPanelService: true)
+        // Shaped and placed exactly like a Save sheet on the window, but another process's.
+        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true, order: 1)
         let otherApp = ScreencastContent.Window(id: 52, frame: CGRect(x: 300, y: 300, width: 300, height: 200), layer: 0, processID: Screens.otherApp, isUntitled: true, isOnScreen: true, order: 0)
         let notice = ScreencastContent.Window(id: 53, frame: CGRect(x: 300, y: 100, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true, order: 0)
-        let content = Screens.content(windows: [target, Screens.browserSheet, Screens.browserMenu, panel, farPanel, otherApp, notice, Screens.drawingLayer])
+        let content = Screens.content(windows: [target, Screens.browserSheet, Screens.browserMenu, panel, otherApp, notice, Screens.drawingLayer])
         let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31, 50]), "never another app's window, nor Keybumps's notice")
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31]))
     }
 
     @Test("A registered overlay is named whether it's on screen or not, so it shows the moment it's ordered in")

@@ -64,6 +64,7 @@ final class ScreencastRecorder {
     @ObservationIgnored private let tickInterval: TimeInterval?
     @ObservationIgnored private let followInterval: TimeInterval
     @ObservationIgnored private let retryDelays: [TimeInterval]
+    @ObservationIgnored private let slowRetryDelay: TimeInterval
     @ObservationIgnored private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
     @ObservationIgnored private var session: Session?
@@ -86,6 +87,7 @@ final class ScreencastRecorder {
     ///     nil for no timers (tests call `tick()` and `followTick()`).
     ///   - followInterval: How often a window recording checks where its window is.
     ///   - retryDelays: The waits before trying a failed stream update again, one per attempt.
+    ///   - slowRetryDelay: After those, how often a filter rebuild that keeps failing is tried.
     init(
         system: (any ScreencastCaptureSystem)? = nil,
         writers: any ScreencastWriterFactory = AVAssetScreencastWriterFactory(),
@@ -96,7 +98,8 @@ final class ScreencastRecorder {
         microphoneGranted: @escaping () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         tickInterval: TimeInterval? = 0.25,
         followInterval: TimeInterval = 1.0 / 20,
-        retryDelays: [TimeInterval] = [0.2, 0.5, 1]
+        retryDelays: [TimeInterval] = [0.2, 0.5, 1],
+        slowRetryDelay: TimeInterval = 5
     ) {
         self.system = system ?? ScreenCaptureKitCaptureSystem.current
         self.writers = writers
@@ -108,6 +111,7 @@ final class ScreencastRecorder {
         self.tickInterval = tickInterval
         self.followInterval = followInterval
         self.retryDelays = retryDelays
+        self.slowRetryDelay = slowRetryDelay
     }
 
     // MARK: Starting
@@ -449,7 +453,9 @@ final class ScreencastRecorder {
 
     /// Shows one of Keybumps's windows in the video, such as the drawing layer. The control bar,
     /// the picker's dimming, and every other Keybumps window stay out. Returns once the running
-    /// streams show it, or once a failed screen read has been tried again and given up on.
+    /// streams show it, or once a failing screen read's quick retries have given up. While a
+    /// rebuild keeps failing after those, it returns at once, and the next rebuild that succeeds
+    /// shows it: it never waits out the slow retry.
     ///
     /// Only the window registered here is recorded, not its child windows (a toolbar or popover
     /// it attaches): register each of those too. A window recording names every window it shows
@@ -471,12 +477,20 @@ final class ScreencastRecorder {
     // one queue per recording, so at most one `updateContentFilter` or `updateConfiguration` is in
     // flight. Requests made meanwhile are coalesced: one rebuild for all of them, and only the
     // window's latest frame. One that fails (the snapshot couldn't be read, ScreenCaptureKit
-    // refused the update) is tried again after each of `retryDelays`, through the same queue.
+    // refused the update) is tried again after each of `retryDelays`, through the same queue; a
+    // filter rebuild that still fails is then tried every `slowRetryDelay`, with one log line when
+    // it starts failing and one when it recovers. A crop waits for the window's next move instead.
 
     /// Rebuilds the filters, returning once a rebuild that began after this call is done, or its
-    /// last attempt failed.
+    /// last quick retry failed; it goes on being tried every `slowRetryDelay` after that. Called
+    /// while it's being tried slowly, it returns at once, and the next attempt that succeeds
+    /// applies the change.
     private func rebuildFilters(for session: Session) async {
         guard session.phase == .live else { return }
+        guard session.rebuildFailures <= retryDelays.count else {
+            session.needsFilterRebuild = true
+            return
+        }
         await withCheckedContinuation { continuation in
             session.rebuildWaiters.append(continuation)
             scheduleFilterRebuild(for: session)
@@ -503,30 +517,36 @@ final class ScreencastRecorder {
                 let waiters = session.rebuildWaiters
                 session.rebuildWaiters = []
                 let failure = await applyFilters(to: session)
-                if failure == nil || session.rebuildFailures >= retryDelays.count {
-                    if session.rebuildFailures > 0 {
-                        // One line for the whole burst of failures, however it ended.
-                        logger.error("screencast filter rebuild failed category=\(session.rebuildFailureCategory ?? "unknown", privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public) recovered=\(failure == nil, privacy: .public)")
-                    }
-                    if failure != nil {
-                        // Given up: the lists it read were never applied, so the next tick that
-                        // reads any windows at all asks again.
+                if let failure {
+                    if session.rebuildFailures == 0 { session.rebuildFailureCategory = failure }
+                    if session.rebuildFailures < retryDelays.count {
+                        // Its callers wait through the backoff for the next attempt.
+                        session.rebuildWaiters = waiters + session.rebuildWaiters
+                    } else {
+                        // Still failing after the quick retries: its callers go on, and it's tried
+                        // again slowly for as long as the recording runs. Said once.
+                        waiters.forEach { $0.resume() }
+                        if session.rebuildFailures == retryDelays.count {
+                            logger.error("screencast filter rebuild failing category=\(failure, privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public)")
+                        }
+                        // The lists it read were never applied.
                         session.queuedAppWindows = nil
                         session.queuedOwnWindows = nil
                     }
-                    session.rebuildFailures = 0
-                    session.rebuildFailureCategory = nil
-                    waiters.forEach { $0.resume() }
-                } else {
-                    // Its callers wait through the backoff for the next attempt.
-                    session.rebuildWaiters = waiters + session.rebuildWaiters
-                    if session.rebuildFailures == 0 { session.rebuildFailureCategory = failure }
+                    let delay = session.rebuildFailures < retryDelays.count ? retryDelays[session.rebuildFailures] : slowRetryDelay
                     session.awaitingRebuildRetry = true
-                    retry(after: retryDelays[session.rebuildFailures], in: session) { session in
+                    retry(after: delay, in: session) { session in
                         session.awaitingRebuildRetry = false
                         session.needsFilterRebuild = true
                     }
                     session.rebuildFailures += 1
+                } else {
+                    if session.rebuildFailures > 0 {
+                        logger.info("screencast filter rebuild recovered category=\(session.rebuildFailureCategory ?? "unknown", privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public)")
+                    }
+                    session.rebuildFailures = 0
+                    session.rebuildFailureCategory = nil
+                    waiters.forEach { $0.resume() }
                 }
             } else if let frame = session.pendingWindowFrame {
                 session.pendingWindowFrame = nil
@@ -704,11 +724,10 @@ final class ScreencastRecorder {
         runUpdates(for: session)
     }
 
-    /// The windows a window recording watches for: its app's on screen, and the panel services'
-    /// (a sandboxed app's Save panel belongs to one). Nil when they can't be read.
+    /// The windows a window recording watches for: its app's on screen, from one read of the
+    /// window server's list. Nil when they can't be read.
     private func watchedAppWindows(of session: Session) -> Set<CGWindowID>? {
-        guard let process = session.targetProcess, let appWindows = system.onScreenWindows(of: process) else { return nil }
-        return appWindows.union(system.onScreenPanelServiceWindows() ?? [])
+        session.targetProcess.flatMap { system.onScreenWindows(of: $0) }
     }
 
     func refreshElapsed() {

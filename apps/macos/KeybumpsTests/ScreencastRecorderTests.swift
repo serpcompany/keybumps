@@ -17,7 +17,11 @@ struct ScreencastRecorderTests {
     let startDate = Date(timeIntervalSince1970: 1_791_000_000)
 
     @available(macOS 15, *)
-    func makeRecorder(microphoneGranted: Bool = true, retryDelays: [TimeInterval] = [0.005, 0.005, 0.005]) -> ScreencastRecorder {
+    func makeRecorder(
+        microphoneGranted: Bool = true,
+        retryDelays: [TimeInterval] = [0.005, 0.005, 0.005],
+        slowRetryDelay: TimeInterval = 0.05
+    ) -> ScreencastRecorder {
         let clock = clock
         let startDate = startDate
         return ScreencastRecorder(
@@ -28,7 +32,8 @@ struct ScreencastRecorderTests {
             ownProcessID: Screens.ownProcess,
             microphoneGranted: { microphoneGranted },
             tickInterval: nil,
-            retryDelays: retryDelays
+            retryDelays: retryDelays,
+            slowRetryDelay: slowRetryDelay
         )
     }
 
@@ -802,7 +807,8 @@ struct ScreencastRecorderTests {
         system.contentFailures = 0
         await recorder.removeOverlayWindow(31)
         await recorder.includeOverlayWindow(31)
-        #expect(system.videoStreams[0].plans == [.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])])
+        #expect(await eventually { system.videoStreams[0].plans == [.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])] },
+                "the slow retry's next attempt applies it")
     }
 
     @available(macOS 15, *)
@@ -1078,17 +1084,66 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("A sandboxed app's Save panel, shown by a system service, joins the recording at the next tick")
-    func savePanelJoins() async throws {
+    @Test("Another app's Open panel over the recorded window, such as TextEdit's after switching to it, is never named")
+    func otherAppsPanelNeverNamed() async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
         try await start(recorder, .window(10))
         recorder.followTick()
         #expect(await eventually { system.contentReads == 2 })
-        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true, isPanelService: true)
+        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true, order: 0)
         system.screen = Screens.content(windows: Screens.content().windows + [panel])
         recorder.followTick()
-        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 50]) })
+        for _ in 0..<20 { await Task.yield() }
+        #expect(system.contentReads == 2, "another process's window isn't the recorded app's, so it asks for nothing")
+        // A rebuild for the app's own menu still leaves the panel out.
+        let menu = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [panel, menu])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("While a rebuild is retried slowly, adding or removing an overlay returns at once, and the next good rebuild applies it")
+    func overlayCallsDuringASlowRetry() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(slowRetryDelay: 0.5)
+        try await start(recorder)
+        system.contentFailures = 1_000
+        await recorder.includeOverlayWindow(31)
+        #expect(system.contentReads == 1 + 4, "the first call waited out the quick retries")
+
+        let started = Date()
+        await recorder.includeOverlayWindow(50)
+        await recorder.removeOverlayWindow(31)
+        #expect(Date().timeIntervalSince(started) < 0.1, "neither waits for the slow retry")
+        #expect(system.contentReads == 5, "nor reads the screen")
+        #expect(recorder.overlayWindows == [50])
+
+        let drawing = ScreencastContent.Window(id: 50, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [drawing])
+        system.contentFailures = 0
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [50]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("A rebuild that keeps failing goes on being tried every few seconds, not every tick, and recovers")
+    func persistentFailureSlowsDown() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(slowRetryDelay: 0.1)
+        try await start(recorder)
+        system.contentFailures = 1_000
+        await recorder.includeOverlayWindow(31)
+        #expect(system.contentReads == 1 + 4, "its caller went on after the quick retries")
+        let started = Date()
+        while Date().timeIntervalSince(started) < 0.35 {
+            recorder.tick()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        let slowReads = system.contentReads - 5
+        #expect(slowReads >= 2 && slowReads <= 4, "about one read every 0.1 s, not one per tick: \(slowReads)")
+        system.contentFailures = 0
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31]) })
     }
 
     @available(macOS 15, *)
@@ -1104,10 +1159,9 @@ struct ScreencastRecorderTests {
         system.screen = Screens.content(windows: Screens.content().windows + [menu])
         recorder.followTick()
         #expect(await eventually { system.contentReads == 6 && system.contentFailures == 0 }, "an attempt and three retries, all failed")
-        for _ in 0..<10 { await Task.yield() }
-        #expect(system.videoStreams[0].plans.isEmpty)
         recorder.followTick()
-        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) },
+                "the slow retry, or the next tick's, reads it")
     }
 
     @available(macOS 15, *)
@@ -1120,11 +1174,10 @@ struct ScreencastRecorderTests {
         #expect(videoKind(system.videoStreams.first)?.0 == .display(1, excludingProcess: nil, exceptingWindows: []))
         system.contentFailures = 4
         system.ownWindows = [40]
-        recorder.tick()
-        #expect(await eventually { system.contentReads == 5 && system.contentFailures == 0 })
-        for _ in 0..<10 { await Task.yield() }
-        // Keybumps is listed now, and the screen reads again.
+        // Keybumps is listed by the time the screen reads again.
         system.screen = Screens.content()
+        recorder.tick()
+        #expect(await eventually { system.contentReads >= 5 && system.contentFailures == 0 })
         recorder.tick()
         #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: []) },
                 "Keybumps's notice is left out from here")

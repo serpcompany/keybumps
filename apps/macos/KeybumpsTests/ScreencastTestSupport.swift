@@ -579,10 +579,6 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
         Set(screen.windows.filter { $0.processID == processID && $0.isOnScreen }.map(\.id))
     }
 
-    func onScreenPanelServiceWindows() -> Set<CGWindowID>? {
-        Set(screen.windows.filter { $0.isPanelService && $0.isOnScreen }.map(\.id))
-    }
-
     /// On screen or not; only a window gone from the screen's list is closed.
     func windowExists(_ id: CGWindowID) -> Bool? {
         screen.windows.contains { $0.id == id }
@@ -635,8 +631,7 @@ enum ScreencastScreens {
     static func with(_ window: ScreencastContent.Window, onScreen: Bool? = nil, frame: CGRect? = nil, order: Int?? = nil) -> ScreencastContent.Window {
         var changed = ScreencastContent.Window(
             id: window.id, frame: frame ?? window.frame, layer: window.layer, processID: window.processID,
-            isUntitled: window.isUntitled, isOnScreen: onScreen ?? window.isOnScreen, order: window.order,
-            isPanelService: window.isPanelService
+            isUntitled: window.isUntitled, isOnScreen: onScreen ?? window.isOnScreen, order: window.order
         )
         if let order { changed.order = order }
         return changed
