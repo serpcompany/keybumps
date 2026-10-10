@@ -121,8 +121,7 @@ final class ScreencastController {
     private(set) var phase: ScreencastPhase = .idle {
         didSet {
             guard phase != oldValue else { return }
-            onPhaseChange?(phase)
-            for (_, observer) in phaseObservers { observer(phase) }
+            announce(phase)
         }
     }
 
@@ -137,6 +136,9 @@ final class ScreencastController {
     @ObservationIgnored private var nextPhaseObservation = 0
     /// `addRestartObserver(_:)`'s observers, in the order they were added.
     @ObservationIgnored private var restartObservers: [() -> Void] = []
+    /// Phases entered while the observers are being told of an earlier one, told next, in order.
+    @ObservationIgnored private var unannouncedPhases: [ScreencastPhase] = []
+    @ObservationIgnored private var isAnnouncingPhase = false
     /// A video or screenshot was saved: the review panel takes it from here. A recording that
     /// ended early comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
@@ -221,6 +223,12 @@ final class ScreencastController {
     /// Calls `observer` with each phase as it's entered, after `onPhaseChange` and the observers
     /// added before it. The control bar, the overlays, and the review panel each add their own, so
     /// adding one never replaces another. Keep the observation to remove it.
+    ///
+    /// An observer may change the phase, or add or remove observers, while it's told. Every
+    /// observer is still told every phase once, in order: a phase entered meanwhile waits until the
+    /// current one has reached everyone, so the controller's own `phase` may already be ahead of the
+    /// one an observer is given. An observer removed meanwhile isn't told anything more, and one
+    /// added meanwhile starts with the next phase.
     @discardableResult
     func addPhaseObserver(_ observer: @escaping (ScreencastPhase) -> Void) -> ScreencastPhaseObservation {
         nextPhaseObservation += 1
@@ -237,6 +245,27 @@ final class ScreencastController {
     /// the overlays clear the drawing then (#449).
     func addRestartObserver(_ observer: @escaping () -> Void) {
         restartObservers.append(observer)
+    }
+
+    /// Tells `onPhaseChange` and the observers about `phase`, or, while they're being told about an
+    /// earlier one, once they've heard it (`addPhaseObserver(_:)`).
+    private func announce(_ phase: ScreencastPhase) {
+        unannouncedPhases.append(phase)
+        guard !isAnnouncingPhase else { return }
+        isAnnouncingPhase = true
+        defer { isAnnouncingPhase = false }
+        var rounds = 0
+        while !unannouncedPhases.isEmpty {
+            rounds += 1
+            assert(rounds < 100, "Screencast's phase observers keep changing the phase")
+            let next = unannouncedPhases.removeFirst()
+            onPhaseChange?(next)
+            for observation in phaseObservers.map(\.0) {
+                // Removed by an observer told before it: told nothing more.
+                guard let observer = phaseObservers.first(where: { $0.0 == observation })?.1 else { continue }
+                observer(next)
+            }
+        }
     }
 
     // MARK: Picking

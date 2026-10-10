@@ -736,7 +736,11 @@ final class SmokeUITests: XCTestCase {
     /// Turns Screencast on and starts a recording of a made-up screen, as Record would.
     private func launchScreencastRecording() {
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES"])
-        XCTAssertTrue(element("screencast.bar.stop").waitForExistence(timeout: 20))
+        // The bar shows as the recording starts, its buttons waiting until it records.
+        let pause = element("screencast.bar.pause")
+        XCTAssertTrue(pause.waitForExistence(timeout: 20))
+        let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: pause)
+        XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
     }
 
     /// Turns Screencast on and opens its review panel on a made-up `video` or `screenshot`.

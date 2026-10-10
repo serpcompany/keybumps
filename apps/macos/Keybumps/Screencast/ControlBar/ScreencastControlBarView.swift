@@ -81,7 +81,7 @@ private struct ScreencastBarStatus: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            ScreencastBarRecordingDot(isPaused: model.isPaused)
+            ScreencastBarRecordingDot(isLive: model.isLive, isPaused: model.isPaused)
             Text(model.timerText)
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
                 .foregroundStyle(model.isPaused ? Color.white.opacity(0.5) : Color.white)
@@ -97,13 +97,15 @@ private struct ScreencastBarStatus: View {
     }
 }
 
-/// Red and slowly pulsing while recording; dim and still while paused or with Reduce Motion.
+/// Red and slowly pulsing while recording; still while the recording starts or with Reduce Motion,
+/// and dim while paused.
 private struct ScreencastBarRecordingDot: View {
+    let isLive: Bool
     let isPaused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: isPaused || reduceMotion)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: !isLive || reduceMotion)) { context in
             Circle()
                 .fill(Color.red)
                 .frame(width: 8, height: 8)
@@ -115,7 +117,7 @@ private struct ScreencastBarRecordingDot: View {
 
     private func opacity(at date: Date) -> Double {
         if isPaused { return 0.35 }
-        if reduceMotion { return 1 }
+        if !isLive || reduceMotion { return 1 }
         let period = 1.6
         let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
         return 0.65 + 0.35 * cos(phase * 2 * .pi)
