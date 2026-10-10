@@ -37,6 +37,16 @@ struct CapabilityWiringSnapshotTests {
             Issue.record("Capability wiring changed. \(WiringRecorder.firstDifference(expected: expected, actual: actual))")
         }
     }
+
+    @Test("Added capabilities depend only on default ones, as the recorded combinations assume")
+    func addedCapabilitiesDependOnlyOnDefaults() {
+        for capability in Capability.allCases where !CapabilityCatalog.defaultCapabilities.contains(capability) {
+            let addedDependencies = Capability.allCases.filter {
+                capability.descriptor.dependencies.contains($0) && !CapabilityCatalog.defaultCapabilities.contains($0)
+            }
+            #expect(addedDependencies.isEmpty, "\(capability.rawValue) depends on \(WiringRecorder.list(addedDependencies.map(\.rawValue))), which aren't default capabilities. The wiring snapshot records each added capability with every combination of the default ones, but with another added one only when every default is on (#455). Extend recordedCombinations() before an added plugin depends on another.")
+        }
+    }
 }
 
 // MARK: - Snapshot model
