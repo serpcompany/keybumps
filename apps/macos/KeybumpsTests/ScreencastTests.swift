@@ -262,17 +262,61 @@ struct ScreencastTests {
         #expect(controller.phase == .idle, "Off, Start Screencast opens its page instead")
     }
 
-    @Test("A saved capture shows its videos to share, or its screenshots")
-    func filesShown() {
-        let folder = URL(fileURLWithPath: "/captures/1791000000", isDirectory: true)
-        let video = ScreencastVideo(
-            file: folder.appendingPathComponent("video-1.mov"), mixdown: folder.appendingPathComponent("video-1-mixdown.mp4"),
-            pixelWidth: 2, pixelHeight: 2, audioTracks: [.microphone, .systemAudio], duration: 1
-        )
-        let capture = ScreencastCapture(folder: folder, videos: [video], duration: 1, endedEarly: nil)
-        #expect(ScreencastModule.files(of: .video(capture)) == [folder.appendingPathComponent("video-1-mixdown.mp4")])
-        let screenshot = ScreencastScreenshot(folder: folder, images: [.init(file: folder.appendingPathComponent("screenshot-1.png"), pixelWidth: 2, pixelHeight: 2)])
-        #expect(ScreencastModule.files(of: .screenshot(screenshot)) == [folder.appendingPathComponent("screenshot-1.png")])
+    @available(macOS 15, *)
+    @Test("A saved capture opens the review panel, off screen here; turning Screencast off closes it, which saves")
+    func savedCaptureOpensTheReviewPanel() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastReview-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [.screencast, .clipboardHistory, .screenshotTools], missing: nil, root: root)
+        harness.model.start()
+        let module = Self.module(of: harness)
+        let folder = root.appendingPathComponent("captures/1791000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("screenshot-1.png")
+        try Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!.write(to: file)
+        let screenshot = ScreencastScreenshot(folder: folder, images: [.init(file: file, pixelWidth: 1, pixelHeight: 1)])
+
+        module.review.captureStarting()
+        module.review.captureFinished(.screenshot(screenshot))
+        try await Self.waitUntil { module.review.panel?.isShown == true }
+        let panel = try #require(module.review.panel)
+        let model = try #require(panel.model)
+        #expect(!panel.panel.isVisible, "never on screen under the unit-test host")
+        #expect(model.input == .screenshot(screenshot))
+        #expect(model.context == .none, "the unit-test host's reader reads nothing")
+        #expect(model.showsAddToScreenshots && model.canEdit, "Clipboard History and Screenshot Tools are on")
+
+        harness.model.setCapability(.screencast, enabled: false)
+        try await Self.waitUntil { !panel.isShown }
+        #expect(ScreencastReview.read(from: screenshot.metadataURL) != nil, "closing saved it")
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    @available(macOS 15, *)
+    @Test("Without Clipboard History or Screenshot Tools, the review panel offers no ⌘3 switch and no Edit")
+    func reviewPanelFollowsOtherPlugins() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastReviewOff-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
+        harness.model.start()
+        let module = Self.module(of: harness)
+        let folder = root.appendingPathComponent("captures/1791000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("screenshot-1.png")
+        try Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!.write(to: file)
+        module.review.captureFinished(.screenshot(ScreencastScreenshot(folder: folder, images: [.init(file: file, pixelWidth: 1, pixelHeight: 1)])))
+        try await Self.waitUntil { module.review.panel?.isShown == true }
+        let model = try #require(module.review.panel?.model)
+        #expect(!model.showsAddToScreenshots && !model.canEdit)
+        await module.review.panel?.close()
+    }
+
+    /// Lets the main actor run until `condition` holds, for two seconds at most.
+    private static func waitUntil(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(condition(), sourceLocation: sourceLocation)
     }
 
     private static func module(of harness: WiringHarness) -> ScreencastModule {

@@ -372,7 +372,8 @@ final class AppModel {
                 openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) },
                 menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screencast),
                 keyDisplay: keyDisplay,
-                seams: injectedScreencast
+                seams: injectedScreencast,
+                review: .app(clipboard: clipboard, screenshotTools: screenshotModule, preferences: preferences)
             ),
         ])
         commandPalette.tabContents = capabilities.paletteContents

@@ -22,6 +22,15 @@ struct UITestLaunchConfiguration: Equatable {
     static let enableCapabilitiesArgument = "-KBUITestEnableCapabilities"
     static let openScreencastPickerArgument = "-KBOpenScreencastPicker"
     static let screencastRecordingArgument = "-KBUITestScreencastRecording"
+    static let screencastReviewArgument = "-KBUITestScreencastReview"
+
+    /// The made-up capture `-KBUITestScreencastReview` opens Screencast's review panel on.
+    enum ScreencastReviewCapture: String, Equatable {
+        /// A short silent video.
+        case video
+        /// A PNG.
+        case screenshot
+    }
 
     /// The fixed license state a UI test starts in (`active` unless `-KBLicenseState` says otherwise).
     enum LicenseStateMode: String, Equatable {
@@ -61,6 +70,9 @@ struct UITestLaunchConfiguration: Equatable {
     /// Starts a Screencast recording of the first made-up screen at launch, with no countdown, so
     /// the control bar shows (Screencast must be on). It captures nothing.
     private(set) var startsScreencastRecording = false
+    /// Opens Screencast's review panel once, at launch, on a capture made up in the sandbox's
+    /// captures folder (Screencast must be on).
+    private(set) var screencastReview: ScreencastReviewCapture?
 
     var isUITesting: Bool { permissions != nil }
 
@@ -86,6 +98,8 @@ struct UITestLaunchConfiguration: Equatable {
         )
         opensScreencastPicker = Self.flag(Self.openScreencastPickerArgument, in: arguments)
         startsScreencastRecording = Self.flag(Self.screencastRecordingArgument, in: arguments)
+        screencastReview = Self.value(after: Self.screencastReviewArgument, in: arguments)
+            .flatMap(ScreencastReviewCapture.init(rawValue:))
     }
 
     /// Accepts both `-Flag` and `-Flag YES`, since Foundation's argument domain pairs every `-key` with a value.

@@ -35,19 +35,19 @@ extension CapabilityDescriptor {
 }
 
 /// What a composition gives Screencast in place of the screen, its windows, the countdown's clock,
-/// and Finder: the UI-test composition's made-up screens and inert recorder, or unit tests' fakes.
-/// Anything left nil is the app's own, which is inert under the unit-test host.
+/// and the app in front: the UI-test composition's made-up screens and inert recorder, or unit
+/// tests' fakes. Anything left nil is the app's own, which is inert under the unit-test host.
 struct ScreencastSeams {
     var captureSystem: (any ScreencastCaptureSystem)?
     var pickerSystem: (any ScreencastPickerSystem)?
     var presenter: (any ScreencastOverlayPresenting)?
     var screens: (@MainActor () -> ScreencastScreenLayout)?
     var sleep: ((TimeInterval) async throws -> Void)?
-    /// Shows a saved capture's files, until the review panel (#450) takes them.
-    var revealCapture: (@MainActor ([URL]) -> Void)?
     /// How long the control bar's Restart? and Discard? wait for an answer before going back as
     /// Keep; the UI-test composition makes it long, so a slow runner never sees one give up.
     var barConfirmationTimeout: Duration?
+    /// Reads the app in front as a capture starts, for the review panel's repository guess.
+    var contextReader: ScreencastCaptureContextReader?
 
     init(
         captureSystem: (any ScreencastCaptureSystem)? = nil,
@@ -55,16 +55,16 @@ struct ScreencastSeams {
         presenter: (any ScreencastOverlayPresenting)? = nil,
         screens: (@MainActor () -> ScreencastScreenLayout)? = nil,
         sleep: ((TimeInterval) async throws -> Void)? = nil,
-        revealCapture: (@MainActor ([URL]) -> Void)? = nil,
-        barConfirmationTimeout: Duration? = nil
+        barConfirmationTimeout: Duration? = nil,
+        contextReader: ScreencastCaptureContextReader? = nil
     ) {
         self.captureSystem = captureSystem
         self.pickerSystem = pickerSystem
         self.presenter = presenter
         self.screens = screens
         self.sleep = sleep
-        self.revealCapture = revealCapture
         self.barConfirmationTimeout = barConfirmationTimeout
+        self.contextReader = contextReader
     }
 }
 
@@ -79,8 +79,8 @@ struct ScreencastSeams {
 /// in the captures folder. While it records, `ScreencastRecordingControls` shows the control bar
 /// and the time in the menu bar, and registers the recording shortcuts, and
 /// `ScreencastOverlaysWiring` puts the drawing and, with Show shortcuts on, the key display on the
-/// recorded screens and into the video. A saved capture is shown in Finder until the review panel
-/// (#450) takes its place.
+/// recorded screens and into the video. Each saved capture opens the review panel (`review`, in
+/// `ScreencastModule+Review.swift`).
 @MainActor
 final class ScreencastModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screencast
@@ -94,6 +94,8 @@ final class ScreencastModule: CapabilityModule {
     /// The drawing and the shortcuts on screen while recording.
     let overlays: ScreencastOverlaysWiring
     private var isOn = false
+    /// The review panel after each capture (#450).
+    let review: ScreencastReviewFlow
     /// The `ScreencastController`, made the first time Start Screencast opens the picker. Stored
     /// untyped because the controller needs macOS 15.
     private var controllerStorage: AnyObject?
@@ -104,7 +106,8 @@ final class ScreencastModule: CapabilityModule {
         openSettings: @escaping @MainActor (SettingsSection) -> Void,
         menuBar: CapabilityMenuBarStatus? = nil,
         keyDisplay: KeyDisplay? = nil,
-        seams: ScreencastSeams = ScreencastSeams()
+        seams: ScreencastSeams = ScreencastSeams(),
+        review services: ScreencastReviewServices? = nil
     ) {
         self.preferences = preferences
         self.permissions = permissions
@@ -124,6 +127,7 @@ final class ScreencastModule: CapabilityModule {
             },
             displays: { ScreencastOverlaysWiring.displays(in: screens(), connected: ScreencastOverlayDisplay.connected) }
         )
+        review = ScreencastReviewFlow(services: services, contextReader: seams.contextReader ?? .current)
     }
 
     func apply(_ context: CapabilityContext) {
@@ -145,6 +149,8 @@ final class ScreencastModule: CapabilityModule {
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
+        // The capture under review is saved, and an editor open on it stays open.
+        review.close()
         guard #available(macOS 15, *), let controller else { return }
         Task { await controller.shutDown() }
     }
@@ -163,7 +169,9 @@ final class ScreencastModule: CapabilityModule {
             openSettings(.screencast)
             return
         }
-        controllerForCapture().open()
+        let controller = controllerForCapture()
+        if controller.phase == .idle { review.captureStarting() }
+        controller.open()
     }
 
     /// The flow controller, once Start Screencast has made it.
@@ -192,8 +200,7 @@ final class ScreencastModule: CapabilityModule {
             microphoneAvailable: { permissions.microphoneGranted },
             sleep: seams.sleep ?? { try await Task.sleep(for: .seconds($0)) }
         )
-        let reveal = seams.revealCapture ?? Self.revealInFinder
-        controller.onCaptureFinished = { result in reveal(Self.files(of: result)) }
+        controller.onCaptureFinished = { [review] result in review.captureFinished(result) }
         recordingControls.attach(to: controller)
         // The engine's own reader, in the screens' AppKit space, so the keys follow a recorded window.
         let captureSystem = seams.captureSystem ?? ScreenCaptureKitCaptureSystem.current
@@ -205,20 +212,5 @@ final class ScreencastModule: CapabilityModule {
         )
         controllerStorage = controller
         return controller
-    }
-
-    /// The files a saved capture shows in Finder: each video to share (its mixdown when there is
-    /// one), or each screenshot.
-    static func files(of result: ScreencastCaptureResult) -> [URL] {
-        switch result {
-        case .video(let capture): capture.videos.map(\.forSharing)
-        case .screenshot(let screenshot): screenshot.images.map(\.file)
-        }
-    }
-
-    /// Selects the files in Finder; never under the unit-test host.
-    private static func revealInFinder(_ files: [URL]) {
-        guard !UnitTestHost.isActive, !files.isEmpty else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(files)
     }
 }

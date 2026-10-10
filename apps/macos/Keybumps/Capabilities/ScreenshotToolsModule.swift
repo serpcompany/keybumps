@@ -48,7 +48,8 @@ final class ScreenshotToolsModule: CapabilityModule {
     ]
 
     private let service: ScreenshotToolsService
-    private let editor: ScreenshotEditorPresenter
+    /// The Screenshot Editor, which Screencast's review panel opens too.
+    let editor: ScreenshotEditorPresenter
     private let palette: CommandPaletteController
     private let clipboard: ClipboardHistoryService
     private let delivery: ScreenshotClipboardDelivery

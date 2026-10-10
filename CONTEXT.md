@@ -219,6 +219,14 @@ _Avoid_: HUD, toolbar, recording panel, status bar (macOS's menu bar)
 Marking up the screen while Screencast records, in the video: a pen, an arrow, a highlighter, or a rectangle, in a few colors, each mark fading a few seconds after it's drawn or staying until cleared. Draw on the control bar, or its shortcut, turns it on and off; while it's on, the recorded screens take the pointer, with a yellow border that isn't in the video, the drawing tools show above the control bar, and Escape stops, Delete clears, and ⌘Z undoes the last mark. The tools' choices carry over to the next recording; the marks don't.
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
+**Review panel**:
+The panel in the corner of the screen after each capture, asking what to do with it. It has a one-line note, the type (Bug, Feature, or Feedback), the repository, and the destination. A recording can be trimmed, and a screenshot opens in the Screenshot Editor and can also go to the Screenshots tab (⌘3). Save keeps the capture with its note; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape or closing it saves too. The note, type, repository, and the app it was taken in are user content, kept in the capture's `meta.json` on this Mac.
+_Avoid_: Quick access card, post-capture window, editor
+
+**Repository guess**:
+The GitHub repository (`owner/name`) the review panel fills in, from the app in front when the capture started and, for a browser, the website's domain or a local development site such as `localhost:3000`. Once the person corrects it, the correction is remembered for that website, or the app, on this Mac only.
+_Avoid_: Repo mapping, project, target
+
 **Destination**:
 An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
 _Avoid_: Integration, upload target, share service

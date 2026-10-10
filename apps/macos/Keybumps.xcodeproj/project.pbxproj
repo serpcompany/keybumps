@@ -52,6 +52,7 @@
 		1E6E7E25BEEECF824546D079 /* EmojiSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625C9C3D47F64A2140D819B3 /* EmojiSearch.swift */; };
 		206DA8D31D5B76FFA73479B1 /* PlainTextInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBCD28A8214497E9A4D5432 /* PlainTextInput.swift */; };
 		21132F8335F6C4863D5A56D4 /* CapabilityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E1CD87EB93B65F4E866246 /* CapabilityModule.swift */; };
+		22B5AD0C2A3A5BE219168ADF /* ScreencastModule+Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA15BBC99926667E9A8CAAB7 /* ScreencastModule+Review.swift */; };
 		2647B186FA8E20D4BD332187 /* ScreencastDrawingToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D829773C7170CC42E4AB67D8 /* ScreencastDrawingToolbar.swift */; };
 		27809D43FBCF8B6211FD5C6B /* DictationPaletteResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = F200EDB123819788E9D6CE81 /* DictationPaletteResults.swift */; };
 		29A806FF7731D3D920AB80E7 /* PermissionDragAssistantController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422C99CA7690E5E2FCDA940B /* PermissionDragAssistantController.swift */; };
@@ -104,6 +105,7 @@
 		542C16333A14D93E7988F34A /* PluginsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5187F8D96AA4D1411822A73 /* PluginsSettingsView.swift */; };
 		544D19AB677E1063188AFABA /* ScreencastMovieWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D9C8A197F353C7B33A9F84 /* ScreencastMovieWriter.swift */; };
 		54671A719E03B771792B4CAB /* QuickSearchCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */; };
+		5469AD135CBC5694DEE31B7F /* ScreencastReviewUITesting.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA51D1BDA9C33BB77197B255 /* ScreencastReviewUITesting.swift */; };
 		55A5331995F3491EB22E185E /* NativeStatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */; };
 		57ABC6624CE28646EA5FC0FC /* UpdateVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */; };
 		588A5EF405543AA821A5AB9C /* EmojiPickerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63244D320735E6A1D2E23B01 /* EmojiPickerModule.swift */; };
@@ -537,6 +539,7 @@
 		A898C7DADACD41A5837D1B9D /* ScreencastControlBarPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastControlBarPlacement.swift; sourceTree = "<group>"; };
 		A8A06DB32A6304AE45706215 /* DictationAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationAudioPlayer.swift; sourceTree = "<group>"; };
 		A9E51DAD29FE4265EDDF9389 /* PluginManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManifest.swift; sourceTree = "<group>"; };
+		AA51D1BDA9C33BB77197B255 /* ScreencastReviewUITesting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastReviewUITesting.swift; sourceTree = "<group>"; };
 		AA9C2CC21396F16E615BBC8D /* PalettePasteRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePasteRoute.swift; sourceTree = "<group>"; };
 		AB401D8E7A0C608C48B0D380 /* LICENSE.sentry-cocoa */ = {isa = PBXFileReference; path = "LICENSE.sentry-cocoa"; sourceTree = "<group>"; };
 		ACC15CDB697113B942048EE9 /* LICENSE.whisper-cpp */ = {isa = PBXFileReference; path = "LICENSE.whisper-cpp"; sourceTree = "<group>"; };
@@ -612,6 +615,7 @@
 		E76CF0BA9E838A59F35DA8C2 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		E77DA4F512B8AB702043230A /* LICENSE.unicode */ = {isa = PBXFileReference; path = LICENSE.unicode; sourceTree = "<group>"; };
 		E8D3737B4CB6F7D25F91B890 /* ScreencastPickerGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastPickerGeometry.swift; sourceTree = "<group>"; };
+		EA15BBC99926667E9A8CAAB7 /* ScreencastModule+Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScreencastModule+Review.swift"; sourceTree = "<group>"; };
 		EBBB83D782A2BF34F2C7854D /* WhisperKitModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitModelDownloader.swift; sourceTree = "<group>"; };
 		EC32BEC56A99FDECD3DDC5C4 /* ScreencastRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastRecorder.swift; sourceTree = "<group>"; };
 		ECF5180228D1F28AB0362C61 /* SystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServices.swift; sourceTree = "<group>"; };
@@ -779,7 +783,9 @@
 			children = (
 				B004FB7A2954A79900D58DE0 /* ScreencastCapturesSettings.swift */,
 				D92D858DD63ADCAAC5C2C39E /* ScreencastController.swift */,
+				EA15BBC99926667E9A8CAAB7 /* ScreencastModule+Review.swift */,
 				09CE5FD0DE58BCA11FD4018F /* ScreencastPreferences.swift */,
+				AA51D1BDA9C33BB77197B255 /* ScreencastReviewUITesting.swift */,
 				6BB3D4974860C8A4246D68A9 /* ScreencastScreenshots.swift */,
 				646486441CEB68D9D9BC2175 /* ControlBar */,
 				765C821D917DD071F131A610 /* Overlays */,
@@ -1586,6 +1592,7 @@
 				B87A9187AFEC1C7D4818469C /* ScreencastDrawingRenderer.swift in Sources */,
 				2647B186FA8E20D4BD332187 /* ScreencastDrawingToolbar.swift in Sources */,
 				9A9F4249CAE685D5D0B7076A /* ScreencastGeometry.swift in Sources */,
+				22B5AD0C2A3A5BE219168ADF /* ScreencastModule+Review.swift in Sources */,
 				D5CC7B03A9D871D6F1CCDAA1 /* ScreencastModule.swift in Sources */,
 				544D19AB677E1063188AFABA /* ScreencastMovieWriter.swift in Sources */,
 				A7088299326D51218FEF33D8 /* ScreencastOverlayWindows.swift in Sources */,
@@ -1604,6 +1611,7 @@
 				5C70310010F877F8327CC063 /* ScreencastReviewModel.swift in Sources */,
 				1DD996C536602FFAD6D9EEB4 /* ScreencastReviewPanel.swift in Sources */,
 				DEC86989729DD1A9B41F5C21 /* ScreencastReviewScreenshots.swift in Sources */,
+				5469AD135CBC5694DEE31B7F /* ScreencastReviewUITesting.swift in Sources */,
 				CD3ADF959284E5C738345245 /* ScreencastReviewView.swift in Sources */,
 				F847FA6352E36035BF9CB3E3 /* ScreencastScreenshots.swift in Sources */,
 				D839CC4F738D60CFDDF1CEC3 /* ScreencastTimeline.swift in Sources */,
