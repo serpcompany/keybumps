@@ -42,9 +42,11 @@ protocol KeyboardLayoutTranslating: AnyObject {
 /// It returns nil for a key it can't name, which the display then leaves out.
 @MainActor
 enum KeystrokeNaming {
-    static func keystroke(for press: KeyPress, layout: any KeyboardLayoutTranslating) -> Keystroke? {
+    /// `isKeybumpsShortcut` names a press that triggers a registered Keybumps shortcut as a shortcut
+    /// whatever its keys: it types nothing, as Dictation's ⌥Space doesn't.
+    static func keystroke(for press: KeyPress, layout: any KeyboardLayoutTranslating, isKeybumpsShortcut: Bool = false) -> Keystroke? {
         let modifiers = press.modifiers
-        if press.isShortcut {
+        if press.isShortcut || isKeybumpsShortcut {
             guard let key = shortcutKey(press.keyCode, command: modifiers.contains(.command), layout: layout) else { return nil }
             return Keystroke(modifiers: modifierSymbols(modifiers), key: key, isShortcut: true)
         }

@@ -231,8 +231,10 @@ final class InertKeyDisplayPresenter: KeyDisplayPresenting {
 /// `SCWindow.windowID` to `overlayWindowIDs`. A holder hears when they're put up or replaced
 /// through the handler it passes to `acquire`.
 ///
-/// A screenshot shortcut never shows: it clears the screen at once (`pauseForScreenshot`), and
-/// nothing shows until a key that isn't part of taking the screenshot.
+/// A screenshot shortcut it knows never shows: macOS's as the person has them, and Screenshot
+/// Tools' while they're registered. It clears the screen at once (`pauseForScreenshot`), and
+/// nothing shows until a key that isn't part of taking the screenshot. Other apps' screenshot
+/// shortcuts aren't known.
 @MainActor
 final class KeyDisplay {
     private(set) var holds = KeyDisplayHolds()
@@ -249,8 +251,11 @@ final class KeyDisplay {
     var registeredShortcutName: (KeyPress) -> String? = { _ in nil }
     /// The Command Palette's own key names while it's the key window, or nil. `AppModel` sets it.
     var paletteKeyNames: () -> [String: String]? = { nil }
-    /// Whether a press takes a screenshot. `AppModel` adds Screenshot Tools' hotkeys.
-    var isScreenshotShortcut: (KeyPress) -> Bool = { KeystrokeFilter.isScreenshotShortcut($0) }
+    /// Screenshot Tools' hotkeys while they're registered. `AppModel` sets it.
+    var keybumpsScreenshotBindings: () -> [ShortcutBinding] = { [] }
+    /// macOS's symbolic hotkeys, read through `SymbolicHotKeyPreferences` (never written), or nil
+    /// when they can't be read. `AppModel` sets it; it's inert under the unit-test host.
+    var symbolicHotKeys: () -> [String: Any]? = { nil }
     /// The screen the pointer is on.
     var pointerDisplay: () -> CGDirectDisplayID? = { KeyDisplayScreen.pointerDisplay() }
     /// The main display's height, to turn the pointer tap's top-left coordinates into AppKit's.
@@ -267,6 +272,11 @@ final class KeyDisplay {
     private var wakeUp: (any TimerScheduledAction)?
     /// The pointer's screen at the newest key.
     private var lastPointerDisplay: CGDirectDisplayID?
+    /// macOS's screenshot shortcuts, and when they were read: again when the display starts or
+    /// changes, and on a key once they're older than `screenshotKeysLifetime`.
+    private var systemScreenshotKeys = KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: nil)
+    private var systemScreenshotKeysRead: Date?
+    static let screenshotKeysLifetime: TimeInterval = 10
 
     init(
         keys: any KeyPressMonitoring,
@@ -352,6 +362,19 @@ final class KeyDisplay {
         present(animated: false)
     }
 
+    /// Whether `press` takes a screenshot, by the shortcuts macOS and Keybumps have now.
+    func isScreenshotShortcut(_ press: KeyPress) -> Bool {
+        if systemScreenshotKeysRead.map({ now().timeIntervalSince($0) >= Self.screenshotKeysLifetime }) ?? true {
+            readSystemScreenshotKeys()
+        }
+        return KeystrokeFilter.isScreenshotShortcut(press, system: systemScreenshotKeys, keybumps: keybumpsScreenshotBindings())
+    }
+
+    private func readSystemScreenshotKeys() {
+        systemScreenshotKeys = KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: symbolicHotKeys())
+        systemScreenshotKeysRead = now()
+    }
+
     // MARK: Overlay windows
 
     /// The overlay windows on screen now.
@@ -381,6 +404,7 @@ final class KeyDisplay {
             return
         }
         if !isListening { isListening = keys.start() }
+        readSystemScreenshotKeys()
         if configuration.showsClicks, !isWatchingClicks {
             isWatchingClicks = pointer.start()
         } else if !configuration.showsClicks, isWatchingClicks {
@@ -405,10 +429,11 @@ final class KeyDisplay {
             if KeystrokeFilter.continuesScreenshot(press) { return }
             isPausedForScreenshot = false
         }
-        guard KeystrokeFilter.shows(press, keys: configuration.keys, secureInput: secureInput()),
-              let stroke = KeystrokeNaming.keystroke(for: press, layout: layout) else { return }
+        let keybumpsName = registeredShortcutName(press)
+        guard KeystrokeFilter.shows(press, keys: configuration.keys, secureInput: secureInput(), isKeybumpsShortcut: keybumpsName != nil),
+              let stroke = KeystrokeNaming.keystroke(for: press, layout: layout, isKeybumpsShortcut: keybumpsName != nil) else { return }
         let name = configuration.namesActions
-            ? KeystrokeActionNames.name(for: stroke, keybumps: registeredShortcutName(press), palette: paletteKeyNames())
+            ? KeystrokeActionNames.name(for: stroke, keybumps: keybumpsName, palette: paletteKeyNames())
             : nil
         lastPointerDisplay = pointerDisplay()
         timeline.record(stroke, name: name, at: now(), linger: configuration.linger)
