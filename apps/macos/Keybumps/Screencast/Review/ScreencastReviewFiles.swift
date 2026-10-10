@@ -97,7 +97,9 @@ enum ScreencastReviewFiles {
         fileManager: FileManager
     ) async throws -> ScreencastCapture {
         // Each display's recording, then its mixdown, which a start cut makes from the recording's cut.
-        let files = capture.videos.flatMap { video in
+        // A display whose recording ended before the trim's start (unplugged meanwhile) has nothing in
+        // the kept range: its files are left as they are.
+        let files = capture.videos.filter { Self.reaches(range, $0) }.flatMap { video in
             [(url: video.file, duration: video.duration, cutRecording: URL?.none)]
                 + [video.mixdown].compactMap { $0 }.map { (url: $0, duration: video.duration, cutRecording: Optional(sideFile(for: video.file, tag: cutTag))) }
         }
@@ -144,7 +146,8 @@ enum ScreencastReviewFiles {
         for original in originals { try? fileManager.removeItem(at: original) }
 
         let videos = capture.videos.map { video in
-            ScreencastVideo(
+            guard Self.reaches(range, video) else { return video }
+            return ScreencastVideo(
                 file: video.file,
                 mixdown: video.mixdown,
                 pixelWidth: video.pixelWidth,
@@ -153,12 +156,20 @@ enum ScreencastReviewFiles {
                 duration: range.limited(to: video.duration).duration
             )
         }
+        // As long as the longest display that was cut; one left as it was ended before the trim.
+        let cut = zip(capture.videos, videos).filter { Self.reaches(range, $0.0) }.map(\.1.duration)
         return ScreencastCapture(
             folder: capture.folder,
             videos: videos,
-            duration: videos.map(\.duration).max() ?? range.duration,
-            endedEarly: capture.endedEarly
+            duration: cut.max() ?? range.duration,
+            endedEarly: capture.endedEarly,
+            displaysEndedEarly: capture.displaysEndedEarly
         )
+    }
+
+    /// Whether a display's recording goes on past the trim's start, so the trim has something to keep.
+    private static func reaches(_ range: ScreencastTrimRange, _ video: ScreencastVideo) -> Bool {
+        video.duration > range.start + ScreencastTrimRange.tolerance
     }
 
     /// A hidden file beside `url` in its folder: `.video-1.trimmed.mov`.
@@ -170,29 +181,56 @@ enum ScreencastReviewFiles {
     static let cutTag = "trimmed"
     static let originalTag = "untrimmed"
 
-    /// What a trim interrupted by a quit or a crash left in each capture's folder: a cut not swapped
-    /// in is deleted, and an original moved aside goes back where it was when nothing took its place;
-    /// one whose cut did take its place is deleted, as the trim would have.
-    static func recoverInterruptedTrims(in capturesFolder: URL, fileManager: FileManager) {
+    /// What a trim interrupted by a quit or a crash left in each capture's folder, put back so the
+    /// folder is untouched, as `meta.json` describes it until a trim returns. An original moved aside
+    /// means the swap was under way, perhaps between two of the folder's files, so every original in
+    /// the folder goes back over whatever took its place, and `meta.json`'s lengths are read again
+    /// from the files. Cuts never swapped in are deleted.
+    static func recoverInterruptedTrims(in capturesFolder: URL, fileManager: FileManager) async {
         guard let folders = try? fileManager.contentsOfDirectory(
             at: capturesFolder, includingPropertiesForKeys: [.isDirectoryKey], options: []
         ) else { return }
         for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
             guard let names = try? fileManager.contentsOfDirectory(atPath: folder.path) else { continue }
+            var restored: [URL] = []
             for name in names where name.hasPrefix(".") {
                 let file = folder.appendingPathComponent(name)
                 if visibleName(ofSideFile: name, tag: cutTag) != nil {
                     try? fileManager.removeItem(at: file)
                 } else if let visible = visibleName(ofSideFile: name, tag: originalTag) {
                     let original = folder.appendingPathComponent(visible)
-                    if fileManager.fileExists(atPath: original.path) {
-                        try? fileManager.removeItem(at: file)
-                    } else {
-                        try? fileManager.moveItem(at: file, to: original)
-                    }
+                    // A cut in the original's place goes; the original never does unless it's back.
+                    let moved = fileManager.fileExists(atPath: original.path)
+                        ? (try? fileManager.replaceItem(at: original, withItemAt: file, backupItemName: nil, options: [], resultingItemURL: nil)) != nil
+                        : (try? fileManager.moveItem(at: file, to: original)) != nil
+                    if moved { restored.append(original) }
                 }
             }
+            if !restored.isEmpty { await restoreLengths(of: restored, in: folder.appendingPathComponent(ScreencastMetadata.fileName)) }
         }
+    }
+
+    /// `meta.json`'s lengths for recordings put back, read from the files themselves.
+    private static func restoreLengths(of files: [URL], in metadataURL: URL) async {
+        var lengths: [String: Double] = [:]
+        for file in files {
+            if let duration = try? await AVURLAsset(url: file).load(.duration), duration.isNumeric {
+                lengths[file.lastPathComponent] = duration.seconds
+            }
+        }
+        guard !lengths.isEmpty, let data = try? Data(contentsOf: metadataURL),
+              var metadata = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var videos = metadata["videos"] as? [[String: Any]] else { return }
+        for index in videos.indices {
+            guard let name = videos[index]["file"] as? String, let length = lengths[name] else { continue }
+            videos[index]["duration"] = length
+        }
+        metadata["videos"] = videos
+        metadata["duration"] = videos.compactMap { $0["duration"] as? Double }.max() ?? metadata["duration"]
+        guard let updated = try? JSONSerialization.data(
+            withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else { return }
+        try? PrivateFile.write(updated, to: metadataURL)
     }
 
     /// `video-1.mov` for `.video-1.trimmed.mov` with the tag `trimmed`; nil for any other name.

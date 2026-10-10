@@ -107,7 +107,7 @@ final class ScreencastReviewFlow {
         guard !didRecoverTrims else { return }
         didRecoverTrims = true
         Task.detached(priority: .utility) {
-            ScreencastReviewFiles.recoverInterruptedTrims(in: capturesFolder, fileManager: .default)
+            await ScreencastReviewFiles.recoverInterruptedTrims(in: capturesFolder, fileManager: .default)
         }
     }
 

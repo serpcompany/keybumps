@@ -627,6 +627,64 @@ struct ScreencastReviewTrimFileTests {
         #expect(abs(try ScreencastMetadata.read(from: capture.metadataURL).duration - 1) < 0.01)
     }
 
+    @Test("A start trim re-encodes at the recorder's rate, however still the screen was, so it keeps the recorder's bitrate")
+    func startTrimKeepsTheRecordersRate() {
+        #expect(ScreencastTrimEncoder.framesPerSecond(shortestFrame: CMTime(value: 1, timescale: 30)) == 30)
+        #expect(ScreencastTrimEncoder.framesPerSecond(shortestFrame: CMTime(value: 1, timescale: 5)) == 30, "a still screen's sparse frames")
+        #expect(ScreencastTrimEncoder.framesPerSecond(shortestFrame: CMTime(value: 1, timescale: 60)) == 60)
+        #expect(ScreencastTrimEncoder.framesPerSecond(shortestFrame: CMTime(value: 1, timescale: 10_000)) == 120)
+        #expect(ScreencastTrimEncoder.framesPerSecond(shortestFrame: .invalid) == 30)
+        func bitRate(_ settings: [String: Any]) -> Int? {
+            (settings[AVVideoCompressionPropertiesKey] as? [String: Any])?[AVVideoAverageBitRateKey] as? Int
+        }
+        let recorder = ScreencastMovieWriter.videoSettings(pixelWidth: 3024, pixelHeight: 1964, framesPerSecond: ScreencastOptions().framesPerSecond)
+        let cut = ScreencastMovieWriter.videoSettings(
+            pixelWidth: 3024, pixelHeight: 1964,
+            framesPerSecond: ScreencastTrimEncoder.framesPerSecond(shortestFrame: CMTime(value: 1, timescale: 30))
+        )
+        #expect(bitRate(cut) == bitRate(recorder))
+    }
+
+    @available(macOS 15, *)
+    @Test("A start trim of a still screen: the file's fastest frames set the rate, and the picture lasts to the cut's end")
+    func startTrimOfAStillScreen() async throws {
+        defer { fixture.tearDown() }
+        let folder = fixture.folder.url.appendingPathComponent("1791000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("video-1.mov")
+        let writer = try ScreencastMovieWriter(
+            url: file, pixelWidth: 320, pixelHeight: 180, audio: [.microphone],
+            options: ScreencastOptions(), fragmentInterval: ScreencastMovieWriter.fragmentInterval, onFailure: {}
+        )
+        ReviewFixture.feedStillScreen(writer, seconds: 3)
+        let result = await writer.finish(at: 103)
+        try #require(result.hasFootage)
+        let source = try #require(try await AVURLAsset(url: file).loadTracks(withMediaType: .video).first)
+        #expect(try await source.load(.nominalFrameRate) < 20, "on average, a still screen has few frames")
+        #expect(ScreencastTrimEncoder.framesPerSecond(shortestFrame: try await source.load(.minFrameDuration)) == 30)
+
+        let capture = ScreencastCapture(
+            folder: folder,
+            videos: [ScreencastVideo(file: file, mixdown: nil, pixelWidth: 320, pixelHeight: 180, audioTracks: [.microphone], duration: result.duration)],
+            duration: result.duration,
+            endedEarly: nil
+        )
+        try ScreencastMetadata(capture: capture, target: .display(1), startedAt: ReviewFixture.reviewDate).write(to: capture.metadataURL)
+        let model = fixture.model(.video(capture), trimmer: ScreencastFileTrimmer())
+        model.setTrim(ScreencastTrimRange(start: 1.5, end: 2.5, within: result.duration))
+        await model.save()
+        #expect(model.isFinished && model.failure == nil)
+
+        let cut = AVURLAsset(url: file)
+        let video = try #require(try await cut.loadTracks(withMediaType: .video).first)
+        let (times, editStart) = try await samples(of: video)
+        #expect(abs(editStart) < 0.001 && (times.min() ?? -1) >= -0.001, "nothing from before the trim")
+        #expect(times.count == 2, "the frame on screen at the trim point, and again at the end")
+        #expect(try await video.load(.timeRange).end.seconds >= 0.99, "the picture lasts as long as the sound")
+        let audio = try #require(try await cut.loadTracks(withMediaType: .audio).first)
+        #expect(abs(try await audio.load(.timeRange).duration.seconds - 1) < 0.05)
+    }
+
     @available(macOS 15, *)
     @Test("A trim of the end alone stays passthrough: the same frames from the start, cut cleanly at the end")
     func endCutStaysPassthrough() async throws {
@@ -783,6 +841,38 @@ final class ReviewFixture {
                 }
             }
             usleep(2_000)
+        }
+    }
+
+    /// A real movie from the recorder's writer: `seconds` of frames at 30 a second, no sound.
+    nonisolated static func writeMovie(to url: URL, seconds: Double) async throws {
+        let writer = try ScreencastMovieWriter(
+            url: url, pixelWidth: 64, pixelHeight: 36, audio: [], options: ScreencastOptions(),
+            fragmentInterval: ScreencastMovieWriter.fragmentInterval, onFailure: {}
+        )
+        for frame in 0..<Int(seconds * 30) {
+            writer.appendVideo(ScreencastSamples.video(at: 100 + Double(frame) / 30, width: 64, height: 36, shade: UInt8(frame % 255)))
+        }
+        _ = await writer.finish(at: 100 + seconds)
+    }
+
+    /// A still screen, as the recorder writes one: a second of frames, then nothing until the
+    /// recording stops at `seconds`, with the microphone all along. The writer puts the last frame
+    /// again at the end.
+    nonisolated static func feedStillScreen(_ writer: ScreencastMovieWriter, seconds: Double) {
+        var nextAudio = 100.0
+        for frame in 0..<30 {
+            let host = 100 + Double(frame) / 30
+            writer.appendVideo(ScreencastSamples.video(at: host, width: 320, height: 180, shade: UInt8(frame)))
+            while nextAudio < host + 1.0 / 30 {
+                writer.appendAudio(ScreencastSamples.audio(at: nextAudio, channels: 1, value: 0.4), from: .microphone)
+                nextAudio += ScreencastSamples.audioBufferSeconds
+            }
+            usleep(2_000)
+        }
+        while nextAudio < 100 + seconds {
+            writer.appendAudio(ScreencastSamples.audio(at: nextAudio, channels: 1, value: 0.4), from: .microphone)
+            nextAudio += ScreencastSamples.audioBufferSeconds
         }
     }
 

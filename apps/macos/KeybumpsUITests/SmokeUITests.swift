@@ -759,10 +759,13 @@ final class SmokeUITests: XCTestCase {
     private func launchScreencastReview(_ capture: String) {
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
         XCTAssertTrue(element("screencast.review.note").waitForExistence(timeout: 20))
+        // So a later check that it closed is about the panel, not a query that finds nothing.
+        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel itself is found")
     }
 
+    /// The review panel. macOS reports a floating panel like it as a dialog, not a window.
     private var reviewPanel: XCUIElement {
-        app.windows.matching(identifier: "screencast.review.panel").firstMatch
+        app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
     }
 
     /// The UI-test-only line that says what the panel did with the capture.

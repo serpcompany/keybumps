@@ -28,6 +28,8 @@ final class ScreencastReviewPanel {
     private let settings: ScreencastReviewSettings
     private let screen: @MainActor () -> NSScreen?
     private let ordersPanelIn: Bool
+    private let takeKeyboard: @MainActor (NSPanel) -> Void
+    private var activationObserver: NSObjectProtocol?
     private var playback: ScreencastReviewPlayback?
     private var keyMonitor: Any?
     /// The last capture's turn, which the next one waits for.
@@ -45,6 +47,7 @@ final class ScreencastReviewPanel {
     ///   - settings: Where the panel remembers that switch; tests pass `InMemoryDefaults`.
     ///   - screen: Where the panel shows: the screen with the pointer.
     ///   - ordersPanelIn: False keeps the panel off screen, as under the unit-test host.
+    ///   - takeKeyboard: Makes the panel key again after the Screenshot Editor; tests record it.
     init(
         repositories: ScreencastRepositoryMemory,
         fileManager: FileManager = .default,
@@ -55,7 +58,8 @@ final class ScreencastReviewPanel {
         screenshots: @escaping @MainActor () -> (any ScreencastScreenshotsLibrary)?,
         settings: ScreencastReviewSettings,
         screen: @escaping @MainActor () -> NSScreen? = ScreencastReviewPanel.screenWithPointer,
-        ordersPanelIn: Bool = !UnitTestHost.isActive
+        ordersPanelIn: Bool = !UnitTestHost.isActive,
+        takeKeyboard: @escaping @MainActor (NSPanel) -> Void = ScreencastReviewPanel.makeKeyIfShown
     ) {
         self.repositories = repositories
         self.fileManager = fileManager
@@ -67,6 +71,7 @@ final class ScreencastReviewPanel {
         self.settings = settings
         self.screen = screen
         self.ordersPanelIn = ordersPanelIn
+        self.takeKeyboard = takeKeyboard
     }
 
     var isShown: Bool { model != nil }
@@ -154,6 +159,10 @@ final class ScreencastReviewPanel {
             self.dismiss()
             self.onFinish?(outcome)
         }
+        model.onEditorFinished = { [weak self, weak model] in
+            guard let self, let model, self.model === model else { return }
+            self.returnKeyboard()
+        }
         self.model = model
         let playback = input.isVideo && ordersPanelIn ? ScreencastReviewPlayback() : nil
         self.playback = playback
@@ -176,7 +185,41 @@ final class ScreencastReviewPanel {
         if self.model === model { dismiss() }
     }
 
+    /// The editor closed with the panel still open: the panel takes the keyboard back, so Return
+    /// saves here rather than reaching the app the editor gave the front back to. That app's
+    /// activation can land a moment later and take the keyboard, so the panel takes it again then,
+    /// once, within a second. It's a non-activating panel's key focus, as when the panel first shows,
+    /// so Keybumps doesn't come to the front.
+    private func returnKeyboard() {
+        takeKeyboard(panel)
+        removeActivationObserver()
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let review = self else { return }
+                review.removeActivationObserver()
+                if review.model != nil { review.takeKeyboard(review.panel) }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated { self?.removeActivationObserver() }
+        }
+    }
+
+    private func removeActivationObserver() {
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+        activationObserver = nil
+    }
+
+    /// The app's way to take the keyboard back: only for a panel on screen.
+    static func makeKeyIfShown(_ panel: NSPanel) {
+        guard panel.isVisible else { return }
+        panel.makeKey()
+    }
+
     private func dismiss() {
+        removeActivationObserver()
         removeKeyMonitor()
         playback?.stop()
         playback = nil
