@@ -508,6 +508,12 @@ final class ScreencastRecorder {
                         // One line for the whole burst of failures, however it ended.
                         logger.error("screencast filter rebuild failed category=\(session.rebuildFailureCategory ?? "unknown", privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public) recovered=\(failure == nil, privacy: .public)")
                     }
+                    if failure != nil {
+                        // Given up: the lists it read were never applied, so the next tick that
+                        // reads any windows at all asks again.
+                        session.queuedAppWindows = nil
+                        session.queuedOwnWindows = nil
+                    }
                     session.rebuildFailures = 0
                     session.rebuildFailureCategory = nil
                     waiters.forEach { $0.resume() }
@@ -568,14 +574,16 @@ final class ScreencastRecorder {
         // Both lists before the snapshot, never after: a window that opens in between is in the
         // snapshot's filter already, or missing from the list, so the next tick rebuilds again.
         // They're the lists this rebuild answers, so a tick that sees them again asks for nothing.
-        let ownWindows = system.ownVisibleWindows()
-        session.queuedOwnWindows = ownWindows
-        if let process = session.targetProcess, !session.targetGone {
-            session.queuedAppWindows = system.onScreenWindows(of: process)
+        session.queuedOwnWindows = system.ownVisibleWindows()
+        if session.targetProcess != nil, !session.targetGone {
+            session.queuedAppWindows = watchedAppWindows(of: session)
         }
         // A window recording needs only what's on screen: a smaller, faster read, so an app's new
-        // menu joins sooner. A display recording reads every window, to find Keybumps as an app.
-        let onScreenOnly = session.streams.allSatisfy { if case .window = $0.source { true } else { false } }
+        // menu joins sooner. But while overlays are registered it reads every window, so an overlay
+        // ordered out for a moment (a click ring between clicks) stays named and shows the moment
+        // it's ordered in. A display recording reads every window, to find Keybumps as an app.
+        let onScreenOnly = overlayWindows.isEmpty
+            && session.streams.allSatisfy { if case .window = $0.source { true } else { false } }
         let content: ScreencastContent
         do {
             content = try await system.content(onScreenOnly: onScreenOnly)
@@ -593,8 +601,11 @@ final class ScreencastRecorder {
                 plan = ScreencastCaptureFilter.displayPlan(display: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
             case .window(let id):
                 plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
-                // The window closed: its list stays as it was, and its app's windows stop mattering.
-                if plan == nil { session.targetGone = true }
+                // Not in this read: closed, or only out of sight (minimized, its app hidden, on
+                // another Space, or its display just unplugged). Either way the last list stays.
+                // Only a window that no longer exists stops its app's windows mattering; one that
+                // comes back is followed again, and its menus join as before.
+                if plan == nil, system.windowExists(id) == false { session.targetGone = true }
             }
             guard let plan, plan != stream.plan, let running = stream.stream else { continue }
             do {
@@ -666,7 +677,7 @@ final class ScreencastRecorder {
         // one rebuild, and a failed one is tried again by its backoff, not by the ticks.
         if watches {
             let ownWindows = system.ownVisibleWindows()
-            if ownWindows != session.queuedOwnWindows {
+            if session.queuedOwnWindows != ownWindows {
                 session.queuedOwnWindows = ownWindows
                 scheduleFilterRebuild(for: session)
             }
@@ -680,8 +691,8 @@ final class ScreencastRecorder {
         guard let session, state.isActive, session.phase == .live, case .window(let id) = session.target else { return }
         // A burst (a menu flicked open and shut, submenus, a completion list) costs one rebuild in
         // flight and one waiting, whose read sees the latest windows.
-        if let process = session.targetProcess, !session.targetGone,
-           let appWindows = system.onScreenWindows(of: process), appWindows != session.queuedAppWindows {
+        if session.targetProcess != nil, !session.targetGone,
+           let appWindows = watchedAppWindows(of: session), appWindows != session.queuedAppWindows {
             session.queuedAppWindows = appWindows
             scheduleFilterRebuild(for: session)
         }
@@ -691,6 +702,13 @@ final class ScreencastRecorder {
         session.pendingWindowFrame = frame
         session.followFailures = 0
         runUpdates(for: session)
+    }
+
+    /// The windows a window recording watches for: its app's on screen, and the panel services'
+    /// (a sandboxed app's Save panel belongs to one). Nil when they can't be read.
+    private func watchedAppWindows(of session: Session) -> Set<CGWindowID>? {
+        guard let process = session.targetProcess, let appWindows = system.onScreenWindows(of: process) else { return nil }
+        return appWindows.union(system.onScreenPanelServiceWindows() ?? [])
     }
 
     func refreshElapsed() {
@@ -1096,7 +1114,7 @@ extension ScreencastRecorder {
         var queuedAppWindows: Set<CGWindowID>?
         var targetGone = false
         /// Keybumps's visible windows, likewise.
-        var queuedOwnWindows: Set<CGWindowID> = []
+        var queuedOwnWindows: Set<CGWindowID>?
         var timers: [Timer] = []
         var activity: NSObjectProtocol?
         /// Displays whose stream stopped while others recorded on, and their files' ending.

@@ -203,6 +203,41 @@ struct ScreencastCaptureFilterTests {
         #expect(ScreencastCaptureFilter.windowPlan(window: 77, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content()) == nil)
     }
 
+    @Test("A titled Save sheet within the window and in front of it shows; another document window doesn't")
+    func titledSheets() throws {
+        let target = Screens.with(Screens.browserWindow, order: 3)
+        // A Save sheet: titled, at the normal layer, within the window, in front of it.
+        let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 122, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
+        // The same shape, but behind the window: another document window, hidden by it.
+        let behind = ScreencastContent.Window(id: 17, frame: CGRect(x: 250, y: 122, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 5)
+        // In front, overlapping but not within it: another document window.
+        let other = Screens.with(Screens.browserOtherWindow, order: 0)
+        let content = Screens.content(windows: [target, Screens.browserSheet, other, Screens.browserMenu, sheet, behind, Screens.controlBar, Screens.drawingLayer])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 16]))
+    }
+
+    @Test("A sandboxed app's Open or Save panel, shown by a system service over the window, shows; nothing else of other apps does")
+    func panelService() throws {
+        let target = Screens.with(Screens.browserWindow, order: 4)
+        let service: pid_t = 777
+        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: service, isUntitled: false, isOnScreen: true, order: 1, isPanelService: true)
+        let farPanel = ScreencastContent.Window(id: 51, frame: CGRect(x: 1000, y: 700, width: 300, height: 200), layer: 0, processID: service, isUntitled: false, isOnScreen: true, order: 2, isPanelService: true)
+        let otherApp = ScreencastContent.Window(id: 52, frame: CGRect(x: 300, y: 300, width: 300, height: 200), layer: 0, processID: Screens.otherApp, isUntitled: true, isOnScreen: true, order: 0)
+        let notice = ScreencastContent.Window(id: 53, frame: CGRect(x: 300, y: 100, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true, order: 0)
+        let content = Screens.content(windows: [target, Screens.browserSheet, Screens.browserMenu, panel, farPanel, otherApp, notice, Screens.drawingLayer])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31, 50]), "never another app's window, nor Keybumps's notice")
+    }
+
+    @Test("A registered overlay is named whether it's on screen or not, so it shows the moment it's ordered in")
+    func hiddenOverlay() throws {
+        let hidden = Screens.with(Screens.drawingLayer, onScreen: false)
+        let content = Screens.content(windows: [Screens.browserWindow, Screens.browserSheet, Screens.browserMenu, hidden])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31]))
+    }
+
     @Test("Recording one of Keybumps's own windows leaves its other windows out, overlays apart")
     func ownWindow() {
         let plan = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content())

@@ -536,7 +536,10 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
             contentFailures -= 1
             throw ScreencastFailure.captureFailed
         }
-        let snapshot = screen
+        // An on-screen read leaves out what isn't: minimized, hidden, or on another Space.
+        let snapshot = onScreenOnly
+            ? ScreencastContent(displays: screen.displays, windows: screen.windows.filter(\.isOnScreen), applicationProcessIDs: screen.applicationProcessIDs)
+            : screen
         let after = afterContentRead
         afterContentRead = nil
         after?()
@@ -574,6 +577,15 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
     /// From the screen as it is, like `CGWindowList`.
     func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? {
         Set(screen.windows.filter { $0.processID == processID && $0.isOnScreen }.map(\.id))
+    }
+
+    func onScreenPanelServiceWindows() -> Set<CGWindowID>? {
+        Set(screen.windows.filter { $0.isPanelService && $0.isOnScreen }.map(\.id))
+    }
+
+    /// On screen or not; only a window gone from the screen's list is closed.
+    func windowExists(_ id: CGWindowID) -> Bool? {
+        screen.windows.contains { $0.id == id }
     }
 }
 
@@ -618,6 +630,17 @@ enum ScreencastScreens {
     static let drawingLayer = ScreencastContent.Window(
         id: 31, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: ownProcess, isUntitled: true, isOnScreen: true
     )
+
+    /// `window` with its on-screen state, frame, or place front to back changed.
+    static func with(_ window: ScreencastContent.Window, onScreen: Bool? = nil, frame: CGRect? = nil, order: Int?? = nil) -> ScreencastContent.Window {
+        var changed = ScreencastContent.Window(
+            id: window.id, frame: frame ?? window.frame, layer: window.layer, processID: window.processID,
+            isUntitled: window.isUntitled, isOnScreen: onScreen ?? window.isOnScreen, order: window.order,
+            isPanelService: window.isPanelService
+        )
+        if let order { changed.order = order }
+        return changed
+    }
 
     static func content(windows: [ScreencastContent.Window]? = nil, includesOwnApp: Bool = true) -> ScreencastContent {
         ScreencastContent(

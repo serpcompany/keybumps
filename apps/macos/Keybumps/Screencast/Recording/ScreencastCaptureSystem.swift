@@ -78,12 +78,24 @@ protocol ScreencastCaptureSystem: AnyObject {
     /// The window numbers of a process's windows on screen now, read cheaply many times a second
     /// to notice a recorded app opening a menu or sheet; nil when they can't be read.
     func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>?
+
+    /// The window numbers of the Open and Save panel services' windows on screen now, read like
+    /// `onScreenWindows(of:)`, to notice a sandboxed app's Save panel opening.
+    func onScreenPanelServiceWindows() -> Set<CGWindowID>?
+
+    /// Whether a window still exists, on screen or not: minimized, hidden, and on another Space
+    /// all count. Nil when it can't be told.
+    func windowExists(_ id: CGWindowID) -> Bool?
 }
 
 extension ScreencastCaptureSystem {
     /// A capture system that can't tell: window recordings then pick up an app's new windows only
     /// when something else rebuilds the filter.
     func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
+
+    func onScreenPanelServiceWindows() -> Set<CGWindowID>? { nil }
+
+    func windowExists(_ id: CGWindowID) -> Bool? { nil }
 
     /// A capture system with one kind of read gives it whatever's asked.
     func content(onScreenOnly: Bool) async throws -> ScreencastContent {
