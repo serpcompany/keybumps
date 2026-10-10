@@ -21,6 +21,8 @@ final class FakeOverlays: ScreencastOverlayPresenting {
         case watchEscape
         case stopWatchingEscape
         case message(String)
+        case gettingReady
+        case hideGettingReady
     }
 
     private(set) var events: [Event] = []
@@ -72,6 +74,8 @@ final class FakeOverlays: ScreencastOverlayPresenting {
     }
 
     func showMessage(_ message: String) { events.append(.message(message)) }
+    func showGettingReady() { events.append(.gettingReady) }
+    func hideGettingReady() { events.append(.hideGettingReady) }
 
     /// The bar's Record (or Capture).
     func record() { confirm?() }
@@ -96,6 +100,9 @@ final class FakePickerSystem: ScreencastPickerSystem {
     /// Holds each screenshot until `releaseScreenshots()`.
     var holdsScreenshots = false
     private var heldScreenshots: [CheckedContinuation<Void, Never>] = []
+    /// Holds reading the screen until `releaseContent()`.
+    var holdsContent = false
+    private var heldContent: [CheckedContinuation<Void, Never>] = []
     private(set) var plans: [ScreencastScreenshotPlan] = []
     private(set) var contentReads = 0
 
@@ -108,8 +115,16 @@ final class FakePickerSystem: ScreencastPickerSystem {
     func content() async throws -> ScreencastContent {
         contentReads += 1
         onContent()
+        if holdsContent { await withCheckedContinuation { heldContent.append($0) } }
         if let contentError { throw contentError }
         return screen
+    }
+
+    func releaseContent() {
+        holdsContent = false
+        let held = heldContent
+        heldContent = []
+        held.forEach { $0.resume() }
     }
 
     func transparentWindows() -> Set<CGWindowID> { transparent }
@@ -236,15 +251,33 @@ enum ScreencastWait {
     }
 }
 
-/// The recorder's fake writers, with every mixdown held until `release()`: a recording that ends
-/// on its own stays in the middle of saving (the recorder `.stopping`) for as long as a test needs.
-final class HoldingMixdownWriters: ScreencastWriterFactory, @unchecked Sendable {
+/// The recorder's fake writers, scripted: each mixdown can be held until `releaseMixdowns()`, so a
+/// recording that ends on its own stays in the middle of saving (the recorder `.stopping`) for as
+/// long as a test needs, and new files can be refused, so a restart fails. After the round-2 review
+/// of #462's repros.
+final class ScriptedWriters: ScreencastWriterFactory, @unchecked Sendable {
     let base = FakeWriterFactory()
     private let lock = NSLock()
-    private var holds = true
+    private var holds: Bool
+    private var refusesNewFiles = false
     private var held: [CheckedContinuation<Void, Never>] = []
 
-    var isHolding: Bool { lock.withLock { !held.isEmpty } }
+    init(holdsMixdowns: Bool = false) {
+        holds = holdsMixdowns
+    }
+
+    var holdsMixdowns: Bool {
+        get { lock.withLock { holds } }
+        set { lock.withLock { holds = newValue } }
+    }
+
+    /// New files throw `writerFailed`.
+    var failsNewFiles: Bool {
+        get { lock.withLock { refusesNewFiles } }
+        set { lock.withLock { refusesNewFiles = newValue } }
+    }
+
+    var isHoldingMixdown: Bool { lock.withLock { !held.isEmpty } }
 
     func makeWriter(
         at url: URL,
@@ -254,7 +287,8 @@ final class HoldingMixdownWriters: ScreencastWriterFactory, @unchecked Sendable 
         options: ScreencastOptions,
         onFailure: @escaping @Sendable () -> Void
     ) throws -> any ScreencastMovieWriting {
-        try base.makeWriter(at: url, pixelWidth: pixelWidth, pixelHeight: pixelHeight, audio: audio, options: options, onFailure: onFailure)
+        if failsNewFiles { throw ScreencastFailure.writerFailed }
+        return try base.makeWriter(at: url, pixelWidth: pixelWidth, pixelHeight: pixelHeight, audio: audio, options: options, onFailure: onFailure)
     }
 
     func writeMixdown(of source: URL, to destination: URL) async throws {
@@ -269,7 +303,7 @@ final class HoldingMixdownWriters: ScreencastWriterFactory, @unchecked Sendable 
     }
 
     /// Lets every mixdown through, from now on too.
-    func release() {
+    func releaseMixdowns() {
         let continuations = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
             defer { held = [] }
             holds = false

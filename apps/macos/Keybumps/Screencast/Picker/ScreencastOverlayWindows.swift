@@ -165,6 +165,14 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
     func showMessage(_ message: String) {
         PaletteHUD.shared.show(message, systemImage: "exclamationmark.triangle.fill", tint: .orange, duration: 4)
     }
+
+    func showGettingReady() {
+        PaletteHUD.shared.show("Getting ready…", systemImage: "record.circle", tint: .secondary, duration: 10)
+    }
+
+    func hideGettingReady() {
+        PaletteHUD.shared.dismiss()
+    }
 }
 
 /// A borderless, non-activating panel over other apps, on every Space and over full-screen apps,

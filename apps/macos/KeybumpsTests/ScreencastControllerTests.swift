@@ -477,15 +477,15 @@ struct ScreencastControllerTests {
 
     // MARK: Ending on its own while the control bar acts
 
-    /// Records every screen with both sounds, then makes the recording end on its own and holds its
-    /// save at the mixdown.
+    /// Records one screen with both sounds, then makes the recording end on its own and holds its
+    /// save at the mixdown. (With every screen, one display stopping ends only its own file.)
     @available(macOS 15, *)
-    private func endEarlyAndHold(_ controller: ScreencastController, _ holding: HoldingMixdownWriters) async throws {
-        try await record(controller, .screen)
+    private func endEarlyAndHold(_ controller: ScreencastController, _ holding: ScriptedWriters) async throws {
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
         #expect(await ScreencastWait.until { controller.phase == .recording })
         clock.advance(3)
         captureSystem.videoStreams[0].handler.stopped(.stoppedByMacOS)
-        #expect(await ScreencastWait.until { holding.isHolding })
+        #expect(await ScreencastWait.until { holding.isHoldingMixdown })
         #expect(controller.recorder.state == .stopping)
         // It leaves `.recording` as soon as the recorder starts saving, before any button.
         #expect(await ScreencastWait.until { controller.phase == .finishing })
@@ -495,7 +495,7 @@ struct ScreencastControllerTests {
     @Test("Stop while a recording that ended on its own is saving waits for that capture")
     func stopDuringEarlyEnd() async throws {
         defer { captures.remove() }
-        let holding = HoldingMixdownWriters()
+        let holding = ScriptedWriters(holdsMixdowns: true)
         let controller = makeController(countdown: 0, writers: holding)
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
@@ -504,7 +504,7 @@ struct ScreencastControllerTests {
         let stopping = Task { await controller.stop() }
         for _ in 0..<50 { await Task.yield() }
         #expect(controller.phase == .finishing && finished.isEmpty)
-        holding.release()
+        holding.releaseMixdowns()
         await stopping.value
 
         #expect(controller.phase == .idle)
@@ -521,7 +521,7 @@ struct ScreencastControllerTests {
     @Test("Discard while a recording that ended on its own is saving deletes that capture, and nothing opens")
     func discardDuringEarlyEnd() async throws {
         defer { captures.remove() }
-        let holding = HoldingMixdownWriters()
+        let holding = ScriptedWriters(holdsMixdowns: true)
         let controller = makeController(countdown: 0, writers: holding)
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
@@ -530,7 +530,7 @@ struct ScreencastControllerTests {
         let discarding = Task { await controller.discard() }
         for _ in 0..<50 { await Task.yield() }
         #expect(controller.phase == .finishing)
-        holding.release()
+        holding.releaseMixdowns()
         await discarding.value
 
         #expect(controller.phase == .idle)
@@ -543,7 +543,7 @@ struct ScreencastControllerTests {
     @Test("Restart while a recording that ended on its own is saving is refused")
     func restartDuringEarlyEnd() async throws {
         defer { captures.remove() }
-        let holding = HoldingMixdownWriters()
+        let holding = ScriptedWriters(holdsMixdowns: true)
         let controller = makeController(countdown: 0, writers: holding)
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
@@ -552,8 +552,8 @@ struct ScreencastControllerTests {
         await controller.restart()
         controller.pause()
         #expect(controller.phase == .finishing)
-        #expect(holding.base.writers.count == 2, "No new take's files")
-        holding.release()
+        #expect(holding.base.writers.count == 1, "No new take's files")
+        holding.releaseMixdowns()
         #expect(await ScreencastWait.until { !finished.isEmpty })
         #expect(controller.phase == .idle)
         #expect(overlays.messages == ["macOS stopped the recording. What was recorded is saved."])
@@ -604,6 +604,146 @@ struct ScreencastControllerTests {
         await restarting.value
         #expect(controller.phase == .idle)
         #expect(overlays.messages.isEmpty)
+    }
+
+    // MARK: Restarting and ending on its own (round-2 review of #462)
+
+    @available(macOS 15, *)
+    @Test("A second restart while one is under way is refused, and a restart that fails leaves the controller free")
+    func secondRestartRefused() async throws {
+        defer { captures.remove() }
+        let writers = ScriptedWriters()
+        let controller = makeController(countdown: 0, writers: writers)
+        try await record(controller, .screen)
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        writers.base.writers[0].holdsCancel = true
+        let first = Task { await controller.restart() }
+        #expect(await ScreencastWait.until { writers.base.writers[0].isHoldingCancel })
+        let made = writers.base.writers.count
+        writers.failsNewFiles = true
+        await controller.restart()
+        #expect(writers.base.writers.count == made, "It never reached the recorder")
+        #expect(controller.phase == .recording && controller.recorder.state == .recording)
+        writers.base.writers[0].releaseCancel()
+        await first.value
+        #expect(controller.phase == .recording)
+
+        // A restart that can't make its files ends the recording with its own message, never as an
+        // early end, and Start Screencast works again.
+        await controller.restart()
+        #expect(controller.phase == .idle)
+        #expect(controller.recorder.state == .failed(.writerFailed))
+        #expect(overlays.messages == [ScreencastMessages.text(for: .writerFailed, kind: .video)])
+        controller.open()
+        #expect(controller.phase == .picking)
+    }
+
+    /// Records one screen, starts a restart whose old take is still being deleted, and makes the new
+    /// take end on its own meanwhile, with its save held at the mixdown.
+    @available(macOS 15, *)
+    private func endEarlyDuringRestart(_ controller: ScreencastController, _ writers: ScriptedWriters) async throws -> Task<Void, Never> {
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        writers.base.writers[0].holdsCancel = true
+        writers.holdsMixdowns = true
+        let restarting = Task { await controller.restart() }
+        #expect(await ScreencastWait.until { writers.base.writers[0].isHoldingCancel })
+        captureSystem.videoStreams[0].handler.stopped(.stoppedByMacOS)
+        #expect(await ScreencastWait.until { writers.isHoldingMixdown })
+        #expect(await ScreencastWait.until { controller.phase == .finishing }, "Seen even while the restart waits")
+        return restarting
+    }
+
+    @available(macOS 15, *)
+    @Test("Stop while a restart deletes the old take and the recording ends on its own: the capture still arrives")
+    func stopDuringRestartAndEarlyEnd() async throws {
+        defer { captures.remove() }
+        let writers = ScriptedWriters()
+        let controller = makeController(countdown: 0, writers: writers)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        let restarting = try await endEarlyDuringRestart(controller, writers)
+
+        // Stop waits for the early end's capture, so it runs on while the save is let go.
+        let stopping = Task { await controller.stop() }
+        for _ in 0..<50 { await Task.yield() }
+        #expect(finished.isEmpty)
+        writers.releaseMixdowns()
+        writers.base.writers[0].releaseCancel()
+        await stopping.value
+        await restarting.value
+        #expect(await ScreencastWait.until { controller.recorder.state != .stopping })
+
+        #expect(finished.count == 1, "the early end's capture reaches onCaptureFinished")
+        #expect(controller.phase == .idle)
+        #expect(overlays.messages == ["macOS stopped the recording. What was recorded is saved."])
+        #expect(await ScreencastWait.until { captures.captureFolders().count == 1 }, "Only the capture; the old take is gone")
+    }
+
+    @available(macOS 15, *)
+    @Test("Discard while a restart deletes the old take and the recording ends on its own: nothing is kept")
+    func discardDuringRestartAndEarlyEnd() async throws {
+        defer { captures.remove() }
+        let writers = ScriptedWriters()
+        let controller = makeController(countdown: 0, writers: writers)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        let restarting = try await endEarlyDuringRestart(controller, writers)
+
+        let discarding = Task { await controller.discard() }
+        for _ in 0..<50 { await Task.yield() }
+        writers.releaseMixdowns()
+        writers.base.writers[0].releaseCancel()
+        await discarding.value
+        await restarting.value
+        #expect(await ScreencastWait.until { controller.recorder.state != .stopping })
+
+        #expect(finished.isEmpty && overlays.messages.isEmpty)
+        #expect(controller.phase == .idle)
+        #expect(await ScreencastWait.until { captures.captureFolders().isEmpty }, "discarded footage is deleted")
+    }
+
+    // MARK: Getting ready
+
+    @available(macOS 15, *)
+    @Test("If reading the screen takes a moment, Getting ready… shows until the picker does")
+    func gettingReady() async throws {
+        defer { captures.remove() }
+        pickerSystem.holdsContent = true
+        let controller = makeController()
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.events.contains(.gettingReady) })
+        #expect(!overlays.events.contains(.showPicker))
+        pickerSystem.releaseContent()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        #expect(overlays.events == [.watchEscape, .gettingReady, .hideGettingReady, .showPicker])
+    }
+
+    @available(macOS 15, *)
+    @Test("Escape while getting ready cancels, hides the cue, and the picker never shows")
+    func escapeWhileGettingReady() async throws {
+        defer { captures.remove() }
+        pickerSystem.holdsContent = true
+        let controller = makeController()
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.events.contains(.gettingReady) })
+        overlays.pressEscape()
+        #expect(controller.phase == .idle)
+        #expect(overlays.events.contains(.hideGettingReady))
+        pickerSystem.releaseContent()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!overlays.events.contains(.showPicker))
+    }
+
+    @available(macOS 15, *)
+    @Test("A quick read never shows Getting ready…")
+    func quickReadNoCue() async throws {
+        defer { captures.remove() }
+        let controller = makeController()
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        try await Task.sleep(for: .milliseconds(450))
+        #expect(!overlays.events.contains(.gettingReady))
     }
 
     // MARK: Turning off

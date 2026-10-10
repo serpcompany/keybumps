@@ -61,6 +61,9 @@ protocol ScreencastOverlayPresenting: AnyObject {
     func stopWatchingEscape()
     /// A short message, such as why a capture couldn't start.
     func showMessage(_ message: String)
+    /// "Getting ready…", while the screen is read before the picker shows, if that takes a moment.
+    func showGettingReady()
+    func hideGettingReady()
 }
 
 /// Draws nothing: the unit-test host's default, so no test opens a window.
@@ -75,6 +78,8 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
     func watchEscape(_ handler: @escaping () -> Void) {}
     func stopWatchingEscape() {}
     func showMessage(_ message: String) {}
+    func showGettingReady() {}
+    func hideGettingReady() {}
 }
 
 /// Runs one capture at a time, from Start Screencast to the saved file: it opens the picker, counts
@@ -145,8 +150,12 @@ final class ScreencastController {
     /// `discard()` came while it was: the capture it saves is deleted.
     @ObservationIgnored private var discardsEarlyEnd = false
     @ObservationIgnored private var earlyEndWaiters: [CheckedContinuation<Void, Never>] = []
-    /// While `restart()` waits on the recorder, which may end the recording itself if it fails.
-    @ObservationIgnored private var isRestarting = false
+    /// A restart is under way: another is refused until it returns.
+    @ObservationIgnored private var restartInFlight = false
+    /// The "Getting ready…" cue, shown if reading the screen takes a moment.
+    @ObservationIgnored private var gettingReadyCue: Task<Void, Never>?
+    @ObservationIgnored private var showsGettingReady = false
+    @ObservationIgnored private let gettingReadyDelay: TimeInterval
     /// False after `shutDown()`: what's saved stays in the captures folder and nothing opens.
     @ObservationIgnored private var opensFinishedCaptures = true
 
@@ -160,6 +169,7 @@ final class ScreencastController {
     ///   - microphoneAvailable: Whether Keybumps has Microphone access, so the microphone switch can
     ///     start on without recording ever asking for it.
     ///   - sleep: Waits a number of seconds, for the countdown; tests pass their own clock.
+    ///   - gettingReadyDelay: How long reading the screen may take before "Getting ready…" shows.
     init(
         recorder: ScreencastRecorder? = nil,
         system: (any ScreencastPickerSystem)? = nil,
@@ -169,6 +179,7 @@ final class ScreencastController {
         screens: @escaping @MainActor () -> ScreencastScreenLayout = { ScreencastScreenLayout.current() },
         microphoneAvailable: @escaping @MainActor () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+        gettingReadyDelay: TimeInterval = 0.3,
         now: @escaping () -> Date = Date.init,
         fileManager: FileManager = .default,
         ownProcessID: pid_t = ProcessInfo.processInfo.processIdentifier
@@ -181,6 +192,7 @@ final class ScreencastController {
         self.screens = screens
         self.microphoneAvailable = microphoneAvailable
         self.sleep = sleep
+        self.gettingReadyDelay = gettingReadyDelay
         self.now = now
         self.fileManager = fileManager
         self.ownProcessID = ownProcessID
@@ -213,8 +225,16 @@ final class ScreencastController {
         presenter.watchEscape { [weak self] in self?.cancel() }
 
         // The screen is read before the picker covers it, so an alert macOS shows for the read
-        // (such as its monthly question about apps that record the screen) is never under it.
+        // (such as its monthly question about apps that record the screen) is never under it. If
+        // the read takes a moment, "Getting ready…" says Start Screencast was heard.
         let generation = generation
+        let delay = gettingReadyDelay
+        gettingReadyCue = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, self.generation == generation, self.phase == .picking else { return }
+            self.showsGettingReady = true
+            self.presenter.showGettingReady()
+        }
         windowsLoad = Task { [weak self] in
             guard let self else { return }
             do {
@@ -231,6 +251,7 @@ final class ScreencastController {
                 self.logger.error("screencast picker windows unavailable category=\(Self.category(of: error), privacy: .public)")
             }
             guard self.generation == generation, self.picker === model, self.phase == .picking else { return }
+            self.endGettingReady()
             self.presenter.showPicker(model, confirm: { [weak self] in self?.confirm() }, cancel: { [weak self] in self?.cancel() })
             self.logger.info("screencast picker opened displays=\(layout.screens.count, privacy: .public)")
         }
@@ -266,6 +287,7 @@ final class ScreencastController {
         switch phase {
         case .picking:
             windowsLoad?.cancel()
+            endGettingReady()
             presenter.closePicker()
             picker = nil
         case .countingDown:
@@ -345,16 +367,16 @@ final class ScreencastController {
     }
 
     /// Throws away what's recorded and starts again at once, recording, or paused if `pause()`
-    /// came meanwhile. Refused while a recording that ended on its own is saving; a `stop()` or
-    /// `discard()` that comes while it waits on the recorder wins.
+    /// came meanwhile. Refused while another restart is under way, or while a recording that ended
+    /// on its own is saving; a `stop()`, `discard()`, or early end that comes while it waits on the
+    /// recorder wins.
     func restart() async {
-        guard !noticeEarlyEnd(), phase.isRecording else { return }
-        isRestarting = true
+        guard !noticeEarlyEnd(), phase.isRecording, !restartInFlight else { return }
+        restartInFlight = true
+        defer { restartInFlight = false }
         do {
             try await recorder.restart()
-            isRestarting = false
         } catch {
-            isRestarting = false
             // A stop or discard took over meanwhile.
             guard phase.isRecording else { return }
             end(showing: error)
@@ -419,12 +441,13 @@ final class ScreencastController {
         }
     }
 
-    /// Whether the recorder is saving a recording that ended on its own. The first time it's seen
-    /// while still showing a recording, the phase becomes `.finishing` and the highlight closes;
-    /// `recordingEndedEarly` completes it.
+    /// Whether the recorder is saving a recording that ended on its own (`endingEarly`, which its
+    /// own stop, discard, or restart never sets). The first time it's seen while still showing a
+    /// recording, the phase becomes `.finishing` and the highlight closes; `recordingEndedEarly`
+    /// completes it.
     @discardableResult
     private func noticeEarlyEnd() -> Bool {
-        if !isEndingEarly, !isRestarting, phase.isRecording, recorder.state == .stopping {
+        if !isEndingEarly, phase.isRecording, recorder.endingEarly != nil {
             isEndingEarly = true
             presenter.closeAreaHighlight()
             phase = .finishing
@@ -436,7 +459,7 @@ final class ScreencastController {
     /// bar acts.
     private func followRecorderState() {
         withObservationTracking {
-            _ = recorder.state
+            _ = recorder.endingEarly
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.noticeEarlyEnd()
@@ -525,6 +548,16 @@ final class ScreencastController {
         }
         choice = nil
         phase = .idle
+    }
+
+    /// Stops the "Getting ready…" cue, and hides it if it showed.
+    private func endGettingReady() {
+        gettingReadyCue?.cancel()
+        gettingReadyCue = nil
+        if showsGettingReady {
+            showsGettingReady = false
+            presenter.hideGettingReady()
+        }
     }
 
     /// Whether the recorder is free: a start that was cancelled may still be winding down.
