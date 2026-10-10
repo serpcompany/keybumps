@@ -232,7 +232,7 @@ final class SmokeUITests: XCTestCase {
     func testScreencastShipsOffAndTurnsOnInSettings() {
         // Its page is drawn by the plugin template: Screen Recording, the Microphone as an optional
         // permission, its preferences, and its captures folder. CI's Mac runs macOS 15 or later, so
-        // it can be turned on. Nothing records yet (#446).
+        // it can be turned on.
         launch(permissions: "denied", ["-KBOpenSettings", "screencast"])
         let toggle = element("capability.toggle.screencast")
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
@@ -248,6 +248,56 @@ final class SmokeUITests: XCTestCase {
         element("capability.offBanner.turnOn.screencast").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
         XCTAssertTrue(element("capability.offBanner.screencast").waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastPickerOpensAndSwitchesModes() {
+        // The UI-test composition's made-up screens: the main screen split into two displays, two
+        // made-up windows, and a recorder that never starts.
+        launchScreencastPicker()
+        XCTAssertEqual(pickerWindows.count, 2, "One picker window per screen")
+        let confirm = element("screencast.picker.confirm")
+        let hint = element("screencast.picker.hint")
+        XCTAssertTrue(waitForLabel(of: confirm, "Record"))
+        XCTAssertTrue(waitForText(of: hint, "Drag to choose an area."))
+        for key in ["microphone", "systemAudio", "shortcuts", "clicks"] {
+            XCTAssertTrue(element("screencast.picker.\(key)").exists, key)
+        }
+
+        element("screencast.picker.kind.screenshot").click()
+        XCTAssertTrue(waitForLabel(of: confirm, "Capture"))
+        XCTAssertTrue(element("screencast.picker.microphone").waitForNonExistence(timeout: 5), "A screenshot has no sound")
+        XCTAssertFalse(element("screencast.picker.systemAudio").exists)
+
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+
+        element("screencast.picker.kind.video").click()
+        XCTAssertTrue(waitForLabel(of: confirm, "Record"))
+        XCTAssertTrue(element("screencast.picker.microphone").waitForExistence(timeout: 5))
+    }
+
+    func testScreencastPickerChoosesOneScreenOrEveryScreen() {
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        element("screencast.picker.target.screen").click()
+        XCTAssertTrue(waitForText(of: hint, "Every screen, one file each. Click a screen for just that one."))
+        let everyScreen = element("screencast.picker.everyScreen")
+        XCTAssertTrue(everyScreen.exists)
+
+        // Above the bar, which sits at the bottom of one of them.
+        let rightScreen = (0..<pickerWindows.count).map { pickerWindows.element(boundBy: $0) }.max { $0.frame.minX < $1.frame.minX }
+        rightScreen?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
+        XCTAssertTrue(waitForText(of: hint, "This screen only. Choose Every Screen for all of them."))
+
+        everyScreen.click()
+        XCTAssertTrue(waitForText(of: hint, "Every screen, one file each. Click a screen for just that one."))
+    }
+
+    func testEscapeClosesTheScreencastPicker() {
+        launchScreencastPicker()
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(pickerWindows.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(element("screencast.picker.bar").exists)
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -525,6 +575,27 @@ final class SmokeUITests: XCTestCase {
             "-KBDisableHotKeys", "YES",
         ] + arguments
         app.launch()
+    }
+
+    /// Turns Screencast on (it ships off) and opens its picker, as Start Screencast does.
+    private func launchScreencastPicker() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES"])
+        XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 20))
+    }
+
+    private var pickerWindows: XCUIElementQuery {
+        app.windows.matching(identifier: "screencastPicker")
+    }
+
+    private func waitForLabel(of element: XCUIElement, _ label: String) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", label)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    /// A text's words, which macOS gives as its label or its value.
+    private func waitForText(of element: XCUIElement, _ text: String) -> Bool {
+        let predicate = NSPredicate(format: "label == %@ OR value == %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 
     private func element(_ identifier: String) -> XCUIElement {

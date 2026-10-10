@@ -21,8 +21,14 @@ extension AppModel {
     /// Runs after `start()`, once the main window exists. Only the first call acts, because the
     /// window's `.task` reruns whenever the main window is reopened.
     func performUITestLaunchActions(_ configuration: UITestLaunchConfiguration = .current) {
-        guard configuration.isUITesting, !Self.didPerformUITestLaunchActions,
-              let tab = configuration.openPalette else { return }
+        guard configuration.isUITesting, !Self.didPerformUITestLaunchActions else { return }
+        if configuration.opensScreencastPicker {
+            Self.didPerformUITestLaunchActions = true
+            // The next turn, once the main window has appeared, so the picker opens over it.
+            DispatchQueue.main.async { [weak self] in self?.startScreencast() }
+            return
+        }
+        guard let tab = configuration.openPalette else { return }
         Self.didPerformUITestLaunchActions = true
         NSApplication.shared.activate(ignoringOtherApps: true)
         guard configuration.closesSettings else {
@@ -60,6 +66,10 @@ extension AppModel {
         let defaults = UserDefaults(suiteName: uiTestDefaultsSuite) ?? .standard
         defaults.removePersistentDomain(forName: uiTestDefaultsSuite)
         defaults.set(true, forKey: "didCompleteOnboarding")
+        let preferences = AppPreferences(defaults: defaults)
+        for capability in configuration.enabledCapabilities {
+            preferences.setCapability(capability, enabled: true)
+        }
 
         let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard, sourceApps: .inert)
         if configuration.seedsRecentKeybumps {
@@ -77,7 +87,7 @@ extension AppModel {
             }
         }
         let model = AppModel(
-            preferences: AppPreferences(defaults: defaults),
+            preferences: preferences,
             inbox: InboxStore(),
             presenceController: AppPresenceController(),
             detector: ManualActionDetector(
@@ -134,7 +144,15 @@ extension AppModel {
             ),
             allowsDictationSystemAccess: false,
             screenshotEditorFallbackFolder: { sandbox.screenshots },
-            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences()
+            symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences(),
+            // Screencast's picker opens on made-up screens and windows; a recording never starts,
+            // and a capture is never shown in Finder.
+            screencast: ScreencastSeams(
+                captureSystem: InertScreencastCaptureSystem(),
+                pickerSystem: UITestScreencastScreen(),
+                screens: { UITestScreencastScreen.layout },
+                revealCapture: { _ in }
+            )
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {
             model.clipboard.ingestImageFile(at: image, isScreenCapture: false)
@@ -192,6 +210,50 @@ private final class InertGlobalHotKeyBackend: GlobalHotKeyRegistering {
     func installHandler(_ handler: @escaping (UInt32) -> Void) {}
     func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { true }
     func unregister(identifier: UInt32) {}
+}
+
+/// Screencast's made-up screen in UI test mode: the main screen split into two displays side by
+/// side, with two windows of a made-up app on the left one, so a test can switch modes and pick a
+/// screen without reading the real screen. Screenshots are blank.
+@MainActor
+final class UITestScreencastScreen: ScreencastPickerSystem {
+    static let madeUpProcess: pid_t = 1
+
+    /// The two displays in AppKit's space: the left and right halves of the main screen.
+    static var layout: ScreencastScreenLayout {
+        let main = NSScreen.screens.first?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let half = (main.width / 2).rounded(.down)
+        return ScreencastScreenLayout(screens: [
+            ScreencastScreen(id: 9_001, frame: CGRect(x: main.minX, y: main.minY, width: half, height: main.height), scale: 2),
+            ScreencastScreen(id: 9_002, frame: CGRect(x: main.minX + half, y: main.minY, width: half, height: main.height), scale: 2),
+        ])
+    }
+
+    func content() async throws -> ScreencastContent {
+        let layout = Self.layout
+        let displays = layout.screens.map {
+            ScreencastContent.Display(id: $0.id, frame: layout.topLeftRect(fromAppKit: $0.frame), scale: $0.scale)
+        }
+        let windows = [CGRect(x: 60, y: 120, width: 400, height: 300), CGRect(x: 200, y: 260, width: 360, height: 240)]
+            .enumerated()
+            .map { index, frame in
+                ScreencastContent.Window(
+                    id: CGWindowID(9_101 + index), frame: frame, layer: 0, processID: Self.madeUpProcess,
+                    isUntitled: false, isOnScreen: true
+                )
+            }
+        return ScreencastContent(displays: displays, windows: windows, applicationProcessIDs: [Self.madeUpProcess])
+    }
+
+    func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
+        let width = max(plan.configuration.pixelWidth, 2)
+        let height = max(plan.configuration.pixelHeight, 2)
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let image = context.makeImage() else { throw ScreencastFailure.captureFailed }
+        return image
+    }
 }
 
 final class InertSpotlightShortcutResolver: SpotlightShortcutConflictResolving {

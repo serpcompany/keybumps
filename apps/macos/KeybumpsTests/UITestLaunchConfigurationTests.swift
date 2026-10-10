@@ -16,12 +16,25 @@ struct UITestLaunchConfigurationTests {
         #expect(!configuration.seedsClipboardImage)
         #expect(!configuration.seedsRecentKeybumps)
         #expect(!configuration.seedsSnippets)
+        #expect(configuration.enabledCapabilities.isEmpty)
+        #expect(!configuration.opensScreencastPicker)
+    }
+
+    @Test func turnsOnNamedPluginsAndOpensScreencastsPicker() {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted",
+            "-KBUITestEnableCapabilities", "screencast, keystrokes,nope", "-KBOpenScreencastPicker", "YES",
+        ])
+        #expect(configuration.enabledCapabilities == [.screencast, .keystrokes])
+        #expect(configuration.opensScreencastPicker)
+        #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestPermissions", "granted", "-KBOpenScreencastPicker", "NO"])
+            .opensScreencastPicker)
     }
 
     @Test func otherFlagsAreIgnoredWithoutThePermissionsFlag() {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBCloseSettings", "YES",
-            "-KBDisableHotKeys",
+            "-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES", "-KBDisableHotKeys",
         ])
         #expect(configuration == UITestLaunchConfiguration(arguments: [executable]))
     }
