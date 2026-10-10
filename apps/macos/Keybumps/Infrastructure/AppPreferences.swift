@@ -282,6 +282,9 @@ final class AppPreferences {
     /// The drawing tools' last choices while recording (`screencast.drawingStyle`).
     var screencastDrawingMemory: ScreencastDrawingMemory { ScreencastDrawingMemory(defaults: defaults) }
 
+    /// Where Screencast's review panel remembers "Also add to Screenshots (⌘3)".
+    var screencastReviewSettings: ScreencastReviewSettings { ScreencastReviewSettings(defaults: defaults) }
+
     /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {
         if enabled { enabledCapabilities.insert(capability) }

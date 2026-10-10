@@ -845,8 +845,7 @@ struct ScreencastRecordingControlsTests {
                 pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
                 presenter: FakeOverlays(),
                 screens: { PickerScreens.both },
-                sleep: { _ in },
-                revealCapture: { _ in }
+                sleep: { _ in }
             )
         )
         module.apply(CapabilityContext(

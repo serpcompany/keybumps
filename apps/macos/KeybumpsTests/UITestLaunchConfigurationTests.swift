@@ -19,6 +19,21 @@ struct UITestLaunchConfigurationTests {
         #expect(configuration.enabledCapabilities.isEmpty)
         #expect(!configuration.opensScreencastPicker)
         #expect(!configuration.startsScreencastRecording)
+        #expect(configuration.screencastReview == nil)
+    }
+
+    @Test(arguments: [
+        ("video", UITestLaunchConfiguration.ScreencastReviewCapture.video),
+        ("screenshot", .screenshot),
+        ("gif", nil),
+    ] as [(String, UITestLaunchConfiguration.ScreencastReviewCapture?)])
+    func opensScreencastsReviewOnAMadeUpCapture(value: String, capture: UITestLaunchConfiguration.ScreencastReviewCapture?) {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted", "-KBUITestScreencastReview", value,
+        ])
+        #expect(configuration.screencastReview == capture)
+        #expect(UITestLaunchConfiguration(arguments: [executable, "-KBUITestScreencastReview", value]).screencastReview == nil,
+                "ignored outside UI test mode")
     }
 
     @Test func turnsOnNamedPluginsAndOpensScreencastsPicker() {
@@ -47,7 +62,7 @@ struct UITestLaunchConfigurationTests {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBCloseSettings", "YES",
             "-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES",
-            "-KBUITestScreencastRecording", "YES", "-KBDisableHotKeys",
+            "-KBUITestScreencastRecording", "YES", "-KBUITestScreencastReview", "video", "-KBDisableHotKeys",
         ])
         #expect(configuration == UITestLaunchConfiguration(arguments: [executable]))
     }
