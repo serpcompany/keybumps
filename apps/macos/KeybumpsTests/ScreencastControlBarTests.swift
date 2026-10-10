@@ -785,7 +785,7 @@ struct ScreencastRecordingControlsTests {
         #expect(hotKeys.registered.isEmpty)
     }
 
-    @Test("The recording shortcuts are Screencast's, unassigned, say when they work, and Draw waits for drawing")
+    @Test("The recording shortcuts are Screencast's, unassigned, say when they work, and Settings lists each")
     func shortcutCases() {
         for shortcut in ScreencastRecordingControls.shortcuts {
             #expect(shortcut.capability == .screencast)
@@ -796,8 +796,7 @@ struct ScreencastRecordingControlsTests {
         #expect(ScreencastRecordingControls.shortcuts.map(\.title) == [
             "Pause & Resume Recording", "Stop Recording", "Discard Recording", "Draw While Recording",
         ])
-        #expect(CapabilityDescriptor.screencast.shortcuts == [.screencast, .screencastPause, .screencastStop, .screencastDiscard])
-        #expect(!CapabilityShortcut.screencastDraw.isListed)
+        #expect(CapabilityDescriptor.screencast.shortcuts == [.screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw])
     }
 
     @available(macOS 15, *)

@@ -8,6 +8,8 @@ enum ScreencastDrawingToolbarID {
     static func lifetime(_ lifetime: ScreencastMarkLifetime) -> String { "screencast.draw.\(lifetime.rawValue)" }
     static let undo = "screencast.draw.undo"
     static let clear = "screencast.draw.clear"
+    /// The value of the chosen tool, color, and Fade or Stay, besides their selected trait.
+    static let selected = "Selected"
 }
 
 /// The drawing tools while drawing: the tool, the color, whether marks fade or stay, Undo, and
@@ -163,6 +165,7 @@ private struct ScreencastDrawingTools: View {
                 .help(tool.title)
                 .accessibilityLabel(tool.title)
                 .accessibilityAddTraits(overlays.style.tool == tool ? .isSelected : [])
+                .accessibilityValue(overlays.style.tool == tool ? ScreencastDrawingToolbarID.selected : "")
                 .accessibilityIdentifier(ScreencastDrawingToolbarID.tool(tool))
             }
 
@@ -178,6 +181,7 @@ private struct ScreencastDrawingTools: View {
                 .help(color.title)
                 .accessibilityLabel(color.title)
                 .accessibilityAddTraits(overlays.style.color == color ? .isSelected : [])
+                .accessibilityValue(overlays.style.color == color ? ScreencastDrawingToolbarID.selected : "")
                 .accessibilityIdentifier(ScreencastDrawingToolbarID.color(color))
             }
 
@@ -190,6 +194,7 @@ private struct ScreencastDrawingTools: View {
                 .buttonStyle(ScreencastDrawingTextButtonStyle(isOn: overlays.style.lifetime == lifetime))
                 .help(lifetime == .fades ? "New marks fade a few seconds after you draw them" : "New marks stay until you clear them")
                 .accessibilityAddTraits(overlays.style.lifetime == lifetime ? .isSelected : [])
+                .accessibilityValue(overlays.style.lifetime == lifetime ? ScreencastDrawingToolbarID.selected : "")
                 .accessibilityIdentifier(ScreencastDrawingToolbarID.lifetime(lifetime))
             }
 

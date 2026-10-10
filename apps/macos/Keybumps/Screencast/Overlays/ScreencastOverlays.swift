@@ -32,17 +32,37 @@ enum ScreencastDrawingKey: String, CaseIterable {
         case .undo: ShortcutBinding(keyCode: UInt32(kVK_ANSI_Z), modifiers: UInt32(cmdKey), displayName: "⌘Z")
         }
     }
+
+    /// The drawing key a key-down in Keybumps's own windows is: exactly its key and modifiers.
+    static func matching(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> ScreencastDrawingKey? {
+        let held = modifiers.intersection([.command, .control, .option, .shift])
+        return allCases.first { UInt32(keyCode) == $0.binding.keyCode && held == $0.modifierFlags }
+    }
+
+    /// The binding's modifiers as AppKit's flags.
+    private var modifierFlags: NSEvent.ModifierFlags {
+        let carbon = Int(binding.modifiers)
+        var flags: NSEvent.ModifierFlags = []
+        if carbon & cmdKey != 0 { flags.insert(.command) }
+        if carbon & shiftKey != 0 { flags.insert(.shift) }
+        if carbon & optionKey != 0 { flags.insert(.option) }
+        if carbon & controlKey != 0 { flags.insert(.control) }
+        return flags
+    }
 }
 
-/// What Screencast shows on screen while recording, for the video (#449): drawing, so far. The
-/// recording flow makes one per recording, shows it on the recorded displays when recording
-/// starts, gives the recorder its windows (`overlayWindowIDs` and `onOverlayWindowsChange`, for
-/// `ScreencastRecorder.includeOverlayWindow`), connects the control bar's Draw button, and hides
-/// it when the recording ends.
+/// The drawing Screencast shows on screen while recording, for the video (#449).
+/// `ScreencastOverlaysWiring` makes one per recording, shows it on the recorded displays as the
+/// recording starts, gives the recorder its windows (`overlayWindowIDs` and
+/// `onOverlayWindowsChange`, for `ScreencastRecorder.includeOverlayWindow`), connects the control
+/// bar's Draw button, and hides it when the recording ends.
 ///
 /// - Drawing is on or off. Off, the drawing layer lets every click through; on, it takes the
 ///   pointer, a border shows around each recorded display, the drawing tools show above the
-///   control bar, and Escape, Delete, and ⌘Z stop drawing, clear, and undo.
+///   control bar, and Escape, Delete, and ⌘Z stop drawing, clear, and undo. Those keys are hot keys
+///   while drawing; when one can't be registered (Dictation's Escape is taken while it records),
+///   it still works while one of Keybumps's own windows has the keyboard, and the Draw button and
+///   shortcut always end drawing.
 /// - Marks are drawn with the tools' choice of pen, arrow, highlighter, or rectangle, a color, and
 ///   whether they fade a few seconds after they're drawn or stay until cleared.
 /// - The drawing layer's windows are in the video; the border and the tools aren't.
@@ -57,9 +77,11 @@ final class ScreencastOverlays {
     private(set) var isShown = false
     /// Whether the drawing layer takes the pointer.
     private(set) var isDrawing = false
-    /// How the next mark is drawn: the drawing tools' choices, kept for as long as these overlays
-    /// are. Changing them never changes a mark already drawn.
-    var style = ScreencastDrawingStyle()
+    /// How the next mark is drawn: the drawing tools' choices. Changing them never changes a mark
+    /// already drawn.
+    var style = ScreencastDrawingStyle() {
+        didSet { if style != oldValue { onStyleChange?(style) } }
+    }
     /// Whether there's a mark on screen to undo or clear.
     private(set) var hasMarks = false
 
@@ -68,6 +90,8 @@ final class ScreencastOverlays {
     @ObservationIgnored var onOverlayWindowsChange: (([CGWindowID]) -> Void)?
     /// Called when drawing starts or stops, however it did: the Draw button, Escape, or `hide`.
     @ObservationIgnored var onDrawingChange: ((Bool) -> Void)?
+    /// Called when the tools' choices change, so they can be remembered for the next recording.
+    @ObservationIgnored var onStyleChange: ((ScreencastDrawingStyle) -> Void)?
 
     /// The marks, read at the overlays' clock.
     @ObservationIgnored private(set) var drawing = ScreencastDrawing()
@@ -78,6 +102,9 @@ final class ScreencastOverlays {
     @ObservationIgnored private let connectedDisplays: @MainActor () -> [ScreencastOverlayDisplay]
     @ObservationIgnored private let clock: () -> TimeInterval
     @ObservationIgnored private let tickInterval: TimeInterval?
+    @ObservationIgnored private let watchesOwnKeys: Bool
+    /// Hears the drawing keys pressed in Keybumps's own windows, while drawing.
+    @ObservationIgnored private var ownKeyMonitor: Any?
     /// The recorded displays, whichever of them are connected.
     @ObservationIgnored private var recordedDisplays: Set<CGDirectDisplayID> = []
     @ObservationIgnored private var timer: Timer?
@@ -90,17 +117,21 @@ final class ScreencastOverlays {
     ///   - clock: Seconds that only go forward, which fading is timed by.
     ///   - tickInterval: How often fading marks are redrawn; nil for no timer (tests call `tick()`).
     ///   - ordersWindowsIn: False keeps every window off screen, as under the unit-test host.
+    ///   - watchesOwnKeys: Whether the drawing keys are also heard in Keybumps's own windows; never
+    ///     under the unit-test host.
     init(
         keys: (any ScreencastDrawingKeyRegistering)? = nil,
         displays: @escaping @MainActor () -> [ScreencastOverlayDisplay] = { ScreencastOverlayDisplay.connected },
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         tickInterval: TimeInterval? = 1.0 / 30,
-        ordersWindowsIn: Bool = !UnitTestHost.isActive
+        ordersWindowsIn: Bool = !UnitTestHost.isActive,
+        watchesOwnKeys: Bool = !UnitTestHost.isActive
     ) {
         self.keys = keys
         connectedDisplays = displays
         self.clock = clock
         self.tickInterval = tickInterval
+        self.watchesOwnKeys = watchesOwnKeys
         layer = ScreencastDrawingLayer(ordersWindowsIn: ordersWindowsIn)
         toolbar = ScreencastDrawingToolbar(ordersPanelIn: ordersWindowsIn)
         layer.delegate = self
@@ -110,6 +141,7 @@ final class ScreencastOverlays {
 
     deinit {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let ownKeyMonitor { NSEvent.removeMonitor(ownKeyMonitor) }
     }
 
     /// The drawing layer's windows, which the recorder shows in the video. Stable from `show` to
@@ -169,6 +201,17 @@ final class ScreencastOverlays {
         bar.isDrawing = isDrawing
         bar.onToggleDrawing = { [weak self] in self?.toggleDrawing() }
     }
+
+    /// Takes the Draw button off the bar again.
+    func disconnectBar() {
+        guard let bar else { return }
+        bar.onToggleDrawing = nil
+        bar.isDrawing = false
+        self.bar = nil
+    }
+
+    /// Whether the control bar's Draw button is these overlays'.
+    func isConnected(to bar: ScreencastControlBar) -> Bool { self.bar === bar }
 
     // MARK: Drawing
 
@@ -238,15 +281,31 @@ final class ScreencastOverlays {
     // MARK: Keys
 
     private func registerKeys() {
-        guard let keys else { return }
-        for key in ScreencastDrawingKey.allCases {
-            keys.register(owner: key.owner, binding: key.binding) { [weak self] in self?.press(key) }
+        if let keys {
+            for key in ScreencastDrawingKey.allCases {
+                keys.register(owner: key.owner, binding: key.binding) { [weak self] in self?.press(key) }
+            }
+        }
+        // A hot key never reaches Keybumps's own windows' handlers, so this hears only what the
+        // hot keys didn't take: a key that couldn't be registered, or with hot keys turned off.
+        guard watchesOwnKeys, ownKeyMonitor == nil else { return }
+        ownKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let key = ScreencastDrawingKey.matching(keyCode: event.keyCode, modifiers: event.modifierFlags) else { return event }
+            let handled = MainActor.assumeIsolated { () -> Bool in
+                guard let self, self.isDrawing else { return false }
+                self.press(key)
+                return true
+            }
+            return handled ? nil : event
         }
     }
 
     private func unregisterKeys() {
-        guard let keys else { return }
-        for key in ScreencastDrawingKey.allCases { keys.unregister(owner: key.owner) }
+        if let keys {
+            for key in ScreencastDrawingKey.allCases { keys.unregister(owner: key.owner) }
+        }
+        if let ownKeyMonitor { NSEvent.removeMonitor(ownKeyMonitor) }
+        ownKeyMonitor = nil
     }
 
     /// What a drawing key does.

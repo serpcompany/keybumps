@@ -77,8 +77,10 @@ struct ScreencastSeams {
 /// until then it opens Screencast's page, so the picker never makes macOS ask. Turning Screencast
 /// off, or Keybumps becoming Locked, cancels a capture that hasn't started and keeps a recording
 /// in the captures folder. While it records, `ScreencastRecordingControls` shows the control bar
-/// and the time in the menu bar, and registers the recording shortcuts. A saved capture is shown
-/// in Finder until the review panel (#450) takes its place.
+/// and the time in the menu bar, and registers the recording shortcuts, and
+/// `ScreencastOverlaysWiring` puts the drawing and, with Show shortcuts on, the key display on the
+/// recorded screens and into the video. A saved capture is shown in Finder until the review panel
+/// (#450) takes its place.
 @MainActor
 final class ScreencastModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screencast
@@ -89,6 +91,8 @@ final class ScreencastModule: CapabilityModule {
     private let seams: ScreencastSeams
     /// The control bar, the menu bar's time, and the recording shortcuts.
     let recordingControls: ScreencastRecordingControls
+    /// The drawing and the shortcuts on screen while recording.
+    let overlays: ScreencastOverlaysWiring
     private var isOn = false
     /// The `ScreencastController`, made the first time Start Screencast opens the picker. Stored
     /// untyped because the controller needs macOS 15.
@@ -99,6 +103,7 @@ final class ScreencastModule: CapabilityModule {
         permissions: PermissionCoordinator,
         openSettings: @escaping @MainActor (SettingsSection) -> Void,
         menuBar: CapabilityMenuBarStatus? = nil,
+        keyDisplay: KeyDisplay? = nil,
         seams: ScreencastSeams = ScreencastSeams()
     ) {
         self.preferences = preferences
@@ -109,6 +114,15 @@ final class ScreencastModule: CapabilityModule {
             menuBar: menuBar,
             placement: preferences.screencastBarPlacement,
             confirmationTimeout: seams.barConfirmationTimeout ?? ScreencastControlBarModel.confirmationTimeout
+        )
+        let screens = seams.screens ?? { ScreencastScreenLayout.current() }
+        overlays = ScreencastOverlaysWiring(
+            keyDisplay: keyDisplay,
+            drawingMemory: preferences.screencastDrawingMemory,
+            keystrokesConfiguration: { [preferences] in
+                preferences.enabledCapabilities.contains(.keystrokes) ? preferences.keystrokesConfiguration : nil
+            },
+            displays: { ScreencastOverlaysWiring.displays(in: screens(), connected: ScreencastOverlayDisplay.connected) }
         )
     }
 
@@ -122,6 +136,7 @@ final class ScreencastModule: CapabilityModule {
             self?.start()
         }
         recordingControls.apply(context)
+        overlays.apply(context)
     }
 
     /// Turned off, or Keybumps Locked: the picker closes and a countdown is cancelled, but a
@@ -180,6 +195,7 @@ final class ScreencastModule: CapabilityModule {
         let reveal = seams.revealCapture ?? Self.revealInFinder
         controller.onCaptureFinished = { result in reveal(Self.files(of: result)) }
         recordingControls.attach(to: controller)
+        overlays.attach(to: controller, bar: { [recordingControls] in recordingControls.bar })
         controllerStorage = controller
         return controller
     }

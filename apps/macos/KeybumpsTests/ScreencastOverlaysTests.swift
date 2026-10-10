@@ -438,7 +438,7 @@ struct ScreencastOverlaysTests {
     func controlBar() {
         let overlays = makeOverlays()
         let recording = FakeBarRecording()
-        let bar = ScreencastControlBar(recording: recording, defaults: InMemoryDefaults(), displays: { [] }, ordersPanelIn: false)
+        let bar = ScreencastControlBar(recording: recording, placement: ScreencastControlBarPlacement(defaults: InMemoryDefaults()), displays: { [] }, ordersPanelIn: false)
         #expect(!bar.model.showsDrawButton)
         overlays.show(on: [1])
         overlays.connect(to: bar)
@@ -459,7 +459,7 @@ struct ScreencastOverlaysTests {
     @Test("While drawing, the tools sit just above the control bar")
     func toolsAboveTheBar() {
         let overlays = makeOverlays()
-        let bar = ScreencastControlBar(recording: FakeBarRecording(), defaults: InMemoryDefaults(), displays: { [] }, ordersPanelIn: false)
+        let bar = ScreencastControlBar(recording: FakeBarRecording(), placement: ScreencastControlBarPlacement(defaults: InMemoryDefaults()), displays: { [] }, ordersPanelIn: false)
         overlays.show(on: [1])
         overlays.connect(to: bar)
         bar.show(on: ScreencastBarDisplay(key: "laptop", visibleFrame: FakeOverlayDisplays.laptop.visibleFrame))
@@ -547,7 +547,7 @@ struct ScreencastOverlaysTests {
 
 /// A hot-key backend that keeps what's registered and can press it.
 @MainActor
-private final class DrawingHotKeyBackend: GlobalHotKeyRegistering {
+final class DrawingHotKeyBackend: GlobalHotKeyRegistering {
     let registrationScope = GlobalHotKeyRegistrationScope.systemWide
     private(set) var registered: [UInt32: ShortcutBinding] = [:]
     private var handler: ((UInt32) -> Void)?

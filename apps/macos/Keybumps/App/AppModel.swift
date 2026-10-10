@@ -371,6 +371,7 @@ final class AppModel {
                 permissions: permissions,
                 openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) },
                 menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screencast),
+                keyDisplay: keyDisplay,
                 seams: injectedScreencast
             ),
         ])
