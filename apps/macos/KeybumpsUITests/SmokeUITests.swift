@@ -30,7 +30,10 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
 
-        for section in ["permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation"] {
+        for section in [
+            "permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows",
+            "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+        ] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
         }
@@ -206,6 +209,257 @@ final class SmokeUITests: XCTestCase {
         element("capability.offBanner.turnOn.translation").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
         XCTAssertTrue(element("capability.offBanner.translation").waitForNonExistence(timeout: 5))
+    }
+
+    func testKeystrokesShipsOffAndTurnsOnInSettings() {
+        // Its page is drawn by the plugin template, with Input Monitoring, which its keyboard tap
+        // needs, and its preferences. The UI-test composition's key display never listens or draws.
+        launch(permissions: "denied", ["-KBOpenSettings", "keystrokes"])
+        let toggle = element("capability.toggle.keystrokes")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForValue(of: toggle, 0), "Keystrokes ships off")
+        XCTAssertTrue(app.staticTexts["Input Monitoring"].exists)
+        for key in ["style", "position", "size", "duration", "keys", "namesActions", "showsClicks"] {
+            XCTAssertTrue(element("plugin.keystrokes.\(key)").exists, key)
+        }
+        XCTAssertTrue(element("capability.offBanner.keystrokes").exists, "Its page says it's off")
+
+        element("capability.offBanner.turnOn.keystrokes").click()
+        XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.keystrokes").waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastShipsOffAndTurnsOnInSettings() {
+        // Its page is drawn by the plugin template: Screen Recording, the Microphone as an optional
+        // permission, its preferences, and its captures folder. CI's Mac runs macOS 15 or later, so
+        // it can be turned on.
+        launch(permissions: "denied", ["-KBOpenSettings", "screencast"])
+        let toggle = element("capability.toggle.screencast")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitForValue(of: toggle, 0), "Screencast ships off")
+        XCTAssertTrue(app.staticTexts["Screen Recording"].exists)
+        XCTAssertTrue(app.staticTexts["Microphone (Optional)"].exists)
+        for key in ["recordsMicrophone", "recordsSystemAudio", "countdown", "showsShortcuts", "highlightsClicks"] {
+            XCTAssertTrue(element("plugin.screencast.\(key)").exists, key)
+        }
+        XCTAssertTrue(element("plugin.screencast.showCaptures").exists)
+        XCTAssertTrue(element("capability.offBanner.screencast").exists, "Its page says it's off")
+
+        element("capability.offBanner.turnOn.screencast").click()
+        XCTAssertTrue(waitForValue(of: toggle, 1))
+        XCTAssertTrue(element("capability.offBanner.screencast").waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastPickerOpensAndSwitchesModes() {
+        // The UI-test composition's made-up screens: the main screen split into a top and a bottom
+        // display, each as wide as it, two made-up windows on the top one, and a recorder that
+        // records them but captures nothing.
+        launchScreencastPicker()
+        XCTAssertEqual(pickerPanels.count, 2, "One picker panel per screen")
+        let confirm = element("screencast.picker.confirm")
+        let hint = element("screencast.picker.hint")
+        XCTAssertTrue(waitForLabel(of: confirm, "Record"))
+        XCTAssertTrue(waitForText(of: hint, "Drag to choose an area."))
+        for key in ["microphone", "systemAudio", "shortcuts", "clicks"] {
+            XCTAssertTrue(element("screencast.picker.\(key)").exists, key)
+        }
+
+        element("screencast.picker.kind.screenshot").click()
+        XCTAssertTrue(waitForLabel(of: confirm, "Capture"))
+        XCTAssertTrue(element("screencast.picker.microphone").waitForNonExistence(timeout: 5), "A screenshot has no sound")
+        XCTAssertFalse(element("screencast.picker.systemAudio").exists)
+
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+
+        element("screencast.picker.kind.video").click()
+        XCTAssertTrue(waitForLabel(of: confirm, "Record"))
+        XCTAssertTrue(element("screencast.picker.microphone").waitForExistence(timeout: 5))
+    }
+
+    func testScreencastPickerChoosesOneScreenOrEveryScreen() throws {
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        element("screencast.picker.target.screen").click()
+        XCTAssertTrue(waitForText(of: hint, "Every screen, one file each. Click a screen for just that one."))
+        let everyScreen = element("screencast.picker.everyScreen")
+        XCTAssertTrue(everyScreen.exists)
+
+        // The lower of the two screens, a quarter of the way down it: above the bar, which sits at
+        // the bottom of one of them.
+        XCTAssertEqual(pickerPanels.count, 2)
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        let lowerScreen = try XCTUnwrap(panels.max { $0.frame.minY < $1.frame.minY })
+        lowerScreen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
+        XCTAssertTrue(waitForText(of: hint, "This screen only. Choose Every Screen for all of them."))
+
+        everyScreen.click()
+        XCTAssertTrue(waitForText(of: hint, "Every screen, one file each. Click a screen for just that one."))
+    }
+
+    func testEscapeClosesTheScreencastPicker() {
+        launchScreencastPicker()
+        XCTAssertEqual(pickerPanels.count, 2, "The picker is up before Escape")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(pickerPanels.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(pickerPanels.count, 0)
+        XCTAssertFalse(element("screencast.picker.bar").exists)
+    }
+
+    func testScreencastControlBarButtonsChangeState() {
+        // A recording of a made-up screen that captures nothing, with the control bar showing.
+        launchScreencastRecording()
+
+        let pause = element("screencast.bar.pause")
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"))
+        pause.click()
+        XCTAssertTrue(waitForLabel(of: pause, "Resume"), "Pause becomes Resume")
+        pause.click()
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Resume becomes Pause")
+
+        let microphone = element("screencast.bar.microphone")
+        XCTAssertTrue(waitForValue(of: microphone, equalTo: "On"))
+        microphone.click()
+        XCTAssertTrue(waitForValue(of: microphone, equalTo: "Off"), "The microphone mutes")
+
+        // Discard and Restart each ask in the bar first, and Keep goes back to the controls.
+        for (button, confirm) in [("discard", "confirmDiscard"), ("restart", "confirmRestart")] {
+            element("screencast.bar.\(button)").click()
+            XCTAssertTrue(element("screencast.bar.\(confirm)").waitForExistence(timeout: 5), button)
+            element("screencast.bar.keep").click()
+            XCTAssertTrue(element("screencast.bar.\(confirm)").waitForNonExistence(timeout: 5), button)
+            XCTAssertTrue(element("screencast.bar.stop").waitForExistence(timeout: 5), "Keep brings the controls back")
+        }
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Still recording")
+
+        // macOS reports the bar's panel as a dialog, not a window.
+        let controlBar = app.dialogs.matching(identifier: "screencastControlBar").firstMatch
+        XCTAssertTrue(controlBar.exists, "The bar's panel is there while recording")
+        let stop = element("screencast.bar.stop")
+        stop.click()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 10), "Stop ends the recording")
+        XCTAssertTrue(controlBar.waitForNonExistence(timeout: 10), "The bar closes")
+    }
+
+    func testScreencastDrawingFromTheControlBar() {
+        // A recording of a made-up screen that captures nothing, with the control bar showing.
+        launchScreencastRecording()
+        // Settings, which UI test mode opens at launch, has the keyboard.
+        let general = element("settings.sidebar.general")
+        XCTAssertTrue(general.waitForExistence(timeout: 10))
+        general.click()
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 5))
+
+        let draw = element("screencast.bar.draw")
+        XCTAssertTrue(draw.waitForExistence(timeout: 5), "The bar has Draw once drawing is wired in")
+        XCTAssertTrue(waitForValue(of: draw, equalTo: "Off"))
+        XCTAssertFalse(element("screencast.draw.tool.pen").exists, "The tools show only while drawing")
+        draw.click()
+        XCTAssertTrue(waitForValue(of: draw, equalTo: "On"))
+        XCTAssertTrue(element("screencast.draw.tool.pen").waitForExistence(timeout: 5), "The tools show above the bar")
+
+        let arrow = element("screencast.draw.tool.arrow")
+        arrow.click()
+        XCTAssertTrue(waitForValue(of: arrow, equalTo: "Selected"))
+        XCTAssertNotEqual(element("screencast.draw.tool.pen").value as? String, "Selected")
+        let blue = element("screencast.draw.color.blue")
+        blue.click()
+        XCTAssertTrue(waitForValue(of: blue, equalTo: "Selected"))
+
+        // An arrow on the drawing layer, which takes the pointer while drawing. macOS reports the
+        // non-activating panels as dialogs. The drag is relative to the layer, which covers the
+        // recorded made-up screen: in its left part, clear of the bar and the tools (centered
+        // near the bottom of the real screen) and of the menu bar.
+        let clear = element("screencast.draw.clear")
+        XCTAssertFalse(clear.isEnabled, "Nothing to clear yet")
+        let layer = app.dialogs.matching(identifier: "screencastDrawing").firstMatch
+        XCTAssertTrue(layer.waitForExistence(timeout: 5))
+        layer.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.3))
+            .press(forDuration: 0.1, thenDragTo: layer.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)))
+        XCTAssertTrue(waitForEnabled(clear, true), "The arrow is there to clear")
+        clear.click()
+        XCTAssertTrue(waitForEnabled(clear, false), "Clear took it away")
+
+        // Escape with Settings the key window: drawing hears it first (its hot key is inert with
+        // -KBDisableHotKeys), so drawing stops and Settings, which closes on Escape, stays open.
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(waitForValue(of: draw, equalTo: "Off"), "Escape stops drawing")
+        XCTAssertTrue(element("screencast.draw.tool.pen").waitForNonExistence(timeout: 5), "and the tools go")
+        XCTAssertTrue(element("settings.detail.general").exists, "Settings kept its window")
+
+        let stop = element("screencast.bar.stop")
+        stop.click()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(app.dialogs.matching(identifier: "screencastDrawing").firstMatch.waitForNonExistence(timeout: 5), "The drawing goes with the recording")
+    }
+
+    // MARK: Screencast's review panel (#450)
+
+    func testScreencastReviewSavesAScreenshotWithItsNote() {
+        launchScreencastReview("screenshot")
+        XCTAssertTrue(element("screencast.review.addToScreenshots").exists, "A screenshot offers Also add to Screenshots")
+        XCTAssertTrue(element("screencast.review.type").exists)
+        XCTAssertTrue(element("screencast.review.repository").exists)
+        XCTAssertTrue(element("screencast.review.destination").exists)
+        XCTAssertFalse(element("screencast.review.saveAndSend").isEnabled, "Sending comes with destinations")
+        XCTAssertFalse(element("screencast.review.sendAndDelete").isEnabled)
+
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Header typo")
+        element("screencast.review.save").click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Save closes the panel")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Header typo"))
+    }
+
+    func testScreencastReviewReturnSaves() {
+        launchScreencastReview("screenshot")
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Saved by Return")
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Saved by Return"))
+    }
+
+    func testScreencastReviewEscapeClosesAndSaves() {
+        launchScreencastReview("video")
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Closed by Escape")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes the panel")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Closed by Escape"), "Closing saves")
+    }
+
+    func testScreencastReviewCopies() {
+        launchScreencastReview("screenshot")
+        element("screencast.review.copy").click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForReviewOutcome("copied; folder kept; note empty; clipboard 1"))
+    }
+
+    func testScreencastReviewDiscardAsksFirst() {
+        launchScreencastReview("video")
+        element("screencast.review.discard").click()
+        let keep = element("screencast.review.keep")
+        XCTAssertTrue(keep.waitForExistence(timeout: 5), "Discard asks first")
+        XCTAssertTrue(element("screencast.review.confirmDiscard").exists)
+        keep.click()
+        XCTAssertTrue(element("screencast.review.discard").waitForExistence(timeout: 5), "Keep goes back")
+        XCTAssertTrue(reviewPanel.exists)
+
+        element("screencast.review.discard").click()
+        element("screencast.review.confirmDiscard").click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForReviewOutcome("discarded; folder deleted"))
+    }
+
+    func testScreencastReviewOfAVideoHasTrimAndNoScreenshotsSwitch() {
+        launchScreencastReview("video")
+        XCTAssertTrue(element("screencast.review.trim").exists)
+        XCTAssertFalse(element("screencast.review.addToScreenshots").exists, "Only a screenshot can go to ⌘3")
+        XCTAssertFalse(element("screencast.review.edit").exists)
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -485,6 +739,59 @@ final class SmokeUITests: XCTestCase {
         app.launch()
     }
 
+    /// Turns Screencast on (it ships off) and opens its picker, as Start Screencast does.
+    private func launchScreencastPicker() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES"])
+        XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 20))
+    }
+
+    /// Turns Screencast on and starts a recording of a made-up screen, as Record would.
+    private func launchScreencastRecording() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES"])
+        // The bar shows as the recording starts, its buttons waiting until it records.
+        let pause = element("screencast.bar.pause")
+        XCTAssertTrue(pause.waitForExistence(timeout: 20))
+        let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: pause)
+        XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
+    }
+
+    /// Turns Screencast on and opens its review panel on a made-up `video` or `screenshot`.
+    private func launchScreencastReview(_ capture: String) {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
+        XCTAssertTrue(element("screencast.review.note").waitForExistence(timeout: 20))
+        // So a later check that it closed is about the panel, not a query that finds nothing.
+        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel itself is found")
+    }
+
+    /// The review panel. macOS reports a floating panel like it as a dialog, not a window.
+    private var reviewPanel: XCUIElement {
+        app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
+    }
+
+    /// The UI-test-only line that says what the panel did with the capture.
+    private func waitForReviewOutcome(_ text: String) -> Bool {
+        let outcome = element("screencast.review.uitest.outcome")
+        let predicate = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: outcome)], timeout: 10) == .completed
+    }
+
+    /// The picker's panels, one per screen. macOS reports a borderless, non-activating panel as a
+    /// dialog, not a window, so `app.windows` never lists them.
+    private var pickerPanels: XCUIElementQuery {
+        app.dialogs.matching(identifier: "screencastPicker")
+    }
+
+    private func waitForLabel(of element: XCUIElement, _ label: String) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", label)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    /// A text's words, which macOS gives as its label or its value.
+    private func waitForText(of element: XCUIElement, _ text: String) -> Bool {
+        let predicate = NSPredicate(format: "label == %@ OR value == %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
@@ -512,6 +819,11 @@ final class SmokeUITests: XCTestCase {
     /// Waits for a hotkey field to show a saved shortcut other than `value`, not still recording.
     private func waitForSavedValue(of element: XCUIElement, notEqualTo value: String?) -> Bool {
         let predicate = NSPredicate(format: "value != %@ AND value != %@", value ?? "", "Waiting for shortcut")
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    private func waitForEnabled(_ element: XCUIElement, _ enabled: Bool) -> Bool {
+        let predicate = NSPredicate(format: "isEnabled == %@", NSNumber(value: enabled))
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 

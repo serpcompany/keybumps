@@ -19,6 +19,18 @@ struct UITestLaunchConfiguration: Equatable {
     static let seedRecentKeybumpsArgument = "-KBUITestSeedRecentKeybumps"
     static let seedSnippetsArgument = "-KBUITestSeedSnippets"
     static let licenseStateArgument = "-KBLicenseState"
+    static let enableCapabilitiesArgument = "-KBUITestEnableCapabilities"
+    static let openScreencastPickerArgument = "-KBOpenScreencastPicker"
+    static let screencastRecordingArgument = "-KBUITestScreencastRecording"
+    static let screencastReviewArgument = "-KBUITestScreencastReview"
+
+    /// The made-up capture `-KBUITestScreencastReview` opens Screencast's review panel on.
+    enum ScreencastReviewCapture: String, Equatable {
+        /// A short silent video.
+        case video
+        /// A PNG.
+        case screenshot
+    }
 
     /// The fixed license state a UI test starts in (`active` unless `-KBLicenseState` says otherwise).
     enum LicenseStateMode: String, Equatable {
@@ -50,6 +62,17 @@ struct UITestLaunchConfiguration: Equatable {
     /// Adds three made-up plain snippets, so a test can select several.
     private(set) var seedsSnippets = false
     private(set) var licenseState: LicenseStateMode = .active
+    /// Plugins turned on at launch, such as those that ship off (`screencast,keystrokes`). Names
+    /// that aren't a `Capability` are ignored.
+    private(set) var enabledCapabilities: Set<Capability> = []
+    /// Opens Screencast's picker once, at launch, as Start Screencast does (Screencast must be on).
+    private(set) var opensScreencastPicker = false
+    /// Starts a Screencast recording of the first made-up screen at launch, with no countdown, so
+    /// the control bar shows (Screencast must be on). It captures nothing.
+    private(set) var startsScreencastRecording = false
+    /// Opens Screencast's review panel once, at launch, on a capture made up in the sandbox's
+    /// captures folder (Screencast must be on).
+    private(set) var screencastReview: ScreencastReviewCapture?
 
     var isUITesting: Bool { permissions != nil }
 
@@ -68,6 +91,15 @@ struct UITestLaunchConfiguration: Equatable {
         seedsSnippets = Self.flag(Self.seedSnippetsArgument, in: arguments)
         licenseState = Self.value(after: Self.licenseStateArgument, in: arguments)
             .flatMap(LicenseStateMode.init(rawValue:)) ?? .active
+        enabledCapabilities = Set(
+            (Self.value(after: Self.enableCapabilitiesArgument, in: arguments) ?? "")
+                .split(separator: ",")
+                .compactMap { Capability(rawValue: $0.trimmingCharacters(in: .whitespaces)) }
+        )
+        opensScreencastPicker = Self.flag(Self.openScreencastPickerArgument, in: arguments)
+        startsScreencastRecording = Self.flag(Self.screencastRecordingArgument, in: arguments)
+        screencastReview = Self.value(after: Self.screencastReviewArgument, in: arguments)
+            .flatMap(ScreencastReviewCapture.init(rawValue:))
     }
 
     /// Accepts both `-Flag` and `-Flag YES`, since Foundation's argument domain pairs every `-key` with a value.

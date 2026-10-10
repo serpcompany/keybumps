@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Keybumps
@@ -16,12 +17,53 @@ struct UITestLaunchConfigurationTests {
         #expect(!configuration.seedsClipboardImage)
         #expect(!configuration.seedsRecentKeybumps)
         #expect(!configuration.seedsSnippets)
+        #expect(configuration.enabledCapabilities.isEmpty)
+        #expect(!configuration.opensScreencastPicker)
+        #expect(!configuration.startsScreencastRecording)
+        #expect(configuration.screencastReview == nil)
+    }
+
+    @Test(arguments: [
+        ("video", UITestLaunchConfiguration.ScreencastReviewCapture.video),
+        ("screenshot", .screenshot),
+        ("gif", nil),
+    ] as [(String, UITestLaunchConfiguration.ScreencastReviewCapture?)])
+    func opensScreencastsReviewOnAMadeUpCapture(value: String, capture: UITestLaunchConfiguration.ScreencastReviewCapture?) {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted", "-KBUITestScreencastReview", value,
+        ])
+        #expect(configuration.screencastReview == capture)
+        #expect(UITestLaunchConfiguration(arguments: [executable, "-KBUITestScreencastReview", value]).screencastReview == nil,
+                "ignored outside UI test mode")
+    }
+
+    @Test func turnsOnNamedPluginsAndOpensScreencastsPicker() {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted",
+            "-KBUITestEnableCapabilities", "screencast, keystrokes,nope", "-KBOpenScreencastPicker", "YES",
+        ])
+        #expect(configuration.enabledCapabilities == [.screencast, .keystrokes])
+        #expect(configuration.opensScreencastPicker)
+        #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestPermissions", "granted", "-KBOpenScreencastPicker", "NO"])
+            .opensScreencastPicker)
+    }
+
+    @Test func startsAScreencastRecording() {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted",
+            "-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES",
+        ])
+        #expect(configuration.startsScreencastRecording)
+        #expect(!configuration.opensScreencastPicker)
+        #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestPermissions", "granted", "-KBUITestScreencastRecording", "NO"])
+            .startsScreencastRecording)
     }
 
     @Test func otherFlagsAreIgnoredWithoutThePermissionsFlag() {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBCloseSettings", "YES",
-            "-KBDisableHotKeys",
+            "-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES",
+            "-KBUITestScreencastRecording", "YES", "-KBUITestScreencastReview", "video", "-KBDisableHotKeys",
         ])
         #expect(configuration == UITestLaunchConfiguration(arguments: [executable]))
     }
@@ -121,7 +163,8 @@ struct UITestLaunchConfigurationTests {
         #expect(Set(tokens).count == tokens.count)
         #expect(tokens == [
             "search", "clipboard", "screenshotTools", "dictation",
-            "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "plugins", "permissions", "general", "changelog", "account",
+            "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+            "plugins", "permissions", "general", "changelog", "account",
         ])
     }
 
@@ -151,5 +194,23 @@ struct UITestFakeCompositionTests {
         service.start()
 
         #expect(service.phase == .failed("Audio capture is unavailable in this session."))
+    }
+
+    @Test("Screencast's made-up screens are a top and a bottom display, each as wide as the main screen, with both windows pickable on the top one")
+    func screencastMadeUpScreens() async throws {
+        let layout = UITestScreencastScreen.layout
+        let main = try #require(NSScreen.screens.first?.frame)
+        #expect(layout.screens.count == 2)
+        #expect(layout.screens.allSatisfy { $0.frame.width == main.width && $0.frame.minX == main.minX })
+        let (bottom, top) = (layout.screens[0], layout.screens[1])
+        #expect(bottom.frame.maxY == top.frame.minY && bottom.frame.minY == main.minY && top.frame.maxY == main.maxY)
+
+        let system = UITestScreencastScreen()
+        let content = try await system.content()
+        let pickable = ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: ProcessInfo.processInfo.processIdentifier)
+        #expect(pickable.count == 2)
+        for window in pickable {
+            #expect(top.frame.contains(layout.appKitRect(fromTopLeft: window.frame)))
+        }
     }
 }

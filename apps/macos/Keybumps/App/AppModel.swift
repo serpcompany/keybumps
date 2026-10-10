@@ -42,6 +42,9 @@ final class AppModel {
     let recentTranslations: RecentTranslations
     /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
     let keywordExpansion: KeywordExpansionController
+    /// The on-screen key display (#443). The Keystrokes plugin holds it while it's on, and a
+    /// Screencast recording holds it for the recording, with the plugin on or off.
+    let keyDisplay: KeyDisplay
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
     let dictationModels: DictationModelManager
@@ -161,6 +164,7 @@ final class AppModel {
         snippets injectedSnippets: SnippetStore? = nil,
         textPaster injectedTextPaster: (any TextPasting)? = nil,
         keyTypingMonitor injectedKeyTypingMonitor: (any KeyTypingMonitoring)? = nil,
+        keyDisplay injectedKeyDisplay: KeyDisplay? = nil,
         updatePrompt injectedUpdatePrompt: (any UpdatePromptPresenting)? = nil,
         whatsNew injectedWhatsNew: (any WhatsNewPresenting)? = nil,
         problemReports injectedProblemReports: (any ProblemReportPresenting)? = nil,
@@ -180,6 +184,7 @@ final class AppModel {
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil,
+        screencast injectedScreencast: ScreencastSeams = ScreencastSeams(),
         permissionPollInterval: Duration = .seconds(1)
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
@@ -299,6 +304,9 @@ final class AppModel {
             restorer: commandPalette.clipboardRestorer
         )
         self.keywordExpansion = keywordExpansion
+        // Unit tests never hear the keyboard or the pointer, or draw the display.
+        let keyDisplay = injectedKeyDisplay ?? KeyDisplay.makeDefault()
+        self.keyDisplay = keyDisplay
         // Dictation's insert shares it too, while its Put the clipboard back setting is on.
         dictation.clipboardRestorer = commandPalette.clipboardRestorer
         dictation.restoresClipboard = { preferences.bool(.dictationRestoresClipboard, for: .dictation) }
@@ -356,8 +364,36 @@ final class AppModel {
                 speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
+            KeystrokesModule(display: keyDisplay),
+            // Settings never opens under unit tests.
+            ScreencastModule(
+                preferences: preferences,
+                permissions: permissions,
+                openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) },
+                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screencast),
+                keyDisplay: keyDisplay,
+                seams: injectedScreencast,
+                review: .app(clipboard: clipboard, screenshotTools: screenshotModule, preferences: preferences)
+            ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
+        // The key display names a Keybumps shortcut only while it's registered, and in the Command
+        // Palette, the palette's own keys rather than what they do elsewhere.
+        keyDisplay.registeredShortcutName = { [shortcuts] press in
+            KeystrokeActionNames.keybumpsName(for: press, bindings: shortcuts.registeredBindings)
+        }
+        keyDisplay.paletteKeyNames = { [commandPalette] in
+            commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
+        }
+        // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
+        // only), and Screenshot Tools' hotkeys while they're registered, which also clear it just
+        // before they capture.
+        keyDisplay.keybumpsScreenshotBindings = { [shortcuts] in
+            let registered = shortcuts.registeredBindings
+            return ScreenshotToolsModule.captureShortcuts.compactMap { registered[$0.shortcut.ownerID] }
+        }
+        keyDisplay.symbolicHotKeys = { [symbolicHotKeys] in try? symbolicHotKeys.readSymbolicHotKeys() }
+        screenshotModule.willCapture = { [keyDisplay] in keyDisplay.pauseForScreenshot() }
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
         commandPalette.offerPasteSetup = { [weak self] plugin in self?.offerPasteSetup(for: plugin) }
@@ -803,6 +839,8 @@ final class AppModel {
         permissionDragAssistant.dismissIfGranted(using: permissions)
         advancePermissionWalkthroughIfNeeded()
         capabilities.permissionsDidRefresh(capabilityContext)
+        // The key display can be held with the Keystrokes plugin off, so the shell retries its tap.
+        keyDisplay.permissionsDidRefresh()
         refreshDetectorState()
         updateMissingPermissionBadge()
     }
@@ -958,6 +996,11 @@ final class AppModel {
     func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
     func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
+    /// What Start Screencast does: the picker, or Screencast's page when something's missing.
+    func startScreencast() {
+        guard isLicensed else { return }
+        (capabilities.module(for: .screencast) as? ScreencastModule)?.start()
+    }
     /// Shows the sample tip in the notch without adding it to history.
     func showSampleTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
     func openPermissionSettings(_ permission: MacPermission) {

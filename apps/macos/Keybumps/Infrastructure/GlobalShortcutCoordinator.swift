@@ -171,6 +171,9 @@ final class GlobalShortcutCoordinator {
     var activeOwners: Set<String> { Set(activeIdentifiers.keys) }
     var desiredOwners: Set<String> { Set(desiredRegistrations.keys) }
     var desiredBindings: [String: ShortcutBinding] { desiredRegistrations.mapValues(\.binding) }
+    /// The bindings registered with macOS now: not those that failed, and none while suspended for
+    /// recording a shortcut.
+    var registeredBindings: [String: ShortcutBinding] { desiredBindings.filter { activeIdentifiers[$0.key] != nil } }
     var registrationScope: GlobalHotKeyRegistrationScope { backend.registrationScope }
 
     init(backend: (any GlobalHotKeyRegistering)? = nil) {
@@ -271,6 +274,14 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case timer
     case emojiPicker
     case translation
+    case keystrokes
+    case screencast
+    /// Screencast's recording shortcuts: registered only while it records
+    /// (`ScreencastRecordingControls`), so their keys work normally everywhere else.
+    case screencastPause
+    case screencastStop
+    case screencastDiscard
+    case screencastDraw
 
     var id: String { rawValue }
     var ownerID: String { rawValue }
@@ -289,6 +300,8 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .timer: .timer
         case .emojiPicker: .emojiPicker
         case .translation: .translation
+        case .keystrokes: .keystrokes
+        case .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: .screencast
         }
     }
 
@@ -305,17 +318,27 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .timer: "Open Timers"
         case .emojiPicker: "Open Emoji Picker"
         case .translation: "Open Translate"
+        case .keystrokes: "Show & Hide Keystrokes"
+        case .screencast: "Start Screencast"
+        case .screencastPause: "Pause & Resume Recording"
+        case .screencastStop: "Stop Recording"
+        case .screencastDiscard: "Discard Recording"
+        case .screencastDraw: "Draw While Recording"
         }
     }
 
     /// Whether the shortcut works from anywhere. Cancel Dictation works only while Dictation is
-    /// recording or transcribing, which `detail` says in Settings.
-    var worksEverywhere: Bool { self != .cancelDictation }
+    /// recording or transcribing, and Screencast's recording shortcuts only while it records, which
+    /// `detail` says in Settings.
+    var worksEverywhere: Bool { detail == nil }
 
     /// A note under the title, for a shortcut that works only at certain times.
     var detail: String? {
         switch self {
         case .cancelDictation: "Only while Dictation is recording or transcribing"
+        case .screencastPause, .screencastStop: "Only while Screencast is recording"
+        case .screencastDiscard: "Only while Screencast is recording. Asks first; press it again to discard."
+        case .screencastDraw: "Only while Screencast is recording"
         default: nil
         }
     }
@@ -330,7 +353,8 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea
-        case .snippets, .timer, .emojiPicker, .translation: nil
+        case .snippets, .timer, .emojiPicker, .translation, .keystrokes, .screencast,
+             .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: nil
         }
     }
 }

@@ -489,7 +489,12 @@ final class KeybumpsFeatureTests: XCTestCase {
             "NOTICES.argmax-oss-swift",
             "LICENSE.openai-whisper",
             "LICENSE.sentry-cocoa",
-            "LICENSE.whisper-cpp"
+            "LICENSE.whisper-cpp",
+            "LICENSE.keycastr",
+            "LICENSE.screendrop",
+            "LICENSE.bettercapture",
+            "LICENSE.snapzy",
+            "LICENSE.hop"
         ] {
             XCTAssertNotNil(bundle.url(forResource: resource, withExtension: nil), resource)
         }
@@ -1444,6 +1449,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("About"))
         XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Shortcut Coach"))
+        XCTAssertTrue(MacPermission.inputMonitoring.explanation.contains("Keystrokes"))
         XCTAssertFalse(MacPermission.inputMonitoring.explanation.contains("Shortcut Coaching"))
     }
 
@@ -1752,7 +1758,10 @@ final class KeybumpsFeatureTests: XCTestCase {
     func testCapabilitiesDefaultEnabledAndPersist() {
         let defaults = InMemoryDefaults()
         let first = AppPreferences(defaults: defaults)
-        XCTAssertEqual(first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation]), "Emoji Picker and Translation ship off")
+        XCTAssertEqual(
+            first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation, .keystrokes, .screencast]),
+            "Emoji Picker, Translation, Keystrokes, and Screencast ship off"
+        )
         first.setCapability(.dictation, enabled: false)
         XCTAssertFalse(AppPreferences(defaults: defaults).enabledCapabilities.contains(.dictation))
     }

@@ -48,7 +48,8 @@ final class ScreenshotToolsModule: CapabilityModule {
     ]
 
     private let service: ScreenshotToolsService
-    private let editor: ScreenshotEditorPresenter
+    /// The Screenshot Editor, which Screencast's review panel opens too.
+    let editor: ScreenshotEditorPresenter
     private let palette: CommandPaletteController
     private let clipboard: ClipboardHistoryService
     private let delivery: ScreenshotClipboardDelivery
@@ -58,6 +59,8 @@ final class ScreenshotToolsModule: CapabilityModule {
     private let permissions: PermissionCoordinator
     /// Set by the shell: asks for Screen Recording when a hotkey is pressed without it.
     var onNeedsScreenRecording: (() -> Void)?
+    /// Set by the shell: runs just before a hotkey captures, so the key display is off the screen.
+    var willCapture: (() -> Void)?
 
     init(
         service: ScreenshotToolsService,
@@ -125,6 +128,7 @@ final class ScreenshotToolsModule: CapabilityModule {
             onNeedsScreenRecording?()
             return
         }
+        willCapture?()
         capturer.capture(mode) { [weak self] files in
             guard opensEditor, let self, let file = delivery.addForEditing(files) else { return }
             if let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) {
