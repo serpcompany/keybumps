@@ -204,8 +204,8 @@ Recording what's on screen, as a screenshot or a video with the microphone and t
 _Avoid_: Screen recorder, screen recording (macOS's permission), Clipy (a destination)
 
 **Capture**:
-One screenshot or video Screencast took, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted. A screenshot taken with Screenshot Tools isn't one.
-_Avoid_: Recording (Dictation's), clip, screencast (the plugin)
+One screenshot or one recording Screencast took, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted; a recording of every screen holds one video per display. A screenshot taken with Screenshot Tools isn't one.
+_Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
 
 **Destination**:
 An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
