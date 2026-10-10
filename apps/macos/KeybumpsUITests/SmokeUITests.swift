@@ -251,10 +251,11 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testScreencastPickerOpensAndSwitchesModes() {
-        // The UI-test composition's made-up screens: the main screen split into two displays, two
-        // made-up windows, and a recorder that records them but captures nothing.
+        // The UI-test composition's made-up screens: the main screen split into a top and a bottom
+        // display, each as wide as it, two made-up windows on the top one, and a recorder that
+        // records them but captures nothing.
         launchScreencastPicker()
-        XCTAssertEqual(pickerWindows.count, 2, "One picker window per screen")
+        XCTAssertEqual(pickerPanels.count, 2, "One picker panel per screen")
         let confirm = element("screencast.picker.confirm")
         let hint = element("screencast.picker.hint")
         XCTAssertTrue(waitForLabel(of: confirm, "Record"))
@@ -276,7 +277,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("screencast.picker.microphone").waitForExistence(timeout: 5))
     }
 
-    func testScreencastPickerChoosesOneScreenOrEveryScreen() {
+    func testScreencastPickerChoosesOneScreenOrEveryScreen() throws {
         launchScreencastPicker()
         let hint = element("screencast.picker.hint")
         element("screencast.picker.target.screen").click()
@@ -284,9 +285,12 @@ final class SmokeUITests: XCTestCase {
         let everyScreen = element("screencast.picker.everyScreen")
         XCTAssertTrue(everyScreen.exists)
 
-        // Above the bar, which sits at the bottom of one of them.
-        let rightScreen = (0..<pickerWindows.count).map { pickerWindows.element(boundBy: $0) }.max { $0.frame.minX < $1.frame.minX }
-        rightScreen?.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
+        // The lower of the two screens, a quarter of the way down it: above the bar, which sits at
+        // the bottom of one of them.
+        XCTAssertEqual(pickerPanels.count, 2)
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        let lowerScreen = try XCTUnwrap(panels.max { $0.frame.minY < $1.frame.minY })
+        lowerScreen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
         XCTAssertTrue(waitForText(of: hint, "This screen only. Choose Every Screen for all of them."))
 
         everyScreen.click()
@@ -295,8 +299,10 @@ final class SmokeUITests: XCTestCase {
 
     func testEscapeClosesTheScreencastPicker() {
         launchScreencastPicker()
+        XCTAssertEqual(pickerPanels.count, 2, "The picker is up before Escape")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        XCTAssertTrue(pickerWindows.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(pickerPanels.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(pickerPanels.count, 0)
         XCTAssertFalse(element("screencast.picker.bar").exists)
     }
 
@@ -760,8 +766,10 @@ final class SmokeUITests: XCTestCase {
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: outcome)], timeout: 10) == .completed
     }
 
-    private var pickerWindows: XCUIElementQuery {
-        app.windows.matching(identifier: "screencastPicker")
+    /// The picker's panels, one per screen. macOS reports a borderless, non-activating panel as a
+    /// dialog, not a window, so `app.windows` never lists them.
+    private var pickerPanels: XCUIElementQuery {
+        app.dialogs.matching(identifier: "screencastPicker")
     }
 
     private func waitForLabel(of element: XCUIElement, _ label: String) -> Bool {
