@@ -21,10 +21,14 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     }
 
     func content() async throws -> ScreencastContent {
+        // Every window, not just those on screen, so Keybumps is listed as an app (and can be
+        // excluded whole) even before its overlays appear.
+        try await content(onScreenOnly: false)
+    }
+
+    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
         do {
-            // Every window, not just those on screen, so Keybumps is listed as an app (and can be
-            // excluded whole) even before its overlays appear.
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: onScreenOnly)
             return Self.snapshot(of: content)
         } catch {
             throw Self.failure(for: error)
@@ -172,6 +176,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         stream.showsCursor = configuration.showsCursor
         stream.showMouseClicks = configuration.showsMouseClicks
         stream.scalesToFit = configuration.scalesToFit
+        stream.includeChildWindows = configuration.includesChildWindows
         stream.preservesAspectRatio = true
         stream.capturesAudio = false
         return stream
