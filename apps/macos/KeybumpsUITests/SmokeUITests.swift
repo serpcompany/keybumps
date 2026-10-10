@@ -332,6 +332,55 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(app.windows.matching(identifier: "screencastControlBar").firstMatch.exists)
     }
 
+    func testScreencastDrawingFromTheControlBar() {
+        // A recording of a made-up screen that captures nothing, with the control bar showing.
+        launchScreencastRecording()
+        // Settings, which UI test mode opens at launch, has the keyboard.
+        let general = element("settings.sidebar.general")
+        XCTAssertTrue(general.waitForExistence(timeout: 10))
+        general.click()
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 5))
+
+        let draw = element("screencast.bar.draw")
+        XCTAssertTrue(draw.waitForExistence(timeout: 5), "The bar has Draw once drawing is wired in")
+        XCTAssertTrue(waitForValue(of: draw, equalTo: "Off"))
+        XCTAssertFalse(element("screencast.draw.tool.pen").exists, "The tools show only while drawing")
+        draw.click()
+        XCTAssertTrue(waitForValue(of: draw, equalTo: "On"))
+        XCTAssertTrue(element("screencast.draw.tool.pen").waitForExistence(timeout: 5), "The tools show above the bar")
+
+        let arrow = element("screencast.draw.tool.arrow")
+        arrow.click()
+        XCTAssertTrue(waitForValue(of: arrow, equalTo: "Selected"))
+        XCTAssertNotEqual(element("screencast.draw.tool.pen").value as? String, "Selected")
+        let blue = element("screencast.draw.color.blue")
+        blue.click()
+        XCTAssertTrue(waitForValue(of: blue, equalTo: "Selected"))
+
+        // An arrow on the drawing layer, which takes the pointer while drawing.
+        let clear = element("screencast.draw.clear")
+        XCTAssertFalse(clear.isEnabled, "Nothing to clear yet")
+        let layer = app.windows.matching(identifier: "screencastDrawing").firstMatch
+        XCTAssertTrue(layer.waitForExistence(timeout: 5))
+        layer.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.25))
+            .press(forDuration: 0.1, thenDragTo: layer.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.4)))
+        XCTAssertTrue(waitForEnabled(clear, true), "The arrow is there to clear")
+        clear.click()
+        XCTAssertTrue(waitForEnabled(clear, false), "Clear took it away")
+
+        // Escape with Settings the key window: drawing hears it first (its hot key is inert with
+        // -KBDisableHotKeys), so drawing stops and Settings, which closes on Escape, stays open.
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(waitForValue(of: draw, equalTo: "Off"), "Escape stops drawing")
+        XCTAssertTrue(element("screencast.draw.tool.pen").waitForNonExistence(timeout: 5), "and the tools go")
+        XCTAssertTrue(element("settings.detail.general").exists, "Settings kept its window")
+
+        let stop = element("screencast.bar.stop")
+        stop.click()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 10))
+        XCTAssertFalse(app.windows.matching(identifier: "screencastDrawing").firstMatch.exists, "The drawing goes with the recording")
+    }
+
     func testHotkeysTabShowsShortcutCoachHistory() {
         // Its rows come from Shortcut Coach's module (`KeyboardShortcutterPaletteContent`).
         launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])
@@ -663,6 +712,11 @@ final class SmokeUITests: XCTestCase {
     /// Waits for a hotkey field to show a saved shortcut other than `value`, not still recording.
     private func waitForSavedValue(of element: XCUIElement, notEqualTo value: String?) -> Bool {
         let predicate = NSPredicate(format: "value != %@ AND value != %@", value ?? "", "Waiting for shortcut")
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    private func waitForEnabled(_ element: XCUIElement, _ enabled: Bool) -> Bool {
+        let predicate = NSPredicate(format: "isEnabled == %@", NSNumber(value: enabled))
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 

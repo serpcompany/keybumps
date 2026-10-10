@@ -157,7 +157,7 @@ final class ScreencastRecordingControls {
     }
 
     /// A recording shortcut, acting as the bar's button does. Discard asks on the bar, and discards
-    /// when pressed again while it asks; Draw does nothing until drawing is supplied (#449).
+    /// when pressed again while it asks; Draw toggles drawing (`ScreencastOverlaysWiring` supplies it).
     func perform(_ shortcut: CapabilityShortcut) {
         guard let model = bar?.model else { return }
         switch shortcut {

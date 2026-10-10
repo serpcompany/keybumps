@@ -196,7 +196,7 @@ Showing the shortcuts you press on screen, for demos, recordings, and screen sha
 _Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
 
 **Key display**:
-The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and shows on a recording's screens while one holds it. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and while a recording holds it, shows on its screens, inside the area or window it records, with its clicks setting. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Screencast**:
@@ -212,8 +212,12 @@ What Start Screencast opens over every screen to choose a capture: an area to dr
 _Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
 
 **Control bar**:
-The floating bar on the recorded screen while Screencast records, never in the video: the time recorded, Pause and Resume, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
+The floating bar on the recorded screen while Screencast records, never in the video: the time recorded, Pause and Resume, Draw, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
 _Avoid_: HUD, toolbar, recording panel, status bar (macOS's menu bar)
+
+**Drawing**:
+Marking up the screen while Screencast records, in the video: a pen, an arrow, a highlighter, or a rectangle, in a few colors, each mark fading a few seconds after it's drawn or staying until cleared. Draw on the control bar, or its shortcut, turns it on and off; while it's on, the recorded screens take the pointer, with a yellow border that isn't in the video, the drawing tools show above the control bar, and Escape stops, Delete clears, and ⌘Z undoes the last mark. The tools' choices carry over to the next recording; the marks don't.
+_Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Destination**:
 An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.

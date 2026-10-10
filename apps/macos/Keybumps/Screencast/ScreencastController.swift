@@ -99,7 +99,8 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 /// - **#449, the overlays,** go up when the phase leaves `.picking` for a video
 ///   (`.countingDown` or `.starting`), as `choice` says (`showsShortcuts`, `highlightsClicks`, and
 ///   the `regions` it shows on), and register their windows with `recorder.includeOverlayWindow`
-///   before it starts, so the first frame has them. They come down when the phase is `.idle` again.
+///   before it starts, so the first frame has them. A restart clears the drawing
+///   (`addRestartObserver(_:)`), and they come down when the phase is `.idle` again.
 /// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved video and screenshot.
 ///
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
@@ -134,6 +135,8 @@ final class ScreencastController {
     /// `addPhaseObserver(_:)`'s observers, in the order they were added.
     @ObservationIgnored private var phaseObservers: [(ScreencastPhaseObservation, (ScreencastPhase) -> Void)] = []
     @ObservationIgnored private var nextPhaseObservation = 0
+    /// `addRestartObserver(_:)`'s observers, in the order they were added.
+    @ObservationIgnored private var restartObservers: [() -> Void] = []
     /// A video or screenshot was saved: the review panel takes it from here. A recording that
     /// ended early comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
@@ -228,6 +231,12 @@ final class ScreencastController {
 
     func removePhaseObserver(_ observation: ScreencastPhaseObservation) {
         phaseObservers.removeAll { $0.0 == observation }
+    }
+
+    /// Calls `observer` each time a restart has started a new take, which stays in the same phase:
+    /// the overlays clear the drawing then (#449).
+    func addRestartObserver(_ observer: @escaping () -> Void) {
+        restartObservers.append(observer)
     }
 
     // MARK: Picking
@@ -411,6 +420,7 @@ final class ScreencastController {
             return
         }
         guard !noticeEarlyEnd(), phase.isRecording else { return }
+        for observer in restartObservers { observer() }
         switch recorder.state {
         case .recording: phase = .recording
         case .paused: phase = .paused

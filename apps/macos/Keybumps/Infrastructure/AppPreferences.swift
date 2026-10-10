@@ -279,6 +279,9 @@ final class AppPreferences {
     /// Where Screencast's control bar was left on each display (`screencast.controlBarPositions`).
     var screencastBarPlacement: ScreencastControlBarPlacement { ScreencastControlBarPlacement(defaults: defaults) }
 
+    /// The drawing tools' last choices while recording (`screencast.drawingStyle`).
+    var screencastDrawingMemory: ScreencastDrawingMemory { ScreencastDrawingMemory(defaults: defaults) }
+
     /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {
         if enabled { enabledCapabilities.insert(capability) }
