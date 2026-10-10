@@ -638,7 +638,8 @@ struct PermissionPromptSourceTests {
         for seam in ["requestMicrophone: PermissionPrompts.inert", "requestSpeechRecognition: PermissionPrompts.inert",
                      "requestScreenRecording: PermissionPrompts.inert", "openSystemSettings: PermissionPrompts.inert",
                      "allowsDictationSystemAccess: false", "textPaster: InertTextPaster()",
-                     "keyTypingMonitor: InertKeyTypingMonitor()"] {
+                     "keyTypingMonitor: InertKeyTypingMonitor()",
+                     "keyDisplay: KeyDisplay(keys: InertKeyTypingMonitor(), pointer: InertPointerEventMonitor(), presenter: InertKeyDisplayPresenter())"] {
             #expect(source.contains(seam), "missing \(seam)")
         }
     }

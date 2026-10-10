@@ -191,6 +191,26 @@ _Avoid_: Translation history, favorites, phrasebook
 Translation's My language and Other language, never the same: text in my language is translated into the other, and text in any other language into mine. Dictation's Translate uses it while Translation is on, and English and Japanese otherwise.
 _Avoid_: Source and target (one translation's languages), target language setting
 
+**Keystrokes**:
+Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut clears it. Its Show & Hide Keystrokes shortcut hides the keys until it's pressed again.
+_Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
+
+**Key display**:
+The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and shows on a recording's screens while one holds it. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+_Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
+
+**Screencast**:
+Recording what's on screen, as a screenshot or a video with the microphone and the Mac's sound, then keeping each capture on this Mac or sending it to a destination (ADR 0009). It ships off, and needs macOS 15: on an older Mac it's listed with "Requires macOS 15" and can't be turned on.
+_Avoid_: Screen recorder, screen recording (macOS's permission), Clipy (a destination)
+
+**Capture**:
+One screenshot or one recording Screencast took, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted; a recording of every screen holds one video per display. A screenshot taken with Screenshot Tools isn't one.
+_Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
+
+**Destination**:
+An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
+_Avoid_: Integration, upload target, share service
+
 ### Licensing
 
 **License Check**:
