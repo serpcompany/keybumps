@@ -178,7 +178,8 @@ final class ScreencastOverlays {
     }
 
     /// Moves the overlays to other recorded displays, as when a recorded window moves to another
-    /// screen. Marks on a display that's left stay in the drawing but no longer show.
+    /// screen. Marks on a display that's left go with its window, so Undo and Clear count only
+    /// marks that show.
     func move(to displays: Set<CGDirectDisplayID>) {
         guard isShown else { return }
         recordedDisplays = displays
@@ -186,11 +187,12 @@ final class ScreencastOverlays {
     }
 
     /// Matches the drawing layer to the recorded displays that are connected now: a display that
-    /// went loses its windows, and one that came back gets new ones.
+    /// went loses its windows and its marks, and one that came back gets new windows.
     func refreshDisplays() {
         guard isShown else { return }
         let displays = connectedDisplays().filter { recordedDisplays.contains($0.id) }
         layer.show(on: displays)
+        if !drawing.removeMarks(notOn: Set(displays.map(\.id))).isEmpty { marksChanged() }
         if displays.isEmpty, isDrawing { endDrawing() }
         if isDrawing { placeToolbar() }
     }

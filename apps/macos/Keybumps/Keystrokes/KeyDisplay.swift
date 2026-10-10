@@ -352,6 +352,14 @@ final class KeyDisplay {
         present(animated: false)
     }
 
+    /// Takes every line and ring off the screen at once, with no fade, as when a recording restarts
+    /// and its new take must start with none. Unlike `pauseForScreenshot()`, the next key shows.
+    func clearLines() {
+        guard holds.isHeld else { return }
+        timeline.removeAll()
+        present(animated: false)
+    }
+
     // MARK: Overlay windows
 
     /// The overlay windows on screen now.

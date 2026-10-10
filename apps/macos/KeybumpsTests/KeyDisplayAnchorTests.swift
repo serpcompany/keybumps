@@ -43,11 +43,33 @@ struct KeyDisplayAnchorTests {
         #expect(Self.laptop.keyArea(anchor: window) == CGRect(x: 1200, y: 70, width: 312, height: 450).insetBy(dx: margin, dy: margin))
     }
 
-    @Test("An anchor on another screen, or too small to hold keys, leaves them where they'd be without one")
-    func unusableAnchor() {
+    @Test("A thin area keeps its keys inside it, with a margin it has room for")
+    func thinArea() {
+        let strip = CGRect(x: 400, y: 500, width: 600, height: 50)
+        let area = Self.laptop.keyArea(anchor: strip)
+        #expect(area == strip.insetBy(dx: KeyDisplayOverlayView.anchorMargin, dy: 12.5))
+        #expect(strip.contains(area))
+        let narrow = CGRect(x: 100, y: 100, width: 40, height: 400)
+        #expect(Self.laptop.keyArea(anchor: narrow) == narrow.insetBy(dx: 10, dy: KeyDisplayOverlayView.anchorMargin))
+    }
+
+    @Test("An area over the Dock keeps its keys inside it, over the Dock, since the keys' window is above it")
+    func areaOverTheDock() {
+        // A strip along the bottom of the laptop, mostly where the Dock is (y 0…70).
+        let strip = CGRect(x: 0, y: 0, width: 1512, height: 80)
+        let area = Self.laptop.keyArea(anchor: strip)
+        #expect(area == strip.insetBy(dx: KeyDisplayOverlayView.anchorMargin, dy: KeyDisplayOverlayView.anchorMargin))
+        #expect(strip.contains(area) && area.minY < 70, "inside the strip, not above the Dock")
+        // One over the menu bar too.
+        let top = CGRect(x: 200, y: 940, width: 600, height: 42)
+        #expect(top.contains(Self.laptop.keyArea(anchor: top)))
+    }
+
+    @Test("Only an anchor that isn't on this screen leaves the keys where they'd be without one")
+    func anchorElsewhere() {
         let plain = Self.laptop.keyArea(anchor: nil)
         #expect(Self.laptop.keyArea(anchor: CGRect(x: 2000, y: 100, width: 600, height: 400)) == plain)
-        #expect(Self.laptop.keyArea(anchor: CGRect(x: 100, y: 100, width: 40, height: 400)) == plain)
+        #expect(Self.laptop.keyArea(anchor: CGRect(x: 1512, y: 100, width: 600, height: 400)) == plain, "touching, not on it")
         #expect(Self.laptop.keyArea(anchor: .null) == plain)
     }
 
@@ -98,6 +120,31 @@ struct KeyDisplayAnchorTests {
         var plain = KeyDisplayHolds()
         plain.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
         #expect(plain.configuration?.anchor == nil && plain.configuration?.displays == nil)
+    }
+
+    @Test("Clearing the lines takes them off at once, with no fade, and the next key still shows")
+    func clearLines() throws {
+        let presenter = FakeKeyDisplayPresenter()
+        let display = KeyDisplay(
+            keys: InertKeyTypingMonitor(),
+            pointer: InertPointerEventMonitor(),
+            presenter: presenter,
+            layout: FakeLetterLayout(),
+            scheduler: KeyDisplayManualScheduler(),
+            secureInput: { false }
+        )
+        display.clearLines()
+        #expect(presenter.last == nil, "nothing while nobody holds it")
+        display.acquire(.screencast, configuration: Self.recording, keepsWindowsOnScreen: true)
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command]))
+        #expect(presenter.last?.entries.count == 1)
+        display.clearLines()
+        #expect(presenter.last?.entries.isEmpty == true)
+        #expect(presenter.lastAnimated == false, "no fade into the new take")
+        #expect(!display.isPausedForScreenshot)
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_V), modifiers: [.command]))
+        #expect(presenter.last?.entries.count == 1)
+        display.release(.screencast)
     }
 
     @Test("The display a recording holds draws no rings when Keystrokes, with rings, is turned on after it")

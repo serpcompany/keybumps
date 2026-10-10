@@ -283,6 +283,19 @@ struct ScreencastDrawing: Equatable {
         return removed
     }
 
+    /// Removes the marks, and a mark being drawn, on any display but `displays`, as when the
+    /// drawing leaves a display; returns them.
+    @discardableResult
+    mutating func removeMarks(notOn displays: Set<CGDirectDisplayID>) -> [ScreencastMark] {
+        var removed = marks.filter { !displays.contains($0.display) }
+        marks.removeAll { !displays.contains($0.display) }
+        if let current, !displays.contains(current.display) {
+            removed.append(current)
+            self.current = nil
+        }
+        return removed
+    }
+
     /// Removes the marks that have faded out by `now`, and returns them.
     @discardableResult
     mutating func removeExpired(at now: TimeInterval) -> [ScreencastMark] {
