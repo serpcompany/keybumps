@@ -335,6 +335,11 @@ final class SmokeUITests: XCTestCase {
     func testScreencastDrawingFromTheControlBar() {
         // A recording of a made-up screen that captures nothing, with the control bar showing.
         launchScreencastRecording()
+        // Settings, which UI test mode opens at launch, has the keyboard.
+        let general = element("settings.sidebar.general")
+        XCTAssertTrue(general.waitForExistence(timeout: 10))
+        general.click()
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 5))
 
         let draw = element("screencast.bar.draw")
         XCTAssertTrue(draw.waitForExistence(timeout: 5), "The bar has Draw once drawing is wired in")
@@ -363,12 +368,12 @@ final class SmokeUITests: XCTestCase {
         clear.click()
         XCTAssertTrue(waitForEnabled(clear, false), "Clear took it away")
 
-        // Settings closes on Escape while it's the key window, so it goes first; Escape then ends
-        // drawing, which the hot key does in another app.
-        app.typeKey("w", modifierFlags: .command)
+        // Escape with Settings the key window: drawing hears it first (its hot key is inert with
+        // -KBDisableHotKeys), so drawing stops and Settings, which closes on Escape, stays open.
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         XCTAssertTrue(waitForValue(of: draw, equalTo: "Off"), "Escape stops drawing")
         XCTAssertTrue(element("screencast.draw.tool.pen").waitForNonExistence(timeout: 5), "and the tools go")
+        XCTAssertTrue(element("settings.detail.general").exists, "Settings kept its window")
 
         let stop = element("screencast.bar.stop")
         stop.click()

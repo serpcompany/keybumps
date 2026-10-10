@@ -37,18 +37,23 @@ struct ScreencastDrawingMemory {
 }
 
 /// Puts Screencast's overlays up around each video it records, and into the video (#449).
-/// `ScreencastModule` attaches it to its `ScreencastController`, after the control bar's
-/// `ScreencastRecordingControls`, and it hears the phase after them.
+/// `ScreencastModule` attaches it to its `ScreencastController`, which tells it each phase
+/// (`addPhaseObserver`) and each restart (`addRestartObserver`).
 ///
 /// - When a video's phase leaves `.picking` (counting down or starting), the drawing goes up on the
 ///   recorded displays (`ScreencastOverlays`) with the tools as they were last left, and its
 ///   windows go to the recorder (`includeOverlayWindow`) before it starts, so the first frame can
-///   have them. The control bar's Draw button and the Draw shortcut toggle it.
+///   have them. The control bar's Draw button and the Draw shortcut toggle it, and a restart
+///   clears it, so a new take starts clean.
 /// - With Show shortcuts on for the recording, it holds the key display (`KeyDisplay`) on the
 ///   recorded displays for the whole recording, showing shortcuts only, in the Keystrokes plugin's
-///   style while the plugin is on, and gives the recorder those windows too. With Show shortcuts
-///   off it never holds the display, and the display's windows never go to the recorder, so keys
-///   the plugin shows (typing included, in All keys) stay out of the video.
+///   style while the plugin is on, and gives the recorder those windows too. The keys sit inside
+///   what's recorded: along the bottom of the area, or of the window, or of the screen for a
+///   screen recording (`KeyDisplayConfiguration.anchor`). With Show shortcuts off it never holds
+///   the display, and the display's windows never go to the recorder, so keys the plugin shows
+///   (typing included, in All keys) stay out of the video.
+/// - A window recording follows its window (`followWindow()`, a few times a second): the keys
+///   move with it, and when it moves to another display, so do the drawing and the keys.
 /// - Click highlights are ScreenCaptureKit's, drawn into the video only
 ///   (`ScreencastOptions.showsMouseClicks`, which the controller sets from the choice); the key
 ///   display's rings stay off while recording, so a click isn't highlighted twice.
@@ -70,7 +75,10 @@ final class ScreencastOverlaysWiring {
     private let displays: @MainActor () -> [ScreencastOverlayDisplay]
     private let ordersWindowsIn: Bool
     private let watchesOwnKeys: Bool
+    private let followInterval: TimeInterval?
     private var keys: (any ScreencastDrawingKeyRegistering)?
+    /// A window's frame now, in AppKit's global space, or nil while it's off screen or closed.
+    private var windowFrame: @MainActor (CGWindowID) -> CGRect? = { _ in nil }
 
     private var choice: @MainActor () -> ScreencastChoice? = { nil }
     private var bar: @MainActor () -> ScreencastControlBar? = { nil }
@@ -80,6 +88,12 @@ final class ScreencastOverlaysWiring {
     private var keyWindowIDs: Set<CGWindowID> = []
     /// The recorder's updates, one at a time, in order.
     private var updates: Task<Void, Never>?
+    /// The recording's screens and the rect its keys sit in, which a followed window moves.
+    private(set) var recordedDisplays: Set<CGDirectDisplayID> = []
+    private(set) var anchor: CGRect?
+    /// The window a window recording records, while it's followed.
+    private(set) var followedWindow: CGWindowID?
+    private var followTimer: Timer?
 
     /// - Parameters:
     ///   - keyDisplay: The shell's key display; nil shows no shortcuts.
@@ -88,13 +102,16 @@ final class ScreencastOverlaysWiring {
     ///   - displays: The displays a recording can be on, real or the UI-test composition's.
     ///   - ordersWindowsIn: False keeps the drawing's windows off screen, as under the unit-test host.
     ///   - watchesOwnKeys: Whether the drawing keys are also heard in Keybumps's own windows.
+    ///   - followInterval: How often a recorded window's frame is read; nil for no timer (tests call
+    ///     `followWindow()`).
     init(
         keyDisplay: KeyDisplay?,
         drawingMemory: ScreencastDrawingMemory,
         keystrokesConfiguration: @escaping @MainActor () -> KeyDisplayConfiguration?,
         displays: @escaping @MainActor () -> [ScreencastOverlayDisplay] = { ScreencastOverlayDisplay.connected },
         ordersWindowsIn: Bool = !UnitTestHost.isActive,
-        watchesOwnKeys: Bool = !UnitTestHost.isActive
+        watchesOwnKeys: Bool = !UnitTestHost.isActive,
+        followInterval: TimeInterval? = 0.1
     ) {
         self.keyDisplay = keyDisplay
         self.drawingMemory = drawingMemory
@@ -102,42 +119,48 @@ final class ScreencastOverlaysWiring {
         self.displays = displays
         self.ordersWindowsIn = ordersWindowsIn
         self.watchesOwnKeys = watchesOwnKeys
+        self.followInterval = followInterval
     }
 
     // MARK: Attaching
 
-    /// Hangs the overlays on `controller`'s phase, after whatever already watches it, and gives
-    /// their windows to its recorder. `bar` is the control bar the recording shows.
+    /// Watches `controller`'s phase and restarts, and gives the overlays' windows to its recorder.
+    /// `bar` is the control bar the recording shows, and `windowFrame` reads a recorded window's
+    /// frame (AppKit's global space) as the recorder follows it.
     @available(macOS 15, *)
-    func attach(to controller: ScreencastController, bar: @escaping @MainActor () -> ScreencastControlBar?) {
-        let previous = controller.onPhaseChange
-        controller.onPhaseChange = { [weak self] phase in
-            previous?(phase)
-            self?.phaseChanged(phase)
-        }
+    func attach(
+        to controller: ScreencastController,
+        bar: @escaping @MainActor () -> ScreencastControlBar?,
+        windowFrame: @escaping @MainActor (CGWindowID) -> CGRect? = { _ in nil }
+    ) {
+        controller.addPhaseObserver { [weak self] phase in self?.phaseChanged(phase) }
+        controller.addRestartObserver { [weak self] in self?.restarted() }
         let recorder = controller.recorder
         attach(
             choice: { [weak controller] in controller?.choice },
             bar: bar,
             include: { [weak recorder] id in await recorder?.includeOverlayWindow(id) },
-            remove: { [weak recorder] id in await recorder?.removeOverlayWindow(id) }
+            remove: { [weak recorder] id in await recorder?.removeOverlayWindow(id) },
+            windowFrame: windowFrame
         )
         phaseChanged(controller.phase)
     }
 
     /// The pieces of a capture flow the overlays follow. Its phase changes then come through
-    /// `phaseChanged(_:)`.
+    /// `phaseChanged(_:)`, and its restarts through `restarted()`.
     func attach(
         choice: @escaping @MainActor () -> ScreencastChoice?,
         bar: @escaping @MainActor () -> ScreencastControlBar?,
         include: @escaping @MainActor (CGWindowID) async -> Void,
-        remove: @escaping @MainActor (CGWindowID) async -> Void
+        remove: @escaping @MainActor (CGWindowID) async -> Void,
+        windowFrame: @escaping @MainActor (CGWindowID) -> CGRect? = { _ in nil }
     ) {
         end()
         self.choice = choice
         self.bar = bar
         self.include = include
         self.remove = remove
+        self.windowFrame = windowFrame
     }
 
     /// Takes the shortcut coordinator, which registers the drawing keys while drawing, from `apply`.
@@ -162,9 +185,17 @@ final class ScreencastOverlaysWiring {
         }
     }
 
+    /// A restart started a new take: it starts with no marks.
+    func restarted() {
+        overlays?.clear()
+    }
+
     private func begin() {
         guard let choice = choice(), choice.kind == .video else { return }
         let recorded = Set(choice.regions.map(\.display))
+        recordedDisplays = recorded
+        anchor = Self.anchor(for: choice)
+        if case .window(let id) = choice.target { followedWindow = id }
         let overlays = ScreencastOverlays(
             keys: keys,
             displays: displays,
@@ -180,17 +211,52 @@ final class ScreencastOverlaysWiring {
         }
         self.overlays = overlays
         overlays.show(on: recorded)
+        if choice.showsShortcuts, keyDisplay != nil {
+            holdsKeyDisplay = true
+            holdKeyDisplay()
+        }
+        followWindow()
+        startFollowing()
+    }
 
-        guard choice.showsShortcuts, let keyDisplay else { return }
-        holdsKeyDisplay = true
+    /// Holds the key display, or updates the hold, for the recording's screens and anchor.
+    private func holdKeyDisplay() {
+        guard holdsKeyDisplay, let keyDisplay else { return }
         keyDisplay.acquire(
             .screencast,
-            configuration: Self.keyConfiguration(plugin: keystrokesConfiguration(), displays: recorded),
+            configuration: Self.keyConfiguration(plugin: keystrokesConfiguration(), displays: recordedDisplays, anchor: anchor),
             keepsWindowsOnScreen: true
         ) { [weak self] windows in
             self?.keyWindowIDs = Self.windowIDs(of: windows)
             self?.updateRecorder()
         }
+    }
+
+    // MARK: Following a window
+
+    /// Reads the recorded window's frame: the keys move to its new bottom edge, and when most of it
+    /// is on another display, the drawing and the keys move to that display. A window that's
+    /// closed or off screen leaves everything where it was.
+    func followWindow() {
+        guard let id = followedWindow, let overlays, let frame = windowFrame(id), frame != anchor else { return }
+        anchor = frame
+        if let display = Self.display(showingMost: frame, among: displays()), [display.id] != recordedDisplays {
+            recordedDisplays = [display.id]
+            overlays.move(to: recordedDisplays)
+        }
+        holdKeyDisplay()
+    }
+
+    private func startFollowing() {
+        guard followedWindow != nil, followTimer == nil, let followInterval else { return }
+        let timer = Timer(timeInterval: followInterval, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { return timer.invalidate() }
+                self.followWindow()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        followTimer = timer
     }
 
     private func connectBar() {
@@ -199,6 +265,11 @@ final class ScreencastOverlaysWiring {
     }
 
     private func end() {
+        followTimer?.invalidate()
+        followTimer = nil
+        followedWindow = nil
+        anchor = nil
+        recordedDisplays = []
         if holdsKeyDisplay {
             holdsKeyDisplay = false
             keyDisplay?.release(.screencast)
@@ -237,14 +308,41 @@ final class ScreencastOverlaysWiring {
 
     // MARK: Rules
 
-    /// What the key display shows while recording: shortcuts only, on the recorded displays, with
-    /// no rings, in the Keystrokes plugin's style while it's on (`plugin`), or the defaults.
-    static func keyConfiguration(plugin: KeyDisplayConfiguration?, displays: Set<CGDirectDisplayID>) -> KeyDisplayConfiguration {
+    /// What the key display shows while recording: shortcuts only, on the recorded displays, inside
+    /// `anchor` when there is one, with no rings, in the Keystrokes plugin's style while it's on
+    /// (`plugin`), or the defaults.
+    static func keyConfiguration(
+        plugin: KeyDisplayConfiguration?,
+        displays: Set<CGDirectDisplayID>,
+        anchor: CGRect? = nil
+    ) -> KeyDisplayConfiguration {
         var configuration = plugin ?? KeyDisplayConfiguration()
         configuration.keys = .shortcutsOnly
         configuration.showsClicks = false
         configuration.displays = displays
+        configuration.anchor = anchor
         return configuration
+    }
+
+    /// Where a recording's keys sit (AppKit's global space): the area, or the window's part of its
+    /// screen until the window is read; nil for a screen recording, so they sit at the screen's
+    /// bottom.
+    static func anchor(for choice: ScreencastChoice) -> CGRect? {
+        switch choice.target {
+        case .area: choice.area?.rect ?? choice.regions.first?.frame
+        case .window: choice.regions.first?.frame
+        case .display, .everyDisplay: nil
+        }
+    }
+
+    /// The display showing most of `frame`, if any shows part of it.
+    static func display(showingMost frame: CGRect, among displays: [ScreencastOverlayDisplay]) -> ScreencastOverlayDisplay? {
+        func shown(_ display: ScreencastOverlayDisplay) -> CGFloat {
+            let part = display.frame.intersection(frame)
+            return part.isNull ? 0 : part.width * part.height
+        }
+        guard let most = displays.max(by: { shown($0) < shown($1) }), shown(most) > 0 else { return nil }
+        return most
     }
 
     /// The window numbers the Window Server gave `windows`, which match `SCWindow.windowID`.

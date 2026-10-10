@@ -475,7 +475,48 @@ struct ScreencastOverlaysTests {
         overlays.hide()
     }
 
-    // MARK: The tools
+    @Test("Moving to another recorded display moves the drawing there, and keeps drawing on")
+    func moveToAnotherDisplay() throws {
+        let overlays = makeOverlays()
+        var changes: [[CGWindowID]] = []
+        overlays.onOverlayWindowsChange = { changes.append($0) }
+        overlays.show(on: [1])
+        overlays.startDrawing()
+        let before = try #require(overlays.layer.window(on: 1)?.windowID)
+        overlays.move(to: [2])
+        let after = try #require(overlays.layer.window(on: 2)?.windowID)
+        #expect(overlays.layer.window(on: 1) == nil)
+        #expect(changes == [[before], [after]])
+        #expect(overlays.isDrawing && overlays.toolbar.isShowing)
+        #expect(overlays.layer.window(on: 2)?.ignoresMouseEvents == false)
+        overlays.hide()
+        overlays.move(to: [1])
+        #expect(overlays.overlayWindowIDs.isEmpty, "nothing comes back once hidden")
+    }
+
+    @Test("The overlays are freed after they hide, the tools' view included")
+    func freedAfterHide() {
+        weak var freed: ScreencastOverlays?
+        weak var toolsView: NSView?
+        autoreleasepool {
+            let overlays = makeOverlays()
+            let bar = ScreencastControlBar(recording: FakeBarRecording(), placement: ScreencastControlBarPlacement(defaults: InMemoryDefaults()), displays: { [] }, ordersPanelIn: false)
+            overlays.show(on: [1, 2])
+            overlays.connect(to: bar)
+            overlays.startDrawing()
+            drag(overlays)
+            toolsView = overlays.toolbar.panel.contentView
+            #expect(toolsView != nil)
+            overlays.hide()
+            #expect(overlays.toolbar.panel.contentView == nil)
+            #expect(!bar.model.showsDrawButton, "the bar lets go of it too")
+            freed = overlays
+        }
+        #expect(freed == nil)
+        #expect(toolsView == nil)
+    }
+
+        // MARK: The tools
 
     @Test("The tools go above the bar, below it with no room above, and stay on the display")
     func toolsPlacement() {
@@ -497,6 +538,42 @@ struct ScreencastOverlaysTests {
         // No bar: centered near the bottom.
         let alone = ScreencastDrawingToolbar.origin(for: size, above: nil, within: visible)
         #expect(alone == CGPoint(x: visible.midX - 200, y: visible.minY + ScreencastDrawingToolbar.bottomInset))
+    }
+
+    @Test("While drawing, the tools follow the bar when it's dragged")
+    func toolsFollowTheBar() {
+        let overlays = makeOverlays()
+        let bar = ScreencastControlBar(recording: FakeBarRecording(), placement: ScreencastControlBarPlacement(defaults: InMemoryDefaults()), displays: { [] }, ordersPanelIn: false)
+        overlays.show(on: [1])
+        overlays.connect(to: bar)
+        bar.show(on: ScreencastBarDisplay(key: "laptop", visibleFrame: FakeOverlayDisplays.laptop.visibleFrame))
+        overlays.startDrawing()
+
+        bar.panel.setFrameOrigin(CGPoint(x: 200, y: 400))
+        overlays.barMoved()
+        let tools = overlays.toolbar.panel.frame
+        #expect(abs(tools.minY - (bar.panel.frame.maxY + ScreencastDrawingToolbar.gap)) < 1)
+        #expect(abs(tools.midX - bar.panel.frame.midX) < 1 || tools.minX == FakeOverlayDisplays.laptop.visibleFrame.minX)
+
+        overlays.endDrawing()
+        let left = overlays.toolbar.panel.frame
+        bar.panel.setFrameOrigin(CGPoint(x: 600, y: 300))
+        overlays.barMoved()
+        #expect(overlays.toolbar.panel.frame == left, "not while drawing is off")
+        bar.hide()
+        overlays.hide()
+    }
+
+    @Test("The tools' shadow shows only with the tools, so none is left above the bar")
+    func toolsShadow() {
+        let overlays = makeOverlays()
+        overlays.show(on: [1])
+        #expect(!overlays.toolbar.panel.hasShadow)
+        overlays.startDrawing()
+        #expect(overlays.toolbar.panel.hasShadow)
+        overlays.endDrawing()
+        #expect(!overlays.toolbar.panel.hasShadow)
+        overlays.hide()
     }
 
     @Test("The tools' panel is on screen for the recording but empty and click-through except while drawing")

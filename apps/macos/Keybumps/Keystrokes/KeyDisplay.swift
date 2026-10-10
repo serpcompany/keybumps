@@ -51,15 +51,21 @@ struct KeyDisplayConfiguration: Equatable, Sendable {
     /// shows a ring on. Nil means the screen the pointer is on when a key is pressed, and a ring on
     /// whichever screen is clicked.
     var displays: Set<CGDirectDisplayID>?
+    /// A rect the keys sit in, in AppKit's global space, such as the area or window a recording
+    /// records: they go along its bottom edge, at `position`, inset, on each of `displays` it's on.
+    /// Nil puts them along the bottom of the screen's visible frame.
+    var anchor: CGRect?
 }
 
 /// Who holds the key display, in the order they took it, and what each asked for. The display
 /// shows while anyone holds it, and only one shows however many do. The configuration in effect is
-/// the most recent holder's, with two exceptions:
+/// the most recent holder's, with these exceptions:
 /// - Show is Shortcuts only if any holder asks for it, so a recording that shows shortcuts only
 ///   never records typing the plugin was set to show;
-/// - the screens are the most recent holder's that names some, so a recording's screens win for
-///   as long as it holds the display, even if the plugin is turned on after it started.
+/// - while a holder keeps the windows on screen (a recording), the screens, the anchor, and
+///   whether clicks show are the most recent such holder's, so what's in its video stays its own
+///   even if the plugin is turned on after it started;
+/// - otherwise the screens and the anchor are the most recent holder's that names some.
 ///
 /// The windows stay on screen for the whole hold if any holder asks (`keepsWindowsOnScreen`). A
 /// holder that acquires again keeps its place and changes only what it asked for.
@@ -82,7 +88,14 @@ struct KeyDisplayHolds: Equatable {
     var configuration: KeyDisplayConfiguration? {
         guard var configuration = holders.last?.configuration else { return nil }
         if holders.contains(where: { $0.configuration.keys == .shortcutsOnly }) { configuration.keys = .shortcutsOnly }
-        configuration.displays = holders.last(where: { $0.configuration.displays != nil })?.configuration.displays
+        if let recording = holders.last(where: \.keepsWindowsOnScreen)?.configuration {
+            configuration.displays = recording.displays
+            configuration.anchor = recording.anchor
+            configuration.showsClicks = recording.showsClicks
+        } else {
+            configuration.displays = holders.last(where: { $0.configuration.displays != nil })?.configuration.displays
+            configuration.anchor = holders.last(where: { $0.configuration.anchor != nil })?.configuration.anchor
+        }
         return configuration
     }
 

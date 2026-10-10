@@ -64,10 +64,19 @@ struct OverlaysFlow {
     let wiring: ScreencastOverlaysWiring
     /// The Keystrokes plugin's settings, while it's on.
     let plugin = PluginState()
+    /// Recorded windows' frames, in AppKit's global space, as the window server would give them.
+    let windows = WindowFrames()
 
     final class PluginState {
         var configuration: KeyDisplayConfiguration?
     }
+
+    final class WindowFrames {
+        var frames: [CGWindowID: CGRect] = [:]
+    }
+
+    /// The browser window in `ScreencastScreens`, on the left screen, in AppKit's global space.
+    static let browserFrame = CGRect(x: 100, y: 282, width: 800, height: 600)
 
     static let displays = ScreencastOverlaysWiring.displays(in: PickerScreens.both, connected: [])
 
@@ -94,11 +103,12 @@ struct OverlaysFlow {
             keystrokesConfiguration: { plugin.configuration },
             displays: { Self.displays },
             ordersWindowsIn: false,
-            watchesOwnKeys: false
+            watchesOwnKeys: false,
+            followInterval: nil
         )
         controls.attach(to: flow.controller)
-        let controls = controls
-        wiring.attach(to: flow.controller, bar: { controls.bar })
+        let controls = controls, windows = windows
+        wiring.attach(to: flow.controller, bar: { controls.bar }, windowFrame: { windows.frames[$0] })
     }
 
     var controller: ScreencastController { flow.controller }
@@ -110,16 +120,36 @@ struct OverlaysFlow {
         keyDisplay.acquire(.keystrokes, configuration: configuration)
     }
 
-    /// Start Screencast, the left screen, Record: `beforeStart` runs once the picker has closed and
-    /// before the recorder starts.
-    func record(showsShortcuts: Bool = true, beforeStart: () -> Void = {}) async throws {
+    /// Start Screencast, the left screen (or what `pick` picks), Record: `beforeStart` runs once the
+    /// picker has closed and before the recorder starts.
+    func record(
+        showsShortcuts: Bool = true,
+        pick: ((ScreencastPickerModel) -> Void)? = nil,
+        beforeStart: () -> Void = {}
+    ) async throws {
         controller.open()
         let picker = try #require(controller.picker)
-        picker.target = .screen
-        picker.clickScreen(PickerScreens.left)
+        if let pick {
+            pick(picker)
+        } else {
+            picker.target = .screen
+            picker.clickScreen(PickerScreens.left)
+        }
         picker.showsShortcuts = showsShortcuts
         controller.confirm()
         beforeStart()
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        await wiring.recorderUpdated()
+    }
+
+    /// Records the browser window, once the picker has read the windows.
+    func recordBrowserWindow() async throws {
+        controller.open()
+        let picker = try #require(controller.picker)
+        #expect(await ScreencastWait.until { !picker.windows.isEmpty })
+        picker.target = .window
+        picker.clickWindow(at: CGPoint(x: 150, y: 832))
+        controller.confirm()
         #expect(await ScreencastWait.until { controller.phase == .recording })
         await wiring.recorderUpdated()
     }
@@ -168,7 +198,7 @@ struct ScreencastOverlaysWiringTests {
         #expect(flows.wiring.overlays == nil)
 
         var drawingIDs: [CGWindowID] = []
-        try await flows.record(showsShortcuts: false) {
+        try await flows.record(showsShortcuts: false, beforeStart: {
             // The countdown is off, so the recorder is starting now; the drawing is already up.
             let overlays = flows.wiring.overlays
             #expect(overlays?.isShown == true)
@@ -177,7 +207,7 @@ struct ScreencastOverlaysWiringTests {
             #expect(overlays?.layer.window(on: PickerScreens.left.id) != nil)
             #expect(flows.wiring.includedWindowIDs == Set(drawingIDs), "asked of the recorder before it starts")
             flows.showOwnWindows(drawingIDs)
-        }
+        })
         #expect(flows.exceptedWindows == drawingIDs, "the first stream's filter has the drawing")
         #expect(flows.recorder.overlayWindows == Set(drawingIDs))
         await flows.stop()
@@ -300,14 +330,14 @@ struct ScreencastOverlaysWiringTests {
         flows.turnOnKeystrokes(plugin)
 
         var keyIDs: Set<CGWindowID> = []
-        try await flows.record(showsShortcuts: true) {
+        try await flows.record(showsShortcuts: true, beforeStart: {
             #expect(flows.keyDisplay.holds(.screencast))
             keyIDs = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
             #expect(keyIDs.count == 1, "a window on the recorded screen for the whole recording")
             let drawing = flows.wiring.overlays?.overlayWindowIDs ?? []
             #expect(flows.wiring.includedWindowIDs == keyIDs.union(drawing))
             flows.showOwnWindows(drawing + keyIDs.sorted())
-        }
+        })
         let configuration = try #require(flows.keyDisplay.configuration)
         #expect(configuration.keys == .shortcutsOnly, "never typing, even with the plugin on All keys")
         #expect(configuration.displays == [PickerScreens.left.id])
@@ -367,9 +397,9 @@ struct ScreencastOverlaysWiringTests {
         flows.type()
         #expect(!flows.keyDisplay.overlayWindows.isEmpty, "the plugin is showing typing")
 
-        try await flows.record(showsShortcuts: false) {
+        try await flows.record(showsShortcuts: false, beforeStart: {
             flows.showOwnWindows(ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows).sorted())
-        }
+        })
         #expect(!flows.keyDisplay.holds(.screencast))
         #expect(flows.keyDisplay.configuration?.keys == .allKeys, "the plugin's display is left as it is")
         for keyCode in [kVK_ANSI_A, kVK_ANSI_S, kVK_ANSI_C] {
@@ -392,6 +422,118 @@ struct ScreencastOverlaysWiringTests {
         #expect(Set(askedFor).isDisjoint(with: flows.presenter.everWindowIDs))
     }
 
+    // MARK: Inside what's recorded
+
+    @available(macOS 15, *)
+    @Test("An area recording's keys sit inside the area")
+    func keysInsideTheArea() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.record { picker in
+            picker.target = .area
+            picker.pressArea(at: CGPoint(x: 200, y: 300), on: PickerScreens.left)
+            picker.dragArea(to: CGPoint(x: 800, y: 700))
+            picker.releaseArea()
+        }
+        let area = CGRect(x: 200, y: 300, width: 600, height: 400)
+        #expect(flows.wiring.anchor == area)
+        #expect(flows.keyDisplay.configuration?.anchor == area)
+        #expect(flows.keyDisplay.configuration?.displays == [PickerScreens.left.id])
+        #expect(flows.wiring.followedWindow == nil)
+        await flows.stop()
+        #expect(flows.wiring.anchor == nil)
+    }
+
+    @available(macOS 15, *)
+    @Test("A screen recording's keys sit at the bottom of the screen, as without a recording")
+    func keysAtTheScreensBottom() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.record()
+        #expect(flows.wiring.anchor == nil)
+        #expect(flows.keyDisplay.configuration?.anchor == nil)
+        await flows.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("A window recording's keys follow the window, and the drawing and keys follow it to another screen")
+    func keysFollowTheWindow() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.recordBrowserWindow()
+        #expect(flows.wiring.followedWindow == ScreencastScreens.browserWindow.id)
+        #expect(flows.keyDisplay.configuration?.anchor == OverlaysFlow.browserFrame, "the window's part of its screen, before it's read")
+        let drawingBefore = try #require(flows.wiring.overlays?.overlayWindowIDs)
+        let keysBefore = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+
+        // Dragged along the same screen: the keys go with it, and nothing else changes.
+        let moved = OverlaysFlow.browserFrame.offsetBy(dx: 200, dy: -100)
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = moved
+        flows.wiring.followWindow()
+        #expect(flows.keyDisplay.configuration?.anchor == moved)
+        #expect(flows.keyDisplay.configuration?.displays == [PickerScreens.left.id])
+        #expect(flows.wiring.overlays?.overlayWindowIDs == drawingBefore)
+
+        // Dragged onto the right screen: the drawing and the keys move there.
+        let across = CGRect(x: 1600, y: 200, width: 800, height: 600)
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = across
+        flows.wiring.followWindow()
+        await flows.wiring.recorderUpdated()
+        let overlays = try #require(flows.wiring.overlays)
+        #expect(overlays.layer.window(on: PickerScreens.right.id) != nil)
+        #expect(overlays.layer.window(on: PickerScreens.left.id) == nil)
+        #expect(flows.keyDisplay.configuration?.displays == [PickerScreens.right.id])
+        #expect(flows.keyDisplay.configuration?.anchor == across)
+        let keysAfter = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+        #expect(flows.recorder.overlayWindows == Set(overlays.overlayWindowIDs).union(keysAfter))
+        #expect(flows.recorder.overlayWindows.isDisjoint(with: Set(drawingBefore).union(keysBefore)), "the old screen's are taken back")
+
+        // A window that's closed or off screen leaves everything where it was.
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = nil
+        flows.wiring.followWindow()
+        #expect(flows.keyDisplay.configuration?.anchor == across)
+        await flows.stop()
+        #expect(flows.wiring.followedWindow == nil)
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart's new take starts with no marks")
+    func restartClearsTheMarks() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.record()
+        let overlays = try #require(flows.wiring.overlays)
+        overlays.style.lifetime = .stays
+        overlays.startDrawing()
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
+        #expect(overlays.hasMarks)
+
+        await flows.controller.restart()
+        #expect(flows.controller.phase == .recording)
+        #expect(!overlays.hasMarks && overlays.drawing.isEmpty)
+        #expect(overlays.isDrawing, "drawing stays on for the new take")
+        #expect(flows.wiring.overlays === overlays, "the same windows, so the recorder keeps them")
+        await flows.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("A recording's overlays are freed once it ends")
+    func overlaysFreed() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        weak var ended: ScreencastOverlays?
+        try await flows.record()
+        try autoreleasepool {
+            let overlays = try #require(flows.wiring.overlays)
+            overlays.startDrawing()
+            #expect(overlays.toolbar.panel.contentView != nil, "the tools were drawn")
+            ended = overlays
+        }
+        await flows.stop()
+        #expect(ended == nil)
+    }
+
     // MARK: Rules
 
     @Test("The key display's configuration while recording keeps the plugin's style and nothing else of it")
@@ -400,6 +542,8 @@ struct ScreencastOverlaysWiringTests {
         var expected = KeyDisplayConfiguration()
         expected.displays = displays
         #expect(ScreencastOverlaysWiring.keyConfiguration(plugin: nil, displays: displays) == expected)
+        let area = CGRect(x: 10, y: 20, width: 300, height: 200)
+        #expect(ScreencastOverlaysWiring.keyConfiguration(plugin: nil, displays: displays, anchor: area).anchor == area)
 
         let plugin = KeyDisplayConfiguration(style: .bezel, position: .bottomRight, keys: .allKeys, namesActions: false, size: .small, linger: 5, showsClicks: true)
         let recording = ScreencastOverlaysWiring.keyConfiguration(plugin: plugin, displays: displays)

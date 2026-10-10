@@ -195,7 +195,14 @@ final class ScreencastModule: CapabilityModule {
         let reveal = seams.revealCapture ?? Self.revealInFinder
         controller.onCaptureFinished = { result in reveal(Self.files(of: result)) }
         recordingControls.attach(to: controller)
-        overlays.attach(to: controller, bar: { [recordingControls] in recordingControls.bar })
+        // The engine's own reader, in the screens' AppKit space, so the keys follow a recorded window.
+        let captureSystem = seams.captureSystem ?? ScreenCaptureKitCaptureSystem.current
+        let screens = seams.screens ?? { ScreencastScreenLayout.current() }
+        overlays.attach(
+            to: controller,
+            bar: { [recordingControls] in recordingControls.bar },
+            windowFrame: { id in captureSystem.windowFrame(id).map { screens().appKitRect(fromTopLeft: $0) } }
+        )
         controllerStorage = controller
         return controller
     }

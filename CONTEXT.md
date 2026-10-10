@@ -196,7 +196,7 @@ Showing the shortcuts you press on screen, for demos, recordings, and screen sha
 _Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
 
 **Key display**:
-The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and shows on a recording's screens while one holds it. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and while a recording holds it, shows on its screens, inside the area or window it records, with its clicks setting. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Screencast**:

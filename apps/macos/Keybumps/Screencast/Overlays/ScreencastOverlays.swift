@@ -110,6 +110,8 @@ final class ScreencastOverlays {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var screenObserver: NSObjectProtocol?
     @ObservationIgnored private weak var bar: ScreencastControlBar?
+    /// Moves the tools with the bar while drawing.
+    @ObservationIgnored private var barMoveObserver: NSObjectProtocol?
 
     /// - Parameters:
     ///   - keys: Where Escape, Delete, and ⌘Z are registered while drawing; nil for none.
@@ -141,6 +143,7 @@ final class ScreencastOverlays {
 
     deinit {
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        if let barMoveObserver { NotificationCenter.default.removeObserver(barMoveObserver) }
         if let ownKeyMonitor { NSEvent.removeMonitor(ownKeyMonitor) }
     }
 
@@ -167,10 +170,19 @@ final class ScreencastOverlays {
         stopTicking()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        disconnectBar()
         layer.hide()
         toolbar.hide()
         recordedDisplays = []
         isShown = false
+    }
+
+    /// Moves the overlays to other recorded displays, as when a recorded window moves to another
+    /// screen. Marks on a display that's left stay in the drawing but no longer show.
+    func move(to displays: Set<CGDirectDisplayID>) {
+        guard isShown else { return }
+        recordedDisplays = displays
+        refreshDisplays()
     }
 
     /// Matches the drawing layer to the recorded displays that are connected now: a display that
@@ -197,17 +209,31 @@ final class ScreencastOverlays {
     /// Gives the bar its Draw button, which toggles drawing, and keeps the button showing whether
     /// drawing is on. The drawing tools show just above the bar.
     func connect(to bar: ScreencastControlBar) {
+        disconnectBar()
         self.bar = bar
         bar.isDrawing = isDrawing
         bar.onToggleDrawing = { [weak self] in self?.toggleDrawing() }
+        barMoveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: bar.panel, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.barMoved() }
+        }
     }
 
     /// Takes the Draw button off the bar again.
     func disconnectBar() {
+        if let barMoveObserver { NotificationCenter.default.removeObserver(barMoveObserver) }
+        barMoveObserver = nil
         guard let bar else { return }
         bar.onToggleDrawing = nil
         bar.isDrawing = false
         self.bar = nil
+    }
+
+    /// The bar was dragged, or moved itself: while drawing, the tools go with it.
+    func barMoved() {
+        guard isDrawing else { return }
+        placeToolbar()
     }
 
     /// Whether the control bar's Draw button is these overlays'.

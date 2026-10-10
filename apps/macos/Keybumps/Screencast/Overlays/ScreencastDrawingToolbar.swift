@@ -22,8 +22,8 @@ enum ScreencastDrawingToolbarID {
 final class ScreencastDrawingToolbar {
     /// The room between the tools and the control bar.
     static let gap: CGFloat = 8
-    /// With no control bar to sit above, how far above the bottom of the display the tools sit:
-    /// where they'd be above a bar in its default spot.
+    /// With no control bar to sit above, how far above the bottom of the display's visible frame
+    /// the tools sit.
     static let bottomInset: CGFloat = 80
 
     let panel = ScreencastDrawingToolbarPanel()
@@ -52,18 +52,24 @@ final class ScreencastDrawingToolbar {
         panel.orderFrontRegardless()
     }
 
+    /// Takes the panel off screen and lets go of the tools' view, which holds the overlays.
     func hide() {
         isOnScreen = false
         setShowing(false)
         panel.orderOut(nil)
+        panel.contentView = nil
+        hostingView = nil
     }
 
-    /// Shows the tools and takes clicks, or empties the panel and lets clicks through.
+    /// Shows the tools and takes clicks, or empties the panel and lets clicks through. The panel's
+    /// shadow goes with the tools, so none is left above the bar.
     func setShowing(_ showing: Bool) {
         isShowing = showing
         if showing { _ = contentSize() }
         hostingView?.isHidden = !showing
         panel.ignoresMouseEvents = !showing
+        panel.hasShadow = showing
+        panel.invalidateShadow()
     }
 
     /// Moves the tools above `anchor` (the control bar's frame), or near the bottom of
@@ -116,7 +122,8 @@ final class ScreencastDrawingToolbarPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // On only while the tools show (`ScreencastDrawingToolbar.setShowing`).
+        hasShadow = false
         hidesOnDeactivate = false
         worksWhenModal = true
         isReleasedWhenClosed = false

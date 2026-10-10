@@ -180,12 +180,28 @@ final class KeyDisplayOverlayState {
 
 extension KeyDisplayScreen {
     /// How far the visible frame is from each edge, so the keys sit above the Dock.
-    var insets: EdgeInsets {
+    var insets: EdgeInsets { insets(to: visibleFrame) }
+
+    /// Where the keys go on this screen, in AppKit's global space: inside the visible frame by
+    /// `KeyDisplayOverlayView.margin`, or, for an `anchor` on this screen, inside the part of it
+    /// that's visible here by `KeyDisplayOverlayView.anchorMargin`. An anchor too small, or not on
+    /// this screen, leaves them where they'd be without one.
+    func keyArea(anchor: CGRect?) -> CGRect {
+        let plain = visibleFrame.insetBy(dx: KeyDisplayOverlayView.margin, dy: KeyDisplayOverlayView.margin)
+        guard let anchor else { return plain }
+        let shown = anchor.standardized.intersection(visibleFrame)
+        let margin = KeyDisplayOverlayView.anchorMargin
+        guard !shown.isNull, shown.width > margin * 4, shown.height > margin * 4 else { return plain }
+        return shown.insetBy(dx: margin, dy: margin)
+    }
+
+    /// How far `rect` is from each edge of the screen.
+    func insets(to rect: CGRect) -> EdgeInsets {
         EdgeInsets(
-            top: frame.maxY - visibleFrame.maxY,
-            leading: visibleFrame.minX - frame.minX,
-            bottom: visibleFrame.minY - frame.minY,
-            trailing: frame.maxX - visibleFrame.maxX
+            top: frame.maxY - rect.maxY,
+            leading: rect.minX - frame.minX,
+            bottom: rect.minY - frame.minY,
+            trailing: frame.maxX - rect.maxX
         )
     }
 }
@@ -195,6 +211,8 @@ extension KeyDisplayScreen {
 struct KeyDisplayOverlayView: View {
     /// How far the keys sit from the visible frame's edges.
     static let margin: CGFloat = 32
+    /// How far they sit from an anchor's edges, such as a recorded window's.
+    static let anchorMargin: CGFloat = 16
 
     let state: KeyDisplayOverlayState
     let screen: KeyDisplayScreen
@@ -210,14 +228,8 @@ struct KeyDisplayOverlayView: View {
                     }
                 }
                 if content.lineDisplays.contains(screen.display) {
-                    let insets = screen.insets
                     KeystrokeStack(content: content, metrics: metrics)
-                        .padding(EdgeInsets(
-                            top: insets.top + Self.margin,
-                            leading: insets.leading + Self.margin,
-                            bottom: insets.bottom + Self.margin,
-                            trailing: insets.trailing + Self.margin
-                        ))
+                        .padding(screen.insets(to: screen.keyArea(anchor: content.configuration.anchor)))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: content.configuration.position.alignment)
                 }
             }
