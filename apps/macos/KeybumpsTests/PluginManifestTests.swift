@@ -187,7 +187,7 @@ struct PluginManifestTests {
         let harness = WiringHarness(enabled: Set(Capability.allCases), missing: missing, root: root)
         for descriptor in CapabilityCatalog.descriptors {
             let page = try #require(descriptor.settingsPage, "\(descriptor.title) has a Settings page")
-            let shown = PermissionRowsOnPage.read(page.content(), model: harness.model)
+            let shown = RowsOnPage.read(page.content(), model: harness.model).permissions
             let optional = descriptor.optionalPermissions.map { PermissionRow.Shown(permission: $0.permission, isOptional: true) }
             #expect(shown.filter(\.isOptional) == optional, "\(descriptor.title) shows \(shown)")
             // Only `PermissionRow`s count: Screenshot Tools' own Screen Recording row isn't one.
@@ -196,24 +196,45 @@ struct PluginManifestTests {
             #expect(Set(shown).count == shown.count, "\(descriptor.title) shows a permission twice: \(shown)")
         }
     }
+
+    @Test("Every plugin's Settings page draws each preference it declares once, those placed at the top first, under its header")
+    func pagesDrawTheirPreferences() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsPluginPreferences-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root)
+        for descriptor in CapabilityCatalog.descriptors {
+            let page = try #require(descriptor.settingsPage, "\(descriptor.title) has a Settings page")
+            let drawn = RowsOnPage.read(page.content(), model: harness.model).preferences
+            let declared = descriptor.preferences.map(\.key)
+            #expect(drawn.count == declared.count && Set(drawn) == Set(declared), "\(descriptor.title) draws \(drawn), each once")
+            let top = descriptor.topPreferences.map(\.key)
+            #expect(Array(drawn.prefix(top.count)) == top, "\(descriptor.title) draws \(drawn)")
+            #expect(drawn == top + descriptor.preferenceGroups.flatMap { $0.preferences.map(\.key) }, "then by group")
+        }
+        #expect(CapabilityDescriptor.keystrokes.topPreferences.map(\.key) == ["showing"])
+        #expect(!CapabilityDescriptor.keystrokes.preferenceGroups.contains { $0.preferences.contains(.keystrokesShowing) }, "Not in a group as well")
+    }
 }
 
 /// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
-/// returns the permission rows it draws, in order.
+/// returns the permission rows and the preference rows it draws, in order.
 @MainActor
-private enum PermissionRowsOnPage {
+private enum RowsOnPage {
     private final class Rows: @unchecked Sendable {
-        var shown: [PermissionRow.Shown] = []
+        var permissions: [PermissionRow.Shown] = []
+        var preferences: [String] = []
     }
 
-    static func read(_ page: AnyView, model: AppModel) -> [PermissionRow.Shown] {
+    static func read(_ page: AnyView, model: AppModel) -> (permissions: [PermissionRow.Shown], preferences: [String]) {
         let rows = Rows()
         let size = CGSize(width: 720, height: 4000)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         let host = NSHostingView(rootView: page
             .environment(model)
-            .onPreferenceChange(PermissionRow.Shown.Key.self) { rows.shown = $0 })
+            .onPreferenceChange(PermissionRow.Shown.Key.self) { rows.permissions = $0 }
+            .onPreferenceChange(PluginPreferenceRow.Shown.self) { rows.preferences = $0 })
         host.frame = NSRect(origin: .zero, size: size)
         window.contentView = host
         defer {
@@ -221,6 +242,6 @@ private enum PermissionRowsOnPage {
             window.close()
         }
         host.layoutSubtreeIfNeeded()
-        return rows.shown
+        return (rows.permissions, rows.preferences)
     }
 }

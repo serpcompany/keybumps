@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
-/// extension's settings: its header with who makes it, its Commands, the permissions it needs and
-/// then the ones it can use (marked Optional), its
+/// extension's settings: its header with who makes it, any preference placed at the top, its
+/// Commands, the permissions it needs and then the ones it can use (marked Optional), its other
 /// declared preferences by group, and last a slot for parts no declaration covers (such as a
 /// library to edit). Timer uses it so far; the other plugins move over one at a time.
 struct PluginSettingsPage<Custom: View>: View {
@@ -66,33 +66,34 @@ struct PluginPermissionsGroup: View {
 }
 
 /// A plugin's declared preferences, a `SettingsGroup` for each of their groups. A page drawn by hand,
-/// as Dictation's is, lists them here too, so they move to the template unchanged. `excluding`
-/// leaves out the keys such a page draws elsewhere with `PluginPreferenceRow`, as Keystrokes' page
-/// puts its Show keys on screen switch at the top.
+/// as Dictation's is, lists them here too, so they move to the template unchanged. Those placed at
+/// the top are drawn by `CapabilityControl` instead.
 struct PluginPreferenceGroups: View {
     let capability: Capability
-    var excluding: Set<String> = []
 
     var body: some View {
         ForEach(capability.descriptor.preferenceGroups, id: \.title) { group in
-            let shown = group.preferences.filter { !excluding.contains($0.key) }
-            if !shown.isEmpty {
-                SettingsGroup(group.title) {
-                    ForEach(shown) { PluginPreferenceRow(capability: capability, preference: $0) }
-                }
+            SettingsGroup(group.title) {
+                ForEach(group.preferences) { PluginPreferenceRow(capability: capability, preference: $0) }
             }
         }
     }
 }
 
 /// One declared preference: a switch or a menu. A change applies the capabilities again, so the
-/// plugin's module picks it up at once.
+/// plugin's module picks it up at once. Each row reports its key through `Shown`, so a test can lay
+/// out every plugin's page and check it draws each declared preference once.
 struct PluginPreferenceRow: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
     let preference: PluginPreference
 
     var body: some View {
+        control.preference(key: Shown.self, value: [preference.key])
+    }
+
+    @ViewBuilder
+    private var control: some View {
         switch preference.kind {
         case .toggle:
             Toggle(isOn: Binding(
@@ -120,6 +121,12 @@ struct PluginPreferenceRow: View {
     }
 
     private var identifier: String { "plugin.\(capability.rawValue).\(preference.key)" }
+
+    /// The keys of the rows a page draws, in order.
+    struct Shown: PreferenceKey {
+        static let defaultValue: [String] = []
+        static func reduce(value: inout [String], nextValue: () -> [String]) { value += nextValue() }
+    }
 
     private func update(_ value: PluginPreference.Value) {
         model.setPluginPreference(preference, to: value, for: capability)

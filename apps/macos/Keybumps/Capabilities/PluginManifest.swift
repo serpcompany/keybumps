@@ -72,6 +72,15 @@ struct PluginPreference: Identifiable, Equatable {
         let title: String
     }
 
+    /// Where the plugin's Settings page draws it.
+    enum Placement: Equatable {
+        /// Under its group's heading (`CapabilityDescriptor.preferenceGroups`).
+        case inGroup
+        /// Under the page's header, before its Commands, with no heading, for a switch that governs
+        /// the rest of the page, such as Keystrokes' Show keystrokes. Its `group` isn't drawn.
+        case top
+    }
+
     /// A stored value.
     enum Value: Equatable {
         case bool(Bool)
@@ -88,6 +97,7 @@ struct PluginPreference: Identifiable, Equatable {
     /// The key of another menu of the same plugin that never has the same value, such as
     /// Translation's two languages. Choosing that one's value swaps the two (`AppPreferences.set`).
     var differsFrom: String?
+    var placement = Placement.inGroup
 
     var id: String { key }
 
@@ -137,9 +147,14 @@ extension CapabilityDescriptor {
         CapabilityShortcut.allCases.filter { $0.capability == capability }
     }
 
-    /// Its declared preferences in groups, in the order they're declared.
+    /// Its declared preferences placed at the top of its page, in the order they're declared.
+    var topPreferences: [PluginPreference] {
+        preferences.filter { $0.placement == .top }
+    }
+
+    /// Its other declared preferences in groups, in the order they're declared.
     var preferenceGroups: [(title: String, preferences: [PluginPreference])] {
-        preferences.reduce(into: []) { groups, preference in
+        preferences.filter { $0.placement == .inGroup }.reduce(into: []) { groups, preference in
             if let index = groups.firstIndex(where: { $0.title == preference.group }) {
                 groups[index].preferences.append(preference)
             } else {
