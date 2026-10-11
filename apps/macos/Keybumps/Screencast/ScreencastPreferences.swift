@@ -31,9 +31,8 @@ struct ScreencastPreferences: Equatable {
     }
 }
 
-/// The switches the picker shows for a video. Each is one of Settings › Screencast's, with one
-/// stored value, so the two never disagree: the picker starts with them, and Record or Capture
-/// saves what it took (#483).
+/// The picker's switches. Each is one of Settings › Screencast's, with one stored value, so the
+/// two never disagree: the picker starts with them, and Record saves what it recorded with (#483).
 struct ScreencastSwitches: Equatable, Sendable {
     var recordsMicrophone: Bool
     var recordsSystemAudio: Bool

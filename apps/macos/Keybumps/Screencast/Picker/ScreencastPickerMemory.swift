@@ -10,11 +10,11 @@ struct ScreencastPickerChoices: Equatable, Sendable {
     }
 
     var target: ScreencastPickerTarget = .area
-    /// Nil until a capture is taken in Screen mode, and Screen mode starts on the pointer's screen.
+    /// Nil until Record is pressed in Screen mode, and Screen mode starts on the pointer's screen.
     var screen: Screen?
 }
 
-/// Area, Window, or Screen, and the screen chosen, as Record or Capture last took them
+/// Area, Window, or Screen, and the screen chosen, as Record last took them
 /// (`screencast.pickerChoices`). The switches are Settings › Screencast's
 /// (`AppPreferences.setScreencastSwitches`), and the area has its own memory
 /// (`ScreencastAreaMemory`). A window is never remembered, since its ID doesn't outlast it. A name

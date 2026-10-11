@@ -71,7 +71,7 @@ final class ScreencastPickerModel {
     /// The screen the pointer was on at Start Screencast, or else the main one, read once: the bar
     /// shows on it, and Screen mode starts with it chosen unless the choice last taken is there.
     let pointerScreen: ScreencastScreen?
-    /// Screen mode's choice when the picker opened, kept for a capture taken in another mode.
+    /// Screen mode's choice when the picker opened, kept when Record is pressed in another mode.
     private let rememberedScreen: ScreencastPickerChoices.Screen?
     /// Windows that can be picked, front to back (`ScreencastWindowPicking`). Empty until what's on
     /// screen has been read, and when it can't be.
@@ -167,8 +167,8 @@ final class ScreencastPickerModel {
     /// Whether Screen mode offers All Screens: with more than one screen.
     var offersEveryScreen: Bool { layout.screens.count > 1 }
 
-    /// The switches as Record or Capture saves them, for the settings. Without Microphone access
-    /// the microphone's switch is off and can't be changed, so its setting stays as it was.
+    /// The switches as Record saves them, for the settings. Without Microphone access the
+    /// microphone's switch is off and can't be changed, so its setting stays as it was.
     var switches: ScreencastSwitches {
         ScreencastSwitches(
             recordsMicrophone: microphoneAvailable ? recordsMicrophone : microphoneSetting,
@@ -179,7 +179,7 @@ final class ScreencastPickerModel {
     }
 
     /// What the next picker opens with (`ScreencastPickerMemory`). Never the window, and the screen
-    /// only from Screen mode, so a capture in another mode keeps the screen last chosen there. A
+    /// only from Screen mode, so a recording in another mode keeps the screen last chosen there. A
     /// screen macOS gives no UUID is remembered as none, so the next picker starts on the pointer's.
     var choicesToRemember: ScreencastPickerChoices {
         var choices = ScreencastPickerChoices(target: target, screen: rememberedScreen)

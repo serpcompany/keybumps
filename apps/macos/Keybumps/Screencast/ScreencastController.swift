@@ -187,11 +187,11 @@ final class ScreencastController {
     ///   - system: The screen, for the windows to pick; inert in the unit-test host unless a test
     ///     passes a fake.
     ///   - presenter: The picker's and countdown's windows; inert in the unit-test host.
-    ///   - areaMemory: The last area recorded or captured, which the picker opens with.
-    ///   - pickerMemory: The rest of what was last recorded or captured, which the picker opens
-    ///     with, but the switches.
+    ///   - areaMemory: The last area recorded, which the picker opens with.
+    ///   - pickerMemory: The rest of what was last recorded, which the picker opens with, but the
+    ///     switches.
     ///   - preferences: Settings › Screencast, read each time the picker opens.
-    ///   - saveSwitches: Saves the picker's switches as Settings › Screencast's, at Record or Capture.
+    ///   - saveSwitches: Saves the picker's switches as Settings › Screencast's, at Record.
     ///   - screens: The displays, read each time the picker opens.
     ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
     ///     its screen.
@@ -311,9 +311,8 @@ final class ScreencastController {
 
     // MARK: Picking
 
-    /// Start Screencast: opens the picker as it was last used to record or capture, with the
-    /// switches as Settings has them and the last area drawn. Does nothing while a capture is under
-    /// way.
+    /// Start Screencast: opens the picker as it was last used to record, with the switches as
+    /// Settings has them and the last area drawn. Does nothing while a capture is under way.
     func open() {
         guard phase == .idle, Self.canStart(recorder.state) else { return }
         generation += 1
