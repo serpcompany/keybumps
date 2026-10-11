@@ -14,7 +14,8 @@ enum ScreencastDrawingRenderer {
     }
 
     static func draw(_ mark: ScreencastMark, opacity: Double, in ctx: CGContext) {
-        guard opacity > 0 else { return }
+        // A mark with no extent has nothing to draw, and no rect to fade in.
+        guard opacity > 0, opacity.isFinite, !mark.bounds.isNull, !mark.bounds.isInfinite else { return }
         let color = mark.color.nsColor.usingColorSpace(.sRGB)?.cgColor ?? mark.color.nsColor.cgColor
         ctx.saveGState()
         defer { ctx.restoreGState() }
