@@ -216,215 +216,110 @@ struct ScreencastCaptureFilterTests {
         #expect(plan.dependsOnWindows(of: Screens.ownProcess))
     }
 
-    @Test("A window recording names its windows: the window, its sheet and menu, and Keybumps's overlays, never Keybumps's others")
+    @Test("A window recording names the window and Keybumps's overlays: none of its app's other windows, and nothing else of Keybumps")
     func window() throws {
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(), watched: Screens.watched(Screens.content())))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31]), "the app's other window (12) and the control bar (30) stay out")
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()))
+        #expect(plan == .windows(1, includingWindows: [10, 31]),
+                "its sheet (11), other window (12), and menu (13), the other app's window (20), and the control bar (30) stay out")
         #expect(!plan.dependsOnWindows(of: Screens.ownProcess), "a window Keybumps opens can't show, not even for a frame")
     }
 
-    @Test("Without an overlay on screen, nothing of Keybumps is in a window recording's filter")
+    @Test("Without an overlay registered and listed, nothing of Keybumps is in a window recording's filter")
     func windowWithoutOverlays() throws {
         for overlays: Set<CGWindowID> in [[], [99]] {
-            let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: overlays, content: Screens.content(), watched: Screens.watched(Screens.content())))
-            #expect(plan == .windows(1, includingWindows: [10, 11, 13]))
+            let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: overlays, content: Screens.content()))
+            #expect(plan == .windows(1, includingWindows: [10]))
         }
-    }
-
-    @Test("The app's windows off screen or on another display aren't named")
-    func windowOffScreen() throws {
-        let hidden = ScreencastContent.Window(id: 14, frame: CGRect(x: 150, y: 150, width: 200, height: 100), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: false)
-        let elsewhere = ScreencastContent.Window(id: 15, frame: CGRect(x: 1800, y: 150, width: 200, height: 100), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
-        let content = Screens.content(windows: Screens.content().windows + [hidden, elsewhere])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: Screens.watched(content)))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13]))
     }
 
     @Test("A window on the right display records there; a closed one can't be recorded")
     func windowDisplay() {
-        let plan = ScreencastCaptureFilter.windowPlan(window: 20, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content(), watched: Screens.watched(Screens.content(), of: Screens.otherApp))
-        #expect(plan?.displayID == 2)
-        #expect(ScreencastCaptureFilter.windowPlan(window: 77, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content(), watched: Screens.watched(Screens.content())) == nil)
+        let plan = ScreencastCaptureFilter.windowPlan(window: 20, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content())
+        #expect(plan == .windows(2, includingWindows: [20]))
+        #expect(ScreencastCaptureFilter.windowPlan(window: 77, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content()) == nil)
     }
 
-    /// The owner's rule: a window recording shows the window, the UI attached to it, and
-    /// Keybumps's overlays; never another of its app's windows. A window centred on another opens
-    /// with its top a quarter of the height difference below the other's (NSWindow.center(),
-    /// measured in review): a 600 × 450 Settings window over a 900 × 600 window sits 37 pt down,
-    /// exactly where a sheet below a toolbar would. On 128f17c, in front of the window, it passed
-    /// as a sheet.
-    @Test("The app's Settings window, another document, or a palette over the recorded window is never in the video, however it's laid out")
-    func titledWindowsNeverShow() throws {
-        let target = Self.recorded
-        // Centred, in the measured places.
-        let settings = Self.browser(40, CGRect(x: 250, y: 137, width: 600, height: 450), titled: true)
-        let secondDocument = Self.browser(41, CGRect(x: 225, y: 130, width: 650, height: 480), titled: true)
-        let sameSize = Self.browser(42, CGRect(x: 100, y: 100, width: 900, height: 600), titled: true)
-        // Floating over the window, at the floating and the pop-up menu layers. On 128f17c any
-        // window off layer 0 showed.
-        let palette = Self.browser(43, CGRect(x: 700, y: 200, width: 250, height: 300), titled: true, layer: 3)
-        let inspector = Self.browser(44, CGRect(x: 800, y: 150, width: 300, height: 500), titled: true, layer: 101)
-        for window in [settings, secondDocument, sameSize, palette, inspector] {
-            #expect(!ScreencastCaptureFilter.isAttached(window, to: target), "\(window.id)")
-        }
-        let content = Screens.content(windows: [target, settings, secondDocument, sameSize, palette, inspector])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: Screens.watched(content)))
-        #expect(plan == .windows(1, includingWindows: [60]))
-    }
-
-    @Test("A titled window is never attached, wherever it sits; an untitled one is whenever it covers part of the window", arguments: [
-        0.0, 10.0, 16.0, 30.0, 37.0, 60.0, 78.0, 150.0, 400.0
+    /// The owner's decision for the MVP (#446, 2026-10-11): a window recording shows the window and
+    /// Keybumps's overlays, and nothing else; menus and sheets come back with #473. Here, every kind
+    /// of window earlier rounds named or had to keep out, around the recorded one (900 × 600, from
+    /// (100, 100)), each titled and untitled, on screen and off, at each layer.
+    @Test("No other window of the recorded app is ever named: titled or not, shaped like a sheet, a menu, a document, or the desktop, at any layer", arguments: [
+        -2147483603, -1, 0, 3, 8, 20, 25, 101, 104
     ])
-    func titleDecides(below: Double) {
-        let frame = CGRect(x: 250, y: 100 + below, width: 600, height: 450)
-        #expect(!ScreencastCaptureFilter.isAttached(Self.browser(16, frame, titled: true), to: Self.recorded))
-        #expect(ScreencastCaptureFilter.isAttached(Self.browser(16, frame, titled: false), to: Self.recorded))
-    }
-
-    @Test("The UI attached to the window shows: an untitled sheet, menu, popover, tooltip, or completion list over it, at any layer")
-    func attachedUIShows() throws {
-        let target = Self.recorded
-        let sheet = Self.browser(70, CGRect(x: 250, y: 128, width: 600, height: 400), titled: false)
-        let tallSheet = Self.browser(71, CGRect(x: 300, y: 128, width: 500, height: 900), titled: false)
-        let menu = Self.browser(72, CGRect(x: 120, y: 120, width: 200, height: 300), titled: false, layer: 101)
-        let popover = Self.browser(73, CGRect(x: 900, y: 300, width: 250, height: 200), titled: false, layer: 3)
-        let tooltip = Self.browser(74, CGRect(x: 980, y: 690, width: 120, height: 24), titled: false, layer: 104)
-        let completions = Self.browser(75, CGRect(x: 400, y: 400, width: 300, height: 180), titled: false, layer: 101)
-        let content = Screens.content(windows: [target, sheet, tallSheet, menu, popover, tooltip, completions])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: Screens.watched(content)))
-        #expect(plan == .windows(1, includingWindows: [60, 70, 71, 72, 73, 74, 75]))
-    }
-
-    @Test("Untitled windows of the app that don't cover the recorded window, at any layer, or only touch its edge, stay out")
-    func untitledApartStaysOut() throws {
-        let target = Self.recorded
-        let beside = Self.browser(80, CGRect(x: 1010, y: 100, width: 300, height: 300), titled: false)
-        let floatingBeside = Self.browser(81, CGRect(x: 1010, y: 400, width: 200, height: 200), titled: false, layer: 3)
-        let touching = Self.browser(82, CGRect(x: 1000, y: 100, width: 200, height: 200), titled: false, layer: 101)
-        let content = Screens.content(windows: [target, beside, floatingBeside, touching])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: Screens.watched(content)))
-        #expect(plan == .windows(1, includingWindows: [60]))
-    }
-
-    /// Finder's desktop, as measured in review: one untitled window per display, the display's
-    /// full size, at `kCGDesktopIconWindowLevel`. It covers every Finder window.
-    @Test("Finder's desktop behind a Finder window recording is never named, whatever layer ScreenCaptureKit gives it")
-    func desktopNeverNamed() throws {
-        let finder: pid_t = 503
-        let recorded = ScreencastContent.Window(id: 60, frame: CGRect(x: 100, y: 100, width: 900, height: 600), layer: 0, processID: finder, isUntitled: false, isOnScreen: true)
-        let desktop = ScreencastContent.Window(id: 61, frame: Screens.leftDisplay.frame, layer: -2147483603, processID: finder, isUntitled: true, isOnScreen: true)
-        #expect(!ScreencastCaptureFilter.isAttached(desktop, to: recorded))
-        let content = Screens.content(windows: [recorded, desktop])
-        // Even if the watch listed it too, untitled, as `.excludeDesktopElements` keeps it from doing.
-        let watchedToo: Set = [
-            ScreencastWatchedWindow(id: 60, isUntitled: false, layer: 0),
-            ScreencastWatchedWindow(id: 61, isUntitled: true, layer: -2147483603),
+    func noAppWindowNamed(layer: Int) throws {
+        let frames = [
+            CGRect(x: 250, y: 128, width: 600, height: 400), // a sheet below the toolbar
+            CGRect(x: 300, y: 128, width: 500, height: 900), // a sheet taller than the window
+            CGRect(x: 120, y: 120, width: 200, height: 300), // a menu
+            CGRect(x: 900, y: 300, width: 250, height: 200), // a popover over its edge
+            CGRect(x: 980, y: 690, width: 120, height: 24), // a tooltip
+            CGRect(x: 250, y: 137, width: 600, height: 450), // its Settings window, centred on it
+            CGRect(x: 100, y: 100, width: 900, height: 600), // another document, exactly over it
+            CGRect(x: 1010, y: 100, width: 300, height: 300), // beside it
+            CGRect(x: 1000, y: 100, width: 200, height: 200), // touching its edge
+            Screens.leftDisplay.frame, // Finder's desktop
         ]
-        for watched in [Screens.watched(content, of: finder), watchedToo] {
-            let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: watched))
-            #expect(plan == .windows(1, includingWindows: [60]))
+        var others: [ScreencastContent.Window] = []
+        for frame in frames {
+            for titled in [true, false] {
+                for onScreen in [true, false] {
+                    others.append(ScreencastContent.Window(
+                        id: CGWindowID(100 + others.count), frame: frame, layer: layer, processID: Screens.browser,
+                        isUntitled: !titled, isOnScreen: onScreen
+                    ))
+                }
+            }
         }
-        // ScreenCaptureKit may give the desktop's icons a layer above 0 (Snapzy relies on it): the
-        // watch's layer keeps it out, and so does the watch not listing it.
-        let raised = Screens.content(windows: [recorded, Screens.with(desktop, layer: 20)])
-        for watched in [watchedToo, [ScreencastWatchedWindow(id: 60, isUntitled: false, layer: 0)]] {
-            let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: raised, watched: watched))
-            #expect(plan == .windows(1, includingWindows: [60]))
-        }
+        let content = Screens.content(windows: [Self.recorded] + others + [Screens.drawingLayer])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
+        #expect(plan == .windows(1, includingWindows: [31, 60]))
     }
 
-    @Test("A window either read calls titled, or the watch doesn't list, isn't named; with no watch read, no window of the app is")
-    func bothReadsMustAgree() throws {
-        let sheet = Self.browser(70, CGRect(x: 250, y: 128, width: 600, height: 400), titled: false)
-        let menu = Self.browser(72, CGRect(x: 120, y: 120, width: 200, height: 300), titled: false, layer: 101)
-        let content = Screens.content(windows: [Self.recorded, sheet, menu])
-        let agreeing = Screens.watched(content)
-        let both = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: agreeing))
-        #expect(both == .windows(1, includingWindows: [60, 70, 72]))
-
-        // ScreenCaptureKit reads the sheet untitled, the window server named.
-        var sheetNamed = agreeing.filter { $0.id != 70 }
-        sheetNamed.insert(ScreencastWatchedWindow(id: 70, isUntitled: false, layer: 0))
-        let disagreeing = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: sheetNamed))
-        #expect(disagreeing == .windows(1, includingWindows: [60, 72]))
-
-        // The watch didn't list the sheet (it opened after that read).
-        let unlisted = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: agreeing.filter { $0.id != 70 }))
-        #expect(unlisted == .windows(1, includingWindows: [60, 72]))
-
-        // The watch's read failed, or doesn't list the recorded window (out of sight there).
-        for watched in [nil, agreeing.filter { $0.id != 60 }] {
-            let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(windows: content.windows + [Screens.drawingLayer]), watched: watched))
-            #expect(plan == .windows(1, includingWindows: [31, 60]), "only the window and the overlays")
-        }
+    @Test("No other app's window is ever named, wherever it is, nor a Keybumps window that isn't a registered overlay")
+    func noOtherWindowNamed() throws {
+        // Shaped and placed exactly like a sheet on the window, titled or not, but another process's:
+        // a sandboxed app's Open or Save panel, drawn by a system service.
+        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true)
+        let untitledPanel = ScreencastContent.Window(id: 51, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: true, isOnScreen: true)
+        let otherApp = ScreencastContent.Window(id: 52, frame: CGRect(x: 300, y: 300, width: 300, height: 200), layer: 101, processID: Screens.otherApp, isUntitled: true, isOnScreen: true)
+        // Keybumps's windows that aren't overlays, untitled and over the window.
+        let notice = ScreencastContent.Window(id: 53, frame: CGRect(x: 300, y: 100, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        let palette = ScreencastContent.Window(id: 54, frame: CGRect(x: 200, y: 200, width: 600, height: 400), layer: 8, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        let content = Screens.content(windows: Screens.content().windows + [panel, untitledPanel, otherApp, notice, palette])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 31]))
+        // Another app's window registered as an overlay by mistake still isn't named.
+        let claimed = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [20, 31, 50, 52], content: content))
+        #expect(claimed == .windows(1, includingWindows: [10, 31]))
     }
 
-    @Test("A recorded window out of sight names none of its app's windows, only itself and the overlays")
-    func outOfSightNamesNoSiblings() throws {
+    @Test("A registered overlay is named whether it's on screen or not, so it shows the moment it's ordered in")
+    func hiddenOverlay() throws {
+        let hidden = Screens.with(Screens.drawingLayer, onScreen: false)
+        let content = Screens.content(windows: [Screens.browserWindow, Screens.browserSheet, Screens.browserMenu, hidden])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 31]))
+    }
+
+    @Test("A recorded window out of sight is still named, with the overlays; from a read that doesn't list it, no list is built")
+    func outOfSight() throws {
         let away = Screens.with(Self.recorded, onScreen: false)
         let sheet = Self.browser(70, CGRect(x: 250, y: 128, width: 600, height: 400), titled: false)
         let content = Screens.content(windows: [away, sheet, Screens.drawingLayer])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: content, watched: Screens.watched(content)))
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: content))
         #expect(plan == .windows(1, includingWindows: [31, 60]))
-        // Not in the read at all: no list from it, since one built from it couldn't name the window.
-        #expect(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(windows: [sheet, Screens.drawingLayer]), watched: Screens.watched(content)) == nil)
+        // Not in the read at all: one built from it couldn't name the window.
+        #expect(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(windows: [sheet, Screens.drawingLayer])) == nil)
     }
 
-    @Test("A window recording's frames may show a list only when it names the window, on screen in its read and in the watch's, its read lists all it names, and it names nothing the rule leaves out")
-    func mayShow() {
-        let content = Screens.content()
-        let watched = Screens.watched(content)
-        let shown = ScreencastFilterPlan.windows(1, includingWindows: [10, 11, 13, 31])
-        func may(
-            _ plan: ScreencastFilterPlan,
-            content: ScreencastContent = content,
-            watched: Set<ScreencastWatchedWindow>? = watched,
-            overlays: Set<CGWindowID> = [31]
-        ) -> Bool {
-            ScreencastCaptureFilter.mayShow(plan, window: 10, ownProcessID: Screens.ownProcess, overlays: overlays, content: content, watched: watched)
-        }
-        func watchedWith(_ id: CGWindowID, isUntitled: Bool, layer: Int) -> Set<ScreencastWatchedWindow> {
-            Set(watched.filter { $0.id != id } + [ScreencastWatchedWindow(id: id, isUntitled: isUntitled, layer: layer)])
-        }
-        #expect(may(shown))
-        #expect(!may(.windows(1, includingWindows: [11, 13, 31])), "without the window")
-        #expect(!may(shown, content: Screens.content(windows: content.windows.filter { $0.id != 10 })),
-                "a read that doesn't list the window builds a list without it")
-        #expect(!may(shown, content: Screens.content(windows: content.windows.map { $0.id == 10 ? Screens.with($0, onScreen: false) : $0 })))
-        #expect(!may(shown, content: Screens.content(windows: content.windows.filter { $0.id != 11 })), "a read that lists less than the list names")
-        #expect(!may(shown, watched: Set(watched.filter { $0.id != 10 })), "out of the watch's sight")
-        #expect(!may(shown, watched: nil), "no watch read")
-        #expect(!may(.windows(1, includingWindows: [10, 12])), "a titled window of the app")
-        #expect(!may(shown, watched: watchedWith(11, isUntitled: false, layer: 0)), "the sheet, titled in the watch")
-        #expect(!may(shown, watched: watchedWith(13, isUntitled: true, layer: -1)), "the menu, below the windows in the watch")
-        #expect(!may(.windows(1, includingWindows: [10, 20])), "another app's window")
-        #expect(!may(.windows(1, includingWindows: [10, 30])), "Keybumps's control bar, not an overlay")
-        #expect(!may(shown, overlays: []), "an overlay since removed")
-        #expect(may(shown, watched: Set(watched.filter { $0.id != 13 })), "a menu that closed since shows nothing, and holds nothing back")
-        #expect(!may(.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])))
-        #expect(ScreencastCaptureFilter.namesExcluded(.windows(1, includingWindows: [10, 11]), window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: nil),
-                "with no watch read, every window but the recorded one counts")
-    }
-
-    @Test("Narrowing takes out what the watch no longer shows as attached UI, and never adds")
+    @Test("Narrowing keeps only the window and the registered overlays, and never adds")
     func narrowing() {
-        let plan = ScreencastFilterPlan.windows(1, includingWindows: [10, 11, 13, 14, 31])
-        func watched(_ windows: [(CGWindowID, Bool, Int)]) -> Set<ScreencastWatchedWindow> {
-            Set(windows.map { ScreencastWatchedWindow(id: $0.0, isUntitled: $0.1, layer: $0.2) })
-        }
-        let all = watched([(10, false, 0), (11, true, 0), (13, true, 101), (14, true, 0), (15, true, 0)])
-        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31], watched: all) == plan, "15 isn't added")
-        let titled = watched([(10, false, 0), (11, true, 0), (13, true, 101), (14, false, 0)])
-        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31], watched: titled) == .windows(1, includingWindows: [10, 11, 13, 31]))
-        let lowered = watched([(10, false, 0), (11, true, 0), (13, true, 101), (14, true, -1)])
-        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31], watched: lowered) == .windows(1, includingWindows: [10, 11, 13, 31]))
-        let closed = watched([(10, false, 0), (11, true, 0), (14, true, 0)])
-        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31], watched: closed) == .windows(1, includingWindows: [10, 11, 14, 31]))
-        let windowAway = watched([(11, true, 0), (13, true, 101), (14, true, 0)])
-        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31], watched: windowAway) == .windows(1, includingWindows: [10, 31]))
-        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31], watched: nil) == .windows(1, includingWindows: [10, 31]))
+        let plan = ScreencastFilterPlan.windows(1, includingWindows: [10, 31, 32])
+        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31, 32, 33]) == plan, "33 isn't added")
+        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: [31]) == .windows(1, includingWindows: [10, 31]))
+        #expect(ScreencastCaptureFilter.narrowed(plan, window: 10, overlays: []) == .windows(1, includingWindows: [10]))
         let display = ScreencastFilterPlan.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])
-        #expect(ScreencastCaptureFilter.narrowed(display, window: 10, overlays: [], watched: nil) == display)
+        #expect(ScreencastCaptureFilter.narrowed(display, window: 10, overlays: []) == display)
     }
 
     /// The recorded window in the measured case: 900 × 600, from (100, 100) to (1000, 700).
@@ -434,34 +329,12 @@ struct ScreencastCaptureFilterTests {
         ScreencastContent.Window(id: id, frame: frame, layer: layer, processID: Screens.browser, isUntitled: !titled, isOnScreen: true)
     }
 
-    @Test("A sandboxed app's Open or Save panel, drawn by a system service, is never named, nor any other app's window, nor a Keybumps window that isn't an overlay")
-    func panelServiceNeverNamed() throws {
-        // Shaped and placed exactly like a sheet on the window, titled or not, but another process's.
-        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true)
-        let untitledPanel = ScreencastContent.Window(id: 51, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: true, isOnScreen: true)
-        let otherApp = ScreencastContent.Window(id: 52, frame: CGRect(x: 300, y: 300, width: 300, height: 200), layer: 0, processID: Screens.otherApp, isUntitled: true, isOnScreen: true)
-        // Keybumps's windows that aren't overlays, untitled and over the window.
-        let notice = ScreencastContent.Window(id: 53, frame: CGRect(x: 300, y: 100, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
-        let palette = ScreencastContent.Window(id: 54, frame: CGRect(x: 200, y: 200, width: 600, height: 400), layer: 8, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
-        let content = Screens.content(windows: [Screens.browserWindow, Screens.browserSheet, Screens.browserMenu, panel, untitledPanel, otherApp, notice, palette, Screens.controlBar, Screens.drawingLayer])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content, watched: Screens.watched(content)))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31]))
-    }
-
-    @Test("A registered overlay is named whether it's on screen or not, so it shows the moment it's ordered in")
-    func hiddenOverlay() throws {
-        let hidden = Screens.with(Screens.drawingLayer, onScreen: false)
-        let content = Screens.content(windows: [Screens.browserWindow, Screens.browserSheet, Screens.browserMenu, hidden])
-        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [31], content: content, watched: Screens.watched(content)))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 31]))
-    }
-
-    @Test("Recording one of Keybumps's own windows leaves its other windows out, overlays apart")
+    /// Review round 13, finding 4: on b568793 a Keybumps window got a list naming it.
+    @Test("One of Keybumps's own windows, an overlay or not, gets no list: it's never recorded")
     func ownWindow() {
-        let plan = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content(), watched: Screens.watched(Screens.content(), of: Screens.ownProcess))
-        #expect(plan == .windows(1, includingWindows: [30]))
-        let withOverlay = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(), watched: Screens.watched(Screens.content(), of: Screens.ownProcess))
-        #expect(withOverlay == .windows(1, includingWindows: [30, 31]))
+        #expect(ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content()) == nil)
+        #expect(ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()) == nil)
+        #expect(ScreencastCaptureFilter.windowPlan(window: 31, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()) == nil)
     }
 
     @Test("The display showing most of a window is the one it's recorded on")

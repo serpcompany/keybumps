@@ -19,8 +19,8 @@ struct ScreencastContent {
         /// The window server layer: 0 for ordinary windows, higher for menus and panels.
         let layer: Int
         let processID: pid_t
-        /// No title (an empty window name): a menu, sheet, popover, tooltip, or completion list
-        /// rather than a window of its own. The title itself is never read into this.
+        /// No title (an empty window name). The title itself is never read into this, and no
+        /// filter rule uses it.
         let isUntitled: Bool
         let isOnScreen: Bool
     }
@@ -64,10 +64,10 @@ enum ScreencastFilterPlan: Equatable, Sendable {
     /// (its overlays), which come back. Display and area recordings. Excluding the whole app keeps
     /// windows it opens mid-recording out too.
     case display(CGDirectDisplayID, excludingProcess: pid_t?, exceptingWindows: [CGWindowID])
-    /// Only these windows on the display. Window recordings: the window, its app's untitled
-    /// windows over it (menus, sheets, popovers), and Keybumps's overlays, each named; no app is
-    /// included whole, so a window opened later shows only once a rebuild names it.
-    /// `ScreencastCaptureFilter.narrowed` takes windows out of it without a read.
+    /// Only these windows on the display. Window recordings: the window and Keybumps's overlays,
+    /// each named; no app is included whole, so no other window can show, not even one opened
+    /// later. `ScreencastCaptureFilter.narrowed` takes overlays since removed out of it without a
+    /// read.
     case windows(CGDirectDisplayID, includingWindows: [CGWindowID])
 
     var displayID: CGDirectDisplayID {
@@ -120,147 +120,42 @@ enum ScreencastCaptureFilter {
         )
     }
 
-    /// A window recording, on the display showing most of it, as a list of windows:
-    /// - the window;
-    /// - the UI attached to it: its app's untitled windows on screen over it (`isAttached(_:to:)`),
-    ///   such as its menus, sheets, popovers, tooltips, and completion lists;
-    /// - Keybumps's registered overlays, on screen or not, so one shows the moment it's ordered in.
+    /// A window recording, on the display showing most of it, as a list of windows: the window,
+    /// and Keybumps's registered overlays (drawing, keys), on screen or not, so one shows the
+    /// moment it's ordered in.
     ///
-    /// Nothing else: none of its app's titled windows, at any layer (its Settings window, another
-    /// document, an inspector or palette), even laid out exactly like a sheet; nothing below the
-    /// windows (Finder's desktop and its icons); Keybumps itself is never included whole, so none
-    /// of its other windows (a notice, the Command Palette, typed keys) can be in the video, even
-    /// for a frame; and no other app's window is named.
+    /// Nothing else (the owner's decision for the MVP): none of its app's other windows, titled or
+    /// not, wherever they are (its menus, sheets, popovers, tooltips, completion lists, Settings
+    /// window, another document); nothing below the windows (Finder's desktop and its icons); no
+    /// other app's window; and none of Keybumps's but the overlays, so a notice or the Command
+    /// Palette can't be in the video, even for a frame. Record an area or the screen to show menus
+    /// and sheets; #473 brings them to window recordings.
     ///
-    /// Both reads must agree before a window of the app is named: this one, and the watch's
-    /// (`watched`, the window server's list of the app's windows on screen). One that either calls
-    /// titled or puts below the windows, or that the watch doesn't list, stays out. While the
-    /// recorded window is out of sight in either read (minimized, on another Space, its app
-    /// hidden), or the watch couldn't read (`watched` nil), none is named: only the window and the
-    /// overlays.
-    ///
-    /// **Known limitations:** missing a piece of attached UI is the trade for never showing another
-    /// window. A titled sheet, such as the Save or Open sheet some apps that aren't sandboxed show
-    /// with a title, is left out, and so is a sandboxed app's Open or Save panel: a system service
-    /// draws it, one process per app, and nothing public ties a service process to its app, so
-    /// naming it would risk another app's panel, with its folders and file names. Untitled UI is
-    /// named as it is when the list is rebuilt, so a menu the recorded window moves under shows
-    /// only from the next rebuild. Record an area to include any of them.
-    ///
-    /// The recorder rebuilds the list when the app's windows change, or one gains or loses a title.
-    /// Nil when the window or its display isn't in `content` (closed, or not on screen in an
-    /// on-screen read): a filter built from `content` couldn't name the window, so the recorder
-    /// builds none from it.
+    /// Nil when the window or its display isn't in `content` (closed): a filter built from
+    /// `content` couldn't name the window, so the recorder builds none from it. Nil too for one of
+    /// Keybumps's windows, which is never recorded (the picker doesn't offer one).
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
         overlays: Set<CGWindowID>,
-        content: ScreencastContent,
-        watched: Set<ScreencastWatchedWindow>?
+        content: ScreencastContent
     ) -> ScreencastFilterPlan? {
-        guard let window = content.window(windowID),
+        guard let window = content.window(windowID), window.processID != ownProcessID,
               let display = content.display(mostOverlapping: window.frame) else { return nil }
-        let attachedInWatch = Set((watched ?? []).filter { looksAttached(isUntitled: $0.isUntitled, layer: $0.layer) }.map(\.id))
-        let inSight = window.isOnScreen && (watched ?? []).contains { $0.id == window.id }
-        let attached = !inSight ? [] : content.windows.filter { other in
-            other.processID == window.processID && other.id != window.id
-                && other.isOnScreen && other.frame.intersects(display.frame)
-                && isAttached(other, to: window)
-                && attachedInWatch.contains(other.id)
-                // Recording one of Keybumps's own windows: its others only when they're overlays.
-                && (window.processID != ownProcessID || overlays.contains(other.id))
-        }
-        let included = Set([window.id] + attached.map(\.id) + ownOverlays(of: window.id, ownProcessID: ownProcessID, overlays: overlays, content: content))
-        return .windows(display.id, includingWindows: included.sorted())
+        let shownOverlays = content.windows.filter { $0.processID == ownProcessID && overlays.contains($0.id) }.map(\.id)
+        return .windows(display.id, includingWindows: Set([window.id] + shownOverlays).sorted())
     }
 
-    /// A window recording's `plan` without the windows the latest watch (`watched`) no longer
-    /// shows as attached UI: those it calls titled or puts below the windows, and those it doesn't
-    /// list. With the recorded window out of the watch's read, or no read (`watched` nil), only
-    /// the window and Keybumps's overlays stay. It only takes windows out, so it's applied at once
-    /// from the list in hand, before the read that rebuilds the list. A display plan is unchanged.
+    /// A window recording's `plan` with only the windows it may still show: the recorded window
+    /// and Keybumps's registered overlays (`overlays`). It takes out an overlay since removed, and
+    /// never adds one, so it's applied from the read the list in hand was built from, without a new
+    /// read. A display plan is unchanged.
     static func narrowed(
         _ plan: ScreencastFilterPlan,
         window windowID: CGWindowID,
-        overlays: Set<CGWindowID>,
-        watched: Set<ScreencastWatchedWindow>?
+        overlays: Set<CGWindowID>
     ) -> ScreencastFilterPlan {
         guard case .windows(let display, let included) = plan else { return plan }
-        let watched = watched ?? []
-        let attachedInWatch: Set<CGWindowID> = watched.contains { $0.id == windowID }
-            ? Set(watched.filter { looksAttached(isUntitled: $0.isUntitled, layer: $0.layer) }.map(\.id))
-            : []
-        return .windows(display, includingWindows: included.filter { $0 == windowID || overlays.contains($0) || attachedInWatch.contains($0) })
-    }
-
-    /// Whether a window recording's frames may reach its file under `plan`, built from `content`,
-    /// as the app's windows are now (`watched`, the latest watch's read): the plan names the
-    /// window, which is on screen in `content` and listed by the watch; `content` lists every window
-    /// the plan names, so the filter built from it shows them all (ScreenCaptureKit's filter keeps
-    /// only the windows its read lists); and the plan names nothing the rule leaves out
-    /// (`namesExcluded`). The recorder also asks that nothing changed since `content` was read that
-    /// needs a newer read.
-    static func mayShow(
-        _ plan: ScreencastFilterPlan,
-        window windowID: CGWindowID,
-        ownProcessID: pid_t,
-        overlays: Set<CGWindowID>,
-        content: ScreencastContent,
-        watched: Set<ScreencastWatchedWindow>?
-    ) -> Bool {
-        guard case .windows(_, let included) = plan, included.contains(windowID),
-              content.window(windowID)?.isOnScreen == true,
-              watched?.contains(where: { $0.id == windowID }) == true,
-              included.allSatisfy({ content.window($0) != nil }) else { return false }
-        return !namesExcluded(plan, window: windowID, ownProcessID: ownProcessID, overlays: overlays, content: content, watched: watched)
-    }
-
-    /// Whether `plan`, built from `content`, names a window a window recording must not show, as
-    /// the latest watch (`watched`) reads the app's windows: one the watch calls titled or puts
-    /// below the windows, one of Keybumps's that isn't a registered overlay, another app's, or one
-    /// `content` doesn't list. With no watch read (`watched` nil), every window but the recorded one
-    /// and the overlays counts. One the watch no longer lists doesn't: it has left the screen and
-    /// shows nothing, so a menu or completion list closing never holds the video back.
-    static func namesExcluded(
-        _ plan: ScreencastFilterPlan,
-        window windowID: CGWindowID,
-        ownProcessID: pid_t,
-        overlays: Set<CGWindowID>,
-        content: ScreencastContent,
-        watched: Set<ScreencastWatchedWindow>?
-    ) -> Bool {
-        guard case .windows(_, let included) = plan else { return false }
-        let app = content.window(windowID)?.processID
-        var seen: [CGWindowID: ScreencastWatchedWindow] = [:]
-        for window in watched ?? [] { seen[window.id] = window }
-        return included.contains { id in
-            guard id != windowID, !overlays.contains(id) else { return false }
-            guard watched != nil, let app, app != ownProcessID, content.window(id)?.processID == app else { return true }
-            guard let read = seen[id] else { return false }
-            return !looksAttached(isUntitled: read.isUntitled, layer: read.layer)
-        }
-    }
-
-    /// Whether `other`, a window of the recorded window's app, is UI attached to `window` as one
-    /// read shows it: it has no title, isn't below the windows, and covers part of it. A titled one
-    /// never is, at any layer and wherever it is: nothing in the window list says which window a
-    /// sheet or panel belongs to, and an app's Settings window, another document, or an inspector
-    /// can sit exactly where a sheet would. Nor is one below the normal window layer, such as
-    /// Finder's desktop, which covers every Finder window.
-    static func isAttached(_ other: ScreencastContent.Window, to window: ScreencastContent.Window) -> Bool {
-        guard looksAttached(isUntitled: other.isUntitled, layer: other.layer) else { return false }
-        let overlap = other.frame.intersection(window.frame)
-        return !overlap.isNull && overlap.width > 0 && overlap.height > 0
-    }
-
-    /// Untitled, and at or above the normal window layer (0): never the desktop (its picture and
-    /// icons sit far below 0) or another window with a title.
-    static func looksAttached(isUntitled: Bool, layer: Int) -> Bool {
-        isUntitled && layer >= 0
-    }
-
-    /// Keybumps's registered overlays in `content`, the recorded window apart.
-    private static func ownOverlays(of windowID: CGWindowID, ownProcessID: pid_t, overlays: Set<CGWindowID>, content: ScreencastContent) -> [CGWindowID] {
-        content.windows.filter { $0.processID == ownProcessID && $0.id != windowID && overlays.contains($0.id) }.map(\.id)
+        return .windows(display, includingWindows: included.filter { $0 == windowID || overlays.contains($0) })
     }
 }
