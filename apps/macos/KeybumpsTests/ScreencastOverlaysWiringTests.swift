@@ -488,6 +488,40 @@ struct ScreencastOverlaysWiringTests {
         #expect(flows.recorder.overlayWindows.isEmpty)
     }
 
+    @available(macOS 15, *)
+    @Test("A recording whose keys are hidden gives the recorder no key window, even beside Keystrokes showing All keys")
+    func hiddenRecordingRecordsNoKeys() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.recordBrowserWindow()
+        let drawing = try #require(flows.wiring.overlays?.overlayWindowIDs)
+        flows.keyDisplay.hideKeys()
+        await flows.wiring.recorderUpdated()
+        #expect(flows.keyDisplay.isHidden(.screencast))
+
+        // Keystrokes' module never starts a shown hold while the recording's keys are hidden; the
+        // overlays mustn't rely on that.
+        flows.turnOnKeystrokes(KeyDisplayConfiguration(keys: .allKeys))
+        flows.type()
+        let typing = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+        #expect(!typing.isEmpty && flows.presenter.last?.entries.isEmpty == false, "the plugin shows typing")
+        await flows.wiring.recorderUpdated()
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows == Set(drawing), "a window that appears isn't given to the recorder")
+
+        // The window moves, so the recording holds the display again, which hands it the windows at once.
+        let moved = OverlaysFlow.browserFrame.offsetBy(dx: 200, dy: -100)
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = moved
+        flows.wiring.followWindow()
+        #expect(!flows.keyDisplay.overlayWindows.isEmpty, "the plugin's window is still up")
+        await flows.wiring.recorderUpdated()
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows.isDisjoint(with: flows.presenter.everWindowIDs), "nor is one already up")
+
+        await flows.stop()
+        #expect(flows.recorder.overlayWindows.isEmpty)
+    }
+
     // MARK: Inside what's recorded
 
     @available(macOS 15, *)
