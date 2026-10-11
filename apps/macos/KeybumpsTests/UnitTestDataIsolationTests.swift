@@ -106,6 +106,7 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(JSONEventPersistence().url, "Shortcut Coach history")
         expectInRunFolder(DictationService(language: "en-US", allowsSystemAccess: false).recoveryURL, "The Dictation recovery file")
         expectInRunFolder(ScreenshotLocationResolver.system.resolve(), "The screenshot folder")
+        expectInRunFolder(ScreencastRepositoryMemory.defaultStorageURL, "Screencast's repository memory")
     }
 
     @Test("An AppModel built without its stores keeps every one in this run's folder")

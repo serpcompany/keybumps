@@ -16,8 +16,9 @@ final class ScreenshotEditorModel {
     func redo() { history.redo() }
 }
 
-/// Hosts the canvas and toolbar for one image. Save flattens, copies, and saves an
-/// `(edited)` copy; Cancel discards. Never logs image content, text, or filenames.
+/// Hosts the canvas and toolbar for one image. Save flattens, copies (unless `copiesToClipboard` is
+/// off, as for Screencast's review panel, whose Copy is the copy), and saves an `(edited)` copy;
+/// Cancel discards. Never logs image content, text, or filenames.
 @MainActor
 final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelegate {
     struct Result: Equatable {
@@ -29,6 +30,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private let sourceURL: URL?
     private let fallbackFolder: URL
     private let pasteboard: NSPasteboard
+    private let copiesToClipboard: Bool
     private let model = ScreenshotEditorModel()
     private let renderer = ScreenshotAnnotationRenderer()
     private let canvas: ScreenshotEditorCanvasView
@@ -36,11 +38,18 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private var didFinish = false
     var onFinish: ((Result?) -> Void)?
 
-    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .keybumps) {
+    init(
+        source: ScreenshotRenderSource,
+        sourceURL: URL?,
+        fallbackFolder: URL,
+        pasteboard: NSPasteboard = .keybumps,
+        copiesToClipboard: Bool = true
+    ) {
         self.source = source
         self.sourceURL = sourceURL
         self.fallbackFolder = fallbackFolder
         self.pasteboard = pasteboard
+        self.copiesToClipboard = copiesToClipboard
         canvas = ScreenshotEditorCanvasView(source: source, model: model, renderer: renderer)
 
         let window = NSWindow(
@@ -89,15 +98,19 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
             finish(nil)
             return
         }
-        pasteboard.clearContents()
-        let copied = pasteboard.setData(png, forType: .png)
-        if copied { pasteboard.markCopiedByKeybumps() }
+        var copied = false
+        if copiesToClipboard {
+            pasteboard.clearContents()
+            copied = pasteboard.setData(png, forType: .png)
+            if copied { pasteboard.markCopiedByKeybumps() }
+        }
         let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder)
         let savedURL: URL? = (try? png.write(to: destination, options: .withoutOverwriting)) == nil ? nil : destination
         if savedURL == nil {
             let alert = NSAlert()
             alert.messageText = "Couldn’t save the edited copy"
-            alert.informativeText = copied ? "The edited image is on the clipboard." : "The edited image could not be copied either."
+            alert.informativeText = !copiesToClipboard ? "The markup wasn’t saved."
+                : copied ? "The edited image is on the clipboard." : "The edited image could not be copied either."
             alert.runModal()
         }
         finish(Result(savedURL: savedURL, copied: copied))

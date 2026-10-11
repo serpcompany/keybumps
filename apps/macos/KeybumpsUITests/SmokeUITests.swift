@@ -468,6 +468,75 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.dialogs.matching(identifier: "screencastDrawing").firstMatch.waitForNonExistence(timeout: 5), "The drawing goes with the recording")
     }
 
+    // MARK: Screencast's review panel (#450)
+
+    func testScreencastReviewSavesAScreenshotWithItsNote() {
+        launchScreencastReview("screenshot")
+        XCTAssertTrue(element("screencast.review.addToScreenshots").exists, "A screenshot offers Also add to Screenshots")
+        XCTAssertTrue(element("screencast.review.type").exists)
+        XCTAssertTrue(element("screencast.review.repository").exists)
+        XCTAssertTrue(element("screencast.review.destination").exists)
+        XCTAssertFalse(element("screencast.review.saveAndSend").isEnabled, "Sending comes with destinations")
+        XCTAssertFalse(element("screencast.review.sendAndDelete").isEnabled)
+
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Header typo")
+        element("screencast.review.save").click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Save closes the panel")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Header typo"))
+    }
+
+    func testScreencastReviewReturnSaves() {
+        launchScreencastReview("screenshot")
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Saved by Return")
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Saved by Return"))
+    }
+
+    func testScreencastReviewEscapeClosesAndSaves() {
+        launchScreencastReview("video")
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Closed by Escape")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes the panel")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Closed by Escape"), "Closing saves")
+    }
+
+    func testScreencastReviewCopies() {
+        launchScreencastReview("screenshot")
+        element("screencast.review.copy").click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForReviewOutcome("copied; folder kept; note empty; clipboard 1"))
+    }
+
+    func testScreencastReviewDiscardAsksFirst() {
+        launchScreencastReview("video")
+        element("screencast.review.discard").click()
+        let keep = element("screencast.review.keep")
+        XCTAssertTrue(keep.waitForExistence(timeout: 5), "Discard asks first")
+        XCTAssertTrue(element("screencast.review.confirmDiscard").exists)
+        keep.click()
+        XCTAssertTrue(element("screencast.review.discard").waitForExistence(timeout: 5), "Keep goes back")
+        XCTAssertTrue(reviewPanel.exists)
+
+        element("screencast.review.discard").click()
+        element("screencast.review.confirmDiscard").click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(waitForReviewOutcome("discarded; folder deleted"))
+    }
+
+    func testScreencastReviewOfAVideoHasTrimAndNoScreenshotsSwitch() {
+        launchScreencastReview("video")
+        XCTAssertTrue(element("screencast.review.trim").exists)
+        XCTAssertFalse(element("screencast.review.addToScreenshots").exists, "Only a screenshot can go to ⌘3")
+        XCTAssertFalse(element("screencast.review.edit").exists)
+    }
+
     func testHotkeysTabShowsShortcutCoachHistory() {
         // Its rows come from Shortcut Coach's module (`KeyboardShortcutterPaletteContent`).
         launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])
@@ -759,6 +828,26 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(pause.waitForExistence(timeout: 20))
         let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: pause)
         XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
+    }
+
+    /// Turns Screencast on and opens its review panel on a made-up `video` or `screenshot`.
+    private func launchScreencastReview(_ capture: String) {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
+        XCTAssertTrue(element("screencast.review.note").waitForExistence(timeout: 20))
+        // So a later check that it closed is about the panel, not a query that finds nothing.
+        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel itself is found")
+    }
+
+    /// The review panel. macOS reports a floating panel like it as a dialog, not a window.
+    private var reviewPanel: XCUIElement {
+        app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
+    }
+
+    /// The UI-test-only line that says what the panel did with the capture.
+    private func waitForReviewOutcome(_ text: String) -> Bool {
+        let outcome = element("screencast.review.uitest.outcome")
+        let predicate = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: outcome)], timeout: 10) == .completed
     }
 
     /// The picker's panels, one per screen. macOS reports a borderless, non-activating panel as a

@@ -34,6 +34,12 @@ extension AppModel {
             DispatchQueue.main.async { [weak self] in self?.startScreencastRecordingForUITesting() }
             return
         }
+        if let capture = configuration.screencastReview {
+            Self.didPerformUITestLaunchActions = true
+            // The next turn, once the main window has appeared, so the panel opens over it.
+            DispatchQueue.main.async { [weak self] in self?.showScreencastReviewForUITesting(capture) }
+            return
+        }
         #endif
         guard let tab = configuration.openPalette else { return }
         Self.didPerformUITestLaunchActions = true
@@ -156,14 +162,14 @@ extension AppModel {
             screenshotEditorFallbackFolder: { sandbox.screenshots },
             symbolicHotKeyPreferences: InertSymbolicHotKeyPreferences(),
             // Screencast's picker opens on made-up screens and windows; a recording runs on them but
-            // captures nothing, and a capture is never shown in Finder.
+            // captures nothing, and the review panel never reads the app in front.
             screencast: ScreencastSeams(
                 captureSystem: UITestScreencastCaptureSystem(),
                 pickerSystem: UITestScreencastScreen(),
                 screens: { UITestScreencastScreen.layout },
-                revealCapture: { _ in },
                 // The control bar's questions wait for the test's Keep, however slow the runner.
-                barConfirmationTimeout: .seconds(600)
+                barConfirmationTimeout: .seconds(600),
+                contextReader: .inert
             )
         )
         if configuration.seedsClipboardImage, let image = UITestSandbox.writeSampleImage(in: sandbox.root) {
