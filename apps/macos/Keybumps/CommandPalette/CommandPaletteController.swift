@@ -372,6 +372,7 @@ private struct PaletteHoverRow: ViewModifier {
 final class CommandPaletteController: NSObject, NSWindowDelegate {
     private let search: QuickSearchModel
     private var useQuickSearchEmoji: (QuickSearchEmoji) -> Void = { _ in }
+    private var performQuickSearchAction: (QuickSearchAction) -> Void = { _ in }
     private let clipboard: ClipboardHistoryService
     private let dictationHistory: DictationHistoryService
     private let dictationService: DictationService
@@ -593,7 +594,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// Runs a Keybumps command: from `choose(_:)`, the footer's Settings button, or its Command-key
     /// shortcut in any tab. Only `choose(_:)` teaches the ranking. A capability's tab opens in place;
-    /// for Settings the palette closes first.
+    /// for Settings or an action command the palette closes first, so what the action opens (the
+    /// Screencast picker) is never under it.
     func run(_ command: QuickSearchCommand) {
         switch command.destination(enabledCapabilities: preferences.enabledCapabilities) {
         case .paletteTab(let tab):
@@ -601,6 +603,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .settings(let section):
             dismiss()
             openSettings(section)
+        case .action(let action):
+            dismiss()
+            performQuickSearchAction(action)
         }
     }
 
@@ -1053,6 +1058,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     ) {
         search.emoji = matches
         useQuickSearchEmoji = use
+    }
+
+    /// Gives Quick Search the plugins' action commands (#468): `list` names those of the plugins that
+    /// are on, and `perform` runs one after the palette closes.
+    func setQuickSearchActions(
+        list: @escaping () -> [QuickSearchAction],
+        perform: @escaping (QuickSearchAction) -> Void
+    ) {
+        search.actions = list
+        performQuickSearchAction = perform
     }
 
     /// Copies a Quick Search emoji, or with `paste` pastes it and puts the clipboard back, as the
@@ -2117,7 +2132,7 @@ private struct SearchResultsView: View {
                                 .buttonStyle(.plain)
                                 .help(hint)
                                 .accessibilityHint(hint)
-                                .accessibilityIdentifier("quickSearch.command.\(command.id)")
+                                .accessibilityIdentifier(command.accessibilityIdentifier)
                             case .snippet(let snippet):
                                 Button {
                                     snippetActions.copy(snippet)
@@ -2260,8 +2275,9 @@ private struct QuickSearchSnippetRow: View {
     }
 }
 
-/// A Keybumps command in Raycast's row: its icon (the Keybumps icon, or the capability's Settings
-/// tile), the name, Turned off for a capability that's off, then its shortcut and kind on the right.
+/// A Keybumps command in Raycast's row: its icon (the Keybumps icon, the capability's Settings tile,
+/// or an action's own symbol on its plugin's tint), the name, Turned off for a capability that's
+/// off, then its shortcut and kind (Command or Action) on the right.
 private struct QuickSearchCommandRow: View {
     let command: QuickSearchCommand
     let shortcut: String?
@@ -2303,6 +2319,9 @@ private struct QuickSearchCommandRow: View {
                 .accessibilityHidden(true)
         case .plugins:
             SettingsIconTile(systemImage: SettingsSection.plugins.icon, tint: .indigo, size: PaletteRowMetrics.iconTileSize)
+                .accessibilityHidden(true)
+        case .action(let action):
+            SettingsIconTile(systemImage: action.action.systemImage, tint: action.capability.descriptor.iconTint, size: PaletteRowMetrics.iconTileSize)
                 .accessibilityHidden(true)
         }
     }

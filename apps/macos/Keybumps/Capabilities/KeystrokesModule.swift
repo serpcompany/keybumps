@@ -18,6 +18,7 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [],
         searchKeywords: ["keys", "keycastr", "demo"],
+        actions: [.toggleKeystrokes],
         category: .media,
         preferences: [
             .keystrokesStyle, .keystrokesPosition, .keystrokesSize, .keystrokesDuration,
@@ -128,6 +129,9 @@ final class KeystrokesModule: CapabilityModule {
     private let notices: any PaletteNoticePresenting
     /// Whether Show & Hide Keystrokes hid the keys: until it's pressed again, or the plugin turns off.
     private(set) var isHidden = false
+    /// The preferences of the last apply while the plugin is on, for Quick Search's show and hide;
+    /// nil while it's off. Goes with the stand-in below once #457's stored show and hide lands.
+    private var appliedPreferences: AppPreferences?
 
     init(display: KeyDisplay, notices: (any PaletteNoticePresenting)? = nil) {
         self.display = display
@@ -143,11 +147,13 @@ final class KeystrokesModule: CapabilityModule {
         ) { [weak self] in
             self?.toggleHidden(preferences: preferences)
         }
+        appliedPreferences = context.isEnabled(capability) ? preferences : nil
         update(isOn: context.isEnabled(capability), preferences: preferences)
     }
 
     func deactivate(_ context: CapabilityContext) {
         isHidden = false
+        appliedPreferences = nil
         display.release(.keystrokes)
     }
 
@@ -169,5 +175,25 @@ final class KeystrokesModule: CapabilityModule {
         } else {
             display.release(.keystrokes)
         }
+    }
+}
+
+/// A stand-in for #457's stored show and hide (`plugin.keystrokes.showing`), with the same
+/// members, over Show & Hide Keystrokes' own state, so Quick Search's Show Keystrokes and Hide
+/// Keystrokes (`KeystrokesShowing`) work before it lands. That commit's `isShowing`, `setShowing`,
+/// and `toggleShowing` replace this extension and `appliedPreferences`.
+extension KeystrokesModule {
+    var isShowing: Bool { !isHidden }
+
+    /// Shows or hides the keys while the plugin is on; does nothing while it's off.
+    func setShowing(_ showing: Bool, announces: Bool = false) {
+        guard showing == isHidden, let preferences = appliedPreferences else { return }
+        isHidden = !showing
+        update(isOn: true, preferences: preferences)
+        if announces { notices.showNotice(isHidden ? "Keystrokes hidden" : "Showing keystrokes", isWarning: false) }
+    }
+
+    func toggleShowing(announces: Bool = false) {
+        setShowing(!isShowing, announces: announces)
     }
 }

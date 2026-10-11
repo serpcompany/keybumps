@@ -1,8 +1,8 @@
 import Foundation
 
 /// A Keybumps action that Quick Search offers beside apps, files, and folders, as Alfred offers its
-/// preferences and Raycast its commands: Keybumps Settings, Plugins, and one per capability that goes
-/// to it.
+/// preferences and Raycast its commands: Keybumps Settings, Plugins, one per capability that goes
+/// to it, and the action commands of the plugins that are on, which act rather than go somewhere.
 enum QuickSearchCommand: Hashable, Identifiable {
     /// Opens Settings, as the status menu's Settings… and Command-comma do.
     case keybumpsSettings
@@ -11,24 +11,42 @@ enum QuickSearchCommand: Hashable, Identifiable {
     case capability(Capability)
     /// Opens Settings › Plugins, the list of every plugin with its switch.
     case plugins
+    /// An action command (#468): runs something a plugin that's on does, such as Start Screencast,
+    /// after the palette closes. Listed only while its plugin is on (`CapabilityRegistry.quickSearchActions`).
+    case action(QuickSearchAction)
 
-    /// Every command, in the order equally good matches are listed: Keybumps Settings, Plugins,
-    /// then the capabilities in registry order whose descriptors declare `searchKeywords` (all but Quick
-    /// Search, whose tab lists the commands).
+    /// Every command that goes somewhere, in the order equally good matches are listed: Keybumps
+    /// Settings, Plugins, then the capabilities in registry order whose descriptors declare
+    /// `searchKeywords` (all but Quick Search, whose tab lists the commands). Action commands depend
+    /// on which plugins are on, so Quick Search adds them after these (`QuickSearchModel.actions`).
     static let allCases: [QuickSearchCommand] = [.keybumpsSettings, .plugins]
         + CapabilityCatalog.descriptors
             .filter { $0.searchKeywords != nil }
             .map { .capability($0.capability) }
 
-    /// A stable token: `keybumpsSettings`, `plugins`, or the capability's ID. It names the row's accessibility
-    /// identifier and is the key for its learned usage (`command:<id>` in `application-usage.json`),
-    /// so renaming it silently resets what Quick Search has learned about the command.
+    /// A stable token: `keybumpsSettings`, `plugins`, the capability's ID, or the action's. It names
+    /// the row's accessibility identifier and is the key for its learned usage (`command:<id>`, or
+    /// `action:<id>` for an action, in `application-usage.json`), so renaming it silently resets
+    /// what Quick Search has learned about the command.
     var id: String {
         switch self {
         case .keybumpsSettings: "keybumpsSettings"
         case .capability(let capability): capability.rawValue
         case .plugins: "plugins"
+        case .action(let action): action.action.id
         }
+    }
+
+    /// The key of its learned usage in `application-usage.json`.
+    var usageKey: String {
+        if case .action = self { return "action:\(id)" }
+        return "command:\(id)"
+    }
+
+    /// Its row's accessibility identifier: `quickSearch.command.<id>`, or `quickSearch.action.<id>`.
+    var accessibilityIdentifier: String {
+        if case .action = self { return "quickSearch.action.\(id)" }
+        return "quickSearch.command.\(id)"
     }
 
     var title: String {
@@ -36,18 +54,23 @@ enum QuickSearchCommand: Hashable, Identifiable {
         case .keybumpsSettings: "\(ReleaseLane.current.productName) Settings"
         case .capability(let capability): capability.title
         case .plugins: "Plugins"
+        case .action(let action): action.title
         }
     }
 
     /// Shown where other results show Application, File, or Folder.
-    var kindLabel: String { "Command" }
+    var kindLabel: String {
+        if case .action = self { return "Action" }
+        return "Command"
+    }
 
     /// The shortcut that runs it from any Command Palette tab. Only Keybumps Settings has one of its
-    /// own; a capability's row shows its tab's Command-number instead (`rowShortcut`).
+    /// own; a capability's row shows its tab's Command-number instead, and an action its plugin's
+    /// shortcut (`rowShortcut`).
     var shortcut: String? {
         switch self {
         case .keybumpsSettings: "⌘,"
-        case .capability, .plugins: nil
+        case .capability, .plugins, .action: nil
         }
     }
 
@@ -55,7 +78,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
     var commandKey: String? {
         switch self {
         case .keybumpsSettings: ","
-        case .capability, .plugins: nil
+        case .capability, .plugins, .action: nil
         }
     }
 
@@ -66,6 +89,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
         case .keybumpsSettings: ["preferences", "prefs"]
         case .capability(let capability): capability.descriptor.searchKeywords ?? []
         case .plugins: ["plugin", "extensions"]
+        case .action(let action): action.action.keywords
         }
     }
 
@@ -121,6 +145,16 @@ enum QuickSearchCommand: Hashable, Identifiable {
     }
 }
 
+/// An action command as Quick Search lists it (#468): a plugin's declared action, named and with
+/// its shortcut's keycaps as they are now (`CapabilityRegistry.quickSearchActions`).
+struct QuickSearchAction: Hashable {
+    let capability: Capability
+    let action: PluginAction
+    let title: String
+    /// The keycaps of its plugin's shortcut that does the same, such as "⌃⌥⇧R", while one is assigned.
+    var shortcut: String?
+}
+
 // MARK: - Where a command goes
 
 extension QuickSearchCommand {
@@ -130,6 +164,8 @@ extension QuickSearchCommand {
         case paletteTab(CommandPaletteTab)
         /// Settings on this page, or where it was left when nil. The palette closes first.
         case settings(SettingsSection?)
+        /// An action command's plugin runs it. The palette closes first.
+        case action(QuickSearchAction)
 
         /// What running it does, for the row's tooltip and VoiceOver hint.
         var hint: String {
@@ -137,19 +173,22 @@ extension QuickSearchCommand {
             case .paletteTab(let tab): "Shows the \(tab.title) tab"
             case .settings(let section?): "Opens \(section.rawValue) in Settings"
             case .settings(nil): "Opens Settings"
+            case .action(let action): "Closes the palette, then runs \(action.title)"
             }
         }
     }
 
     /// Keybumps Settings opens Settings. A capability's command shows its tab while the capability is
     /// on. While it's off, or when it has no tab (Window Manager), it opens its Settings page, where
-    /// it can be turned on.
+    /// it can be turned on. An action command runs.
     func destination(enabledCapabilities: Set<Capability>) -> Destination {
         switch self {
         case .keybumpsSettings:
             return .settings(nil)
         case .plugins:
             return .settings(.plugins)
+        case .action(let action):
+            return .action(action)
         case .capability(let capability):
             let descriptor = capability.descriptor
             if enabledCapabilities.contains(capability), let tab = descriptor.paletteTab?.tab {
@@ -165,10 +204,12 @@ extension QuickSearchCommand {
         return !enabledCapabilities.contains(capability)
     }
 
-    /// The keycaps its row shows: its own shortcut, or the Command-number of the tab it goes to while
-    /// that tab is in the tab bar (the Hotkeys tab is usually hidden, and then Command-9 does nothing).
+    /// The keycaps its row shows: its own shortcut, an action's plugin shortcut while one is
+    /// assigned, or the Command-number of the tab it goes to while that tab is in the tab bar (the
+    /// Hotkeys tab is usually hidden, and then Command-9 does nothing).
     func rowShortcut(enabledCapabilities: Set<Capability>, visibleTabs: [CommandPaletteTab]) -> String? {
         if let shortcut { return shortcut }
+        if case .action(let action) = self { return action.shortcut }
         guard case .paletteTab(let tab) = destination(enabledCapabilities: enabledCapabilities),
               visibleTabs.contains(tab) else { return nil }
         return tab.shortcutLabel
@@ -263,8 +304,8 @@ extension QuickSearchRanking {
     /// first, as Alfred puts its preferences first; commands matched through a keyword, then ones the
     /// query only starts, come after the applications, so an app named by the query (Shortcuts for
     /// "shortcuts") stays first and a few letters still find apps first. Equal scores keep that
-    /// order, and equally good commands keep `QuickSearchCommand.allCases` order. Files and folders
-    /// always come last.
+    /// order, and equally good commands keep `QuickSearchCommand.allCases` order, then `actions`
+    /// order: action commands rank exactly as commands do. Files and folders always come last.
     ///
     /// Snippets (`SnippetSearch.quickSearchMatches`) match only by keyword and name. One whose whole
     /// keyword, punctuation included, is the query comes first of all, since a keyword is typed to
@@ -276,12 +317,15 @@ extension QuickSearchRanking {
         applications: [QuickSearchResult],
         files: [QuickSearchResult],
         commands: [QuickSearchCommand] = QuickSearchCommand.allCases,
+        actions: [QuickSearchAction] = [],
         snippets: [Snippet] = [],
         emoji: [QuickSearchEmoji] = [],
         usage: ApplicationUsageStore? = nil
     ) -> [QuickSearchItem] {
         let normalizedTerm = normalized(term)
-        let matches = commands.compactMap { command in command.match(term).map { (command: command, match: $0) } }
+        let matches = (commands + actions.map(QuickSearchCommand.action)).compactMap { command in
+            command.match(term).map { (command: command, match: $0) }
+        }
         func scoredCommands(_ level: QuickSearchCommand.Match) -> [(item: QuickSearchItem, score: Int)] {
             matches.filter { $0.match == level }.map { entry in
                 (item: QuickSearchItem.command(entry.command), score: level.textScore + (usage?.priorityScore(for: entry.command) ?? 0))

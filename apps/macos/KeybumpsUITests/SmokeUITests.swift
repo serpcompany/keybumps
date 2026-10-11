@@ -608,6 +608,24 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "Settings opens on Window Manager")
     }
 
+    func testQuickSearchListsAndRunsStartScreencast() {
+        // An action command is listed only while its plugin is on, and Screencast ships off.
+        launch(permissions: "granted", [
+            "-KBUITestEnableCapabilities", "screencast", "-KBOpenPalette", "search", "-KBCloseSettings", "YES",
+        ])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        app.typeText("screencast")
+        XCTAssertTrue(element("quickSearch.command.screencast").waitForExistence(timeout: 5))
+        let action = element("quickSearch.action.startScreencast")
+        XCTAssertTrue(action.waitForExistence(timeout: 5), "Start Screencast is listed beside Screencast's command")
+        action.click()
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 10), "It opens the picker, as the shortcut does")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+    }
+
     func testCapabilityCommandMovesOpenSettingsToItsPage() {
         // Settings stays open on General, so the page arrives through the open window, not a new one.
         launch(permissions: "granted", ["-KBOpenSettings", "general", "-KBOpenPalette", "search"])

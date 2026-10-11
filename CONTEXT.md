@@ -69,8 +69,12 @@ Finding and opening local applications, files, and folders, finding snippets by 
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:
-A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, Plugins, or a capability command.
+A Keybumps action that Quick Search offers beside applications, files, and folders: Keybumps Settings, Plugins, or a capability command, shown as the kind Command, or an action command, shown as the kind Action.
 _Avoid_: Workflow, extension command
+
+**Action command**:
+A Quick Search command that does something a plugin does, rather than going somewhere, such as Start Screencast or Hide Keystrokes. It's listed only while its plugin is on, and picking it closes the palette and does it, as the plugin's shortcut would.
+_Avoid_: Quick action, workflow, shortcut (a key combination), command (alone)
 
 **Capability command**:
 The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
