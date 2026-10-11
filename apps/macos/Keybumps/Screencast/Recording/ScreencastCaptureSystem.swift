@@ -97,8 +97,8 @@ struct ScreencastWatchedWindow: Hashable, Sendable {
 }
 
 extension ScreencastCaptureSystem {
-    /// A capture system that can't tell: window recordings then pick up an app's new windows only
-    /// when something else rebuilds the filter.
+    /// A capture system that can't tell: nothing then says a window recording's window is in
+    /// sight, so it writes no frame.
     func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>? { nil }
 
     func windowExists(_ id: CGWindowID) -> Bool? { nil }
