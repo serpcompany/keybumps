@@ -18,6 +18,8 @@ enum KeybumpsMain {
         CrashReporter.startIfAllowed()
         // Even with reports off, so a QA candidate can show that nothing is sent.
         CrashReportTest.runIfRequested()
+        // QA candidates only: records for real, writes a structural result, and quits (#470).
+        if ScreencastSmokeTest.isRequested() { ScreencastSmokeTest.runAndExit() }
         KeybumpsApp.main()
     }
 }

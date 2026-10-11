@@ -55,6 +55,7 @@ Before handing a candidate to the owner, the agent verifies what it can without 
 - Deterministic tests, extended for the changed behavior.
 - Offscreen renders of changed surfaces (for example SwiftUI `ImageRenderer` snapshots) inspected by the agent for layout, truncation, and state.
 - The installed candidate launches from `/Applications`, has a valid signature and matching designated requirement, stays running, and loads existing local data. Check persisted data structurally only (counts, kinds, schema) and never read or report user content.
+- For Screencast changes, `apps/macos/scripts/smoke-screencast.sh` on the installed candidate records 2 s of a screen, a window, and an area and takes a screenshot of each through the real capture path (`-KBScreencastSmokeTest YES`, QA candidates only), checks and deletes the files, prints a structural result, and reopens Keybumps. Screen Recording must already be granted; the recording indicator shows for about ten seconds.
 
 Computer-use or other screen control drives the owner's real mouse, keyboard, and focus. Use it only after the owner explicitly hands over the screen, announce when it starts and ends, and keep it to checks that require real focus (global shortcuts, cross-app paste, permissions, Dictation insertion). Report the first pass as its own evidence; it never substitutes for owner acceptance.
 
