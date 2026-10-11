@@ -55,7 +55,6 @@ extension ScreencastModule {
         start()
         guard #available(macOS 15, *), let controller, let picker = controller.picker,
               let screen = picker.layout.screens.first else { return }
-        picker.kind = .video
         picker.target = .screen
         picker.clickScreen(screen)
         controller.confirm()

@@ -161,11 +161,11 @@ struct ScreencastSmokeScriptTests {
         bench.expectAllStoppedAndCleanedUp()
     }
 
-    @Test("A helper that can't show its window: the smoke run gets no window PID, so its window captures fail, and everything is still cleaned up")
+    @Test("A helper that can't show its window: the smoke run gets no window PID, so its window capture fails, and everything is still cleaned up")
     func helperFails() throws {
         let bench = try SmokeScriptBench()
         defer { bench.remove() }
-        // What the app reports with no window PID: both window captures fail as noSmokeWindow.
+        // What the app reports with no window PID: the window capture fails as noSmokeWindow.
         var report = ScreencastSmokeReport(macOS: "15.6.1", displayCount: 1, modes: ScreencastSmokeMode.allCases)
         report.complete = true
         report.cleanedUp = true

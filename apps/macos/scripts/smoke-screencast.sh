@@ -1,19 +1,19 @@
 #!/bin/zsh
 # Run Screencast's QA smoke test (-KBScreencastSmokeTest, #470) on the installed QA candidate:
-# it records 2 s each of the main display, a blank window, and an area, takes a screenshot of
-# each, checks and deletes every file, and writes a structural result (no titles, app names, file
-# names, or paths). On screen: a blank window titled "Keybumps smoke test" and the macOS recording
-# indicator, for about ten seconds. Nothing asks for a permission. If the window captures fail
-# with noSmokeWindow, leave full screen and run it again.
+# it records 2 s each of the main display, a blank window, and an area, checks and deletes every
+# file, and writes a structural result (no titles, app names, file names, or paths). On screen: a
+# blank window titled "Keybumps smoke test" and the macOS recording indicator, for about ten
+# seconds. Nothing asks for a permission. If the window capture fails with noSmokeWindow, leave
+# full screen and run it again.
 #
 # It quits the running Keybumps by bundle id first, and reopens it afterwards whatever happened.
 # The blank window comes from a helper process of the script's own (osascript running
 # JavaScript, which draws its own window, sends no Apple events, and never takes keyboard focus),
-# and the smoke test records and screenshots only that process's window, never one of the
-# person's. Screen Recording must already be granted to the installed app: without it the run
-# reports permission-denied, and nothing opens a prompt or System Settings. It never touches the
-# person's captures folder or settings. On every exit (Ctrl-C and a closed terminal included) it
-# stops the smoke run and the helper, and deletes the smoke test's temporary captures folder once
+# and the smoke test records only that process's window, never one of the person's. Screen
+# Recording must already be granted to the installed app: without it the run reports
+# permission-denied, and nothing opens a prompt or System Settings. It never touches the person's
+# captures folder or settings. On every exit (Ctrl-C and a closed terminal included) it stops the
+# smoke run and the helper, and deletes the smoke test's temporary captures folder once
 # the smoke run is gone.
 #
 # usage: apps/macos/scripts/smoke-screencast.sh [--timeout <seconds>]
@@ -104,7 +104,7 @@ require_candidate() {
 require_candidate
 [[ "$temporary" == /* ]] || { print -u2 "couldn't find the temporary folder"; exit 69 }
 
-# The blank window the window captures take, shown by a helper of the script's own so the smoke
+# The blank window the window capture takes, shown by a helper of the script's own so the smoke
 # test can tell it by its process ID. It's an accessory app, so it never becomes active or takes
 # keyboard focus; it's on every Space, full-screen ones included; and it closes when the script
 # is gone (it's given the script's PID, so that holds from its first line), or after its lifetime
@@ -212,12 +212,12 @@ rm -rf -- "$captures" || { print -u2 "couldn't delete the smoke test's captures:
 mkdir -p "$qa_folder" && rm -f "$result" || { print -u2 "couldn't prepare $qa_folder"; exit 69 }
 
 work=$(mktemp -d "${temporary%/}/keybumps-smoke-script.XXXXXX") || { print -u2 "couldn't prepare a folder for the script"; exit 69 }
-# Without the window, the smoke test still runs, and its window captures fail as noSmokeWindow.
+# Without the window, the smoke test still runs, and its window capture fails as noSmokeWindow.
 window_arguments=()
 if start_helper; then
   window_arguments=("-$window_option" "$helper_pid")
 else
-  print -u2 "couldn't show the smoke test's window, so its window captures will fail"
+  print -u2 "couldn't show the smoke test's window, so its window capture will fail"
   stop_pid "$helper_pid" || true
   helper_pid=
 fi

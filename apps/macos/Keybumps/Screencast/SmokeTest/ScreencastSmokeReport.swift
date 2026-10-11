@@ -1,29 +1,18 @@
 import AVFoundation
 import Foundation
-import ImageIO
 
-/// What the Screencast smoke test captures, in the order it runs them (#470): a video and a
-/// screenshot of a screen, a window, and an area.
+/// What the Screencast smoke test records, in the order it runs them (#470): a video of a screen, a
+/// window, and an area.
 enum ScreencastSmokeMode: String, CaseIterable, Codable, Sendable {
     case videoScreen = "video-screen"
     case videoWindow = "video-window"
     case videoArea = "video-area"
-    case screenshotScreen = "screenshot-screen"
-    case screenshotWindow = "screenshot-window"
-    case screenshotArea = "screenshot-area"
-
-    var kind: ScreencastCaptureKind {
-        switch self {
-        case .videoScreen, .videoWindow, .videoArea: .video
-        case .screenshotScreen, .screenshotWindow, .screenshotArea: .screenshot
-        }
-    }
 
     var target: ScreencastPickerTarget {
         switch self {
-        case .videoScreen, .screenshotScreen: .screen
-        case .videoWindow, .screenshotWindow: .window
-        case .videoArea, .screenshotArea: .area
+        case .videoScreen: .screen
+        case .videoWindow: .window
+        case .videoArea: .area
         }
     }
 }
@@ -35,11 +24,11 @@ enum ScreencastSmokeStage: String, Codable, Sendable {
     case opening
     /// The picker's choice being made through its model.
     case picking
-    /// Record or Capture pressed.
+    /// Record pressed.
     case chosen
     case starting
     case recording
-    /// Stopping a video, or taking a screenshot.
+    /// Stopping the recording.
     case finishing
     case saved
     case checked
@@ -74,7 +63,6 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
     case unreadableVideo
     case noVideoTrack
     case durationOutOfRange
-    case undecodableImage
     case cleanupFailed
     /// An earlier capture didn't wind down, so this one didn't run.
     case skipped
@@ -89,11 +77,11 @@ struct ScreencastSmokeReport: Codable, Equatable, Sendable {
     struct Timings: Codable, Equatable, Sendable {
         /// From Start Screencast until the picker's windows were read.
         var pickerMs: Int?
-        /// From Record until recording (videos).
+        /// From Record until recording.
         var startMs: Int?
-        /// Recording (videos).
+        /// Recording.
         var recordMs: Int?
-        /// From Stop, or Capture, until the capture was saved.
+        /// From Stop until the recording was saved.
         var finishMs: Int?
         var checkMs: Int?
         var totalMs: Int?
@@ -105,8 +93,8 @@ struct ScreencastSmokeReport: Codable, Equatable, Sendable {
         var stage = ScreencastSmokeStage.notStarted
         var errorCategory: String?
         var timings = Timings()
-        /// Videos: whether the control bar and the overlays were up while it recorded, and how
-        /// many overlay windows the recorder was given.
+        /// Whether the control bar and the overlays were up while it recorded, and how many
+        /// overlay windows the recorder was given.
         var controlBarShown: Bool?
         var overlaysShown: Bool?
         var overlayWindows: Int?
@@ -170,17 +158,10 @@ struct ScreencastSmokeVideoFacts: Equatable, Sendable {
     let pixelHeight: Int
 }
 
-/// What a check reads from a screenshot file.
-struct ScreencastSmokeImageFacts: Equatable, Sendable {
-    let pixelWidth: Int
-    let pixelHeight: Int
-}
-
-/// Reads saved captures: AVFoundation loads a video, and ImageIO decodes a screenshot. Tests pass
-/// their own for a fake writer's files.
+/// Reads saved recordings: AVFoundation loads a video. Tests pass their own for a fake writer's
+/// files.
 struct ScreencastSmokeInspector: Sendable {
     var video: @Sendable (URL) async throws -> ScreencastSmokeVideoFacts
-    var image: @Sendable (URL) -> ScreencastSmokeImageFacts?
 
     static let system = ScreencastSmokeInspector(
         video: { url in
@@ -194,17 +175,12 @@ struct ScreencastSmokeInspector: Sendable {
                 pixelWidth: ScreencastSmokeChecks.pixels(size.width),
                 pixelHeight: ScreencastSmokeChecks.pixels(size.height)
             )
-        },
-        image: { url in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-            return ScreencastSmokeImageFacts(pixelWidth: image.width, pixelHeight: image.height)
         }
     )
 }
 
-/// The checks on each saved file: it exists and isn't empty, a video has a picture of about the
-/// length recorded, and a screenshot decodes.
+/// The checks on each saved file: it exists and isn't empty, and has a picture of about the length
+/// recorded.
 enum ScreencastSmokeChecks {
     /// The file's size in bytes, or `missingFile` or `emptyFile`.
     static func size(of url: URL, fileManager: FileManager) throws -> Int {
@@ -222,12 +198,6 @@ enum ScreencastSmokeChecks {
             throw ScreencastSmokeFailure.noVideoTrack
         }
         guard durations.contains(facts.duration) else { throw ScreencastSmokeFailure.durationOutOfRange }
-    }
-
-    static func check(_ facts: ScreencastSmokeImageFacts?) throws {
-        guard let facts, facts.pixelWidth > 0, facts.pixelHeight > 0 else {
-            throw ScreencastSmokeFailure.undecodableImage
-        }
     }
 
     /// A size AVFoundation reports, as whole pixels; 0 for one that isn't a finite number, rather

@@ -2,12 +2,6 @@ import CoreGraphics
 import Foundation
 import Observation
 
-/// A screenshot or a video.
-enum ScreencastCaptureKind: String, CaseIterable, Equatable, Sendable {
-    case video
-    case screenshot
-}
-
 /// A screen choice in the picker's bar that the pointer is over.
 enum ScreencastScreenPreview: Equatable, Sendable {
     case screen(CGDirectDisplayID)
@@ -24,7 +18,7 @@ enum ScreencastPickerTarget: String, CaseIterable, Equatable, Sendable {
     case screen
 }
 
-/// What the picker's Record or Capture chose: everything the countdown, the recording, and the
+/// What the picker's Record chose: everything the countdown, the recording, and the
 /// pieces around it (#448's control bar, #449's overlays) need.
 struct ScreencastChoice: Equatable, Sendable {
     /// Where the target is on one display.
@@ -34,32 +28,27 @@ struct ScreencastChoice: Equatable, Sendable {
         let frame: CGRect
     }
 
-    var kind: ScreencastCaptureKind
     var target: ScreencastTarget
     /// One per display it shows on, in display order. The countdown shows on these, and the
     /// shortcuts only on these displays.
     var regions: [Region]
     /// The area and its screen, for the highlight while it records; nil for a window or every screen.
     var area: ScreencastPickedArea?
-    /// The sounds to record: none for a screenshot.
+    /// The sounds to record.
     var audio: ScreencastAudio
-    /// Whether the shortcuts pressed show on screen while it records; off for a screenshot.
+    /// Whether the shortcuts pressed show on screen while it records.
     var showsShortcuts: Bool
-    /// Whether clicks are highlighted while it records; off for a screenshot.
+    /// Whether clicks are highlighted while it records.
     var highlightsClicks: Bool
 }
 
-/// The picker's state, shared by its windows (one per screen) and its bar: screenshot or video,
-/// area, window, or every screen, the area drawn or the window picked, and the switches. The
-/// switches are the settings', which Record or Capture saves (`switches`). It opens on the mode and
-/// screen last taken (`ScreencastPickerMemory`), with no window picked.
+/// The picker's state, shared by its windows (one per screen) and its bar: area, window, or every
+/// screen, the area drawn or the window picked, and the switches. The switches are the settings',
+/// which Record saves (`switches`). It opens on the mode and screen last recorded
+/// (`ScreencastPickerMemory`), with no window picked.
 @MainActor
 @Observable
 final class ScreencastPickerModel {
-    var kind: ScreencastCaptureKind = .video {
-        didSet { changed() }
-    }
-
     /// Switching keeps the area drawn and the window picked, so switching back finds them.
     var target: ScreencastPickerTarget = .area {
         didSet {
@@ -157,9 +146,6 @@ final class ScreencastPickerModel {
 
     var canConfirm: Bool { choice() != nil }
 
-    /// Record's title: Record for a video, Capture for a screenshot.
-    var confirmTitle: String { kind == .video ? "Record" : "Capture" }
-
     /// What to do next, under the bar.
     var hint: String {
         switch target {
@@ -171,9 +157,9 @@ final class ScreencastPickerModel {
             selectedWindow == nil ? "Click a window to choose it." : "Click another window to change it."
         case .screen:
             if let id = selectedScreen, let screen = layout.screen(id) {
-                kind == .video ? "Records all of \(layout.title(of: screen))." : "Captures all of \(layout.title(of: screen))."
+                "Records all of \(layout.title(of: screen))."
             } else {
-                kind == .video ? "Records all screens, one file each." : "Captures all screens, one image each."
+                "Records all screens, one file each."
             }
         }
     }
@@ -209,12 +195,11 @@ final class ScreencastPickerModel {
 
     /// What Record would capture now, or nil while nothing is chosen.
     func choice() -> ScreencastChoice? {
-        let isVideo = kind == .video
-        let audio = isVideo ? ScreencastAudio(microphone: recordsMicrophone && microphoneAvailable, systemAudio: recordsSystemAudio) : .none
+        let audio = ScreencastAudio(microphone: recordsMicrophone && microphoneAvailable, systemAudio: recordsSystemAudio)
         func make(_ target: ScreencastTarget, regions: [ScreencastChoice.Region], area: ScreencastPickedArea? = nil) -> ScreencastChoice {
             ScreencastChoice(
-                kind: kind, target: target, regions: regions, area: area, audio: audio,
-                showsShortcuts: isVideo && showsShortcuts, highlightsClicks: isVideo && highlightsClicks
+                target: target, regions: regions, area: area, audio: audio,
+                showsShortcuts: showsShortcuts, highlightsClicks: highlightsClicks
             )
         }
         switch target {

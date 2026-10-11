@@ -25,7 +25,7 @@ struct UITestLaunchConfigurationTests {
 
     @Test(arguments: [
         ("video", UITestLaunchConfiguration.ScreencastReviewCapture.video),
-        ("screenshot", .screenshot),
+        ("screenshot", nil),
         ("gif", nil),
     ] as [(String, UITestLaunchConfiguration.ScreencastReviewCapture?)])
     func opensScreencastsReviewOnAMadeUpCapture(value: String, capture: UITestLaunchConfiguration.ScreencastReviewCapture?) {

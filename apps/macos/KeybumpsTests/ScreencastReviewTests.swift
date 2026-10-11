@@ -34,7 +34,6 @@ struct ScreencastReviewTests {
             type: .feature,
             repository: "serpcompany/keybumps",
             context: context,
-            editedImages: nil,
             reviewedAt: ReviewFixture.reviewDate
         ))
         let metadata = try ScreencastMetadata.read(from: input.metadataURL)
@@ -45,21 +44,21 @@ struct ScreencastReviewTests {
         #expect(FileManager.default.fileExists(atPath: input.folder.path))
     }
 
-    @Test("A screenshot's own meta.json keys are kept, whatever they are")
-    func keepsScreenshotMetadata() async throws {
+    @Test("A meta.json key the panel doesn't know is kept")
+    func keepsUnknownMetadata() async throws {
         defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
+        let input = try fixture.video()
+        var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: input.metadataURL)) as? [String: Any])
+        object["madeUpKey"] = "kept"
+        try JSONSerialization.data(withJSONObject: object).write(to: input.metadataURL)
         let model = fixture.model(input)
         model.note = "Typo in the header"
 
         await model.save()
         #expect(model.isFinished)
 
-        let object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: input.metadataURL)) as? [String: Any])
-        #expect(object["kind"] as? String == "screenshot")
-        #expect(object["madeUpKey"] as? String == "kept", "a key the panel doesn't know")
-        let metadata = try ScreencastScreenshotMetadata.read(from: input.metadataURL)
-        #expect(metadata.images.map(\.file) == ["screenshot-1.png"], "the screenshot's own type still reads it")
+        let saved = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: input.metadataURL)) as? [String: Any])
+        #expect(saved["madeUpKey"] as? String == "kept", "a key the panel doesn't know")
         #expect(ScreencastReview.read(from: input.metadataURL)?.note == "Typo in the header")
         #expect(ScreencastReview.read(from: input.metadataURL)?.type == .bug, "Bug unless chosen")
     }
@@ -89,7 +88,7 @@ struct ScreencastReviewTests {
     @Test("Save stays open on a repository that isn't owner/name; closing saves without it")
     func invalidRepository() async throws {
         defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
+        let input = try fixture.video()
         let model = fixture.model(input)
         model.note = "kept"
         model.repositoryText = "not a repo"
@@ -123,7 +122,7 @@ struct ScreencastReviewTests {
     @Test("A meta.json that can't be written keeps the panel open with Save; closing still finishes")
     func metadataFailure() async throws {
         defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
+        let input = try fixture.video()
         try FileManager.default.removeItem(at: input.metadataURL)
         try FileManager.default.createDirectory(at: input.metadataURL, withIntermediateDirectories: true)
         let model = fixture.model(input)
@@ -155,69 +154,22 @@ struct ScreencastReviewTests {
         #expect(ScreencastReview.read(from: input.metadataURL) != nil)
     }
 
-    @Test("Copy puts each display's screenshot on the pasteboard as an item, the image and its file; a marked-up copy goes in its place")
-    func copiesAScreenshot() async throws {
-        defer { fixture.tearDown() }
-        let input = try fixture.screenshot(displays: 2)
-        let editor = FakeScreenshotEditor()
-        let model = fixture.model(input, editor: editor)
-        let images = try #require(fixture.screenshotURLs)
-        #expect(model.displayCount == 2)
-        model.selectedDisplay = 1
-        model.edit()
-        #expect(model.isEditing && editor.opened == [images[1]], "Edit opens the display shown")
-        let edited = input.folder.appendingPathComponent("screenshot-2 (edited).png")
-        try ReviewFixture.png(seed: "edited").write(to: edited)
-        editor.finishEditing(savedAt: edited)
-        #expect(!model.isEditing && model.editedImages == [1: edited])
-        #expect(model.screenshotFiles == [images[0], edited])
-
-        await model.copy()
-        #expect(model.isFinished)
-        let items = try #require(fixture.pasteboard.pasteboardItems)
-        #expect(items.count == 2)
-        #expect(items[0].data(forType: .png) == (try Data(contentsOf: images[0])))
-        #expect(items[0].string(forType: .fileURL) == images[0].absoluteString)
-        #expect(items[1].data(forType: .png) == (try Data(contentsOf: edited)))
-        #expect(items[1].string(forType: .fileURL) == edited.absoluteString)
-        #expect(ScreencastReview.read(from: input.metadataURL)?.editedImages == ["screenshot-2.png": "screenshot-2 (edited).png"])
-    }
-
     @Test("What the flow controller saved becomes the panel's input")
     func inputFromTheController() throws {
         defer { fixture.tearDown() }
-        guard case .video(let capture) = try fixture.video(), case .screenshot(let screenshot) = try fixture.screenshot(name: "1791000100") else {
+        guard case .video(let capture) = try fixture.video() else {
             Issue.record("no fixture")
             return
         }
         #expect(ScreencastReviewInput(.video(capture)) == .video(capture))
-        #expect(ScreencastReviewInput(.screenshot(screenshot)) == .screenshot(screenshot))
-        #expect(ScreencastReviewInput(.screenshot(screenshot)).folder == ScreencastCaptureResult.screenshot(screenshot).folder)
+        #expect(ScreencastReviewInput(.video(capture)).folder == ScreencastCaptureResult.video(capture).folder)
     }
 
-    @Test("Copy is kept out of Clipboard History, though the same write is otherwise recorded")
-    func copySkipsClipboardHistory() async throws {
-        defer { fixture.tearDown() }
-        let clipboard = fixture.clipboard
-        let model = fixture.model(try fixture.screenshot(), keepOutOfClipboardHistory: { clipboard.suppressCurrentChange() })
-        await model.copy()
-        #expect(model.isFinished)
-        clipboard.pollForTesting()
-        #expect(clipboard.entries.isEmpty)
-
-        // The same write without the mark is recorded, so the skip is what kept it out.
-        let other = fixture.model(try fixture.screenshot(name: "1791000100", seed: "other"))
-        await other.copy()
-        #expect(other.isFinished)
-        clipboard.pollForTesting()
-        #expect(clipboard.entries.count == 1)
-    }
-
-    @Test("A screenshot that can't be read copies nothing and leaves the clipboard as it was")
+    @Test("A recording with no file to copy copies nothing and leaves the clipboard as it was")
     func copyFailure() async throws {
         defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
-        try FileManager.default.removeItem(at: try #require(fixture.screenshotURL))
+        guard case .video(let recorded) = try fixture.video() else { return }
+        let input = ScreencastReviewInput.video(ScreencastCapture(folder: recorded.folder, videos: [], duration: 0, endedEarly: nil))
         fixture.pasteboard.clearContents()
         fixture.pasteboard.setString("before", forType: .string)
         let model = fixture.model(input)
@@ -225,56 +177,6 @@ struct ScreencastReviewTests {
         #expect(model.failure == .copyFailed && !model.isFinished)
         #expect(fixture.pasteboard.string(forType: .string) == "before")
         #expect(fixture.suppressions.isEmpty)
-    }
-
-    // MARK: Also add to Screenshots (⌘3)
-
-    @Test("Saving a screenshot with the switch on adds each display's to the Screenshots tab, from Screencast, without the pasteboard")
-    func addsToScreenshots() async throws {
-        defer { fixture.tearDown() }
-        let input = try fixture.screenshot(displays: 2)
-        let images = try #require(fixture.screenshotURLs)
-        let changeCount = fixture.pasteboard.changeCount
-        let model = fixture.model(input, screenshots: fixture.clipboard)
-        #expect(model.showsAddToScreenshots && model.addsToScreenshots, "on at first")
-        await model.save()
-        #expect(model.isFinished)
-
-        let entries = fixture.clipboard.entries
-        #expect(entries.count == 2 && entries.allSatisfy(\.isScreenshot))
-        #expect(entries.allSatisfy { $0.sourceApp?.name == "Screencast" })
-        #expect(Set(entries.compactMap(\.sourcePath)) == Set(images.map(\.path)))
-        #expect(fixture.pasteboard.changeCount == changeCount)
-        #expect(images.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }, "the originals stay in the capture's folder")
-    }
-
-    @Test("The switch is remembered; off, Save adds nothing, and Copy never adds")
-    func switchOffAndCopy() async throws {
-        defer { fixture.tearDown() }
-        let first = fixture.model(try fixture.screenshot(), screenshots: fixture.clipboard)
-        first.addsToScreenshots = false
-        #expect(fixture.defaults.object(forKey: ScreencastReviewSettings.addsToScreenshotsKey) as? Bool == false)
-        await first.save()
-        #expect(first.isFinished)
-        #expect(fixture.clipboard.entries.isEmpty)
-
-        let second = fixture.model(try fixture.screenshot(name: "1791000100", seed: "b"), screenshots: fixture.clipboard)
-        #expect(!second.addsToScreenshots, "remembered")
-        second.addsToScreenshots = true
-        await second.copy()
-        #expect(second.isFinished)
-        #expect(fixture.clipboard.entries.isEmpty)
-    }
-
-    @Test("The switch is hidden while Clipboard History is off, and for a recording")
-    func switchHidden() async throws {
-        defer { fixture.tearDown() }
-        #expect(!fixture.model(try fixture.screenshot()).showsAddToScreenshots)
-        let video = fixture.model(try fixture.video(), screenshots: fixture.clipboard)
-        #expect(!video.showsAddToScreenshots)
-        await video.save()
-        #expect(video.isFinished)
-        #expect(fixture.clipboard.entries.isEmpty)
     }
 
     // MARK: Discard
@@ -302,7 +204,7 @@ struct ScreencastReviewTests {
     @Test("A folder that can't be deleted stays, and the panel says so")
     func discardFailure() throws {
         defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
+        let input = try fixture.video()
         let model = fixture.model(input, fileManager: UnremovingFileManager())
         model.askToDiscard()
         model.confirmDiscard()
@@ -313,16 +215,14 @@ struct ScreencastReviewTests {
     @Test("Discard deletes only a folder that holds the capture's own files")
     func discardOnlyTheCapturesFolder() throws {
         defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
-        let image = try #require(fixture.screenshotURL)
-        let wrongFolder = ScreencastReviewInput.screenshot(ScreencastScreenshot(
-            folder: fixture.folder.url,
-            images: [ScreencastScreenshot.Image(file: image, pixelWidth: 2, pixelHeight: 2)]
+        guard case .video(let capture) = try fixture.video() else { return }
+        let wrongFolder = ScreencastReviewInput.video(ScreencastCapture(
+            folder: fixture.folder.url, videos: capture.videos, duration: capture.duration, endedEarly: nil
         ))
         #expect(throws: ScreencastReviewFailure.deleteFailed) { try ScreencastReviewFiles.delete(wrongFolder, fileManager: .default) }
-        let empty = ScreencastReviewInput.video(ScreencastCapture(folder: input.folder, videos: [], duration: 0, endedEarly: nil))
+        let empty = ScreencastReviewInput.video(ScreencastCapture(folder: capture.folder, videos: [], duration: 0, endedEarly: nil))
         #expect(throws: ScreencastReviewFailure.deleteFailed) { try ScreencastReviewFiles.delete(empty, fileManager: .default) }
-        #expect(FileManager.default.fileExists(atPath: image.path))
+        #expect(capture.videos.allSatisfy { FileManager.default.fileExists(atPath: $0.file.path) })
     }
 
     // MARK: Trim, with stand-in files
@@ -409,64 +309,27 @@ struct ScreencastReviewTests {
         #expect(try fixture.hiddenFiles(in: capture.folder).isEmpty)
     }
 
-    // MARK: Sending, editing, keys, placement
+    // MARK: Sending, keys, placement
 
     @Test("The destination shows None yet, and Save and Send and Send and Delete can't be used")
     func noDestinationYet() throws {
         defer { fixture.tearDown() }
-        let model = fixture.model(try fixture.screenshot())
+        let model = fixture.model(try fixture.video())
         #expect(model.destinationTitle == "None yet")
         #expect(!model.canSend)
-    }
-
-    @Test("Edit is offered for a screenshot with an editor; an editor already busy says so")
-    func editAvailability() throws {
-        defer { fixture.tearDown() }
-        #expect(!fixture.model(try fixture.screenshot()).canEdit)
-        #expect(!fixture.model(try fixture.video(), editor: FakeScreenshotEditor()).canEdit)
-        let busy = FakeScreenshotEditor()
-        busy.opens = false
-        let model = fixture.model(try fixture.screenshot(name: "1791000100", seed: "b"), editor: busy)
-        #expect(model.canEdit)
-        model.edit()
-        #expect(model.failure == .editorUnavailable && !model.isEditing)
-    }
-
-    @Test("Closing while the editor is open saves the review and leaves the editor, whose later Save is recorded")
-    func closeCancelsTheEditor() async throws {
-        defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
-        let editor = FakeScreenshotEditor()
-        let model = fixture.model(input, editor: editor, screenshots: fixture.clipboard)
-        model.edit()
-        await model.save()
-        #expect(!model.isFinished, "Save does nothing while the editor is open")
-        await model.close()
-        #expect(model.isFinished && fixture.outcomes == [.saved(input)])
-        #expect(editor.isOpen, "the editor stays open with its markup")
-        #expect(ScreencastReview.read(from: input.metadataURL)?.editedImages == nil)
-        #expect(fixture.clipboard.entries.isEmpty, "the image being edited waits for the editor")
-
-        let edited = input.folder.appendingPathComponent("screenshot-1 (edited).png")
-        try ReviewFixture.png(seed: "late").write(to: edited)
-        editor.finishEditing(savedAt: edited)
-        #expect(ScreencastReview.read(from: input.metadataURL)?.editedImages == ["screenshot-1.png": "screenshot-1 (edited).png"],
-                "a Save in the editor after the panel closed is still recorded")
-        #expect(fixture.clipboard.entries.map(\.sourcePath) == [edited.path], "and goes to ⌘3, marked up")
     }
 
     @Test("Return saves and Escape closes; the discard question, the trim controls, composing text, and a claimed key keep their keys")
     func keys() {
         func action(
             _ key: UInt16, _ modifiers: NSEvent.ModifierFlags = [], trimming: Bool = false, composing: Bool = false,
-            confirming: Bool = false, editing: Bool = false, claimed: Bool = false
+            confirming: Bool = false, claimed: Bool = false
         ) -> ScreencastReviewKey {
             ScreencastReviewKey.action(
                 keyCode: key, modifiers: modifiers, isTrimming: trimming, isComposing: composing,
-                isConfirmingDiscard: confirming, isEditing: editing, isClaimed: claimed
+                isConfirmingDiscard: confirming, isClaimed: claimed
             )
         }
-        #expect(action(53, editing: true) == .ignore && action(36, editing: true) == .ignore, "the editor's markup is never thrown away")
         #expect(action(36) == .save && action(76) == .save && action(36, .shift) == .save)
         #expect(action(53) == .close)
         #expect(action(53, confirming: true) == .keep && action(36, confirming: true) == .ignore)
@@ -492,8 +355,6 @@ struct ScreencastReviewTests {
             repositories: fixture.repositories,
             pasteboard: fixture.pasteboard,
             keepOutOfClipboardHistory: {},
-            screenshots: { nil },
-            settings: ScreencastReviewSettings(defaults: fixture.defaults),
             screen: { nil }
         )
         var outcomes: [ScreencastReviewOutcome] = []
@@ -503,7 +364,7 @@ struct ScreencastReviewTests {
         #expect(panel.isShown && !panel.panel.isVisible && !panel.panel.canBecomeKey)
         #expect(panel.panel.identifier?.rawValue == "screencast.review.panel")
 
-        let second = try fixture.screenshot()
+        let second = try fixture.video(name: "1791000100")
         await panel.show(second, context: .none)
         #expect(outcomes == [.saved(first)], "a new capture closes the one under review, which saves it")
         await panel.close()
@@ -716,15 +577,14 @@ struct ScreencastReviewTrimFileTests {
 
 // MARK: - Harness
 
-/// A temporary captures folder, a named pasteboard, in-memory preferences, a repository memory and
-/// a Clipboard History in the folder, and the review models' outcomes.
+/// A temporary captures folder, a named pasteboard, a repository memory and a Clipboard History in
+/// the folder, and the review models' outcomes.
 @MainActor
 final class ReviewFixture {
     static let reviewDate = Date(timeIntervalSince1970: 1_791_000_000)
 
     let folder = TemporaryCapturesFolder()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsScreencastReview-\(UUID().uuidString)"))
-    let defaults = InMemoryDefaults()
     lazy var repositories = ScreencastRepositoryMemory(storageURL: folder.url.appendingPathComponent("repositories.json"))
     lazy var clipboard = ClipboardHistoryService(
         storageURL: folder.url.appendingPathComponent("clipboard/history.json"),
@@ -735,18 +595,13 @@ final class ReviewFixture {
     private(set) var outcomes: [ScreencastReviewOutcome] = []
     /// The pasteboard's change count each time Copy asked to be kept out of Clipboard History.
     private(set) var suppressions: [Int] = []
-    /// The last screenshot's images, by display.
-    private(set) var screenshotURLs: [URL]?
-    var screenshotURL: URL? { screenshotURLs?.first }
 
     func model(
         _ input: ScreencastReviewInput,
         context: ScreencastCaptureContext = .none,
         contextRead: Task<ScreencastCaptureContext, Never>? = nil,
         fileManager: FileManager = .default,
-        editor: (any ScreencastScreenshotEditing)? = nil,
         trimmer: any ScreencastTrimming = FakeTrimmer(),
-        screenshots: (any ScreencastScreenshotsLibrary)? = nil,
         keepOutOfClipboardHistory: (() -> Void)? = nil
     ) -> ScreencastReviewModel {
         let pasteboard = pasteboard
@@ -758,10 +613,7 @@ final class ReviewFixture {
             fileManager: fileManager,
             pasteboard: pasteboard,
             keepOutOfClipboardHistory: keepOutOfClipboardHistory ?? { [weak self] in self?.suppressions.append(pasteboard.changeCount) },
-            editor: editor,
             trimmer: trimmer,
-            screenshots: screenshots,
-            settings: ScreencastReviewSettings(defaults: defaults),
             now: { Self.reviewDate }
         )
         model.onFinish = { [weak self] in self?.outcomes.append($0) }
@@ -787,39 +639,6 @@ final class ReviewFixture {
         let capture = ScreencastCapture(folder: captureFolder, videos: videos, duration: 4, endedEarly: nil)
         try ScreencastMetadata(capture: capture, target: .display(1), startedAt: Self.reviewDate).write(to: capture.metadataURL)
         return .video(capture)
-    }
-
-    /// A screenshot's folder, as the flow controller saves one: a small PNG per display, and its
-    /// `meta.json` with one key more that the review panel doesn't know.
-    func screenshot(name: String = "1791000000", seed: String = "a", displays: Int = 1) throws -> ScreencastReviewInput {
-        let captureFolder = folder.url.appendingPathComponent(name, isDirectory: true)
-        try FileManager.default.createDirectory(at: captureFolder, withIntermediateDirectories: true)
-        let images = try (0..<displays).map { index in
-            let file = captureFolder.appendingPathComponent(ScreencastCaptureFolder.screenshotName(index: index))
-            try Self.png(seed: "\(seed)\(index)").write(to: file)
-            return ScreencastScreenshot.Image(file: file, pixelWidth: 2, pixelHeight: 2)
-        }
-        let screenshot = ScreencastScreenshot(folder: captureFolder, images: images)
-        try ScreencastScreenshotMetadata(screenshot: screenshot, target: .display(1), startedAt: Self.reviewDate).write(to: screenshot.metadataURL)
-        var metadata = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: screenshot.metadataURL)) as? [String: Any])
-        metadata["madeUpKey"] = "kept"
-        try JSONSerialization.data(withJSONObject: metadata).write(to: screenshot.metadataURL)
-        screenshotURLs = images.map(\.file)
-        return .screenshot(screenshot)
-    }
-
-    /// A 2×2 PNG whose pixels are `seed`'s bytes, so each seed is a different image.
-    static func png(seed: String) -> Data {
-        let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
-            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 8, bitsPerPixel: 32
-        )!
-        let bytes = Array(seed.utf8)
-        for index in 0..<16 {
-            // Opaque, so no channel is dropped as premultiplied.
-            rep.bitmapData![index] = index % 4 == 3 ? 255 : bytes[index % bytes.count]
-        }
-        return rep.representation(using: .png, properties: [:])!
     }
 
     func originalContents(of input: ScreencastReviewInput) throws -> [String] {
@@ -929,31 +748,6 @@ final class FakeTrimmer: ScreencastTrimming, @unchecked Sendable {
         }
         if let failingFrom, index >= failingFrom { throw CocoaError(.fileWriteUnknown) }
         try Data("cut of \(source.lastPathComponent)".utf8).write(to: destination)
-    }
-}
-
-/// The Screenshot Editor, opened and finished by the test. It never touches the pasteboard, as the
-/// real one doesn't when `copiesToClipboard` is off (`editorSaveWithoutCopy` checks that one).
-@MainActor
-final class FakeScreenshotEditor: ScreencastScreenshotEditing {
-    var opens = true
-    private(set) var opened: [URL] = []
-    private(set) var copyRequests: [Bool] = []
-    private var onFinish: ((URL?) -> Void)?
-
-    var isOpen: Bool { onFinish != nil }
-
-    func editScreenshot(at image: URL, copiesToClipboard: Bool, onFinish: @escaping (URL?) -> Void) -> Bool {
-        guard opens else { return false }
-        opened.append(image)
-        copyRequests.append(copiesToClipboard)
-        self.onFinish = onFinish
-        return true
-    }
-
-    func finishEditing(savedAt url: URL?) {
-        onFinish?(url)
-        onFinish = nil
     }
 }
 

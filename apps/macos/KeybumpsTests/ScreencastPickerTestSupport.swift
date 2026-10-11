@@ -77,7 +77,7 @@ final class FakeOverlays: ScreencastOverlayPresenting {
     func showGettingReady() { events.append(.gettingReady) }
     func hideGettingReady() { events.append(.hideGettingReady) }
 
-    /// The bar's Record (or Capture).
+    /// The bar's Record.
     func record() { confirm?() }
     /// The bar's close button.
     func cancel() { cancelPicker?() }
@@ -86,31 +86,23 @@ final class FakeOverlays: ScreencastOverlayPresenting {
     func pressEscape() { escape?() }
 }
 
-/// A screen that's made up: `content()` returns `screen`, and screenshots are blank images of the
-/// size each plan asks for.
+/// A screen that's made up: `content()` returns `screen`.
 @MainActor
 final class FakePickerSystem: ScreencastPickerSystem {
     var screen: ScreencastContent
     var contentError: ScreencastFailure?
-    var screenshotError: ScreencastFailure?
     /// Windows drawn with alpha 0.
     var transparent: Set<CGWindowID> = []
     /// Runs as the screen is read.
     var onContent: () -> Void = {}
-    /// Holds each screenshot until `releaseScreenshots()`.
-    var holdsScreenshots = false
-    private var heldScreenshots: [CheckedContinuation<Void, Never>] = []
     /// Holds reading the screen until `releaseContent()`.
     var holdsContent = false
     private var heldContent: [CheckedContinuation<Void, Never>] = []
-    private(set) var plans: [ScreencastScreenshotPlan] = []
     private(set) var contentReads = 0
 
     init(content: ScreencastContent) {
         screen = content
     }
-
-    var isHoldingScreenshot: Bool { !heldScreenshots.isEmpty }
 
     func content() async throws -> ScreencastContent {
         contentReads += 1
@@ -128,31 +120,6 @@ final class FakePickerSystem: ScreencastPickerSystem {
     }
 
     func transparentWindows() -> Set<CGWindowID> { transparent }
-
-    func releaseScreenshots() {
-        let held = heldScreenshots
-        heldScreenshots = []
-        held.forEach { $0.resume() }
-    }
-
-    func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
-        plans.append(plan)
-        if holdsScreenshots { await withCheckedContinuation { heldScreenshots.append($0) } }
-        if let screenshotError { throw screenshotError }
-        return ScreencastImages.blank(width: plan.configuration.pixelWidth, height: plan.configuration.pixelHeight)
-    }
-}
-
-enum ScreencastImages {
-    static func blank(width: Int, height: Int) -> CGImage {
-        let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
-        context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        return context.makeImage()!
-    }
 }
 
 /// The countdown's clock: each `sleep` waits until the test calls `advance()`, or throws when its
@@ -241,7 +208,7 @@ enum PickerScreens {
 
 enum ScreencastWait {
     /// Lets the main actor run what was handed to it until `condition` holds, then waits up to
-    /// five seconds for work off the main actor, such as encoding a screenshot.
+    /// five seconds for work off the main actor, such as encoding a trim.
     @MainActor
     static func until(_ condition: () -> Bool) async -> Bool {
         for _ in 0..<500 {

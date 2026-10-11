@@ -6,12 +6,9 @@ import SwiftUI
 enum ScreencastReviewID {
     static let panel = "screencast.review.panel"
     static let player = "screencast.review.player"
-    static let image = "screencast.review.image"
     static let duration = "screencast.review.duration"
     static let display = "screencast.review.display"
     static let trim = "screencast.review.trim"
-    static let edit = "screencast.review.edit"
-    static let addToScreenshots = "screencast.review.addToScreenshots"
     static let note = "screencast.review.note"
     static let type = "screencast.review.type"
     static let repository = "screencast.review.repository"
@@ -28,10 +25,10 @@ enum ScreencastReviewID {
     static let failure = "screencast.review.failure"
 }
 
-/// The review panel: the capture (a recording's player with its trim, or the screenshot with Edit),
-/// then the note, type, and repository, the destination, and the actions. Laid out after Snapzy's
-/// quick-access card (BSD-3-Clause, see LICENSE.snapzy), with the duration in the preview's corner,
-/// and the destination beside the send buttons, as Kap puts its share menu by Export.
+/// The review panel: the recording's player with its trim, then the note, type, and repository,
+/// the destination, and the actions. Laid out after Snapzy's quick-access card (BSD-3-Clause, see
+/// LICENSE.snapzy), with the duration in the preview's corner, and the destination beside the send
+/// buttons, as Kap puts its share menu by Export.
 struct ScreencastReviewView: View {
     static let width: CGFloat = 400
     static let previewHeight: CGFloat = 207
@@ -75,15 +72,7 @@ struct ScreencastReviewView: View {
 
     // MARK: The capture
 
-    @ViewBuilder private var preview: some View {
-        if model.input.isVideo {
-            videoPreview
-        } else {
-            screenshotPreview
-        }
-    }
-
-    private var videoPreview: some View {
+    private var preview: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topTrailing) {
                 Group {
@@ -124,51 +113,7 @@ struct ScreencastReviewView: View {
         }
     }
 
-    private var screenshotPreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Group {
-                if let image = model.image {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } else {
-                    Color.black
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: Self.previewHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .accessibilityLabel("Screenshot")
-            .accessibilityIdentifier(ScreencastReviewID.image)
-            if model.canEdit || model.showsAddToScreenshots || model.displayCount > 1 {
-                HStack(spacing: 8) {
-                    displayPicker
-                    if model.showsAddToScreenshots {
-                        Toggle("Also add to Screenshots (⌘3)", isOn: $model.addsToScreenshots)
-                            .toggleStyle(.switch)
-                            .controlSize(.mini)
-                            .font(.system(size: 12))
-                            .disabled(model.isWorking || model.isFinished)
-                            .help("Saving also lists the screenshot in the Command Palette’s Screenshots tab")
-                            .accessibilityIdentifier(ScreencastReviewID.addToScreenshots)
-                    }
-                    Spacer()
-                    if model.canEdit { editButton }
-                }
-            }
-        }
-    }
-
-    private var editButton: some View {
-        Button(action: model.edit) {
-            Label(model.isEditing ? "Editing…" : "Edit", systemImage: "pencil.tip.crop.circle")
-        }
-        .buttonStyle(PalettePillButtonStyle(showsIcon: true))
-        .disabled(!model.acceptsActions)
-        .help("Mark up or redact the screenshot in the Screenshot Editor")
-        .accessibilityIdentifier(ScreencastReviewID.edit)
-    }
-
-    /// Which display's video or image shows, for a capture of every display.
+    /// Which display's video shows, for a recording of every display.
     @ViewBuilder private var displayPicker: some View {
         if model.displayCount > 1 {
             Picker("Display", selection: $model.selectedDisplay) {
@@ -288,7 +233,7 @@ struct ScreencastReviewView: View {
                     Task { await model.copy() }
                 }
                 .buttonStyle(PalettePillButtonStyle())
-                .help(model.input.isVideo ? "Save, and copy the recording’s file" : "Save, and copy the screenshot")
+                .help("Save, and copy the recording’s file")
                 .accessibilityIdentifier(ScreencastReviewID.copy)
                 Spacer()
                 if model.isWorking {

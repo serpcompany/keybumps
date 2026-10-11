@@ -127,6 +127,19 @@ struct ScreencastTests {
         #expect(preferences.screencast.countdownSeconds == 10, "Only one of its options")
     }
 
+    @Test("The review panel's retired \"Also add to Screenshots\" switch is removed on load, and the rest kept")
+    func retiredAddsToScreenshots() {
+        let defaults = InMemoryDefaults()
+        defaults.set(false, forKey: "plugin.screencast.addsToScreenshots")
+        defaults.set(false, forKey: "plugin.screencast.recordsMicrophone")
+
+        let preferences = AppPreferences(defaults: defaults)
+
+        #expect(defaults.object(forKey: "plugin.screencast.addsToScreenshots") == nil, "Only QA builds had it (#464, #485)")
+        #expect(defaults.object(forKey: "plugin.screencast.recordsMicrophone") as? Bool == false)
+        #expect(!preferences.screencast.recordsMicrophone)
+    }
+
     @Test("Captures go in Documents › Keybumps › captures, shown as Go to Folder takes it")
     func capturesFolder() {
         let paths = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: nil, unitTestRoot: nil)
@@ -267,53 +280,29 @@ struct ScreencastTests {
     func savedCaptureOpensTheReviewPanel() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastReview-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: [.screencast, .clipboardHistory, .screenshotTools], missing: nil, root: root)
+        let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
         harness.model.start()
         let module = Self.module(of: harness)
-        let folder = root.appendingPathComponent("captures/1791000000", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appendingPathComponent("screenshot-1.png")
-        try Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!.write(to: file)
-        let screenshot = ScreencastScreenshot(folder: folder, images: [.init(file: file, pixelWidth: 1, pixelHeight: 1)])
+        let capture = try Self.recording(in: root.appendingPathComponent("captures/1791000000", isDirectory: true))
 
         module.review.captureStarting()
-        module.review.captureFinished(.screenshot(screenshot))
+        module.review.captureFinished(.video(capture))
         try await Self.waitUntil { module.review.panel?.isShown == true }
         let panel = try #require(module.review.panel)
         let model = try #require(panel.model)
         #expect(!panel.panel.isVisible, "never on screen under the unit-test host")
-        #expect(model.input == .screenshot(screenshot))
+        #expect(model.input == .video(capture))
         #expect(model.context == .none, "the unit-test host's reader reads nothing")
-        #expect(model.showsAddToScreenshots && model.canEdit, "Clipboard History and Screenshot Tools are on")
 
         harness.model.setCapability(.screencast, enabled: false)
         try await Self.waitUntil { !panel.isShown }
-        #expect(ScreencastReview.read(from: screenshot.metadataURL) != nil, "closing saved it")
-        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(ScreencastReview.read(from: capture.metadataURL) != nil, "closing saved it")
+        #expect(FileManager.default.fileExists(atPath: capture.videos[0].file.path))
     }
 
     @available(macOS 15, *)
-    @Test("Without Clipboard History or Screenshot Tools, the review panel offers no ⌘3 switch and no Edit")
-    func reviewPanelFollowsOtherPlugins() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastReviewOff-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
-        harness.model.start()
-        let module = Self.module(of: harness)
-        let folder = root.appendingPathComponent("captures/1791000000", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appendingPathComponent("screenshot-1.png")
-        try Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!.write(to: file)
-        module.review.captureFinished(.screenshot(ScreencastScreenshot(folder: folder, images: [.init(file: file, pixelWidth: 1, pixelHeight: 1)])))
-        try await Self.waitUntil { module.review.panel?.isShown == true }
-        let model = try #require(module.review.panel?.model)
-        #expect(!model.showsAddToScreenshots && !model.canEdit)
-        await module.review.panel?.close()
-    }
-
-    @available(macOS 15, *)
-    @Test("Through the module, a screenshot taken with the picker reaches the review panel once")
-    func screenshotReachesTheReviewOnce() async throws {
+    @Test("Through the module, a recording made with the picker and stopped reaches the review panel once")
+    func recordingReachesTheReviewOnce() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastOnce-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsScreencastOnce-\(UUID().uuidString)"))
@@ -322,6 +311,8 @@ struct ScreencastTests {
             try? FileManager.default.removeItem(at: root)
         }
         let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
+        let writers = FakeWriterFactory()
         let clipboard = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("history.json"), pasteboard: pasteboard,
             mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true), sourceApps: .inert
@@ -332,6 +323,7 @@ struct ScreencastTests {
             openSettings: { _ in },
             seams: ScreencastSeams(
                 captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
+                writers: writers,
                 pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
                 presenter: FakeOverlays(),
                 screens: { PickerScreens.both },
@@ -340,9 +332,6 @@ struct ScreencastTests {
             ),
             review: ScreencastReviewServices(
                 clipboard: clipboard,
-                isClipboardHistoryOn: { false },
-                editor: { nil },
-                settings: ScreencastReviewSettings(defaults: InMemoryDefaults()),
                 notices: nil,
                 repositories: { ScreencastRepositoryMemory(storageURL: root.appendingPathComponent("repositories.json")) }
             )
@@ -362,23 +351,36 @@ struct ScreencastTests {
         module.start()
         let controller = try #require(module.controller)
         let picker = try #require(controller.picker)
-        picker.kind = .screenshot
         picker.target = .screen
         picker.clickScreen(PickerScreens.left)
         controller.confirm()
+        try await Self.waitUntil { controller.phase == .recording }
+        await controller.stop()
         try await Self.waitUntil { module.review.panel?.isShown == true }
         let panel = try #require(module.review.panel)
-        guard case .screenshot(let screenshot) = panel.model?.input else {
-            Issue.record("the panel shows the screenshot")
+        guard case .video(let capture) = panel.model?.input else {
+            Issue.record("the panel shows the recording")
             return
         }
-        defer { try? FileManager.default.removeItem(at: screenshot.folder) }
+        defer { try? FileManager.default.removeItem(at: capture.folder) }
         #expect(controller.phase == .idle)
+        #expect(capture.videos.map(\.file) == writers.writers.map(\.fileURL), "the recording the module's recorder made")
 
         await panel.close()
         try await Task.sleep(for: .milliseconds(50))
-        #expect(outcomes == [.saved(.screenshot(screenshot))], "once, and saved")
+        #expect(outcomes == [.saved(.video(capture))], "once, and saved")
         #expect(!panel.isShown)
+    }
+
+    /// A recording's folder as the recorder leaves one: a stand-in video file and its meta.json.
+    private static func recording(in folder: URL) throws -> ScreencastCapture {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: 0))
+        try Data("made-up video".utf8).write(to: file)
+        let video = ScreencastVideo(file: file, mixdown: nil, pixelWidth: 64, pixelHeight: 36, audioTracks: [], duration: 1)
+        let capture = ScreencastCapture(folder: folder, videos: [video], duration: 1, endedEarly: nil)
+        try ScreencastMetadata(capture: capture, target: .display(1), startedAt: Date(timeIntervalSince1970: 1_791_000_000)).write(to: capture.metadataURL)
+        return capture
     }
 
     /// Lets the main actor run until `condition` holds, for two seconds at most.

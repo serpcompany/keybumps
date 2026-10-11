@@ -28,8 +28,6 @@ struct UITestLaunchConfiguration: Equatable {
     enum ScreencastReviewCapture: String, Equatable {
         /// A short silent video.
         case video
-        /// A PNG.
-        case screenshot
     }
 
     /// The fixed license state a UI test starts in (`active` unless `-KBLicenseState` says otherwise).

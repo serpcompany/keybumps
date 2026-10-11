@@ -8,9 +8,8 @@ import SwiftUI
 ///
 /// The flow that finishes captures makes one, calls `show` with each capture and the context read
 /// when it started, and hears how each ended through `onFinish`. Captures take turns: one that
-/// arrives while another is under review closes that one first, which saves it, unless the
-/// Screenshot Editor is open on it, which the person finishes first. After `shutDown()`, a capture
-/// still waiting is saved without showing.
+/// arrives while another is under review closes that one first, which saves it. After
+/// `shutDown()`, a capture still waiting is saved without showing.
 @MainActor
 final class ScreencastReviewPanel {
     let panel = ScreencastReviewWindow()
@@ -22,14 +21,9 @@ final class ScreencastReviewPanel {
     private let fileManager: FileManager
     private let pasteboard: NSPasteboard
     private let keepOutOfClipboardHistory: () -> Void
-    private let editor: @MainActor () -> (any ScreencastScreenshotEditing)?
     private let trimmer: any ScreencastTrimming
-    private let screenshots: @MainActor () -> (any ScreencastScreenshotsLibrary)?
-    private let settings: ScreencastReviewSettings
     private let screen: @MainActor () -> NSScreen?
     private let ordersPanelIn: Bool
-    private let takeKeyboard: @MainActor (NSPanel) -> Void
-    private var activationObserver: NSObjectProtocol?
     private var playback: ScreencastReviewPlayback?
     private var keyMonitor: Any?
     /// The last capture's turn, which the next one waits for.
@@ -40,38 +34,24 @@ final class ScreencastReviewPanel {
     /// - Parameters:
     ///   - keepOutOfClipboardHistory: Marks Copy's write so Clipboard History skips it; the app
     ///     passes `ClipboardHistoryService.suppressCurrentChange`.
-    ///   - editor: Screenshot Tools' editor for a screenshot's Edit while it's on, or nil to offer
-    ///     none; read for each capture.
-    ///   - screenshots: Clipboard History while it's on, for "Also add to Screenshots (⌘3)"; read
-    ///     for each capture.
-    ///   - settings: Where the panel remembers that switch; tests pass `InMemoryDefaults`.
     ///   - screen: Where the panel shows: the screen with the pointer.
     ///   - ordersPanelIn: False keeps the panel off screen, as under the unit-test host.
-    ///   - takeKeyboard: Makes the panel key again after the Screenshot Editor; tests record it.
     init(
         repositories: ScreencastRepositoryMemory,
         fileManager: FileManager = .default,
         pasteboard: NSPasteboard = .keybumps,
         keepOutOfClipboardHistory: @escaping () -> Void,
-        editor: @escaping @MainActor () -> (any ScreencastScreenshotEditing)? = { nil },
         trimmer: any ScreencastTrimming = ScreencastFileTrimmer(),
-        screenshots: @escaping @MainActor () -> (any ScreencastScreenshotsLibrary)?,
-        settings: ScreencastReviewSettings,
         screen: @escaping @MainActor () -> NSScreen? = ScreencastReviewPanel.screenWithPointer,
-        ordersPanelIn: Bool = !UnitTestHost.isActive,
-        takeKeyboard: @escaping @MainActor (NSPanel) -> Void = ScreencastReviewPanel.makeKeyIfShown
+        ordersPanelIn: Bool = !UnitTestHost.isActive
     ) {
         self.repositories = repositories
         self.fileManager = fileManager
         self.pasteboard = pasteboard
         self.keepOutOfClipboardHistory = keepOutOfClipboardHistory
-        self.editor = editor
         self.trimmer = trimmer
-        self.screenshots = screenshots
-        self.settings = settings
         self.screen = screen
         self.ordersPanelIn = ordersPanelIn
-        self.takeKeyboard = takeKeyboard
     }
 
     var isShown: Bool { model != nil }
@@ -93,8 +73,8 @@ final class ScreencastReviewPanel {
         await current.value
     }
 
-    /// Screencast turned off: the capture under review is saved and the panel closes. An editor open
-    /// on it stays open with its markup. Captures still waiting are saved without showing.
+    /// Screencast turned off: the capture under review is saved and the panel closes. Captures still
+    /// waiting are saved without showing.
     func shutDown() {
         isAccepting = false
         guard let model else { return }
@@ -117,12 +97,8 @@ final class ScreencastReviewPanel {
         context: ScreencastCaptureContext,
         contextRead: Task<ScreencastCaptureContext, Never>?
     ) async {
-        while let shown = model {
-            if shown.isEditing {
-                await shown.waitUntilFinished()
-            } else {
-                await close()
-            }
+        while model != nil {
+            await close()
         }
         let model = makeModel(input, context: context, contextRead: contextRead)
         guard isAccepting else {
@@ -145,26 +121,18 @@ final class ScreencastReviewPanel {
             fileManager: fileManager,
             pasteboard: pasteboard,
             keepOutOfClipboardHistory: keepOutOfClipboardHistory,
-            editor: editor(),
-            trimmer: trimmer,
-            screenshots: screenshots(),
-            settings: settings
+            trimmer: trimmer
         )
     }
 
     private func install(_ model: ScreencastReviewModel) {
-        let input = model.input
         model.onFinish = { [weak self, weak model] outcome in
             guard let self, let model, self.model === model else { return }
             self.dismiss()
             self.onFinish?(outcome)
         }
-        model.onEditorFinished = { [weak self, weak model] in
-            guard let self, let model, self.model === model else { return }
-            self.returnKeyboard()
-        }
         self.model = model
-        let playback = input.isVideo && ordersPanelIn ? ScreencastReviewPlayback() : nil
+        let playback = ordersPanelIn ? ScreencastReviewPlayback() : nil
         self.playback = playback
         let host = ScreencastReviewHostingView(rootView: ScreencastReviewView(model: model, playback: playback))
         panel.contentView = host
@@ -177,7 +145,7 @@ final class ScreencastReviewPanel {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    /// Closes the panel without a choice, which saves the capture. An editor open on it stays open.
+    /// Closes the panel without a choice, which saves the capture.
     func close() async {
         guard let model else { return }
         await model.close()
@@ -185,41 +153,7 @@ final class ScreencastReviewPanel {
         if self.model === model { dismiss() }
     }
 
-    /// The editor closed with the panel still open: the panel takes the keyboard back, so Return
-    /// saves here rather than reaching the app the editor gave the front back to. That app's
-    /// activation can land a moment later and take the keyboard, so the panel takes it again then,
-    /// once, within a second. It's a non-activating panel's key focus, as when the panel first shows,
-    /// so Keybumps doesn't come to the front.
-    private func returnKeyboard() {
-        takeKeyboard(panel)
-        removeActivationObserver()
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let review = self else { return }
-                review.removeActivationObserver()
-                if review.model != nil { review.takeKeyboard(review.panel) }
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            MainActor.assumeIsolated { self?.removeActivationObserver() }
-        }
-    }
-
-    private func removeActivationObserver() {
-        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
-        activationObserver = nil
-    }
-
-    /// The app's way to take the keyboard back: only for a panel on screen.
-    static func makeKeyIfShown(_ panel: NSPanel) {
-        guard panel.isVisible else { return }
-        panel.makeKey()
-    }
-
     private func dismiss() {
-        removeActivationObserver()
         removeKeyMonitor()
         playback?.stop()
         playback = nil
@@ -268,7 +202,6 @@ final class ScreencastReviewPanel {
             isTrimming: model.isTrimming,
             isComposing: isComposing,
             isConfirmingDiscard: model.isConfirmingDiscard,
-            isEditing: model.isEditing,
             isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: event.keyCode, modifiers: event.modifierFlags)
         ) {
         case .pass: return event
@@ -288,8 +221,7 @@ final class ScreencastReviewPanel {
 
 /// What a key does in the review panel. Return saves and Escape closes, which saves too; while the
 /// discard question is up, Escape keeps the capture and Return does nothing, so a key never
-/// deletes. While the Screenshot Editor is open on the screenshot, neither does anything, so its
-/// markup is never thrown away. The player's trim controls and a text field still composing (an
+/// deletes. The player's trim controls and a text field still composing (an
 /// input method's marked text) keep their keys, and a key claimed in Keybumps's own windows
 /// (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what claims it.
 enum ScreencastReviewKey: Equatable {
@@ -310,12 +242,10 @@ enum ScreencastReviewKey: Equatable {
         isTrimming: Bool,
         isComposing: Bool,
         isConfirmingDiscard: Bool,
-        isEditing: Bool = false,
         isClaimed: Bool = false
     ) -> ScreencastReviewKey {
         guard !isClaimed, !isTrimming, !isComposing,
               modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
-        if isEditing, keyCode == escapeKeyCode || returnKeyCodes.contains(keyCode) { return .ignore }
         if keyCode == escapeKeyCode { return isConfirmingDiscard ? .keep : .close }
         if returnKeyCodes.contains(keyCode) { return isConfirmingDiscard ? .ignore : .save }
         return .pass

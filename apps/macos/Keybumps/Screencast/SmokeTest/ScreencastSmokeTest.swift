@@ -9,9 +9,8 @@ import Foundation
 ///
 /// It records 2 seconds each of the main display, the blank window the script shows from a helper
 /// process (`windowProcessOption`), and an area in the middle of the main display, with no sound,
-/// shortcuts, or click highlights, and takes a screenshot of each (`ScreencastSmokeRunner`);
-/// checks each file, deletes it, writes a structural result to `resultURL()`, and exits 0 when
-/// everything passed.
+/// shortcuts, or click highlights (`ScreencastSmokeRunner`); checks each file, deletes it, writes a
+/// structural result to `resultURL()`, and exits 0 when everything passed.
 /// Nothing of the person's is composed: no `AppModel`, shortcuts, menu bar item, or updater. It
 /// needs Screen Recording already granted and never asks for it.
 /// `apps/macos/scripts/smoke-screencast.sh` runs it on the installed candidate.
@@ -19,7 +18,7 @@ import Foundation
 enum ScreencastSmokeTest {
     nonisolated static let launchOption = "KBScreencastSmokeTest"
     /// The process ID of the script's helper, whose blank window is the only one the window
-    /// captures may take.
+    /// capture may take.
     nonisolated static let windowProcessOption = "KBScreencastSmokeWindowPID"
     /// Its own defaults, so the area it draws and the mode and screen it picks never replace the
     /// person's last ones. Emptied before and after it runs.

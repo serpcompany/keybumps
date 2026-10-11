@@ -41,17 +41,20 @@ extension PluginAction {
     static let startScreencast = PluginAction(
         id: "startScreencast",
         title: "Start Screencast",
-        keywords: ["record", "recording", "screen recording", "capture", "video", "screenshot"],
+        keywords: ["record", "recording", "screen recording", "capture", "video"],
         systemImage: "record.circle",
         shortcut: .screencast
     )
 }
 
-/// What a composition gives Screencast in place of the screen, its windows, the countdown's clock,
-/// and the app in front: the UI-test composition's made-up screens and inert recorder, or unit
-/// tests' fakes. Anything left nil is the app's own, which is inert under the unit-test host.
+/// What a composition gives Screencast in place of the screen, its windows, the files a recording
+/// writes, the countdown's clock, and the app in front: the UI-test composition's made-up screens
+/// and inert recorder, or unit tests' fakes. Anything left nil is the app's own, which is inert
+/// under the unit-test host.
 struct ScreencastSeams {
     var captureSystem: (any ScreencastCaptureSystem)?
+    /// Writes each recording's movie files and its mixdown.
+    var writers: (any ScreencastWriterFactory)?
     var pickerSystem: (any ScreencastPickerSystem)?
     var presenter: (any ScreencastOverlayPresenting)?
     var screens: (@MainActor () -> ScreencastScreenLayout)?
@@ -64,6 +67,7 @@ struct ScreencastSeams {
 
     init(
         captureSystem: (any ScreencastCaptureSystem)? = nil,
+        writers: (any ScreencastWriterFactory)? = nil,
         pickerSystem: (any ScreencastPickerSystem)? = nil,
         presenter: (any ScreencastOverlayPresenting)? = nil,
         screens: (@MainActor () -> ScreencastScreenLayout)? = nil,
@@ -72,6 +76,7 @@ struct ScreencastSeams {
         contextReader: ScreencastCaptureContextReader? = nil
     ) {
         self.captureSystem = captureSystem
+        self.writers = writers
         self.pickerSystem = pickerSystem
         self.presenter = presenter
         self.screens = screens
@@ -158,12 +163,12 @@ final class ScreencastModule: CapabilityModule {
     }
 
     /// Turned off, or Keybumps Locked: the picker closes and a countdown is cancelled, but a
-    /// recording stops and is kept, and a screenshot being saved finishes. Neither opens anything;
-    /// they stay in the captures folder (`ScreencastController.shutDown`).
+    /// recording stops and is kept. It opens nothing; it stays in the captures folder
+    /// (`ScreencastController.shutDown`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
-        // The capture under review is saved, and an editor open on it stays open.
+        // The capture under review is saved.
         review.close()
         guard #available(macOS 15, *), let controller else { return }
         Task { await controller.shutDown() }
@@ -217,6 +222,7 @@ final class ScreencastModule: CapabilityModule {
         let preferences = preferences
         let recorder = ScreencastRecorder(
             system: seams.captureSystem,
+            writers: seams.writers ?? AVAssetScreencastWriterFactory(),
             // The recorder asks on the main actor, as a recording starts. Asked anywhere else, it
             // reads macOS's answer directly rather than trapping.
             microphoneGranted: {
