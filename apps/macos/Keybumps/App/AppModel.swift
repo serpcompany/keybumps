@@ -364,7 +364,11 @@ final class AppModel {
                 speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
-            KeystrokesModule(display: keyDisplay),
+            KeystrokesModule(
+                display: keyDisplay,
+                preferences: preferences,
+                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes)
+            ),
             // Settings never opens under unit tests.
             ScreencastModule(
                 preferences: preferences,
@@ -384,14 +388,15 @@ final class AppModel {
         keyDisplay.paletteKeyNames = { [commandPalette] in
             commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
         }
-        // A screenshot never shows the keys that took it: macOS's shortcuts, and Screenshot Tools'
-        // hotkeys as they're set now, which also clear the display just before they capture.
-        keyDisplay.isScreenshotShortcut = { [preferences] press in
-            KeystrokeFilter.isScreenshotShortcut(
-                press,
-                keybumps: ScreenshotToolsModule.captureShortcuts.compactMap { preferences.capabilityShortcut(for: $0.shortcut) }
-            )
+        // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
+        // only), and Screenshot Tools' hotkeys while they're registered, which also clear it just
+        // before they capture.
+        keyDisplay.keybumpsScreenshotBindings = { [shortcuts] in
+            let registered = shortcuts.registeredBindings
+            return ScreenshotToolsModule.captureShortcuts.compactMap { registered[$0.shortcut.ownerID] }
         }
+        keyDisplay.symbolicHotKeys = { [symbolicHotKeys] in try? symbolicHotKeys.readSymbolicHotKeys() }
+        screenshotModule.systemShortcuts.didChange = { [keyDisplay] in keyDisplay.systemScreenshotShortcutsDidChange() }
         screenshotModule.willCapture = { [keyDisplay] in keyDisplay.pauseForScreenshot() }
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
@@ -558,7 +563,11 @@ final class AppModel {
             if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
             if capability == .dictation { dismissDictationSetupCards() }
         }
+        let wasOn = preferences.enabledCapabilities.contains(capability)
         preferences.setCapability(capability, enabled: enabled)
+        if !wasOn, preferences.enabledCapabilities.contains(capability) {
+            capabilities.willTurnOn(capability, context: capabilityContext)
+        }
         applyCapabilities()
         CrashReporter.recordPlugins(preferences.enabledCapabilities)
     }

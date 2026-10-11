@@ -192,11 +192,11 @@ Translation's My language and Other language, never the same: text in my languag
 _Avoid_: Source and target (one translation's languages), target language setting
 
 **Keystrokes**:
-Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut clears it. Its Show & Hide Keystrokes shortcut hides the keys until it's pressed again.
-_Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
+Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut macOS or Keybumps knows clears it. Its keys are **shown** or **hidden** apart from turning it on or off, and that acts on what's on screen now: hiding takes every key on screen away, a recording's included until that recording ends, and showing brings them back, a recording's in its own look. They stay hidden after a relaunch, and turning the plugin on shows them. Show keystrokes in its settings, Show Keystrokes (checked while shown) in the menu bar menu, and the Show & Hide Keystrokes shortcut all switch it; the shortcut's notice says Keystrokes shown or Keystrokes hidden, or why the keys can't show.
+_Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay; showing keystrokes or keys on screen (say shown)
 
 **Key display**:
-The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and while a recording holds it, shows on its screens, inside the area or window it records, with its clicks setting. It's never in a screenshot. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and while a recording holds it, shows on its screens, inside the area or window it records, with its clicks setting. Hiding Keystrokes hides every holder's keys; a recording that starts later shows its own. Pressing a screenshot shortcut macOS or Keybumps knows clears it at once. A keystroke stays in memory only while it's on screen, and is never logged or stored.
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Screencast**:
