@@ -155,9 +155,10 @@ extension AppPreferences {
 /// a press hides them all, a recording's for the rest of it, and remembers Hidden; while none do,
 /// it shows them all, a recording's in its own look, and remembers Shown. Keys count as on screen
 /// only while the keyboard tap listens (`KeyDisplay.isOnScreen`): without Input Monitoring none
-/// are, so every press shows them and the shortcut says why they can't. The item is checked while
-/// keys are on screen, and redraws as a recording starts or ends and as the tap starts or stops
-/// (`KeyDisplay.onShowingChange`).
+/// are, so every press shows them, the shortcut and Quick Search say why they can't, and Quick
+/// Search opens Keystrokes' page. The item is checked, and Quick Search's action is named Hide
+/// Keystrokes, while keys are on screen; the item redraws as a recording starts or ends and as the
+/// tap starts or stops (`KeyDisplay.onShowingChange`).
 /// They go through `setShowing`. Settings' switch writes the preference through
 /// `AppModel.setPluginPreference`, which applies the capabilities again. Both reach `update`, which
 /// shows or hides every holder's keys when the preference changed. The display belongs to the
@@ -255,21 +256,20 @@ final class KeystrokesModule: CapabilityModule {
         return context.permissionReadiness([capability]).missingCount
     }
 
+    /// Named for what `toggleShowing` will do: Hide Keystrokes while keys are on screen, the
+    /// plugin's or a recording's, else Show Keystrokes.
     func title(for action: PluginAction, _ context: CapabilityContext) -> String? {
         guard action == .toggleKeystrokes else { return nil }
-        return isShowing ? "Hide Keystrokes" : "Show Keystrokes"
+        return display.isOnScreen ? "Hide Keystrokes" : "Show Keystrokes"
     }
 
-    /// Quick Search's Show or Hide Keystrokes does what the shortcut does, with its notch notice.
-    /// Without Input Monitoring no keys could show, so Show Keystrokes opens Keystrokes' page,
-    /// which asks for it, as Start Screencast opens Screencast's.
+    /// Quick Search's Show or Hide Keystrokes does what the shortcut does (`toggleShowing`), with
+    /// its notch notice. Keys it shows without Input Monitoring can't appear, as the notice says,
+    /// so it also opens Keystrokes' page, which asks for it.
     func perform(_ action: PluginAction, _ context: CapabilityContext) {
         guard action == .toggleKeystrokes else { return }
-        if !isShowing, context.permissionReadiness([capability]).missingCount > 0 {
-            openSettings(.keystrokes)
-            return
-        }
         toggleShowing(announces: true)
+        if isOn, isShowing, !display.isListening { openSettings(.keystrokes) }
     }
 
     /// Holds the display while the plugin is on, its keys hidden while they are, and lists Show
