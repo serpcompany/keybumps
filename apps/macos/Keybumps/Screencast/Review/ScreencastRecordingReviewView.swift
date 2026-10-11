@@ -40,8 +40,9 @@ struct ScreencastRecordingReviewView: View {
 }
 
 /// A part of a recording's window's toolbar: Discard on the left, or "Discard this capture?" with
-/// Keep and Discard in its place; the display picker in the middle, for a recording of every
-/// display; and Copy and Save on the right, Save the primary one. Nothing until a review shows.
+/// Keep and Discard in its place; the window's title in the middle, with the display picker for a
+/// recording of every display; and Copy and Save on the right, Save the primary one. Nothing until a
+/// review shows.
 struct ScreencastRecordingReviewToolbar: View {
     enum Part {
         case leading
@@ -56,7 +57,7 @@ struct ScreencastRecordingReviewToolbar: View {
         if let model {
             switch part {
             case .leading: discard(model)
-            case .middle: ScreencastReviewDisplayPicker(model: model)
+            case .middle: title(model)
             case .trailing: actions(model)
             }
         }
@@ -86,6 +87,19 @@ struct ScreencastRecordingReviewToolbar: View {
                 .disabled(!model.acceptsActions)
                 .help("Delete this capture")
                 .accessibilityIdentifier(ScreencastReviewID.discard)
+        }
+    }
+
+    /// The window hides its own title, which would push the actions together (macOS lets a shown
+    /// title take the flexible spaces' room), so it's here.
+    private func title(_ model: ScreencastReviewModel) -> some View {
+        HStack(spacing: 10) {
+            Text("Recording")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .accessibilityAddTraits(.isHeader)
+            ScreencastReviewDisplayPicker(model: model)
         }
     }
 

@@ -55,6 +55,9 @@ final class ScreencastRecordingReviewWindow: NSWindow, NSToolbarDelegate {
         toolbar.allowsUserCustomization = false
         self.toolbar = toolbar
         toolbarStyle = .unifiedCompact
+        // A title shown in a unified toolbar takes the room the flexible spaces would, which pushes
+        // Discard over to Copy and Save. The toolbar's middle shows it instead.
+        titleVisibility = .hidden
     }
 
     override var canBecomeKey: Bool { !UnitTestHost.isActive }
@@ -65,7 +68,7 @@ final class ScreencastRecordingReviewWindow: NSWindow, NSToolbarDelegate {
         onClose()
     }
 
-    /// Puts `model`'s Discard, display picker, Copy, and Save in the toolbar.
+    /// Puts `model`'s Discard, title and display picker, Copy, and Save in the toolbar.
     func showActions(for model: ScreencastReviewModel) {
         leadingPart.rootView = ScreencastRecordingReviewToolbar(model: model, part: .leading)
         middlePart.rootView = ScreencastRecordingReviewToolbar(model: model, part: .middle)
@@ -88,7 +91,8 @@ final class ScreencastRecordingReviewWindow: NSWindow, NSToolbarDelegate {
 
     // MARK: The toolbar
 
-    /// Discard on the left, the display picker in the middle, Copy and Save on the right.
+    /// Discard on the left, the title (and the display picker) in the middle, Copy and Save on the
+    /// right.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [Self.leadingItem, .flexibleSpace, Self.middleItem, .flexibleSpace, Self.trailingItem]
     }

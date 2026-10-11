@@ -98,7 +98,7 @@ struct ScreencastRecordingReviewTests {
         let window = ScreencastRecordingReviewWindow()
         #expect(window.styleMask.isSuperset(of: [.titled, .closable, .miniaturizable, .resizable]))
         #expect(!window.styleMask.contains(.nonactivatingPanel) && !window.styleMask.contains(.fullScreen))
-        #expect(window.title == "Recording")
+        #expect(window.title == "Recording" && window.titleVisibility == .hidden, "the toolbar shows it, in its middle")
         #expect(window.toolbar != nil && window.toolbarStyle == .unifiedCompact)
         #expect(window.level == .normal && window.collectionBehavior.isSuperset(of: [.managed, .participatesInCycle]))
         #expect(window.collectionBehavior.contains(.fullScreenAuxiliary), "it opens over a full-screen app, as the panel did")
@@ -109,7 +109,7 @@ struct ScreencastRecordingReviewTests {
         #expect(!window.canBecomeKey && !window.canBecomeMain && !window.isReleasedWhenClosed)
     }
 
-    @Test("Discard is on the toolbar's left, the display picker in its middle, and Copy and Save on its right; nothing else is around the player")
+    @Test("Discard is on the toolbar's left, the title and display picker in its middle, and Copy and Save on its right; nothing else is around the player")
     func toolbarHoldsTheActions() async throws {
         defer { fixture.tearDown() }
         let panel = panel(outcomes: ReviewOutcomeLog())
@@ -125,6 +125,21 @@ struct ScreencastRecordingReviewTests {
         #expect(parts.map(\.part) == [.leading, .middle, .trailing])
         #expect(parts.allSatisfy { $0.model === panel.model }, "they act on the review's model")
         #expect(window.contentView is NSHostingView<ScreencastRecordingReviewView>, "the content is the player alone")
+
+        // Laid out off screen at a CI screen's size: the parts sit where the owner put them, not
+        // pushed together by a shown title.
+        window.setFrame(CGRect(x: 16, y: 16, width: 992, height: 700), display: false)
+        for _ in 0..<3 {
+            window.contentView?.superview?.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let frames = toolbar.items.filter { $0.view is NSHostingView<ScreencastRecordingReviewToolbar> }
+            .compactMap { item in item.view.map { $0.convert($0.bounds, to: nil) } }
+        try #require(frames.count == 3)
+        let middle = window.frame.width / 2
+        #expect(frames[0].width > 0 && frames[0].maxX < middle / 2, "Discard on the left")
+        #expect(frames[1].minX < middle && frames[1].maxX > middle, "the title and picker in the middle")
+        #expect(frames[2].width > 0 && frames[2].minX > middle * 1.5, "Copy and Save on the right")
         await panel.close()
     }
 
