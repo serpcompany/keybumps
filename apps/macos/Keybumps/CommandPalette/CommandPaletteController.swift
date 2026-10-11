@@ -574,6 +574,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// Whether the palette is on screen, on any tab.
     var isVisible: Bool { panel?.isVisible == true }
 
+    /// Whether the palette has key focus, so the keys typed go to it.
+    var isKey: Bool { panel?.isKeyWindow == true }
+
     func isDisplaying(_ tab: CommandPaletteTab) -> Bool {
         panel?.isVisible == true && state.tab == tab
     }

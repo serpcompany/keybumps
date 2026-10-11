@@ -67,6 +67,10 @@ targets:
         buildPhase: resources
       - path: LICENSE.whisper-cpp
         buildPhase: resources
+      - path: LICENSE.keycastr
+        buildPhase: resources
+      - path: LICENSE.snapzy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps

@@ -231,6 +231,12 @@ enum KeyboardShortcutRegistry {
         return CanonicalKeyboardShortcut(modifiers: modifiers, primaryKey: printable)
     }
 
+    /// The special key a virtual key code is, such as ↩ for Return or F5, or nil for a key that
+    /// types a character. The key display names keys with it (`KeystrokeNaming`).
+    static func specialKey(forVirtualKey virtualKey: Int) -> KeyboardShortcutKey? {
+        definitions.first { $0.virtualKeys.contains(virtualKey) }?.key
+    }
+
     static func keycapTokens(for displayString: String) -> [String] {
         resolve(displayString: displayString)?.keycapTokens ?? []
     }

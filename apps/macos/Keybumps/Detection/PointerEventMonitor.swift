@@ -70,3 +70,12 @@ final class PointerEventMonitor: PointerEventMonitoring {
         eventTap = nil
     }
 }
+
+/// Never listens: the UI-test composition, and the key display under unit tests. `start()` reports
+/// success, so a detector built on it reads as monitoring.
+final class InertPointerEventMonitor: PointerEventMonitoring {
+    var onSample: ((PointerSample) -> Void)?
+    var onTapRecovered: (() -> Void)?
+    func start() -> Bool { true }
+    func stop() {}
+}

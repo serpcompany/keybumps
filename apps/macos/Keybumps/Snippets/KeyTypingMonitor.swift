@@ -20,9 +20,11 @@ extension KeyTypingMonitoring {
 /// delay or change what the user types, and it needs Input Monitoring. The callback only reads the
 /// key's code, characters, and flags and hands them on: it never logs them, and nothing slow runs
 /// on that path. A key that arrives late (Keybumps was busy) counts as a reset, since more typing
-/// may already have landed after it.
-final class KeyTypingMonitor: KeyTypingMonitoring {
+/// may already have landed after it. The key display hears through one of its own, as every key
+/// that goes down (`onPress`, `KeyPressMonitoring`), late or not.
+final class KeyTypingMonitor: KeyTypingMonitoring, KeyPressMonitoring {
     var onKey: ((TypedKey) -> Void)?
+    var onPress: ((KeyPress) -> Void)?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     /// When the last key handed on went down, in system uptime.
@@ -49,6 +51,7 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
                 if let tap = monitor.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
                 monitor.onKey?(.reset)
             case .keyDown:
+                monitor.onPress?(KeyPress(event: event))
                 let sent = KeyTypingMonitor.uptime(of: event)
                 let isLate = sent.map { KeyTypingMonitor.isLate(eventUptime: $0, now: ProcessInfo.processInfo.systemUptime) } ?? false
                 monitor.lastKeyUptime = sent
@@ -116,8 +119,9 @@ final class KeyTypingMonitor: KeyTypingMonitoring {
 }
 
 /// Never listens: unit tests and the UI-test composition.
-final class InertKeyTypingMonitor: KeyTypingMonitoring {
+final class InertKeyTypingMonitor: KeyTypingMonitoring, KeyPressMonitoring {
     var onKey: ((TypedKey) -> Void)?
+    var onPress: ((KeyPress) -> Void)?
     func start() -> Bool { false }
     func stop() {}
 }
