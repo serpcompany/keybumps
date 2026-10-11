@@ -24,6 +24,25 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
     /// How many of Keybumps's window numbers the last read left out, so a count is logged once.
     private var loggedDroppedWindowNumbers = 0
+    /// Whether Keybumps has Screen Recording access, without asking for it; without it,
+    /// `CGWindowList` reads no other app's window names.
+    private let screenCaptureAccess: () -> Bool
+    /// The last answer, and when (host seconds): asking took about 8 ms where measured, too long
+    /// for every watch read, many times a second.
+    private var accessAnswer: (granted: Bool, at: Double)?
+
+    init(screenCaptureAccess: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() }) {
+        self.screenCaptureAccess = screenCaptureAccess
+    }
+
+    /// Whether window names can be read: Screen Recording access, asked at most once a second.
+    private func canReadNames() -> Bool {
+        let now = CACurrentMediaTime()
+        if let answer = accessAnswer, now - answer.at >= 0, now - answer.at < 1 { return answer.granted }
+        let granted = screenCaptureAccess()
+        accessAnswer = (granted, now)
+        return granted
+    }
 
     func content() async throws -> ScreencastContent {
         // Every window, not just those on screen, so Keybumps is listed as an app (and can be
@@ -34,7 +53,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(!includesDesktop, onScreenWindowsOnly: onScreenOnly)
-            return Self.snapshot(of: content)
+            return Self.snapshot(of: content, canReadNames: canReadNames())
         } catch {
             throw Self.failure(for: error)
         }
@@ -118,7 +137,8 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         let owners = list.map { $0[kCGWindowOwnerPID as String] as? pid_t }
         let untitled = Self.untitled(
             zip(owners, list).map { (processID: $0, name: $1[kCGWindowName as String] as? String) },
-            ownProcessID: ProcessInfo.processInfo.processIdentifier
+            ownProcessID: ProcessInfo.processInfo.processIdentifier,
+            canReadNames: canReadNames()
         )
         var windows = Set<ScreencastWatchedWindow>()
         for (index, info) in list.enumerated() where owners[index] == processID {
@@ -159,19 +179,21 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     }
 
     /// Whether each window of one read is untitled, from its title (`SCWindow.title`) or name
-    /// (`kCGWindowName`): one rule for both reads, so the watch and the filter agree. A read in
-    /// which no window but Keybumps's (`ownProcessID`, whose names are always readable) has a name
-    /// couldn't read names at all, as `CGWindowList` can't without Screen Recording access: every
-    /// window in it then counts as titled, so none is taken for UI attached to the recorded window.
-    static func untitled(_ windows: [(processID: pid_t?, name: String?)], ownProcessID: pid_t) -> [Bool] {
-        let namesReadable = windows.contains { $0.processID != ownProcessID && !isUntitled($0.name) }
+    /// (`kCGWindowName`): one rule for both reads, so the watch and the filter agree. Without
+    /// Screen Recording access (`canReadNames` false), `CGWindowList` reads no other app's names,
+    /// though the Window Server's own windows keep theirs: every window then counts as titled, so
+    /// none is taken for UI attached to the recorded window. So does every window of a read in which
+    /// none but Keybumps's (`ownProcessID`, whose names are always readable) has a name.
+    static func untitled(_ windows: [(processID: pid_t?, name: String?)], ownProcessID: pid_t, canReadNames: Bool) -> [Bool] {
+        let namesReadable = canReadNames && windows.contains { $0.processID != ownProcessID && !isUntitled($0.name) }
         return windows.map { namesReadable && isUntitled($0.name) }
     }
 
-    static func snapshot(of content: SCShareableContent) -> ScreencastContent {
+    static func snapshot(of content: SCShareableContent, canReadNames: Bool) -> ScreencastContent {
         let untitled = Self.untitled(
             content.windows.map { (processID: $0.owningApplication?.processID, name: $0.title) },
-            ownProcessID: ProcessInfo.processInfo.processIdentifier
+            ownProcessID: ProcessInfo.processInfo.processIdentifier,
+            canReadNames: canReadNames
         )
         return ScreencastContent(
             displays: content.displays.map { display in

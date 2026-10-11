@@ -366,9 +366,44 @@ struct ScreencastCaptureFilterTests {
         let content = Screens.content(windows: [away, sheet, Screens.drawingLayer])
         let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: content, watched: Screens.watched(content)))
         #expect(plan == .windows(1, includingWindows: [31, 60]))
-        // Not in the read at all: the same, on the display it was recorded on.
-        let alone = ScreencastCaptureFilter.windowAlone(window: 60, display: 2, ownProcessID: Screens.ownProcess, overlays: [31, 99], content: Screens.content(windows: [sheet, Screens.drawingLayer]))
-        #expect(alone == .windows(2, includingWindows: [31, 60]))
+        // Not in the read at all: no list from it, since one built from it couldn't name the window.
+        #expect(ScreencastCaptureFilter.windowPlan(window: 60, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content(windows: [sheet, Screens.drawingLayer]), watched: Screens.watched(content)) == nil)
+    }
+
+    @Test("A window recording's frames may show a list only when it names the window, on screen in its read and in the watch's, its read lists all it names, and it names nothing the rule leaves out")
+    func mayShow() {
+        let content = Screens.content()
+        let watched = Screens.watched(content)
+        let shown = ScreencastFilterPlan.windows(1, includingWindows: [10, 11, 13, 31])
+        func may(
+            _ plan: ScreencastFilterPlan,
+            content: ScreencastContent = content,
+            watched: Set<ScreencastWatchedWindow>? = watched,
+            overlays: Set<CGWindowID> = [31]
+        ) -> Bool {
+            ScreencastCaptureFilter.mayShow(plan, window: 10, ownProcessID: Screens.ownProcess, overlays: overlays, content: content, watched: watched)
+        }
+        func watchedWith(_ id: CGWindowID, isUntitled: Bool, layer: Int) -> Set<ScreencastWatchedWindow> {
+            Set(watched.filter { $0.id != id } + [ScreencastWatchedWindow(id: id, isUntitled: isUntitled, layer: layer)])
+        }
+        #expect(may(shown))
+        #expect(!may(.windows(1, includingWindows: [11, 13, 31])), "without the window")
+        #expect(!may(shown, content: Screens.content(windows: content.windows.filter { $0.id != 10 })),
+                "a read that doesn't list the window builds a list without it")
+        #expect(!may(shown, content: Screens.content(windows: content.windows.map { $0.id == 10 ? Screens.with($0, onScreen: false) : $0 })))
+        #expect(!may(shown, content: Screens.content(windows: content.windows.filter { $0.id != 11 })), "a read that lists less than the list names")
+        #expect(!may(shown, watched: Set(watched.filter { $0.id != 10 })), "out of the watch's sight")
+        #expect(!may(shown, watched: nil), "no watch read")
+        #expect(!may(.windows(1, includingWindows: [10, 12])), "a titled window of the app")
+        #expect(!may(shown, watched: watchedWith(11, isUntitled: false, layer: 0)), "the sheet, titled in the watch")
+        #expect(!may(shown, watched: watchedWith(13, isUntitled: true, layer: -1)), "the menu, below the windows in the watch")
+        #expect(!may(.windows(1, includingWindows: [10, 20])), "another app's window")
+        #expect(!may(.windows(1, includingWindows: [10, 30])), "Keybumps's control bar, not an overlay")
+        #expect(!may(shown, overlays: []), "an overlay since removed")
+        #expect(may(shown, watched: Set(watched.filter { $0.id != 13 })), "a menu that closed since shows nothing, and holds nothing back")
+        #expect(!may(.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])))
+        #expect(ScreencastCaptureFilter.namesExcluded(.windows(1, includingWindows: [10, 11]), window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content, watched: nil),
+                "with no watch read, every window but the recorded one counts")
     }
 
     @Test("Narrowing takes out what the watch no longer shows as attached UI, and never adds")
