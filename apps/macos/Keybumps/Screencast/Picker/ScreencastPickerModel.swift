@@ -193,12 +193,13 @@ final class ScreencastPickerModel {
     }
 
     /// What the next picker opens with (`ScreencastPickerMemory`). Never the window, and the screen
-    /// only from Screen mode, so a capture in another mode keeps the screen last chosen there.
+    /// only from Screen mode, so a capture in another mode keeps the screen last chosen there. A
+    /// screen macOS gives no UUID is remembered as none, so the next picker starts on the pointer's.
     var choicesToRemember: ScreencastPickerChoices {
         var choices = ScreencastPickerChoices(target: target, screen: rememberedScreen)
         if target == .screen {
             if let id = selectedScreen {
-                if let uuid = layout.screen(id)?.uuid { choices.screen = .display(uuid: uuid) }
+                choices.screen = layout.screen(id)?.uuid.map { .display(uuid: $0) }
             } else {
                 choices.screen = .all
             }
