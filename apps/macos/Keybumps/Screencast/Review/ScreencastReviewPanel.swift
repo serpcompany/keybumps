@@ -268,7 +268,8 @@ final class ScreencastReviewPanel {
             isTrimming: model.isTrimming,
             isComposing: isComposing,
             isConfirmingDiscard: model.isConfirmingDiscard,
-            isEditing: model.isEditing
+            isEditing: model.isEditing,
+            isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: event.keyCode, modifiers: event.modifierFlags)
         ) {
         case .pass: return event
         case .ignore: return nil
@@ -289,7 +290,8 @@ final class ScreencastReviewPanel {
 /// discard question is up, Escape keeps the capture and Return does nothing, so a key never
 /// deletes. While the Screenshot Editor is open on the screenshot, neither does anything, so its
 /// markup is never thrown away. The player's trim controls and a text field still composing (an
-/// input method's marked text) keep their keys.
+/// input method's marked text) keep their keys, and a key claimed in Keybumps's own windows
+/// (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what claims it.
 enum ScreencastReviewKey: Equatable {
     case save
     case close
@@ -308,9 +310,10 @@ enum ScreencastReviewKey: Equatable {
         isTrimming: Bool,
         isComposing: Bool,
         isConfirmingDiscard: Bool,
-        isEditing: Bool = false
+        isEditing: Bool = false,
+        isClaimed: Bool = false
     ) -> ScreencastReviewKey {
-        guard !isTrimming, !isComposing,
+        guard !isClaimed, !isTrimming, !isComposing,
               modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
         if isEditing, keyCode == escapeKeyCode || returnKeyCodes.contains(keyCode) { return .ignore }
         if keyCode == escapeKeyCode { return isConfirmingDiscard ? .keep : .close }

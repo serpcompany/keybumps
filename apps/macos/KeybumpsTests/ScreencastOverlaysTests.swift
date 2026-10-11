@@ -464,6 +464,39 @@ struct ScreencastOverlaysTests {
         overlays.hide()
     }
 
+    /// AppKit calls its local key monitors in no set order, so the drawing can't count on hearing
+    /// Escape before Settings' Escape closer does. On CI, with hot keys off, Settings' heard it
+    /// first: Settings closed and drawing stayed on. Settings leaves a claimed key to the drawing.
+    @Test("With its hot keys off, Escape in Settings stops drawing and leaves Settings open, whichever monitor hears it first")
+    func escapeInSettingsWhileDrawing() throws {
+        let ownKeys = OwnWindowKeyClaims(monitorsEvents: false)
+        let displays = displays
+        let overlays = ScreencastOverlays(displays: { displays.connected }, tickInterval: nil, ordersWindowsIn: false, ownKeys: ownKeys)
+        let settings = KeyWindowStandIn()
+        defer { settings.close() }
+        let escape = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: settings.windowNumber,
+            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false,
+            keyCode: UInt16(kVK_Escape)
+        ))
+        #expect(SettingsEscapePolicy.action(event: escape, window: settings, ownKeys: ownKeys) == .close, "Not drawing, Escape closes Settings")
+
+        overlays.show(on: [1])
+        overlays.startDrawing()
+        #expect(SettingsEscapePolicy.action(event: escape, window: settings, ownKeys: ownKeys) == nil, "Drawing, Settings leaves Escape alone")
+        let delete = UInt16(kVK_Delete), z = UInt16(kVK_ANSI_Z)
+        #expect(ownKeys.isClaimed(keyCode: delete, modifiers: []) && ownKeys.isClaimed(keyCode: z, modifiers: .command))
+        #expect(!ownKeys.isClaimed(keyCode: z, modifiers: []), "only the drawing keys")
+        drag(overlays)
+        #expect(ownKeys.take(keyCode: delete, modifiers: []) && overlays.drawing.isEmpty, "Delete clears")
+        #expect(ownKeys.take(keyCode: escape.keyCode, modifiers: escape.modifierFlags))
+        #expect(!overlays.isDrawing, "and Escape stops drawing")
+
+        #expect(!ownKeys.isClaimed(keyCode: escape.keyCode, modifiers: []), "Not drawing, nothing is claimed")
+        #expect(SettingsEscapePolicy.action(event: escape, window: settings, ownKeys: ownKeys) == .close, "and Escape closes Settings again")
+        overlays.hide()
+    }
+
     // MARK: The control bar
 
     @Test("The control bar's Draw button toggles drawing and follows Escape")
@@ -677,4 +710,15 @@ final class DrawingHotKeyBackend: GlobalHotKeyRegistering {
     func press(_ identifier: UInt32) {
         handler?(identifier)
     }
+}
+
+/// A window that says it has the keyboard, as Settings does when Escape is pressed in it, without
+/// being ordered in or made key.
+final class KeyWindowStandIn: NSWindow {
+    init() {
+        super.init(contentRect: CGRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        isReleasedWhenClosed = false
+    }
+
+    override var isKeyWindow: Bool { true }
 }
