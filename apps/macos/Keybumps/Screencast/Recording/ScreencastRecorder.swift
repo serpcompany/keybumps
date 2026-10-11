@@ -577,7 +577,7 @@ final class ScreencastRecorder {
     /// Queues `request` again after `delay`, while the recording goes on.
     private func retry(after delay: TimeInterval, in session: Session, _ request: @escaping (Session) -> Void) {
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(max(delay, 0) * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: ScreencastNumbers.nanoseconds(delay))
             guard let self, session === self.session, session.phase == .live else {
                 // The recording ended during the wait: nobody waits for a rebuild that won't come.
                 self?.resumeRebuildWaiters(of: session)
@@ -933,7 +933,7 @@ final class ScreencastRecorder {
         }
         endingEarly = nil
         state = endedEarly.map { .failed($0) } ?? .idle
-        logger.info("screencast stopped displays=\(videos.count, privacy: .public) duration_ms=\(Int(capture.duration * 1000), privacy: .public) ended_early=\(capture.endedEarly?.rawValue ?? "none", privacy: .public)")
+        logger.info("screencast stopped displays=\(videos.count, privacy: .public) duration_ms=\(ScreencastNumbers.int(capture.duration * 1000, in: 0...Int.max, fallback: 0), privacy: .public) ended_early=\(capture.endedEarly?.rawValue ?? "none", privacy: .public)")
         return capture
     }
 

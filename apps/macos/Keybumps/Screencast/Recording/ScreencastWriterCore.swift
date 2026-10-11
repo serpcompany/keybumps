@@ -73,7 +73,7 @@ final class ScreencastWriterCore {
     ///     up on it.
     init(sink: ScreencastMovieSink, framesPerSecond: Int, stallTimeout: TimeInterval = 2, onFailure: @escaping () -> Void) {
         self.sink = sink
-        frameDuration = CMTime(value: 1, timescale: CMTimeScale(max(framesPerSecond, 1)))
+        frameDuration = CMTime(value: 1, timescale: CMTimeScale(ScreencastNumbers.framesPerSecond(framesPerSecond)))
         self.stallTimeout = stallTimeout
         self.onFailure = onFailure
     }
@@ -114,8 +114,8 @@ final class ScreencastWriterCore {
     // MARK: Video
 
     func appendVideo(_ sample: CMSampleBuffer) {
-        guard isActive, checkHealth() else { return }
-        let host = sample.presentationTimeStamp.seconds
+        // A sample without a real timestamp can't be placed, and mustn't become t=0.
+        guard isActive, checkHealth(), let host = Self.host(of: sample) else { return }
         if !timeline.hasStarted {
             // Paused before the first frame arrived: t=0 waits for the resume.
             guard !timeline.isPaused(at: host) else { return }
@@ -142,7 +142,7 @@ final class ScreencastWriterCore {
     // MARK: Audio
 
     func appendAudio(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
-        guard isActive, sink.audioSources.contains(source), checkHealth(),
+        guard isActive, sink.audioSources.contains(source), checkHealth(), Self.host(of: sample) != nil,
               let sample = conformed(sample, from: source) else { return }
         enqueue(sample, from: source)
         // Before the first frame there's nowhere to put it yet; anything heard before t=0 is
@@ -203,9 +203,10 @@ final class ScreencastWriterCore {
     /// wasn't ready to take it all yet; true once it's written, or dropped because it was captured
     /// while paused or lies before what's written.
     private func place(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) -> Bool {
-        let host = sample.presentationTimeStamp.seconds
-        guard let format = CMSampleBufferGetFormatDescription(sample),
+        guard let host = Self.host(of: sample),
+              let format = CMSampleBufferGetFormatDescription(sample),
               let rate = ScreencastAudioBuffers.sampleRate(of: format),
+              let scale = ScreencastNumbers.timescale(forSampleRate: rate),
               // Captured while paused: not part of the recording.
               let start = timeline.time(at: host) else { return true }
         let frames = CMSampleBufferGetNumSamples(sample)
@@ -220,17 +221,18 @@ final class ScreencastWriterCore {
             }
             placement = caughtUp
         }
-        let trimFrames = Int((placement.trim * rate).rounded())
+        let trimFrames = ScreencastNumbers.int((placement.trim * rate).rounded(), in: 0...frames, fallback: frames)
         guard trimFrames < frames else { return true }
         let position = writtenAudio(for: source)
-        let time = CMTime(value: CMTimeValue((position * rate).rounded()), timescale: CMTimeScale(rate))
+        guard let value = ScreencastNumbers.timeValue(position, timescale: scale) else { return true }
+        let time = CMTime(value: value, timescale: scale)
         let kept: CMSampleBuffer?
         if switchedOff[source]?.contains(host) == true {
             kept = ScreencastAudioBuffers.silence(frames: frames - trimFrames, format: format, at: time)
         } else if trimFrames > 0 {
             kept = ScreencastAudioBuffers.dropping(frames: trimFrames, from: sample, at: time)
         } else {
-            kept = Self.copy(sample, at: time, duration: CMTime(value: 1, timescale: CMTimeScale(rate)))
+            kept = Self.copy(sample, at: time, duration: CMTime(value: 1, timescale: scale))
         }
         guard let kept else { return true }
         guard sink.isReady(for: .audio(source)) else { return false }
@@ -267,14 +269,17 @@ final class ScreencastWriterCore {
     /// of zeros. Stops where the input isn't ready; returns whether it wrote it all.
     @discardableResult
     private func writeSilence(_ seconds: Double, format: CMAudioFormatDescription, to source: ScreencastAudioSource) -> Bool {
-        guard let rate = ScreencastAudioBuffers.sampleRate(of: format) else { return true }
-        var remaining = Int((seconds * rate).rounded())
+        guard let rate = ScreencastAudioBuffers.sampleRate(of: format),
+              let scale = ScreencastNumbers.timescale(forSampleRate: rate) else { return true }
+        var remaining = ScreencastNumbers.int((seconds * rate).rounded(), in: 0...Int(Int32.max), fallback: 0)
         while remaining > 0 {
             guard sink.isReady(for: .audio(source)) else { return false }
-            let frames = min(remaining, Int(rate) * Self.silenceChunkSeconds)
+            let frames = min(remaining, Int(scale) * Self.silenceChunkSeconds)
             let position = writtenAudio(for: source)
-            let time = CMTime(value: CMTimeValue((position * rate).rounded()), timescale: CMTimeScale(rate))
-            guard let silence = ScreencastAudioBuffers.silence(frames: frames, format: format, at: time) else { return true }
+            guard let value = ScreencastNumbers.timeValue(position, timescale: scale),
+                  let silence = ScreencastAudioBuffers.silence(frames: frames, format: format, at: CMTime(value: value, timescale: scale)) else {
+                return true
+            }
             guard sink.append(silence, to: .audio(source)) else {
                 _ = checkHealth()
                 return true
@@ -331,6 +336,13 @@ final class ScreencastWriterCore {
         didReportFailure = true
         onFailure()
         return false
+    }
+
+    /// A sample's host-clock time in seconds, or nil when it has no real timestamp.
+    static func host(of sample: CMSampleBuffer) -> Double? {
+        let time = sample.presentationTimeStamp
+        guard time.isNumeric, time.seconds.isFinite else { return nil }
+        return time.seconds
     }
 
     static func copy(_ sample: CMSampleBuffer, at presentationTime: CMTime, duration: CMTime) -> CMSampleBuffer? {

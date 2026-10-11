@@ -121,7 +121,9 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     }
 
     func ownVisibleWindows() -> Set<CGWindowID> {
-        Set(NSApplication.shared.windows.filter { $0.isVisible && $0.windowNumber > 0 }.map { CGWindowID($0.windowNumber) })
+        // Each window's number read once: a window closing between two reads can change it, and
+        // one that doesn't fit a `CGWindowID` is left out rather than trapping (QA 4030.329.2).
+        ScreencastNumbers.windowIDs(NSApplication.shared.windows.compactMap { $0.isVisible ? $0.windowNumber : nil })
     }
 
     // MARK: Building ScreenCaptureKit objects
@@ -138,7 +140,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                 ScreencastContent.Display(
                     id: display.displayID,
                     frame: display.frame,
-                    scale: max(CGFloat(SCContentFilter(display: display, excludingWindows: []).pointPixelScale), 1)
+                    scale: Self.scale(SCContentFilter(display: display, excludingWindows: []).pointPixelScale)
                 )
             },
             windows: content.windows.compactMap { window in
@@ -175,12 +177,18 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         }
     }
 
+    /// Pixels per point: 1 to 8, and 1 for a scale that isn't a number.
+    static func scale(_ pointPixelScale: Float) -> CGFloat {
+        pointPixelScale.isFinite ? CGFloat(min(max(pointPixelScale, 1), 8)) : 1
+    }
+
     static func streamConfiguration(_ configuration: ScreencastStreamConfiguration) -> SCStreamConfiguration {
         let stream = SCStreamConfiguration()
         stream.width = configuration.pixelWidth
         stream.height = configuration.pixelHeight
         stream.sourceRect = configuration.sourceRect
-        stream.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(configuration.framesPerSecond, 1)))
+        // At most 120, so it always fits a `CMTimeScale`.
+        stream.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(ScreencastNumbers.framesPerSecond(configuration.framesPerSecond)))
         stream.queueDepth = queueDepth(pixelWidth: configuration.pixelWidth, pixelHeight: configuration.pixelHeight)
         stream.pixelFormat = kCVPixelFormatType_32BGRA
         // Frames come in sRGB, which the writer tags its files with.
@@ -200,8 +208,9 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     /// with at least four: the writer keeps its last frame for the end of the file, and the
     /// recorder the newest one for a restart, so two can be held while paused.
     static func queueDepth(pixelWidth: Int, pixelHeight: Int) -> Int {
-        let frameBytes = max(pixelWidth * pixelHeight * 4, 1)
-        return min(max(300_000_000 / frameBytes, 4), 6)
+        // In floating point, so no size can overflow.
+        let frameBytes = max(Double(pixelWidth) * Double(pixelHeight) * 4, 1)
+        return ScreencastNumbers.int(300_000_000 / frameBytes, in: 4...6, fallback: 4)
     }
 
     nonisolated static func failure(for error: Error) -> ScreencastFailure {

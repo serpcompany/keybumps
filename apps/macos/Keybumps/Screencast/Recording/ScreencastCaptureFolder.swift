@@ -4,7 +4,8 @@ import Foundation
 /// the start time in Unix seconds, with `-2`, `-3`, … when two start in the same second.
 enum ScreencastCaptureFolder {
     static func create(in capturesFolder: URL, startedAt: Date, fileManager: FileManager) throws -> URL {
-        let baseName = String(Int(startedAt.timeIntervalSince1970))
+        // A clock that isn't a real time names the folder 0 rather than trapping.
+        let baseName = String(ScreencastNumbers.int(startedAt.timeIntervalSince1970, in: 0...Int.max, fallback: 0))
         var name = baseName
         var suffix = 2
         while fileManager.fileExists(atPath: capturesFolder.appendingPathComponent(name).path) {

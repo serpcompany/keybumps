@@ -419,3 +419,78 @@ struct ScreencastMetadataTests {
         #expect(ScreencastCaptureFolder.mixdownName(index: 0) == "video-1-mixdown.mp4")
     }
 }
+
+// MARK: - Values from the real system
+
+/// What the real ScreenCaptureKit, AVFoundation, and window server can hand over that fakes never
+/// did: none of it may trap (QA 4030.329.2 crashed converting a window number).
+@Suite("Screencast: real-world values never trap")
+struct ScreencastRealValueTests {
+    @Test("Window numbers that are 0, negative, or too big for a CGWindowID are left out")
+    func windowNumbers() {
+        let numbers = [-1, 0, 5, Int(UInt32.max), Int(UInt32.max) + 1, Int.max]
+        #expect(ScreencastNumbers.windowIDs(numbers) == [5, UInt32.max])
+    }
+
+    @Test("Conversions take NaN, infinity, and values that don't fit")
+    func conversions() {
+        #expect(ScreencastNumbers.int(.nan, in: 0...10, fallback: 7) == 7)
+        #expect(ScreencastNumbers.int(.infinity, in: 0...10, fallback: 7) == 7)
+        #expect(ScreencastNumbers.int(1e30, in: 0...10, fallback: 7) == 10)
+        #expect(ScreencastNumbers.int(-3.5, in: 0...10, fallback: 7) == 0)
+        for rate in [Double.nan, .infinity, 0, 0.4, 1e12] {
+            #expect(ScreencastNumbers.timescale(forSampleRate: rate) == nil, "\(rate)")
+        }
+        #expect(ScreencastNumbers.timescale(forSampleRate: 44_100) == 44_100)
+        #expect(ScreencastNumbers.timeValue(.nan, timescale: 48_000) == nil)
+        #expect(ScreencastNumbers.timeValue(1e300, timescale: 48_000) == nil)
+        #expect(ScreencastNumbers.timeValue(2, timescale: 48_000) == 96_000)
+        #expect(ScreencastNumbers.nanoseconds(.nan) == 0 && ScreencastNumbers.nanoseconds(-1) == 0)
+        #expect(ScreencastNumbers.nanoseconds(.infinity) == 3_600_000_000_000)
+        #expect(ScreencastNumbers.framesPerSecond(0) == 1 && ScreencastNumbers.framesPerSecond(Int.max) == 120)
+    }
+
+    @Test("A rect, display, or scale that isn't finite gives a small frame, not a crash")
+    func geometry() {
+        let display = CGSize(width: 1512, height: 982)
+        let nan = ScreencastCaptureGeometry.area(CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100), displaySize: display, scale: 2)
+        #expect(nan.pixelWidth == 3024 && nan.pixelHeight == 1964, "the whole display")
+        let infinite = ScreencastCaptureGeometry.area(CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 100), displaySize: display, scale: 2)
+        #expect(infinite.pixelWidth == 3024)
+        let badDisplay = ScreencastCaptureGeometry.display(size: CGSize(width: CGFloat.nan, height: 900), scale: .nan)
+        #expect(badDisplay.pixelWidth == 2 && badDisplay.pixelHeight == 2)
+        let huge = ScreencastCaptureGeometry.display(size: CGSize(width: 1e9, height: 1e9), scale: 1e9)
+        #expect(huge.pixelWidth <= 16_384 && huge.pixelHeight <= 16_384)
+    }
+
+    @Test("A clock that isn't a real time names the capture folder 0")
+    func folderName() throws {
+        let folder = TemporaryCapturesFolder()
+        defer { folder.remove() }
+        let made = try ScreencastCaptureFolder.create(in: folder.url, startedAt: Date(timeIntervalSince1970: .nan), fileManager: .default)
+        #expect(made.lastPathComponent == "0")
+    }
+
+    @Test("Encoding sizes and frame rates can't overflow")
+    func encoding() {
+        #expect(ScreencastVideoFormat.bitRate(pixelWidth: Int.max, pixelHeight: Int.max, framesPerSecond: Int.max, hevc: true) == 40_000_000)
+        #expect(ScreencastVideoFormat.plan(pixelWidth: Int.max, pixelHeight: Int.max, framesPerSecond: Int.max).codec == .hevc)
+        #expect(!ScreencastVideoFormat.fitsH264(pixelWidth: 0, pixelHeight: 0, framesPerSecond: 30))
+    }
+
+    @Test("Samples without a real timestamp are dropped, and never become t=0")
+    func untimedSamples() {
+        let sink = RecordingSink(audio: [.microphone])
+        let core = ScreencastWriterCore(sink: sink, framesPerSecond: 30, onFailure: {})
+        let untimedVideo = ScreencastWriterCore.copy(ScreencastSamples.video(at: 50), at: .invalid, duration: .invalid)
+        let untimedAudio = ScreencastWriterCore.copy(ScreencastSamples.audio(at: 50, channels: 1), at: .invalid, duration: .invalid)
+        #expect(untimedVideo != nil && untimedAudio != nil)
+        if let untimedVideo { core.appendVideo(untimedVideo) }
+        if let untimedAudio { core.appendAudio(untimedAudio, from: .microphone) }
+        #expect(sink.appends.isEmpty && !sink.sessionStarted)
+        core.appendVideo(ScreencastSamples.video(at: 100))
+        core.appendAudio(ScreencastSamples.audio(at: 100, channels: 1), from: .microphone)
+        #expect(sink.video.first?.start == 0)
+        #expect(sink.audio(.microphone).first?.isSilent == false)
+    }
+}

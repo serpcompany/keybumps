@@ -206,6 +206,32 @@ struct ScreencastMovieWriterTests {
         #expect(try await asset.load(.duration).seconds > 1.5)
     }
 
+    @Test("Sizes a writer can't take fail the recording with a category instead of raising an exception", arguments: [
+        (100_000, 100_000), (0, 180), (320, 0)
+    ] as [(Int, Int)])
+    func unusableSize(width: Int, height: Int) {
+        #expect(throws: ScreencastFailure.writerFailed) {
+            _ = try ScreencastMovieWriter(
+                url: folder.url.appendingPathComponent("unusable-\(width)x\(height).mov"),
+                pixelWidth: width, pixelHeight: height,
+                audio: [.microphone, .systemAudio], options: ScreencastOptions(), onFailure: {}
+            )
+        }
+        folder.remove()
+    }
+
+    @Test("An absurd frame rate is clamped, and the file is written")
+    func absurdFrameRate() async throws {
+        defer { folder.remove() }
+        let writer = try ScreencastMovieWriter(
+            url: folder.url.appendingPathComponent("fast.mov"), pixelWidth: 320, pixelHeight: 180,
+            audio: [], options: ScreencastOptions(framesPerSecond: Int.max), onFailure: {}
+        )
+        writer.appendVideo(ScreencastSamples.video(at: 100, width: 320, height: 180))
+        let result = await writer.finish(at: 101)
+        #expect(!result.failed && result.hasFootage)
+    }
+
     @Test("Cancelling deletes the file")
     func cancel() async throws {
         defer { folder.remove() }

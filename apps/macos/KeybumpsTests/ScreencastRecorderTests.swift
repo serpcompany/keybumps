@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreMedia
 import Foundation
 import Testing
 @testable import Keybumps
@@ -1199,6 +1200,32 @@ struct ScreencastRecorderTests {
         recorder.followTick()
         #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14, 31]) })
         #expect(system.readKinds.allSatisfy { !$0 }, "every read is full while an overlay is registered")
+    }
+
+    @available(macOS 15, *)
+    @Test("Retry waits that aren't numbers, or are negative, can't trap")
+    func absurdRetryDelays() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(retryDelays: [.nan, -1, 0], slowRetryDelay: .nan)
+        try await start(recorder)
+        system.contentFailures = 2
+        await recorder.includeOverlayWindow(31)
+        #expect(system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31]))
+    }
+
+    @available(macOS 15, *)
+    @Test("The real capture system's conversions take what ScreenCaptureKit and AppKit can hand over")
+    func realCaptureSystemConversions() {
+        #expect(ScreenCaptureKitCaptureSystem.scale(.nan) == 1)
+        #expect(ScreenCaptureKitCaptureSystem.scale(0) == 1 && ScreenCaptureKitCaptureSystem.scale(2) == 2)
+        #expect(ScreenCaptureKitCaptureSystem.queueDepth(pixelWidth: Int.max, pixelHeight: Int.max) == 4)
+        let configuration = ScreenCaptureKitCaptureSystem.streamConfiguration(ScreencastStreamConfiguration(
+            pixelWidth: 320, pixelHeight: 180, sourceRect: CGRect(x: 0, y: 0, width: 320, height: 180),
+            framesPerSecond: Int.max, showsCursor: true, showsMouseClicks: false, scalesToFit: false
+        ))
+        #expect(configuration.minimumFrameInterval == CMTime(value: 1, timescale: 120))
+        // The unit-test host's own windows, read as the recorder does: it mustn't trap.
+        _ = ScreenCaptureKitCaptureSystem().ownVisibleWindows()
     }
 
     @available(macOS 15, *)
