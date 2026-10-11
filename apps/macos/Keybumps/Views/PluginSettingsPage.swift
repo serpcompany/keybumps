@@ -81,15 +81,19 @@ struct PluginPreferenceGroups: View {
 }
 
 /// One declared preference: a switch or a menu. A change applies the capabilities again, so the
-/// plugin's module picks it up at once. Each row reports its key through `Shown`, so a test can lay
-/// out every plugin's page and check it draws each declared preference once.
+/// plugin's module picks it up at once. Each row reports its key through `Shown`, and through
+/// `Disabled` while it can't change, so a test can lay out every plugin's page and check it draws
+/// each declared preference once, and which can't change.
 struct PluginPreferenceRow: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.isEnabled) private var isEnabled
     let capability: Capability
     let preference: PluginPreference
 
     var body: some View {
-        control.preference(key: Shown.self, value: [preference.key])
+        control
+            .preference(key: Shown.self, value: [preference.key])
+            .preference(key: Disabled.self, value: isEnabled ? [] : [preference.key])
     }
 
     @ViewBuilder
@@ -124,6 +128,12 @@ struct PluginPreferenceRow: View {
 
     /// The keys of the rows a page draws, in order.
     struct Shown: PreferenceKey {
+        static let defaultValue: [String] = []
+        static func reduce(value: inout [String], nextValue: () -> [String]) { value += nextValue() }
+    }
+
+    /// The keys of the rows a page draws that can't change now, in order.
+    struct Disabled: PreferenceKey {
         static let defaultValue: [String] = []
         static func reduce(value: inout [String], nextValue: () -> [String]) { value += nextValue() }
     }

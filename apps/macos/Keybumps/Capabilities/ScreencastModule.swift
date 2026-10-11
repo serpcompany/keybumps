@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 extension CapabilityDescriptor {
@@ -179,8 +180,12 @@ final class ScreencastModule: CapabilityModule {
         let preferences = preferences
         let recorder = ScreencastRecorder(
             system: seams.captureSystem,
-            // The recorder runs on the main actor, and asks only as a recording starts.
-            microphoneGranted: { MainActor.assumeIsolated { permissions.microphoneGranted } }
+            // The recorder asks on the main actor, as a recording starts. Asked anywhere else, it
+            // reads macOS's answer directly rather than trapping.
+            microphoneGranted: {
+                guard Thread.isMainThread else { return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
+                return MainActor.assumeIsolated { permissions.microphoneGranted }
+            }
         )
         let controller = ScreencastController(
             recorder: recorder,

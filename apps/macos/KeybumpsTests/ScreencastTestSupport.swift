@@ -311,7 +311,22 @@ final class FakeMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
         lock.withLock { recorded.append(call) }
     }
 
-    func appendVideo(_ sample: CMSampleBuffer) { record(.video(host: sample.presentationTimeStamp.seconds)) }
+    func appendVideo(_ sample: CMSampleBuffer) {
+        record(.video(host: sample.presentationTimeStamp.seconds))
+        let shade = Self.shade(of: sample)
+        lock.withLock { shades.append(shade) }
+    }
+
+    /// Each frame's shade (`ScreencastSamples.video(shade:)`), in order, to tell frames apart.
+    var videoShades: [UInt8?] { lock.withLock { shades } }
+    private var shades: [UInt8?] = []
+
+    private static func shade(of sample: CMSampleBuffer) -> UInt8? {
+        guard let pixels = CMSampleBufferGetImageBuffer(sample) else { return nil }
+        CVPixelBufferLockBaseAddress(pixels, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
+        return CVPixelBufferGetBaseAddress(pixels)?.load(as: UInt8.self)
+    }
     func appendAudio(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
         record(.audio(source, host: sample.presentationTimeStamp.seconds))
     }
@@ -409,7 +424,13 @@ final class FakeStream: ScreencastStream {
     private(set) var isRunning = false
     private(set) var startCount = 0
     private(set) var stopCount = 0
+    /// Every filter applied after the start, in order.
     private(set) var plans: [ScreencastFilterPlan] = []
+    /// Window lists refused because they name no window, or one the read they're built from
+    /// doesn't list, as `ScreenCaptureKitCaptureSystem.filter(for:in:)` refuses them.
+    private(set) var refusedLists: [ScreencastFilterPlan] = []
+    /// The next this many filter updates throw, as ScreenCaptureKit can.
+    var filterFailures = 0
     private(set) var sourceRects: [CGRect] = []
     /// Holds each update until `releaseUpdates()`, to see how many are in flight at once.
     var holdsUpdates = false
@@ -445,6 +466,14 @@ final class FakeStream: ScreencastStream {
 
     func update(plan: ScreencastFilterPlan, content: ScreencastContent) async throws {
         await holdUpdate()
+        if filterFailures > 0 {
+            filterFailures -= 1
+            throw ScreencastFailure.captureFailed
+        }
+        guard FakeCaptureSystem.canBuild(plan, from: content) else {
+            refusedLists.append(plan)
+            throw ScreencastFailure.targetUnavailable
+        }
         plans.append(plan)
     }
 
@@ -475,9 +504,9 @@ final class FakeStream: ScreencastStream {
         updatesInFlight -= 1
     }
 
-    /// Delivers a frame stamped `host`, as ScreenCaptureKit would on its queue.
-    func deliverFrame(at host: Double) {
-        handler.video(ScreencastSamples.video(at: host))
+    /// Delivers a frame stamped `host`, as ScreenCaptureKit would on its queue, filled with `shade`.
+    func deliverFrame(at host: Double, shade: UInt8 = 0x80) {
+        handler.video(ScreencastSamples.video(at: host, shade: shade))
     }
 
     func deliverAudio(_ source: ScreencastAudioSource, at host: Double, value: Float = 0.5) {
@@ -497,6 +526,8 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
     var ownWindows: Set<CGWindowID> = []
     /// Video streams made from now on hold their start until released.
     var holdsVideoStart = false
+    /// Video streams made from now on hold every update until released (`FakeStream.holdsUpdates`).
+    var holdsVideoUpdates = false
     private(set) var videoStreams: [FakeStream] = []
     private(set) var audioStreams: [FakeStream] = []
     private(set) var contentReads = 0
@@ -510,15 +541,33 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
 
     /// The next this many snapshots fail.
     var contentFailures = 0
+    /// Windows that exist, by `windowExists(_:)`, but that `content()` doesn't list.
+    var unlisted: Set<CGWindowID> = []
+    /// Holds each snapshot until `releaseContent()`.
+    var holdsContent = false
+    private var heldContent: [CheckedContinuation<Void, Never>] = []
+    var heldContentCount: Int { heldContent.count }
 
+    func releaseContent() {
+        let held = heldContent
+        heldContent = []
+        held.forEach { $0.resume() }
+    }
+
+    /// Every window on the screen, on screen or not, as `SCShareableContent` lists them.
     func content() async throws -> ScreencastContent {
         contentReads += 1
+        if holdsContent { await withCheckedContinuation { heldContent.append($0) } }
         if let contentError { throw contentError }
         if contentFailures > 0 {
             contentFailures -= 1
             throw ScreencastFailure.captureFailed
         }
-        let snapshot = screen
+        let snapshot = unlisted.isEmpty ? screen : ScreencastContent(
+            displays: screen.displays,
+            windows: screen.windows.filter { !unlisted.contains($0.id) },
+            applicationProcessIDs: screen.applicationProcessIDs
+        )
         let after = afterContentRead
         afterContentRead = nil
         after?()
@@ -531,9 +580,11 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
         content: ScreencastContent,
         handler: ScreencastSampleHandler
     ) throws -> any ScreencastStream {
+        guard Self.canBuild(plan, from: content) else { throw ScreencastFailure.targetUnavailable }
         let stream = FakeStream(kind: .video(plan, configuration), handler: handler)
         stream.startError = videoStartError
         stream.holdsStart = holdsVideoStart
+        stream.holdsUpdates = holdsVideoUpdates
         videoStreams.append(stream)
         return stream
     }
@@ -553,9 +604,16 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
         ownWindows
     }
 
-    /// From the screen as it is, like `CGWindowList`.
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? {
-        Set(screen.windows.filter { $0.processID == processID && $0.isOnScreen }.map(\.id))
+    /// Whether `ScreenCaptureKitCaptureSystem.filter(for:in:)` builds a filter for `plan` from
+    /// `content`: a window list must name at least one window, and only windows `content` lists.
+    static func canBuild(_ plan: ScreencastFilterPlan, from content: ScreencastContent) -> Bool {
+        guard case .windows(_, let ids) = plan else { return true }
+        return !ids.isEmpty && ids.allSatisfy { content.window($0) != nil }
+    }
+
+    /// On screen or not; only a window gone from the screen's list is closed.
+    func windowExists(_ id: CGWindowID) -> Bool? {
+        screen.windows.contains { $0.id == id }
     }
 }
 
@@ -569,8 +627,8 @@ final class FakeHostClock {
     }
 }
 
-/// Made-up screens: two displays side by side, a browser window with a sheet and another
-/// window, and Keybumps with a control bar and an overlay.
+/// Made-up screens: two displays side by side, a browser window with a sheet, a menu, and another
+/// window, another app's window, and Keybumps with a control bar and an overlay.
 enum ScreencastScreens {
     static let ownProcess: pid_t = 900
     static let browser: pid_t = 501
@@ -600,6 +658,14 @@ enum ScreencastScreens {
     static let drawingLayer = ScreencastContent.Window(
         id: 31, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: ownProcess, isUntitled: true, isOnScreen: true
     )
+
+    /// `window` with its on-screen state, frame, layer, or whether it has a title changed.
+    static func with(_ window: ScreencastContent.Window, onScreen: Bool? = nil, frame: CGRect? = nil, layer: Int? = nil, isUntitled: Bool? = nil) -> ScreencastContent.Window {
+        ScreencastContent.Window(
+            id: window.id, frame: frame ?? window.frame, layer: layer ?? window.layer, processID: window.processID,
+            isUntitled: isUntitled ?? window.isUntitled, isOnScreen: onScreen ?? window.isOnScreen
+        )
+    }
 
     static func content(windows: [ScreencastContent.Window]? = nil, includesOwnApp: Bool = true) -> ScreencastContent {
         ScreencastContent(

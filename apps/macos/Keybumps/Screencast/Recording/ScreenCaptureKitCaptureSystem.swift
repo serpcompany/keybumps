@@ -1,5 +1,6 @@
 import AppKit
 import CoreMedia
+import OSLog
 import ScreenCaptureKit
 
 /// The app's capture system: `SCShareableContent` for what's on screen and an `SCStream` per
@@ -20,10 +21,15 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         UnitTestHost.isActive ? InertScreencastCaptureSystem() : ScreenCaptureKitCaptureSystem()
     }
 
+    private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
+    /// How many of Keybumps's window numbers the last read left out, so a count is logged once.
+    private var loggedDroppedWindowNumbers = 0
+
     func content() async throws -> ScreencastContent {
+        // Every window, not just those on screen, so Keybumps is listed as an app (and can be
+        // excluded whole) even before its overlays appear, and a window recording's window is
+        // listed while it's minimized or on another Space.
         do {
-            // Every window, not just those on screen, so Keybumps is listed as an app (and can be
-            // excluded whole) even before its overlays appear.
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             return Self.snapshot(of: content)
         } catch {
@@ -100,21 +106,33 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         return frame
     }
 
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? {
-        // Window numbers and owners only; no window's name is read.
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
-            return nil
-        }
-        return Set(list.compactMap { info in
-            (info[kCGWindowOwnerPID as String] as? pid_t) == processID ? info[kCGWindowNumber as String] as? CGWindowID : nil
-        })
+    func windowExists(_ id: CGWindowID) -> Bool? {
+        // Listed whatever its on-screen state; a closed window isn't.
+        guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]] else { return nil }
+        return !list.isEmpty
     }
 
     func ownVisibleWindows() -> Set<CGWindowID> {
-        Set(NSApplication.shared.windows.filter { $0.isVisible && $0.windowNumber > 0 }.map { CGWindowID($0.windowNumber) })
+        // QA 4030.329.2 trapped converting one of these numbers: the value didn't fit a
+        // `CGWindowID`, and why is unconfirmed. A number that's 0, negative, or doesn't fit is now
+        // left out, and how many were is logged when that count changes (a count only), so a
+        // candidate shows whether it recurs without a line every tick.
+        let read = ScreencastNumbers.windowIDs(NSApplication.shared.windows.compactMap { $0.isVisible ? $0.windowNumber : nil })
+        if read.dropped != loggedDroppedWindowNumbers {
+            if read.dropped > 0 {
+                logger.error("screencast own window numbers dropped count=\(read.dropped, privacy: .public)")
+            }
+            loggedDroppedWindowNumbers = read.dropped
+        }
+        return read.ids
     }
 
     // MARK: Building ScreenCaptureKit objects
+
+    /// Whether a window's title is empty. The title itself is never kept.
+    static func isUntitled(_ title: String?) -> Bool {
+        (title ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
 
     static func snapshot(of content: SCShareableContent) -> ScreencastContent {
         ScreencastContent(
@@ -122,7 +140,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                 ScreencastContent.Display(
                     id: display.displayID,
                     frame: display.frame,
-                    scale: max(CGFloat(SCContentFilter(display: display, excludingWindows: []).pointPixelScale), 1)
+                    scale: Self.scale(SCContentFilter(display: display, excludingWindows: []).pointPixelScale)
                 )
             },
             windows: content.windows.compactMap { window in
@@ -132,7 +150,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                     frame: window.frame,
                     layer: window.windowLayer,
                     processID: processID,
-                    isUntitled: (window.title ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
+                    isUntitled: Self.isUntitled(window.title),
                     isOnScreen: window.isOnScreen
                 )
             },
@@ -153,9 +171,19 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                 excludingApplications: source.applications.filter { $0.processID == excludedProcess },
                 exceptingWindows: source.windows.filter { exceptingWindows.contains($0.windowID) }
             )
-        case .windows(_, let windows):
-            return SCContentFilter(display: display, including: source.windows.filter { windows.contains($0.windowID) })
+        case .windows(_, let ids):
+            // Every window the list names, or no filter: ScreenCaptureKit's shows only the windows
+            // it's given, so one this read doesn't list (a window recording's window, closed) would
+            // leave a filter that names less than its list, or nothing.
+            let windows = source.windows.filter { ids.contains($0.windowID) }
+            guard !ids.isEmpty, Set(windows.map(\.windowID)) == Set(ids) else { throw ScreencastFailure.targetUnavailable }
+            return SCContentFilter(display: display, including: windows)
         }
+    }
+
+    /// Pixels per point: 1 to 8, and 1 for a scale that isn't a number.
+    static func scale(_ pointPixelScale: Float) -> CGFloat {
+        pointPixelScale.isFinite ? CGFloat(min(max(pointPixelScale, 1), 8)) : 1
     }
 
     static func streamConfiguration(_ configuration: ScreencastStreamConfiguration) -> SCStreamConfiguration {
@@ -163,7 +191,8 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         stream.width = configuration.pixelWidth
         stream.height = configuration.pixelHeight
         stream.sourceRect = configuration.sourceRect
-        stream.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(max(configuration.framesPerSecond, 1)))
+        // At most 120, so it always fits a `CMTimeScale`.
+        stream.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(ScreencastNumbers.framesPerSecond(configuration.framesPerSecond)))
         stream.queueDepth = queueDepth(pixelWidth: configuration.pixelWidth, pixelHeight: configuration.pixelHeight)
         stream.pixelFormat = kCVPixelFormatType_32BGRA
         // Frames come in sRGB, which the writer tags its files with.
@@ -172,6 +201,7 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         stream.showsCursor = configuration.showsCursor
         stream.showMouseClicks = configuration.showsMouseClicks
         stream.scalesToFit = configuration.scalesToFit
+        stream.includeChildWindows = configuration.includesChildWindows
         stream.preservesAspectRatio = true
         stream.capturesAudio = false
         return stream
@@ -182,8 +212,9 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     /// with at least four: the writer keeps its last frame for the end of the file, and the
     /// recorder the newest one for a restart, so two can be held while paused.
     static func queueDepth(pixelWidth: Int, pixelHeight: Int) -> Int {
-        let frameBytes = max(pixelWidth * pixelHeight * 4, 1)
-        return min(max(300_000_000 / frameBytes, 4), 6)
+        // In floating point, so no size can overflow.
+        let frameBytes = max(Double(pixelWidth) * Double(pixelHeight) * 4, 1)
+        return ScreencastNumbers.int(300_000_000 / frameBytes, in: 4...6, fallback: 4)
     }
 
     nonisolated static func failure(for error: Error) -> ScreencastFailure {
@@ -323,8 +354,6 @@ final class InertScreencastCaptureSystem: ScreencastCaptureSystem {
     }
 
     func windowFrame(_ id: CGWindowID) -> CGRect? { nil }
-
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
 
     func ownVisibleWindows() -> Set<CGWindowID> { [] }
 }

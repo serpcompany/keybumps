@@ -69,6 +69,10 @@ final class ScreencastControlBarModel {
 
     var isPaused: Bool { recording.phase == .paused }
 
+    /// Recording now: the dot pulses. It holds still while the recording starts, and dims while
+    /// paused.
+    var isLive: Bool { recording.phase == .recording }
+
     /// The buttons act only while recording or paused, and one at a time.
     var acceptsActions: Bool { recording.phase.isRecording && !isWorking }
 

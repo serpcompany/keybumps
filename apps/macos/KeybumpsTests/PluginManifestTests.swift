@@ -216,18 +216,39 @@ struct PluginManifestTests {
         #expect(CapabilityDescriptor.keystrokes.topPreferences.map(\.key) == ["showing"])
         #expect(!CapabilityDescriptor.keystrokes.preferenceGroups.contains { $0.preferences.contains(.keystrokesShowing) }, "Not in a group as well")
     }
+
+    @Test("A preference placed at the top can't change while its plugin is off, since turning Keystrokes on shows its keys; the others can")
+    func topPreferencesWaitForThePlugin() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsTopPreferences-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [], missing: nil, root: root)
+        for descriptor in CapabilityCatalog.descriptors {
+            let page = try #require(descriptor.settingsPage)
+            let rows = RowsOnPage.read(page.content(), model: harness.model)
+            #expect(rows.disabled == descriptor.topPreferences.map(\.key), "\(descriptor.title) off draws \(rows.disabled) disabled")
+        }
+        #expect(RowsOnPage.read(try #require(CapabilityDescriptor.keystrokes.settingsPage).content(), model: harness.model).disabled == ["showing"])
+
+        let on = WiringHarness(enabled: [.keystrokes], missing: nil, root: root)
+        let rows = RowsOnPage.read(try #require(CapabilityDescriptor.keystrokes.settingsPage).content(), model: on.model)
+        #expect(rows.preferences.first == "showing")
+        #expect(rows.disabled.isEmpty, "Show keystrokes can change once Keystrokes is on")
+    }
 }
 
 /// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
-/// returns the permission rows and the preference rows it draws, in order.
+/// returns the permission rows and the preference rows it draws, and those it draws disabled, in
+/// order.
 @MainActor
 private enum RowsOnPage {
     private final class Rows: @unchecked Sendable {
         var permissions: [PermissionRow.Shown] = []
         var preferences: [String] = []
+        var disabled: [String] = []
     }
 
-    static func read(_ page: AnyView, model: AppModel) -> (permissions: [PermissionRow.Shown], preferences: [String]) {
+    static func read(_ page: AnyView, model: AppModel) -> (permissions: [PermissionRow.Shown], preferences: [String], disabled: [String]) {
         let rows = Rows()
         let size = CGSize(width: 720, height: 4000)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -235,7 +256,8 @@ private enum RowsOnPage {
         let host = NSHostingView(rootView: page
             .environment(model)
             .onPreferenceChange(PermissionRow.Shown.Key.self) { rows.permissions = $0 }
-            .onPreferenceChange(PluginPreferenceRow.Shown.self) { rows.preferences = $0 })
+            .onPreferenceChange(PluginPreferenceRow.Shown.self) { rows.preferences = $0 }
+            .onPreferenceChange(PluginPreferenceRow.Disabled.self) { rows.disabled = $0 })
         host.frame = NSRect(origin: .zero, size: size)
         window.contentView = host
         defer {
@@ -243,6 +265,6 @@ private enum RowsOnPage {
             window.close()
         }
         host.layoutSubtreeIfNeeded()
-        return (rows.permissions, rows.preferences)
+        return (rows.permissions, rows.preferences, rows.disabled)
     }
 }

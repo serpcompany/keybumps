@@ -191,6 +191,10 @@ final class PaletteHUD: CoachTipPresenting {
     private var panel: NSPanel?
     private var hideWork: DispatchWorkItem?
     private var isShowingCoach = false
+    /// Counts the notices shown, so a surface can hide its own without hiding a newer one.
+    private var noticesShown = 0
+    /// The notice showing now, as `show` numbered it; nil while none is.
+    private(set) var shownNotice: Int?
 
     /// The surface that currently owns the notch (Dictation while its indicator shows). While set,
     /// other notices are dropped rather than drawn over it, and one already showing is hidden. It is
@@ -240,14 +244,18 @@ final class PaletteHUD: CoachTipPresenting {
         if waitingForNotch?.source == source { waitingForNotch = nil }
     }
 
+    /// Shows `message`, replacing the current notice, and returns its number for
+    /// `dismiss(notice:)`, or nil when it was dropped. A `duration` of `.infinity` keeps it until
+    /// it's dismissed or replaced.
+    @discardableResult
     func show(
         _ message: String,
         systemImage: String = "checkmark.circle.fill",
         tint: Color = .green,
         shortcut: String? = nil,
         duration: TimeInterval? = nil
-    ) {
-        guard !isSuppressed, let screen = NSScreen.main else { return }
+    ) -> Int? {
+        guard !isSuppressed, let screen = NSScreen.main else { return nil }
         let panel = panel ?? makePanel()
         self.panel = panel
 
@@ -266,6 +274,7 @@ final class PaletteHUD: CoachTipPresenting {
             announcement: message,
             duration: duration ?? (tint == .green ? 1.6 : 3)
         )
+        return shownNotice
     }
 
     /// A Shortcut Coach tip: the notch drops down into a two-row panel with the app's icon, the
@@ -292,6 +301,7 @@ final class PaletteHUD: CoachTipPresenting {
         hideWork?.cancel()
         hideWork = nil
         isShowingCoach = false
+        shownNotice = nil
         panel?.orderOut(nil)
         panel?.contentView = nil
     }
@@ -301,10 +311,17 @@ final class PaletteHUD: CoachTipPresenting {
         if isShowingCoach { dismiss() }
     }
 
+    /// Hides the notice `show` numbered `notice`, only while it is the one showing.
+    func dismiss(notice: Int) {
+        if shownNotice == notice { dismiss() }
+    }
+
     private func present(_ view: some View, on screen: NSScreen, announcement: String, duration: TimeInterval) {
         let panel = panel ?? makePanel()
         self.panel = panel
         isShowingCoach = false
+        noticesShown += 1
+        shownNotice = noticesShown
         let host = NSHostingView(rootView: view)
         panel.contentView = host
         let size = host.fittingSize
@@ -320,11 +337,14 @@ final class PaletteHUD: CoachTipPresenting {
         )
 
         hideWork?.cancel()
+        hideWork = nil
+        guard duration.isFinite else { return }
         let work = DispatchWorkItem { [weak self, weak panel] in
             NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; panel?.animator().alphaValue = 0 }) {
                 // A newer show may have started during the fade.
                 if panel?.alphaValue == 0 {
                     self?.isShowingCoach = false
+                    self?.shownNotice = nil
                     panel?.orderOut(nil)
                     // Drop the view so its animations stop while nothing is shown.
                     panel?.contentView = nil

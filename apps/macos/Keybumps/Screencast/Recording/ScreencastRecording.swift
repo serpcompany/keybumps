@@ -11,7 +11,8 @@ enum ScreencastTarget: Equatable, Sendable {
     case display(CGDirectDisplayID)
     /// Every display connected when recording starts, each in its own file.
     case everyDisplay
-    /// One window, followed as it moves or resizes, with its app's menus, sheets, and popovers.
+    /// One window, followed as it moves or resizes: the window alone, without its app's menus,
+    /// sheets, or popovers (#473), and Keybumps's overlays.
     case window(CGWindowID)
     /// Part of one display. `rect` is in the display's points with the origin at its top-left, the
     /// space of ScreenCaptureKit's `sourceRect`; `displayLocalRect(fromAppKit:screenFrame:)` converts a

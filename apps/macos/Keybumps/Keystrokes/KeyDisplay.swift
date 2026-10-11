@@ -294,6 +294,11 @@ final class KeyDisplay {
     var pointerDisplay: () -> CGDirectDisplayID? = { KeyDisplayScreen.pointerDisplay() }
     /// The main display's height, to turn the pointer tap's top-left coordinates into AppKit's.
     var mainDisplayHeight: () -> CGFloat = { NSScreen.screens.first?.frame.height ?? 0 }
+    /// Called after `isShowing` or `isListening` changes: a holder acquiring or letting go, Show or
+    /// Hide Keystrokes, or the keyboard tap starting once Input Monitoring is granted. The Keystrokes
+    /// module sets it, so Show Keystrokes in the menu bar menu is checked while keys can be on screen
+    /// (`isOnScreen`), a recording's included.
+    var onShowingChange: () -> Void = {}
 
     private let keys: any KeyPressMonitoring
     private let pointer: any PointerEventMonitoring
@@ -303,6 +308,8 @@ final class KeyDisplay {
     private let scheduler: any TimerScheduling
     private let secureInput: () -> Bool
     private var windowHandlers: [KeyDisplayOwner: ([NSWindow]) -> Void] = [:]
+    /// `isShowing` and `isListening` when `onShowingChange` was last called.
+    private var reported = (isShowing: false, isListening: false)
     private var wakeUp: (any TimerScheduledAction)?
     /// The pointer's screen at the newest key.
     private var lastPointerDisplay: CGDirectDisplayID?
@@ -354,6 +361,10 @@ final class KeyDisplay {
     var owners: [KeyDisplayOwner] { holds.owners }
     /// Whether any holder's keys are shown, so the display runs.
     var isShowing: Bool { holds.isShowing }
+    /// Whether keys can be on screen now: some holder's are shown and the keyboard tap is listening.
+    /// Without Input Monitoring macOS refuses the tap, so no key can appear though a holder shows
+    /// them. Secure input doesn't count: it's brief, and macOS gives no notice when it ends.
+    var isOnScreen: Bool { holds.isShowing && isListening }
     /// The configuration in effect, or nil while no holder's keys are shown.
     var configuration: KeyDisplayConfiguration? { holds.configuration }
     func holds(_ owner: KeyDisplayOwner) -> Bool { holds.holds(owner) }
@@ -404,8 +415,10 @@ final class KeyDisplay {
     }
 
     /// Starts the keyboard tap that macOS refused earlier, once Input Monitoring may have been
-    /// granted. `AppModel` calls it whenever it re-reads permissions.
+    /// granted, and tells `onShowingChange` if it did. `AppModel` calls it whenever it re-reads
+    /// permissions.
     func permissionsDidRefresh() {
+        defer { reportShowingChange() }
         guard let configuration = holds.configuration else { return }
         if !isListening { isListening = keys.start() }
         if configuration.showsClicks, !isWatchingClicks { isWatchingClicks = pointer.start() }
@@ -471,6 +484,7 @@ final class KeyDisplay {
     // MARK: Showing
 
     private func apply() {
+        defer { reportShowingChange() }
         guard let configuration = holds.configuration else {
             keys.stop()
             pointer.stop()
@@ -498,6 +512,14 @@ final class KeyDisplay {
         if configuration.keys == .shortcutsOnly { timeline.removeTyping() }
         if !configuration.showsClicks { timeline.removeClicks() }
         present(animated: timeline == before)
+    }
+
+    /// Calls `onShowingChange` if `isShowing` or `isListening` changed since the last call.
+    private func reportShowingChange() {
+        let current = (isShowing: holds.isShowing, isListening: isListening)
+        guard current != reported else { return }
+        reported = current
+        onShowingChange()
     }
 
     func receive(_ press: KeyPress) {

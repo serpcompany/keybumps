@@ -11,6 +11,9 @@ struct ScreencastScreen: Equatable, Sendable {
     let frame: CGRect
     /// Pixels per point.
     let scale: CGFloat
+    /// What macOS calls it (`NSScreen.localizedName`), such as "Built-in Retina Display"; empty
+    /// when it has no name.
+    var name: String = ""
 }
 
 /// The connected displays, and the conversions between AppKit's global space, which the picker's
@@ -23,9 +26,25 @@ struct ScreencastScreenLayout: Equatable, Sendable {
     @MainActor
     static func current() -> ScreencastScreenLayout {
         ScreencastScreenLayout(screens: NSScreen.screens.compactMap { screen in
-            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
-            return ScreencastScreen(id: CGDirectDisplayID(number.uint32Value), frame: screen.frame, scale: screen.backingScaleFactor)
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
+                  let id = CGDirectDisplayID(exactly: number.uint32Value) else { return nil }
+            return ScreencastScreen(id: id, frame: screen.frame, scale: screen.backingScaleFactor, name: screen.localizedName)
         })
+    }
+
+    /// The screens in the order recordings number their files: left to right, then top to bottom.
+    var orderedScreens: [ScreencastScreen] {
+        screens.sorted { ($0.frame.minX, -$0.frame.maxY) < ($1.frame.minX, -$1.frame.maxY) }
+    }
+
+    /// A screen's place in `orderedScreens`, from 1.
+    func number(of screen: ScreencastScreen) -> Int {
+        (orderedScreens.firstIndex { $0.id == screen.id } ?? 0) + 1
+    }
+
+    /// What the picker calls a screen: its name, or "Screen 2" when it has none.
+    func title(of screen: ScreencastScreen) -> String {
+        screen.name.isEmpty ? "Screen \(number(of: screen))" : screen.name
     }
 
     /// The main display's height: both spaces start at its corners, AppKit's at the bottom-left
