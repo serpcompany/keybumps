@@ -275,9 +275,15 @@ final class ScreencastRecorder {
         overlays: Set<CGWindowID>,
         options: ScreencastOptions
     ) throws -> [StreamPlan] {
-        func displayStream(_ display: ScreencastContent.Display, area: CGRect?) -> StreamPlan {
-            let geometry = area.map { ScreencastCaptureGeometry.area($0, displaySize: display.frame.size, scale: display.scale) }
-                ?? .display(size: display.frame.size, scale: display.scale)
+        // A display or area with no usable geometry fails the start, rather than recording a sliver
+        // or more of the screen than was chosen.
+        func displayStream(_ display: ScreencastContent.Display, area: CGRect?) throws -> StreamPlan {
+            let geometry = if let area {
+                ScreencastCaptureGeometry.area(area, displaySize: display.frame.size, scale: display.scale)
+            } else {
+                ScreencastCaptureGeometry.display(size: display.frame.size, scale: display.scale)
+            }
+            guard let geometry else { throw ScreencastFailure.targetUnavailable }
             return StreamPlan(
                 source: area.map { .area(display.id, $0) } ?? .display(display.id),
                 plan: ScreencastCaptureFilter.displayPlan(display: display.id, ownProcessID: ownProcessID, overlays: overlays, content: content),
@@ -288,20 +294,21 @@ final class ScreencastRecorder {
         switch target {
         case .display(let id):
             guard let display = content.display(id) else { throw ScreencastFailure.targetUnavailable }
-            return [displayStream(display, area: nil)]
+            return [try displayStream(display, area: nil)]
         case .everyDisplay:
             guard !content.displays.isEmpty else { throw ScreencastFailure.targetUnavailable }
             // Left to right, then top to bottom: video-1 is the leftmost display.
             let displays = content.displays.sorted { ($0.frame.minX, $0.frame.minY) < ($1.frame.minX, $1.frame.minY) }
-            return displays.map { displayStream($0, area: nil) }
+            return try displays.map { try displayStream($0, area: nil) }
         case .area(let id, let rect):
             guard let display = content.display(id) else { throw ScreencastFailure.targetUnavailable }
-            return [displayStream(display, area: rect)]
+            return [try displayStream(display, area: rect)]
         case .window(let id):
             guard let window = content.window(id),
                   let plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlays, content: content),
-                  let display = content.display(plan.displayID) else { throw ScreencastFailure.targetUnavailable }
-            let geometry = ScreencastCaptureGeometry.window(frame: window.frame, displayFrame: display.frame, scale: display.scale)
+                  let display = content.display(plan.displayID),
+                  let geometry = ScreencastCaptureGeometry.window(frame: window.frame, displayFrame: display.frame, scale: display.scale)
+            else { throw ScreencastFailure.targetUnavailable }
             return [StreamPlan(source: .window(id), plan: plan, configuration: configuration(geometry, options: options, scalesToFit: true))]
         }
     }
@@ -632,9 +639,9 @@ final class ScreencastRecorder {
                 try await running.update(plan: plan, content: content)
                 session.streams[index].plan = plan
                 if plan.displayID != stream.plan.displayID, case .window(let id) = stream.source,
-                   let frame = content.window(id)?.frame, let display = content.display(plan.displayID) {
+                   let frame = content.window(id)?.frame, let display = content.display(plan.displayID),
+                   let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale) {
                     // The window moved to another display: read it there.
-                    let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale)
                     try await running.update(sourceRect: geometry.sourceRect)
                 }
             } catch {
@@ -651,7 +658,8 @@ final class ScreencastRecorder {
         guard let display = session.content.display(mostOverlapping: frame), display.id == stream.plan.displayID else {
             return await applyFilters(to: session)
         }
-        let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale)
+        // A frame with no usable geometry keeps the crop where it was.
+        guard let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale) else { return nil }
         do {
             try await running.update(sourceRect: geometry.sourceRect)
             return nil

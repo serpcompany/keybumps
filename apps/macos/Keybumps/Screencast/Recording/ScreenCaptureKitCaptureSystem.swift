@@ -1,5 +1,6 @@
 import AppKit
 import CoreMedia
+import OSLog
 import ScreenCaptureKit
 
 /// The app's capture system: `SCShareableContent` for what's on screen and an `SCStream` per
@@ -19,6 +20,10 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     static var current: any ScreencastCaptureSystem {
         UnitTestHost.isActive ? InertScreencastCaptureSystem() : ScreenCaptureKitCaptureSystem()
     }
+
+    private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
+    /// How many of Keybumps's window numbers the last read left out, so a count is logged once.
+    private var loggedDroppedWindowNumbers = 0
 
     func content() async throws -> ScreencastContent {
         // Every window, not just those on screen, so Keybumps is listed as an app (and can be
@@ -121,9 +126,18 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     }
 
     func ownVisibleWindows() -> Set<CGWindowID> {
-        // Each window's number read once: a window closing between two reads can change it, and
-        // one that doesn't fit a `CGWindowID` is left out rather than trapping (QA 4030.329.2).
-        ScreencastNumbers.windowIDs(NSApplication.shared.windows.compactMap { $0.isVisible ? $0.windowNumber : nil })
+        // QA 4030.329.2 trapped converting one of these numbers: the value didn't fit a
+        // `CGWindowID`, and why is unconfirmed. A number that's 0, negative, or doesn't fit is now
+        // left out, and how many were is logged when that count changes (a count only), so a
+        // candidate shows whether it recurs without a line every tick.
+        let read = ScreencastNumbers.windowIDs(NSApplication.shared.windows.compactMap { $0.isVisible ? $0.windowNumber : nil })
+        if read.dropped != loggedDroppedWindowNumbers {
+            if read.dropped > 0 {
+                logger.error("screencast own window numbers dropped count=\(read.dropped, privacy: .public)")
+            }
+            loggedDroppedWindowNumbers = read.dropped
+        }
+        return read.ids
     }
 
     // MARK: Building ScreenCaptureKit objects

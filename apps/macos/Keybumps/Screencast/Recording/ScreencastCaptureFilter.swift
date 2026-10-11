@@ -121,8 +121,8 @@ enum ScreencastCaptureFilter {
     /// - the window;
     /// - its app's other windows on screen on that display, except its ordinary windows, which
     ///   would cover the chosen one where they overlap it, so its menus, sheets, and popovers show.
-    ///   An ordinary window laid out as the chosen one's sheet (`isSheet(_:on:)`: a titled Save or
-    ///   Open sheet) shows too;
+    ///   An ordinary window attached as the chosen one's sheet (`isSheet(_:on:)`: a titled Save or
+    ///   Open sheet) shows too, within the limits that function names;
     /// - Keybumps's registered overlays, on screen or not, so one shows the moment it's ordered in.
     ///
     /// Nothing else: Keybumps itself is never included whole, so none of its other windows (a
@@ -157,17 +157,27 @@ enum ScreencastCaptureFilter {
         return .windows(display.id, includingWindows: included.sorted())
     }
 
-    /// Whether `other` is laid out as `window`'s sheet: centred on it (within 2 pt), its top below
-    /// the window's title bar and toolbar (within 150 pt of the window's top, which leaves room for
-    /// an expanded or labelled toolbar and a tab bar), and in front of it. It may run past the
-    /// window's bottom, as a tall Save sheet on a short window does. A smaller window that merely
-    /// sits inside isn't one, nor is a window of unknown place. Only the recorded app's own windows
-    /// are ever asked about, so a loose bound can't let in another app's.
+    /// Whether `other` is attached to `window` the way AppKit attaches a sheet: in front of it,
+    /// centred on it and no wider (within 2 pt), and its top just below the window's title bar or
+    /// a standard toolbar (16 to 60 pt below the window's top). It may run past the window's
+    /// bottom, as a tall Save sheet on a short window does. A window that merely sits inside isn't
+    /// one, nor is a window of unknown place.
+    ///
+    /// Nothing in the window list says which window a sheet belongs to or where a window's content
+    /// starts, so this is geometry, kept tight: the app's other windows in front of the recorded
+    /// one, such as its Settings window or another document, which open centred, mustn't pass.
+    /// Only the recorded app's own windows are ever asked about.
+    ///
+    /// **Known limitations:** a sheet below a taller toolbar (an expanded or labelled one, or a tab
+    /// bar), or one wider than its window, is missed. A window of the same app that's centred on
+    /// the recorded one, in front of it, no wider, and with its top 16 to 60 pt below is taken for
+    /// its sheet.
     static func isSheet(_ other: ScreencastContent.Window, on window: ScreencastContent.Window) -> Bool {
         guard let otherOrder = other.order, let windowOrder = window.order, otherOrder < windowOrder else { return false }
         let centred = abs(other.frame.midX - window.frame.midX) <= 2
+        let noWider = other.frame.minX >= window.frame.minX - 2 && other.frame.maxX <= window.frame.maxX + 2
         let below = other.frame.minY - window.frame.minY
-        return centred && below >= 0 && below <= 150
+        return centred && noWider && below >= 16 && below <= 60
     }
 
     /// The other windows of a recorded window's app to leave out: its ordinary windows (layer 0).

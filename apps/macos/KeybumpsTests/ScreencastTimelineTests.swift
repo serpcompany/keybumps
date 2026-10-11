@@ -110,34 +110,60 @@ struct ScreencastAudioPlacementTests {
 @Suite("Screencast: what a stream reads")
 struct ScreencastGeometryTests {
     @Test("A whole display at its pixel size")
-    func display() {
-        let geometry = ScreencastCaptureGeometry.display(size: CGSize(width: 1512, height: 982), scale: 2)
+    func display() throws {
+        let geometry = try #require(ScreencastCaptureGeometry.display(size: CGSize(width: 1512, height: 982), scale: 2))
         #expect(geometry.sourceRect == CGRect(x: 0, y: 0, width: 1512, height: 982))
         #expect(geometry.pixelWidth == 3024 && geometry.pixelHeight == 1964)
     }
 
     @Test("An area snaps to whole, even pixels and stays on the display")
-    func area() {
-        let geometry = ScreencastCaptureGeometry.area(CGRect(x: 10.3, y: 20.7, width: 100.5, height: 50.25), displaySize: CGSize(width: 1512, height: 982), scale: 2)
+    func area() throws {
+        let geometry = try #require(ScreencastCaptureGeometry.area(CGRect(x: 10.3, y: 20.7, width: 100.5, height: 50.25), displaySize: CGSize(width: 1512, height: 982), scale: 2))
         #expect(geometry.pixelWidth % 2 == 0 && geometry.pixelHeight % 2 == 0)
         #expect(geometry.pixelWidth == 202 && geometry.pixelHeight == 102)
         #expect(geometry.sourceRect.width * 2 == CGFloat(geometry.pixelWidth))
 
-        let edge = ScreencastCaptureGeometry.area(CGRect(x: 1400, y: 900, width: 300, height: 300), displaySize: CGSize(width: 1512, height: 982), scale: 1)
+        let edge = try #require(ScreencastCaptureGeometry.area(CGRect(x: 1400, y: 900, width: 300, height: 300), displaySize: CGSize(width: 1512, height: 982), scale: 1))
         #expect(edge.sourceRect.maxX <= 1512 && edge.sourceRect.maxY <= 982, "clamped to the display")
         #expect(edge.pixelWidth == 112 && edge.pixelHeight == 82)
 
-        let odd = ScreencastCaptureGeometry.area(CGRect(x: 1511, y: 0, width: 1, height: 1), displaySize: CGSize(width: 1512, height: 982), scale: 1)
+        let odd = try #require(ScreencastCaptureGeometry.area(CGRect(x: 1511, y: 0, width: 1, height: 1), displaySize: CGSize(width: 1512, height: 982), scale: 1))
         #expect(odd.pixelWidth == 2 && odd.sourceRect.maxX <= 1512, "rounding up to even steps back in")
     }
 
     @Test("A window reads its frame on its display; the part past the edge is left out")
-    func window() {
+    func window() throws {
         let display = ScreencastScreens.rightDisplay
-        let geometry = ScreencastCaptureGeometry.window(frame: CGRect(x: 1600, y: 100, width: 800, height: 600), displayFrame: display.frame, scale: 1)
+        let geometry = try #require(ScreencastCaptureGeometry.window(frame: CGRect(x: 1600, y: 100, width: 800, height: 600), displayFrame: display.frame, scale: 1))
         #expect(geometry.sourceRect == CGRect(x: 88, y: 100, width: 800, height: 600))
-        let past = ScreencastCaptureGeometry.window(frame: CGRect(x: 3200, y: 100, width: 800, height: 600), displayFrame: display.frame, scale: 1)
+        let past = try #require(ScreencastCaptureGeometry.window(frame: CGRect(x: 3200, y: 100, width: 800, height: 600), displayFrame: display.frame, scale: 1))
         #expect(past.sourceRect.maxX <= 1920 && past.pixelWidth == 232)
+        #expect(ScreencastCaptureGeometry.window(frame: CGRect(x: 4000, y: 100, width: 800, height: 600), displayFrame: display.frame, scale: 1) == nil, "none of it on the display")
+    }
+
+    @Test("A display larger than the writer takes is read whole and scaled down to fit, its shape kept")
+    func largerThanTheWriterTakes() throws {
+        // A 57-inch ultrawide at a HiDPI scale: 10240 × 2880 pixels.
+        let wide = try #require(ScreencastCaptureGeometry.display(size: CGSize(width: 5120, height: 1440), scale: 2))
+        #expect(wide.sourceRect == CGRect(x: 0, y: 0, width: 5120, height: 1440), "the whole display, not a crop")
+        #expect(wide.pixelWidth == ScreencastMovieWriter.maximumPixels && wide.pixelHeight == 2304)
+        let tall = try #require(ScreencastCaptureGeometry.area(CGRect(x: 0, y: 0, width: 1000, height: 5000), displaySize: CGSize(width: 3000, height: 6000), scale: 2))
+        #expect(tall.sourceRect == CGRect(x: 0, y: 0, width: 1000, height: 5000))
+        #expect(tall.pixelHeight == ScreencastMovieWriter.maximumPixels && tall.pixelWidth == 1638)
+        #expect(tall.pixelWidth % 2 == 0 && wide.pixelHeight % 2 == 0)
+        let atTheCap = try #require(ScreencastCaptureGeometry.display(size: CGSize(width: 4096, height: 2304), scale: 2))
+        #expect(atTheCap.pixelWidth == 8192 && atTheCap.pixelHeight == 4608, "a display at the cap isn't scaled")
+    }
+
+    @Test("A display with no usable size, or an area that isn't finite or misses its display, has no geometry")
+    func unusable() {
+        let display = CGSize(width: 1512, height: 982)
+        for size in [CGSize(width: CGFloat.nan, height: 900), CGSize(width: 1512, height: CGFloat.infinity), .zero, CGSize(width: 0.5, height: 900), CGSize(width: -1512, height: 982), CGSize(width: 1e9, height: 1e9)] {
+            #expect(ScreencastCaptureGeometry.display(size: size, scale: 2) == nil, "\(size)")
+        }
+        for rect in [CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100), CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 100), .zero, CGRect(x: 2000, y: 0, width: 100, height: 100), .null] {
+            #expect(ScreencastCaptureGeometry.area(rect, displaySize: display, scale: 2) == nil, "\(rect)")
+        }
     }
 
     @Test("An area drawn in AppKit's space becomes the display's own, top-left")
@@ -222,13 +248,39 @@ struct ScreencastCaptureFilterTests {
         #expect(plan == .windows(1, includingWindows: [10, 11, 13, 16, 18]))
     }
 
-    @Test("A sheet below an expanded or labelled toolbar, or a tab bar, still counts; one much lower doesn't", arguments: [
-        (78.0, true), (120.0, true), (150.0, true), (200.0, false)
+    @Test("A sheet just below the title bar or a standard toolbar counts; one over the title bar, or lower, doesn't", arguments: [
+        (0.0, false), (10.0, false), (16.0, true), (28.0, true), (52.0, true), (60.0, true), (78.0, false), (150.0, false)
     ] as [(Double, Bool)])
     func sheetBelowAToolbar(below: Double, isSheet: Bool) {
         let window = Screens.with(Screens.browserWindow, order: 3)
         let sheet = ScreencastContent.Window(id: 16, frame: CGRect(x: 250, y: 100 + below, width: 500, height: 300), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
         #expect(ScreencastCaptureFilter.isSheet(sheet, on: window) == isSheet)
+    }
+
+    /// Until they're moved, an app's new windows open centred, and NSWindow.center() puts a shorter
+    /// window's top a third of the height difference below a taller one's.
+    @Test("The app's Settings window or another document, centred in front of the recorded window, isn't its sheet; a real sheet is")
+    func centredWindowsAreNotSheets() throws {
+        // The recorded window runs from (100, 100) to (900, 700): centred on x 500.
+        let target = Screens.with(Screens.browserWindow, order: 3)
+        func titled(_ id: CGWindowID, _ frame: CGRect) -> ScreencastContent.Window {
+            ScreencastContent.Window(id: id, frame: frame, layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true, order: 1)
+        }
+        // 500 × 300, centred: its top (600 - 300) / 3 = 100 pt below the recorded window's.
+        let settings = titled(40, CGRect(x: 250, y: 200, width: 500, height: 300))
+        // The same size, centred: exactly over the recorded window.
+        let secondDocument = titled(41, CGRect(x: 100, y: 100, width: 800, height: 600))
+        // Wider than the recorded window, centred, its top 40 pt below.
+        let wider = titled(42, CGRect(x: 0, y: 140, width: 1000, height: 480))
+        // A Save sheet below a unified toolbar.
+        let sheet = titled(43, CGRect(x: 250, y: 152, width: 500, height: 400))
+        for window in [settings, secondDocument, wider] {
+            #expect(!ScreencastCaptureFilter.isSheet(window, on: target), "\(window.id)")
+        }
+        #expect(ScreencastCaptureFilter.isSheet(sheet, on: target))
+        let content = Screens.content(windows: [target, Screens.browserSheet, Screens.browserMenu, settings, secondDocument, wider, sheet])
+        let plan = try #require(ScreencastCaptureFilter.windowPlan(window: 10, ownProcessID: Screens.ownProcess, overlays: [], content: content))
+        #expect(plan == .windows(1, includingWindows: [10, 11, 13, 43]))
     }
 
     @Test("Unknown order counts as behind, so a window out of sight names no sheet")
@@ -426,10 +478,33 @@ struct ScreencastMetadataTests {
 /// did: none of it may trap (QA 4030.329.2 crashed converting a window number).
 @Suite("Screencast: real-world values never trap")
 struct ScreencastRealValueTests {
-    @Test("Window numbers that are 0, negative, or too big for a CGWindowID are left out")
+    @Test("Window numbers that are 0, negative, or too big for a CGWindowID are left out and counted")
     func windowNumbers() {
-        let numbers = [-1, 0, 5, Int(UInt32.max), Int(UInt32.max) + 1, Int.max]
-        #expect(ScreencastNumbers.windowIDs(numbers) == [5, UInt32.max])
+        let numbers = [-1, 0, 5, Int(UInt32.max), Int(UInt32.max) + 1, Int.max, Int.min]
+        let read = ScreencastNumbers.windowIDs(numbers)
+        #expect(read.ids == [5, UInt32.max])
+        #expect(read.dropped == 5)
+        #expect(ScreencastNumbers.windowIDs([7, 8]).dropped == 0)
+    }
+
+    /// Every range production converts into, with the values a real clock, timestamp, or size can
+    /// reach. On 33fa556, `0...Int.max` trapped at 1e300 and at `Double(Int.max)`, which rounds up
+    /// to 2^63.
+    @Test("Conversions into every range production uses can't trap, at either end", arguments: [
+        0...Int.max, 0...ScreencastCaptureGeometry.pixelLimit, 4...6, 2_000_000...40_000_000,
+        0...Int(Int32.max), 0...0, Int.min...Int.max, Int.max...Int.max, Int.min...Int.min
+    ] as [ClosedRange<Int>])
+    func conversionRanges(range: ClosedRange<Int>) {
+        let values: [Double] = [1e300, -1e300, .infinity, -.infinity, .nan, Double(Int.max), Double(Int.min), .greatestFiniteMagnitude, -0.0, 0.5, 5.9]
+        for value in values {
+            let converted = ScreencastNumbers.int(value, in: range, fallback: range.lowerBound)
+            #expect(range.contains(converted), "\(value)")
+        }
+        #expect(ScreencastNumbers.int(1e300, in: range, fallback: range.lowerBound) == range.upperBound)
+        #expect(ScreencastNumbers.int(Double(Int.max), in: range, fallback: range.lowerBound) == range.upperBound)
+        #expect(ScreencastNumbers.int(-1e300, in: range, fallback: range.upperBound) == range.lowerBound)
+        #expect(ScreencastNumbers.int(.nan, in: range, fallback: range.upperBound) == range.upperBound, "NaN gives the fallback")
+        #expect(ScreencastNumbers.int(-.infinity, in: range, fallback: range.upperBound) == range.upperBound, "so does infinity")
     }
 
     @Test("Conversions take NaN, infinity, and values that don't fit")
@@ -438,6 +513,8 @@ struct ScreencastRealValueTests {
         #expect(ScreencastNumbers.int(.infinity, in: 0...10, fallback: 7) == 7)
         #expect(ScreencastNumbers.int(1e30, in: 0...10, fallback: 7) == 10)
         #expect(ScreencastNumbers.int(-3.5, in: 0...10, fallback: 7) == 0)
+        #expect(ScreencastNumbers.int(1e300, in: 0...Int.max, fallback: 0) == Int.max)
+        #expect(ScreencastNumbers.int(5.9, in: 0...Int.max, fallback: 0) == 5)
         for rate in [Double.nan, .infinity, 0, 0.4, 1e12] {
             #expect(ScreencastNumbers.timescale(forSampleRate: rate) == nil, "\(rate)")
         }
@@ -450,17 +527,19 @@ struct ScreencastRealValueTests {
         #expect(ScreencastNumbers.framesPerSecond(0) == 1 && ScreencastNumbers.framesPerSecond(Int.max) == 120)
     }
 
-    @Test("A rect, display, or scale that isn't finite gives a small frame, not a crash")
-    func geometry() {
+    @Test("A rect, display, or scale that isn't finite gives no geometry, or a scale of 1, not a crash")
+    func geometry() throws {
         let display = CGSize(width: 1512, height: 982)
-        let nan = ScreencastCaptureGeometry.area(CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100), displaySize: display, scale: 2)
-        #expect(nan.pixelWidth == 3024 && nan.pixelHeight == 1964, "the whole display")
-        let infinite = ScreencastCaptureGeometry.area(CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 100), displaySize: display, scale: 2)
-        #expect(infinite.pixelWidth == 3024)
-        let badDisplay = ScreencastCaptureGeometry.display(size: CGSize(width: CGFloat.nan, height: 900), scale: .nan)
-        #expect(badDisplay.pixelWidth == 2 && badDisplay.pixelHeight == 2)
-        let huge = ScreencastCaptureGeometry.display(size: CGSize(width: 1e9, height: 1e9), scale: 1e9)
-        #expect(huge.pixelWidth <= 16_384 && huge.pixelHeight <= 16_384)
+        #expect(ScreencastCaptureGeometry.area(CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100), displaySize: display, scale: 2) == nil)
+        #expect(ScreencastCaptureGeometry.area(CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 100), displaySize: display, scale: 2) == nil)
+        #expect(ScreencastCaptureGeometry.display(size: CGSize(width: CGFloat.nan, height: 900), scale: .nan) == nil)
+        #expect(ScreencastCaptureGeometry.display(size: CGSize(width: 1e9, height: 1e9), scale: 1e9) == nil)
+        #expect(ScreencastCaptureGeometry.display(size: CGSize(width: 1e300, height: 1e300), scale: 1) == nil)
+        let noScale = try #require(ScreencastCaptureGeometry.display(size: display, scale: .nan))
+        #expect(noScale.pixelWidth == 1512 && noScale.pixelHeight == 982)
+        let hugeScale = try #require(ScreencastCaptureGeometry.display(size: CGSize(width: 1920, height: 1080), scale: 1e9))
+        #expect(hugeScale.pixelWidth <= ScreencastMovieWriter.maximumPixels && hugeScale.pixelHeight <= ScreencastMovieWriter.maximumPixels)
+        #expect(hugeScale.sourceRect == CGRect(x: 0, y: 0, width: 1920, height: 1080))
     }
 
     @Test("A clock that isn't a real time names the capture folder 0")

@@ -239,6 +239,22 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("A display with no usable size, or an area that isn't finite or misses its display, fails the start rather than recording something else")
+    func unusableGeometry() async {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        for rect in [CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100), CGRect(x: 0, y: 0, width: 100, height: CGFloat.infinity), .zero, CGRect(x: 5000, y: 0, width: 100, height: 100)] {
+            await #expect(throws: ScreencastFailure.targetUnavailable, "\(rect)") { try await start(recorder, .area(display: 1, rect: rect)) }
+        }
+        let empty = ScreencastContent.Display(id: 3, frame: CGRect(x: 3432, y: 0, width: 0, height: 0), scale: 2)
+        system.screen = ScreencastContent(displays: Screens.content().displays + [empty], windows: Screens.content().windows, applicationProcessIDs: Screens.content().applicationProcessIDs)
+        await #expect(throws: ScreencastFailure.targetUnavailable) { try await start(recorder, .display(3)) }
+        await #expect(throws: ScreencastFailure.targetUnavailable) { try await start(recorder, .everyDisplay) }
+        #expect(system.videoStreams.isEmpty && writers.writers.isEmpty)
+        #expect(captures.captureFolders().isEmpty)
+    }
+
+    @available(macOS 15, *)
     @Test("A stream that won't start removes the folder and its files")
     func streamWontStart() async {
         defer { captures.remove() }
@@ -1224,8 +1240,8 @@ struct ScreencastRecorderTests {
             framesPerSecond: Int.max, showsCursor: true, showsMouseClicks: false, scalesToFit: false
         ))
         #expect(configuration.minimumFrameInterval == CMTime(value: 1, timescale: 120))
-        // The unit-test host's own windows, read as the recorder does: it mustn't trap.
-        _ = ScreenCaptureKitCaptureSystem().ownVisibleWindows()
+        // Keybumps's own window numbers: `ScreencastRealValueTests.windowNumbers` covers their
+        // conversion, since the test host has no window whose number could trap.
     }
 
     @available(macOS 15, *)
