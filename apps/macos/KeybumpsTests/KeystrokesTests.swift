@@ -784,23 +784,30 @@ struct KeystrokesTests {
         #expect(harness.presenter.last?.clicks.isEmpty == true)
     }
 
-    @Test("A keyboard tap macOS refused starts once permissions are read again")
+    @Test("A keyboard tap macOS refused starts once permissions are read again, and the display says so")
     func refusedTapRetries() {
         let harness = DisplayHarness()
+        var reports: [Bool] = []
+        harness.display.onShowingChange = { reports.append(harness.display.isOnScreen) }
         harness.keys.refuses = true
         harness.display.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
         #expect(!harness.display.isListening)
+        #expect(!harness.display.isOnScreen, "Shown, but no key can appear")
         harness.display.permissionsDidRefresh()
         #expect(!harness.display.isListening)
+        #expect(reports == [false], "Only the hold is reported")
 
         harness.keys.refuses = false
         harness.display.permissionsDidRefresh()
         #expect(harness.display.isListening)
         #expect(harness.keys.isRunning)
+        #expect(harness.display.isOnScreen)
+        #expect(reports == [false, true], "The tap starting is reported")
 
         harness.display.release(.keystrokes)
         harness.display.permissionsDidRefresh()
         #expect(!harness.keys.isRunning, "Nobody holds it")
+        #expect(reports == [false, true, false], "Once, though it stopped showing and listening together")
     }
 
     // MARK: The plugin
@@ -1048,6 +1055,50 @@ struct KeystrokesTests {
         #expect(notices.warnings.suffix(3) == [true, false, true])
     }
 
+    @Test("Without Input Monitoring no key can be on screen: Show Keystrokes is unchecked, every press says why, never Keystrokes hidden, and the item checks itself once the tap starts")
+    func withoutInputMonitoring() throws {
+        let harness = DisplayHarness()
+        harness.keys.refuses = true
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let binding = ShortcutBinding(keyCode: UInt32(kVK_ANSI_K), modifiers: UInt32(controlKey | optionKey | shiftKey), displayName: "⌃⌥⇧K")
+        preferences.setCapabilityShortcut(binding, for: .keystrokes)
+        let status = MenuBarStatus()
+        var redraws = 0
+        status.onChange = { redraws += 1 }
+        let notices = RecordingNotices()
+        let module = KeystrokesModule(
+            display: harness.display,
+            preferences: preferences,
+            menuBar: CapabilityMenuBarStatus(status: status, capability: .keystrokes),
+            notices: notices
+        )
+        let isChecked = { status.sections.first?.first?.isChecked }
+        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
+        #expect(module.isShowing)
+        #expect(harness.display.isShowing, "The plugin's keys are shown")
+        #expect(isChecked() == false, "but none can appear, so the item is unchecked")
+
+        harness.hotKeys.press(binding)
+        harness.hotKeys.press(binding)
+        #expect(notices.messages == Array(repeating: "Keystrokes can't show keys without Input Monitoring", count: 2), "Every press says why")
+        #expect(notices.warnings == [true, true])
+        try #require(status.sections.first?.first).action()
+        #expect(module.isShowing, "Every press shows them")
+        #expect(harness.display.isShowing)
+        #expect(isChecked() == false)
+        #expect(notices.messages.count == 2, "The item doesn't announce")
+
+        harness.keys.refuses = false
+        let before = redraws
+        harness.display.permissionsDidRefresh()
+        #expect(isChecked() == true, "Checked once Input Monitoring is granted and the tap starts")
+        #expect(redraws == before + 1)
+        harness.hotKeys.press(binding)
+        #expect(!harness.display.isShowing, "Now a press hides them")
+        #expect(notices.messages.last == "Keystrokes hidden")
+        #expect(isChecked() == false)
+    }
+
     @Test("The app's display follows the plugin's switch and settings, and missing Input Monitoring is its page's attention")
     func pluginInTheApp() throws {
         let root = FileManager.default.temporaryDirectory
@@ -1087,7 +1138,7 @@ struct KeystrokesTests {
         model.setCapability(.keystrokes, enabled: true)
         #expect(model.preferences.bool(.keystrokesShowing, for: .keystrokes), "Turning it on shows the keys")
         #expect(model.keyDisplay.isShowing)
-        #expect(model.menuBarStatus.sections.first?.first?.isChecked == true)
+        #expect(model.menuBarStatus.sections.first?.first?.isChecked == false, "Listed, but unchecked: without Input Monitoring no key can be on screen")
     }
 
     @Test("Hidden keys stay hidden after a relaunch, with the plugin on")
