@@ -233,7 +233,7 @@ private final class InertGlobalHotKeyBackend: GlobalHotKeyRegistering {
 /// Screencast's made-up screen in UI test mode: the main screen split into a top and a bottom
 /// display, each as wide as it (CI's screen is 1024 points wide, and the picker's bar needs most of
 /// that), with two windows of a made-up app on each, so a test can switch modes, pick a screen, and
-/// pick a window on the screen with the bar, without reading the real screen. Screenshots are blank.
+/// pick a window on the screen with the bar, without reading the real screen.
 @MainActor
 final class UITestScreencastScreen: ScreencastPickerSystem {
     static let madeUpProcess: pid_t = 1
@@ -278,16 +278,6 @@ final class UITestScreencastScreen: ScreencastPickerSystem {
     }
 
     func transparentWindows() -> Set<CGWindowID> { [] }
-
-    func screenshot(_ plan: ScreencastScreenshotPlan, content: ScreencastContent) async throws -> CGImage {
-        let width = max(plan.configuration.pixelWidth, 2)
-        let height = max(plan.configuration.pixelHeight, 2)
-        guard let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ), let image = context.makeImage() else { throw ScreencastFailure.captureFailed }
-        return image
-    }
 }
 
 final class InertSpotlightShortcutResolver: SpotlightShortcutConflictResolving {

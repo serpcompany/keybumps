@@ -1,6 +1,6 @@
 # 0009: Screencast records the screen and sound in Keybumps, and sends a capture where the person chooses, starting with their own Clipy account
 
-Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329.
+Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329. Amended 2026-10-12 (#485): Screencast records video only, and screenshots stay with Screenshot Tools.
 
 ## Context
 
@@ -20,7 +20,7 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
 1. **Screencast is an added plugin that ships off** (ADR 0006, `isOnByDefault` false), built with the recipe in `docs/adding-a-plugin.md`. The person turns it on and sets it up in Settings › Screencast: permissions, audio defaults, and the Clipy key if they want to send.
 2. **It needs macOS 15** (`minimumMacOS`), so ScreenCaptureKit records the screen, system audio, and microphone in one stream. On 2026-10-10 the owner decided macOS 14 doesn't need it. Keybumps itself still supports 14.2.
 3. **What it captures:**
-   - screenshots and video of an area, a window, or every screen. Screenshots reuse Screenshot Tools' redaction and markup. Screenshot Tools selects an area through macOS's `screencapture -i`, which can't drive a video, so Screencast has its own area and window picker. Every screen records one file per display;
+   - video of an area, a window, or every screen. It took screenshots too, with Screenshot Tools' redaction and markup, until the owner decided on 2026-10-12 that screenshots are Screenshot Tools' alone (#485). Screenshot Tools selects an area through macOS's `screencapture -i`, which can't drive a video, so Screencast has its own area and window picker. Every screen records one file per display;
    - the microphone and system audio, each with its own switch;
    - a floating control bar with the elapsed time, pause and resume, stop, discard, restart, the audio switches, and drawing. The bar is left out of the recording;
    - the keys pressed, shown on screen, but only combinations with ⌘, ⌃, or ⌥, never plain typing. The display is its own plugin (#443), which Screencast uses;
@@ -29,7 +29,7 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
    - **Save**: keep it on the Mac only;
    - **Save and Send**: keep it and send it to a destination;
    - **Send and Delete**: send it, then delete the local copy once the destination confirms the upload. If the upload fails, the capture stays;
-   - **Copy**: put the screenshot or video on the clipboard;
+   - **Copy**: put the video on the clipboard;
    - **Discard**.
 5. **Keybumps does all the recording**; it doesn't hand captures to another recorder app. Sending is optional and goes to a **destination**: an account of the person's own that they connect in Settings › Screencast. Each destination is built into Keybumps and ships in a release, like plugins (ADR 0006). Clipy is the first destination, and the rest of this decision and decisions 6 and 8 describe it.
 

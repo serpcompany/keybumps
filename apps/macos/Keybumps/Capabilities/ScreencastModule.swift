@@ -41,7 +41,7 @@ extension PluginAction {
     static let startScreencast = PluginAction(
         id: "startScreencast",
         title: "Start Screencast",
-        keywords: ["record", "recording", "screen recording", "capture", "video", "screenshot"],
+        keywords: ["record", "recording", "screen recording", "capture", "video"],
         systemImage: "record.circle",
         shortcut: .screencast
     )
@@ -158,12 +158,12 @@ final class ScreencastModule: CapabilityModule {
     }
 
     /// Turned off, or Keybumps Locked: the picker closes and a countdown is cancelled, but a
-    /// recording stops and is kept, and a screenshot being saved finishes. Neither opens anything;
-    /// they stay in the captures folder (`ScreencastController.shutDown`).
+    /// recording stops and is kept. It opens nothing; it stays in the captures folder
+    /// (`ScreencastController.shutDown`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
-        // The capture under review is saved, and an editor open on it stays open.
+        // The capture under review is saved.
         review.close()
         guard #available(macOS 15, *), let controller else { return }
         Task { await controller.shutDown() }

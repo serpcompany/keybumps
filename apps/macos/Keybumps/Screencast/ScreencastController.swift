@@ -16,7 +16,7 @@ enum ScreencastPhase: Equatable, Sendable {
     case starting
     case recording
     case paused
-    /// Saving: the recording stopping, or a screenshot being taken.
+    /// Saving: the recording stopping.
     case finishing
 
     /// Recording or paused: while the control bar shows.
@@ -33,13 +33,11 @@ struct ScreencastPhaseObservation: Hashable, Sendable {
 /// A capture saved in the captures folder, for the review panel (#450).
 enum ScreencastCaptureResult: Equatable, Sendable {
     case video(ScreencastCapture)
-    case screenshot(ScreencastScreenshot)
 
     /// Its `<captures folder>/<timestamp>/` folder.
     var folder: URL {
         switch self {
         case .video(let capture): capture.folder
-        case .screenshot(let screenshot): screenshot.folder
         }
     }
 }
@@ -47,7 +45,7 @@ enum ScreencastCaptureResult: Equatable, Sendable {
 /// What Screencast draws around a capture: the picker on every screen, the countdown, the
 /// highlight while an area records, and short messages. `ScreencastOverlayWindows` in the app; an
 /// inert one in the unit-test host, and fakes in tests. Every window it opens is Keybumps's own,
-/// so recordings and screenshots leave it out.
+/// so recordings leave it out.
 @MainActor
 protocol ScreencastOverlayPresenting: AnyObject {
     /// Covers every screen with the picker for `model`. Its Record (or Return) runs `confirm`, and
@@ -89,8 +87,8 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 }
 
 /// Runs one capture at a time, from Start Screencast to the saved file: it opens the picker, counts
-/// down, starts `recorder`, keeps an area highlighted while it records, takes screenshots, and hands
-/// each saved capture to `onCaptureFinished`.
+/// down, starts `recorder`, keeps an area highlighted while it records, and hands each saved
+/// capture to `onCaptureFinished`.
 ///
 /// The pieces around a recording hang on it:
 /// - **#448, the control bar,** shows from `.starting` until the recording ends, reads `recorder` for the elapsed
@@ -103,7 +101,7 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 ///   before it starts, so the first frame has them. A restart clears the drawing and the keys
 ///   first (`addWillRestartObserver(_:)`) and gives the screen a moment to show that, and they come
 ///   down when the phase is `.idle` again.
-/// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved video and screenshot.
+/// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved recording.
 ///
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
 /// whatever order they're added in; `onPhaseChange` reports it too. Escape cancels while picking,
@@ -141,8 +139,8 @@ final class ScreencastController {
     /// Phases entered while the observers are being told of an earlier one, told next, in order.
     @ObservationIgnored private var unannouncedPhases: [ScreencastPhase] = []
     @ObservationIgnored private var isAnnouncingPhase = false
-    /// A video or screenshot was saved: the review panel takes it from here. A recording that
-    /// ended early comes here too, with `endedEarly` set, after its message.
+    /// A recording was saved: the review panel takes it from here. A recording that ended early
+    /// comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
 
     @ObservationIgnored private let system: any ScreencastPickerSystem
@@ -154,7 +152,6 @@ final class ScreencastController {
     @ObservationIgnored private let microphoneAvailable: @MainActor () -> Bool
     @ObservationIgnored private let sleep: (TimeInterval) async throws -> Void
     @ObservationIgnored private let restartSettle: TimeInterval
-    @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let ownProcessID: pid_t
     @ObservationIgnored private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
@@ -185,8 +182,8 @@ final class ScreencastController {
 
     /// - Parameters:
     ///   - recorder: The recording engine; a new one, inert in the unit-test host, unless given.
-    ///   - system: The screen, for the windows to pick and for screenshots; inert in the unit-test
-    ///     host unless a test passes a fake.
+    ///   - system: The screen, for the windows to pick; inert in the unit-test host unless a test
+    ///     passes a fake.
     ///   - presenter: The picker's and countdown's windows; inert in the unit-test host.
     ///   - preferences: Settings › Screencast, read each time the picker opens.
     ///   - screens: The displays, read each time the picker opens.
@@ -216,7 +213,6 @@ final class ScreencastController {
         gettingReadyDelay: TimeInterval = 0.3,
         screenReadTimeout: TimeInterval = 30,
         screenChanges: NotificationCenter = .default,
-        now: @escaping () -> Date = Date.init,
         fileManager: FileManager = .default,
         ownProcessID: pid_t = ProcessInfo.processInfo.processIdentifier
     ) {
@@ -233,7 +229,6 @@ final class ScreencastController {
         self.gettingReadyDelay = gettingReadyDelay
         self.screenReadTimeout = screenReadTimeout
         self.screenChanges = screenChanges
-        self.now = now
         self.fileManager = fileManager
         self.ownProcessID = ownProcessID
         self.recorder.onEndedEarly = { [weak self] capture, failure in
@@ -372,10 +367,9 @@ final class ScreencastController {
     private func pickerUnavailable(_ error: Error) {
         guard phase == .picking else { return }
         let failure = (error as? ScreencastFailure) ?? .captureFailed
-        let kind = picker?.kind ?? .video
         logger.error("screencast picker unavailable category=\(failure.rawValue, privacy: .public)")
         cancel()
-        presenter.showMessage(ScreencastMessages.text(for: failure, kind: kind))
+        presenter.showMessage(ScreencastMessages.text(for: failure))
     }
 
     /// The displays changed while the picker is open, such as one unplugged. Its panels and its
@@ -402,8 +396,8 @@ final class ScreencastController {
         screenObserver = nil
     }
 
-    /// Record or Capture: closes the picker, remembers an area, then takes the screenshot, or counts
-    /// down and starts recording. Does nothing until something is chosen.
+    /// Record: closes the picker, remembers an area, then counts down and starts recording. Does
+    /// nothing until something is chosen.
     func confirm() {
         guard phase == .picking, let model = picker, let choice = model.choice(), let settings else { return }
         if let area = choice.area { areaMemory.save(area.rect) }
@@ -412,19 +406,12 @@ final class ScreencastController {
         presenter.closePicker()
         picker = nil
         self.choice = choice
-        logger.info("screencast picker confirmed kind=\(choice.kind.rawValue, privacy: .public) target=\(choice.target.kind, privacy: .public)")
+        logger.info("screencast picker confirmed target=\(choice.target.kind, privacy: .public)")
         let generation = generation
-        switch choice.kind {
-        case .screenshot:
-            presenter.stopWatchingEscape()
-            phase = .finishing
-            flow = Task { [weak self] in await self?.takeScreenshot(choice, settings: settings, generation: generation) }
-        case .video:
-            if let area = choice.area { presenter.showAreaHighlight(area) }
-            // Entered now, so Escape before the countdown's first second still cancels it.
-            phase = settings.countdownSeconds > 0 ? .countingDown(remaining: settings.countdownSeconds) : .starting
-            flow = Task { [weak self] in await self?.countDownAndRecord(choice, settings: settings, generation: generation) }
-        }
+        if let area = choice.area { presenter.showAreaHighlight(area) }
+        // Entered now, so Escape before the countdown's first second still cancels it.
+        phase = settings.countdownSeconds > 0 ? .countingDown(remaining: settings.countdownSeconds) : .starting
+        flow = Task { [weak self] in await self?.countDownAndRecord(choice, settings: settings, generation: generation) }
     }
 
     /// Escape: closes the picker, stops the countdown, or cancels a start, and leaves nothing
@@ -660,27 +647,6 @@ final class ScreencastController {
         waiters.forEach { $0.resume() }
     }
 
-    // MARK: Screenshots
-
-    private func takeScreenshot(_ choice: ScreencastChoice, settings: ScreencastPreferences, generation: Int) async {
-        do {
-            let screenshot = try await ScreencastScreenshots.take(
-                choice.target,
-                system: system,
-                ownProcessID: ownProcessID,
-                capturesFolder: settings.capturesFolder,
-                takenAt: now(),
-                fileManager: fileManager
-            )
-            guard generation == self.generation else { return }
-            logger.info("screencast screenshot saved displays=\(screenshot.images.count, privacy: .public)")
-            finish(with: .screenshot(screenshot))
-        } catch {
-            guard generation == self.generation else { return }
-            end(showing: error)
-        }
-    }
-
     // MARK: Ending
 
     private func finish(with result: ScreencastCaptureResult) {
@@ -704,7 +670,7 @@ final class ScreencastController {
         } else {
             let failure = (error as? ScreencastFailure) ?? .captureFailed
             logger.error("screencast failed category=\(failure.rawValue, privacy: .public)")
-            presenter.showMessage(ScreencastMessages.text(for: failure, kind: choice?.kind ?? .video))
+            presenter.showMessage(ScreencastMessages.text(for: failure))
         }
         choice = nil
         phase = .idle
@@ -735,14 +701,14 @@ final class ScreencastController {
 
 /// What Screencast says when a capture can't start or save.
 enum ScreencastMessages {
-    static func text(for failure: ScreencastFailure, kind: ScreencastCaptureKind) -> String {
+    static func text(for failure: ScreencastFailure) -> String {
         switch failure {
         case .screenRecordingDenied:
             "Turn on Screen Recording for Keybumps in System Settings to capture your screen."
         case .targetUnavailable:
             "That window or screen isn’t there anymore."
         case .captureFailed:
-            kind == .video ? "The recording couldn’t start. Try again." : "The screenshot couldn’t be taken. Try again."
+            "The recording couldn’t start. Try again."
         case .stoppedByMacOS:
             "macOS stopped the recording."
         case .writerFailed:

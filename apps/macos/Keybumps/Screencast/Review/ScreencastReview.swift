@@ -4,39 +4,30 @@ import Foundation
 // user content: it stays in the capture's `meta.json` on this Mac until the person sends the
 // capture (#451), and is never logged.
 
-/// A finished capture for the review panel: a recording or a screenshot, each in its own folder in
-/// the captures folder, `<captures folder>/<timestamp>/`, beside its `meta.json`, with a video or an
-/// image per display.
+/// A finished recording for the review panel, in its own folder in the captures folder,
+/// `<captures folder>/<timestamp>/`, beside its `meta.json`, with a video per display.
 enum ScreencastReviewInput: Equatable {
     case video(ScreencastCapture)
-    case screenshot(ScreencastScreenshot)
 
     /// What the flow controller saved.
     init(_ result: ScreencastCaptureResult) {
         switch result {
         case .video(let capture): self = .video(capture)
-        case .screenshot(let screenshot): self = .screenshot(screenshot)
         }
     }
 
     var folder: URL {
         switch self {
         case .video(let capture): capture.folder
-        case .screenshot(let screenshot): screenshot.folder
         }
     }
 
     var metadataURL: URL { folder.appendingPathComponent(ScreencastMetadata.fileName) }
 
-    var isVideo: Bool {
-        if case .video = self { true } else { false }
-    }
-
     /// The capture's own files. Discard deletes the folder only when every one is in it.
     var mediaFiles: [URL] {
         switch self {
         case .video(let capture): capture.videos.flatMap { [$0.file] + [$0.mixdown].compactMap { $0 } }
-        case .screenshot(let screenshot): screenshot.images.map(\.file)
         }
     }
 }
@@ -80,8 +71,6 @@ enum ScreencastReviewFailure: String, Error, Equatable {
     case copyFailed
     /// The capture's folder couldn't be deleted, or wasn't the capture's.
     case deleteFailed
-    /// The Screenshot Editor didn't open: another screenshot is being edited, or this one can't be read.
-    case editorUnavailable
 
     /// What the panel says.
     var message: String {
@@ -91,7 +80,6 @@ enum ScreencastReviewFailure: String, Error, Equatable {
         case .metadataFailed: "Couldn’t save the note. The capture is still in its folder."
         case .copyFailed: "Couldn’t copy the capture."
         case .deleteFailed: "Couldn’t delete the capture."
-        case .editorUnavailable: "Couldn’t open the editor. Finish the screenshot you’re editing first."
         }
     }
 }
@@ -108,15 +96,11 @@ struct ScreencastReview: Codable, Equatable, Sendable {
     var repository: String?
     /// The app, and for a browser the website, in front when the capture started.
     var context: ScreencastCaptureContext
-    /// A screenshot's marked-up copies in the capture's folder, by the image each replaces, which
-    /// Copy and Send use in their place: `["screenshot-1.png": "screenshot-1 (edited).png"]`. Nil
-    /// for a recording, or a screenshot that wasn't edited.
-    var editedImages: [String: String]?
     var reviewedAt: Date
 
-    /// Puts `review` in the `meta.json` at `url`, keeping everything the recorder or the screenshot
-    /// wrote there, and, after a trim, `trimmed`'s new durations. From then on the file holds user
-    /// content, so only the person can read it (0600).
+    /// Puts `review` in the `meta.json` at `url`, keeping everything the recorder wrote there, and,
+    /// after a trim, `trimmed`'s new durations. From then on the file holds user content, so only
+    /// the person can read it (0600).
     static func write(
         _ review: ScreencastReview,
         trimmed: ScreencastCapture? = nil,

@@ -378,7 +378,7 @@ final class AppModel {
                 menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screencast),
                 keyDisplay: keyDisplay,
                 seams: injectedScreencast,
-                review: .app(clipboard: clipboard, screenshotTools: screenshotModule, preferences: preferences)
+                review: .app(clipboard: clipboard)
             ),
         ])
         commandPalette.tabContents = capabilities.paletteContents

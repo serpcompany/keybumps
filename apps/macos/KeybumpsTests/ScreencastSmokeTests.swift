@@ -1,8 +1,6 @@
 import CoreGraphics
 import Foundation
-import ImageIO
 import Testing
-import UniformTypeIdentifiers
 @testable import Keybumps
 
 /// The QA smoke test's runner (#470), driven through the real controller, control bar, and
@@ -12,7 +10,7 @@ import UniformTypeIdentifiers
 @MainActor
 @Suite("Screencast: the QA smoke test")
 struct ScreencastSmokeTests {
-    /// The script's helper, whose blank window the window captures take.
+    /// The script's helper, whose blank window the window capture takes.
     nonisolated static let helperProcess: pid_t = 503
     static let smokeWindow = ScreencastContent.Window(
         id: 40, frame: CGRect(x: 1000, y: 600, width: 480, height: 270), layer: 0, processID: helperProcess, isUntitled: false, isOnScreen: true
@@ -85,7 +83,7 @@ struct ScreencastSmokeTests {
         )
         let runner = ScreencastSmokeRunner(
             rig: rig,
-            inspector: ScreencastSmokeInspector(video: { _ in video }, image: ScreencastSmokeInspector.system.image),
+            inspector: ScreencastSmokeInspector(video: { _ in video }),
             configuration: configuration ?? Self.quick,
             environment: ScreencastSmokeRunner.Environment(
                 macOS: "15.6.1",
@@ -122,7 +120,7 @@ struct ScreencastSmokeTests {
             #expect(capture.timings.pickerMs != nil && capture.timings.finishMs != nil && capture.timings.checkMs != nil)
             #expect((capture.bytes ?? 0) > 0 && (capture.pixelWidth ?? 0) > 0)
         }
-        let videos = report.captures.filter { $0.mode.kind == .video }
+        let videos = report.captures
         #expect(videos.allSatisfy { $0.controlBarShown == true && $0.overlaysShown == true && $0.durationSeconds == 2 })
         #expect(videos.allSatisfy { $0.timings.startMs != nil && $0.timings.recordMs != nil })
 
@@ -142,10 +140,6 @@ struct ScreencastSmokeTests {
         }
         let area = ScreencastSmokeRunner.area(in: PickerScreens.left.frame)
         #expect(abs(configuration.sourceRect.width - area.width) < 2 && abs(configuration.sourceRect.height - area.height) < 2)
-        // Screenshots: the main display, the script's window, the area.
-        #expect(pickerSystem.plans.count == 3)
-        #expect(pickerSystem.plans.map(\.filter.displayID) == [1, nil, 1])
-        #expect(pickerSystem.plans.dropFirst().first?.filter == .window(Self.smokeWindow.id))
 
         // The picker's windows never opened; the area's highlight did, and closed; nothing is left.
         #expect(!overlays.events.contains(.showPicker))
@@ -179,7 +173,7 @@ struct ScreencastSmokeTests {
     }
 
     @available(macOS 15, *)
-    @Test("A video that can't start fails with the engine's reason, shown as the app shows it, and the screenshots still run")
+    @Test("A video that can't start fails with the engine's reason, shown as the app shows it, and the next still runs")
     func failedStart() async throws {
         defer { folder.remove() }
         captureSystem.videoStartError = .captureFailed
@@ -187,10 +181,9 @@ struct ScreencastSmokeTests {
         let report = await runner.run()
 
         #expect(!report.passed && report.complete && report.exitCode == 1)
-        let videos = report.captures.filter { $0.mode.kind == .video }
+        let videos = report.captures
         #expect(videos.count == 3 && videos.allSatisfy { !$0.passed && $0.stage == .starting && $0.errorCategory == "captureFailed" })
-        #expect(report.captures.filter { $0.mode.kind == .screenshot }.allSatisfy { $0.passed })
-        #expect(overlays.messages.contains(ScreencastMessages.text(for: .captureFailed, kind: .video)))
+        #expect(overlays.messages.contains(ScreencastMessages.text(for: .captureFailed)))
         #expect(!FileManager.default.fileExists(atPath: capturesURL.path))
     }
 
@@ -252,7 +245,7 @@ struct ScreencastSmokeTests {
     }
 
     @available(macOS 15, *)
-    @Test("Without the script's window on screen, both window captures fail as noSmokeWindow and never take another window")
+    @Test("Without the script's window on screen, the window capture fails as noSmokeWindow and never takes another window")
     func noSmokeWindow() async throws {
         defer { folder.remove() }
         let offSpace = ScreencastContent.Window(
@@ -270,10 +263,9 @@ struct ScreencastSmokeTests {
             let report = await runner.run()
 
             let windows = report.captures.filter { $0.mode.target == .window }
-            #expect(windows.count == 2 && windows.allSatisfy { $0.stage == .opening && $0.errorCategory == "noSmokeWindow" }, "\(item.name)")
+            #expect(windows.count == 1 && windows.allSatisfy { $0.stage == .opening && $0.errorCategory == "noSmokeWindow" }, "\(item.name)")
             #expect(report.captures.filter { $0.mode.target != .window }.allSatisfy { $0.passed }, "\(item.name)")
             #expect(!smoke.videoPlans.contains { if case .windows = $0 { true } else { false } }, "\(item.name)")
-            #expect(!smoke.pickerSystem.plans.contains { if case .window = $0.filter { true } else { false } }, "\(item.name)")
             #expect(report.exitCode == 1 && report.cleanedUp, "\(item.name)")
         }
     }
@@ -308,16 +300,15 @@ struct ScreencastSmokeTests {
             pickerSystem.onContent = {}
 
             let windows = report.captures.filter { $0.mode.target == .window }
-            #expect(windows.count == 2 && windows.allSatisfy { $0.stage == .opening && $0.errorCategory == item.category }, "\(item.name): \(windows.map(\.errorCategory))")
+            #expect(windows.count == 1 && windows.allSatisfy { $0.stage == .opening && $0.errorCategory == item.category }, "\(item.name): \(windows.map(\.errorCategory))")
             #expect(report.captures.filter { $0.mode.target != .window }.allSatisfy { $0.passed }, "\(item.name)")
             #expect(!smoke.videoPlans.contains { if case .windows = $0 { true } else { false } }, "\(item.name)")
-            #expect(!pickerSystem.plans.contains { if case .window = $0.filter { true } else { false } }, "\(item.name)")
             #expect(report.exitCode == 1 && report.cleanedUp, "\(item.name)")
         }
     }
 
     @available(macOS 15, *)
-    @Test("The window captures wait for the script's window to appear on screen, then take it")
+    @Test("The window capture waits for the script's window to appear on screen, then takes it")
     func lateSmokeWindow() async throws {
         let smoke = ScreencastSmokeTests(content: Self.withSmokeWindow)
         defer {
@@ -335,7 +326,11 @@ struct ScreencastSmokeTests {
         let report = await runner.run()
 
         #expect(report.passed && report.exitCode == 0, "\(report.captures.map(\.errorCategory))")
-        #expect(pickerSystem.plans.dropFirst().first?.filter == .window(Self.smokeWindow.id))
+        guard smoke.videoPlans.count == 3, case .windows(_, let included) = smoke.videoPlans[1] else {
+            Issue.record("the window video didn't record a window")
+            return
+        }
+        #expect(included == [Self.smokeWindow.id], "\(included)")
     }
 
     @available(macOS 15, *)
@@ -357,16 +352,15 @@ struct ScreencastSmokeTests {
         let (runner, _) = makeRunner(video: ScreencastSmokeVideoFacts(videoTracks: 1, duration: 0.3, pixelWidth: 64, pixelHeight: 36))
         let report = await runner.run()
 
-        let videos = report.captures.filter { $0.mode.kind == .video }
+        let videos = report.captures
         #expect(videos.count == 3 && videos.allSatisfy { $0.stage == .saved && $0.errorCategory == "durationOutOfRange" })
-        #expect(report.captures.filter { $0.mode.kind == .screenshot }.allSatisfy { $0.passed })
         #expect(!FileManager.default.fileExists(atPath: capturesURL.path))
     }
 
     // MARK: Checks
 
     @available(macOS 15, *)
-    @Test("A check fails a missing or empty file, a video with no picture or of the wrong length, and an image that doesn't decode")
+    @Test("A check fails a missing or empty file, and a video with no picture or of the wrong length")
     func checks() throws {
         defer { folder.remove() }
         let missing = folder.url.appendingPathComponent("missing.mov")
@@ -383,17 +377,16 @@ struct ScreencastSmokeTests {
         #expect(throws: ScreencastSmokeFailure.durationOutOfRange) { try ScreencastSmokeChecks.check(video(duration: 0.5), durations: 1...4) }
         #expect(throws: ScreencastSmokeFailure.durationOutOfRange) { try ScreencastSmokeChecks.check(video(duration: 9), durations: 1...4) }
         #expect(throws: Never.self) { try ScreencastSmokeChecks.check(video(duration: 2.1), durations: 1...4) }
-        #expect(throws: ScreencastSmokeFailure.undecodableImage) { try ScreencastSmokeChecks.check(nil) }
         #expect(ScreencastSmokeChecks.pixels(.nan) == 0 && ScreencastSmokeChecks.pixels(.infinity) == 0)
         #expect(ScreencastSmokeChecks.pixels(1919.6) == 1920)
 
-        let message = ScreencastMessages.text(for: .writerFailed, kind: .screenshot)
-        #expect(ScreencastSmokeRunner.failure(shownAs: message, kind: .screenshot) == .writerFailed)
-        #expect(ScreencastSmokeRunner.failure(shownAs: ScreencastMessages.endedEarly(.stoppedByMacOS, kept: true), kind: .video) == .stoppedByMacOS)
+        let message = ScreencastMessages.text(for: .writerFailed)
+        #expect(ScreencastSmokeRunner.failure(shownAs: message) == .writerFailed)
+        #expect(ScreencastSmokeRunner.failure(shownAs: ScreencastMessages.endedEarly(.stoppedByMacOS, kept: true)) == .stoppedByMacOS)
         #expect(ScreencastSmokeRunner.area(in: PickerScreens.left.frame) == CGRect(x: 436, y: 311, width: 640, height: 360))
     }
 
-    @Test("The checks read a real 2-second movie and a real PNG, and neither reading accepts a file that's neither")
+    @Test("The check reads a real 2-second movie, and doesn't accept a file that isn't one")
     func realFiles() async throws {
         defer { folder.remove() }
         let writer = try ScreencastMovieWriter(
@@ -414,15 +407,8 @@ struct ScreencastSmokeTests {
         #expect(abs(facts.duration - 2) < 0.1)
         #expect(throws: Never.self) { try ScreencastSmokeChecks.check(facts, durations: 1...4) }
 
-        let png = folder.url.appendingPathComponent("screenshot-1.png")
-        let destination = try #require(CGImageDestinationCreateWithURL(png as CFURL, UTType.png.identifier as CFString, 1, nil))
-        CGImageDestinationAddImage(destination, ScreencastImages.blank(width: 64, height: 36), nil)
-        #expect(CGImageDestinationFinalize(destination))
-        #expect(ScreencastSmokeInspector.system.image(png) == ScreencastSmokeImageFacts(pixelWidth: 64, pixelHeight: 36))
-
         let garbage = folder.url.appendingPathComponent("garbage.mov")
         FileManager.default.createFile(atPath: garbage.path, contents: Data("movie".utf8))
-        #expect(ScreencastSmokeInspector.system.image(garbage) == nil)
         let garbageVideo = try? await ScreencastSmokeInspector.system.video(garbage)
         #expect(garbageVideo == nil || garbageVideo?.videoTracks == 0)
     }

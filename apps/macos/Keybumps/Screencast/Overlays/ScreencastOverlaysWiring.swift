@@ -210,7 +210,7 @@ final class ScreencastOverlaysWiring {
     }
 
     private func begin() {
-        guard let choice = choice(), choice.kind == .video else { return }
+        guard let choice = choice() else { return }
         let recorded = Set(choice.regions.map(\.display))
         recordedDisplays = recorded
         anchor = Self.anchor(for: choice)

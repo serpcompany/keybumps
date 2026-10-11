@@ -240,7 +240,7 @@ struct ScreencastRecorderTests {
 
     /// Review round 13, finding 4: on b568793 a window recording of a Keybumps window started.
     @available(macOS 15, *)
-    @Test("One of Keybumps's own windows can't be recorded as a window, an overlay or not, as its screenshots can't be taken")
+    @Test("One of Keybumps's own windows can't be recorded as a window, an overlay or not")
     func ownWindowRefused() async {
         defer { captures.remove() }
         system.ownWindows = [30, 31]

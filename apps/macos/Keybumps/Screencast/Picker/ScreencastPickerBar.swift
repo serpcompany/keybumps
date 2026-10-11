@@ -1,11 +1,9 @@
 import Observation
 import SwiftUI
 
-/// The picker's bar, on the screen the pointer was on: Video or Screenshot; Area, Window, or
-/// Screen; for a video, the microphone, the Mac's sound, shortcuts, and clicks; then Record (or
-/// Capture) and close. What to do next shows above it, and in Screen mode, a choice for each screen
-/// by name and All Screens. One
-/// slim bar, after Screendrop's `RecordingPickerBar` (CC0-1.0, see LICENSE.screendrop): an input
+/// The picker's bar, on the screen the pointer was on: Area, Window, or Screen; the microphone, the
+/// Mac's sound, shortcuts, and clicks; then Record and close. What to do next shows above it, and in
+/// Screen mode, a choice for each screen by name and All Screens. One slim bar, after Screendrop's `RecordingPickerBar` (CC0-1.0, see LICENSE.screendrop): an input
 /// that's off is dimmed, not hidden.
 struct ScreencastPickerBar: View {
     @Bindable var model: ScreencastPickerModel
@@ -109,12 +107,6 @@ struct ScreencastPickerBar: View {
 
     private func controls(showsTitles: Bool) -> some View {
         HStack(spacing: 4) {
-            ForEach(ScreencastCaptureKind.allCases, id: \.self) { kind in
-                option(kind.title, systemImage: kind.systemImage, showsTitle: showsTitles, isSelected: model.kind == kind, identifier: "screencast.picker.kind.\(kind.rawValue)") {
-                    model.kind = kind
-                }
-            }
-            divider
             ForEach(ScreencastPickerTarget.allCases, id: \.self) { target in
                 option(
                     target.title,
@@ -126,22 +118,20 @@ struct ScreencastPickerBar: View {
                     model.target = target
                 }
             }
-            if model.kind == .video {
-                divider
-                toggle(
-                    "Microphone", on: "mic.fill", off: "mic.slash", isOn: $model.recordsMicrophone, identifier: "screencast.picker.microphone",
-                    help: model.microphoneAvailable
-                        ? "Record your voice"
-                        : "To record your voice, give Keybumps Microphone access in Settings › Screencast"
-                )
-                .disabled(!model.microphoneAvailable)
-                toggle("Mac’s sound", on: "speaker.wave.2.fill", off: "speaker.slash", isOn: $model.recordsSystemAudio, identifier: "screencast.picker.systemAudio", help: "Record what your apps play")
-                toggle("Shortcuts", on: "command", off: "command", isOn: $model.showsShortcuts, identifier: "screencast.picker.shortcuts", help: "Show the shortcuts you press")
-                toggle("Clicks", on: "cursorarrow.click.2", off: "cursorarrow", isOn: $model.highlightsClicks, identifier: "screencast.picker.clicks", help: "Highlight where you click")
-            }
+            divider
+            toggle(
+                "Microphone", on: "mic.fill", off: "mic.slash", isOn: $model.recordsMicrophone, identifier: "screencast.picker.microphone",
+                help: model.microphoneAvailable
+                    ? "Record your voice"
+                    : "To record your voice, give Keybumps Microphone access in Settings › Screencast"
+            )
+            .disabled(!model.microphoneAvailable)
+            toggle("Mac’s sound", on: "speaker.wave.2.fill", off: "speaker.slash", isOn: $model.recordsSystemAudio, identifier: "screencast.picker.systemAudio", help: "Record what your apps play")
+            toggle("Shortcuts", on: "command", off: "command", isOn: $model.showsShortcuts, identifier: "screencast.picker.shortcuts", help: "Show the shortcuts you press")
+            toggle("Clicks", on: "cursorarrow.click.2", off: "cursorarrow", isOn: $model.highlightsClicks, identifier: "screencast.picker.clicks", help: "Highlight where you click")
             divider
             Button(action: confirm) {
-                Label(model.confirmTitle, systemImage: model.kind == .video ? "record.circle" : "camera")
+                Label("Record", systemImage: "record.circle")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -150,7 +140,7 @@ struct ScreencastPickerBar: View {
             }
             .buttonStyle(.plain)
             .disabled(!model.canConfirm)
-            .help("\(model.confirmTitle) (Return)")
+            .help("Record (Return)")
             .accessibilityIdentifier("screencast.picker.confirm")
             Button(action: cancel) {
                 Image(systemName: "xmark")
@@ -229,22 +219,6 @@ private struct ScreencastBarButtonStyle: ButtonStyle {
                     .fill(Color.primary.opacity(isSelected ? 0.14 : configuration.isPressed ? 0.08 : 0))
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-}
-
-extension ScreencastCaptureKind {
-    var title: String {
-        switch self {
-        case .video: "Video"
-        case .screenshot: "Screenshot"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .video: "record.circle"
-        case .screenshot: "camera"
-        }
     }
 }
 

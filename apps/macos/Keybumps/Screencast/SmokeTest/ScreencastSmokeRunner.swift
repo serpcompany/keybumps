@@ -8,7 +8,7 @@ import Foundation
 @MainActor
 final class ScreencastSmokePresenter: ScreencastOverlayPresenting {
     private let base: any ScreencastOverlayPresenting
-    /// The picker the controller would show now, and its Record (or Capture).
+    /// The picker the controller would show now, and its Record.
     private(set) var picker: ScreencastPickerModel?
     private(set) var record: (() -> Void)?
     /// The last message shown, to tell why a capture ended. Keybumps's own words, never written
@@ -145,9 +145,9 @@ struct ScreencastSmokeRig {
 /// two seconds of recording, Stop, and the saved files checked and deleted. Only the picker's
 /// windows, the countdown (set to none), and the review panel are skipped.
 ///
-/// The window captures take only the blank window `smoke-screencast.sh` shows from a helper
+/// The window capture takes only the blank window `smoke-screencast.sh` shows from a helper
 /// process of its own, found by that process's ID (`environment.windowProcessID`), whatever is in
-/// front of it. Without that window on screen in time they fail with `noSmokeWindow`; no other
+/// front of it. Without that window on screen in time it fails with `noSmokeWindow`; no other
 /// window is ever taken instead.
 ///
 /// Every step has a time limit, so a hang fails the capture at the stage it reached instead of
@@ -184,7 +184,7 @@ final class ScreencastSmokeRunner {
         var screenRecordingGranted: () -> Bool
         /// The display to record a screen of and draw an area on.
         var mainDisplay: () -> CGDirectDisplayID
-        /// The script's helper, whose blank window is the only one the window captures take; nil
+        /// The script's helper, whose blank window is the only one the window capture takes; nil
         /// when the script couldn't show it.
         var windowProcessID: pid_t?
         var resultURL: URL
@@ -262,21 +262,14 @@ final class ScreencastSmokeRunner {
 
         enter(.picking)
         let expected = try choose(mode, on: model)
-        guard let choice = model.choice(), choice.kind == mode.kind, choice.target == expected, choice.audio == .none,
+        guard let choice = model.choice(), choice.target == expected, choice.audio == .none,
               let record = rig.presenter.record else { throw ScreencastSmokeFailure.noChoice }
         let confirmed = ContinuousClock.now
         record()
         enter(.chosen)
 
-        var late: Error?
-        if mode.kind == .video {
-            late = try await recordVideo(confirmed: confirmed)
-        } else {
-            enter(.finishing)
-            try await waitUntil(configuration.finishTimeout) { self.saved != nil || controller.phase == .idle }
-            report.captures[current].timings.finishMs = Self.milliseconds(since: confirmed)
-        }
-        guard let result = saved else { throw endReason(mode.kind) }
+        let late = try await recordVideo(confirmed: confirmed)
+        guard let result = saved else { throw endReason() }
         enter(.saved)
 
         let checking = ContinuousClock.now
@@ -302,7 +295,7 @@ final class ScreencastSmokeRunner {
         let controller = rig.controller
         enter(.starting)
         try await waitUntil(configuration.startTimeout) { controller.phase == .recording || controller.phase == .idle }
-        guard controller.phase == .recording else { throw endReason(.video) }
+        guard controller.phase == .recording else { throw endReason() }
         report.captures[current].timings.startMs = Self.milliseconds(since: confirmed)
         enter(.recording)
 
@@ -336,7 +329,6 @@ final class ScreencastSmokeRunner {
     /// Makes the picker's choice for `mode` through its model, as its clicks and drags would, with
     /// every switch off, and returns the target it should record.
     private func choose(_ mode: ScreencastSmokeMode, on model: ScreencastPickerModel) throws -> ScreencastTarget {
-        model.kind = mode.kind
         model.target = mode.target
         model.recordsMicrophone = false
         model.recordsSystemAudio = false
@@ -427,13 +419,6 @@ final class ScreencastSmokeRunner {
             report.captures[current].pixelWidth = facts.pixelWidth
             report.captures[current].pixelHeight = facts.pixelHeight
             try ScreencastSmokeChecks.check(facts, durations: configuration.durations)
-        case .screenshot(let screenshot):
-            guard screenshot.images.count == 1, let image = screenshot.images.first else { throw ScreencastSmokeFailure.wrongFileCount }
-            report.captures[current].bytes = try ScreencastSmokeChecks.size(of: image.file, fileManager: fileManager)
-            let facts = inspector.image(image.file)
-            report.captures[current].pixelWidth = facts?.pixelWidth
-            report.captures[current].pixelHeight = facts?.pixelHeight
-            try ScreencastSmokeChecks.check(facts)
         }
     }
 
@@ -501,11 +486,11 @@ final class ScreencastSmokeRunner {
         try? report.write(to: environment.resultURL, fileManager: environment.fileManager)
     }
 
-    /// Why a capture ended without a file: the recorder's failure for a video, else the failure
-    /// whose message the controller showed, else `ended`.
-    private func endReason(_ kind: ScreencastCaptureKind) -> Error {
-        if kind == .video, case .failed(let failure) = rig.controller.recorder.state { return failure }
-        if let message = rig.presenter.lastMessage, let failure = Self.failure(shownAs: message, kind: kind) { return failure }
+    /// Why a capture ended without a file: the recorder's failure, else the failure whose message
+    /// the controller showed, else `ended`.
+    private func endReason() -> Error {
+        if case .failed(let failure) = rig.controller.recorder.state { return failure }
+        if let message = rig.presenter.lastMessage, let failure = Self.failure(shownAs: message) { return failure }
         return ScreencastSmokeFailure.ended
     }
 
@@ -513,9 +498,9 @@ final class ScreencastSmokeRunner {
         .screenRecordingDenied, .targetUnavailable, .captureFailed, .stoppedByMacOS, .writerFailed, .folderUnavailable, .noFootage,
     ]
 
-    static func failure(shownAs message: String, kind: ScreencastCaptureKind) -> ScreencastFailure? {
+    static func failure(shownAs message: String) -> ScreencastFailure? {
         failures.first { failure in
-            message == ScreencastMessages.text(for: failure, kind: kind)
+            message == ScreencastMessages.text(for: failure)
                 || message == ScreencastMessages.endedEarly(failure, kept: false)
                 || message == ScreencastMessages.endedEarly(failure, kept: true)
         }
