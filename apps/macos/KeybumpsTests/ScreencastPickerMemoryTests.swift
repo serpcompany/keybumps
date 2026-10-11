@@ -14,6 +14,15 @@ struct ScreencastPickerMemoryTests {
     let defaults = InMemoryDefaults()
     /// (150, 150) in the top-left space: on the browser window, on the left screen.
     let onBrowserWindow = CGPoint(x: 150, y: 832)
+    /// The switches before any is changed: Settings › Screencast's defaults.
+    let firstUseSwitches = ScreencastSwitches(
+        recordsMicrophone: true, recordsSystemAudio: true, showsShortcuts: true, highlightsClicks: false
+    )
+    /// Where Settings › Screencast stores the switches.
+    let switchKeys = [
+        PluginPreference.screencastRecordsMicrophone, .screencastRecordsSystemAudio,
+        .screencastShowsShortcuts, .screencastHighlightsClicks,
+    ].map { $0.storageKey(for: .screencast) }
 
     struct Launch {
         let preferences: AppPreferences
@@ -68,7 +77,9 @@ struct ScreencastPickerMemoryTests {
         return picker
     }
 
-    /// Record, then Escape during the countdown, so nothing records.
+    /// Record, then Escape during the countdown, so nothing records. What Record saved stays: that
+    /// Escape cancels the recording, not the choices Record took (`escapeSavesNothing` covers
+    /// Escape in the picker).
     @available(macOS 15, *)
     private func record(_ launch: Launch) throws {
         let controller = try #require(launch.module.controller)
@@ -103,6 +114,11 @@ struct ScreencastPickerMemoryTests {
         let chosen = switches(picker)
         try record(first)
         #expect(first.preferences.screencast.switches == chosen, "Settings › Screencast shows what the picker took")
+        // Stored by its UUID, whichever screen the pointer is on.
+        let stored = try #require(defaults.dictionary(forKey: ScreencastPickerMemory.key))
+        #expect(stored["target"] as? String == "screen")
+        #expect(stored["display"] as? String == "MADE-UP-RIGHT-DISPLAY")
+        #expect(stored["allScreens"] == nil)
 
         let again = try await open(launch())
         #expect(again.target == .screen)
@@ -160,6 +176,40 @@ struct ScreencastPickerMemoryTests {
         #expect(again.hint == "Click a window to choose it.")
     }
 
+    // MARK: Escape
+
+    @available(macOS 15, *)
+    @Test("Escape in the picker saves nothing, nor does Record with nothing chosen: the next picker opens as on first use")
+    func escapeSavesNothing() async throws {
+        let first = launch()
+        let before = NSDictionary(dictionary: defaults.dictionaryRepresentation())
+        let picker = try await open(first)
+        let controller = try #require(first.module.controller)
+        picker.target = .screen
+        picker.chooseScreen(PickerScreens.right.id)
+        picker.recordsSystemAudio = false
+        picker.highlightsClicks = true
+        // Window mode with no window chosen: Record does nothing, and the picker stays open.
+        picker.target = .window
+        #expect(!picker.canConfirm)
+        controller.confirm()
+        #expect(controller.phase == .picking)
+        picker.target = .screen
+        controller.cancel()
+        #expect(controller.phase == .idle && controller.picker == nil)
+
+        #expect(defaults.object(forKey: ScreencastPickerMemory.key) == nil)
+        #expect(switchKeys.allSatisfy { defaults.object(forKey: $0) == nil })
+        #expect(first.preferences.screencast.switches == firstUseSwitches, "Settings › Screencast is as it was")
+        #expect(before.isEqual(to: defaults.dictionaryRepresentation()), "Nothing at all was stored")
+
+        let again = try await open(launch())
+        #expect(again.target == .area && again.area == nil)
+        #expect(switches(again) == firstUseSwitches)
+        again.target = .screen
+        #expect(again.selectedScreen == again.pointerScreen?.id, "Screen mode starts on the pointer's screen")
+    }
+
     // MARK: Falling back
 
     @Test("A remembered screen that isn't connected falls back to the pointer's screen, and so does All Screens on one screen")
@@ -196,6 +246,31 @@ struct ScreencastPickerMemoryTests {
         // Taken in another mode, the screen remembered stays.
         unplugged.target = .window
         #expect(unplugged.choicesToRemember == ScreencastPickerChoices(target: .window, screen: right))
+    }
+
+    @Test("A screen chosen that macOS gives no UUID is remembered as none, so the next picker starts on the pointer's screen")
+    func screenWithoutUUID() {
+        var unnamed = PickerScreens.right
+        unnamed.uuid = nil
+        let layout = ScreencastScreenLayout(screens: [PickerScreens.left, unnamed])
+        let memory = ScreencastPickerMemory(defaults: InMemoryDefaults())
+        func model() -> ScreencastPickerModel {
+            ScreencastPickerModel(
+                layout: layout, preferences: PickerScreens.preferences(), microphoneAvailable: true,
+                remembered: memory.choices, pointerScreen: PickerScreens.left.id
+            )
+        }
+        // All Screens was last chosen.
+        memory.save(ScreencastPickerChoices(target: .screen, screen: .all))
+        let picker = model()
+        #expect(picker.selectedScreen == nil)
+        picker.chooseScreen(unnamed.id)
+        #expect(picker.choicesToRemember == ScreencastPickerChoices(target: .screen, screen: nil))
+        memory.save(picker.choicesToRemember)
+
+        let again = model()
+        #expect(again.target == .screen)
+        #expect(again.selectedScreen == PickerScreens.left.id, "Not All Screens")
     }
 
     @Test("Remembered choices that aren't understood are ignored")
@@ -244,9 +319,7 @@ struct ScreencastPickerMemoryTests {
         let picker = try await open(first)
         #expect(picker.target == .area && picker.area == nil)
         #expect(picker.hint == "Drag to choose an area.")
-        #expect(switches(picker) == ScreencastSwitches(
-            recordsMicrophone: true, recordsSystemAudio: true, showsShortcuts: true, highlightsClicks: false
-        ))
+        #expect(switches(picker) == firstUseSwitches)
         // Screen mode starts on the pointer's screen, as before.
         let model = ScreencastPickerModel(
             layout: PickerScreens.both, preferences: PickerScreens.preferences(), microphoneAvailable: true,
@@ -257,10 +330,6 @@ struct ScreencastPickerMemoryTests {
         // Recording with the switches as they were stores none of them.
         picker.target = .screen
         try record(first)
-        let switchKeys = [
-            PluginPreference.screencastRecordsMicrophone, .screencastRecordsSystemAudio,
-            .screencastShowsShortcuts, .screencastHighlightsClicks,
-        ].map { $0.storageKey(for: .screencast) }
         #expect(switchKeys.allSatisfy { defaults.object(forKey: $0) == nil })
         #expect(ScreencastPickerMemory(defaults: defaults).choices.target == .screen)
     }
