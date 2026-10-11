@@ -67,11 +67,13 @@ final class ScreencastReviewFlow {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
     }
 
-    /// Start Screencast, from idle: reads the app in front, and a browser's site, before the picker
-    /// covers the screen.
+    /// Start Screencast, from idle: closes a recording's window already saved, so it isn't left on
+    /// screen through the next recording, and reads the app in front, and a browser's site, before
+    /// the picker covers the screen.
     func captureStarting() {
         isOn = true
         panel?.startAccepting()
+        panel?.captureStarting()
         let reader = contextReader
         contextRead = Task { await reader.read() }
     }

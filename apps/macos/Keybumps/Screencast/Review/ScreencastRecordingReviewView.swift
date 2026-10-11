@@ -32,7 +32,8 @@ struct ScreencastRecordingReviewView: View {
             bottomBar
         }
         .uiTestAnimationsDisabled()
-        .onAppear { focus = .note }
+        // No `focus = .note` on appearing, unlike the panel: the window is for watching, so Space
+        // plays at once, and a click in the note types there.
         .onChange(of: model.isWorking) { _, isWorking in
             if isWorking { playback?.pause() }
         }

@@ -572,6 +572,22 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(window.waitForNonExistence(timeout: 10), "Done closes it")
     }
 
+    /// #475: the window opens with no text field typing, so the first Space plays the recording
+    /// rather than typing into the note, and Return and Escape still save and close.
+    func testScreencastReviewOfAVideoOpensWithTheKeyboardFreeForSpace() {
+        launchScreencastReview("video")
+        let note = element("screencast.review.note")
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertFalse((note.value as? String ?? "").hasPrefix(" "), "Space doesn't type into the note")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(element("screencast.review.confirmation").waitForExistence(timeout: 10), "Return saves")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
+        XCTAssertTrue(reviewPanel.exists, "the window stays after Save")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes it once saved")
+    }
+
     func testHotkeysTabShowsShortcutCoachHistory() {
         // Its rows come from Shortcut Coach's module (`KeyboardShortcutterPaletteContent`).
         launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])

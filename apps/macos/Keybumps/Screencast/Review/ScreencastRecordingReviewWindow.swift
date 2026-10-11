@@ -7,8 +7,8 @@ import AppKit
 /// miniaturizable, and resizable, its title bar blending into the window, at the normal level and in
 /// the window cycle, with a minimum size. Unlike Snapzy's, closing it (`performClose`, as its close
 /// button does) asks the review first (`onClose`), which saves the recording, and Space is the
-/// review's key monitor's (`ScreencastReviewKey`). Under the unit-test host it never becomes key or
-/// main.
+/// review's key monitor's (`ScreencastReviewKey`). Like the panel, it can open over a full-screen app,
+/// and it's never restored at launch. Under the unit-test host it never becomes key or main.
 final class ScreencastRecordingReviewWindow: NSWindow {
     static let identifier = NSUserInterfaceItemIdentifier(ScreencastReviewID.window)
     /// Snapzy's editor opens at 1200 × 800; this one at a little less, fitted to the screen.
@@ -32,9 +32,12 @@ final class ScreencastRecordingReviewWindow: NSWindow {
         titlebarAppearsTransparent = true
         minSize = Self.minimumSize
         isReleasedWhenClosed = false
-        // An ordinary window: the normal level, and in ⌘` cycling.
+        // Nothing to put back at launch: quitting saves the review.
+        isRestorable = false
+        // An ordinary window: the normal level, and in ⌘` cycling. It also opens over a full-screen
+        // app, as the panel did, so stopping a recording of one doesn't move to a desktop Space.
         level = .normal
-        collectionBehavior = [.managed, .participatesInCycle]
+        collectionBehavior = [.managed, .participatesInCycle, .fullScreenAuxiliary]
         tabbingMode = .disallowed
         identifier = Self.identifier
         setAccessibilityIdentifier(ScreencastReviewID.window)

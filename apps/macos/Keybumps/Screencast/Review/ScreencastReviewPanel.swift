@@ -7,7 +7,7 @@ import SwiftUI
 /// Snapzy's quick-access card (BSD-3-Clause, see LICENSE.snapzy), grown into a panel. A recording's
 /// is a bigger standard window to watch it in, with the same review in a sidebar (#475,
 /// `ScreencastRecordingReviewWindow`); after Save or Copy it stays open to say where the recording
-/// is, until the person closes it.
+/// is, until the person closes it or starts the next capture.
 ///
 /// The flow that finishes captures makes one, calls `show` with each capture and the context read
 /// when it started, and hears how each ended through `onFinish`. Captures take turns: one that
@@ -126,6 +126,16 @@ final class ScreencastReviewPanel {
         isAccepting = true
     }
 
+    /// A capture is starting (the picker opens): a recording's window that's already saved or copied
+    /// closes, so it isn't left on screen through the next recording, which leaves Keybumps' windows
+    /// out. It doesn't give the front back, since the picker is about to take the keyboard; the next
+    /// recording's window gives it back instead. A review not yet saved stays until the next
+    /// capture's turn, which saves it and closes it first.
+    func captureStarting() {
+        guard model?.isFinished == true else { return }
+        dismiss(givesFrontBack: false)
+    }
+
     /// Keybumps is quitting or relaunching: the capture under review is saved at once, without a
     /// trim not yet applied.
     func saveNow() {
@@ -227,6 +237,9 @@ final class ScreencastReviewPanel {
         if recordingWindow.isMiniaturized { recordingWindow.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
         recordingWindow.makeKeyAndOrderFront(nil)
+        // Nothing has the keyboard at first, not even the note, so Space plays the recording at once;
+        // a click in the note types there. Return and Escape are the key monitor's either way.
+        recordingWindow.makeFirstResponder(nil)
     }
 
     /// Show in Finder, once a recording is saved or copied: selects the capture's folder.
@@ -277,7 +290,9 @@ final class ScreencastReviewPanel {
         panel.makeKey()
     }
 
-    private func dismiss() {
+    /// - Parameter givesFrontBack: False keeps the app that was in front before a recording's window
+    ///   for the next one to give it back to.
+    private func dismiss(givesFrontBack: Bool = true) {
         removeActivationObserver()
         removeKeyMonitor()
         playback?.stop()
@@ -288,6 +303,7 @@ final class ScreencastReviewPanel {
         guard wasRecording else { return panel.orderOut(nil) }
         let hadKeyboard = recordingWindow.isKeyWindow
         recordingWindow.orderOut(nil)
+        guard givesFrontBack else { return }
         if hadKeyboard { previousApp?.activate() }
         previousApp = nil
     }
@@ -324,11 +340,18 @@ final class ScreencastReviewPanel {
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
-        guard let model, event.window === (model.input.isVideo ? recordingWindow : panel) else { return event }
-        let responder = event.window?.firstResponder
-        let key = ScreencastReviewKey.action(
-            keyCode: event.keyCode,
-            modifiers: event.modifierFlags,
+        let key = action(forKey: event.keyCode, modifiers: event.modifierFlags, in: event.window)
+        return perform(key, isRepeat: event.isARepeat) ? nil : event
+    }
+
+    /// What a key pressed in `window` does, given what has its keyboard: nothing outside the
+    /// review's own panel or window.
+    func action(forKey keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow?) -> ScreencastReviewKey {
+        guard let model, let window, window === (model.input.isVideo ? recordingWindow : panel) else { return .pass }
+        let responder = window.firstResponder
+        return ScreencastReviewKey.action(
+            keyCode: keyCode,
+            modifiers: modifiers,
             isTrimming: model.isTrimming,
             isComposing: (responder as? NSTextView)?.hasMarkedText() == true,
             isConfirmingDiscard: model.isConfirmingDiscard,
@@ -337,10 +360,11 @@ final class ScreencastReviewPanel {
             isTyping: responder is NSText || responder is NSTextField,
             playsRecording: model.input.isVideo
         )
-        return perform(key, isRepeat: event.isARepeat) ? nil : event
     }
 
-    /// Does what a key asks, and says whether it took the key. A held Space plays or pauses once.
+    /// Does what a key asks, and says whether it took the key. A held key acts once: Space plays or
+    /// pauses once, and a held Return or Escape doesn't close the window it just saved before its
+    /// confirmation can be read.
     @discardableResult
     func perform(_ key: ScreencastReviewKey, isRepeat: Bool = false) -> Bool {
         guard let model else { return false }
@@ -348,7 +372,7 @@ final class ScreencastReviewPanel {
         case .pass: return false
         case .ignore: break
         case .save: Task { await model.save() }
-        case .close: Task { await self.close() }
+        case .close: if !isRepeat { Task { await self.close() } }
         case .keep: model.keep()
         case .togglePlay: if !isRepeat { playback?.togglePlay() }
         }
