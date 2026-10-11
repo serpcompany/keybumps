@@ -19,6 +19,7 @@ struct UITestLaunchConfigurationTests {
         #expect(!configuration.seedsSnippets)
         #expect(configuration.enabledCapabilities.isEmpty)
         #expect(!configuration.opensScreencastPicker)
+        #expect(!configuration.startsScreencastRecording)
     }
 
     @Test func turnsOnNamedPluginsAndOpensScreencastsPicker() {
@@ -32,10 +33,22 @@ struct UITestLaunchConfigurationTests {
             .opensScreencastPicker)
     }
 
+    @Test func startsAScreencastRecording() {
+        let configuration = UITestLaunchConfiguration(arguments: [
+            executable, "-KBUITestPermissions", "granted",
+            "-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES",
+        ])
+        #expect(configuration.startsScreencastRecording)
+        #expect(!configuration.opensScreencastPicker)
+        #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestPermissions", "granted", "-KBUITestScreencastRecording", "NO"])
+            .startsScreencastRecording)
+    }
+
     @Test func otherFlagsAreIgnoredWithoutThePermissionsFlag() {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBCloseSettings", "YES",
-            "-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES", "-KBDisableHotKeys",
+            "-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES",
+            "-KBUITestScreencastRecording", "YES", "-KBDisableHotKeys",
         ])
         #expect(configuration == UITestLaunchConfiguration(arguments: [executable]))
     }

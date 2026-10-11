@@ -252,8 +252,8 @@ final class SmokeUITests: XCTestCase {
 
     func testScreencastPickerOpensAndSwitchesModes() {
         // The UI-test composition's made-up screens: the main screen split into a top and a bottom
-        // display, each as wide as it, two made-up windows on each, and a recorder that never
-        // starts.
+        // display, each as wide as it, two made-up windows on each, and a recorder that records
+        // them but captures nothing.
         launchScreencastPicker()
         XCTAssertEqual(pickerPanels.count, 2, "One picker panel per screen")
         let confirm = element("screencast.picker.confirm")
@@ -379,6 +379,41 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(pickerPanels.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertEqual(pickerPanels.count, 0)
         XCTAssertFalse(element("screencast.picker.bar").exists)
+    }
+
+    func testScreencastControlBarButtonsChangeState() {
+        // A recording of a made-up screen that captures nothing, with the control bar showing.
+        launchScreencastRecording()
+
+        let pause = element("screencast.bar.pause")
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"))
+        pause.click()
+        XCTAssertTrue(waitForLabel(of: pause, "Resume"), "Pause becomes Resume")
+        pause.click()
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Resume becomes Pause")
+
+        let microphone = element("screencast.bar.microphone")
+        XCTAssertTrue(waitForValue(of: microphone, equalTo: "On"))
+        microphone.click()
+        XCTAssertTrue(waitForValue(of: microphone, equalTo: "Off"), "The microphone mutes")
+
+        // Discard and Restart each ask in the bar first, and Keep goes back to the controls.
+        for (button, confirm) in [("discard", "confirmDiscard"), ("restart", "confirmRestart")] {
+            element("screencast.bar.\(button)").click()
+            XCTAssertTrue(element("screencast.bar.\(confirm)").waitForExistence(timeout: 5), button)
+            element("screencast.bar.keep").click()
+            XCTAssertTrue(element("screencast.bar.\(confirm)").waitForNonExistence(timeout: 5), button)
+            XCTAssertTrue(element("screencast.bar.stop").waitForExistence(timeout: 5), "Keep brings the controls back")
+        }
+        XCTAssertTrue(waitForLabel(of: pause, "Pause"), "Still recording")
+
+        // macOS reports the bar's panel as a dialog, not a window.
+        let controlBar = app.dialogs.matching(identifier: "screencastControlBar").firstMatch
+        XCTAssertTrue(controlBar.exists, "The bar's panel is there while recording")
+        let stop = element("screencast.bar.stop")
+        stop.click()
+        XCTAssertTrue(stop.waitForNonExistence(timeout: 10), "Stop ends the recording")
+        XCTAssertTrue(controlBar.waitForNonExistence(timeout: 10), "The bar closes")
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -662,6 +697,16 @@ final class SmokeUITests: XCTestCase {
     private func launchScreencastPicker() {
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES"])
         XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 20))
+    }
+
+    /// Turns Screencast on and starts a recording of a made-up screen, as Record would.
+    private func launchScreencastRecording() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES"])
+        // The bar shows as the recording starts, its buttons waiting until it records.
+        let pause = element("screencast.bar.pause")
+        XCTAssertTrue(pause.waitForExistence(timeout: 20))
+        let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: pause)
+        XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
     }
 
     /// The picker's panels, one per screen. macOS reports a borderless, non-activating panel as a

@@ -276,6 +276,12 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case translation
     case keystrokes
     case screencast
+    /// Screencast's recording shortcuts: registered only while it records
+    /// (`ScreencastRecordingControls`), so their keys work normally everywhere else.
+    case screencastPause
+    case screencastStop
+    case screencastDiscard
+    case screencastDraw
 
     var id: String { rawValue }
     var ownerID: String { rawValue }
@@ -295,7 +301,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .emojiPicker: .emojiPicker
         case .translation: .translation
         case .keystrokes: .keystrokes
-        case .screencast: .screencast
+        case .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: .screencast
         }
     }
 
@@ -314,20 +320,31 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .translation: "Open Translate"
         case .keystrokes: "Show & Hide Keystrokes"
         case .screencast: "Start Screencast"
+        case .screencastPause: "Pause & Resume Recording"
+        case .screencastStop: "Stop Recording"
+        case .screencastDiscard: "Discard Recording"
+        case .screencastDraw: "Draw While Recording"
         }
     }
 
     /// Whether the shortcut works from anywhere. Cancel Dictation works only while Dictation is
-    /// recording or transcribing, which `detail` says in Settings.
-    var worksEverywhere: Bool { self != .cancelDictation }
+    /// recording or transcribing, and Screencast's recording shortcuts only while it records, which
+    /// `detail` says in Settings.
+    var worksEverywhere: Bool { detail == nil }
 
     /// A note under the title, for a shortcut that works only at certain times.
     var detail: String? {
         switch self {
         case .cancelDictation: "Only while Dictation is recording or transcribing"
+        case .screencastPause, .screencastStop: "Only while Screencast is recording"
+        case .screencastDiscard: "Only while Screencast is recording. Asks first; press it again to discard."
+        case .screencastDraw: "Only while Screencast is recording"
         default: nil
         }
     }
+
+    /// Whether Settings lists it. Draw While Recording waits for drawing (#449).
+    var isListed: Bool { self != .screencastDraw }
 
     /// The binding a new install starts with; nil for a shortcut that starts unassigned.
     var defaultBinding: ShortcutBinding? {
@@ -339,7 +356,8 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea
-        case .snippets, .timer, .emojiPicker, .translation, .keystrokes, .screencast: nil
+        case .snippets, .timer, .emojiPicker, .translation, .keystrokes, .screencast,
+             .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: nil
         }
     }
 }

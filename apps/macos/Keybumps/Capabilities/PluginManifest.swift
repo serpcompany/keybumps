@@ -145,7 +145,7 @@ struct PluginPreference: Identifiable, Equatable {
 extension CapabilityDescriptor {
     /// The plugin's shortcuts, in the order Settings lists them.
     var shortcuts: [CapabilityShortcut] {
-        CapabilityShortcut.allCases.filter { $0.capability == capability }
+        CapabilityShortcut.allCases.filter { $0.capability == capability && $0.isListed }
     }
 
     /// Its declared preferences placed at the top of its page, in the order they're declared.
