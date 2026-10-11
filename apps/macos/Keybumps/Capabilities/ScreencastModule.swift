@@ -179,6 +179,17 @@ final class ScreencastModule: CapabilityModule {
         if action == .startScreencast { start() }
     }
 
+    /// Start Screencast isn't listed while a capture is under way, when it would do nothing.
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool {
+        action != .startScreencast || !isCapturing
+    }
+
+    /// Whether a capture is under way: the picker open, counting down, recording, or saving.
+    var isCapturing: Bool {
+        guard #available(macOS 15, *), let controller else { return false }
+        return controller.phase != .idle
+    }
+
     /// Start Screencast: the picker, while Screencast is on, on macOS 15, with Screen Recording.
     /// Otherwise Screencast's page, which says what's missing; the picker never makes macOS ask.
     func start() {

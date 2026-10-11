@@ -208,7 +208,12 @@ struct QuickSearchActionTests {
         #expect(controller.phase == .picking)
         #expect(!harness.model.commandPalette.isVisible)
         #expect(search.applicationUsage.record(for: .action(action))?.launchCount == 1)
+
+        #expect(harness.model.quickSearchActions.isEmpty, "Not listed while a capture is under way, when it would do nothing")
+        search.query = "start screencast"
+        #expect(search.items.isEmpty)
         controller.cancel()
+        #expect(harness.model.quickSearchActions == [action], "Listed again once the capture is over")
     }
 
     @Test("Without Screen Recording, Start Screencast from Quick Search opens Screencast's page, as the shortcut does")

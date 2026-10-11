@@ -147,6 +147,9 @@ protocol CapabilityModule: AnyObject {
     /// What one of its actions is called now, when that follows its state (Show or Hide
     /// Keystrokes); nil keeps the declared title.
     func title(for action: PluginAction, _ context: CapabilityContext) -> String?
+    /// Whether Quick Search lists one of its actions now: false while picking it would do nothing,
+    /// such as Start Screencast during a capture.
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool
 }
 
 extension CapabilityModule {
@@ -156,6 +159,7 @@ extension CapabilityModule {
     var paletteContent: (any CapabilityPaletteContent)? { nil }
     func perform(_ action: PluginAction, _ context: CapabilityContext) {}
     func title(for action: PluginAction, _ context: CapabilityContext) -> String? { nil }
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool { true }
 }
 
 /// What the shell hands a module each time it applies, deactivates, or refreshes it.
@@ -271,10 +275,11 @@ final class CapabilityRegistry {
 
     /// Quick Search's action commands: the declared actions of every module that's on, in registry
     /// order, each named as its module names it now and with its shortcut's keycaps while one is
-    /// assigned. A plugin that's off, or that this Mac's macOS can't run, lists none.
+    /// assigned. A plugin that's off, or that this Mac's macOS can't run, lists none, and a module
+    /// leaves out those it doesn't offer now.
     func quickSearchActions(_ context: CapabilityContext) -> [QuickSearchAction] {
         modules.filter { context.isEnabled($0.capability) }.flatMap { module in
-            module.descriptor.actions.map { action in
+            module.descriptor.actions.filter { module.offers($0, context) }.map { action in
                 QuickSearchAction(
                     capability: module.capability,
                     action: action,
