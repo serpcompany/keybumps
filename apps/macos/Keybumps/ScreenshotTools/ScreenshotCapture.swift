@@ -107,6 +107,8 @@ final class SystemScreenshotShortcutTakeover {
 
     /// Read by the unit-test isolation guard.
     let preferences: any SymbolicHotKeyPreferences
+    /// Set by the shell: runs after it writes macOS's shortcuts, so the key display reads them again.
+    var didChange: (() -> Void)?
     private let takenOver: () -> Set<String>
     private let setTakenOver: (Set<String>) -> Void
 
@@ -147,6 +149,7 @@ final class SystemScreenshotShortcutTakeover {
             changed = true
         }
         guard changed else { return }
+        defer { didChange?() }
         do {
             try preferences.writeSymbolicHotKeys(hotKeys)
             try preferences.reloadSymbolicHotKeys()

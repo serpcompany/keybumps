@@ -19,6 +19,9 @@ import QuartzCore
 ///   Microphone access, or when the microphone fails, the Mac's sound records on alone.
 /// - Keybumps's own windows stay out of the video, except the overlays added with
 ///   `includeOverlayWindow(_:)`.
+/// - A window recording shows only its window and those overlays. An overlay removed from it holds
+///   its frames back until ScreenCaptureKit has applied a list without it (see "Updating the
+///   streams").
 /// - A recording ends once: by `stop()`, `discard()`, or the first stream or file that fails. A
 ///   recording that stops on its own (the display went away, the disk filled up) keeps what it
 ///   captured and reports it once through `onEndedEarly`; later reports are ignored.
@@ -64,6 +67,7 @@ final class ScreencastRecorder {
     @ObservationIgnored private let tickInterval: TimeInterval?
     @ObservationIgnored private let followInterval: TimeInterval
     @ObservationIgnored private let retryDelays: [TimeInterval]
+    @ObservationIgnored private let slowRetryDelay: TimeInterval
     @ObservationIgnored private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
     @ObservationIgnored private var session: Session?
@@ -86,6 +90,7 @@ final class ScreencastRecorder {
     ///     nil for no timers (tests call `tick()` and `followTick()`).
     ///   - followInterval: How often a window recording checks where its window is.
     ///   - retryDelays: The waits before trying a failed stream update again, one per attempt.
+    ///   - slowRetryDelay: After those, how often a filter rebuild that keeps failing is tried.
     init(
         system: (any ScreencastCaptureSystem)? = nil,
         writers: any ScreencastWriterFactory = AVAssetScreencastWriterFactory(),
@@ -96,7 +101,8 @@ final class ScreencastRecorder {
         microphoneGranted: @escaping () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         tickInterval: TimeInterval? = 0.25,
         followInterval: TimeInterval = 1.0 / 20,
-        retryDelays: [TimeInterval] = [0.2, 0.5, 1]
+        retryDelays: [TimeInterval] = [0.2, 0.5, 1],
+        slowRetryDelay: TimeInterval = 5
     ) {
         self.system = system ?? ScreenCaptureKitCaptureSystem.current
         self.writers = writers
@@ -108,6 +114,7 @@ final class ScreencastRecorder {
         self.tickInterval = tickInterval
         self.followInterval = followInterval
         self.retryDelays = retryDelays
+        self.slowRetryDelay = slowRetryDelay
     }
 
     // MARK: Starting
@@ -157,7 +164,7 @@ final class ScreencastRecorder {
                 content: content,
                 router: makeRouter(generation: generation)
             )
-            session.ownWindows = ownWindows
+            session.queuedOwnWindows = ownWindows
             started = session
             startingSession = session
 
@@ -165,7 +172,7 @@ final class ScreencastRecorder {
             if audio.microphone, !microphoneGranted() {
                 // No Microphone access: asking for it would cost the Mac's sound too.
                 asked.microphone = false
-                session.failedAudio.insert(.microphone)
+                markFailed(.microphone, in: session)
             }
             if !asked.sources.isEmpty {
                 // Started before the picture, so a microphone that's slow to start has warmed up by
@@ -189,7 +196,6 @@ final class ScreencastRecorder {
 
             if case .window(let id) = target {
                 session.followedFrame = content.window(id)?.frame
-                session.targetProcess = content.window(id)?.processID
             }
             // A stream that stopped while the others started: with no display left to record, the
             // start fails; otherwise it's handled below as it would be mid-recording.
@@ -208,7 +214,9 @@ final class ScreencastRecorder {
             publishAudioStates(of: session)
             startTicking(session)
             if overlayWindows != overlays {
-                // An overlay was added or removed while the streams were starting.
+                // An overlay was added or removed while the streams were starting: one removed has
+                // held the frames back since (`removeOverlayWindow`), and leaves the list first.
+                updateHolds(of: session)
                 scheduleFilterRebuild(for: session)
             }
             for (index, failure) in stopped { displayStopped(index, failure, in: session) }
@@ -255,12 +263,12 @@ final class ScreencastRecorder {
                 session.audioStream = nil
                 logger.error("screencast audio stream failed microphone=\(attempt.microphone, privacy: .public) category=\(Self.category(of: error), privacy: .public)")
                 guard attempt.microphone, attempt.systemAudio else { break }
-                session.failedAudio.insert(.microphone)
+                markFailed(.microphone, in: session)
                 attempt.microphone = false
             }
         }
         session.audioStreamSources = .none
-        session.failedAudio.formUnion(attempt.sources)
+        attempt.sources.forEach { markFailed($0, in: session) }
     }
 
     /// The streams a target needs, one per display, with what each shows and reads.
@@ -271,46 +279,59 @@ final class ScreencastRecorder {
         overlays: Set<CGWindowID>,
         options: ScreencastOptions
     ) throws -> [StreamPlan] {
-        func displayStream(_ display: ScreencastContent.Display, area: CGRect?) -> StreamPlan {
-            let geometry = area.map { ScreencastCaptureGeometry.area($0, displaySize: display.frame.size, scale: display.scale) }
-                ?? .display(size: display.frame.size, scale: display.scale)
+        // A display or area with no usable geometry fails the start, rather than recording a sliver
+        // or more of the screen than was chosen.
+        func displayStream(_ display: ScreencastContent.Display, area: CGRect?) throws -> StreamPlan {
+            let geometry = if let area {
+                ScreencastCaptureGeometry.usableArea(area, displaySize: display.frame.size, scale: display.scale)
+            } else {
+                ScreencastCaptureGeometry.usableDisplay(size: display.frame.size, scale: display.scale)
+            }
+            guard let geometry else { throw ScreencastFailure.targetUnavailable }
             return StreamPlan(
                 source: area.map { .area(display.id, $0) } ?? .display(display.id),
                 plan: ScreencastCaptureFilter.displayPlan(display: display.id, ownProcessID: ownProcessID, overlays: overlays, content: content),
-                configuration: configuration(geometry, options: options, scalesToFit: false)
+                configuration: configuration(geometry, options: options, scalesToFit: false),
+                content: content
             )
         }
 
         switch target {
         case .display(let id):
             guard let display = content.display(id) else { throw ScreencastFailure.targetUnavailable }
-            return [displayStream(display, area: nil)]
+            return [try displayStream(display, area: nil)]
         case .everyDisplay:
             guard !content.displays.isEmpty else { throw ScreencastFailure.targetUnavailable }
             // Left to right, then top to bottom: video-1 is the leftmost display.
             let displays = content.displays.sorted { ($0.frame.minX, $0.frame.minY) < ($1.frame.minX, $1.frame.minY) }
-            return displays.map { displayStream($0, area: nil) }
+            return try displays.map { try displayStream($0, area: nil) }
         case .area(let id, let rect):
             guard let display = content.display(id) else { throw ScreencastFailure.targetUnavailable }
-            return [displayStream(display, area: rect)]
+            return [try displayStream(display, area: rect)]
         case .window(let id):
             guard let window = content.window(id),
                   let plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlays, content: content),
-                  let display = content.display(plan.displayID) else { throw ScreencastFailure.targetUnavailable }
-            let geometry = ScreencastCaptureGeometry.window(frame: window.frame, displayFrame: display.frame, scale: display.scale)
-            return [StreamPlan(source: .window(id), plan: plan, configuration: configuration(geometry, options: options, scalesToFit: true))]
+                  let display = content.display(plan.displayID),
+                  let geometry = ScreencastCaptureGeometry.usableWindow(frame: window.frame, displayFrame: display.frame, scale: display.scale)
+            else { throw ScreencastFailure.targetUnavailable }
+            return [StreamPlan(source: .window(id), plan: plan, configuration: configuration(geometry, options: options, scalesToFit: true), content: content)]
         }
     }
 
+    /// A window recording's stream (`scalesToFit`) also leaves out child windows its list doesn't name.
+    /// A region larger than the writer takes (`ScreencastMovieWriter.maximumPixels` a side) is
+    /// recorded whole, scaled down to fit.
     private static func configuration(_ geometry: ScreencastCaptureGeometry, options: ScreencastOptions, scalesToFit: Bool) -> ScreencastStreamConfiguration {
-        ScreencastStreamConfiguration(
+        let geometry = geometry.fitting(longestSide: ScreencastMovieWriter.maximumPixels)
+        return ScreencastStreamConfiguration(
             pixelWidth: geometry.pixelWidth,
             pixelHeight: geometry.pixelHeight,
             sourceRect: geometry.sourceRect,
             framesPerSecond: options.framesPerSecond,
             showsCursor: options.showsCursor,
             showsMouseClicks: options.showsMouseClicks,
-            scalesToFit: scalesToFit
+            scalesToFit: scalesToFit,
+            includesChildWindows: !scalesToFit
         )
     }
 
@@ -383,8 +404,8 @@ final class ScreencastRecorder {
         refreshElapsed()
     }
 
-    /// Switches a recorded sound off (its track gets silence) or back on. Does nothing for a sound
-    /// the recording started without, or one that failed.
+    /// Switches a recorded sound off (its track gets silence) or back on. For a sound the recording
+    /// started without, or one that failed, it does nothing and needn't: neither reaches a file.
     func setAudio(_ source: ScreencastAudioSource, on: Bool) {
         guard state.isActive, let session, session.phase == .live,
               session.audio.contains(source), !session.failedAudio.contains(source) else { return }
@@ -424,11 +445,11 @@ final class ScreencastRecorder {
         session.audioStreamSources = .none
         logger.error("screencast audio stream stopped microphone=\(carried.microphone, privacy: .public) systemAudio=\(carried.systemAudio, privacy: .public)")
         if carried.microphone, carried.systemAudio {
-            session.failedAudio.insert(.microphone)
+            markFailed(.microphone, in: session)
             publishAudioStates(of: session)
             Task { await restartSystemAudio(for: session) }
         } else {
-            session.failedAudio.formUnion(carried.sources)
+            carried.sources.forEach { markFailed($0, in: session) }
             publishAudioStates(of: session)
         }
     }
@@ -447,14 +468,47 @@ final class ScreencastRecorder {
 
     /// Shows one of Keybumps's windows in the video, such as the drawing layer. The control bar,
     /// the picker's dimming, and every other Keybumps window stay out. Returns once the running
-    /// streams show it.
+    /// streams show it, or once a failing screen read's quick retries have given up. While a
+    /// rebuild keeps failing after those, it returns at once, and the next rebuild that succeeds
+    /// shows it: it never waits out the slow retry.
+    ///
+    /// Only the window registered here is recorded, not its child windows (a toolbar or popover
+    /// it attaches): register each of those too. A window recording names every window it shows
+    /// and turns ScreenCaptureKit's child windows off; a display recording leaves out all of
+    /// Keybumps but the windows registered here.
     func includeOverlayWindow(_ id: CGWindowID) async {
-        guard overlayWindows.insert(id).inserted, let session else { return }
+        guard overlayWindows.insert(id).inserted else { return }
+        // One registered again while its removal was on its way may show again, even while the
+        // recording starts: its list still names it, and nothing else would let the frames go on.
+        guard let session else {
+            if let startingSession { updateHolds(of: startingSession) }
+            return
+        }
+        updateHolds(of: session)
         await rebuildFilters(for: session)
     }
 
+    /// Takes one of Keybumps's windows back out of the video.
+    ///
+    /// Close the window (order it out) before removing it, or keep it showing only what it showed
+    /// as an overlay until it's closed: a Screen or Area recording goes on showing it until
+    /// ScreenCaptureKit has applied the change, and for as long as ScreenCaptureKit refuses it.
+    /// Show anything else in a new window, which stays out with the rest of Keybumps. The key
+    /// display closes its windows before it removes them, and shows later keys in new ones.
+    ///
+    /// A window recording doesn't rely on that: it shows only its window and its overlays, so one
+    /// that shows the window, or is about to, writes no frame from now until ScreenCaptureKit has
+    /// applied a list without it. The list in hand loses it first, without waiting for a read.
     func removeOverlayWindow(_ id: CGWindowID) async {
-        guard overlayWindows.remove(id) != nil, let session else { return }
+        guard overlayWindows.remove(id) != nil else { return }
+        guard let session else {
+            // A recording still starting holds its frames back now, and the list loses it once
+            // it's live.
+            if let startingSession { updateHolds(of: startingSession) }
+            return
+        }
+        updateHolds(of: session)
+        if session.needsNarrowing, session.phase == .live { runUpdates(for: session) }
         await rebuildFilters(for: session)
     }
 
@@ -464,12 +518,26 @@ final class ScreencastRecorder {
     // one queue per recording, so at most one `updateContentFilter` or `updateConfiguration` is in
     // flight. Requests made meanwhile are coalesced: one rebuild for all of them, and only the
     // window's latest frame. One that fails (the snapshot couldn't be read, ScreenCaptureKit
-    // refused the update) is tried again after each of `retryDelays`, through the same queue.
+    // refused the update) is tried again after each of `retryDelays`, through the same queue; a
+    // filter rebuild that still fails is then tried every `slowRetryDelay`, with one log line when
+    // it starts failing and one when it recovers. A crop waits for the window's next move instead.
+    //
+    // A window recording's list names its window and the registered overlays, so the one change
+    // that must take effect before another frame is written is an overlay's removal: while the list
+    // ScreenCaptureKit applied, or the one on its way, names a window that's neither, its frames are
+    // held back (`updateHolds`), and the file holds its last frame. A window recording whose list
+    // still names one after the quick retries ends early, keeping what it wrote.
 
     /// Rebuilds the filters, returning once a rebuild that began after this call is done, or its
-    /// last attempt failed.
+    /// last quick retry failed; it goes on being tried every `slowRetryDelay` after that. Called
+    /// while it's being tried slowly, it returns at once, and the next attempt that succeeds
+    /// applies the change.
     private func rebuildFilters(for session: Session) async {
         guard session.phase == .live else { return }
+        guard session.rebuildFailures <= retryDelays.count else {
+            session.needsFilterRebuild = true
+            return
+        }
         await withCheckedContinuation { continuation in
             session.rebuildWaiters.append(continuation)
             scheduleFilterRebuild(for: session)
@@ -489,22 +557,60 @@ final class ScreencastRecorder {
 
     private func drainUpdates(for session: Session) async {
         while session === self.session, session.phase == .live {
-            if session.needsFilterRebuild {
+            // An overlay removed from a window recording leaves first, from the list in hand,
+            // without waiting for a read or a backoff. If that fails, a rebuild tries again.
+            if session.needsNarrowing {
+                session.needsNarrowing = false
+                _ = await narrowWindowStreams(of: session)
+            } else if session.needsFilterRebuild, !session.awaitingRebuildRetry {
+                // During a failed rebuild's backoff, a new request waits for the retry: only
+                // `retry` runs the next attempt, however often the ticks ask.
                 session.needsFilterRebuild = false
                 let waiters = session.rebuildWaiters
                 session.rebuildWaiters = []
-                if await applyFilters(to: session) || session.rebuildFailures >= retryDelays.count {
-                    session.rebuildFailures = 0
-                    waiters.forEach { $0.resume() }
-                } else {
-                    // Its callers wait for the next attempt.
-                    session.rebuildWaiters = waiters + session.rebuildWaiters
-                    retry(after: retryDelays[session.rebuildFailures], in: session) { $0.needsFilterRebuild = true }
+                let failure = await applyFilters(to: session)
+                if let failure {
+                    if session.rebuildFailures == 0 { session.rebuildFailureCategory = failure.rawValue }
+                    if session.rebuildFailures >= retryDelays.count, isHoldingFrames(session) {
+                        // A window recording whose list still names an overlay since removed: it
+                        // ends here and keeps what it wrote, none of it under that list after the
+                        // removal.
+                        waiters.forEach { $0.resume() }
+                        logger.error("screencast filter rebuild failed with frames held back category=\(failure.rawValue, privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public)")
+                        endEarly(failure, generation: session.generation, take: nil)
+                        break
+                    }
+                    if session.rebuildFailures < retryDelays.count {
+                        // Its callers wait through the backoff for the next attempt.
+                        session.rebuildWaiters = waiters + session.rebuildWaiters
+                    } else {
+                        // Still failing after the quick retries: its callers go on, and it's tried
+                        // again slowly for as long as the recording runs. Said once.
+                        waiters.forEach { $0.resume() }
+                        if session.rebuildFailures == retryDelays.count {
+                            logger.error("screencast filter rebuild failing category=\(failure.rawValue, privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public)")
+                        }
+                        // The list it read was never applied.
+                        session.queuedOwnWindows = nil
+                    }
+                    let delay = session.rebuildFailures < retryDelays.count ? retryDelays[session.rebuildFailures] : slowRetryDelay
+                    session.awaitingRebuildRetry = true
+                    retry(after: delay, in: session) { session in
+                        session.awaitingRebuildRetry = false
+                        session.needsFilterRebuild = true
+                    }
                     session.rebuildFailures += 1
+                } else {
+                    if session.rebuildFailures > 0 {
+                        logger.info("screencast filter rebuild recovered category=\(session.rebuildFailureCategory ?? "unknown", privacy: .public) attempts=\(session.rebuildFailures + 1, privacy: .public)")
+                    }
+                    session.rebuildFailures = 0
+                    session.rebuildFailureCategory = nil
+                    waiters.forEach { $0.resume() }
                 }
             } else if let frame = session.pendingWindowFrame {
                 session.pendingWindowFrame = nil
-                if await follow(windowFrame: frame, in: session) || session.followFailures >= retryDelays.count {
+                if await follow(windowFrame: frame, in: session) == nil || session.followFailures >= retryDelays.count {
                     session.followFailures = 0
                 } else {
                     retry(after: retryDelays[session.followFailures], in: session) { session in
@@ -531,7 +637,7 @@ final class ScreencastRecorder {
     /// Queues `request` again after `delay`, while the recording goes on.
     private func retry(after delay: TimeInterval, in session: Session, _ request: @escaping (Session) -> Void) {
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(max(delay, 0) * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: ScreencastNumbers.nanoseconds(delay))
             guard let self, session === self.session, session.phase == .live else {
                 // The recording ended during the wait: nobody waits for a rebuild that won't come.
                 self?.resumeRebuildWaiters(of: session)
@@ -542,66 +648,166 @@ final class ScreencastRecorder {
         }
     }
 
-    /// Re-reads what's on screen and gives every stream its filter again, if it changed. False
-    /// when the snapshot couldn't be read or a stream refused its new filter.
-    private func applyFilters(to session: Session) async -> Bool {
-        // Both lists before the snapshot, never after: a window that opens in between is in the
+    /// Re-reads what's on screen and gives every stream its filter again, if it changed. Returns
+    /// why it failed (the snapshot couldn't be read, a stream refused its new filter, or a window
+    /// recording's window that still exists isn't in the snapshot), or nil.
+    private func applyFilters(to session: Session) async -> ScreencastFailure? {
+        // Keybumps's windows before the snapshot, never after: one that opens in between is in the
         // snapshot's filter already, or missing from the list, so the next tick rebuilds again.
-        let ownWindows = system.ownVisibleWindows()
-        let appWindows = session.targetProcess.flatMap { system.onScreenWindows(of: $0) }
+        // It's the list this rebuild answers, so a tick that sees it again asks for nothing.
+        session.queuedOwnWindows = system.ownVisibleWindows()
         let content: ScreencastContent
         do {
             content = try await system.content()
         } catch {
-            logger.error("screencast filter rebuild couldn't read the screen category=\(Self.category(of: error), privacy: .public)")
-            return false
+            // An overlay removed from a window recording needs no read to leave its list.
+            if session === self.session, session.phase == .live {
+                _ = await narrowWindowStreams(of: session)
+            }
+            return Self.failure(of: error)
         }
-        guard session === self.session, session.phase == .live else { return true }
+        guard session === self.session, session.phase == .live else { return nil }
         session.content = content
-        session.ownWindows = ownWindows
-        session.targetAppWindows = appWindows
-        var succeeded = true
+        var failure: ScreencastFailure?
         for index in session.streams.indices where session.endedDisplays[index] == nil {
             let stream = session.streams[index]
-            let plan: ScreencastFilterPlan?
             switch stream.source {
             case .display(let id), .area(let id, _):
-                plan = ScreencastCaptureFilter.displayPlan(display: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
-            case .window(let id):
-                plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
-            }
-            guard let plan, plan != stream.plan, let running = stream.stream else { continue }
-            do {
-                try await running.update(plan: plan, content: content)
-                session.streams[index].plan = plan
-                if plan.displayID != stream.plan.displayID, case .window(let id) = stream.source,
-                   let frame = content.window(id)?.frame, let display = content.display(plan.displayID) {
-                    // The window moved to another display: read it there.
-                    let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale)
-                    try await running.update(sourceRect: geometry.sourceRect)
+                let plan = ScreencastCaptureFilter.displayPlan(display: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
+                guard plan != stream.plan, let running = stream.stream else { continue }
+                do {
+                    try await running.update(plan: plan, content: content)
+                    session.streams[index].plan = plan
+                    session.streams[index].planContent = content
+                } catch {
+                    failure = Self.failure(of: error)
                 }
-            } catch {
-                succeeded = false
-                logger.error("screencast filter update failed category=\(Self.category(of: error), privacy: .public)")
+            case .window(let id):
+                if let error = await rebuildWindowStream(index, window: id, content: content, in: session) {
+                    failure = error
+                }
             }
         }
-        return succeeded
+        return failure
+    }
+
+    /// A window recording's rebuild from `content`. Returns why it failed, or nil.
+    private func rebuildWindowStream(_ index: Int, window id: CGWindowID, content: ScreencastContent, in session: Session) async -> ScreencastFailure? {
+        let stream = session.streams[index]
+        guard let running = stream.stream else { return nil }
+        guard let plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content) else {
+            // Not in this read: a filter built from it couldn't name the window, so none is. The
+            // list in hand stays, without any overlay since removed. A window that still exists is
+            // read again after the backoff; one that closed is never listed again.
+            if let failure = await narrowWindowStreams(of: session) { return failure }
+            return system.windowExists(id) == false ? nil : .targetUnavailable
+        }
+        // Unchanged: nothing to send, unless frames are held back. A list without the removed
+        // overlay that failed on its way leaves them held, and only one applied lets them go on.
+        guard plan != stream.plan || session.router.isHoldingFrames(display: index) else { return nil }
+        if let failure = await apply(plan, from: content, to: index, in: session) { return failure }
+        if plan.displayID != stream.plan.displayID, let frame = content.window(id)?.frame, let display = content.display(plan.displayID),
+           let geometry = ScreencastCaptureGeometry.usableWindow(frame: frame, displayFrame: display.frame, scale: display.scale) {
+            // The window moved to another display: read it there. Its list names only its
+            // windows, wherever the crop is, so a failed move holds nothing back.
+            do {
+                try await running.update(sourceRect: geometry.sourceRect)
+            } catch {
+                return Self.failure(of: error)
+            }
+        }
+        return nil
+    }
+
+    /// Takes out of each window recording's list, without a new read, every window that's neither
+    /// its window nor a registered overlay (`ScreencastCaptureFilter.narrowed`), built from the
+    /// read its running list was, which lists them all. Returns why an update failed, or nil.
+    private func narrowWindowStreams(of session: Session) async -> ScreencastFailure? {
+        var failure: ScreencastFailure?
+        for index in session.streams.indices where session.endedDisplays[index] == nil {
+            let stream = session.streams[index]
+            guard case .window(let id) = stream.source, stream.stream != nil else { continue }
+            let plan = ScreencastCaptureFilter.narrowed(stream.plan, window: id, overlays: overlayWindows)
+            guard plan != stream.plan || session.router.isHoldingFrames(display: index) else { continue }
+            if let error = await apply(plan, from: stream.planContent, to: index, in: session) {
+                failure = error
+            }
+        }
+        return failure
+    }
+
+    /// Gives a window recording's stream `plan`, built from `content`. Once ScreenCaptureKit has
+    /// applied it, frames held back for a removed overlay go on if no list names it any more
+    /// (`updateHolds`); a refused update leaves them held. Returns why it failed, or nil.
+    private func apply(_ plan: ScreencastFilterPlan, from content: ScreencastContent, to index: Int, in session: Session) async -> ScreencastFailure? {
+        guard let running = session.streams[index].stream, case .window(let id) = session.streams[index].source else { return nil }
+        // Never a list without the window, or one naming a window its read doesn't list:
+        // ScreenCaptureKit's filter can show only the windows its read lists.
+        guard plan.windowIDs.contains(id), plan.windowIDs.allSatisfy({ content.window($0) != nil }) else { return .targetUnavailable }
+        session.streams[index].pending = plan
+        defer { session.streams[index].pending = nil }
+        do {
+            try await running.update(plan: plan, content: content)
+        } catch {
+            return Self.failure(of: error)
+        }
+        session.streams[index].plan = plan
+        session.streams[index].planContent = content
+        updateHolds(of: session)
+        return nil
+    }
+
+    /// Holds a window recording's frames back while the list ScreenCaptureKit applied, or the one
+    /// on its way, names a window that's neither the recorded one nor a registered overlay (an
+    /// overlay since removed), and asks for the list in hand to lose it. Once neither does, frames
+    /// held back go on from a moment after now, since a frame on its way was captured before the
+    /// list without it applied. Frames never held back are left alone.
+    private func updateHolds(of session: Session) {
+        for (index, stream) in session.streams.enumerated() {
+            guard case .window(let id) = stream.source else { continue }
+            let lists = [stream.plan] + (stream.pending.map { [$0] } ?? [])
+            if lists.contains(where: { ScreencastCaptureFilter.narrowed($0, window: id, overlays: overlayWindows) != $0 }) {
+                session.router.holdFrames(display: index)
+                if ScreencastCaptureFilter.narrowed(stream.plan, window: id, overlays: overlayWindows) != stream.plan {
+                    session.needsNarrowing = true
+                }
+            } else {
+                session.router.releaseFrames(display: index, from: hostClock() + Self.releaseMargin(stream.configuration))
+            }
+        }
+    }
+
+    /// Two frames: frames ScreenCaptureKit captured under the previous list may still be on their
+    /// way when an update's completion arrives.
+    static func releaseMargin(_ configuration: ScreencastStreamConfiguration) -> Double {
+        2 / Double(ScreencastNumbers.framesPerSecond(configuration.framesPerSecond))
+    }
+
+    /// Whether a window recording's stream, still running, has its frames held back.
+    private func isHoldingFrames(_ session: Session) -> Bool {
+        session.streams.indices.contains { index in
+            session.streams[index].source.windowID != nil && session.endedDisplays[index] == nil
+                && session.router.isHoldingFrames(display: index)
+        }
     }
 
     /// Moves a window recording's crop with its window. A resized window scales into the video; a
-    /// window dragged to another display moves the stream there. False when the update failed.
-    private func follow(windowFrame frame: CGRect, in session: Session) async -> Bool {
-        guard let stream = session.streams.first, let running = stream.stream else { return true }
+    /// window dragged to another display moves the stream there. Returns why it failed, or nil.
+    private func follow(windowFrame frame: CGRect, in session: Session) async -> ScreencastFailure? {
+        guard let stream = session.streams.first, let running = stream.stream else { return nil }
         guard let display = session.content.display(mostOverlapping: frame), display.id == stream.plan.displayID else {
             return await applyFilters(to: session)
         }
-        let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale)
+        // A frame with no usable geometry keeps the crop where it was.
+        guard let geometry = ScreencastCaptureGeometry.usableWindow(frame: frame, displayFrame: display.frame, scale: display.scale) else { return nil }
         do {
             try await running.update(sourceRect: geometry.sourceRect)
-            return true
+            return nil
         } catch {
-            logger.error("screencast window follow failed category=\(Self.category(of: error), privacy: .public)")
-            return false
+            if session.followFailures == 0 {
+                logger.error("screencast window follow failed category=\(Self.category(of: error), privacy: .public)")
+            }
+            return Self.failure(of: error)
         }
     }
 
@@ -635,22 +841,22 @@ final class ScreencastRecorder {
             session.router.writers.forEach { $0.keepUp(at: host) }
         }
         let watches = !overlayWindows.isEmpty || session.streams.contains { $0.plan.dependsOnWindows(of: ownProcessID) }
-        // Compared with the list the last rebuild read, which only a rebuild updates, so a rebuild
-        // that failed is tried again.
-        if watches, system.ownVisibleWindows() != session.ownWindows {
-            scheduleFilterRebuild(for: session)
+        // Compared with the list the last rebuild read or was queued for, so one change asks for
+        // one rebuild, and a failed one is tried again by its backoff, not by the ticks.
+        if watches {
+            let ownWindows = system.ownVisibleWindows()
+            if session.queuedOwnWindows != ownWindows {
+                session.queuedOwnWindows = ownWindows
+                scheduleFilterRebuild(for: session)
+            }
         }
     }
 
-    /// A window recording: notices the recorded app opening or closing a window (a menu, sheet, or
-    /// popover), which the filter names one by one, and where the window is now, and moves the
-    /// crop there. Both go through the update queue.
+    /// A window recording: where its window is now, and moves the crop there, through the update
+    /// queue. A window minimized, hidden, on another Space, or closed has no frame to read, so the
+    /// crop stays where it was, and its list still names it.
     func followTick() {
         guard let session, state.isActive, session.phase == .live, case .window(let id) = session.target else { return }
-        if let process = session.targetProcess, let appWindows = system.onScreenWindows(of: process),
-           appWindows != session.targetAppWindows {
-            scheduleFilterRebuild(for: session)
-        }
         guard let frame = system.windowFrame(id), frame != session.followedFrame,
               frame.width >= 2, frame.height >= 2 else { return }
         session.followedFrame = frame
@@ -862,7 +1068,7 @@ final class ScreencastRecorder {
         }
         endingEarly = nil
         state = endedEarly.map { .failed($0) } ?? .idle
-        logger.info("screencast stopped displays=\(videos.count, privacy: .public) duration_ms=\(Int(capture.duration * 1000), privacy: .public) ended_early=\(capture.endedEarly?.rawValue ?? "none", privacy: .public)")
+        logger.info("screencast stopped displays=\(videos.count, privacy: .public) duration_ms=\(ScreencastNumbers.int(capture.duration * 1000, in: 0...Int.max, fallback: 0), privacy: .public) ended_early=\(capture.endedEarly?.rawValue ?? "none", privacy: .public)")
         return capture
     }
 
@@ -939,6 +1145,12 @@ final class ScreencastRecorder {
 
     // MARK: Samples
 
+    /// A sound that failed stays failed for the recording: no buffer of it reaches a file again.
+    private func markFailed(_ source: ScreencastAudioSource, in session: Session) {
+        session.failedAudio.insert(source)
+        session.router.block(source)
+    }
+
     private func makeRouter(generation: Int) -> ScreencastSampleRouter {
         ScreencastSampleRouter(
             onMicrophoneLevel: { [weak self] level in
@@ -953,13 +1165,14 @@ final class ScreencastRecorder {
         )
     }
 
-    /// A sound arrived in a format no file can take: it's dropped, its track is silent from here,
-    /// and the control bar shows it failed. The other sound records on.
+    /// A sound arrived in a format no file can take. The router already drops all of it from then
+    /// on, even buffers that would convert (a device switched back), so a sound shown as failed is
+    /// never recorded; its track gets silence. The other sound records on.
     private func audioUnusable(_ source: ScreencastAudioSource, generation: Int) {
         let session = self.session ?? startingSession
         guard generation == self.generation, let session, session.generation == generation,
               session.audio.contains(source) else { return }
-        session.failedAudio.insert(source)
+        markFailed(source, in: session)
         if session === self.session { publishAudioStates(of: session) }
         logger.error("screencast sound in an unusable format source=\(source.rawValue, privacy: .public)")
     }
@@ -989,6 +1202,10 @@ final class ScreencastRecorder {
     private static func category(of error: Error) -> String {
         (error as? ScreencastFailure)?.rawValue ?? String(describing: type(of: error))
     }
+
+    private static func failure(of error: Error) -> ScreencastFailure {
+        (error as? ScreencastFailure) ?? .captureFailed
+    }
 }
 
 // MARK: - Session
@@ -1000,19 +1217,31 @@ extension ScreencastRecorder {
         case display(CGDirectDisplayID)
         case area(CGDirectDisplayID, CGRect)
         case window(CGWindowID)
+
+        /// The recorded window, for a window recording's stream.
+        var windowID: CGWindowID? {
+            if case .window(let id) = self { id } else { nil }
+        }
     }
 
     /// One display's stream: what it shows and reads, and the stream once it exists.
     struct StreamPlan {
         let source: StreamSource
+        /// What the stream shows: the list ScreenCaptureKit last applied.
         var plan: ScreencastFilterPlan
         let configuration: ScreencastStreamConfiguration
         var stream: (any ScreencastStream)?
+        /// The read `plan`'s filter was built from, which lists every window it names (a window
+        /// recording's window included).
+        var planContent: ScreencastContent
+        /// A window recording's list on its way to ScreenCaptureKit.
+        var pending: ScreencastFilterPlan?
 
-        init(source: StreamSource, plan: ScreencastFilterPlan, configuration: ScreencastStreamConfiguration) {
+        init(source: StreamSource, plan: ScreencastFilterPlan, configuration: ScreencastStreamConfiguration, content: ScreencastContent) {
             self.source = source
             self.plan = plan
             self.configuration = configuration
+            planContent = content
         }
     }
 
@@ -1049,12 +1278,9 @@ extension ScreencastRecorder {
         var startedAt: Date?
         var timeline = ScreencastTimeline()
         var followedFrame: CGRect?
-        /// A window recording's app, and its windows on screen when the filter was last built (nil
-        /// until then).
-        var targetProcess: pid_t?
-        var targetAppWindows: Set<CGWindowID>?
-        /// Keybumps's visible windows when the filters were last built.
-        var ownWindows: Set<CGWindowID> = []
+        /// Keybumps's visible windows as the last rebuild read them or was queued for (nil until
+        /// then).
+        var queuedOwnWindows: Set<CGWindowID>?
         var timers: [Timer] = []
         var activity: NSObjectProtocol?
         /// Displays whose stream stopped while others recorded on, and their files' ending.
@@ -1065,10 +1291,15 @@ extension ScreencastRecorder {
         var pendingAudioStopToken: Int?
         // The stream update queue.
         var isUpdating = false
+        /// Window recordings: an overlay since removed to take out of the list now.
+        var needsNarrowing = false
         var needsFilterRebuild = false
         var pendingWindowFrame: CGRect?
         var rebuildWaiters: [CheckedContinuation<Void, Never>] = []
         var rebuildFailures = 0
+        var rebuildFailureCategory: String?
+        /// A failed rebuild is waiting out its backoff.
+        var awaitingRebuildRetry = false
         var followFailures = 0
 
         init(
@@ -1117,22 +1348,38 @@ extension ScreencastRecorder {
 /// its own file, and the sound to every file. Restarting swaps the files, a display that stopped
 /// gives up its own, and stopping detaches them all, under the lock; a sample already on its way to
 /// a detached file is dropped by it.
+///
+/// A window recording's frames can be held back (`holdFrames`) while its list still names an overlay
+/// since removed: none reaches its file until they're released (`releaseFrames`), and then only
+/// frames stamped from that moment on. The file holds its last frame meanwhile. A stream's frames
+/// are never held otherwise, and display and area streams' never are.
 final class ScreencastSampleRouter: @unchecked Sendable {
     /// How often the microphone meter updates.
     static let meteringInterval = 1.0 / 15
 
+    private enum Hold {
+        case holding
+        /// Released: frames stamped from this host time on pass.
+        case released(from: Double)
+    }
+
     private let lock = NSLock()
     /// By display, in the recording's display order.
     private var files: [Int: any ScreencastMovieWriting] = [:]
+    /// Only frames that reached a file, so a restart never starts its files with one held back.
     private var lastFrames: [Int: CMSampleBuffer] = [:]
+    private var holds: [Int: Hold] = [:]
     private var isMetering = false
     private var lastMeteredAt = -Double.infinity
     private var unusableSources: Set<ScreencastAudioSource> = []
+    /// Sounds that failed: dropped here, so none of them reaches a file.
+    private var blockedSources: Set<ScreencastAudioSource> = []
     private let onMicrophoneLevel: @Sendable (Float) -> Void
     private let onUnusableAudio: @Sendable (ScreencastAudioSource) -> Void
 
     /// `onUnusableAudio` is told once per sound that arrives in a format no file can take (more
-    /// than two channels with no layout): its buffers are dropped from then on.
+    /// than two channels with no layout): all its buffers are dropped from then on, as for any sound
+    /// `block(_:)` names.
     init(
         onMicrophoneLevel: @escaping @Sendable (Float) -> Void,
         onUnusableAudio: @escaping @Sendable (ScreencastAudioSource) -> Void = { _ in }
@@ -1180,8 +1427,41 @@ final class ScreencastSampleRouter: @unchecked Sendable {
         lock.withLock { isMetering = on }
     }
 
+    /// Drops every buffer of `source` from now on.
+    func block(_ source: ScreencastAudioSource) {
+        lock.withLock { _ = blockedSources.insert(source) }
+    }
+
+    /// From now on, none of `index`'s frames reaches its file until `releaseFrames`.
+    func holdFrames(display index: Int) {
+        lock.withLock { holds[index] = .holding }
+    }
+
+    /// Lets `index`'s frames stamped `host` or later through, if they're held back. Frames not held
+    /// back stay as they are.
+    func releaseFrames(display index: Int, from host: Double) {
+        lock.withLock {
+            guard case .holding = holds[index] else { return }
+            holds[index] = .released(from: host)
+        }
+    }
+
+    /// Whether `index`'s frames are held back now.
+    func isHoldingFrames(display index: Int) -> Bool {
+        lock.withLock { if case .holding = holds[index] { true } else { false } }
+    }
+
     func video(_ sample: CMSampleBuffer, display index: Int) {
         let file: (any ScreencastMovieWriting)? = lock.withLock {
+            switch holds[index] {
+            case nil:
+                break
+            case .holding:
+                return nil
+            case .released(let from):
+                // A frame with no real time can't be told to be after the release.
+                guard let host = ScreencastWriterCore.host(of: sample), host >= from else { return nil }
+            }
             lastFrames[index] = sample
             return files[index]
         }
@@ -1189,8 +1469,12 @@ final class ScreencastSampleRouter: @unchecked Sendable {
     }
 
     func audio(_ sample: CMSampleBuffer, from source: ScreencastAudioSource) {
+        guard !lock.withLock({ blockedSources.contains(source) }) else { return }
         guard let format = CMSampleBufferGetFormatDescription(sample), ScreencastAudioBuffers.canConvert(format) else {
-            let isFirst = lock.withLock { unusableSources.insert(source).inserted }
+            let isFirst = lock.withLock {
+                blockedSources.insert(source)
+                return unusableSources.insert(source).inserted
+            }
             if isFirst { onUnusableAudio(source) }
             return
         }
