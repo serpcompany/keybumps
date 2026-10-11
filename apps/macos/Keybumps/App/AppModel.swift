@@ -364,8 +364,13 @@ final class AppModel {
                 speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
-            KeystrokesModule(display: keyDisplay),
             // Settings never opens under unit tests.
+            KeystrokesModule(
+                display: keyDisplay,
+                preferences: preferences,
+                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes),
+                openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) }
+            ),
             ScreencastModule(
                 preferences: preferences,
                 permissions: permissions,
@@ -377,6 +382,11 @@ final class AppModel {
             ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
+        // Quick Search lists the action commands of the plugins that are on, and they run through them.
+        commandPalette.setQuickSearchActions(
+            list: { [weak self] in self?.quickSearchActions ?? [] },
+            perform: { [weak self] action in self?.runQuickSearchAction(action) }
+        )
         // The key display names a Keybumps shortcut only while it's registered, and in the Command
         // Palette, the palette's own keys rather than what they do elsewhere.
         keyDisplay.registeredShortcutName = { [shortcuts] press in
@@ -996,6 +1006,10 @@ final class AppModel {
     func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
     func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
+    /// Quick Search's action commands now: those of the plugins that are on, and none while Locked.
+    var quickSearchActions: [QuickSearchAction] { capabilities.quickSearchActions(capabilityContext) }
+    /// Runs an action command picked in Quick Search, through its plugin's module.
+    func runQuickSearchAction(_ action: QuickSearchAction) { capabilities.perform(action, capabilityContext) }
     /// What Start Screencast does: the picker, or Screencast's page when something's missing.
     func startScreencast() {
         guard isLicensed else { return }

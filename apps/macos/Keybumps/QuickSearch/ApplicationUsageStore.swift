@@ -7,8 +7,9 @@ struct ApplicationUsageRecord: Codable, Equatable {
 
 /// Quick Search's learned usage: how often and how recently the user opened each app, or ran each
 /// Quick Search command, from Quick Search. It is kept per item, not per query, and only ranks
-/// results; it never lists anything (Recent Items does). Apps are keyed by their standardized path
-/// and commands by `command:<id>`, so the keys never collide and older builds ignore command keys.
+/// results; it never lists anything (Recent Items does). Apps are keyed by their standardized path,
+/// commands by `command:<id>`, and action commands by `action:<id>`, so the keys never collide and
+/// older builds ignore command and action keys.
 @MainActor
 final class ApplicationUsageStore {
     private var records: [String: ApplicationUsageRecord] = [:]
@@ -63,7 +64,7 @@ final class ApplicationUsageStore {
     }
 
     private static func key(for command: QuickSearchCommand) -> String {
-        "command:\(command.id)"
+        command.usageKey
     }
 
     private func record(key: String) {

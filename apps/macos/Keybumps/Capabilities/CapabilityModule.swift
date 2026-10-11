@@ -25,6 +25,9 @@ struct CapabilityDescriptor: Identifiable {
     /// means no capability command; an empty list means one found by its title alone. A keyword
     /// ranks the command after the apps, so it never hides an app with that name.
     let searchKeywords: [String]?
+    /// What it does that Quick Search offers as action commands while it's on (#468), such as
+    /// Start Screencast. Its module runs them (`CapabilityModule.perform(_:_:)`).
+    var actions: [PluginAction] = []
     /// Its plugin manifest's Store category.
     let category: PluginCategory
     var publisher: PluginPublisher = .keybumps
@@ -138,6 +141,15 @@ protocol CapabilityModule: AnyObject {
     /// The rows of the module's palette tab, when the module supplies them itself rather than
     /// through a case in `CommandPaletteController`.
     var paletteContent: (any CapabilityPaletteContent)? { get }
+    /// Runs one of the actions its descriptor declares, once Quick Search has closed the palette.
+    /// The shell calls it only while the capability is on.
+    func perform(_ action: PluginAction, _ context: CapabilityContext)
+    /// What one of its actions is called now, when that follows its state (Show or Hide
+    /// Keystrokes); nil keeps the declared title.
+    func title(for action: PluginAction, _ context: CapabilityContext) -> String?
+    /// Whether Quick Search lists one of its actions now: false while picking it would do nothing,
+    /// such as Start Screencast during a capture.
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool
 }
 
 extension CapabilityModule {
@@ -145,6 +157,9 @@ extension CapabilityModule {
     func permissionsDidRefresh(_ context: CapabilityContext) {}
     func attentionCount(_ context: CapabilityContext) -> Int { 0 }
     var paletteContent: (any CapabilityPaletteContent)? { nil }
+    func perform(_ action: PluginAction, _ context: CapabilityContext) {}
+    func title(for action: PluginAction, _ context: CapabilityContext) -> String? { nil }
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool { true }
 }
 
 /// What the shell hands a module each time it applies, deactivates, or refreshes it.
@@ -256,5 +271,28 @@ final class CapabilityRegistry {
 
     func attentionCount(for capability: Capability, context: CapabilityContext) -> Int {
         module(for: capability)?.attentionCount(context) ?? 0
+    }
+
+    /// Quick Search's action commands: the declared actions of every module that's on, in registry
+    /// order, each named as its module names it now and with its shortcut's keycaps while one is
+    /// assigned. A plugin that's off, or that this Mac's macOS can't run, lists none, and a module
+    /// leaves out those it doesn't offer now.
+    func quickSearchActions(_ context: CapabilityContext) -> [QuickSearchAction] {
+        modules.filter { context.isEnabled($0.capability) }.flatMap { module in
+            module.descriptor.actions.filter { module.offers($0, context) }.map { action in
+                QuickSearchAction(
+                    capability: module.capability,
+                    action: action,
+                    title: module.title(for: action, context) ?? action.title,
+                    shortcut: action.shortcut.flatMap { context.preferences.capabilityShortcut(for: $0)?.displayName }
+                )
+            }
+        }
+    }
+
+    /// Runs an action command Quick Search listed, if its capability is still on.
+    func perform(_ action: QuickSearchAction, _ context: CapabilityContext) {
+        guard context.isEnabled(action.capability) else { return }
+        module(for: action.capability)?.perform(action.action, context)
     }
 }

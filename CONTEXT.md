@@ -69,8 +69,12 @@ Finding and opening local applications, files, and folders, finding snippets by 
 _Avoid_: Web search, workflow launcher
 
 **Quick Search command**:
-A Keybumps action that Quick Search offers beside applications, files, and folders, shown as the kind Command: Keybumps Settings, Plugins, or a capability command.
+A Keybumps action that Quick Search offers beside applications, files, and folders: Keybumps Settings, Plugins, or a capability command, shown as the kind Command, or an action command, shown as the kind Action.
 _Avoid_: Workflow, extension command
+
+**Action command**:
+A Quick Search command that does something a plugin does, rather than going somewhere, such as Start Screencast or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Start Screencast during a capture. Picking it closes the palette and does it, as the plugin's shortcut would, or opens the plugin's page when a permission it needs is missing.
+_Avoid_: Quick action, workflow, shortcut (a key combination), command (alone)
 
 **Capability command**:
 The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
@@ -192,7 +196,7 @@ Translation's My language and Other language, never the same: text in my languag
 _Avoid_: Source and target (one translation's languages), target language setting
 
 **Keystrokes**:
-Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut macOS or Keybumps knows clears it. Its Show & Hide Keystrokes shortcut hides the keys until it's pressed again.
+Showing the shortcuts you press on screen, for demos, recordings, and screen sharing, through the key display, on the screen with the pointer. It ships off, and needs Input Monitoring. Unless Show is All keys it shows only shortcuts: ⌘ or ⌃ held, or ⌥ with a key that types nothing, such as an arrow. Nothing shows while you type a password, and a screenshot shortcut macOS or Keybumps knows clears it. The keys can be hidden without turning the plugin off, and stay hidden until shown again, even after a relaunch: Show keys on screen in its settings, Show Keystrokes in the menu bar menu, the Show & Hide Keystrokes shortcut, and Quick Search's Show Keystrokes or Hide Keystrokes all switch it.
 _Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay
 
 **Key display**:

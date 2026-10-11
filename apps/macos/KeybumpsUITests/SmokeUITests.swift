@@ -219,7 +219,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertTrue(waitForValue(of: toggle, 0), "Keystrokes ships off")
         XCTAssertTrue(app.staticTexts["Input Monitoring"].exists)
-        for key in ["style", "position", "size", "duration", "keys", "namesActions", "showsClicks"] {
+        for key in ["showing", "style", "position", "size", "duration", "keys", "namesActions", "showsClicks"] {
             XCTAssertTrue(element("plugin.keystrokes.\(key)").exists, key)
         }
         XCTAssertTrue(element("capability.offBanner.keystrokes").exists, "Its page says it's off")
@@ -627,6 +627,24 @@ final class SmokeUITests: XCTestCase {
         app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
         XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
         XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "Settings opens on Window Manager")
+    }
+
+    func testQuickSearchListsAndRunsStartScreencast() {
+        // An action command is listed only while its plugin is on, and Screencast ships off.
+        launch(permissions: "granted", [
+            "-KBUITestEnableCapabilities", "screencast", "-KBOpenPalette", "search", "-KBCloseSettings", "YES",
+        ])
+        let field = paletteField("Search apps, files, and folders")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+
+        app.typeText("screencast")
+        XCTAssertTrue(element("quickSearch.command.screencast").waitForExistence(timeout: 5))
+        let action = element("quickSearch.action.startScreencast")
+        XCTAssertTrue(action.waitForExistence(timeout: 5), "Start Screencast is listed beside Screencast's command")
+        action.click()
+        XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
+        XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 10), "It opens the picker, as the shortcut does")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
     }
 
     func testCapabilityCommandMovesOpenSettingsToItsPage() {

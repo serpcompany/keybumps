@@ -7,6 +7,8 @@ struct MenuBarItem: Identifiable {
     let title: String
     /// An SF Symbol name.
     let systemImage: String?
+    /// Whether the menu shows a checkmark beside it, for an item that turns something on or off.
+    var isChecked = false
     let action: @MainActor () -> Void
 }
 
@@ -49,7 +51,7 @@ final class MenuBarStatus {
         let old = parts[capability] ?? Part()
         let changed = old.title != title || old.spokenTitle != spoken
             || old.items.map(\.id) != items.map(\.id) || old.items.map(\.title) != items.map(\.title)
-            || old.items.map(\.systemImage) != items.map(\.systemImage)
+            || old.items.map(\.systemImage) != items.map(\.systemImage) || old.items.map(\.isChecked) != items.map(\.isChecked)
             || old.takesPrecedence != takesPrecedence
         parts[capability] = Part(title: title, spokenTitle: spoken, items: items, takesPrecedence: takesPrecedence)
         if changed { onChange() }

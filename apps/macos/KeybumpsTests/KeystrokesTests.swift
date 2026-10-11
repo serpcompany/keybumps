@@ -692,33 +692,113 @@ struct KeystrokesTests {
         ))
     }
 
-    @Test("The plugin holds the display while it's on, and Show & Hide Keystrokes lets go and takes it back")
-    func pluginHoldsTheDisplay() {
+    @Test("Shown or hidden is its own state: hiding lets go of the plugin's hold, showing takes it back, and it outlasts turning the plugin off and a relaunch")
+    func showingState() {
         let harness = DisplayHarness()
-        let notices = RecordingNotices()
-        let module = KeystrokesModule(display: harness.display, notices: notices)
-        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let defaults = InMemoryDefaults()
+        let preferences = AppPreferences(defaults: defaults)
         preferences.set(.choice("bezel"), of: .keystrokesStyle, for: .keystrokes)
+        let notices = RecordingNotices()
+        let module = KeystrokesModule(display: harness.display, preferences: preferences, notices: notices)
+        #expect(module.isShowing, "Shown by default")
 
         module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
         #expect(harness.display.holds(.keystrokes))
         #expect(harness.display.configuration?.style == .bezel)
+        #expect(harness.keys.isRunning)
 
-        module.toggleHidden(preferences: preferences)
+        module.setShowing(false)
+        #expect(!module.isShowing)
         #expect(!harness.display.holds(.keystrokes))
-        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
-        #expect(!harness.display.holds(.keystrokes), "Hidden until the shortcut shows it again")
-        module.toggleHidden(preferences: preferences)
-        #expect(harness.display.holds(.keystrokes))
-        #expect(notices.messages == ["Keystrokes hidden", "Showing keystrokes"])
+        #expect(!harness.keys.isRunning, "No keyboard tap runs for a hidden plugin")
+        #expect(defaults.object(forKey: "plugin.keystrokes.showing") as? Bool == false)
+        #expect(!AppPreferences(defaults: defaults).bool(.keystrokesShowing, for: .keystrokes), "Remembered across a relaunch")
+        #expect(notices.messages.isEmpty, "Only the shortcut announces it")
 
-        module.toggleHidden(preferences: preferences)
+        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
+        #expect(!harness.display.holds(.keystrokes), "Applying again keeps it hidden")
         module.deactivate(harness.context(enabled: [.keystrokes], preferences: preferences))
         module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
-        #expect(harness.display.holds(.keystrokes), "Turning it off and on shows the keys again")
+        #expect(!harness.display.holds(.keystrokes), "Turning the plugin off and on keeps it hidden")
+
+        module.toggleShowing(announces: true)
+        #expect(module.isShowing)
+        #expect(harness.display.holds(.keystrokes))
+        #expect(harness.keys.isRunning)
+        #expect(notices.messages == ["Showing keystrokes"])
 
         module.apply(harness.context(enabled: [], preferences: preferences))
+        #expect(!harness.display.holds(.keystrokes), "Off, nothing is held")
+        module.setShowing(false)
+        module.setShowing(true)
+        #expect(!harness.display.holds(.keystrokes), "While the plugin is off, showing is only remembered")
+    }
+
+    @Test("Hiding the plugin's keys leaves a recording's hold, and its keyboard tap, running")
+    func hidingLeavesARecording() {
+        let harness = DisplayHarness()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let module = KeystrokesModule(display: harness.display, preferences: preferences, notices: RecordingNotices())
+        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
+        harness.display.acquire(Self.recording, configuration: KeyDisplayConfiguration(), keepsWindowsOnScreen: true)
+
+        module.setShowing(false)
+        #expect(harness.display.owners == [Self.recording])
+        #expect(harness.display.isShowing)
+        #expect(harness.keys.isRunning)
+        module.setShowing(true)
+        #expect(harness.display.owners == [Self.recording, .keystrokes])
+    }
+
+    @Test("While the plugin is on, the menu bar menu lists Show Keystrokes, checked while the keys show, and it toggles them")
+    func menuBarItem() throws {
+        let harness = DisplayHarness()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let status = MenuBarStatus()
+        let module = KeystrokesModule(
+            display: harness.display,
+            preferences: preferences,
+            menuBar: CapabilityMenuBarStatus(status: status, capability: .keystrokes),
+            notices: RecordingNotices()
+        )
+        #expect(status.sections.isEmpty)
+        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
+        let item = try #require(status.sections.first?.first)
+        #expect(item.title == "Show Keystrokes")
+        #expect(item.isChecked)
+
+        item.action()
+        #expect(!module.isShowing)
         #expect(!harness.display.holds(.keystrokes))
+        #expect(status.sections.first?.first?.isChecked == false, "Unchecked while hidden")
+        try #require(status.sections.first?.first).action()
+        #expect(module.isShowing)
+
+        module.apply(harness.context(enabled: [], preferences: preferences))
+        #expect(status.sections.isEmpty, "Only while the plugin is on")
+        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
+        module.deactivate(harness.context(enabled: [.keystrokes], preferences: preferences))
+        #expect(status.sections.isEmpty)
+    }
+
+    @Test("Show & Hide Keystrokes toggles the same state, and says so")
+    func shortcutTogglesShowing() {
+        let harness = DisplayHarness()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let binding = ShortcutBinding(keyCode: UInt32(kVK_ANSI_K), modifiers: UInt32(controlKey | optionKey | shiftKey), displayName: "⌃⌥⇧K")
+        preferences.setCapabilityShortcut(binding, for: .keystrokes)
+        let notices = RecordingNotices()
+        let module = KeystrokesModule(display: harness.display, preferences: preferences, notices: notices)
+        module.apply(harness.context(enabled: [.keystrokes], preferences: preferences))
+
+        harness.hotKeys.press(binding)
+        #expect(!module.isShowing)
+        #expect(!preferences.bool(.keystrokesShowing, for: .keystrokes))
+        #expect(!harness.display.holds(.keystrokes))
+        harness.hotKeys.press(binding)
+        #expect(module.isShowing)
+        #expect(harness.display.holds(.keystrokes))
+        #expect(notices.messages == ["Keystrokes hidden", "Showing keystrokes"])
     }
 
     @Test("The app's display follows the plugin's switch and settings, and missing Input Monitoring is its page's attention")
@@ -737,9 +817,19 @@ struct KeystrokesTests {
         model.setPluginPreference(.keystrokesKeys, to: .choice("all"), for: .keystrokes)
         #expect(model.keyDisplay.configuration?.keys == .allKeys)
 
+        // Settings' Show keys on screen switch.
+        model.setPluginPreference(.keystrokesShowing, to: .bool(false), for: .keystrokes)
+        #expect(!model.keyDisplay.isShowing)
+        #expect(model.menuBarStatus.sections.first?.first?.isChecked == false)
+        let module = try #require(model.capabilities.module(for: .keystrokes) as? KeystrokesModule)
+        module.setShowing(true)
+        #expect(model.keyDisplay.holds(.keystrokes))
+        #expect(model.preferences.bool(.keystrokesShowing, for: .keystrokes), "The switch reads the same preference")
+
         model.setCapability(.keystrokes, enabled: false)
         #expect(!model.keyDisplay.isShowing)
         #expect(model.settingsAttentionCount(for: .keystrokes) == 0)
+        #expect(model.menuBarStatus.sections.isEmpty, "Show Keystrokes leaves the menu with the plugin")
     }
 
     @Test("Keystrokes ships off, needs Input Monitoring, has no tab, and its shortcut starts unassigned")
@@ -753,7 +843,7 @@ struct KeystrokesTests {
         #expect(CapabilityShortcut.keystrokes.defaultBinding == nil)
         #expect(CapabilityShortcut.keystrokes.title == "Show & Hide Keystrokes")
         #expect(descriptor.preferences.map { $0.storageKey(for: .keystrokes) } == [
-            "plugin.keystrokes.style", "plugin.keystrokes.position", "plugin.keystrokes.size", "plugin.keystrokes.duration",
+            "plugin.keystrokes.showing", "plugin.keystrokes.style", "plugin.keystrokes.position", "plugin.keystrokes.size", "plugin.keystrokes.duration",
             "plugin.keystrokes.keys", "plugin.keystrokes.namesActions", "plugin.keystrokes.showsClicks",
         ])
         let otherIcons = CapabilityCatalog.descriptors.filter { $0.capability != .keystrokes }.map(\.systemImage)
@@ -982,7 +1072,8 @@ private final class DisplayHarness {
     let clock = Clock()
     let secureInput = SecureInput()
     let display: KeyDisplay
-    private let shortcuts = GlobalShortcutCoordinator(backend: QuietHotKeys())
+    let hotKeys = KeepingHotKeys()
+    private lazy var shortcuts = GlobalShortcutCoordinator(backend: hotKeys)
 
     init(layout: FixedKeyboardLayout? = nil) {
         let clock = clock
@@ -1150,10 +1241,19 @@ private final class RefusingHotKeys: GlobalHotKeyRegistering {
     func unregister(identifier: UInt32) {}
 }
 
+/// Registers everything and keeps Carbon's handler, so a test can press a shortcut.
 @MainActor
-private final class QuietHotKeys: GlobalHotKeyRegistering {
+private final class KeepingHotKeys: GlobalHotKeyRegistering {
     let registrationScope = GlobalHotKeyRegistrationScope.systemWide
-    func installHandler(_ handler: @escaping (UInt32) -> Void) {}
-    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool { true }
-    func unregister(identifier: UInt32) {}
+    private var handler: ((UInt32) -> Void)?
+    private var registered: [UInt32: ShortcutBinding] = [:]
+    func installHandler(_ handler: @escaping (UInt32) -> Void) { self.handler = handler }
+    func register(binding: ShortcutBinding, identifier: UInt32) -> Bool {
+        registered[identifier] = binding
+        return true
+    }
+    func unregister(identifier: UInt32) { registered[identifier] = nil }
+    func press(_ binding: ShortcutBinding) {
+        for (identifier, registeredBinding) in registered where registeredBinding.usesSameKeys(as: binding) { handler?(identifier) }
+    }
 }
