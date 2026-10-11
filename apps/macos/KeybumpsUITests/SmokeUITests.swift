@@ -499,7 +499,7 @@ final class SmokeUITests: XCTestCase {
         note.click()
         note.typeText("Closed by Escape")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes the panel")
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes the window")
         XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Closed by Escape"), "Closing saves")
     }
 
@@ -531,6 +531,41 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("screencast.review.trim").exists)
         XCTAssertFalse(element("screencast.review.addToScreenshots").exists, "Only a screenshot can go to ⌘3")
         XCTAssertFalse(element("screencast.review.edit").exists)
+    }
+
+    /// #475: a recording's review is a bigger, standard window with the player and the review in a
+    /// sidebar, and after Save it stays to say where the recording is, until Done.
+    func testScreencastReviewOfAVideoOpensTheBiggerWindowAndConfirmsSave() {
+        launchScreencastReview("video")
+        let window = reviewPanel
+        XCTAssertGreaterThanOrEqual(window.frame.width, 760, "the bigger window")
+        XCTAssertGreaterThanOrEqual(window.frame.height, 500)
+        XCTAssertFalse(app.dialogs.matching(identifier: "screencast.review.panel").firstMatch.exists, "not the corner panel")
+        let player = window.descendants(matching: .any).matching(identifier: "screencast.review.playerArea").firstMatch
+        let sidebar = window.descendants(matching: .any).matching(identifier: "screencast.review.sidebar").firstMatch
+        XCTAssertTrue(player.exists, "the player")
+        XCTAssertTrue(sidebar.exists, "the sidebar")
+        XCTAssertGreaterThan(player.frame.width, sidebar.frame.width, "the player is the big part")
+        for field in ["note", "type", "repository", "destination", "saveAndSend", "sendAndDelete"] {
+            XCTAssertTrue(sidebar.descendants(matching: .any).matching(identifier: "screencast.review.\(field)").firstMatch.exists, field)
+        }
+        XCTAssertTrue(element("screencast.review.trim").exists)
+        XCTAssertFalse(element("screencast.review.saveAndSend").isEnabled, "Sending comes with destinations")
+
+        let note = element("screencast.review.note")
+        note.click()
+        note.typeText("Watched it back")
+        element("screencast.review.save").click()
+        let confirmation = element("screencast.review.confirmation")
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10), "Save says what happened")
+        XCTAssertTrue(waitForText(of: confirmation, containing: "Saved · "))
+        XCTAssertTrue(waitForText(of: confirmation, containing: "captures"), "and where")
+        XCTAssertTrue(element("screencast.review.showInFinder").exists)
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Watched it back"))
+        XCTAssertTrue(window.exists, "the window stays after Save")
+
+        element("screencast.review.done").click()
+        XCTAssertTrue(window.waitForNonExistence(timeout: 10), "Done closes it")
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -844,17 +879,24 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
     }
 
-    /// Turns Screencast on and opens its review panel on a made-up `video` or `screenshot`.
+    /// Turns Screencast on and opens its review on a made-up `video` or `screenshot`.
     private func launchScreencastReview(_ capture: String) {
+        reviewedCapture = capture
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
         XCTAssertTrue(element("screencast.review.note").waitForExistence(timeout: 20))
-        // So a later check that it closed is about the panel, not a query that finds nothing.
-        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel itself is found")
+        // So a later check that it closed is about the review, not a query that finds nothing.
+        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel or window itself is found")
     }
 
-    /// The review panel. macOS reports a floating panel like it as a dialog, not a window.
+    /// The capture `launchScreencastReview` made up.
+    private var reviewedCapture = "screenshot"
+
+    /// The review: a screenshot's floating panel, which macOS reports as a dialog, not a window, or
+    /// a recording's standard window (#475), which it reports as a window.
     private var reviewPanel: XCUIElement {
-        app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
+        reviewedCapture == "video"
+            ? app.windows.matching(identifier: "screencast.review.window").firstMatch
+            : app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
     }
 
     /// The UI-test-only line that says what the panel did with the capture.
@@ -889,6 +931,11 @@ final class SmokeUITests: XCTestCase {
     /// A text's words, which macOS gives as its label or its value.
     private func waitForText(of element: XCUIElement, _ text: String) -> Bool {
         let predicate = NSPredicate(format: "label == %@ OR value == %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    private func waitForText(of element: XCUIElement, containing text: String) -> Bool {
+        let predicate = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", text, text)
         return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 

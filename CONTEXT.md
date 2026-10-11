@@ -224,7 +224,7 @@ Marking up the screen while Screencast records, in the video: a pen, an arrow, a
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Review panel**:
-The panel in the corner of the screen after each capture, asking what to do with it. It has a one-line note, the type (Bug, Feature, or Feedback), the repository, and the destination. A recording can be trimmed, and a screenshot opens in the Screenshot Editor and can also go to the Screenshots tab (⌘3). Save keeps the capture with its note; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape or closing it saves too. The note, type, repository, and the app it was taken in are user content, kept in the capture's `meta.json` on this Mac.
+The panel in the corner of the screen after each screenshot, and the bigger window after each recording, with its player and the review in a sidebar, asking what to do with the capture. It has a one-line note, the type (Bug, Feature, or Feedback), the repository, and the destination. A recording can be played, scrubbed, and trimmed, and a screenshot opens in the Screenshot Editor and can also go to the Screenshots tab (⌘3). Save keeps the capture with its note; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape or closing it saves too. After a recording's Save or Copy, its window says where the capture is, with Show in Finder, until it's closed. The note, type, repository, and the app it was taken in are user content, kept in the capture's `meta.json` on this Mac.
 _Avoid_: Quick access card, post-capture window, editor
 
 **Repository guess**:

@@ -77,6 +77,8 @@ final class ScreencastReviewModel {
     private(set) var isWorking = false
     private(set) var failure: ScreencastReviewFailure?
     private(set) var isFinished = false
+    /// How the review ended, once it has: what a recording's window says after Save or Copy.
+    private(set) var outcome: ScreencastReviewOutcome?
 
     /// Called once, when the panel is done with the capture.
     @ObservationIgnored var onFinish: ((ScreencastReviewOutcome) -> Void)?
@@ -499,6 +501,7 @@ final class ScreencastReviewModel {
     private func finish(_ outcome: ScreencastReviewOutcome) {
         guard !isFinished else { return }
         isFinished = true
+        self.outcome = outcome
         onFinish?(outcome)
         let waiting = waitingForFinish
         waitingForFinish = []
