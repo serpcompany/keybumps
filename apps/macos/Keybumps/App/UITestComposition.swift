@@ -230,20 +230,27 @@ private final class InertGlobalHotKeyBackend: GlobalHotKeyRegistering {
     func unregister(identifier: UInt32) {}
 }
 
-/// Screencast's made-up screen in UI test mode: the main screen split into two displays side by
-/// side, with two windows of a made-up app on the left one, so a test can switch modes and pick a
-/// screen without reading the real screen. Screenshots are blank.
+/// Screencast's made-up screen in UI test mode: the main screen split into a top and a bottom
+/// display, each as wide as it (CI's screen is 1024 points wide, and the picker's bar needs most of
+/// that), with two windows of a made-up app on each, so a test can switch modes, pick a screen, and
+/// pick a window on the screen with the bar, without reading the real screen. Screenshots are blank.
 @MainActor
 final class UITestScreencastScreen: ScreencastPickerSystem {
     static let madeUpProcess: pid_t = 1
 
-    /// The two displays in AppKit's space: the left and right halves of the main screen.
+    /// The two displays in AppKit's space: the bottom and top halves of the main screen.
     static var layout: ScreencastScreenLayout {
         let main = NSScreen.screens.first?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let half = (main.width / 2).rounded(.down)
+        let lower = (main.height / 2).rounded(.down)
         return ScreencastScreenLayout(screens: [
-            ScreencastScreen(id: 9_001, frame: CGRect(x: main.minX, y: main.minY, width: half, height: main.height), scale: 2),
-            ScreencastScreen(id: 9_002, frame: CGRect(x: main.minX + half, y: main.minY, width: half, height: main.height), scale: 2),
+            ScreencastScreen(
+                id: 9_001, frame: CGRect(x: main.minX, y: main.minY, width: main.width, height: lower), scale: 2,
+                name: "Made-up Bottom Display"
+            ),
+            ScreencastScreen(
+                id: 9_002, frame: CGRect(x: main.minX, y: main.minY + lower, width: main.width, height: main.height - lower), scale: 2,
+                name: "Made-up Top Display"
+            ),
         ])
     }
 
@@ -252,14 +259,21 @@ final class UITestScreencastScreen: ScreencastPickerSystem {
         let displays = layout.screens.map {
             ScreencastContent.Display(id: $0.id, frame: layout.topLeftRect(fromAppKit: $0.frame), scale: $0.scale)
         }
-        let windows = [CGRect(x: 60, y: 120, width: 400, height: 300), CGRect(x: 200, y: 260, width: 360, height: 240)]
-            .enumerated()
-            .map { index, frame in
-                ScreencastContent.Window(
-                    id: CGWindowID(9_101 + index), frame: frame, layer: 0, processID: Self.madeUpProcess,
-                    isUntitled: false, isOnScreen: true
-                )
-            }
+        // On each display, at the same place in from its top-left corner (in AppKit's space): the
+        // first in front of the second, where they overlap.
+        let windows = layout.screens.flatMap { screen in
+            [
+                CGRect(x: screen.frame.minX + 60, y: screen.frame.maxY - 40 - 220, width: 400, height: 220),
+                CGRect(x: screen.frame.minX + 200, y: screen.frame.maxY - 120 - 180, width: 360, height: 180),
+            ]
+        }
+        .enumerated()
+        .map { index, frame in
+            ScreencastContent.Window(
+                id: CGWindowID(9_101 + index), frame: layout.topLeftRect(fromAppKit: frame), layer: 0,
+                processID: Self.madeUpProcess, isUntitled: false, isOnScreen: true
+            )
+        }
         return ScreencastContent(displays: displays, windows: windows, applicationProcessIDs: [Self.madeUpProcess])
     }
 

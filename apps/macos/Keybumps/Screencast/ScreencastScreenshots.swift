@@ -155,12 +155,13 @@ enum ScreencastScreenshots {
             // Keybumps's.
             guard let window = content.window(id), window.processID != ownProcessID,
                   let display = content.display(mostOverlapping: window.frame) else { throw ScreencastFailure.targetUnavailable }
-            let scale = max(display.scale, 1)
+            guard let pixelWidth = pixels(window.frame.width, scale: display.scale),
+                  let pixelHeight = pixels(window.frame.height, scale: display.scale) else { throw ScreencastFailure.targetUnavailable }
             return [ScreencastScreenshotPlan(
                 filter: .window(id),
                 configuration: ScreencastStreamConfiguration(
-                    pixelWidth: Int((window.frame.width * scale).rounded(.up)),
-                    pixelHeight: Int((window.frame.height * scale).rounded(.up)),
+                    pixelWidth: pixelWidth,
+                    pixelHeight: pixelHeight,
                     sourceRect: CGRect(origin: .zero, size: window.frame.size),
                     framesPerSecond: 1,
                     showsCursor: false,
@@ -169,6 +170,15 @@ enum ScreencastScreenshots {
                 )
             )]
         }
+    }
+
+    /// Whole pixels for `points` at `scale`, rounded up; nil for a size ScreenCaptureKit reported
+    /// that isn't a real, positive number of pixels (not finite, below one, or too large), so a bad
+    /// reading fails the screenshot instead of trapping.
+    static func pixels(_ points: CGFloat, scale: CGFloat) -> Int? {
+        let value = (points * max(scale, 1)).rounded(.up)
+        guard value.isFinite, value >= 1, value <= 32_768 else { return nil }
+        return Int(exactly: value)
     }
 
     private static func configuration(_ geometry: ScreencastCaptureGeometry) -> ScreencastStreamConfiguration {
@@ -267,9 +277,13 @@ final class ScreenCaptureKitPickerSystem: ScreencastPickerSystem {
             }
             filter = SCContentFilter(desktopIndependentWindow: window)
             // The window's own size and scale, as ScreenCaptureKit measures them now.
-            let scale = CGFloat(max(filter.pointPixelScale, 1))
-            configuration.width = Int((filter.contentRect.width * scale).rounded(.up))
-            configuration.height = Int((filter.contentRect.height * scale).rounded(.up))
+            let scale = CGFloat(filter.pointPixelScale)
+            guard let width = ScreencastScreenshots.pixels(filter.contentRect.width, scale: scale.isFinite ? scale : 1),
+                  let height = ScreencastScreenshots.pixels(filter.contentRect.height, scale: scale.isFinite ? scale : 1) else {
+                throw ScreencastFailure.targetUnavailable
+            }
+            configuration.width = width
+            configuration.height = height
             configuration.sourceRect = .zero
         }
         do {
