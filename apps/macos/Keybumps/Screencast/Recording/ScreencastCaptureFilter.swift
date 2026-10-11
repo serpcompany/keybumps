@@ -132,14 +132,15 @@ enum ScreencastCaptureFilter {
     /// and sheets; #473 brings them to window recordings.
     ///
     /// Nil when the window or its display isn't in `content` (closed): a filter built from
-    /// `content` couldn't name the window, so the recorder builds none from it.
+    /// `content` couldn't name the window, so the recorder builds none from it. Nil too for one of
+    /// Keybumps's windows, which is never recorded (the picker doesn't offer one).
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
         overlays: Set<CGWindowID>,
         content: ScreencastContent
     ) -> ScreencastFilterPlan? {
-        guard let window = content.window(windowID),
+        guard let window = content.window(windowID), window.processID != ownProcessID,
               let display = content.display(mostOverlapping: window.frame) else { return nil }
         let shownOverlays = content.windows.filter { $0.processID == ownProcessID && overlays.contains($0.id) }.map(\.id)
         return .windows(display.id, includingWindows: Set([window.id] + shownOverlays).sorted())

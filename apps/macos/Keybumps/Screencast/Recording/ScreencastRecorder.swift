@@ -477,17 +477,28 @@ final class ScreencastRecorder {
     /// and turns ScreenCaptureKit's child windows off; a display recording leaves out all of
     /// Keybumps but the windows registered here.
     func includeOverlayWindow(_ id: CGWindowID) async {
-        guard overlayWindows.insert(id).inserted, let session else { return }
-        // One registered again while its removal was on its way may show again.
+        guard overlayWindows.insert(id).inserted else { return }
+        // One registered again while its removal was on its way may show again, even while the
+        // recording starts: its list still names it, and nothing else would let the frames go on.
+        guard let session else {
+            if let startingSession { updateHolds(of: startingSession) }
+            return
+        }
         updateHolds(of: session)
         await rebuildFilters(for: session)
     }
 
-    /// Takes one of Keybumps's windows back out of the video. A window recording that shows it, or
-    /// is about to, writes no frame from now until ScreenCaptureKit has applied a list without it:
-    /// once it's no longer an overlay, the window may show something else (the key display shows
-    /// another holder's keys once the recording's are hidden). The list in hand loses it first,
-    /// without waiting for a read.
+    /// Takes one of Keybumps's windows back out of the video.
+    ///
+    /// Close the window (order it out) before removing it, or keep it showing only what it showed
+    /// as an overlay until it's closed: a Screen or Area recording goes on showing it until
+    /// ScreenCaptureKit has applied the change, and for as long as ScreenCaptureKit refuses it.
+    /// Show anything else in a new window, which stays out with the rest of Keybumps. The key
+    /// display closes its windows before it removes them, and shows later keys in new ones.
+    ///
+    /// A window recording doesn't rely on that: it shows only its window and its overlays, so one
+    /// that shows the window, or is about to, writes no frame from now until ScreenCaptureKit has
+    /// applied a list without it. The list in hand loses it first, without waiting for a read.
     func removeOverlayWindow(_ id: CGWindowID) async {
         guard overlayWindows.remove(id) != nil else { return }
         guard let session else {

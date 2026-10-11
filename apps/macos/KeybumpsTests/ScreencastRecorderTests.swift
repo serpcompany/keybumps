@@ -238,6 +238,22 @@ struct ScreencastRecorderTests {
         #expect(captures.captureFolders().isEmpty)
     }
 
+    /// Review round 13, finding 4: on b568793 a window recording of a Keybumps window started.
+    @available(macOS 15, *)
+    @Test("One of Keybumps's own windows can't be recorded as a window, an overlay or not, as its screenshots can't be taken")
+    func ownWindowRefused() async {
+        defer { captures.remove() }
+        system.ownWindows = [30, 31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        for id: CGWindowID in [30, 31] {
+            await #expect(throws: ScreencastFailure.targetUnavailable, "\(id)") { try await start(recorder, .window(id)) }
+        }
+        #expect(recorder.state == .failed(.targetUnavailable))
+        #expect(system.videoStreams.isEmpty && writers.writers.isEmpty)
+        #expect(captures.captureFolders().isEmpty)
+    }
+
     @available(macOS 15, *)
     @Test("A display with no usable size, or an area that isn't finite or misses its display, fails the start rather than recording something else")
     func unusableGeometry() async {
@@ -1299,6 +1315,44 @@ struct ScreencastRecorderTests {
         #expect(await eventually { stream.plans == [.windows(1, includingWindows: [10])] }, "it leaves the list once the recording is live")
         stream.deliverFrame(at: 1_000.6)
         #expect(file.videoHosts == [1_000.1, 1_000.6])
+    }
+
+    /// Review round 13, finding 1: on b568793 an overlay removed and registered again while the
+    /// recording started left its frames held for good, so a still window's file got no frame.
+    @available(macOS 15, *)
+    @Test("An overlay removed and registered again while a window recording starts holds its frames only in between: a still window's file starts with its narration")
+    func removedAndBackWhileStarting() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        system.holdsVideoStart = true
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        let starting = Task { try await start(recorder, .window(10)) }
+        #expect(await eventually { system.videoStreams.first?.isHoldingStart == true })
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        await recorder.removeOverlayWindow(31)
+        stream.deliverFrame(at: 1_000.1)
+        clock.now = 1_000.2
+        await recorder.includeOverlayWindow(31)
+        clock.now = 1_000.5
+        stream.releaseStart()
+        try await starting.value
+        // The one frame ScreenCaptureKit sends once the stream runs; nothing changes after it.
+        stream.deliverFrame(at: 1_000.5)
+        for step in 0...50 {
+            system.audioStreams[0].deliverAudio(.microphone, at: 1_000.5 + Double(step) / 10)
+        }
+        for _ in 0..<20 {
+            recorder.followTick()
+            await Task.yield()
+        }
+        #expect(file.videoHosts == [1_000.5], "none while it wasn't an overlay, then the first frame, with no read or update to let it through")
+        #expect(system.contentReads == 1 && stream.plans.isEmpty, "the list never changed")
+        clock.now = 1_006
+        let capture = try await recorder.stop()
+        #expect(file.calls.filter { if case .audio(.microphone, _) = $0 { true } else { false } }.count == 51, "all the narration")
+        #expect(capture.videos.count == 1, "the capture is kept")
     }
 
     /// Review round 11, finding 2: on 421ea10 a list that had to lose a window could fail to, and

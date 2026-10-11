@@ -329,12 +329,12 @@ struct ScreencastCaptureFilterTests {
         ScreencastContent.Window(id: id, frame: frame, layer: layer, processID: Screens.browser, isUntitled: !titled, isOnScreen: true)
     }
 
-    @Test("Recording one of Keybumps's own windows leaves its other windows out, overlays apart")
+    /// Review round 13, finding 4: on b568793 a Keybumps window got a list naming it.
+    @Test("One of Keybumps's own windows, an overlay or not, gets no list: it's never recorded")
     func ownWindow() {
-        let plan = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content())
-        #expect(plan == .windows(1, includingWindows: [30]))
-        let withOverlay = ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content())
-        #expect(withOverlay == .windows(1, includingWindows: [30, 31]))
+        #expect(ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [], content: Screens.content()) == nil)
+        #expect(ScreencastCaptureFilter.windowPlan(window: 30, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()) == nil)
+        #expect(ScreencastCaptureFilter.windowPlan(window: 31, ownProcessID: Screens.ownProcess, overlays: [31], content: Screens.content()) == nil)
     }
 
     @Test("The display showing most of a window is the one it's recorded on")
