@@ -8,13 +8,19 @@ enum ScreencastCaptureKind: String, CaseIterable, Equatable, Sendable {
     case screenshot
 }
 
+/// A screen choice in the picker's bar that the pointer is over.
+enum ScreencastScreenPreview: Equatable, Sendable {
+    case screen(CGDirectDisplayID)
+    case all
+}
+
 /// What the picker chooses on screen.
 enum ScreencastPickerTarget: String, CaseIterable, Equatable, Sendable {
     /// An area dragged on one screen.
     case area
     /// A window clicked.
     case window
-    /// A screen clicked, or every screen, one file each.
+    /// A screen chosen in the bar or clicked, or all screens, one file each.
     case screen
 }
 
@@ -70,6 +76,9 @@ final class ScreencastPickerModel {
     let microphoneAvailable: Bool
 
     let layout: ScreencastScreenLayout
+    /// The screen the pointer was on at Start Screencast, or else the main one: the bar shows on
+    /// it, and Screen mode starts with it chosen. Read once, so the two always agree.
+    let pointerScreen: ScreencastScreen?
     /// Windows that can be picked, front to back (`ScreencastWindowPicking`). Empty until what's on
     /// screen has been read, and when it can't be.
     var windows: [ScreencastContent.Window] = [] {
@@ -79,12 +88,19 @@ final class ScreencastPickerModel {
         }
     }
 
-    /// The window under the pointer.
+    /// The window under the pointer, which a click would choose: none over the bar.
     private(set) var hoveredWindow: CGWindowID?
-    /// The window clicked, which Record records.
+    /// The window clicked, which Record records. Only a click on another window changes it: never
+    /// the pointer moving, and never the bar.
     private(set) var selectedWindow: CGWindowID?
-    /// The screen clicked in Screen mode; nil for every screen, as it starts.
+    /// The bar's frame in AppKit's global space, once it's laid out. The pointer over it is on the
+    /// bar, never on a window under it, and a press on it changes no choice (`press`).
+    @ObservationIgnored var barFrame: CGRect?
+    /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
     private(set) var selectedScreen: CGDirectDisplayID?
+    /// The choice the pointer is over in the bar's screen choices, which the screens show until it
+    /// leaves.
+    private(set) var previewedScreens: ScreencastScreenPreview?
     private(set) var areaEditor: ScreencastAreaEditor?
 
     /// Runs after anything the windows draw changes, so they redraw. The bar observes the model.
@@ -94,7 +110,8 @@ final class ScreencastPickerModel {
         layout: ScreencastScreenLayout,
         preferences: ScreencastPreferences,
         microphoneAvailable: Bool,
-        rememberedArea: ScreencastPickedArea? = nil
+        rememberedArea: ScreencastPickedArea? = nil,
+        pointerScreen: CGDirectDisplayID? = nil
     ) {
         self.layout = layout
         self.microphoneAvailable = microphoneAvailable
@@ -102,6 +119,9 @@ final class ScreencastPickerModel {
         recordsSystemAudio = preferences.recordsSystemAudio
         showsShortcuts = preferences.showsShortcuts
         highlightsClicks = preferences.highlightsClicks
+        let startScreen = pointerScreen.flatMap { layout.screen($0) } ?? layout.screens.first
+        self.pointerScreen = startScreen
+        selectedScreen = startScreen?.id
         if let rememberedArea, let screen = layout.screen(rememberedArea.display) {
             areaEditor = ScreencastAreaEditor(rect: rememberedArea.rect, bounds: screen.frame)
         }
@@ -133,17 +153,15 @@ final class ScreencastPickerModel {
         case .window:
             selectedWindow == nil ? "Click a window to choose it." : "Click another window to change it."
         case .screen:
-            if layout.screens.count < 2 {
-                "The whole screen."
-            } else if selectedScreen == nil {
-                "Every screen, one file each. Click a screen for just that one."
+            if let id = selectedScreen, let screen = layout.screen(id) {
+                kind == .video ? "Records all of \(layout.title(of: screen))." : "Captures all of \(layout.title(of: screen))."
             } else {
-                "This screen only. Choose Every Screen for all of them."
+                kind == .video ? "Records all screens, one file each." : "Captures all screens, one image each."
             }
         }
     }
 
-    /// Whether Screen mode offers Every Screen: with more than one screen.
+    /// Whether Screen mode offers All Screens: with more than one screen.
     var offersEveryScreen: Bool { layout.screens.count > 1 }
 
     /// What Record would capture now, or nil while nothing is chosen.
@@ -171,31 +189,82 @@ final class ScreencastPickerModel {
                 return make(.display(id), regions: [.init(display: id, frame: screen.frame)])
             }
             // Left to right, as the recorder numbers its files.
-            let screens = layout.screens.sorted { ($0.frame.minX, -$0.frame.maxY) < ($1.frame.minX, -$1.frame.maxY) }
+            let screens = layout.orderedScreens
             guard let first = screens.first else { return nil }
             let target: ScreencastTarget = screens.count == 1 ? .display(first.id) : .everyDisplay
             return make(target, regions: screens.map { .init(display: $0.id, frame: $0.frame) })
         }
     }
 
-    /// Whether Screen mode would capture `screen`: the one clicked, or every screen.
+    /// Whether Screen mode would capture `screen`: the one chosen, or all screens.
     func isChosen(_ screen: ScreencastScreen) -> Bool {
         selectedScreen == nil || selectedScreen == screen.id
     }
 
+    /// Whether Screen mode shows `screen` as what's recorded: the choice the pointer is over in the
+    /// bar, or else what's chosen.
+    func isLit(_ screen: ScreencastScreen) -> Bool {
+        switch previewedScreens {
+        case .all: true
+        case .screen(let id): id == screen.id
+        case nil: isChosen(screen)
+        }
+    }
+
+    // MARK: A press on a screen (AppKit's global space)
+
+    /// A press on `screen`'s part of the picker, the only way a press reaches a choice: in Area it
+    /// draws, moves, or resizes the area, in Window it chooses the window under it, and in Screen it
+    /// chooses that screen. Says whether it records: a double click in the area, on a window, or on
+    /// a screen. A press on the bar does none of it, in every mode: the bar's controls take their
+    /// own clicks, and one it passes on (its padding, the hint, the gaps) stops here. With no
+    /// gesture started, the drag and release that follow do nothing either.
+    func press(at point: CGPoint, on screen: ScreencastScreen, clickCount: Int) -> Bool {
+        if isOnBar(point) { return false }
+        switch target {
+        case .area:
+            if clickCount == 2, let area, area.rect.contains(point) { return true }
+            pressArea(at: point, on: screen)
+            return false
+        case .window:
+            return clickWindow(at: point) && clickCount == 2
+        case .screen:
+            clickScreen(screen)
+            return clickCount == 2
+        }
+    }
+
+    /// Whether `point` is on the bar, never on what's under it.
+    private func isOnBar(_ point: CGPoint) -> Bool {
+        barFrame?.contains(point) == true
+    }
+
     // MARK: Choosing a screen
 
-    /// Screen mode: just this screen.
+    /// Screen mode: a click on a screen chooses it.
     func clickScreen(_ screen: ScreencastScreen) {
-        guard target == .screen, layout.screen(screen.id) != nil, selectedScreen != screen.id else { return }
-        selectedScreen = screen.id
+        guard target == .screen else { return }
+        chooseScreen(screen.id)
+    }
+
+    /// One of the bar's screen choices: just this screen.
+    func chooseScreen(_ id: CGDirectDisplayID) {
+        guard layout.screen(id) != nil, selectedScreen != id else { return }
+        selectedScreen = id
         changed()
     }
 
-    /// Screen mode: every screen again.
+    /// The bar's All Screens, with more than one screen.
     func chooseEveryScreen() {
-        guard selectedScreen != nil else { return }
+        guard offersEveryScreen, selectedScreen != nil else { return }
         selectedScreen = nil
+        changed()
+    }
+
+    /// The pointer moved onto a screen choice in the bar, or off them (nil).
+    func previewScreens(_ preview: ScreencastScreenPreview?) {
+        guard previewedScreens != preview else { return }
+        previewedScreens = preview
         changed()
     }
 
@@ -225,21 +294,29 @@ final class ScreencastPickerModel {
 
     // MARK: Picking a window (AppKit's global space)
 
+    /// Notes the window under the pointer, if any, which only previews it: the window picked stays.
+    /// Over the bar, it's on no window.
     func hoverWindow(at point: CGPoint) {
         guard target == .window else { return }
-        let id = ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)?.id
+        let id = isOnBar(point) ? nil : window(at: point)?.id
         guard id != hoveredWindow else { return }
         hoveredWindow = id
         changed()
     }
 
-    /// Picks the window under `point`; a click on no window keeps the one picked.
-    func clickWindow(at point: CGPoint) {
-        guard target == .window,
-              let window = ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows) else { return }
+    /// Picks the window under `point`, and says whether there was one. A click on no window keeps
+    /// the one picked; `press` keeps the bar's clicks from reaching here.
+    @discardableResult
+    func clickWindow(at point: CGPoint) -> Bool {
+        guard target == .window, let window = window(at: point) else { return false }
         hoveredWindow = window.id
         selectedWindow = window.id
         changed()
+        return true
+    }
+
+    private func window(at point: CGPoint) -> ScreencastContent.Window? {
+        ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)
     }
 
     /// A pickable window's frame in AppKit's global space.

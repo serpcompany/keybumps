@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreMedia
 import Foundation
 import Testing
 @testable import Keybumps
@@ -17,7 +18,11 @@ struct ScreencastRecorderTests {
     let startDate = Date(timeIntervalSince1970: 1_791_000_000)
 
     @available(macOS 15, *)
-    func makeRecorder(microphoneGranted: Bool = true, retryDelays: [TimeInterval] = [0.005, 0.005, 0.005]) -> ScreencastRecorder {
+    func makeRecorder(
+        microphoneGranted: Bool = true,
+        retryDelays: [TimeInterval] = [0.005, 0.005, 0.005],
+        slowRetryDelay: TimeInterval = 0.05
+    ) -> ScreencastRecorder {
         let clock = clock
         let startDate = startDate
         return ScreencastRecorder(
@@ -28,7 +33,8 @@ struct ScreencastRecorderTests {
             ownProcessID: Screens.ownProcess,
             microphoneGranted: { microphoneGranted },
             tickInterval: nil,
-            retryDelays: retryDelays
+            retryDelays: retryDelays,
+            slowRetryDelay: slowRetryDelay
         )
     }
 
@@ -43,10 +49,13 @@ struct ScreencastRecorderTests {
 
     /// Lets the main actor run what was handed to it until `condition` holds, sleeping a little now
     /// and then so retries waiting out a backoff get their turn too.
-    private func eventually(_ condition: () -> Bool) async -> Bool {
-        for attempt in 0..<1_000 {
+    private func eventually(within seconds: TimeInterval = 2, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        var attempt = 0
+        while Date() < deadline {
             if condition() { return true }
-            if attempt % 10 == 9 {
+            attempt += 1
+            if attempt % 10 == 0 {
                 try? await Task.sleep(nanoseconds: 1_000_000)
             } else {
                 await Task.yield()
@@ -78,6 +87,7 @@ struct ScreencastRecorderTests {
         #expect(configuration.pixelWidth == 3024 && configuration.pixelHeight == 1964)
         #expect(configuration.sourceRect == CGRect(x: 0, y: 0, width: 1512, height: 982))
         #expect(!configuration.scalesToFit)
+        #expect(configuration.includesChildWindows, "left at ScreenCaptureKit's default")
         #expect(system.audioStreams.first?.kind == .audio(ScreencastAudio(microphone: true, systemAudio: true)))
         #expect(system.audioStreams.first?.isRunning == true && system.videoStreams.first?.isRunning == true)
 
@@ -171,18 +181,19 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("A window: its app without its other windows, cropped to it and scaled, the sound from its own stream")
+    @Test("A window: the window alone, cropped to it and scaled, the sound from its own stream")
     func window() async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
         try await start(recorder, .window(10))
 
         let (plan, configuration) = try #require(videoKind(system.videoStreams.first))
-        #expect(plan == .windows(1, includingWindows: [10, 11, 13]),
-                "the window, its sheet and menu; no overlay is registered, so nothing of Keybumps")
+        #expect(plan == .windows(1, includingWindows: [10]),
+                "not its sheet (11), other window (12), or menu (13); no overlay is registered, so nothing of Keybumps")
         #expect(configuration.sourceRect == CGRect(x: 100, y: 100, width: 800, height: 600))
         #expect(configuration.pixelWidth == 1600 && configuration.pixelHeight == 1200)
         #expect(configuration.scalesToFit)
+        #expect(!configuration.includesChildWindows, "the list names every window it shows: a child window nobody named stays out")
         #expect(system.audioStreams.first?.kind == .audio(ScreencastAudio(microphone: true, systemAudio: true)),
                 "a window's stream would hear only its app, so the Mac's sound has its own")
     }
@@ -225,6 +236,52 @@ struct ScreencastRecorderTests {
         await #expect(throws: ScreencastFailure.targetUnavailable) { try await start(recorder, .window(77)) }
         await #expect(throws: ScreencastFailure.targetUnavailable) { try await start(recorder, .display(9)) }
         #expect(captures.captureFolders().isEmpty)
+    }
+
+    /// Review round 13, finding 4: on b568793 a window recording of a Keybumps window started.
+    @available(macOS 15, *)
+    @Test("One of Keybumps's own windows can't be recorded as a window, an overlay or not, as its screenshots can't be taken")
+    func ownWindowRefused() async {
+        defer { captures.remove() }
+        system.ownWindows = [30, 31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        for id: CGWindowID in [30, 31] {
+            await #expect(throws: ScreencastFailure.targetUnavailable, "\(id)") { try await start(recorder, .window(id)) }
+        }
+        #expect(recorder.state == .failed(.targetUnavailable))
+        #expect(system.videoStreams.isEmpty && writers.writers.isEmpty)
+        #expect(captures.captureFolders().isEmpty)
+    }
+
+    @available(macOS 15, *)
+    @Test("A display with no usable size, or an area that isn't finite or misses its display, fails the start rather than recording something else")
+    func unusableGeometry() async {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        for rect in [CGRect(x: CGFloat.nan, y: 0, width: 100, height: 100), CGRect(x: 0, y: 0, width: 100, height: CGFloat.infinity), .zero, CGRect(x: 5000, y: 0, width: 100, height: 100)] {
+            await #expect(throws: ScreencastFailure.targetUnavailable, "\(rect)") { try await start(recorder, .area(display: 1, rect: rect)) }
+        }
+        let empty = ScreencastContent.Display(id: 3, frame: CGRect(x: 3432, y: 0, width: 0, height: 0), scale: 2)
+        system.screen = ScreencastContent(displays: Screens.content().displays + [empty], windows: Screens.content().windows, applicationProcessIDs: Screens.content().applicationProcessIDs)
+        await #expect(throws: ScreencastFailure.targetUnavailable) { try await start(recorder, .display(3)) }
+        await #expect(throws: ScreencastFailure.targetUnavailable) { try await start(recorder, .everyDisplay) }
+        #expect(system.videoStreams.isEmpty && writers.writers.isEmpty)
+        #expect(captures.captureFolders().isEmpty)
+    }
+
+    @available(macOS 15, *)
+    @Test("A display larger than the writer takes is recorded whole, its frames scaled down to fit")
+    func largerThanTheWriterTakes() async throws {
+        defer { captures.remove() }
+        // A 57-inch ultrawide at a HiDPI scale: 10240 × 2880 pixels.
+        let wide = ScreencastContent.Display(id: 3, frame: CGRect(x: 3432, y: 0, width: 5120, height: 1440), scale: 2)
+        system.screen = ScreencastContent(displays: Screens.content().displays + [wide], windows: Screens.content().windows, applicationProcessIDs: Screens.content().applicationProcessIDs)
+        let recorder = makeRecorder()
+        try await start(recorder, .display(3))
+        let (_, configuration) = try #require(videoKind(system.videoStreams.first))
+        #expect(configuration.sourceRect == CGRect(x: 0, y: 0, width: 5120, height: 1440), "the whole display, not a crop")
+        #expect(configuration.pixelWidth == ScreencastMovieWriter.maximumPixels && configuration.pixelHeight == 2304)
     }
 
     @available(macOS 15, *)
@@ -797,7 +854,8 @@ struct ScreencastRecorderTests {
         system.contentFailures = 0
         await recorder.removeOverlayWindow(31)
         await recorder.includeOverlayWindow(31)
-        #expect(system.videoStreams[0].plans == [.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])])
+        #expect(await eventually { system.videoStreams[0].plans == [.display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31])] },
+                "the slow retry's next attempt applies it")
     }
 
     @available(macOS 15, *)
@@ -879,6 +937,642 @@ struct ScreencastRecorderTests {
         system.audioStreams[0].deliverAudio(.systemAudio, at: 1_000.2)
         let calls = writers.writers[0].calls
         #expect(calls == [.audio(.systemAudio, host: 1_000.2)], "no microphone buffer reached the file")
+    }
+
+    @available(macOS 15, *)
+    @Test("A microphone that failed stays out of the file, even when it comes back in a format that converts")
+    func failedMicrophoneStaysOut() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder)
+        system.audioStreams[0].handler.audio(ScreencastSamples.audio(at: 1_000.1, channelValues: [0.5, 0.5, 0.5, 0.5]), .microphone)
+        #expect(await eventually { recorder.microphone == .failed })
+        // The person switches to another microphone, which ScreenCaptureKit follows.
+        system.audioStreams[0].deliverAudio(.microphone, at: 1_000.2)
+        system.audioStreams[0].deliverAudio(.microphone, at: 1_000.3)
+        recorder.setAudio(.microphone, on: false)
+        recorder.setAudio(.microphone, on: true)
+        #expect(recorder.microphone == .failed && recorder.microphoneLevel == 0)
+        #expect(!writers.writers[0].calls.contains { if case .audio(.microphone, _) = $0 { true } else { false } },
+                "no microphone buffer reaches the file")
+        #expect(!writers.writers[0].calls.contains { if case .setAudio = $0 { true } else { false } }, "switching it does nothing")
+    }
+
+    @available(macOS 15, *)
+    @Test("A microphone lost with the sound stream stays out too, whatever its old stream still delivers")
+    func lostMicrophoneStaysOut() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder)
+        system.audioStreams[0].handler.stopped(.captureFailed)
+        #expect(await eventually { recorder.microphone == .failed && system.audioStreams.count == 2 })
+        system.audioStreams[0].deliverAudio(.microphone, at: 1_000.2)
+        system.audioStreams[1].deliverAudio(.systemAudio, at: 1_000.2)
+        #expect(writers.writers[0].calls == [.audio(.systemAudio, host: 1_000.2)])
+    }
+
+    /// The keys: one of Keybumps's windows, registered as an overlay in some tests.
+    static let keys = ScreencastContent.Window(
+        id: 50, frame: CGRect(x: 100, y: 640, width: 800, height: 60), layer: 3, processID: ScreencastScreens.ownProcess, isUntitled: true, isOnScreen: true
+    )
+
+    @available(macOS 15, *)
+    @Test("One change to Keybumps's windows costs a window recording with an overlay one screen read, however many ticks see it while it's read")
+    func oneReadPerChange() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        system.holdsContent = true
+        // A notice opens.
+        system.ownWindows = [31, 40]
+        recorder.tick()
+        #expect(await eventually { system.heldContentCount == 1 })
+        for _ in 0..<5 {
+            recorder.tick()
+            recorder.followTick()
+            await Task.yield()
+        }
+        #expect(system.contentReads == 2, "the ticks that saw the same windows asked for nothing")
+        system.holdsContent = false
+        system.releaseContent()
+        #expect(await eventually { system.heldContentCount == 0 })
+        for _ in 0..<5 {
+            recorder.tick()
+            await Task.yield()
+        }
+        #expect(system.contentReads == 2)
+        #expect(system.videoStreams[0].plans.isEmpty, "the notice isn't named, so the list didn't change")
+    }
+
+    @available(macOS 15, *)
+    @Test("A burst of changes to Keybumps's windows costs one read in flight and one waiting, which sees the latest windows")
+    func burstsAreCoalesced() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        // The keys are registered before their window is up.
+        await recorder.includeOverlayWindow(50)
+        try await start(recorder, .window(10))
+        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 31]))
+        system.holdsContent = true
+        // A notice opens, the keys come up, and the notice closes.
+        for (own, shown) in [([31, 40], []), ([31, 40, 50], [Self.keys]), ([31, 50], [Self.keys])] as [([CGWindowID], [ScreencastContent.Window])] {
+            system.ownWindows = Set(own)
+            system.screen = Screens.content(windows: Screens.content().windows + shown)
+            recorder.tick()
+            #expect(await eventually { system.heldContentCount == 1 })
+        }
+        #expect(system.contentReads == 2)
+        system.holdsContent = false
+        system.releaseContent()
+        #expect(await eventually { system.contentReads == 3 && system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 31, 50]) })
+        for _ in 0..<10 { await Task.yield() }
+        #expect(system.contentReads == 3, "one read in flight, then one waiting")
+    }
+
+    @available(macOS 15, *)
+    @Test("A failed read waits out its backoff, however often the ticks see a change")
+    func ticksRespectTheBackoff() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder(retryDelays: [0.2, 0.2, 0.2])
+        await recorder.includeOverlayWindow(31)
+        await recorder.includeOverlayWindow(50)
+        try await start(recorder, .window(10))
+        system.contentFailures = 2
+        system.ownWindows = [31, 40]
+        recorder.tick()
+        #expect(await eventually { system.contentReads == 2 }, "the first read failed")
+        for id in 41...50 {
+            system.ownWindows = [31, CGWindowID(id)]
+            if id == 50 { system.screen = Screens.content(windows: Screens.content().windows + [Self.keys]) }
+            recorder.tick()
+            recorder.followTick()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        #expect(system.contentReads == 2, "no read during the backoff")
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 31, 50]) })
+        #expect(system.contentReads == 4, "two retries, the second with the latest windows")
+    }
+    @available(macOS 15, *)
+    @Test("includeOverlayWindow waits through the whole backoff, ticks or not, and returns with the overlay shown")
+    func overlayWaitsThroughTheBackoff() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(retryDelays: [0.05, 0.05, 0.05])
+        try await start(recorder)
+        system.contentFailures = 3
+        system.ownWindows = [31]
+        var returned = false
+        let including = Task {
+            await recorder.includeOverlayWindow(31)
+            returned = true
+        }
+        let started = Date()
+        while !returned, Date().timeIntervalSince(started) < 2 {
+            recorder.tick()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        await including.value
+        #expect(Date().timeIntervalSince(started) >= 0.15, "three backoffs")
+        #expect(system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31]))
+        #expect(system.contentReads == 1 + 4, "the ticks added no reads")
+    }
+
+    // MARK: What a window recording shows
+
+    /// Review round 12, finding 1: on efd1215 a window recording dropped every frame until a list
+    /// read once it was live had been applied, and ScreenCaptureKit sends no frame while nothing
+    /// changes, so a still window's file started late, or never, and lost its narration.
+    @available(macOS 15, *)
+    @Test("A still window's first frame starts its file at once, and the narration from then on is kept")
+    func stillWindowStartsAtOnce() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        // The one frame ScreenCaptureKit sends as the stream starts; nothing changes after it.
+        stream.deliverFrame(at: 1_000)
+        for step in 0...50 {
+            system.audioStreams[0].deliverAudio(.microphone, at: 1_000 + Double(step) / 10)
+        }
+        for _ in 0..<20 {
+            recorder.followTick()
+            await Task.yield()
+        }
+        clock.now = 1_005
+        let capture = try await recorder.stop()
+        #expect(file.videoHosts == [1_000], "the first frame, at once")
+        #expect(file.calls.filter { if case .audio(.microphone, _) = $0 { true } else { false } }.count == 51, "all the narration")
+        #expect(file.calls.last == .finish(1_005))
+        #expect(capture.videos.count == 1, "the capture is kept")
+        #expect(system.contentReads == 1 && stream.plans.isEmpty, "nothing read or sent before frames could reach the file")
+    }
+
+    /// Review round 11, finding 1: on 421ea10 a list built from a read that didn't list the recorded
+    /// window named none. Now every read lists a window that's away, a list is never built from one
+    /// that doesn't, and ScreenCaptureKit is never given a list without it (the fake refuses one, as
+    /// `ScreenCaptureKitCaptureSystem.filter(for:in:)` does).
+    @available(macOS 15, *)
+    @Test("A window minimized, hidden, on another Space, or closed keeps a list naming it, never none or the whole display, and an overlay removed meanwhile still leaves", arguments: ["minimize", "hide", "space", "close"])
+    func windowAway(how: String) async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        system.screen = Screens.content(windows: Screens.content().windows + [Self.keys])
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        #expect(videoKind(stream)?.0 == .windows(1, includingWindows: [10, 31]))
+        clock.now = 1_000.5
+        stream.deliverFrame(at: 1_000.5)
+
+        // Minimizing takes the window off screen; hiding its app or switching Spaces, every window
+        // of the app; closing it takes it out of every read.
+        let away = (Screens.content().windows + [Self.keys]).compactMap { window -> ScreencastContent.Window? in
+            let affected = how == "minimize" || how == "close" ? window.id == 10 : window.processID == Screens.browser
+            guard affected else { return window }
+            return how == "close" ? nil : Screens.with(window, onScreen: false)
+        }
+        system.screen = Screens.content(windows: away)
+        system.windowFrames[10] = nil
+        recorder.followTick()
+        stream.deliverFrame(at: 1_000.6)
+        // The drawing is put away, and the keys come up.
+        clock.now = 1_000.7
+        await recorder.removeOverlayWindow(31)
+        stream.deliverFrame(at: 1_000.75)
+        system.ownWindows = [50]
+        await recorder.includeOverlayWindow(50)
+        stream.deliverFrame(at: 1_000.9)
+
+        let expected: [ScreencastFilterPlan] = how == "close"
+            ? [.windows(1, includingWindows: [10])]
+            : [.windows(1, includingWindows: [10]), .windows(1, includingWindows: [10, 50])]
+        #expect(stream.plans == expected, "the drawing leaves from the list in hand; the keys join only from a read that lists the window")
+        #expect(stream.refusedLists.isEmpty, "never a list without the window")
+        #expect(file.videoHosts == [1_000.5, 1_000.6, 1_000.9], "only the frames captured as the drawing left are held back")
+        #expect(recorder.state == .recording)
+
+        guard how != "close" else { return }
+        let reads = system.contentReads
+        system.screen = Screens.content(windows: Screens.content().windows + [Self.keys])
+        system.windowFrames[10] = Screens.browserWindow.frame
+        recorder.followTick()
+        for _ in 0..<10 { await Task.yield() }
+        stream.deliverFrame(at: 1_001)
+        #expect(system.contentReads == reads && stream.plans == expected, "back on screen, its list already names it")
+        #expect(file.videoHosts.last == 1_001)
+    }
+
+    @available(macOS 15, *)
+    @Test("A window recording's window that exists but a read doesn't list gets no list from that read: it's read again, and records on")
+    func windowMissingFromTheRead() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        system.unlisted = [10]
+        system.ownWindows = [31]
+        await recorder.includeOverlayWindow(31)
+        #expect(system.contentReads == 1 + 4, "an attempt and three retries")
+        #expect(stream.plans.isEmpty && stream.refusedLists.isEmpty, "no list without the window")
+        stream.deliverFrame(at: 1_000.5)
+        #expect(file.videoHosts == [1_000.5] && recorder.state == .recording)
+        system.unlisted = []
+        #expect(await eventually { stream.plans == [.windows(1, includingWindows: [10, 31])] }, "the slow retry names the overlay once the window is listed")
+    }
+
+    @available(macOS 15, *)
+    @Test("Nothing that opens over the recorded window joins it, or costs a screen read: its app's menu, sheet, or titled window, another app's panel, or a Keybumps window")
+    func newWindowsNeverJoin() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        let menu = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        let sheet = ScreencastContent.Window(id: 15, frame: CGRect(x: 250, y: 128, width: 600, height: 400), layer: 0, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        let document = ScreencastContent.Window(id: 16, frame: CGRect(x: 200, y: 200, width: 700, height: 500), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true)
+        let panel = ScreencastContent.Window(id: 51, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true)
+        let notice = ScreencastContent.Window(id: 40, frame: CGRect(x: 500, y: 0, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [menu, sheet, document, panel, notice])
+        system.ownWindows = [30, 40]
+        for _ in 0..<5 {
+            recorder.followTick()
+            recorder.tick()
+            await Task.yield()
+        }
+        #expect(system.contentReads == 1 && system.videoStreams[0].plans.isEmpty, "nothing to rebuild for")
+        // A rebuild for an overlay leaves them all out.
+        system.ownWindows = [30, 31, 40]
+        await recorder.includeOverlayWindow(31)
+        #expect(system.videoStreams[0].plans == [.windows(1, includingWindows: [10, 31])])
+    }
+
+    @available(macOS 15, *)
+    @Test("Finder's desktop behind a window recording is never named, from the start or in a rebuild")
+    func desktopNeverNamed() async throws {
+        defer { captures.remove() }
+        // As measured: untitled, the display's size, far below the windows.
+        let desktop = ScreencastContent.Window(id: 40, frame: Screens.leftDisplay.frame, layer: -2147483603, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [desktop])
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        await recorder.includeOverlayWindow(31)
+        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10]))
+        #expect(system.videoStreams[0].plans == [.windows(1, includingWindows: [10, 31])])
+    }
+
+    // MARK: A removed overlay holds the frames back
+
+    @available(macOS 15, *)
+    @Test("An overlay a window recording shows that's removed holds the frames back until a list without it is applied")
+    func removedOverlayHoldsFrames() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        #expect(videoKind(stream)?.0 == .windows(1, includingWindows: [10, 31]))
+        clock.now = 1_000.5
+        stream.deliverFrame(at: 1_000.5)
+        stream.holdsUpdates = true
+        let removing = Task { await recorder.removeOverlayWindow(31) }
+        #expect(await eventually { stream.heldUpdateCount == 1 })
+        stream.deliverFrame(at: 1_000.6)
+        clock.now = 1_001
+        stream.holdsUpdates = false
+        stream.releaseUpdates()
+        await removing.value
+        #expect(stream.plans == [.windows(1, includingWindows: [10])])
+        // Captured under the old list, on its way as the new one applied.
+        stream.deliverFrame(at: 1_001.05)
+        stream.deliverFrame(at: 1_001.1)
+        #expect(file.videoHosts == [1_000.5, 1_001.1])
+    }
+
+    @available(macOS 15, *)
+    @Test("An overlay removed while a list naming it is on its way holds the frames back until a list without it is applied, whether that list lands or fails", arguments: ["lands", "fails"])
+    func removedWhileOnItsWay(outcome: String) async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        clock.now = 1_000.5
+        stream.deliverFrame(at: 1_000.5)
+        stream.holdsUpdates = true
+        system.ownWindows = [31]
+        let including = Task { await recorder.includeOverlayWindow(31) }
+        #expect(await eventually { stream.heldUpdateCount == 1 }, "the list naming it is on its way")
+        stream.deliverFrame(at: 1_000.6)
+        clock.now = 1_000.7
+        let removing = Task { await recorder.removeOverlayWindow(31) }
+        for _ in 0..<10 { await Task.yield() }
+        stream.deliverFrame(at: 1_000.8)
+        clock.now = 1_000.9
+        stream.holdsUpdates = false
+        if outcome == "fails" { stream.filterFailures = 1 }
+        stream.releaseUpdates()
+        await including.value
+        await removing.value
+        if outcome == "lands" {
+            #expect(stream.plans == [.windows(1, includingWindows: [10, 31]), .windows(1, includingWindows: [10])],
+                    "the list on its way landed, and the one without it next")
+        } else {
+            #expect(stream.plans == [.windows(1, includingWindows: [10])],
+                    "the list on its way failed, and the one in force is sent again, unchanged, to be sure of it")
+        }
+        stream.deliverFrame(at: 1_001)
+        #expect(file.videoHosts == [1_000.5, 1_000.6, 1_001], "none from the removal until the list without it applied")
+    }
+
+    @available(macOS 15, *)
+    @Test("An overlay removed while a window recording starts holds its frames back from then until a list without it is applied")
+    func removedWhileStarting() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        system.holdsVideoStart = true
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        let starting = Task { try await start(recorder, .window(10)) }
+        #expect(await eventually { system.videoStreams.first?.isHoldingStart == true })
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        stream.deliverFrame(at: 1_000.1)
+        await recorder.removeOverlayWindow(31)
+        stream.deliverFrame(at: 1_000.2)
+        clock.now = 1_000.5
+        stream.releaseStart()
+        try await starting.value
+        #expect(await eventually { stream.plans == [.windows(1, includingWindows: [10])] }, "it leaves the list once the recording is live")
+        stream.deliverFrame(at: 1_000.6)
+        #expect(file.videoHosts == [1_000.1, 1_000.6])
+    }
+
+    /// Review round 13, finding 1: on b568793 an overlay removed and registered again while the
+    /// recording started left its frames held for good, so a still window's file got no frame.
+    @available(macOS 15, *)
+    @Test("An overlay removed and registered again while a window recording starts holds its frames only in between: a still window's file starts with its narration")
+    func removedAndBackWhileStarting() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        system.holdsVideoStart = true
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        let starting = Task { try await start(recorder, .window(10)) }
+        #expect(await eventually { system.videoStreams.first?.isHoldingStart == true })
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        await recorder.removeOverlayWindow(31)
+        stream.deliverFrame(at: 1_000.1)
+        clock.now = 1_000.2
+        await recorder.includeOverlayWindow(31)
+        clock.now = 1_000.5
+        stream.releaseStart()
+        try await starting.value
+        // The one frame ScreenCaptureKit sends once the stream runs; nothing changes after it.
+        stream.deliverFrame(at: 1_000.5)
+        for step in 0...50 {
+            system.audioStreams[0].deliverAudio(.microphone, at: 1_000.5 + Double(step) / 10)
+        }
+        for _ in 0..<20 {
+            recorder.followTick()
+            await Task.yield()
+        }
+        #expect(file.videoHosts == [1_000.5], "none while it wasn't an overlay, then the first frame, with no read or update to let it through")
+        #expect(system.contentReads == 1 && stream.plans.isEmpty, "the list never changed")
+        clock.now = 1_006
+        let capture = try await recorder.stop()
+        #expect(file.calls.filter { if case .audio(.microphone, _) = $0 { true } else { false } }.count == 51, "all the narration")
+        #expect(capture.videos.count == 1, "the capture is kept")
+    }
+
+    /// Review round 11, finding 2: on 421ea10 a list that had to lose a window could fail to, and
+    /// frames went on into the file under the old one.
+    @available(macOS 15, *)
+    @Test("A removed overlay whose list ScreenCaptureKit refuses holds every frame back until one without it is applied; if none can be, the recording ends early with what it wrote", arguments: ["recovers", "never"])
+    func failedRemovalHoldsFrames(outcome: String) async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        var ended: (capture: ScreencastCapture?, failure: ScreencastFailure)?
+        recorder.onEndedEarly = { ended = ($0, $1) }
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        clock.now = 1_000.5
+        stream.deliverFrame(at: 1_000.5)
+
+        // ScreenCaptureKit refuses the lists that leave it out: the narrowing's, then the rebuild's.
+        clock.now = 1_001
+        let failures = outcome == "recovers" ? 2 : 1_000
+        stream.filterFailures = failures
+        let removing = Task { await recorder.removeOverlayWindow(31) }
+        #expect(await eventually { stream.filterFailures < failures }, "the narrowing was refused")
+        for host in [1_000.6, 1_000.7, 1_000.8] {
+            stream.deliverFrame(at: host)
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+        await removing.value
+        if outcome == "recovers" {
+            #expect(stream.plans == [.windows(1, includingWindows: [10])])
+            stream.deliverFrame(at: 1_001.1)
+            #expect(file.videoHosts == [1_000.5, 1_001.1], "none until the list without it applied")
+            #expect(recorder.state == .recording)
+        } else {
+            #expect(await eventually { ended != nil })
+            #expect(file.videoHosts == [1_000.5], "none while it may still be in the list")
+            #expect(ended?.failure == .captureFailed)
+            #expect(ended?.capture != nil, "what was written before is kept")
+            #expect(recorder.state == .failed(.captureFailed))
+            #expect(stream.plans.isEmpty)
+        }
+    }
+
+    @available(macOS 15, *)
+    @Test("A window recording whose screen read keeps failing records on, and an overlay removed meanwhile leaves without a read")
+    func failingReadsKeepRecording() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        var ended: ScreencastFailure?
+        recorder.onEndedEarly = { ended = $1 }
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        let file = try #require(writers.writers.first)
+        clock.now = 1_000.5
+        stream.deliverFrame(at: 1_000.5)
+        system.contentFailures = 1_000
+        await recorder.removeOverlayWindow(31)
+        #expect(stream.plans == [.windows(1, includingWindows: [10])], "from the read the list in hand was built from")
+        #expect(system.contentReads == 1 + 4, "the rebuild's attempt and three retries")
+        stream.deliverFrame(at: 1_001)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        stream.deliverFrame(at: 1_001.1)
+        #expect(file.videoHosts == [1_000.5, 1_001, 1_001.1])
+        #expect(recorder.state == .recording && ended == nil, "nothing it shows is in doubt, so it records on")
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart starts the new take's file with the last frame written, stamped at the restart, never one held back")
+    func restartOnAWindow() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        clock.now = 1_000.5
+        stream.deliverFrame(at: 1_000.5, shade: 0x10)
+        stream.holdsUpdates = true
+        let removing = Task { await recorder.removeOverlayWindow(31) }
+        #expect(await eventually { stream.heldUpdateCount == 1 })
+        stream.deliverFrame(at: 1_000.6, shade: 0x20)
+        clock.now = 1_001
+        try await recorder.restart()
+        let fresh = try #require(writers.writers.last)
+        #expect(fresh.videoHosts == [1_001] && fresh.videoShades == [0x10], "the last frame written, not the one held back")
+        stream.holdsUpdates = false
+        stream.releaseUpdates()
+        await removing.value
+        stream.deliverFrame(at: 1_001.1, shade: 0x30)
+        #expect(fresh.videoHosts == [1_001, 1_001.1] && fresh.videoShades == [0x10, 0x30], "then the new take's own frames")
+        #expect(writers.writers[0].videoShades == [0x10])
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart before any frame was written starts the new file with none")
+    func restartBeforeAFrame() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        let stream = system.videoStreams[0]
+        stream.holdsUpdates = true
+        let removing = Task { await recorder.removeOverlayWindow(31) }
+        #expect(await eventually { stream.heldUpdateCount == 1 })
+        stream.deliverFrame(at: 1_000.6)
+        clock.now = 1_001
+        try await recorder.restart()
+        #expect(try #require(writers.writers.last).videoHosts.isEmpty)
+        stream.holdsUpdates = false
+        stream.releaseUpdates()
+        await removing.value
+    }
+    @available(macOS 15, *)
+    @Test("While a rebuild is retried slowly, adding or removing an overlay returns at once, and the next good rebuild applies it")
+    func overlayCallsDuringASlowRetry() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(slowRetryDelay: 0.5)
+        try await start(recorder)
+        system.contentFailures = 1_000
+        await recorder.includeOverlayWindow(31)
+        #expect(system.contentReads == 1 + 4, "the first call waited out the quick retries")
+
+        let started = Date()
+        await recorder.includeOverlayWindow(50)
+        await recorder.removeOverlayWindow(31)
+        #expect(Date().timeIntervalSince(started) < 0.1, "neither waits for the slow retry")
+        #expect(system.contentReads == 5, "nor reads the screen")
+        #expect(recorder.overlayWindows == [50])
+
+        let drawing = ScreencastContent.Window(id: 50, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [drawing])
+        system.contentFailures = 0
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [50]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("A rebuild that keeps failing goes on being tried every few seconds, not every tick, and recovers")
+    func persistentFailureSlowsDown() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(slowRetryDelay: 0.1)
+        try await start(recorder)
+        system.contentFailures = 1_000
+        await recorder.includeOverlayWindow(31)
+        #expect(system.contentReads == 1 + 4, "its caller went on after the quick retries")
+        let started = Date()
+        while Date().timeIntervalSince(started) < 0.35 {
+            recorder.tick()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        let slowReads = system.contentReads - 5
+        #expect(slowReads >= 2 && slowReads <= 4, "about one read every 0.1 s, not one per tick: \(slowReads)")
+        system.contentFailures = 0
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("After the last retry fails, a display recording that names Keybumps's windows one by one asks again at the next tick")
+    func afterGivingUpADisplayRecording() async throws {
+        defer { captures.remove() }
+        system.screen = Screens.content(includesOwnApp: false)
+        let recorder = makeRecorder()
+        try await start(recorder)
+        #expect(videoKind(system.videoStreams.first)?.0 == .display(1, excludingProcess: nil, exceptingWindows: []))
+        system.contentFailures = 4
+        system.ownWindows = [40]
+        // Keybumps is listed by the time the screen reads again.
+        system.screen = Screens.content()
+        recorder.tick()
+        #expect(await eventually { system.contentReads >= 5 && system.contentFailures == 0 })
+        recorder.tick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: []) },
+                "Keybumps's notice is left out from here")
+    }
+
+    @available(macOS 15, *)
+    @Test("A window recording keeps a hidden overlay named, so it shows the moment it's ordered in")
+    func hiddenOverlayStaysNamed() async throws {
+        defer { captures.remove() }
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        await recorder.includeOverlayWindow(31)
+        try await start(recorder, .window(10))
+        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 31]))
+        // The click ring is ordered out between clicks while the keys come up.
+        let windows = Screens.content().windows.map { $0.id == 31 ? Screens.with($0, onScreen: false) : $0 } + [Self.keys]
+        system.screen = Screens.content(windows: windows)
+        system.ownWindows = [50]
+        await recorder.includeOverlayWindow(50)
+        #expect(system.videoStreams[0].plans == [.windows(1, includingWindows: [10, 31, 50])])
+    }
+
+    @available(macOS 15, *)
+    @Test("Retry waits that aren't numbers, or are negative, can't trap")
+    func absurdRetryDelays() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(retryDelays: [.nan, -1, 0], slowRetryDelay: .nan)
+        try await start(recorder)
+        system.contentFailures = 2
+        await recorder.includeOverlayWindow(31)
+        #expect(system.videoStreams[0].plans.last == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: [31]))
+    }
+
+    @available(macOS 15, *)
+    @Test("The real capture system's conversions take what ScreenCaptureKit and AppKit can hand over")
+    func realCaptureSystemConversions() {
+        #expect(ScreenCaptureKitCaptureSystem.scale(.nan) == 1)
+        #expect(ScreenCaptureKitCaptureSystem.scale(0) == 1 && ScreenCaptureKitCaptureSystem.scale(2) == 2)
+        #expect(ScreenCaptureKitCaptureSystem.queueDepth(pixelWidth: Int.max, pixelHeight: Int.max) == 4)
+        let configuration = ScreenCaptureKitCaptureSystem.streamConfiguration(ScreencastStreamConfiguration(
+            pixelWidth: 320, pixelHeight: 180, sourceRect: CGRect(x: 0, y: 0, width: 320, height: 180),
+            framesPerSecond: Int.max, showsCursor: true, showsMouseClicks: false, scalesToFit: false
+        ))
+        #expect(configuration.minimumFrameInterval == CMTime(value: 1, timescale: 120))
+        // Keybumps's own window numbers: `ScreencastRealValueTests.windowNumbers` covers their
+        // conversion, since the test host has no window whose number could trap.
     }
 
     @available(macOS 15, *)
@@ -1025,41 +1719,24 @@ struct ScreencastRecorderTests {
         let recorder = makeRecorder()
         await recorder.includeOverlayWindow(31)
         try await start(recorder, .window(10))
-        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 11, 13, 31]))
+        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 31]))
 
-        // A notch notice and the Command Palette open, then the app opens a popover.
+        // A notch notice and the Command Palette open, then the keys come up.
         let notice = ScreencastContent.Window(id: 40, frame: CGRect(x: 500, y: 0, width: 300, height: 40), layer: 25, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
         let palette = ScreencastContent.Window(id: 41, frame: CGRect(x: 300, y: 200, width: 700, height: 450), layer: 8, processID: Screens.ownProcess, isUntitled: true, isOnScreen: true)
-        let popover = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
         system.screen = Screens.content(windows: Screens.content().windows + [notice, palette])
         system.ownWindows = [30, 31, 40, 41]
         recorder.tick()
-        recorder.followTick()
-        system.screen = Screens.content(windows: Screens.content().windows + [notice, palette, popover])
-        recorder.followTick()
-        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14, 31]) })
+        #expect(await eventually { system.contentReads == 2 })
+        system.screen = Screens.content(windows: Screens.content().windows + [notice, palette, Self.keys])
+        system.ownWindows = [30, 31, 40, 41, 50]
+        await recorder.includeOverlayWindow(50)
+        #expect(system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 31, 50]))
         let every = [videoKind(system.videoStreams[0])?.0].compactMap { $0 } + system.videoStreams[0].plans
         for plan in every {
             guard case .windows(_, let windows) = plan else { Issue.record("not a window list"); continue }
             #expect(Set(windows).isDisjoint(with: [30, 40, 41]), "Keybumps's other windows are never named")
         }
-    }
-
-    @available(macOS 15, *)
-    @Test("The recorded app's new window joins at the next follow tick, and leaves when it closes")
-    func appWindowJoins() async throws {
-        defer { captures.remove() }
-        let recorder = makeRecorder()
-        try await start(recorder, .window(10))
-        recorder.followTick()
-        for _ in 0..<20 { await Task.yield() }
-        let menu = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
-        system.screen = Screens.content(windows: Screens.content().windows + [menu])
-        recorder.followTick()
-        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
-        system.screen = Screens.content()
-        recorder.followTick()
-        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13]) })
     }
 
     @available(macOS 15, *)
@@ -1124,7 +1801,7 @@ struct ScreencastRecorderTests {
         await including.value
         #expect(await eventually { stream.sourceRects.last == CGRect(x: 200, y: 100, width: 800, height: 600) })
         #expect(stream.mostUpdatesInFlight == 1)
-        #expect(stream.plans.count == 1)
+        #expect(stream.plans == [.windows(1, includingWindows: [10, 31])], "the overlay's")
         #expect(stream.sourceRects.count == 2, "the frames in between were skipped")
     }
 
