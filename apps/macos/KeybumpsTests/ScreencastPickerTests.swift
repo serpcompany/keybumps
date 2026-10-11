@@ -301,6 +301,13 @@ struct ScreencastPickerTests {
     func screenWithThePointer() {
         #expect(PickerScreens.model(pointerScreen: 2).selectedScreen == 2)
         #expect(PickerScreens.model(pointerScreen: 77).selectedScreen == 1, "A screen that isn't there: the first")
+        // The bar's screen is the same one.
+        #expect(PickerScreens.model(pointerScreen: 2).pointerScreen == PickerScreens.right)
+        #expect(PickerScreens.model(pointerScreen: 77).pointerScreen == PickerScreens.left)
+        // Without the pointer on a screen, both start on the main one, which `NSScreen` lists
+        // first, even when it isn't leftmost.
+        let mainOnRight = PickerScreens.model(layout: ScreencastScreenLayout(screens: [PickerScreens.right, PickerScreens.left]))
+        #expect(mainOnRight.pointerScreen == PickerScreens.right && mainOnRight.selectedScreen == 2)
         let single = PickerScreens.model(layout: PickerScreens.leftOnly)
         single.target = .screen
         #expect(!single.offersEveryScreen && single.selectedScreen == 1)
@@ -362,5 +369,37 @@ struct ScreencastPickerTests {
         model.target = .window
         model.pressArea(at: CGPoint(x: 10, y: 10), on: left)
         #expect(model.areaEditor?.bounds == right.frame)
+    }
+}
+
+/// "Getting ready…" in the notch, through Screencast's own overlays and a notch notice of the
+/// test's own.
+@MainActor
+@Suite("Screencast: Getting ready…")
+struct ScreencastGettingReadyNoticeTests {
+    @available(macOS 15, *)
+    @Test("Hiding Getting ready… hides it, and never a notice that replaced it, such as a Shortcut Coach tip")
+    func hidesOnlyItself() throws {
+        let notices = PaletteHUD()
+        defer { notices.dismiss() }
+        let overlays = ScreencastOverlayWindows(notices: notices)
+
+        overlays.showGettingReady()
+        #expect(notices.shownNotice != nil)
+        overlays.hideGettingReady()
+        #expect(notices.shownNotice == nil)
+
+        overlays.showGettingReady()
+        notices.showCoach(NotchCoachPresentation(event: .sample))
+        let tip = try #require(notices.shownNotice)
+        overlays.hideGettingReady()
+        #expect(notices.shownNotice == tip, "the tip stays")
+
+        // Nor a notice that came after one that hid on its own.
+        overlays.showGettingReady()
+        notices.dismiss()
+        let later = notices.show("Copied to Clipboard")
+        overlays.hideGettingReady()
+        #expect(later != nil && notices.shownNotice == later)
     }
 }

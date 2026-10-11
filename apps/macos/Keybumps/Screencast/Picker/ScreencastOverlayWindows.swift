@@ -22,20 +22,28 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
     private var highlightPanel: NSPanel?
     private var escapeMonitors: [Any] = []
     private var escapeHandler: (() -> Void)?
+    /// The notch notices, shared with every other surface.
+    private let notices: PaletteHUD
+    /// "Getting ready…", as `notices` numbered it, while it may still be showing.
+    private var gettingReadyNotice: Int?
+
+    init(notices: PaletteHUD = .shared) {
+        self.notices = notices
+    }
 
     // MARK: The picker
 
     func showPicker(_ model: ScreencastPickerModel, confirm: @escaping () -> Void, cancel: @escaping () -> Void) {
         closePicker()
         let layout = model.layout
-        let barScreen = layout.screen(containing: NSEvent.mouseLocation) ?? layout.screens.first
         var keyPanel: ScreencastKeyPanel?
         for screen in layout.screens {
             let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
             panel.acceptsMouseMovedEvents = true
             let view = ScreencastPickerView(model: model, screen: screen, confirm: confirm)
             panel.contentView = view
-            if screen.id == barScreen?.id {
+            // The screen the pointer was on at Start Screencast, which Screen mode starts with too.
+            if screen.id == model.pointerScreen?.id {
                 view.showBar(ScreencastPickerBar(model: model, confirm: confirm, cancel: cancel), bottomInset: Self.dockInset(of: screen))
                 keyPanel = panel
             }
@@ -163,15 +171,19 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
     }
 
     func showMessage(_ message: String) {
-        PaletteHUD.shared.show(message, systemImage: "exclamationmark.triangle.fill", tint: .orange, duration: 4)
+        notices.show(message, systemImage: "exclamationmark.triangle.fill", tint: .orange, duration: 4)
     }
 
+    /// Up until `hideGettingReady()`, when the screen has been read or reading it failed, however
+    /// long that takes.
     func showGettingReady() {
-        PaletteHUD.shared.show("Getting ready…", systemImage: "record.circle", tint: .secondary, duration: 10)
+        gettingReadyNotice = notices.show("Getting ready…", systemImage: "record.circle", tint: .secondary, duration: .infinity)
     }
 
+    /// Hides "Getting ready…" only: a notice that replaced it, such as a Shortcut Coach tip, stays.
     func hideGettingReady() {
-        PaletteHUD.shared.dismiss()
+        if let gettingReadyNotice { notices.dismiss(notice: gettingReadyNotice) }
+        gettingReadyNotice = nil
     }
 }
 

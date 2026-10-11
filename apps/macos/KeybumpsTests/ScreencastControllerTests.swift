@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -35,7 +36,11 @@ struct ScreencastControllerTests {
         countdown: Int = 3,
         microphoneAvailable: Bool = true,
         writers: (any ScreencastWriterFactory)? = nil,
-        pointer: CGPoint = CGPoint(x: -10_000, y: -10_000)
+        pointer: @escaping @MainActor () -> CGPoint = { CGPoint(x: -10_000, y: -10_000) },
+        screens: @escaping @MainActor () -> ScreencastScreenLayout = { PickerScreens.both },
+        gettingReadyDelay: TimeInterval = 0.3,
+        screenReadTimeout: TimeInterval = 30,
+        screenChanges: NotificationCenter = NotificationCenter()
     ) -> ScreencastController {
         let clock = clock
         let startDate = startDate
@@ -56,10 +61,13 @@ struct ScreencastControllerTests {
             presenter: overlays,
             areaMemory: ScreencastAreaMemory(defaults: defaults),
             preferences: { preferences },
-            screens: { PickerScreens.both },
-            pointerLocation: { pointer },
+            screens: screens,
+            pointerLocation: pointer,
             microphoneAvailable: { microphoneAvailable },
             sleep: { try await sleeper.sleep($0) },
+            gettingReadyDelay: gettingReadyDelay,
+            screenReadTimeout: screenReadTimeout,
+            screenChanges: screenChanges,
             now: { startDate },
             ownProcessID: Screens.ownProcess
         )
@@ -131,15 +139,17 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
-    @Test("Without the screen, the picker still opens, with no windows to pick")
+    @Test("If the screen can't be read, the picker never shows, and the message says why")
     func openWithoutScreen() async throws {
         defer { captures.remove() }
         pickerSystem.contentError = .screenRecordingDenied
         let controller = makeController()
         controller.open()
-        #expect(await ScreencastWait.until { overlays.picker != nil })
-        #expect(controller.phase == .picking)
-        #expect(controller.picker?.windows.isEmpty == true)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(controller.picker == nil)
+        #expect(!overlays.events.contains(.showPicker))
+        #expect(!overlays.isWatchingEscape)
+        #expect(overlays.messages == [ScreencastMessages.text(for: .screenRecordingDenied, kind: .video)])
     }
 
     @available(macOS 15, *)
@@ -238,9 +248,25 @@ struct ScreencastControllerTests {
     @Test("Screen mode starts on the screen with the pointer")
     func pointerScreen() async throws {
         defer { captures.remove() }
-        let controller = makeController(pointer: CGPoint(x: 2000, y: 500))
+        let controller = makeController(pointer: { CGPoint(x: 2000, y: 500) })
         controller.open()
         #expect(controller.picker?.selectedScreen == 2)
+    }
+
+    @available(macOS 15, *)
+    @Test("The bar and Screen mode both use the screen the pointer was on at Start Screencast, even if it moves while the screen is read")
+    func pointerReadOnce() async throws {
+        defer { captures.remove() }
+        var pointer = CGPoint(x: 2000, y: 500)
+        pickerSystem.holdsContent = true
+        let controller = makeController(pointer: { pointer })
+        controller.open()
+        // To answer an alert macOS shows on the other screen, say.
+        pointer = CGPoint(x: 100, y: 100)
+        pickerSystem.releaseContent()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        #expect(overlays.picker?.pointerScreen == PickerScreens.right)
+        #expect(overlays.picker?.selectedScreen == 2)
     }
 
     @available(macOS 15, *)
@@ -747,6 +773,24 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
+    @Test("A read that takes too long gives up: the cue hides, the message says why, and the picker never shows")
+    func screenReadTimesOut() async throws {
+        defer { captures.remove() }
+        pickerSystem.holdsContent = true
+        let controller = makeController(gettingReadyDelay: 0.01, screenReadTimeout: 0.1)
+        controller.open()
+        #expect(await ScreencastWait.until { !overlays.messages.isEmpty })
+        #expect(controller.phase == .idle && controller.picker == nil)
+        #expect(overlays.events == [
+            .watchEscape, .gettingReady, .hideGettingReady, .closePicker, .stopWatchingEscape,
+            .message(ScreencastMessages.text(for: .captureFailed, kind: .video)),
+        ])
+        pickerSystem.releaseContent()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!overlays.events.contains(.showPicker))
+    }
+
+    @available(macOS 15, *)
     @Test("A quick read never shows Getting ready…")
     func quickReadNoCue() async throws {
         defer { captures.remove() }
@@ -755,6 +799,71 @@ struct ScreencastControllerTests {
         #expect(await ScreencastWait.until { overlays.picker != nil })
         try await Task.sleep(for: .milliseconds(450))
         #expect(!overlays.events.contains(.gettingReady))
+    }
+
+    // MARK: Displays changing
+
+    @available(macOS 15, *)
+    @Test("A display unplugged while the picker is open closes it and says so; the next one offers only the screens left")
+    func displayUnpluggedWhilePicking() async throws {
+        defer { captures.remove() }
+        var layout = PickerScreens.both
+        let screenChanges = NotificationCenter()
+        let controller = makeController(screens: { layout }, screenChanges: screenChanges)
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+
+        layout = PickerScreens.leftOnly
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(controller.picker == nil && overlays.picker == nil)
+        #expect(!overlays.isWatchingEscape)
+        #expect(overlays.messages == [ScreencastMessages.screensChanged])
+
+        controller.open()
+        let model = try #require(controller.picker)
+        #expect(model.layout == PickerScreens.leftOnly)
+        #expect(model.layout.orderedScreens.map(\.id) == [1] && !model.offersEveryScreen)
+        #expect(model.selectedScreen == 1)
+    }
+
+    @available(macOS 15, *)
+    @Test("A display change while the screen is read cancels, and the picker never shows")
+    func displayChangeWhileReading() async throws {
+        defer { captures.remove() }
+        var layout = PickerScreens.both
+        let screenChanges = NotificationCenter()
+        pickerSystem.holdsContent = true
+        let controller = makeController(screens: { layout }, screenChanges: screenChanges)
+        controller.open()
+        layout = PickerScreens.leftOnly
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        pickerSystem.releaseContent()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!overlays.events.contains(.showPicker))
+        #expect(overlays.messages == [ScreencastMessages.screensChanged])
+    }
+
+    @available(macOS 15, *)
+    @Test("A screen notice that changes nothing leaves the picker open, and none is heard once it closes")
+    func screenNoticeWithoutChange() async throws {
+        defer { captures.remove() }
+        var layout = PickerScreens.both
+        let screenChanges = NotificationCenter()
+        let controller = makeController(screens: { layout }, screenChanges: screenChanges)
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(controller.phase == .picking && overlays.picker != nil)
+
+        overlays.pressEscape()
+        layout = PickerScreens.leftOnly
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(controller.phase == .idle)
+        #expect(overlays.messages.isEmpty)
     }
 
     // MARK: Turning off

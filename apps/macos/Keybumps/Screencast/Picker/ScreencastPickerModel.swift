@@ -76,6 +76,9 @@ final class ScreencastPickerModel {
     let microphoneAvailable: Bool
 
     let layout: ScreencastScreenLayout
+    /// The screen the pointer was on at Start Screencast, or else the main one: the bar shows on
+    /// it, and Screen mode starts with it chosen. Read once, so the two always agree.
+    let pointerScreen: ScreencastScreen?
     /// Windows that can be picked, front to back (`ScreencastWindowPicking`). Empty until what's on
     /// screen has been read, and when it can't be.
     var windows: [ScreencastContent.Window] = [] {
@@ -89,7 +92,7 @@ final class ScreencastPickerModel {
     private(set) var hoveredWindow: CGWindowID?
     /// The window clicked, which Record records.
     private(set) var selectedWindow: CGWindowID?
-    /// The screen chosen in Screen mode, at first the one with the pointer; nil for all screens.
+    /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
     private(set) var selectedScreen: CGDirectDisplayID?
     /// The choice the pointer is over in the bar's screen choices, which the screens show until it
     /// leaves.
@@ -112,7 +115,9 @@ final class ScreencastPickerModel {
         recordsSystemAudio = preferences.recordsSystemAudio
         showsShortcuts = preferences.showsShortcuts
         highlightsClicks = preferences.highlightsClicks
-        selectedScreen = pointerScreen.flatMap { layout.screen($0)?.id } ?? layout.orderedScreens.first?.id
+        let startScreen = pointerScreen.flatMap { layout.screen($0) } ?? layout.screens.first
+        self.pointerScreen = startScreen
+        selectedScreen = startScreen?.id
         if let rememberedArea, let screen = layout.screen(rememberedArea.display) {
             areaEditor = ScreencastAreaEditor(rect: rememberedArea.rect, bounds: screen.frame)
         }
