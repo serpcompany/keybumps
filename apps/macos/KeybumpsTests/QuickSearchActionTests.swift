@@ -229,9 +229,9 @@ struct QuickSearchActionTests {
     func keystrokesShowAndHide() {
         let display = KeyDisplay(keys: InertKeyTypingMonitor(), pointer: InertPointerEventMonitor())
         let notices = NoticeRecorder()
-        let module = KeystrokesModule(display: display, notices: notices)
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.setCapability(.keystrokes, enabled: true)
+        let module = KeystrokesModule(display: display, preferences: preferences, notices: notices)
         let context = CapabilityContext(
             enabledCapabilities: [.keystrokes], preferences: preferences,
             shortcuts: GlobalShortcutCoordinator(backend: SilentHotKeys()),
@@ -252,7 +252,8 @@ struct QuickSearchActionTests {
         #expect(notices.messages == ["Keystrokes hidden", "Showing keystrokes"], "The shortcut's notices")
 
         module.setShowing(true, announces: true)
-        #expect(notices.messages.count == 2, "Already showing: nothing changes")
+        #expect(module.isShowing && display.holds(.keystrokes))
+        #expect(notices.messages.count == 3, "Already showing: it stays, and says so again")
         #expect(module.title(for: .startScreencast, context) == nil)
 
         module.apply(CapabilityContext(
@@ -260,7 +261,8 @@ struct QuickSearchActionTests {
             permissions: context.permissions, permissionReadiness: context.permissionReadiness
         ))
         module.setShowing(false, announces: true)
-        #expect(!display.holds(.keystrokes) && notices.messages.count == 2, "Off: nothing to show or hide")
+        #expect(!display.holds(.keystrokes), "Off: nothing shows")
+        #expect(notices.messages.count == 4 && notices.messages.last == "Keystrokes hidden", "Off: hiding is only remembered, and still says so")
     }
 }
 
