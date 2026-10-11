@@ -279,9 +279,9 @@ final class ScreencastRecorder {
         // or more of the screen than was chosen.
         func displayStream(_ display: ScreencastContent.Display, area: CGRect?) throws -> StreamPlan {
             let geometry = if let area {
-                ScreencastCaptureGeometry.area(area, displaySize: display.frame.size, scale: display.scale)
+                ScreencastCaptureGeometry.usableArea(area, displaySize: display.frame.size, scale: display.scale)
             } else {
-                ScreencastCaptureGeometry.display(size: display.frame.size, scale: display.scale)
+                ScreencastCaptureGeometry.usableDisplay(size: display.frame.size, scale: display.scale)
             }
             guard let geometry else { throw ScreencastFailure.targetUnavailable }
             return StreamPlan(
@@ -307,15 +307,18 @@ final class ScreencastRecorder {
             guard let window = content.window(id),
                   let plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlays, content: content),
                   let display = content.display(plan.displayID),
-                  let geometry = ScreencastCaptureGeometry.window(frame: window.frame, displayFrame: display.frame, scale: display.scale)
+                  let geometry = ScreencastCaptureGeometry.usableWindow(frame: window.frame, displayFrame: display.frame, scale: display.scale)
             else { throw ScreencastFailure.targetUnavailable }
             return [StreamPlan(source: .window(id), plan: plan, configuration: configuration(geometry, options: options, scalesToFit: true))]
         }
     }
 
     /// A window recording's stream (`scalesToFit`) also leaves out child windows its list doesn't name.
+    /// A region larger than the writer takes (`ScreencastMovieWriter.maximumPixels` a side) is
+    /// recorded whole, scaled down to fit.
     private static func configuration(_ geometry: ScreencastCaptureGeometry, options: ScreencastOptions, scalesToFit: Bool) -> ScreencastStreamConfiguration {
-        ScreencastStreamConfiguration(
+        let geometry = geometry.fitting(longestSide: ScreencastMovieWriter.maximumPixels)
+        return ScreencastStreamConfiguration(
             pixelWidth: geometry.pixelWidth,
             pixelHeight: geometry.pixelHeight,
             sourceRect: geometry.sourceRect,
@@ -640,7 +643,7 @@ final class ScreencastRecorder {
                 session.streams[index].plan = plan
                 if plan.displayID != stream.plan.displayID, case .window(let id) = stream.source,
                    let frame = content.window(id)?.frame, let display = content.display(plan.displayID),
-                   let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale) {
+                   let geometry = ScreencastCaptureGeometry.usableWindow(frame: frame, displayFrame: display.frame, scale: display.scale) {
                     // The window moved to another display: read it there.
                     try await running.update(sourceRect: geometry.sourceRect)
                 }
@@ -659,7 +662,7 @@ final class ScreencastRecorder {
             return await applyFilters(to: session)
         }
         // A frame with no usable geometry keeps the crop where it was.
-        guard let geometry = ScreencastCaptureGeometry.window(frame: frame, displayFrame: display.frame, scale: display.scale) else { return nil }
+        guard let geometry = ScreencastCaptureGeometry.usableWindow(frame: frame, displayFrame: display.frame, scale: display.scale) else { return nil }
         do {
             try await running.update(sourceRect: geometry.sourceRect)
             return nil
@@ -713,8 +716,9 @@ final class ScreencastRecorder {
     }
 
     /// A window recording: notices the recorded app opening or closing a window (a menu, sheet, or
-    /// popover), which the filter names one by one, and where the window is now, and moves the
-    /// crop there. Both go through the update queue.
+    /// popover), which the filter names one by one, or one of its windows gaining or losing a
+    /// title, which decides whether it may show; and where the window is now, and moves the crop
+    /// there. Both go through the update queue.
     func followTick() {
         guard let session, state.isActive, session.phase == .live, case .window(let id) = session.target else { return }
         // A burst (a menu flicked open and shut, submenus, a completion list) costs one rebuild in
@@ -732,9 +736,9 @@ final class ScreencastRecorder {
         runUpdates(for: session)
     }
 
-    /// The windows a window recording watches for: its app's on screen, from one read of the
-    /// window server's list. Nil when they can't be read.
-    private func watchedAppWindows(of session: Session) -> Set<CGWindowID>? {
+    /// The windows a window recording watches for: its app's on screen, and which have titles,
+    /// from one read of the window server's list. Nil when they can't be read.
+    private func watchedAppWindows(of session: Session) -> Set<ScreencastWatchedWindow>? {
         session.targetProcess.flatMap { system.onScreenWindows(of: $0) }
     }
 
@@ -1135,10 +1139,11 @@ extension ScreencastRecorder {
         var startedAt: Date?
         var timeline = ScreencastTimeline()
         var followedFrame: CGRect?
-        /// A window recording's app; its windows on screen as the last rebuild read them or was
-        /// queued for (nil until then); and whether the recorded window has closed.
+        /// A window recording's app; its windows on screen, and which have titles, as the last
+        /// rebuild read them or was queued for (nil until then); and whether the recorded window
+        /// has closed.
         var targetProcess: pid_t?
-        var queuedAppWindows: Set<CGWindowID>?
+        var queuedAppWindows: Set<ScreencastWatchedWindow>?
         var targetGone = false
         /// Keybumps's visible windows, likewise.
         var queuedOwnWindows: Set<CGWindowID>?

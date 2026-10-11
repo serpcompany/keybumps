@@ -109,13 +109,15 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
         return frame
     }
 
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? {
-        // Window numbers and owners only; no window's name is read.
+    func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>? {
+        // Window numbers and owners, and whether each has a name; the name itself isn't kept.
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
         return Set(list.compactMap { info in
-            (info[kCGWindowOwnerPID as String] as? pid_t) == processID ? info[kCGWindowNumber as String] as? CGWindowID : nil
+            guard (info[kCGWindowOwnerPID as String] as? pid_t) == processID,
+                  let id = info[kCGWindowNumber as String] as? CGWindowID else { return nil }
+            return ScreencastWatchedWindow(id: id, isUntitled: Self.isUntitled(info[kCGWindowName as String] as? String))
         })
     }
 
@@ -142,14 +144,14 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
 
     // MARK: Building ScreenCaptureKit objects
 
+    /// Whether a window's title or name is empty; one test for both reads, so the watch and the
+    /// filter agree.
+    static func isUntitled(_ title: String?) -> Bool {
+        (title ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     static func snapshot(of content: SCShareableContent) -> ScreencastContent {
-        // Front to back, numbers only, for telling a sheet in front of its window.
-        let onScreen = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
-        var order: [CGWindowID: Int] = [:]
-        for (index, info) in onScreen.enumerated() {
-            if let id = info[kCGWindowNumber as String] as? CGWindowID, order[id] == nil { order[id] = index }
-        }
-        return ScreencastContent(
+        ScreencastContent(
             displays: content.displays.map { display in
                 ScreencastContent.Display(
                     id: display.displayID,
@@ -164,9 +166,8 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                     frame: window.frame,
                     layer: window.windowLayer,
                     processID: processID,
-                    isUntitled: (window.title ?? "").trimmingCharacters(in: .whitespaces).isEmpty,
-                    isOnScreen: window.isOnScreen,
-                    order: order[window.windowID]
+                    isUntitled: Self.isUntitled(window.title),
+                    isOnScreen: window.isOnScreen
                 )
             },
             applicationProcessIDs: Set(content.applications.map(\.processID)),
@@ -365,7 +366,7 @@ final class InertScreencastCaptureSystem: ScreencastCaptureSystem {
 
     func windowFrame(_ id: CGWindowID) -> CGRect? { nil }
 
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
+    func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>? { nil }
 
     func ownVisibleWindows() -> Set<CGWindowID> { [] }
 }

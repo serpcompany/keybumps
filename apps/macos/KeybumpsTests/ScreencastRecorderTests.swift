@@ -255,6 +255,20 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("A display larger than the writer takes is recorded whole, its frames scaled down to fit")
+    func largerThanTheWriterTakes() async throws {
+        defer { captures.remove() }
+        // A 57-inch ultrawide at a HiDPI scale: 10240 × 2880 pixels.
+        let wide = ScreencastContent.Display(id: 3, frame: CGRect(x: 3432, y: 0, width: 5120, height: 1440), scale: 2)
+        system.screen = ScreencastContent(displays: Screens.content().displays + [wide], windows: Screens.content().windows, applicationProcessIDs: Screens.content().applicationProcessIDs)
+        let recorder = makeRecorder()
+        try await start(recorder, .display(3))
+        let (_, configuration) = try #require(videoKind(system.videoStreams.first))
+        #expect(configuration.sourceRect == CGRect(x: 0, y: 0, width: 5120, height: 1440), "the whole display, not a crop")
+        #expect(configuration.pixelWidth == ScreencastMovieWriter.maximumPixels && configuration.pixelHeight == 2304)
+    }
+
+    @available(macOS 15, *)
     @Test("A stream that won't start removes the folder and its files")
     func streamWontStart() async {
         defer { captures.remove() }
@@ -1108,7 +1122,7 @@ struct ScreencastRecorderTests {
         try await start(recorder, .window(10))
         recorder.followTick()
         #expect(await eventually { system.contentReads == 2 })
-        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true, order: 0)
+        let panel = ScreencastContent.Window(id: 50, frame: CGRect(x: 250, y: 122, width: 500, height: 400), layer: 0, processID: 777, isUntitled: false, isOnScreen: true)
         system.screen = Screens.content(windows: Screens.content().windows + [panel])
         recorder.followTick()
         for _ in 0..<20 { await Task.yield() }
@@ -1118,6 +1132,24 @@ struct ScreencastRecorderTests {
         system.screen = Screens.content(windows: Screens.content().windows + [panel, menu])
         recorder.followTick()
         #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("An untitled window of the app over the recorded one that gains a title, such as a new document still loading, leaves the video at the next tick")
+    func windowGainingATitleLeaves() async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        recorder.followTick()
+        #expect(await eventually { system.contentReads == 2 })
+        let untitled = ScreencastContent.Window(id: 14, frame: CGRect(x: 200, y: 200, width: 700, height: 500), layer: 0, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [untitled])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+        // The same window, same place, now titled: only its title changed.
+        system.screen = Screens.content(windows: Screens.content().windows + [Screens.with(untitled, isUntitled: false)])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13]) })
     }
 
     @available(macOS 15, *)

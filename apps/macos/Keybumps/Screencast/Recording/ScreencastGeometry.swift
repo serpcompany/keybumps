@@ -6,29 +6,54 @@ import Foundation
 ///
 /// Adapted from Shotnix's `RecordingEngine.captureGeometry` (MIT, see LICENSE.shotnix): whole
 /// physical pixels, even-sized (the encoders need even dimensions), and a captured region exactly
-/// that size, so nothing is resampled and no edge is left unfilled. A region larger than the
-/// writer takes (`ScreencastMovieWriter.maximumPixels` a side) is scaled down to fit, its shape
-/// kept.
+/// that size, so nothing is resampled and no edge is left unfilled.
 struct ScreencastCaptureGeometry: Equatable, Sendable {
     /// In the display's points, origin at its top-left: ScreenCaptureKit's `sourceRect`.
     let sourceRect: CGRect
-    /// The frames' size, which the file is written at.
+    /// The frames' size: the region's own pixels, unless `fitting(longestSide:)` scaled it down.
     let pixelWidth: Int
     let pixelHeight: Int
 
     /// The most pixels a side a display can have here; a display reporting more isn't a real one.
     static let pixelLimit = 1 << 20
 
-    /// The whole display, or nil when its size isn't a usable one.
-    static func display(size: CGSize, scale: CGFloat) -> ScreencastCaptureGeometry? {
+    /// The whole display.
+    static func display(size: CGSize, scale: CGFloat) -> ScreencastCaptureGeometry {
         area(CGRect(origin: .zero, size: size), displaySize: size, scale: scale)
     }
 
     /// `rect` (display points, top-left origin), clamped to the display and snapped to its pixels.
-    /// Nil, rather than another part of the screen, when the display's size isn't finite, is under
-    /// a point, or is more than `pixelLimit` pixels a side, or when `rect` isn't finite or doesn't
-    /// meet the display.
-    static func area(_ rect: CGRect, displaySize: CGSize, scale: CGFloat) -> ScreencastCaptureGeometry? {
+    /// It never traps: a `rect` that isn't finite or doesn't meet the display reads the whole
+    /// display, and a display whose size isn't usable reads 2 pixels at its corner. A recording,
+    /// which mustn't read another part of the screen than was chosen, asks `usableArea` instead.
+    static func area(_ rect: CGRect, displaySize: CGSize, scale: CGFloat) -> ScreencastCaptureGeometry {
+        usableArea(rect, displaySize: displaySize, scale: scale)
+            ?? usableArea(CGRect(origin: .zero, size: displaySize), displaySize: displaySize, scale: scale)
+            ?? ScreencastCaptureGeometry(sourceRect: CGRect(x: 0, y: 0, width: 2, height: 2), pixelWidth: 2, pixelHeight: 2)
+    }
+
+    /// A window, from its frame and its display's frame (both in the global top-left space
+    /// `SCWindow.frame` and `SCDisplay.frame` share). The window can reach past the display's
+    /// edge, so only the part on it is read.
+    static func window(frame: CGRect, displayFrame: CGRect, scale: CGFloat) -> ScreencastCaptureGeometry {
+        area(frame.offsetBy(dx: -displayFrame.minX, dy: -displayFrame.minY), displaySize: displayFrame.size, scale: scale)
+    }
+
+    /// `display(size:scale:)`, or nil when the display's size isn't a usable one.
+    static func usableDisplay(size: CGSize, scale: CGFloat) -> ScreencastCaptureGeometry? {
+        usableArea(CGRect(origin: .zero, size: size), displaySize: size, scale: scale)
+    }
+
+    /// `window(frame:displayFrame:scale:)`, or nil when no part of the window is on the display, or
+    /// a frame isn't a usable one.
+    static func usableWindow(frame: CGRect, displayFrame: CGRect, scale: CGFloat) -> ScreencastCaptureGeometry? {
+        usableArea(frame.offsetBy(dx: -displayFrame.minX, dy: -displayFrame.minY), displaySize: displayFrame.size, scale: scale)
+    }
+
+    /// `area(_:displaySize:scale:)`, or nil, rather than another part of the screen, when the
+    /// display's size isn't finite, is under a point, or is more than `pixelLimit` pixels a side,
+    /// or when `rect` isn't finite or doesn't meet the display.
+    static func usableArea(_ rect: CGRect, displaySize: CGSize, scale: CGFloat) -> ScreencastCaptureGeometry? {
         let scale = scale.isFinite ? min(max(scale, 1), 8) : 1
         guard displaySize.width.isFinite, displaySize.height.isFinite,
               displaySize.width >= 1, displaySize.height >= 1,
@@ -39,10 +64,10 @@ struct ScreencastCaptureGeometry: Equatable, Sendable {
         guard !region.isNull, !region.isEmpty else { return nil }
         let maxPixelWidth = max(2, pixels(displaySize.width * scale) & ~1)
         let maxPixelHeight = max(2, pixels(displaySize.height * scale) & ~1)
-        let sourcePixelWidth = min(evenCeil(pixels(ceil(region.width * scale - 0.0001))), maxPixelWidth)
-        let sourcePixelHeight = min(evenCeil(pixels(ceil(region.height * scale - 0.0001))), maxPixelHeight)
-        let width = CGFloat(sourcePixelWidth) / scale
-        let height = CGFloat(sourcePixelHeight) / scale
+        let pixelWidth = min(evenCeil(pixels(ceil(region.width * scale - 0.0001))), maxPixelWidth)
+        let pixelHeight = min(evenCeil(pixels(ceil(region.height * scale - 0.0001))), maxPixelHeight)
+        let width = CGFloat(pixelWidth) / scale
+        let height = CGFloat(pixelHeight) / scale
         var x = floor(region.minX * scale + 0.0001) / scale
         var y = floor(region.minY * scale + 0.0001) / scale
         // Rounding up to even can reach past the edge: step back in.
@@ -50,30 +75,24 @@ struct ScreencastCaptureGeometry: Equatable, Sendable {
         y = max(min(y, displaySize.height - height), 0)
         return ScreencastCaptureGeometry(
             sourceRect: CGRect(x: x, y: y, width: width, height: height),
-            pixelWidth: fitted(sourcePixelWidth, longest: max(sourcePixelWidth, sourcePixelHeight)),
-            pixelHeight: fitted(sourcePixelHeight, longest: max(sourcePixelWidth, sourcePixelHeight))
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight
         )
     }
 
-    /// One side of a frame larger than the writer takes, scaled with its longest side down to the
-    /// writer's limit and kept even; ScreenCaptureKit scales the region into it, its shape kept.
-    /// Whole numbers: both sides are at most `pixelLimit`, so the product can't overflow.
-    private static func fitted(_ side: Int, longest: Int) -> Int {
-        let cap = ScreencastMovieWriter.maximumPixels
-        guard longest > cap else { return side }
-        return max(2, (side * cap / longest) & ~1)
-    }
-
-    /// A window, from its frame and its display's frame (both in the global top-left space
-    /// `SCWindow.frame` and `SCDisplay.frame` share). The window can reach past the display's
-    /// edge, so only the part on it is read. Nil when no part of it is on the display, or a frame
-    /// isn't a usable one.
-    static func window(frame: CGRect, displayFrame: CGRect, scale: CGFloat) -> ScreencastCaptureGeometry? {
-        area(
-            frame.offsetBy(dx: -displayFrame.minX, dy: -displayFrame.minY),
-            displaySize: displayFrame.size,
-            scale: scale
-        )
+    /// The same region in frames whose longest side is at most `longestSide` (at least 2): a
+    /// larger one is scaled down, its shape kept and both sides even, and ScreenCaptureKit scales
+    /// the region into it. The video writer's limit, applied only to recordings.
+    func fitting(longestSide: Int) -> ScreencastCaptureGeometry {
+        let cap = max(2, longestSide)
+        let longest = max(pixelWidth, pixelHeight)
+        guard longest > cap else { return self }
+        // In `Double`, so no size can overflow; rounded down, then even.
+        func side(_ value: Int) -> Int {
+            let scaled = Double(value) * Double(cap) / Double(longest)
+            return max(2, ScreencastNumbers.int(scaled, in: 0...cap, fallback: 2) & ~1)
+        }
+        return ScreencastCaptureGeometry(sourceRect: sourceRect, pixelWidth: side(pixelWidth), pixelHeight: side(pixelHeight))
     }
 
     private static func evenCeil(_ value: Int) -> Int {

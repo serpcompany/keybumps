@@ -19,13 +19,10 @@ struct ScreencastContent {
         /// The window server layer: 0 for ordinary windows, higher for menus and panels.
         let layer: Int
         let processID: pid_t
-        /// Untitled: a sheet, popover, or panel rather than a document window. The title itself is
-        /// never read into this.
+        /// No title (an empty window name): a menu, sheet, popover, tooltip, or completion list
+        /// rather than a window of its own. The title itself is never read into this.
         let isUntitled: Bool
         let isOnScreen: Bool
-        /// Its place front to back among the windows on screen, 0 in front; nil when it isn't on
-        /// screen or that isn't known, which counts as behind every window.
-        var order: Int?
     }
 
     let displays: [Display]
@@ -67,9 +64,9 @@ enum ScreencastFilterPlan: Equatable, Sendable {
     /// (its overlays), which come back. Display and area recordings. Excluding the whole app keeps
     /// windows it opens mid-recording out too.
     case display(CGDirectDisplayID, excludingProcess: pid_t?, exceptingWindows: [CGWindowID])
-    /// Only these windows on the display. Window recordings: the window, its app's menus, sheets,
-    /// and popovers on screen, and Keybumps's overlays, each named; no app is included whole, so a
-    /// window opened later shows only once a rebuild names it.
+    /// Only these windows on the display. Window recordings: the window, its app's untitled
+    /// windows over it (menus, sheets, popovers), and Keybumps's overlays, each named; no app is
+    /// included whole, so a window opened later shows only once a rebuild names it.
     case windows(CGDirectDisplayID, includingWindows: [CGWindowID])
 
     var displayID: CGDirectDisplayID {
@@ -119,23 +116,26 @@ enum ScreencastCaptureFilter {
 
     /// A window recording, on the display showing most of it, as a list of windows:
     /// - the window;
-    /// - its app's other windows on screen on that display, except its ordinary windows, which
-    ///   would cover the chosen one where they overlap it, so its menus, sheets, and popovers show.
-    ///   An ordinary window attached as the chosen one's sheet (`isSheet(_:on:)`: a titled Save or
-    ///   Open sheet) shows too, within the limits that function names;
+    /// - the UI attached to it: its app's untitled windows on screen over it (`isAttached(_:to:)`),
+    ///   such as its menus, sheets, popovers, tooltips, and completion lists;
     /// - Keybumps's registered overlays, on screen or not, so one shows the moment it's ordered in.
     ///
-    /// Nothing else: Keybumps itself is never included whole, so none of its other windows (a
-    /// notice, the Command Palette, typed keys) can be in the video, even for a frame, and no other
-    /// app's window is named.
+    /// Nothing else: none of its app's titled windows, at any layer (its Settings window, another
+    /// document, an inspector or palette), even laid out exactly like a sheet; Keybumps itself is
+    /// never included whole, so none of its other windows (a notice, the Command Palette, typed
+    /// keys) can be in the video, even for a frame; and no other app's window is named.
     ///
-    /// **Known limitation:** a sandboxed app's Open and Save panels are drawn by a system service,
-    /// one process per app, and nothing public ties a service process to its app. Naming them would
-    /// risk another app's panel, with its folders and file names, so they're left out. In a
-    /// sandboxed app, record an area to include its Save or Open panel.
+    /// **Known limitations:** missing a piece of attached UI is the trade for never showing another
+    /// window. A titled sheet, such as the Save or Open sheet some apps that aren't sandboxed show
+    /// with a title, is left out, and so is a sandboxed app's Open or Save panel: a system service
+    /// draws it, one process per app, and nothing public ties a service process to its app, so
+    /// naming it would risk another app's panel, with its folders and file names. Untitled UI is
+    /// named as it is when the list is rebuilt, so a menu the recorded window moves under shows
+    /// only from the next rebuild. Record an area to include any of them.
     ///
-    /// The recorder rebuilds the list when the app's windows change. Nil when the window or its
-    /// display isn't in `content` (closed, or not on screen in an on-screen read).
+    /// The recorder rebuilds the list when the app's windows change, or one gains or loses a title.
+    /// Nil when the window or its display isn't in `content` (closed, or not on screen in an
+    /// on-screen read).
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
@@ -144,50 +144,25 @@ enum ScreencastCaptureFilter {
     ) -> ScreencastFilterPlan? {
         guard let window = content.window(windowID),
               let display = content.display(mostOverlapping: window.frame) else { return nil }
-        let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
-        let hidden = windowsToHide(recording: window, others: siblings)
-        let appWindows = siblings.filter { sibling in
-            sibling.isOnScreen && sibling.frame.intersects(display.frame)
-                && (!hidden.contains(sibling.id) || isSheet(sibling, on: window))
+        let attached = content.windows.filter { other in
+            other.processID == window.processID && other.id != window.id
+                && other.isOnScreen && other.frame.intersects(display.frame)
+                && isAttached(other, to: window)
                 // Recording one of Keybumps's own windows: its others only when they're overlays.
-                && (window.processID != ownProcessID || overlays.contains(sibling.id))
+                && (window.processID != ownProcessID || overlays.contains(other.id))
         }
         let ownOverlays = content.windows.filter { $0.processID == ownProcessID && $0.id != window.id && overlays.contains($0.id) }
-        let included = Set([window.id] + appWindows.map(\.id) + ownOverlays.map(\.id))
+        let included = Set([window.id] + attached.map(\.id) + ownOverlays.map(\.id))
         return .windows(display.id, includingWindows: included.sorted())
     }
 
-    /// Whether `other` is attached to `window` the way AppKit attaches a sheet: in front of it,
-    /// centred on it and no wider (within 2 pt), and its top just below the window's title bar or
-    /// a standard toolbar (16 to 60 pt below the window's top). It may run past the window's
-    /// bottom, as a tall Save sheet on a short window does. A window that merely sits inside isn't
-    /// one, nor is a window of unknown place.
-    ///
-    /// Nothing in the window list says which window a sheet belongs to or where a window's content
-    /// starts, so this is geometry, kept tight: the app's other windows in front of the recorded
-    /// one, such as its Settings window or another document, which open centred, mustn't pass.
-    /// Only the recorded app's own windows are ever asked about.
-    ///
-    /// **Known limitations:** a sheet below a taller toolbar (an expanded or labelled one, or a tab
-    /// bar), or one wider than its window, is missed. A window of the same app that's centred on
-    /// the recorded one, in front of it, no wider, and with its top 16 to 60 pt below is taken for
-    /// its sheet.
-    static func isSheet(_ other: ScreencastContent.Window, on window: ScreencastContent.Window) -> Bool {
-        guard let otherOrder = other.order, let windowOrder = window.order, otherOrder < windowOrder else { return false }
-        let centred = abs(other.frame.midX - window.frame.midX) <= 2
-        let noWider = other.frame.minX >= window.frame.minX - 2 && other.frame.maxX <= window.frame.maxX + 2
-        let below = other.frame.minY - window.frame.minY
-        return centred && noWider && below >= 16 && below <= 60
-    }
-
-    /// The other windows of a recorded window's app to leave out: its ordinary windows (layer 0).
-    /// Menus, popovers, and sheets that open later still come through, and so does an untitled
-    /// window already over the chosen one when recording starts: that's its sheet or popover.
-    static func windowsToHide(recording chosen: ScreencastContent.Window, others: [ScreencastContent.Window]) -> Set<CGWindowID> {
-        Set(others.compactMap { other -> CGWindowID? in
-            guard other.id != chosen.id, other.layer == 0 else { return nil }
-            if other.isUntitled, other.frame.intersects(chosen.frame) { return nil }
-            return other.id
-        })
+    /// Whether `other`, a window of the recorded window's app, is UI attached to `window`: it has
+    /// no title and covers part of it. A titled one never is, at any layer and wherever it is:
+    /// nothing in the window list says which window a sheet or panel belongs to, and an app's
+    /// Settings window, another document, or an inspector can sit exactly where a sheet would.
+    static func isAttached(_ other: ScreencastContent.Window, to window: ScreencastContent.Window) -> Bool {
+        guard other.isUntitled else { return false }
+        let overlap = other.frame.intersection(window.frame)
+        return !overlap.isNull && overlap.width > 0 && overlap.height > 0
     }
 }
