@@ -5,12 +5,11 @@ import SwiftUI
 import Testing
 @testable import Keybumps
 
-/// A recording's review in its bigger window (#475): it opens for a recording and not for a
-/// screenshot, is the player and Discard, Copy, and Save, closes on Save or Copy with a notice in the
-/// notch, and plays and pauses on Space. Made-up captures in a temporary folder, a named pasteboard,
-/// and no window ordered in or made key.
+/// A recording's review in its window (#475): the player and Discard, Copy, and Save, closing on
+/// Save or Copy with a notice in the notch, and playing and pausing on Space. Made-up captures in a
+/// temporary folder, a named pasteboard, and no window ordered in or made key.
 @MainActor
-@Suite("Screencast: a recording's review window")
+@Suite("Screencast: the review window")
 struct ScreencastRecordingReviewTests {
     let fixture = ReviewFixture()
 
@@ -22,8 +21,6 @@ struct ScreencastRecordingReviewTests {
             repositories: fixture.repositories,
             pasteboard: fixture.pasteboard,
             keepOutOfClipboardHistory: {},
-            screenshots: { nil },
-            settings: ScreencastReviewSettings(defaults: fixture.defaults),
             screen: { nil },
             makePlayback: makePlayback
         )
@@ -36,9 +33,6 @@ struct ScreencastRecordingReviewTests {
         let flow = ScreencastReviewFlow(
             services: ScreencastReviewServices(
                 clipboard: fixture.clipboard,
-                isClipboardHistoryOn: { false },
-                editor: { nil },
-                settings: ScreencastReviewSettings(defaults: fixture.defaults),
                 notices: notices,
                 repositories: { [fixture] in fixture.repositories }
             ),
@@ -48,9 +42,9 @@ struct ScreencastRecordingReviewTests {
         return flow
     }
 
-    /// The window's SwiftUI view, while it shows a recording.
+    /// The window's SwiftUI view.
     private func windowView(of panel: ScreencastReviewPanel) -> ScreencastRecordingReviewView? {
-        (panel.recordingWindow.contentView as? NSHostingView<ScreencastRecordingReviewView>)?.rootView
+        (panel.window.contentView as? NSHostingView<ScreencastRecordingReviewView>)?.rootView
     }
 
     /// A recording the player can play: one second of real media.
@@ -73,7 +67,7 @@ struct ScreencastRecordingReviewTests {
 
     // MARK: Which review opens
 
-    @Test("A recording opens in the bigger window, on the panel's model; a screenshot keeps the panel")
+    @Test("Each recording opens in the window, on the review's model; the next one closes it, which saves")
     func recordingOpensTheWindow() async throws {
         defer { fixture.tearDown() }
         let outcomes = ReviewOutcomeLog()
@@ -81,15 +75,13 @@ struct ScreencastRecordingReviewTests {
         let recording = try fixture.video()
         await panel.show(recording)
         let view = try #require(windowView(of: panel), "the window shows the recording")
-        #expect(view.model === panel.model, "its bottom bar acts on the review's model")
-        #expect(!(panel.panel.contentView is NSHostingView<ScreencastReviewView>), "not in the panel")
-        #expect(panel.isShown && !panel.recordingWindow.isVisible, "never on screen under the unit-test host")
+        #expect(view.model === panel.model, "its toolbar acts on the review's model")
+        #expect(panel.isShown && !panel.window.isVisible, "never on screen under the unit-test host")
 
-        let screenshot = try fixture.screenshot(name: "1791000100")
-        await panel.show(screenshot)
+        let next = try fixture.video(name: "1791000100")
+        await panel.show(next)
         #expect(outcomes.outcomes == [.saved(recording)], "the next capture closes the window, which saves")
-        #expect(panel.panel.contentView is NSHostingView<ScreencastReviewView>, "a screenshot keeps the panel")
-        #expect(panel.model?.input == screenshot && !panel.recordingWindow.isVisible)
+        #expect(windowView(of: panel)?.model === panel.model && panel.model?.input == next && !panel.window.isVisible)
         await panel.close()
     }
 
@@ -101,7 +93,7 @@ struct ScreencastRecordingReviewTests {
         #expect(window.title == "Recording" && window.titleVisibility == .hidden, "the toolbar shows it, in its middle")
         #expect(window.toolbar != nil && window.toolbarStyle == .unifiedCompact)
         #expect(window.level == .normal && window.collectionBehavior.isSuperset(of: [.managed, .participatesInCycle]))
-        #expect(window.collectionBehavior.contains(.fullScreenAuxiliary), "it opens over a full-screen app, as the panel did")
+        #expect(window.collectionBehavior.contains(.fullScreenAuxiliary), "it opens over a full-screen app")
         #expect(!window.isRestorable, "nothing to put back at launch")
         // AppKit adds a few points to the height for the toolbar.
         #expect(window.minSize.width == 640 && (400...420).contains(window.minSize.height))
@@ -114,7 +106,7 @@ struct ScreencastRecordingReviewTests {
         defer { fixture.tearDown() }
         let panel = panel(outcomes: ReviewOutcomeLog())
         await panel.show(try fixture.video(displays: 2))
-        let window = panel.recordingWindow
+        let window = panel.window
         let toolbar = try #require(window.toolbar)
         #expect(toolbar.items.map(\.itemIdentifier.rawValue) == [
             "screencast.review.toolbar.leading", "NSToolbarFlexibleSpaceItem",
@@ -155,7 +147,7 @@ struct ScreencastRecordingReviewTests {
         #expect(ScreencastRecordingReviewWindow.frame(in: tiny) == CGRect(x: 0, y: 0, width: 600, height: 380))
     }
 
-    @Test("A recording's window opens filling the screen with the pointer")
+    @Test("The window opens filling the screen with the pointer")
     func windowFillsItsScreen() async throws {
         defer { fixture.tearDown() }
         let screen = try #require(NSScreen.screens.last)
@@ -163,13 +155,11 @@ struct ScreencastRecordingReviewTests {
             repositories: fixture.repositories,
             pasteboard: fixture.pasteboard,
             keepOutOfClipboardHistory: {},
-            screenshots: { nil },
-            settings: ScreencastReviewSettings(defaults: fixture.defaults),
             screen: { screen },
             makePlayback: { nil }
         )
         await review.show(try fixture.video())
-        #expect(review.recordingWindow.frame == ScreencastRecordingReviewWindow.frame(in: screen.visibleFrame))
+        #expect(review.window.frame == ScreencastRecordingReviewWindow.frame(in: screen.visibleFrame))
         await review.close()
     }
 
@@ -188,7 +178,7 @@ struct ScreencastRecordingReviewTests {
 
         await panel.model?.save()
         #expect(outcomes.outcomes == [.saved(recording)])
-        #expect(!panel.isShown && !panel.recordingWindow.isVisible && panel.playback == nil, "the window closes")
+        #expect(!panel.isShown && !panel.window.isVisible && panel.playback == nil, "the window closes")
         #expect(notices.messages == ["Recording saved"] && notices.warnings == [false])
         #expect(FileManager.default.fileExists(atPath: recording.folder.path), "kept in the captures folder it was recorded into")
         #expect(try ScreencastMetadata.read(from: recording.metadataURL).duration == 4, "the recording as it was")
@@ -205,7 +195,7 @@ struct ScreencastRecordingReviewTests {
         let returned = try fixture.video(name: "1791000000")
         await flow.show(returned, context: .none)
         let panel = try #require(flow.panel)
-        #expect(panel.action(forKey: 36, modifiers: [], in: panel.recordingWindow) == .save)
+        #expect(panel.action(forKey: 36, modifiers: [], in: panel.window) == .save)
         #expect(panel.perform(.save, isRepeat: true), "a repeat is swallowed")
         try await Task.sleep(for: .milliseconds(50))
         #expect(panel.isShown && outcomes.outcomes.isEmpty, "and doesn't save")
@@ -215,7 +205,7 @@ struct ScreencastRecordingReviewTests {
 
         let escaped = try fixture.video(name: "1791000100")
         await flow.show(escaped, context: .none)
-        #expect(panel.action(forKey: 53, modifiers: [], in: panel.recordingWindow) == .close)
+        #expect(panel.action(forKey: 53, modifiers: [], in: panel.window) == .close)
         #expect(panel.perform(.close, isRepeat: true))
         try await Task.sleep(for: .milliseconds(50))
         #expect(panel.isShown, "a held Escape acts once, on its first press")
@@ -224,7 +214,7 @@ struct ScreencastRecordingReviewTests {
 
         let closed = try fixture.video(name: "1791000200")
         await flow.show(closed, context: .none)
-        panel.recordingWindow.performClose(nil)
+        panel.window.performClose(nil)
         try await eventually { !panel.isShown }
 
         #expect(outcomes.outcomes == [.saved(returned), .saved(escaped), .saved(closed)])
@@ -240,7 +230,7 @@ struct ScreencastRecordingReviewTests {
         let recording = try fixture.video()
         await panel.show(recording)
         await panel.model?.copy()
-        #expect(outcomes.outcomes == [.copied(recording)] && !panel.isShown && !panel.recordingWindow.isVisible)
+        #expect(outcomes.outcomes == [.copied(recording)] && !panel.isShown && !panel.window.isVisible)
         #expect(fixture.pasteboard.pasteboardItems?.isEmpty == false)
         #expect(ScreencastReviewFlow.notice(for: outcomes.outcomes[0]) == "Recording copied")
     }
@@ -258,8 +248,8 @@ struct ScreencastRecordingReviewTests {
         panel.model?.confirmDiscard()
         #expect(panel.isShown && FileManager.default.fileExists(atPath: discarded.folder.path), "nothing goes without the question")
         panel.model?.askToDiscard()
-        #expect(panel.action(forKey: 36, modifiers: [], in: panel.recordingWindow) == .ignore, "Return doesn't answer it")
-        #expect(panel.action(forKey: 53, modifiers: [], in: panel.recordingWindow) == .keep, "Escape keeps it")
+        #expect(panel.action(forKey: 36, modifiers: [], in: panel.window) == .ignore, "Return doesn't answer it")
+        #expect(panel.action(forKey: 53, modifiers: [], in: panel.window) == .keep, "Escape keeps it")
         panel.model?.confirmDiscard()
         #expect(!panel.isShown && outcomes.outcomes == [.discarded])
         #expect(!FileManager.default.fileExists(atPath: discarded.folder.path))
@@ -283,7 +273,7 @@ struct ScreencastRecordingReviewTests {
         await flow.show(saved, context: .none)
         let panel = try #require(flow.panel)
         await panel.model?.save()
-        #expect(!panel.isShown && !panel.recordingWindow.isVisible, "gone before Start Screencast")
+        #expect(!panel.isShown && !panel.window.isVisible, "gone before Start Screencast")
 
         let unsaved = try fixture.video(name: "1791000100")
         await flow.show(unsaved, context: .none)
@@ -297,33 +287,27 @@ struct ScreencastRecordingReviewTests {
         await panel.close()
     }
 
-    @Test("What the notch says: a recording's Save and Copy, and a screenshot's Copy as before")
+    @Test("What the notch says: Save and Copy, and nothing for Discard")
     func notices() throws {
         defer { fixture.tearDown() }
         let recording = try fixture.video(name: "1791000000")
-        let screenshot = try fixture.screenshot(name: "1791000100")
         #expect(ScreencastReviewFlow.notice(for: .saved(recording)) == "Recording saved")
         #expect(ScreencastReviewFlow.notice(for: .copied(recording)) == "Recording copied")
-        #expect(ScreencastReviewFlow.notice(for: .copied(screenshot)) == "Copied to Clipboard")
-        #expect(ScreencastReviewFlow.notice(for: .saved(screenshot)) == nil)
         #expect(ScreencastReviewFlow.notice(for: .discarded) == nil)
     }
 
     // MARK: Space
 
-    @Test("Space plays and pauses a recording; Return saves and Escape closes, as in the panel")
+    @Test("Space plays and pauses the recording; Return saves and Escape closes")
     func keys() {
         func action(
-            _ key: UInt16, _ modifiers: NSEvent.ModifierFlags = [], recording: Bool = true,
-            composing: Bool = false, confirming: Bool = false
+            _ key: UInt16, _ modifiers: NSEvent.ModifierFlags = [], composing: Bool = false, confirming: Bool = false
         ) -> ScreencastReviewKey {
             ScreencastReviewKey.action(
-                keyCode: key, modifiers: modifiers, isComposing: composing,
-                isConfirmingDiscard: confirming, playsRecording: recording
+                keyCode: key, modifiers: modifiers, isComposing: composing, isConfirmingDiscard: confirming
             )
         }
         #expect(action(49) == .togglePlay)
-        #expect(action(49, recording: false) == .pass, "a screenshot's panel has no player")
         #expect(action(49, .shift) == .pass && action(49, .command) == .pass && action(49, .option) == .pass)
         #expect(action(49, composing: true) == .pass)
         #expect(action(49, confirming: true) == .togglePlay)
@@ -338,7 +322,7 @@ struct ScreencastRecordingReviewTests {
         let recording = try await playableRecording()
         let panel = panel(outcomes: ReviewOutcomeLog(), makePlayback: { ScreencastReviewPlayback() })
         await panel.show(recording)
-        let window = panel.recordingWindow
+        let window = panel.window
         // Lays the window out, as on screen, so whatever takes the keyboard as it appears has run.
         window.contentView?.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(200))
@@ -347,7 +331,7 @@ struct ScreencastRecordingReviewTests {
 
         #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save)
         #expect(panel.action(forKey: 53, modifiers: [], in: window) == .close)
-        #expect(panel.action(forKey: 49, modifiers: [], in: panel.panel) == .pass, "keys count only in the review's own window")
+        #expect(panel.action(forKey: 49, modifiers: [], in: NSWindow()) == .pass, "keys count only in the review's own window")
         let space = panel.action(forKey: 49, modifiers: [], in: window)
         #expect(space == .togglePlay)
         let playback = try #require(panel.playback)

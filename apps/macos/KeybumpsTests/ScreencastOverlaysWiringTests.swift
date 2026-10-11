@@ -289,22 +289,6 @@ struct ScreencastOverlaysWiringTests {
     }
 
     @available(macOS 15, *)
-    @Test("A screenshot puts nothing on screen")
-    func screenshotHasNone() async throws {
-        let flows = OverlaysFlow()
-        defer { flows.flow.captures.remove() }
-        flows.controller.open()
-        let picker = try #require(flows.controller.picker)
-        picker.kind = .screenshot
-        picker.target = .screen
-        picker.clickScreen(PickerScreens.left)
-        flows.controller.confirm()
-        #expect(flows.wiring.overlays == nil && !flows.keyDisplay.holds(.screencast))
-        #expect(await ScreencastWait.until { flows.controller.phase == .idle })
-        #expect(flows.wiring.overlays == nil && flows.recorder.overlayWindows.isEmpty)
-    }
-
-    @available(macOS 15, *)
     @Test("Cancelling while the recording starts takes the overlays down and lets go of the key display")
     func cancelWhileStarting() async throws {
         let flows = OverlaysFlow()

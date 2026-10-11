@@ -263,18 +263,12 @@ final class SmokeUITests: XCTestCase {
         for key in ["microphone", "systemAudio", "shortcuts", "clicks"] {
             XCTAssertTrue(element("screencast.picker.\(key)").exists, key)
         }
-
-        element("screencast.picker.kind.screenshot").click()
-        XCTAssertTrue(waitForLabel(of: confirm, "Capture"))
-        XCTAssertTrue(element("screencast.picker.microphone").waitForNonExistence(timeout: 5), "A screenshot has no sound")
-        XCTAssertFalse(element("screencast.picker.systemAudio").exists)
+        XCTAssertFalse(element("screencast.picker.kind.screenshot").exists, "Screencast records video only (#485)")
 
         element("screencast.picker.target.window").click()
         XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
-
-        element("screencast.picker.kind.video").click()
         XCTAssertTrue(waitForLabel(of: confirm, "Record"))
-        XCTAssertTrue(element("screencast.picker.microphone").waitForExistence(timeout: 5))
+        XCTAssertTrue(element("screencast.picker.microphone").exists)
     }
 
     func testScreencastPickerChoosesOneScreenOrEveryScreen() throws {
@@ -470,33 +464,6 @@ final class SmokeUITests: XCTestCase {
 
     // MARK: Screencast's review panel (#450)
 
-    func testScreencastReviewSavesAScreenshotWithItsNote() {
-        launchScreencastReview("screenshot")
-        XCTAssertTrue(element("screencast.review.addToScreenshots").exists, "A screenshot offers Also add to Screenshots")
-        XCTAssertTrue(element("screencast.review.type").exists)
-        XCTAssertTrue(element("screencast.review.repository").exists)
-        XCTAssertTrue(element("screencast.review.destination").exists)
-        XCTAssertFalse(element("screencast.review.saveAndSend").isEnabled, "Sending comes with destinations")
-        XCTAssertFalse(element("screencast.review.sendAndDelete").isEnabled)
-
-        let note = element("screencast.review.note")
-        note.click()
-        note.typeText("Header typo")
-        element("screencast.review.save").click()
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Save closes the panel")
-        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Header typo"))
-    }
-
-    func testScreencastReviewReturnSaves() {
-        launchScreencastReview("screenshot")
-        let note = element("screencast.review.note")
-        note.click()
-        note.typeText("Saved by Return")
-        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
-        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Saved by Return"))
-    }
-
     func testScreencastReviewEscapeClosesAndSaves() {
         launchScreencastReview("video")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
@@ -505,7 +472,7 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testScreencastReviewCopies() {
-        launchScreencastReview("screenshot")
+        launchScreencastReview("video")
         element("screencast.review.copy").click()
         XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
         XCTAssertTrue(waitForReviewOutcome("copied; folder kept; note empty; clipboard 1"))
@@ -534,7 +501,6 @@ final class SmokeUITests: XCTestCase {
         let window = reviewPanel
         XCTAssertGreaterThanOrEqual(window.frame.width, 760, "the big window")
         XCTAssertGreaterThanOrEqual(window.frame.height, 500)
-        XCTAssertFalse(app.dialogs.matching(identifier: "screencast.review.panel").firstMatch.exists, "not the corner panel")
         let player = window.descendants(matching: .any).matching(identifier: "screencast.review.playerArea").firstMatch
         XCTAssertTrue(player.exists, "the player")
         XCTAssertEqual(player.frame.minX, window.frame.minX, accuracy: 1, "edge to edge")
@@ -573,14 +539,6 @@ final class SmokeUITests: XCTestCase {
         app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
         XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Return saves and closes the window")
         XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
-    }
-
-    /// #475: Copy puts the recording on the clipboard and closes the window.
-    func testScreencastReviewOfAVideoCopyClosesIt() {
-        launchScreencastReview("video")
-        element("screencast.review.copy").click()
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Copy closes the window")
-        XCTAssertTrue(waitForReviewOutcome("copied; folder kept; note empty; clipboard 1"))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -894,24 +852,17 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
     }
 
-    /// Turns Screencast on and opens its review on a made-up `video` or `screenshot`.
+    /// Turns Screencast on and opens its review on a made-up `video`.
     private func launchScreencastReview(_ capture: String) {
-        reviewedCapture = capture
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
         XCTAssertTrue(element("screencast.review.save").waitForExistence(timeout: 20))
         // So a later check that it closed is about the review, not a query that finds nothing.
-        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel or window itself is found")
+        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the window itself is found")
     }
 
-    /// The capture `launchScreencastReview` made up.
-    private var reviewedCapture = "screenshot"
-
-    /// The review: a screenshot's floating panel, which macOS reports as a dialog, not a window, or
-    /// a recording's standard window (#475), which it reports as a window.
+    /// The review: a standard window (#475), which macOS reports as a window.
     private var reviewPanel: XCUIElement {
-        reviewedCapture == "video"
-            ? app.windows.matching(identifier: "screencast.review.window").firstMatch
-            : app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
+        app.windows.matching(identifier: "screencast.review.window").firstMatch
     }
 
     /// The UI-test-only line that says what the panel did with the capture.

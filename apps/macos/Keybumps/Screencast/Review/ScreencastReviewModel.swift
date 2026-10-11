@@ -2,34 +2,17 @@ import AppKit
 import Observation
 import os
 
-/// Opens Screenshot Tools' editor on a capture's screenshot. `ScreenshotEditorPresenter` is the one
-/// in the app; tests pass a fake.
-@MainActor
-protocol ScreencastScreenshotEditing: AnyObject {
-    /// Opens the Screenshot Editor on `image`, unless another image is being edited. With
-    /// `copiesToClipboard` false, its Save writes the marked-up copy and leaves the clipboard alone.
-    /// `onFinish` gets the marked-up copy's location after Save, or nil after Cancel.
-    func editScreenshot(at image: URL, copiesToClipboard: Bool, onFinish: @escaping (URL?) -> Void) -> Bool
-}
-
-/// The review's state and actions, for `ScreencastReviewView`, `ScreencastRecordingReviewView`, and
-/// tests: the note, type, and repository the person gives a screenshot, and Save, Copy, and
-/// Discard. A recording's window has no fields, so its review keeps the type and the guessed
-/// repository as they start.
+/// The review's state and actions, for `ScreencastRecordingReviewView` and for tests: Save, Copy,
+/// and Discard, and the review they write. The window has no fields (#475), so a review keeps the
+/// type and the guessed repository as they start, for a later Send (#451).
 ///
 /// Every way out keeps the capture except Discard. Save, Return, and Copy write the review into
-/// `meta.json` and stay open if that fails, saying why. Escape and closing the panel save too, as
+/// `meta.json` and stay open if that fails, saying why. Escape and closing the window save too, as
 /// far as they can, so nothing is lost: a repository that isn't `owner/name` is left out. Quitting
-/// saves at once (`saveNow`). Saving a screenshot also adds it to the Screenshots tab (⌘3) while
-/// "Also add to Screenshots" is on; Copy never does, since it keeps the capture out of Clipboard
-/// History.
+/// saves at once (`saveNow`).
 ///
-/// The context read when the capture started may still be on its way: the panel shows at once, and
-/// the guess fills the repository field when it comes, unless the person has typed there.
-///
-/// The Screenshot Editor opened from here doesn't copy on Save; the panel's Copy is the copy. While
-/// it's open, the actions wait. If the panel closes anyway (Screencast turned off, a quit), the
-/// editor stays open with its markup, and a Save there is still recorded in `meta.json`.
+/// The context read when the capture started may still be on its way: the window shows at once, and
+/// the guess fills the repository when it comes.
 @MainActor
 @Observable
 final class ScreencastReviewModel {
@@ -39,26 +22,13 @@ final class ScreencastReviewModel {
     /// One line, as the person types it; Save keeps it on one line.
     var note = ""
     var type: ScreencastReviewType = .bug
-    /// What the repository field shows: the guess at first.
+    /// The repository the review keeps: the guess at first.
     var repositoryText: String {
         didSet { if !isFillingGuess { repositoryWasTyped = true } }
     }
     private(set) var guess: ScreencastRepositoryGuess?
-    /// The display shown, for a capture of every display.
-    var selectedDisplay = 0 {
-        didSet { refreshImage() }
-    }
-    /// A screenshot's marked-up copies, by display, which Copy and Send use in place of the originals.
-    private(set) var editedImages: [Int: URL] = [:]
-    /// The display whose screenshot the Screenshot Editor is open on.
-    private(set) var editingDisplay: Int?
-    /// The screenshot shown, as it is now, marked up or not.
-    private(set) var image: NSImage?
-    /// "Also add to Screenshots (⌘3)": saving a screenshot adds it there. Remembered for the next
-    /// capture.
-    var addsToScreenshots: Bool {
-        didSet { settings.addsToScreenshots = addsToScreenshots }
-    }
+    /// The display shown, for a recording of every display.
+    var selectedDisplay = 0
     /// Discard asked "Discard this capture?" and waits for Discard or Keep.
     private(set) var isConfirmingDiscard = false
     /// Save or Copy is writing files.
@@ -66,43 +36,26 @@ final class ScreencastReviewModel {
     private(set) var failure: ScreencastReviewFailure?
     private(set) var isFinished = false
 
-    /// Called once, when the panel is done with the capture.
+    /// Called once, when the review is done with the capture.
     @ObservationIgnored var onFinish: ((ScreencastReviewOutcome) -> Void)?
-    /// Called when the editor finishes while the panel is still open, so it takes the keyboard back
-    /// from the app the editor returned to.
-    @ObservationIgnored var onEditorFinished: (() -> Void)?
 
     @ObservationIgnored private let repositories: ScreencastRepositoryMemory
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let pasteboard: NSPasteboard
     @ObservationIgnored private let keepOutOfClipboardHistory: () -> Void
-    @ObservationIgnored private let editor: (any ScreencastScreenshotEditing)?
-    @ObservationIgnored private let screenshots: (any ScreencastScreenshotsLibrary)?
-    @ObservationIgnored private let settings: ScreencastReviewSettings
     @ObservationIgnored private let now: () -> Date
     /// `close()` calls waiting for a Save or Copy to finish.
     @ObservationIgnored private var waitingForWork: [CheckedContinuation<Void, Never>] = []
-    /// `waitUntilFinished()` calls.
-    @ObservationIgnored private var waitingForFinish: [CheckedContinuation<Void, Never>] = []
     /// The context read when the capture started, until it comes.
     @ObservationIgnored private var contextRead: Task<ScreencastCaptureContext, Never>?
     @ObservationIgnored private var repositoryWasTyped = false
     @ObservationIgnored private var isFillingGuess = false
-    /// The review written when the panel finished, for an editor Save that comes after.
-    @ObservationIgnored private var savedReview: ScreencastReview?
-    /// The panel finished while the editor was open, with "Also add to Screenshots" on: the image
-    /// being edited goes to ⌘3 once the editor is done, marked up or not.
-    @ObservationIgnored private var addsEditedImageLater = false
     @ObservationIgnored private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
     /// - Parameters:
     ///   - pasteboard: Where Copy writes; tests pass a named pasteboard.
     ///   - keepOutOfClipboardHistory: Called right after Copy writes, to mark that write so Clipboard
     ///     History skips it (`ClipboardHistoryService.suppressCurrentChange`).
-    ///   - editor: The Screenshot Editor, or nil to offer no Edit.
-    ///   - screenshots: Clipboard History's screenshot items, or nil while Clipboard History is off,
-    ///     which hides "Also add to Screenshots".
-    ///   - settings: Where that switch is remembered.
     ///   - contextRead: The context's read, when it's still on its way; `context` until it comes.
     init(
         input: ScreencastReviewInput,
@@ -112,9 +65,6 @@ final class ScreencastReviewModel {
         fileManager: FileManager = .default,
         pasteboard: NSPasteboard = .keybumps,
         keepOutOfClipboardHistory: @escaping () -> Void,
-        editor: (any ScreencastScreenshotEditing)? = nil,
-        screenshots: (any ScreencastScreenshotsLibrary)? = nil,
-        settings: ScreencastReviewSettings,
         now: @escaping () -> Date = Date.init
     ) {
         self.input = input
@@ -123,15 +73,10 @@ final class ScreencastReviewModel {
         self.fileManager = fileManager
         self.pasteboard = pasteboard
         self.keepOutOfClipboardHistory = keepOutOfClipboardHistory
-        self.editor = editor
-        self.screenshots = screenshots
-        self.settings = settings
-        addsToScreenshots = settings.addsToScreenshots
         self.now = now
         let guess = repositories.guess(for: context)
         self.guess = guess
         repositoryText = guess?.repository.description ?? ""
-        refreshImage()
         if let contextRead {
             self.contextRead = contextRead
             Task { [weak self] in
@@ -160,19 +105,10 @@ final class ScreencastReviewModel {
         receive(await contextRead.value)
     }
 
-    /// Returns once the panel is done with the capture: saved, copied, or discarded.
-    func waitUntilFinished() async {
-        guard !isFinished else { return }
-        await withCheckedContinuation { waitingForFinish.append($0) }
-    }
+    // MARK: What the window shows
 
-    // MARK: What the panel shows
-
-    /// The actions act one at a time, and wait for the editor.
-    var acceptsActions: Bool { !isWorking && !isFinished && !isEditing }
-
-    /// The Screenshot Editor is open on one of the screenshot's images.
-    var isEditing: Bool { editingDisplay != nil }
+    /// The actions act one at a time.
+    var acceptsActions: Bool { !isWorking && !isFinished }
 
     var videos: [ScreencastVideo] {
         if case .video(let capture) = input { capture.videos } else { [] }
@@ -184,83 +120,8 @@ final class ScreencastReviewModel {
         return videos.indices.contains(selectedDisplay) ? videos[selectedDisplay] : videos.first
     }
 
-    /// A screenshot's files as they are now, by display: each marked-up copy in its original's place.
-    var screenshotFiles: [URL] {
-        guard case .screenshot(let screenshot) = input else { return [] }
-        return screenshot.images.enumerated().map { editedImages[$0.offset] ?? $0.element.file }
-    }
-
-    /// How many displays the capture has a video or an image of.
-    var displayCount: Int { input.isVideo ? videos.count : screenshotFiles.count }
-
-    var canEdit: Bool { editor != nil && !input.isVideo }
-
-    /// The switch is for screenshots, and only while Clipboard History, which keeps ⌘3's items, is on.
-    var showsAddToScreenshots: Bool { screenshots != nil && !input.isVideo }
-
-    /// Sending comes with destinations (#451); until then there's none to show.
-    var destinationTitle: String { "None yet" }
-    var canSend: Bool { false }
-
-    /// Under the repository field: what the guess was remembered for, or how to type one.
-    var repositoryHint: String? {
-        let text = repositoryText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        guard let repository = ScreencastRepository(text) else { return "Type it as owner/name." }
-        guard let guess, guess.repository == repository else { return nil }
-        switch guess.source {
-        case .website(let domain): return "Remembered for \(domain)"
-        case .app: return "Remembered for \(context.appName ?? "this app")"
-        }
-    }
-
-    // MARK: Edit
-
-    /// Opens the Screenshot Editor on the image shown, or its marked-up copy after an earlier edit.
-    /// Its Save doesn't copy: the panel's Copy does that, so a capture later discarded leaves nothing
-    /// in Clipboard History, and the ⌘3 add isn't taken for a repeat of the editor's copy.
-    func edit() {
-        let files = screenshotFiles
-        guard acceptsActions, files.indices.contains(selectedDisplay), let editor else { return }
-        let display = selectedDisplay
-        failure = nil
-        editingDisplay = display
-        // Holds the model until the editor is done, which may be after the panel closed.
-        let opened = editor.editScreenshot(at: files[display], copiesToClipboard: false) { [self] edited in
-            editingDisplay = nil
-            if let edited {
-                editedImages[display] = edited
-                refreshImage()
-            }
-            if isFinished {
-                recordLateEdit(edited, original: files[display])
-            } else {
-                onEditorFinished?()
-            }
-        }
-        if !opened {
-            editingDisplay = nil
-            fail(.editorUnavailable)
-        }
-    }
-
-    /// The editor finished after the panel did: its Save goes into `meta.json`, and a ⌘3 add that
-    /// waited for it happens now.
-    private func recordLateEdit(_ edited: URL?, original: URL) {
-        if edited != nil, var review = savedReview {
-            review.editedImages = editedImageNames
-            savedReview = review
-            do {
-                try ScreencastReview.write(review, to: input.metadataURL, fileManager: fileManager)
-            } catch {
-                log(.metadataFailed)
-            }
-        }
-        if addsEditedImageLater {
-            addsEditedImageLater = false
-            screenshots?.addScreencastScreenshot(at: edited ?? original)
-        }
-    }
+    /// How many displays the recording has a video of.
+    var displayCount: Int { videos.count }
 
     // MARK: Save, Copy, Discard
 
@@ -274,8 +135,7 @@ final class ScreencastReviewModel {
         await conclude(copying: true, strictly: true)
     }
 
-    /// Escape, or the panel closing without a choice: saves what it can, and always finishes. An
-    /// editor still open stays open, with its markup.
+    /// Escape, or the window closing without a choice: saves what it can, and always finishes.
     func close() async {
         // A Save or Copy under way finishes first; if it stopped at a failure, this saves anyway.
         if isWorking { await withCheckedContinuation { waitingForWork.append($0) } }
@@ -297,11 +157,10 @@ final class ScreencastReviewModel {
         let text = repositoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let repository = text.isEmpty ? nil : ScreencastRepository(text)
         record(repository: repository, strictly: false)
-        addToScreenshots()
         finish(.saved(input))
     }
 
-    /// Discard asks first, in the panel: "Discard this capture?" with Discard and Keep.
+    /// Discard asks first, in the window: "Discard this capture?" with Discard and Keep.
     func askToDiscard() {
         guard acceptsActions else { return }
         failure = nil
@@ -349,16 +208,14 @@ final class ScreencastReviewModel {
 
         guard record(repository: repository, strictly: strictly) else { return }
         if copying {
-            guard ScreencastReviewFiles.copy(input, images: screenshotFiles, to: pasteboard) else { return fail(.copyFailed) }
+            guard ScreencastReviewFiles.copy(input, to: pasteboard) else { return fail(.copyFailed) }
             keepOutOfClipboardHistory()
-        } else {
-            addToScreenshots()
         }
         finish(copying ? .copied(input) : .saved(input))
     }
 
     /// Remembers a corrected repository and writes the review into `meta.json`. False when that
-    /// failed and `strictly` keeps the panel open to say so.
+    /// failed and `strictly` keeps the window open to say so.
     @discardableResult
     private func record(repository: ScreencastRepository?, strictly: Bool) -> Bool {
         if let repository, repository != guess?.repository {
@@ -369,7 +226,6 @@ final class ScreencastReviewModel {
             type: type,
             repository: repository?.description,
             context: context,
-            editedImages: editedImageNames,
             reviewedAt: now()
         )
         do {
@@ -381,34 +237,7 @@ final class ScreencastReviewModel {
             }
             log(.metadataFailed)
         }
-        savedReview = review
         return true
-    }
-
-    /// "Also add to Screenshots (⌘3)": each display's screenshot as it is now. One still in the
-    /// editor goes once the editor is done.
-    private func addToScreenshots() {
-        guard showsAddToScreenshots, addsToScreenshots else { return }
-        for (display, file) in screenshotFiles.enumerated() where display != editingDisplay {
-            screenshots?.addScreencastScreenshot(at: file)
-        }
-        addsEditedImageLater = isEditing
-    }
-
-    /// The marked-up copies' file names, by the original each replaces.
-    private var editedImageNames: [String: String]? {
-        guard case .screenshot(let screenshot) = input, !editedImages.isEmpty else { return nil }
-        var names: [String: String] = [:]
-        for (display, edited) in editedImages where screenshot.images.indices.contains(display) {
-            names[screenshot.images[display].file.lastPathComponent] = edited.lastPathComponent
-        }
-        return names
-    }
-
-    private func refreshImage() {
-        let files = screenshotFiles
-        guard !files.isEmpty else { return }
-        image = NSImage(contentsOf: files[files.indices.contains(selectedDisplay) ? selectedDisplay : 0])
     }
 
     /// The note on one line: line breaks and tabs become spaces, and the ends are trimmed.
@@ -433,8 +262,5 @@ final class ScreencastReviewModel {
         guard !isFinished else { return }
         isFinished = true
         onFinish?(outcome)
-        let waiting = waitingForFinish
-        waitingForFinish = []
-        waiting.forEach { $0.resume() }
     }
 }

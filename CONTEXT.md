@@ -204,15 +204,15 @@ The keys on screen that the Keystrokes plugin and a Screencast recording share. 
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Screencast**:
-Recording what's on screen, as a screenshot or a video with the microphone and the Mac's sound, then keeping each capture on this Mac or sending it to a destination (ADR 0009). It ships off, and needs macOS 15: on an older Mac it's listed with "Requires macOS 15" and can't be turned on.
+Recording what's on screen as a video, with the microphone and the Mac's sound, then keeping each capture on this Mac or sending it to a destination (ADR 0009). It takes no screenshots: those are Screenshot Tools'. It ships off, and needs macOS 15: on an older Mac it's listed with "Requires macOS 15" and can't be turned on.
 _Avoid_: Screen recorder, screen recording (macOS's permission), Clipy (a destination)
 
 **Capture**:
-One screenshot or one recording Screencast took, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted; a recording of every screen holds one video per display. A screenshot taken with Screenshot Tools isn't one.
+One recording Screencast made, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted; a recording of every screen holds one video per display. A screenshot taken with Screenshot Tools isn't one.
 _Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
 
 **Screencast picker**:
-What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens with the last area drawn.
+What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts down, then records. Escape cancels until recording starts. It opens with the last area drawn.
 _Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
 
 **Control bar**:
@@ -224,7 +224,7 @@ Marking up the screen while Screencast records, in the video: a pen, an arrow, a
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Review panel**:
-The panel in the corner of the screen after each screenshot, and the window after each recording, asking what to do with the capture. The panel has a one-line note, the type (Bug, Feature, or Feedback), the repository, and the destination, and a screenshot opens in the Screenshot Editor and can also go to the Screenshots tab (⌘3). A recording's window all but fills the screen with its player (play, pause, and scrubbing), with Discard, Copy, and Save in its toolbar, and nothing to type or trim. Save keeps the capture with its note; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape or closing it saves too. A recording's window closes then, and a notice in the notch says it was saved or copied. The note, type, repository, and the app it was taken in are user content, kept in the capture's `meta.json` on this Mac.
+What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar, with nothing to type or trim. Save keeps the capture; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape or closing it saves too. The window closes then, and a notice in the notch says it was saved or copied. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the capture's `meta.json` on this Mac.
 _Avoid_: Quick access card, post-capture window, editor
 
 **Repository guess**:

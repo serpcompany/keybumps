@@ -4,7 +4,7 @@ import SwiftUI
 /// Screencast's windows around a capture: the picker over every screen, the countdown, and the
 /// area highlight while an area records. All borderless, non-activating panels of Keybumps's own,
 /// so a recording leaves them out (only windows registered with `includeOverlayWindow` show, and
-/// these never are) and a screenshot's filter leaves out all of Keybumps.
+/// these never are).
 ///
 /// Adapted from Screendrop's `RecordingAreaSelectionPresenter`, `RecordingAreaHighlightPresenter`,
 /// and `CaptureCountdownPresenter` (CC0-1.0, see LICENSE.screendrop) and BetterCapture's

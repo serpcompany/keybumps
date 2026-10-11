@@ -7,6 +7,9 @@ final class AppPreferences {
     private enum Key {
         /// Retired: the old presentation-channel list. Removed on load.
         static let retiredSelectedChannels = "selectedNotificationChannels"
+        /// Retired: Screencast's "Also add to Screenshots (⌘3)", which only QA builds had (#464,
+        /// #485). Removed on load.
+        static let retiredScreencastAddsToScreenshots = "plugin.screencast.addsToScreenshots"
         static let showInDockAndSwitcher = "showInDockAndSwitcher"
         static let enabledCapabilities = "enabledCapabilities"
         static let knownCapabilities = "knownCapabilities"
@@ -261,6 +264,7 @@ final class AppPreferences {
         }
 
         defaults.removeObject(forKey: Key.retiredSelectedChannels)
+        defaults.removeObject(forKey: Key.retiredScreencastAddsToScreenshots)
         if introducedShortcuts {
             persistCapabilityShortcuts()
         }
@@ -281,9 +285,6 @@ final class AppPreferences {
 
     /// The drawing tools' last choices while recording (`screencast.drawingStyle`).
     var screencastDrawingMemory: ScreencastDrawingMemory { ScreencastDrawingMemory(defaults: defaults) }
-
-    /// Where Screencast's review panel remembers "Also add to Screenshots (⌘3)".
-    var screencastReviewSettings: ScreencastReviewSettings { ScreencastReviewSettings(defaults: defaults) }
 
     /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {

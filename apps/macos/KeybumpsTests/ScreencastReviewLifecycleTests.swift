@@ -3,12 +3,11 @@ import Foundation
 import Testing
 @testable import Keybumps
 
-/// The review panel around the person's choices (#464's review): the editor opened from it, a quit
-/// or relaunch, Screencast turned off while a capture waits, captures
-/// that arrive one after another, and a context read that comes late. Made-up captures in a
-/// temporary folder, a named pasteboard, and no window ordered in.
+/// The review around the person's choices (#464's review): a quit or relaunch, Screencast turned off
+/// while a capture waits, captures that arrive one after another, and a context read that comes
+/// late. Made-up captures in a temporary folder, a named pasteboard, and no window ordered in.
 @MainActor
-@Suite("Screencast: the review panel's lifecycle")
+@Suite("Screencast: the review's lifecycle")
 struct ScreencastReviewLifecycleTests {
     let fixture = ReviewFixture()
     static let safari = ScreencastCaptureContext(appBundleIdentifier: "com.apple.Safari", appName: "Safari", domain: "keybumps.app")
@@ -17,18 +16,11 @@ struct ScreencastReviewLifecycleTests {
         try #require(ScreencastRepository(text))
     }
 
-    private func panel(
-        editor: (any ScreencastScreenshotEditing)? = nil,
-        screenshots: (any ScreencastScreenshotsLibrary)? = nil,
-        outcomes: ReviewOutcomeLog
-    ) -> ScreencastReviewPanel {
+    private func panel(outcomes: ReviewOutcomeLog) -> ScreencastReviewPanel {
         let panel = ScreencastReviewPanel(
             repositories: fixture.repositories,
             pasteboard: fixture.pasteboard,
             keepOutOfClipboardHistory: {},
-            editor: { editor },
-            screenshots: { screenshots },
-            settings: ScreencastReviewSettings(defaults: fixture.defaults),
             screen: { nil }
         )
         panel.onFinish = { outcomes.outcomes.append($0) }
@@ -41,72 +33,6 @@ struct ScreencastReviewLifecycleTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         try #require(condition(), sourceLocation: sourceLocation)
-    }
-
-    // MARK: The Screenshot Editor opened from the panel
-
-    @Test("Edit, then Save with ⌘3 on: the editor doesn't copy, and ⌘3 gets exactly one item, the marked-up one")
-    func editThenSaveAddsTheMarkedUpImage() async throws {
-        defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
-        let editor = FakeScreenshotEditor()
-        let changeCount = fixture.pasteboard.changeCount
-        let model = fixture.model(input, editor: editor, screenshots: fixture.clipboard)
-        model.edit()
-        #expect(editor.copyRequests == [false], "the panel's Copy is the copy")
-        let edited = input.folder.appendingPathComponent("screenshot-1 (edited).png")
-        try ReviewFixture.png(seed: "marked up").write(to: edited)
-        editor.finishEditing(savedAt: edited)
-
-        await model.save()
-        fixture.clipboard.pollForTesting()
-        let entries = fixture.clipboard.entries
-        #expect(entries.count == 1)
-        #expect(entries.first?.isScreenshot == true && entries.first?.sourcePath == edited.path)
-        #expect(fixture.pasteboard.changeCount == changeCount)
-    }
-
-    @Test("Edit, then Discard: nothing is left in Clipboard History")
-    func editThenDiscardLeavesNothing() async throws {
-        defer { fixture.tearDown() }
-        let input = try fixture.screenshot()
-        let editor = FakeScreenshotEditor()
-        let model = fixture.model(input, editor: editor, screenshots: fixture.clipboard)
-        model.edit()
-        let edited = input.folder.appendingPathComponent("screenshot-1 (edited).png")
-        try ReviewFixture.png(seed: "marked up").write(to: edited)
-        editor.finishEditing(savedAt: edited)
-        model.askToDiscard()
-        model.confirmDiscard()
-
-        fixture.clipboard.pollForTesting()
-        #expect(model.isFinished && fixture.clipboard.entries.isEmpty)
-        #expect(!FileManager.default.fileExists(atPath: input.folder.path))
-    }
-
-    @Test("The Screenshot Editor opened from the panel saves its copy without the clipboard; Screenshot Tools' own still copies")
-    func editorSaveWithoutCopy() throws {
-        defer { fixture.tearDown() }
-        guard case .screenshot(let screenshot) = try fixture.screenshot() else { return }
-        let file = screenshot.images[0].file
-        let source = try #require(ScreenshotRenderSource(imageData: Data(contentsOf: file)))
-        let before = fixture.pasteboard.changeCount
-
-        var quietResult: ScreenshotEditorWindowController.Result?
-        let quiet = ScreenshotEditorWindowController(
-            source: source, sourceURL: file, fallbackFolder: screenshot.folder, pasteboard: fixture.pasteboard, copiesToClipboard: false
-        )
-        quiet.onFinish = { quietResult = $0 }
-        quiet.save()
-        #expect(fixture.pasteboard.changeCount == before)
-        #expect(quietResult?.copied == false)
-        #expect(quietResult?.savedURL.map { FileManager.default.fileExists(atPath: $0.path) } == true)
-
-        var copyingResult: ScreenshotEditorWindowController.Result?
-        let copying = ScreenshotEditorWindowController(source: source, sourceURL: file, fallbackFolder: screenshot.folder, pasteboard: fixture.pasteboard)
-        copying.onFinish = { copyingResult = $0 }
-        copying.save()
-        #expect(copyingResult?.copied == true && fixture.pasteboard.data(forType: .png) != nil)
     }
 
     // MARK: Quitting
@@ -125,41 +51,6 @@ struct ScreencastReviewLifecycleTests {
         #expect(ScreencastReview.read(from: input.metadataURL)?.repository == "serpcompany/keybumps")
     }
 
-    // MARK: The keyboard after the editor
-
-    @Test("When the editor closes with the panel open, the panel takes the keyboard back; after the panel closed, it doesn't")
-    func keyboardComesBackAfterTheEditor() async throws {
-        defer { fixture.tearDown() }
-        let outcomes = ReviewOutcomeLog()
-        let editor = FakeScreenshotEditor()
-        var keyboardTaken = 0
-        let panel = ScreencastReviewPanel(
-            repositories: fixture.repositories,
-            pasteboard: fixture.pasteboard,
-            keepOutOfClipboardHistory: {},
-            editor: { editor },
-            screenshots: { nil },
-            settings: ScreencastReviewSettings(defaults: fixture.defaults),
-            screen: { nil },
-            takeKeyboard: { _ in keyboardTaken += 1 }
-        )
-        panel.onFinish = { outcomes.outcomes.append($0) }
-        await panel.show(try fixture.screenshot(name: "1791000000"))
-        panel.model?.edit()
-        #expect(keyboardTaken == 0)
-        editor.finishEditing(savedAt: nil)
-        #expect(keyboardTaken >= 1, "Return goes to the panel, not the app the editor gave the front back to")
-        await panel.close()
-
-        keyboardTaken = 0
-        await panel.show(try fixture.screenshot(name: "1791000100", seed: "b"))
-        panel.model?.edit()
-        panel.shutDown()
-        try await eventually { !panel.isShown }
-        editor.finishEditing(savedAt: nil)
-        #expect(keyboardTaken == 0, "no panel to take it")
-    }
-
     // MARK: Turning Screencast off, and captures taking turns
 
     @Test("A capture finishing as Screencast turns off is saved, with its context once read, and never shown")
@@ -169,9 +60,6 @@ struct ScreencastReviewLifecycleTests {
         let flow = ScreencastReviewFlow(
             services: ScreencastReviewServices(
                 clipboard: fixture.clipboard,
-                isClipboardHistoryOn: { false },
-                editor: { nil },
-                settings: ScreencastReviewSettings(defaults: fixture.defaults),
                 notices: nil,
                 repositories: { [fixture] in fixture.repositories }
             ),
@@ -180,17 +68,17 @@ struct ScreencastReviewLifecycleTests {
                 return Self.safari
             }
         )
-        guard case .screenshot(let screenshot) = try fixture.screenshot() else { return }
+        guard case .video(let capture) = try fixture.video() else { return }
         flow.captureStarting()
-        flow.captureFinished(.screenshot(screenshot))
+        flow.captureFinished(.video(capture))
         flow.close()
         try await Task.sleep(for: .milliseconds(50))
         #expect(flow.panel?.isShown != true)
 
         gate.open()
-        try await eventually { ScreencastReview.read(from: screenshot.metadataURL) != nil }
+        try await eventually { ScreencastReview.read(from: capture.metadataURL) != nil }
         #expect(flow.panel?.isShown != true, "never shown")
-        #expect(ScreencastReview.read(from: screenshot.metadataURL)?.context == Self.safari)
+        #expect(ScreencastReview.read(from: capture.metadataURL)?.context == Self.safari)
     }
 
     @Test("Captures take turns: one arriving during a slow Save waits, and none is skipped or left unsaved")
@@ -199,8 +87,8 @@ struct ScreencastReviewLifecycleTests {
         let outcomes = ReviewOutcomeLog()
         let panel = panel(outcomes: outcomes)
         let first = try fixture.video(name: "1791000000", mixdown: false)
-        let second = try fixture.screenshot(name: "1791000100")
-        let third = try fixture.screenshot(name: "1791000200", seed: "c")
+        let second = try fixture.video(name: "1791000100")
+        let third = try fixture.video(name: "1791000200")
 
         // The first's save waits for its context, which is slow to come.
         let gate = ContextGate()
@@ -225,68 +113,20 @@ struct ScreencastReviewLifecycleTests {
         await panel.close()
     }
 
-    @Test("While the editor is open, a new capture waits until the editor and then the panel close")
-    func newCaptureWaitsForTheEditor() async throws {
-        defer { fixture.tearDown() }
-        let outcomes = ReviewOutcomeLog()
-        let editor = FakeScreenshotEditor()
-        let panel = panel(editor: editor, outcomes: outcomes)
-        let first = try fixture.screenshot(name: "1791000000")
-        let second = try fixture.screenshot(name: "1791000100", seed: "b")
-        await panel.show(first)
-        panel.model?.edit()
-        #expect(panel.model?.isEditing == true)
-
-        let showingSecond = Task { await panel.show(second) }
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(panel.model?.input == first && outcomes.outcomes.isEmpty, "nothing closes the panel under the editor")
-        editor.finishEditing(savedAt: nil)
-        try await Task.sleep(for: .milliseconds(50))
-        #expect(panel.model?.input == first, "it waits for the person to close the panel too")
-
-        await panel.model?.save()
-        await showingSecond.value
-        #expect(outcomes.outcomes == [.saved(first)])
-        #expect(panel.model?.input == second)
-        await panel.close()
-    }
-
-    @Test("Turning Screencast off with the editor open saves the review and leaves the editor; its later Save is recorded")
-    func turnedOffWhileEditing() async throws {
-        defer { fixture.tearDown() }
-        let outcomes = ReviewOutcomeLog()
-        let editor = FakeScreenshotEditor()
-        let panel = panel(editor: editor, outcomes: outcomes)
-        let input = try fixture.screenshot()
-        await panel.show(input)
-        panel.model?.note = "while editing"
-        panel.model?.edit()
-
-        panel.shutDown()
-        try await eventually { !panel.isShown }
-        #expect(outcomes.outcomes == [.saved(input)] && editor.isOpen)
-        #expect(ScreencastReview.read(from: input.metadataURL)?.note == "while editing")
-
-        let edited = input.folder.appendingPathComponent("screenshot-1 (edited).png")
-        try ReviewFixture.png(seed: "late").write(to: edited)
-        editor.finishEditing(savedAt: edited)
-        #expect(ScreencastReview.read(from: input.metadataURL)?.editedImages == ["screenshot-1.png": "screenshot-1 (edited).png"])
-    }
-
     // MARK: A context that comes late
 
-    @Test("The panel shows at once; the guess fills the repository when the context comes, unless the person typed there")
+    @Test("The window shows at once; the guess fills the repository when the context comes, unless it was changed")
     func lateContextFillsTheGuess() async throws {
         defer { fixture.tearDown() }
         fixture.repositories.remember(try repository("serpcompany/keybumps"), for: Self.safari)
 
         let gate = ContextGate()
-        let untouched = fixture.model(try fixture.screenshot(name: "1791000000"), contextRead: Task { @MainActor in
+        let untouched = fixture.model(try fixture.video(name: "1791000000"), contextRead: Task { @MainActor in
             await gate.wait()
             return Self.safari
         })
         #expect(untouched.repositoryText.isEmpty && untouched.context == .none)
-        let typed = fixture.model(try fixture.screenshot(name: "1791000100", seed: "b"), contextRead: Task { @MainActor in
+        let typed = fixture.model(try fixture.video(name: "1791000100"), contextRead: Task { @MainActor in
             await gate.wait()
             return Self.safari
         })
@@ -294,8 +134,7 @@ struct ScreencastReviewLifecycleTests {
 
         gate.open()
         try await eventually { untouched.context == Self.safari && typed.context == Self.safari }
-        #expect(untouched.repositoryText == "serpcompany/keybumps")
-        #expect(untouched.repositoryHint == "Remembered for keybumps.app")
+        #expect(untouched.repositoryText == "serpcompany/keybumps" && untouched.guess?.source == .website("keybumps.app"))
         #expect(typed.repositoryText == "serpcompany/other", "what the person typed stays")
     }
 
@@ -303,7 +142,7 @@ struct ScreencastReviewLifecycleTests {
     func saveWaitsForTheContext() async throws {
         defer { fixture.tearDown() }
         let gate = ContextGate()
-        let input = try fixture.screenshot()
+        let input = try fixture.video()
         let model = fixture.model(input, contextRead: Task { @MainActor in
             await gate.wait()
             return Self.safari

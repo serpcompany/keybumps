@@ -163,6 +163,8 @@ struct QuickSearchActionTests {
         #expect(QuickSearchCommand.action(Self.start()).match("start screencast") == .name)
         #expect(QuickSearchCommand.action(Self.start()).match("record") == .keyword)
         #expect(QuickSearchCommand.action(Self.start()).match("sta") == .prefix)
+        #expect(QuickSearchCommand.action(Self.start()).match("screenshot") == nil, "Screenshots are Screenshot Tools' alone (#485)")
+        #expect(!items("screenshot").contains(start))
         #expect(items("start") == [start, .result(file)])
         #expect(items("screencast") == [.command(.capability(.screencast)), start, .result(file)], "Equal scores keep commands first")
         #expect(

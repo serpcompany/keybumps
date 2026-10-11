@@ -2,6 +2,22 @@ import AppKit
 import AVKit
 import SwiftUI
 
+/// The review window's accessibility identifiers, which the UI tests drive.
+enum ScreencastReviewID {
+    /// The window (#475), and the player's area in it.
+    static let window = "screencast.review.window"
+    static let playerArea = "screencast.review.playerArea"
+    static let player = "screencast.review.player"
+    static let display = "screencast.review.display"
+    static let save = "screencast.review.save"
+    static let copy = "screencast.review.copy"
+    static let discard = "screencast.review.discard"
+    /// Discard, answering "Discard this capture?".
+    static let confirmDiscard = "screencast.review.confirmDiscard"
+    static let keep = "screencast.review.keep"
+    static let failure = "screencast.review.failure"
+}
+
 /// A recording's review window's content (#475), after Snapzy's Video Editor (BSD-3-Clause, see
 /// LICENSE.snapzy): the player edge to edge, `AVPlayerView` with its own controls along its bottom
 /// for play, pause, and scrubbing, the video fitted to it. Discard, Copy, and Save are in the
@@ -103,7 +119,7 @@ struct ScreencastRecordingReviewToolbar: View {
         }
     }
 
-    /// Hidden while the discard question is up, as the panel's actions are.
+    /// Hidden while the discard question is up.
     @ViewBuilder private func actions(_ model: ScreencastReviewModel) -> some View {
         if !model.isConfirmingDiscard {
             HStack(spacing: 8) {
@@ -125,6 +141,27 @@ struct ScreencastRecordingReviewToolbar: View {
                 .accessibilityIdentifier(ScreencastReviewID.save)
             }
             .disabled(!model.acceptsActions)
+        }
+    }
+}
+
+/// Which display's video shows, for a recording of every display.
+struct ScreencastReviewDisplayPicker: View {
+    @Bindable var model: ScreencastReviewModel
+
+    var body: some View {
+        if model.displayCount > 1 {
+            Picker("Display", selection: $model.selectedDisplay) {
+                ForEach(0..<model.displayCount, id: \.self) { index in
+                    Text("\(index + 1)").tag(index)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Which display’s recording shows")
+            .accessibilityLabel("Display")
+            .accessibilityIdentifier(ScreencastReviewID.display)
         }
     }
 }

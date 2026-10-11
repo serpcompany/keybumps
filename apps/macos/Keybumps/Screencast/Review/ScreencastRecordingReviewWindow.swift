@@ -1,16 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// A recording's review window (#475): a standard window that all but fills the screen, to watch
-/// the recording with `AVPlayerView`'s own controls (play, pause, and scrubbing), with Discard,
-/// Copy, and Save in its compact toolbar and nothing else around the player.
+/// The review window (#475): a standard window that all but fills the screen, to watch the
+/// recording with `AVPlayerView`'s own controls (play, pause, and scrubbing), with Discard, Copy,
+/// and Save in its compact toolbar and nothing else around the player.
 ///
 /// Its shell is Snapzy's `VideoEditorWindow` (BSD-3-Clause, see LICENSE.snapzy): titled, closable,
 /// miniaturizable, and resizable, at the normal level and in the window cycle, with a minimum size.
 /// Unlike Snapzy's, closing it (`performClose`, as its close button does) asks the review first
 /// (`onClose`), which saves the recording, and Space is the review's key monitor's
-/// (`ScreencastReviewKey`). Like the panel, it can open over a full-screen app, and it's never
-/// restored at launch. Under the unit-test host it never becomes key or main.
+/// (`ScreencastReviewKey`). It can open over a full-screen app, and it's never restored at launch.
+/// Under the unit-test host it never becomes key or main.
 final class ScreencastRecordingReviewWindow: NSWindow, NSToolbarDelegate {
     static let identifier = NSUserInterfaceItemIdentifier(ScreencastReviewID.window)
     /// A player still big enough to watch, and the toolbar's buttons.
@@ -42,7 +42,7 @@ final class ScreencastRecordingReviewWindow: NSWindow, NSToolbarDelegate {
         // Nothing to put back at launch: quitting saves the review.
         isRestorable = false
         // An ordinary window: the normal level, and in ⌘` cycling. It also opens over a full-screen
-        // app, as the panel did, so stopping a recording of one doesn't move to a desktop Space.
+        // app, so stopping a recording of one doesn't move to a desktop Space.
         level = .normal
         collectionBehavior = [.managed, .participatesInCycle, .fullScreenAuxiliary]
         tabbingMode = .disallowed

@@ -262,8 +262,6 @@ struct ScreencastPickerTests {
         #expect(!model.press(at: onBar, on: left, clickCount: 2), "A double click on the bar records nothing")
         #expect(model.selectedWindow == 10)
         // What the bar's buttons and switches set.
-        model.kind = .screenshot
-        model.kind = .video
         model.recordsMicrophone.toggle()
         model.recordsSystemAudio.toggle()
         model.showsShortcuts.toggle()
@@ -371,18 +369,17 @@ struct ScreencastPickerTests {
         #expect(withoutAccess.choice()?.audio == ScreencastAudio(microphone: false, systemAudio: false))
     }
 
-    @Test("A screenshot captures with no sound, shortcuts, or clicks, and its button says Capture")
-    func screenshotMode() {
+    @Test("Record records the sounds, shortcuts, and clicks the switches chose")
+    func switchesChoose() {
         let model = PickerScreens.model(rememberedArea: ScreencastPickedArea(display: 1, rect: CGRect(x: 100, y: 282, width: 800, height: 600)))
-        #expect(model.kind == .video && model.confirmTitle == "Record")
         #expect(model.choice()?.audio == ScreencastAudio(microphone: true, systemAudio: true))
         #expect(model.choice()?.showsShortcuts == true)
-        model.kind = .screenshot
-        #expect(model.confirmTitle == "Capture")
+        model.recordsSystemAudio = false
+        model.showsShortcuts = false
+        model.highlightsClicks = true
         let choice = model.choice()
-        #expect(choice?.kind == .screenshot)
-        #expect(choice?.audio == ScreencastAudio.none)
-        #expect(choice?.showsShortcuts == false && choice?.highlightsClicks == false)
+        #expect(choice?.audio == ScreencastAudio(microphone: true, systemAudio: false))
+        #expect(choice?.showsShortcuts == false && choice?.highlightsClicks == true)
     }
 
     @Test("Switching between area, window, and screen keeps the area drawn and the window picked")
@@ -424,10 +421,8 @@ struct ScreencastPickerTests {
         #expect(model.choice()?.target == .everyDisplay)
         #expect(model.isChosen(left) && model.isChosen(right))
         #expect(model.hint == "Records all screens, one file each.")
-        model.kind = .screenshot
-        #expect(model.hint == "Captures all screens, one image each.")
         model.chooseScreen(1)
-        #expect(model.hint == "Captures all of Screen 1.")
+        #expect(model.hint == "Records all of Screen 1.")
 
         // A click picks a screen only in Screen mode.
         model.target = .area
