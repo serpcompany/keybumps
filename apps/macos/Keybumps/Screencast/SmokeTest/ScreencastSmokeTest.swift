@@ -20,6 +20,9 @@ enum ScreencastSmokeTest {
     /// Its own defaults, so the area it draws never replaces the person's last one. Emptied before
     /// and after it runs.
     static let defaultsSuite = "com.serp.keybumps.screencast-smoke-test"
+    /// Its captures folder, in the temporary folder: emptied before it runs, deleted after, and
+    /// deleted by the script too, so a run that crashed leaves nothing for long.
+    static let capturesFolderName = "Keybumps-screencast-smoke-test"
 
     /// Whether this launch is the smoke test: asked for, in a QA candidate (`CrashReportTest.isAllowed`).
     static func isRequested(defaults: UserDefaults = .standard, bundle: Bundle = .main) -> Bool {
@@ -77,6 +80,8 @@ enum ScreencastSmokeTest {
             return report.exitCode
         }
 
+        let capturesFolder = FileManager.default.temporaryDirectory.appendingPathComponent(capturesFolderName, isDirectory: true)
+        try? FileManager.default.removeItem(at: capturesFolder)
         let window = ScreencastSmokeWindow()
         window.show()
         defer { window.close() }
@@ -88,8 +93,7 @@ enum ScreencastSmokeTest {
             presenter: ScreencastOverlayWindows(),
             screens: { ScreencastScreenLayout.current() },
             defaults: defaults,
-            capturesFolder: FileManager.default.temporaryDirectory
-                .appendingPathComponent("Keybumps-screencast-smoke-\(UUID().uuidString)", isDirectory: true)
+            capturesFolder: capturesFolder
         )
         let runner = ScreencastSmokeRunner(
             rig: rig,

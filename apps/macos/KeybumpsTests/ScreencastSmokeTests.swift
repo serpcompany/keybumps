@@ -309,6 +309,7 @@ struct ScreencastSmokeTests {
         #expect(text.contains("option=\(ScreencastSmokeTest.launchOption)\n"))
         #expect(text.contains("result=\"$HOME/Library/Developer/Keybumps-QA/screencast-smoke-test.json\""))
         #expect(text.contains("== \(ScreencastSmokeFailure.permissionDenied.rawValue) ]]"))
+        #expect(text.contains("/\(ScreencastSmokeTest.capturesFolderName)\""))
         #expect(!text.contains("pkill") && !text.contains("killall"))
     }
 

@@ -97,6 +97,10 @@ while [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null; do
   sleep 0.5
 done
 
+# The app deletes its captures itself; this covers a run that crashed or was stopped.
+temporary=$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)
+[[ "$temporary" == /* ]] && rm -rf -- "${temporary%/}/Keybumps-screencast-smoke-test"
+
 status=3
 if [[ -f "$result" ]]; then
   cat "$result"
