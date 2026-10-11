@@ -455,15 +455,15 @@ struct ScreencastReviewTests {
         #expect(fixture.clipboard.entries.map(\.sourcePath) == [edited.path], "and goes to ⌘3, marked up")
     }
 
-    @Test("Return saves and Escape closes; the discard question, the trim controls, and composing text keep their keys")
+    @Test("Return saves and Escape closes; the discard question, the trim controls, composing text, and a claimed key keep their keys")
     func keys() {
         func action(
             _ key: UInt16, _ modifiers: NSEvent.ModifierFlags = [], trimming: Bool = false, composing: Bool = false,
-            confirming: Bool = false, editing: Bool = false
+            confirming: Bool = false, editing: Bool = false, claimed: Bool = false
         ) -> ScreencastReviewKey {
             ScreencastReviewKey.action(
                 keyCode: key, modifiers: modifiers, isTrimming: trimming, isComposing: composing,
-                isConfirmingDiscard: confirming, isEditing: editing
+                isConfirmingDiscard: confirming, isEditing: editing, isClaimed: claimed
             )
         }
         #expect(action(53, editing: true) == .ignore && action(36, editing: true) == .ignore, "the editor's markup is never thrown away")
@@ -473,6 +473,8 @@ struct ScreencastReviewTests {
         #expect(action(36, trimming: true) == .pass && action(53, trimming: true) == .pass)
         #expect(action(36, composing: true) == .pass && action(53, composing: true) == .pass)
         #expect(action(36, .command) == .pass && action(53, .option) == .pass)
+        #expect(action(53, claimed: true) == .pass && action(53, confirming: true, claimed: true) == .pass,
+                "Escape is the next recording's drawing's while it draws, whichever monitor hears it first")
         #expect(action(0) == .pass)
     }
 
