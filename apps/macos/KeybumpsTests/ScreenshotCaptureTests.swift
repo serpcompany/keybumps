@@ -57,6 +57,8 @@ struct ScreenshotCaptureTests {
         let store = FakeSymbolicHotKeys(hotKeys: [:])
         var owned: Set<String> = []
         let takeover = SystemScreenshotShortcutTakeover(preferences: store, takenOver: { owned }, setTakenOver: { owned = $0 })
+        var changes = 0
+        takeover.didChange = { changes += 1 }
         let keybumps = [DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea]
 
         takeover.apply(bindings: keybumps, isEnabled: true)
@@ -64,14 +66,17 @@ struct ScreenshotCaptureTests {
         #expect(store.isEnabled("30") == false)
         #expect(owned == ["28", "30"])
         #expect(store.reloads == 1)
+        #expect(changes == 1, "The key display hears that macOS's shortcuts changed")
 
         takeover.apply(bindings: keybumps, isEnabled: true)
         #expect(store.writes == 1, "No change, no write")
+        #expect(changes == 1)
 
         takeover.apply(bindings: keybumps, isEnabled: false)
         #expect(store.isEnabled("28") == true)
         #expect(store.isEnabled("30") == true)
         #expect(owned.isEmpty)
+        #expect(changes == 2)
     }
 
     @Test("Moving a hotkey off macOS's keys gives only that shortcut back")
