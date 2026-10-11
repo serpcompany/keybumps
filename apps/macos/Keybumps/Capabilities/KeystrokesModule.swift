@@ -28,6 +28,18 @@ extension CapabilityDescriptor {
     )
 }
 
+extension PluginAction {
+    /// Quick Search's Show Keystrokes or Hide Keystrokes, named for what it does now, which does
+    /// what the Show & Hide Keystrokes shortcut does (`KeystrokesModule.perform`).
+    static let toggleKeystrokes = PluginAction(
+        id: "toggleKeystrokes",
+        title: "Show & Hide Keystrokes",
+        keywords: ["show keystrokes", "hide keystrokes", "keys", "keycastr", "toggle"],
+        systemImage: "eye",
+        shortcut: .keystrokes
+    )
+}
+
 extension PluginPreference {
     /// Whether the keys show while the plugin is on: hiding them doesn't turn the plugin off.
     static let keystrokesShowing = PluginPreference(
@@ -192,6 +204,17 @@ final class KeystrokesModule: CapabilityModule {
     func attentionCount(_ context: CapabilityContext) -> Int {
         guard context.isEnabled(capability) else { return 0 }
         return context.permissionReadiness([capability]).missingCount
+    }
+
+    func title(for action: PluginAction, _ context: CapabilityContext) -> String? {
+        guard action == .toggleKeystrokes else { return nil }
+        return isShowing ? "Hide Keystrokes" : "Show Keystrokes"
+    }
+
+    /// Quick Search's Show or Hide Keystrokes does what the shortcut does, with its notch notice.
+    func perform(_ action: PluginAction, _ context: CapabilityContext) {
+        guard action == .toggleKeystrokes else { return }
+        toggleShowing(announces: true)
     }
 
     /// Holds the display while the plugin is on and showing, and lists Show Keystrokes, checked
