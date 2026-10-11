@@ -43,8 +43,9 @@ struct ScreencastChoice: Equatable, Sendable {
 }
 
 /// The picker's state, shared by its windows (one per screen) and its bar: area, window, or every
-/// screen, the area drawn or the window picked, and the switches. The
-/// switches start from the settings; changing them here applies to this capture only.
+/// screen, the area drawn or the window picked, and the switches. The switches are the settings',
+/// which Record saves (`switches`). It opens on the mode and screen last recorded
+/// (`ScreencastPickerMemory`), with no window picked.
 @MainActor
 @Observable
 final class ScreencastPickerModel {
@@ -63,11 +64,15 @@ final class ScreencastPickerModel {
     /// Whether Keybumps has Microphone access. Without it the microphone switch stays off, so
     /// recording never asks for it.
     let microphoneAvailable: Bool
+    /// The microphone's setting, kept while its switch has to stay off.
+    private let microphoneSetting: Bool
 
     let layout: ScreencastScreenLayout
-    /// The screen the pointer was on at Start Screencast, or else the main one: the bar shows on
-    /// it, and Screen mode starts with it chosen. Read once, so the two always agree.
+    /// The screen the pointer was on at Start Screencast, or else the main one, read once: the bar
+    /// shows on it, and Screen mode starts with it chosen unless the choice last taken is there.
     let pointerScreen: ScreencastScreen?
+    /// Screen mode's choice when the picker opened, kept when Record is pressed in another mode.
+    private let rememberedScreen: ScreencastPickerChoices.Screen?
     /// Windows that can be picked, front to back (`ScreencastWindowPicking`). Empty until what's on
     /// screen has been read, and when it can't be.
     var windows: [ScreencastContent.Window] = [] {
@@ -85,7 +90,8 @@ final class ScreencastPickerModel {
     /// The bar's frame in AppKit's global space, once it's laid out. The pointer over it is on the
     /// bar, never on a window under it, and a press on it changes no choice (`press`).
     @ObservationIgnored var barFrame: CGRect?
-    /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
+    /// The screen chosen in Screen mode; nil for all screens. At first the one last chosen while
+    /// it's connected, or All Screens while there's more than one, or else `pointerScreen`.
     private(set) var selectedScreen: CGDirectDisplayID?
     /// The choice the pointer is over in the bar's screen choices, which the screens show until it
     /// leaves.
@@ -99,21 +105,32 @@ final class ScreencastPickerModel {
         layout: ScreencastScreenLayout,
         preferences: ScreencastPreferences,
         microphoneAvailable: Bool,
+        remembered: ScreencastPickerChoices = ScreencastPickerChoices(),
         rememberedArea: ScreencastPickedArea? = nil,
         pointerScreen: CGDirectDisplayID? = nil
     ) {
         self.layout = layout
         self.microphoneAvailable = microphoneAvailable
+        microphoneSetting = preferences.recordsMicrophone
         recordsMicrophone = preferences.recordsMicrophone && microphoneAvailable
         recordsSystemAudio = preferences.recordsSystemAudio
         showsShortcuts = preferences.showsShortcuts
         highlightsClicks = preferences.highlightsClicks
         let startScreen = pointerScreen.flatMap { layout.screen($0) } ?? layout.screens.first
         self.pointerScreen = startScreen
-        selectedScreen = startScreen?.id
+        rememberedScreen = remembered.screen
+        switch remembered.screen {
+        case .all? where layout.screens.count > 1:
+            selectedScreen = nil
+        case .display(let uuid)?:
+            selectedScreen = layout.screen(uuid: uuid)?.id ?? startScreen?.id
+        default:
+            selectedScreen = startScreen?.id
+        }
         if let rememberedArea, let screen = layout.screen(rememberedArea.display) {
             areaEditor = ScreencastAreaEditor(rect: rememberedArea.rect, bounds: screen.frame)
         }
+        target = remembered.target
     }
 
     // MARK: What's chosen
@@ -149,6 +166,32 @@ final class ScreencastPickerModel {
 
     /// Whether Screen mode offers All Screens: with more than one screen.
     var offersEveryScreen: Bool { layout.screens.count > 1 }
+
+    /// The switches as Record saves them, for the settings. Without Microphone access the
+    /// microphone's switch is off and can't be changed, so its setting stays as it was.
+    var switches: ScreencastSwitches {
+        ScreencastSwitches(
+            recordsMicrophone: microphoneAvailable ? recordsMicrophone : microphoneSetting,
+            recordsSystemAudio: recordsSystemAudio,
+            showsShortcuts: showsShortcuts,
+            highlightsClicks: highlightsClicks
+        )
+    }
+
+    /// What the next picker opens with (`ScreencastPickerMemory`). Never the window, and the screen
+    /// only from Screen mode, so a recording in another mode keeps the screen last chosen there. A
+    /// screen macOS gives no UUID is remembered as none, so the next picker starts on the pointer's.
+    var choicesToRemember: ScreencastPickerChoices {
+        var choices = ScreencastPickerChoices(target: target, screen: rememberedScreen)
+        if target == .screen {
+            if let id = selectedScreen {
+                choices.screen = layout.screen(id)?.uuid.map { .display(uuid: $0) }
+            } else {
+                choices.screen = .all
+            }
+        }
+        return choices
+    }
 
     /// What Record would capture now, or nil while nothing is chosen.
     func choice() -> ScreencastChoice? {
