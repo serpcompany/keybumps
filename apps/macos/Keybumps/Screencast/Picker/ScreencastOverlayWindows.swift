@@ -266,8 +266,8 @@ final class ScreencastPickerView: NSView {
         noteBarFrame()
     }
 
-    /// Tells the model where the bar is, so the pointer over it, and a click on it, never reach a
-    /// window under it. Its frame changes with what it shows.
+    /// Tells the model where the bar is, so the pointer over it, and a press on it, never reach the
+    /// area, window, or screen under it. Its frame changes with what it shows.
     private func noteBarFrame() {
         guard let bar else { return }
         model.barFrame = bar.frame.offsetBy(dx: screen.frame.minX, dy: screen.frame.minY)
@@ -284,24 +284,13 @@ final class ScreencastPickerView: NSView {
         rect.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
     }
 
+    /// A press reaches the model's choices only through `press`, which ignores one on the bar in
+    /// every mode. The drag and mouse-up that follow come here even over the bar, so an area drawn
+    /// from elsewhere can end on it.
     override func mouseDown(with event: NSEvent) {
         window?.makeKey()
         noteBarFrame()
-        let point = globalPoint(event)
-        switch model.target {
-        case .area:
-            if event.clickCount == 2, let area = model.area, area.rect.contains(point) {
-                confirm()
-                return
-            }
-            model.pressArea(at: point, on: screen)
-        case .window:
-            // A double click on a window records it; one on the bar or on no window does nothing.
-            if model.clickWindow(at: point), event.clickCount == 2 { confirm() }
-        case .screen:
-            model.clickScreen(screen)
-            if event.clickCount == 2 { confirm() }
-        }
+        if model.press(at: globalPoint(event), on: screen, clickCount: event.clickCount) { confirm() }
     }
 
     override func mouseDragged(with event: NSEvent) {

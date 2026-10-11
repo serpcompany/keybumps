@@ -331,13 +331,41 @@ final class SmokeUITests: XCTestCase {
         hint.click()
         XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
         XCTAssertTrue(confirm.isEnabled)
+        // Nor does a double click on the bar's words: it records nothing.
+        hint.doubleClick()
+        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
+        XCTAssertFalse(countdown.waitForExistence(timeout: 2))
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
 
         // Record counts down on the window chosen: centered on the first window, not the second.
         confirm.click()
-        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
         XCTAssertEqual(countdown.frame.midX, top.minX + 260, accuracy: 2)
         XCTAssertEqual(countdown.frame.midY, top.minY + 150, accuracy: 2)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastPickerRecordsAWindowDoubleClicked() throws {
+        // The made-up windows as above: the first chosen, then a double click on the second.
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+        XCTAssertEqual(pickerPanels.count, 2)
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        let topScreen = try XCTUnwrap(panels.min { $0.frame.minY < $1.frame.minY })
+        let top = topScreen.frame
+        let corner = topScreen.coordinate(withNormalizedOffset: .zero)
+        corner.withOffset(CGVector(dx: 100, dy: 100)).click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+
+        // It counts down on the second window: centered on it, at (200, 120), 360 × 180.
+        corner.withOffset(CGVector(dx: 520, dy: 200)).doubleClick()
+        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        XCTAssertEqual(countdown.frame.midX, top.minX + 380, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, top.minY + 210, accuracy: 2)
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
     }

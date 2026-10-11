@@ -302,7 +302,7 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
-    @Test("A window chosen, then the pointer over other windows and the bar, and a click there: Record records the window chosen")
+    @Test("A window chosen, then the pointer over other windows and the bar, and a click and a double click there: Record records the window chosen")
     func windowChosenBeforeTheBar() async throws {
         defer { captures.remove() }
         let controller = makeController()
@@ -310,10 +310,11 @@ struct ScreencastControllerTests {
             // The bar over the browser's other window (12), and a point on it over only that one.
             model.barFrame = CGRect(x: 250, y: 190, width: 700, height: 100)
             let onBar = CGPoint(x: 920, y: 240)
-            for point in [CGPoint(x: 950, y: 232), CGPoint(x: 1400, y: 20), onBar] {
+            for point in [CGPoint(x: 975, y: 232), CGPoint(x: 1400, y: 20), onBar] {
                 model.hoverWindow(at: point)
             }
-            model.clickWindow(at: onBar)
+            #expect(!model.press(at: onBar, on: PickerScreens.left, clickCount: 1))
+            #expect(!model.press(at: onBar, on: PickerScreens.left, clickCount: 2))
             #expect(model.selectedWindow == 10)
         }
         #expect(await ScreencastWait.until { sleeper.pending == 1 })

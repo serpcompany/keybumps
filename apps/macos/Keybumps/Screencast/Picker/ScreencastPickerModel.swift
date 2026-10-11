@@ -94,7 +94,7 @@ final class ScreencastPickerModel {
     /// the pointer moving, and never the bar.
     private(set) var selectedWindow: CGWindowID?
     /// The bar's frame in AppKit's global space, once it's laid out. The pointer over it is on the
-    /// bar, never on a window under it.
+    /// bar, never on a window under it, and a press on it changes no choice (`press`).
     @ObservationIgnored var barFrame: CGRect?
     /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
     private(set) var selectedScreen: CGDirectDisplayID?
@@ -211,6 +211,34 @@ final class ScreencastPickerModel {
         }
     }
 
+    // MARK: A press on a screen (AppKit's global space)
+
+    /// A press on `screen`'s part of the picker, the only way a press reaches a choice: in Area it
+    /// draws, moves, or resizes the area, in Window it chooses the window under it, and in Screen it
+    /// chooses that screen. Says whether it records: a double click in the area, on a window, or on
+    /// a screen. A press on the bar does none of it, in every mode: the bar's controls take their
+    /// own clicks, and one it passes on (its padding, the hint, the gaps) stops here. With no
+    /// gesture started, the drag and release that follow do nothing either.
+    func press(at point: CGPoint, on screen: ScreencastScreen, clickCount: Int) -> Bool {
+        if isOnBar(point) { return false }
+        switch target {
+        case .area:
+            if clickCount == 2, let area, area.rect.contains(point) { return true }
+            pressArea(at: point, on: screen)
+            return false
+        case .window:
+            return clickWindow(at: point) && clickCount == 2
+        case .screen:
+            clickScreen(screen)
+            return clickCount == 2
+        }
+    }
+
+    /// Whether `point` is on the bar, never on what's under it.
+    private func isOnBar(_ point: CGPoint) -> Bool {
+        barFrame?.contains(point) == true
+    }
+
     // MARK: Choosing a screen
 
     /// Screen mode: a click on a screen chooses it.
@@ -267,16 +295,17 @@ final class ScreencastPickerModel {
     // MARK: Picking a window (AppKit's global space)
 
     /// Notes the window under the pointer, if any, which only previews it: the window picked stays.
+    /// Over the bar, it's on no window.
     func hoverWindow(at point: CGPoint) {
         guard target == .window else { return }
-        let id = window(at: point)?.id
+        let id = isOnBar(point) ? nil : window(at: point)?.id
         guard id != hoveredWindow else { return }
         hoveredWindow = id
         changed()
     }
 
-    /// Picks the window under `point`, and says whether there was one. A click on no window, or on
-    /// the bar, keeps the one picked.
+    /// Picks the window under `point`, and says whether there was one. A click on no window keeps
+    /// the one picked; `press` keeps the bar's clicks from reaching here.
     @discardableResult
     func clickWindow(at point: CGPoint) -> Bool {
         guard target == .window, let window = window(at: point) else { return false }
@@ -286,10 +315,8 @@ final class ScreencastPickerModel {
         return true
     }
 
-    /// The window under `point`, unless the bar is.
     private func window(at point: CGPoint) -> ScreencastContent.Window? {
-        if barFrame?.contains(point) == true { return nil }
-        return ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)
+        ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)
     }
 
     /// A pickable window's frame in AppKit's global space.

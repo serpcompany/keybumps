@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import Testing
@@ -209,10 +210,10 @@ struct ScreencastPickerTests {
     }
 
     /// In AppKit's space, on the left screen unless said: on the browser window (10) only; on the
-    /// browser's other window (12) only; on the other app's window (20), on the right screen; on no
-    /// window; and on the bar, over window 12.
+    /// browser's other window (12) only, clear of the bar; on the other app's window (20), on the
+    /// right screen; on no window; and on the bar, over window 12.
     private let onBrowserWindow = CGPoint(x: 150, y: 832)
-    private let onOtherWindow = CGPoint(x: 950, y: 232)
+    private let onOtherWindow = CGPoint(x: 975, y: 232)
     private let onRightWindow = CGPoint(x: 2000, y: 582)
     private let onDesktop = CGPoint(x: 1400, y: 20)
     private let onBar = CGPoint(x: 920, y: 240)
@@ -248,15 +249,17 @@ struct ScreencastPickerTests {
         #expect(model.choice()?.target == .window(10))
     }
 
-    @Test("A click on the bar, or on its buttons and switches, never changes the window chosen")
+    @Test("A click or a double click on the bar, or on its buttons and switches, never changes the window chosen")
     func barNeverChoosesAWindow() {
         let model = windowModel()
-        #expect(!model.clickWindow(at: onBar), "Before one is chosen, a click on the bar chooses none")
+        #expect(!model.press(at: onBar, on: left, clickCount: 1), "Before one is chosen, a click on the bar chooses none")
+        #expect(!model.press(at: onBar, on: left, clickCount: 2))
         #expect(model.selectedWindow == nil && !model.canConfirm)
 
         model.clickWindow(at: onBrowserWindow)
         model.hoverWindow(at: onBar)
-        #expect(!model.clickWindow(at: onBar))
+        #expect(!model.press(at: onBar, on: left, clickCount: 1))
+        #expect(!model.press(at: onBar, on: left, clickCount: 2), "A double click on the bar records nothing")
         #expect(model.selectedWindow == 10)
         // What the bar's buttons and switches set.
         model.kind = .screenshot
@@ -285,10 +288,62 @@ struct ScreencastPickerTests {
         #expect(model.clickWindow(at: onRightWindow))
         #expect(model.choice()?.target == .window(20))
         #expect(model.choice()?.regions.map(\.display) == [2])
-        // Without a bar laid out, as on a screen without it, the pointer reaches every window.
+        // A double click on a window chooses it and records it; one on no window records nothing.
+        #expect(model.press(at: onBrowserWindow, on: left, clickCount: 2))
+        #expect(model.selectedWindow == 10)
+        #expect(!model.press(at: onDesktop, on: left, clickCount: 2))
+        // Without a bar laid out, as on a screen without it, a press reaches every window.
         model.barFrame = nil
-        #expect(model.clickWindow(at: onBar))
+        #expect(!model.press(at: onBar, on: left, clickCount: 1))
         #expect(model.selectedWindow == 12)
+    }
+
+    @Test("A click or a double click on the bar keeps the area drawn, and a drag from elsewhere can end on it")
+    func barKeepsTheArea() {
+        let model = PickerScreens.model()
+        model.barFrame = CGRect(x: 250, y: 190, width: 700, height: 100)
+        // Drawn from above the bar down onto it.
+        #expect(!model.press(at: CGPoint(x: 400, y: 600), on: left, clickCount: 1))
+        model.dragArea(to: CGPoint(x: 600, y: 240))
+        model.releaseArea()
+        let area = ScreencastPickedArea(display: 1, rect: CGRect(x: 400, y: 240, width: 200, height: 360))
+        #expect(model.area == area)
+
+        // The bar's empty part, beside the area, and the bar where it covers the area: a click, a
+        // drag that starts there, and a double click change nothing and record nothing.
+        for onBar in [CGPoint(x: 900, y: 200), CGPoint(x: 450, y: 270)] {
+            #expect(!model.press(at: onBar, on: left, clickCount: 1))
+            model.dragArea(to: CGPoint(x: onBar.x + 40, y: onBar.y + 40))
+            model.releaseArea()
+            #expect(!model.press(at: onBar, on: left, clickCount: 2), "A double click on the bar records nothing")
+            model.releaseArea()
+        }
+        #expect(model.area == area)
+        #expect(model.canConfirm)
+        #expect(model.hint == "Drag inside it to move it, or its edges to resize it, or drag elsewhere for a new one.")
+        // Off the bar, a double click in the area records it.
+        #expect(model.press(at: CGPoint(x: 500, y: 500), on: left, clickCount: 2))
+    }
+
+    @Test("A click or a double click on the bar keeps the screen chosen, or All Screens, and records nothing")
+    func barKeepsTheScreen() {
+        let model = PickerScreens.model()
+        model.target = .screen
+        model.barFrame = CGRect(x: 250, y: 190, width: 700, height: 100)
+        model.chooseEveryScreen()
+        #expect(!model.press(at: onBar, on: left, clickCount: 1))
+        #expect(!model.press(at: onBar, on: left, clickCount: 2), "A double click on the bar records nothing")
+        #expect(model.selectedScreen == nil && model.choice()?.target == .everyDisplay)
+
+        model.chooseScreen(right.id)
+        #expect(!model.press(at: onBar, on: left, clickCount: 1))
+        #expect(!model.press(at: onBar, on: left, clickCount: 2))
+        #expect(model.choice()?.target == .display(2))
+
+        // Off the bar, a click chooses that screen, and a double click records it.
+        #expect(!model.press(at: onDesktop, on: left, clickCount: 1))
+        #expect(model.selectedScreen == 1)
+        #expect(model.press(at: onDesktop, on: left, clickCount: 2))
     }
 
     @Test("A picked window that closes is no longer picked")
@@ -452,6 +507,84 @@ struct ScreencastPickerTests {
         model.target = .window
         model.pressArea(at: CGPoint(x: 10, y: 10), on: left)
         #expect(model.areaEditor?.bounds == right.frame)
+    }
+}
+
+/// One screen's picker view with the bar laid out on it, as Start Screencast lays it out, in a panel
+/// that's never shown, and mouse events sent to it as AppKit sends them.
+@MainActor
+@Suite("Screencast: the picker on a screen")
+struct ScreencastPickerViewTests {
+    /// Below and right of AppKit's origin, so a wrong offset or a flipped y shows.
+    let right = PickerScreens.right
+
+    /// A window over most of the right screen, down to its bottom, so the bar is over it.
+    private let underTheBar = ScreencastContent.Window(
+        id: 30, frame: CGRect(x: 1612, y: 80, width: 1720, height: 1000), layer: 0,
+        processID: ScreencastScreens.otherApp, isUntitled: false, isOnScreen: true
+    )
+
+    @available(macOS 15, *)
+    @Test("The bar's frame is in AppKit's global space, and a double click on it records nothing in any mode")
+    func barOnAScreenAwayFromTheOrigin() throws {
+        let model = PickerScreens.model(pointerScreen: right.id)
+        model.windows = [underTheBar]
+        var recorded = 0
+        let view = ScreencastPickerView(model: model, screen: right, confirm: { recorded += 1 })
+        let panel = ScreencastKeyPanel(frame: right.frame, level: .screenSaver, identifier: "screencastPicker")
+        defer { panel.contentView = nil }
+        panel.contentView = view
+        view.showBar(ScreencastPickerBar(model: model, confirm: {}, cancel: {}), bottomInset: 28)
+        view.layoutSubtreeIfNeeded()
+
+        let bar = try #require(model.barFrame)
+        #expect(right.frame.contains(bar))
+        #expect(abs(bar.midX - right.frame.midX) <= 1)
+        #expect(bar.minY == right.frame.minY + 28)
+
+        /// A mouse event at `point`, in AppKit's global space.
+        func event(_ type: NSEvent.EventType, at point: CGPoint, clickCount: Int = 1) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(
+                with: type, location: CGPoint(x: point.x - right.frame.minX, y: point.y - right.frame.minY),
+                modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber, context: nil,
+                eventNumber: 0, clickCount: clickCount, pressure: 1
+            ))
+        }
+        func doubleClick(at point: CGPoint) throws {
+            for count in [1, 2] {
+                try view.mouseDown(with: event(.leftMouseDown, at: point, clickCount: count))
+                try view.mouseUp(with: event(.leftMouseUp, at: point, clickCount: count))
+            }
+        }
+        // On the bar's lower row, there in every mode, and over the window.
+        let onBar = CGPoint(x: bar.midX, y: bar.minY + 20)
+        let offBar = CGPoint(x: 1700, y: 500)
+        #expect(ScreencastWindowPicking.window(at: model.layout.topLeftPoint(fromAppKit: onBar), in: model.windows)?.id == 30)
+
+        model.target = .window
+        try doubleClick(at: onBar)
+        #expect(model.selectedWindow == nil && recorded == 0, "On the bar: no window chosen, nothing recorded")
+        try doubleClick(at: offBar)
+        #expect(model.selectedWindow == 30 && recorded == 1, "On the window: chosen and recorded")
+
+        model.target = .screen
+        model.chooseEveryScreen()
+        try doubleClick(at: onBar)
+        #expect(model.selectedScreen == nil && recorded == 1, "On the bar: All Screens kept, nothing recorded")
+        try doubleClick(at: offBar)
+        #expect(model.selectedScreen == right.id && recorded == 2)
+
+        // An area drawn from above the bar down past the point on it.
+        model.target = .area
+        try view.mouseDown(with: event(.leftMouseDown, at: CGPoint(x: bar.midX - 200, y: 500)))
+        try view.mouseDragged(with: event(.leftMouseDragged, at: CGPoint(x: bar.midX + 100, y: bar.minY + 10)))
+        try view.mouseUp(with: event(.leftMouseUp, at: CGPoint(x: bar.midX + 100, y: bar.minY + 10)))
+        let area = try #require(model.area)
+        #expect(area.rect.contains(onBar))
+        try doubleClick(at: onBar)
+        #expect(model.area == area && recorded == 2, "On the bar over the area: kept, nothing recorded")
+        try doubleClick(at: CGPoint(x: area.rect.midX, y: 400))
+        #expect(recorded == 3, "In the area, off the bar: recorded")
     }
 }
 
