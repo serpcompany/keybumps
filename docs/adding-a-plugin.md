@@ -17,6 +17,7 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
     - Shortcut Coach's `commandKey` in the website's `plugins.ts`, whose test requires unique numbers.
 
     The palette matches one typed digit, and Hotkeys now has ⌘9, the last one: a tenth tab needs another way in.
+  - **Quick Search actions, if any:** `actions` lists the `PluginAction`s Quick Search offers while it's on, such as Start Screencast. The module runs them in `perform`, and can rename one for its state in `title(for:)` or leave it out for now in `offers`. An action's `id` never changes once shipped: it keys the action's learned usage.
   - **`isOnByDefault`:** most plugins ship on. Emoji Picker, Translation, Keystrokes, and Screencast ship off. Several tests depend on this choice (§2).
   - **`minimumMacOS`:** set it when the plugin needs a newer macOS than Keybumps does, as Translation needs 15. `PluginCompatibility` then keeps it off on older Macs and Settings says why; give its macOS-only code an inert path for the older ones.
   - **`criticalOperations`:** a plugin that holds unsaved work must make an update restart wait. It has to be declared *and* set while work is unsaved (`updateSafety.setCriticalOperation(_:active:)`, as `ScreenshotToolsModule` does); declaring alone does nothing. But `.unsavedWork` is one shared flag: a second plugin that clears it also clears the Screenshot Editor's, and the quit warning in `Updates/UpdateController.swift` names only the Screenshot Editor. So first give each source its own case (or count holders) and its own quit reason, which is #272.
@@ -35,7 +36,7 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
 
 These name plugins on purpose. Update every one. Some fail when a plugin is missing. Some fail only when it ships on (or off). The smoke lists pass without it but then don't cover it.
 
-- **Plugin lists:** `CapabilityCommandTests`, `CapabilityModuleTests`, `KeybumpsFeatureTests`, `PluginManifestTests`, `QuickSearchCommandTests`, `SettingsSidebarTests`, `UITestLaunchConfigurationTests`.
+- **Plugin lists:** `CapabilityCommandTests`, `CapabilityModuleTests`, `KeybumpsFeatureTests`, `PluginManifestTests`, `QuickSearchActionTests` (only the plugins it names may declare actions), `QuickSearchCommandTests`, `SettingsSidebarTests`, `UITestLaunchConfigurationTests`.
 - **Palette numbering:** a new tab moves Hotkeys and the first unused number, which these check:
   - `SnippetTests`' tab order and tab keys;
   - `EmojiPickerTests` (Hotkeys' number);

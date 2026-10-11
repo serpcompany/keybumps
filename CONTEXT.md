@@ -73,7 +73,7 @@ A Keybumps action that Quick Search offers beside applications, files, and folde
 _Avoid_: Workflow, extension command
 
 **Action command**:
-A Quick Search command that does something a plugin does, rather than going somewhere, such as Start Screencast or Hide Keystrokes. It's listed only while its plugin is on, and picking it closes the palette and does it, as the plugin's shortcut would.
+A Quick Search command that does something a plugin does, rather than going somewhere, such as Start Screencast or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Start Screencast during a capture. Picking it closes the palette and does it, as the plugin's shortcut would, or opens the plugin's page when a permission it needs is missing.
 _Avoid_: Quick action, workflow, shortcut (a key combination), command (alone)
 
 **Capability command**:
