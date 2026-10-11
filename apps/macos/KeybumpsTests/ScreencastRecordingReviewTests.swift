@@ -31,13 +31,16 @@ struct ScreencastRecordingReviewTests {
     }
 
     /// The flow the app hangs the review on, with its notch notices recorded.
-    private func flow(outcomes: ReviewOutcomeLog, notices: ReviewNotices) -> ScreencastReviewFlow {
+    private func flow(
+        outcomes: ReviewOutcomeLog, notices: ReviewNotices, front: ScreencastReviewFront = .app
+    ) -> ScreencastReviewFlow {
         let flow = ScreencastReviewFlow(
             services: ScreencastReviewServices(
                 clipboard: fixture.clipboard,
                 pasteboard: fixture.pasteboard,
                 notices: notices,
-                repositories: { [fixture] in fixture.repositories }
+                repositories: { [fixture] in fixture.repositories },
+                front: front
             ),
             contextReader: .inert
         )
@@ -406,6 +409,117 @@ struct ScreencastRecordingReviewTests {
         }
     }
 
+    // MARK: Who gets the front
+
+    @Test(
+        "When the next capture closes a window that had the keyboard, the app in front before the window gets it back once that capture records or is cancelled, and only once",
+        arguments: [ScreencastPhase.recording, .idle]
+    )
+    func nextCaptureGivesTheFrontBack(once phase: ScreencastPhase) async throws {
+        defer { fixture.tearDown() }
+        let front = FrontStandIn()
+        let flow = flow(outcomes: ReviewOutcomeLog(), notices: ReviewNotices(), front: front.front)
+        await flow.show(try fixture.video(), context: .none)
+        let panel = try #require(flow.panel)
+        front.windowTakesTheFront(panel.window)
+
+        flow.captureStarting()
+        flow.capturePhaseChanged(.picking)
+        front.keyWindow = nil
+        try await eventually { panel.model == nil }
+        flow.capturePhaseChanged(.countingDown(remaining: 1))
+        flow.capturePhaseChanged(.starting)
+        #expect(front.activated.isEmpty, "nothing while the picker and the countdown have the keyboard")
+
+        flow.capturePhaseChanged(phase)
+        #expect(front.activated == [FrontStandIn.appBefore])
+        flow.capturePhaseChanged(.recording)
+        flow.capturePhaseChanged(.idle)
+        #expect(front.activated == [FrontStandIn.appBefore], "once")
+    }
+
+    @Test("The front goes back only where the window had it: not if another app had the keyboard when the capture started, nor if another app was made active meanwhile")
+    func nextCaptureLeavesTheFrontWhereItIs() async throws {
+        defer { fixture.tearDown() }
+        let front = FrontStandIn()
+        let flow = flow(outcomes: ReviewOutcomeLog(), notices: ReviewNotices(), front: front.front)
+        await flow.show(try fixture.video(name: "1791000000"), context: .none)
+        let panel = try #require(flow.panel)
+        front.windowTakesTheFront(panel.window)
+        // The person clicks another app, then starts a capture.
+        front.anotherAppTakesTheFront(201)
+        flow.captureStarting()
+        try await eventually { panel.model == nil }
+        flow.capturePhaseChanged(.recording)
+        flow.capturePhaseChanged(.idle)
+        #expect(front.activated.isEmpty, "nothing, then or later")
+
+        // The next window gives the front to the app before it, not to the one before the first.
+        await flow.show(try fixture.video(name: "1791000100"), context: .none)
+        front.windowTakesTheFront(panel.window)
+        await panel.model?.save()
+        #expect(front.activated == [201])
+
+        // A capture closes a window with the keyboard, but the person makes another app active
+        // during the picker: that app keeps the front.
+        front.appInFront = 202
+        await flow.show(try fixture.video(name: "1791000200"), context: .none)
+        front.windowTakesTheFront(panel.window)
+        flow.captureStarting()
+        front.anotherAppTakesTheFront(203)
+        try await eventually { panel.model == nil }
+        flow.capturePhaseChanged(.recording)
+        #expect(front.activated == [201], "Keybumps no longer has the front to give")
+    }
+
+    @Test("Captures taking turns: the window closing for the next one activates no app, and the next window, as it closes, gives the front to the app before the first")
+    func turnKeepsTheAppBefore() async throws {
+        defer { fixture.tearDown() }
+        let front = FrontStandIn()
+        let outcomes = ReviewOutcomeLog()
+        let flow = flow(outcomes: outcomes, notices: ReviewNotices(), front: front.front)
+        let first = try fixture.video(name: "1791000000")
+        await flow.show(first, context: .none)
+        let panel = try #require(flow.panel)
+        front.windowTakesTheFront(panel.window)
+
+        let second = try fixture.video(name: "1791000100")
+        await flow.show(second, context: .none)
+        #expect(outcomes.outcomes == [.saved(first)] && panel.model?.input == second)
+        #expect(front.activated.isEmpty, "the next window has the front")
+
+        await panel.model?.save()
+        #expect(front.activated == [FrontStandIn.appBefore])
+    }
+
+    @Test(
+        "Save, Copy, Discard, and Escape each close the window and give the front back to the app before it, once; a window without the keyboard gives none",
+        arguments: ReviewChoice.allCases
+    )
+    func eachChoiceGivesTheFrontBack(_ choice: ReviewChoice) async throws {
+        defer { fixture.tearDown() }
+        let front = FrontStandIn()
+        let flow = flow(outcomes: ReviewOutcomeLog(), notices: ReviewNotices(), front: front.front)
+        for (name, hasKeyboard) in [("1791000000", true), ("1791000100", false)] {
+            front.appInFront = FrontStandIn.appBefore
+            await flow.show(try fixture.video(name: name), context: .none)
+            let panel = try #require(flow.panel)
+            front.windowTakesTheFront(panel.window)
+            if !hasKeyboard { front.anotherAppTakesTheFront(201) }
+            let model = try #require(panel.model)
+            switch choice {
+            case .save: await model.save()
+            case .copy: await model.copy()
+            case .discard:
+                model.askToDiscard()
+                model.confirmDiscard()
+            case .escape: #expect(panel.perform(.close))
+            }
+            try await eventually { panel.model == nil }
+        }
+        #expect(front.activated == [FrontStandIn.appBefore], "for the window with the keyboard only")
+    }
+
     // MARK: Space
 
     @Test("Space plays and pauses the recording; Return saves and Escape closes")
@@ -425,18 +539,19 @@ struct ScreencastRecordingReviewTests {
         #expect(action(36) == .save && action(76) == .save && action(53) == .close)
         #expect(action(53, confirming: true) == .keep && action(36, confirming: true) == .ignore)
 
-        // A toolbar button with the keyboard (Full Keyboard Access) keeps Space and Return.
+        // A toolbar button with the keyboard (Full Keyboard Access) keeps Space; Return still saves.
         func focused(_ key: UInt16, confirming: Bool = false) -> ScreencastReviewKey {
             ScreencastReviewKey.action(
                 keyCode: key, modifiers: [], isComposing: false, isConfirmingDiscard: confirming, controlHasKeyboard: true
             )
         }
-        #expect(focused(49) == .pass && focused(36) == .pass && focused(76) == .pass)
+        #expect(focused(49) == .pass, "Space presses the button")
+        #expect(focused(36) == .save && focused(76) == .save, "Return is the window's, never the focused button's")
         #expect(focused(36, confirming: true) == .ignore, "Return still never answers the discard question")
         #expect(focused(53) == .close && focused(53, confirming: true) == .keep, "Escape is the window's")
     }
 
-    @Test("With Full Keyboard Access, Space and Return go to the toolbar button that has the keyboard; with nothing focused, Space plays and Return saves")
+    @Test("With Full Keyboard Access, Space goes to the toolbar button that has the keyboard, and Return still saves; with nothing focused, Space plays")
     func focusedButtonKeepsItsKeys() async throws {
         defer { fixture.tearDown() }
         let fullKeyboardAccess = KeyboardNavigation()
@@ -454,7 +569,8 @@ struct ScreencastRecordingReviewTests {
         #expect(window.makeFirstResponder(button))
         #expect(window.toolbarHas(window.firstResponder))
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .pass, "Space presses the button")
-        #expect(panel.action(forKey: 36, modifiers: [], in: window) == .pass, "and Return is the button's too")
+        #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save, "Return still saves")
+        #expect(panel.action(forKey: 76, modifiers: [], in: window) == .save, "the keypad's Enter too")
         #expect(panel.action(forKey: 53, modifiers: [], in: window) == .close)
 
         fullKeyboardAccess.isOn = false
@@ -526,6 +642,47 @@ struct ScreencastRecordingReviewTests {
 
         await panel.close()
         #expect(panel.playback == nil && playback.view.player?.currentItem == nil, "closing stops the player")
+    }
+}
+
+/// How a review ends, for the tests of who gets the front.
+enum ReviewChoice: CaseIterable, Sendable {
+    case save, copy, discard, escape
+}
+
+/// Who has the front, as macOS would say: the app in front, whether Keybumps is active, and the
+/// window with the keyboard. It records the apps the review gives the front to, and activates none.
+@MainActor
+final class FrontStandIn {
+    /// The app in front before the first review window.
+    static let appBefore: pid_t = 101
+
+    var appInFront: pid_t? = appBefore
+    var keybumpsIsActive = false
+    var keyWindow: NSWindow?
+    private(set) var activated: [pid_t] = []
+
+    var front: ScreencastReviewFront {
+        ScreencastReviewFront(
+            otherAppInFront: { self.appInFront },
+            keybumpsIsActive: { self.keybumpsIsActive },
+            windowHasKeyboard: { $0 === self.keyWindow },
+            activate: { self.activated.append($0) }
+        )
+    }
+
+    /// The review's window is up: Keybumps is in front, and the window has the keyboard.
+    func windowTakesTheFront(_ window: NSWindow) {
+        appInFront = nil
+        keybumpsIsActive = true
+        keyWindow = window
+    }
+
+    /// The person clicks another app.
+    func anotherAppTakesTheFront(_ app: pid_t) {
+        appInFront = app
+        keybumpsIsActive = false
+        keyWindow = nil
     }
 }
 

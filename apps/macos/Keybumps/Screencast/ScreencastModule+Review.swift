@@ -13,6 +13,9 @@ struct ScreencastReviewServices {
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
+    /// Who has the front, which the review window takes and gives back: macOS's, or a test's
+    /// stand-in.
+    var front: ScreencastReviewFront = .app
 
     /// The app's: its Clipboard History.
     @MainActor
@@ -107,7 +110,8 @@ final class ScreencastReviewFlow {
         let panel = ScreencastReviewPanel(
             repositories: services.repositories(),
             pasteboard: services.pasteboard,
-            keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() }
+            keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() },
+            front: services.front
         )
         panel.onFinish = { [weak self, weak panel] outcome in
             // The next capture closed it: only a failure needs saying.

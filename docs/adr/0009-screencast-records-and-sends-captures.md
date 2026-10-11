@@ -48,13 +48,14 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
 
 ## Amendments
 
-**2026-10-12, the review window** (#475, PR #479; with #485). The owner's decisions on #479:
-- The review is a window that fills the screen with the recording's player (play, pause, and scrubbing), with Discard, Copy, and Save in its toolbar. By default it "fills the screen's visible frame with a small margin".
-- No note, type, or repository: "Remove the whole sidebar for now (type selector, note and repo)", whose "implementation gets rethought later". What the review keeps stays in `meta.json`.
-- No Trim: "It's the only editing tool". Combining Screenshot Tools and Screencast into one plugin, Screengrabs, is a new epic (#482).
-- No quick-access card: the window is the only review.
-- "After Save, the window closes, a notice in the notch says it was saved, and the file goes to the default save location."
+**2026-10-12, the review window** (#475, PR #479; with #485). The owner's decisions on #479, after trying candidate 4030.475.2:
+- The review is a window with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar. The owner asked for it much bigger ("or maybe just like fill screen"): by default it fills the screen's visible frame with a small margin.
+- No note, type, or repository: the owner called the sidebar that held them "kind of worthless" and removed it for now, to be rethought later. What the review keeps stays in `meta.json`.
+- No Trim, the only editing tool. Combining Screenshot Tools and Screencast into one plugin, Screengrabs, is a new epic (#482).
+- After Save, the window closes, a notice in the notch says it was saved, and the file goes to the captures folder set in Settings › Screencast.
 - Screencast is video only (#485).
+
+Not an owner decision: #479 removed the corner panel, which grew from Snapzy's quick-access card, because nothing opened it any more once Screencast was video only (#485) and recordings opened in the window. Whether a card comes back after each capture is open, in #496 (parked; see #482).
 
 ## Consequences
 
@@ -73,3 +74,4 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
 - Does it get a Command Palette tab? ⌘1–⌘9 are taken (`docs/adding-a-plugin.md`).
 - Where does the repository mapping live: in Keybumps, sent with each capture (as above), or in the webhook receiver?
 - A rolling buffer that keeps the last 30 seconds (vestige), opt-in, after the first release.
+- A quick-access card after each capture (#496), parked until the owner decides.

@@ -224,7 +224,7 @@ Marking up the screen while Screencast records, in the video: a pen, an arrow, a
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Review panel**:
-What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar, with nothing to type or trim. Save keeps the capture; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape, closing it, or starting the next capture saves too. The window closes then, and a notice in the notch says it was saved or copied, or why it couldn't be saved. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the capture's `meta.json` on this Mac.
+What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar, with nothing to type or trim. Save keeps the capture; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape, closing it, or starting the next capture saves too. The window closes then, and a notice in the notch says it was saved or copied, or why it couldn't be saved; starting the next capture shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the capture's `meta.json` on this Mac.
 _Avoid_: Quick access card, post-capture window, editor
 
 **Repository guess**:

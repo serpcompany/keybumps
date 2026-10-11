@@ -310,41 +310,16 @@ struct ScreencastTests {
             pasteboard.releaseGlobally()
             try? FileManager.default.removeItem(at: root)
         }
-        let preferences = AppPreferences(defaults: InMemoryDefaults())
-        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
         let writers = FakeWriterFactory()
         let clipboard = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("history.json"), pasteboard: pasteboard,
             mediaDirectoryURL: root.appendingPathComponent("media", isDirectory: true), sourceApps: .inert
         )
-        let module = ScreencastModule(
-            preferences: preferences,
-            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
-            openSettings: { _ in },
-            seams: ScreencastSeams(
-                captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
-                writers: writers,
-                pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
-                presenter: FakeOverlays(),
-                screens: { PickerScreens.both },
-                sleep: { _ in },
-                contextReader: .inert
-            ),
-            review: ScreencastReviewServices(
-                clipboard: clipboard,
-                pasteboard: pasteboard,
-                notices: nil,
-                repositories: { ScreencastRepositoryMemory(storageURL: root.appendingPathComponent("repositories.json")) }
-            )
-        )
-        module.apply(CapabilityContext(
-            enabledCapabilities: [.screencast],
-            preferences: preferences,
-            shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
-            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
-            permissionReadiness: { capabilities in
-                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
-            }
+        let module = Self.reviewingModule(writers: writers, review: ScreencastReviewServices(
+            clipboard: clipboard,
+            pasteboard: pasteboard,
+            notices: nil,
+            repositories: { ScreencastRepositoryMemory(storageURL: root.appendingPathComponent("repositories.json")) }
         ))
         var outcomes: [ScreencastReviewOutcome] = []
         module.review.onFinish = { outcomes.append($0) }
@@ -371,6 +346,69 @@ struct ScreencastTests {
         try await Task.sleep(for: .milliseconds(50))
         #expect(outcomes == [.saved(.video(capture))], "once, and saved")
         #expect(!panel.isShown)
+    }
+
+    @available(macOS 15, *)
+    @Test("Through the module, Start Screencast closes the review window before its picker, and the app in front before the window gets the front back once the picker is done, not while it's open")
+    func startingACaptureGivesTheFrontBackAfterThePicker() async throws {
+        let fixture = ReviewFixture()
+        defer { fixture.tearDown() }
+        let front = FrontStandIn()
+        let module = Self.reviewingModule(review: ScreencastReviewServices(
+            clipboard: fixture.clipboard,
+            pasteboard: fixture.pasteboard,
+            notices: nil,
+            repositories: { [fixture] in fixture.repositories },
+            front: front.front
+        ))
+        await module.review.show(try fixture.video(), context: .none)
+        let panel = try #require(module.review.panel)
+        front.windowTakesTheFront(panel.window)
+
+        module.start()
+        let controller = try #require(module.controller)
+        #expect(controller.phase == .picking && !panel.isShown, "the window goes before the picker opens")
+        try await Self.waitUntil { panel.model == nil }
+        #expect(front.activated.isEmpty, "nothing while the picker has the keyboard")
+
+        controller.cancel()
+        #expect(controller.phase == .idle)
+        #expect(front.activated == [FrontStandIn.appBefore], "once the picker is done")
+    }
+
+    /// The module on fakes, turned on: made-up screens, an inert recorder, no countdown, and the
+    /// review on `review`'s services.
+    @available(macOS 15, *)
+    private static func reviewingModule(
+        writers: FakeWriterFactory = FakeWriterFactory(), review: ScreencastReviewServices
+    ) -> ScreencastModule {
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
+        let module = ScreencastModule(
+            preferences: preferences,
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { _ in },
+            seams: ScreencastSeams(
+                captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
+                writers: writers,
+                pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
+                presenter: FakeOverlays(),
+                screens: { PickerScreens.both },
+                sleep: { _ in },
+                contextReader: .inert
+            ),
+            review: review
+        )
+        module.apply(CapabilityContext(
+            enabledCapabilities: [.screencast],
+            preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            permissionReadiness: { capabilities in
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
+            }
+        ))
+        return module
     }
 
     /// A recording's folder as the recorder leaves one: a stand-in video file and its meta.json.
