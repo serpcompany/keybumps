@@ -58,6 +58,12 @@ final class KeyDisplayOverlayController: KeyDisplayPresenting {
             transaction.disablesAnimations = true
             withTransaction(transaction) { state.content = content }
         }
+        if !animated {
+            // A line an earlier show took away fades on in the view SwiftUI animates it in, whatever
+            // the content says now: each window gets a new view, which draws only `content`. The
+            // windows, and their numbers, stay.
+            for panel in panels.values { panel.window.contentView = view(for: panel.screen) }
+        }
         arrange(animated: animates)
         if !animates {
             // Draw the change now, not at the next display cycle.
@@ -126,15 +132,19 @@ final class KeyDisplayOverlayController: KeyDisplayPresenting {
         if let existing = panels[screen.display] {
             if existing.screen != screen {
                 existing.window.setFrame(screen.frame, display: false)
-                existing.window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
+                existing.window.contentView = view(for: screen)
                 panels[screen.display] = (screen, existing.window)
             }
             return existing.window
         }
         let window = KeyDisplayOverlayWindow(frame: screen.frame)
-        window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
+        window.contentView = view(for: screen)
         panels[screen.display] = (screen, window)
         return window
+    }
+
+    private func view(for screen: KeyDisplayScreen) -> NSView {
+        NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
     }
 
     private func close(_ window: NSWindow) {

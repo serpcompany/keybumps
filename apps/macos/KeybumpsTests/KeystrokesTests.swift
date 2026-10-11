@@ -806,6 +806,38 @@ struct KeyDisplayOverlayControllerTests {
         #expect(!window.isVisible)
         #expect(harness.changes == 2)
     }
+
+    @Test("Clearing the lines while one fades out ends the fade at once: the window stays, with a new view that draws nothing")
+    func clearLinesEndsTheFade() throws {
+        let harness = Harness([Self.screen(1, x: 0)])
+        var time = Date(timeIntervalSince1970: 1_000)
+        let display = KeyDisplay(
+            keys: InertKeyTypingMonitor(),
+            pointer: InertPointerEventMonitor(),
+            presenter: harness.controller,
+            layout: FakeLetterLayout(),
+            now: { time },
+            scheduler: KeyDisplayManualScheduler(),
+            secureInput: { false }
+        )
+        defer { display.release(.screencast) }
+        var configuration = KeyDisplayConfiguration()
+        configuration.displays = [1]
+        display.acquire(.screencast, configuration: configuration, keepsWindowsOnScreen: true)
+        let window = try #require(harness.controller.windows.first)
+        let number = window.windowNumber
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command]))
+        time += configuration.linger
+        display.expire()
+        let fading = try #require(window.contentView, "the line fades out in this view")
+
+        #expect(display.clearLines(), "a line was fading")
+        #expect(harness.controller.windows.count == 1 && harness.controller.windows.first === window)
+        #expect(window.windowNumber == number, "still the window a recording records")
+        #expect(window.contentView != nil && window.contentView !== fading, "the view the line was fading in is gone")
+        #expect(display.timeline.entries.isEmpty && display.timeline.clicks.isEmpty, "the new one draws no lines or rings")
+        #expect(!display.clearLines(), "nothing fades any more")
+    }
 }
 
 /// Counts the observers added and removed.
