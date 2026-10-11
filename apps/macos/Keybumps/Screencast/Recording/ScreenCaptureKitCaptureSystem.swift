@@ -28,12 +28,12 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     func content() async throws -> ScreencastContent {
         // Every window, not just those on screen, so Keybumps is listed as an app (and can be
         // excluded whole) even before its overlays appear.
-        try await content(onScreenOnly: false)
+        try await content(onScreenOnly: false, includesDesktop: true)
     }
 
-    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
+    func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent {
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: onScreenOnly)
+            let content = try await SCShareableContent.excludingDesktopWindows(!includesDesktop, onScreenWindowsOnly: onScreenOnly)
             return Self.snapshot(of: content)
         } catch {
             throw Self.failure(for: error)
@@ -110,15 +110,24 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
     }
 
     func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>? {
-        // Window numbers and owners, and whether each has a name; the name itself isn't kept.
+        // Window numbers, owners, and layers, and whether each has a name; the name itself isn't
+        // kept. Every app's windows are read, to tell whether names can be read at all.
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
-        return Set(list.compactMap { info in
-            guard (info[kCGWindowOwnerPID as String] as? pid_t) == processID,
-                  let id = info[kCGWindowNumber as String] as? CGWindowID else { return nil }
-            return ScreencastWatchedWindow(id: id, isUntitled: Self.isUntitled(info[kCGWindowName as String] as? String))
-        })
+        let owners = list.map { $0[kCGWindowOwnerPID as String] as? pid_t }
+        let untitled = Self.untitled(
+            zip(owners, list).map { (processID: $0, name: $1[kCGWindowName as String] as? String) },
+            ownProcessID: ProcessInfo.processInfo.processIdentifier
+        )
+        var windows = Set<ScreencastWatchedWindow>()
+        for (index, info) in list.enumerated() where owners[index] == processID {
+            guard let id = info[kCGWindowNumber as String] as? CGWindowID else { continue }
+            // A layer that can't be read counts as below the windows: never attached UI.
+            let layer = info[kCGWindowLayer as String] as? Int ?? Int.min
+            windows.insert(ScreencastWatchedWindow(id: id, isUntitled: untitled[index], layer: layer))
+        }
+        return windows
     }
 
     func windowExists(_ id: CGWindowID) -> Bool? {
@@ -144,14 +153,27 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
 
     // MARK: Building ScreenCaptureKit objects
 
-    /// Whether a window's title or name is empty; one test for both reads, so the watch and the
-    /// filter agree.
+    /// Whether a window's title or name is empty.
     static func isUntitled(_ title: String?) -> Bool {
         (title ?? "").trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// Whether each window of one read is untitled, from its title (`SCWindow.title`) or name
+    /// (`kCGWindowName`): one rule for both reads, so the watch and the filter agree. A read in
+    /// which no window but Keybumps's (`ownProcessID`, whose names are always readable) has a name
+    /// couldn't read names at all, as `CGWindowList` can't without Screen Recording access: every
+    /// window in it then counts as titled, so none is taken for UI attached to the recorded window.
+    static func untitled(_ windows: [(processID: pid_t?, name: String?)], ownProcessID: pid_t) -> [Bool] {
+        let namesReadable = windows.contains { $0.processID != ownProcessID && !isUntitled($0.name) }
+        return windows.map { namesReadable && isUntitled($0.name) }
+    }
+
     static func snapshot(of content: SCShareableContent) -> ScreencastContent {
-        ScreencastContent(
+        let untitled = Self.untitled(
+            content.windows.map { (processID: $0.owningApplication?.processID, name: $0.title) },
+            ownProcessID: ProcessInfo.processInfo.processIdentifier
+        )
+        return ScreencastContent(
             displays: content.displays.map { display in
                 ScreencastContent.Display(
                     id: display.displayID,
@@ -159,14 +181,14 @@ final class ScreenCaptureKitCaptureSystem: ScreencastCaptureSystem {
                     scale: Self.scale(SCContentFilter(display: display, excludingWindows: []).pointPixelScale)
                 )
             },
-            windows: content.windows.compactMap { window in
+            windows: zip(content.windows, untitled).compactMap { window, isUntitled in
                 guard let processID = window.owningApplication?.processID else { return nil }
                 return ScreencastContent.Window(
                     id: window.windowID,
                     frame: window.frame,
                     layer: window.windowLayer,
                     processID: processID,
-                    isUntitled: Self.isUntitled(window.title),
+                    isUntitled: isUntitled,
                     isOnScreen: window.isOnScreen
                 )
             },

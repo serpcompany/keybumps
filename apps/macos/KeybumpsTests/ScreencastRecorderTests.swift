@@ -1062,7 +1062,7 @@ struct ScreencastRecorderTests {
     // MARK: The recorded window out of sight, sheets, and giving up
 
     @available(macOS 15, *)
-    @Test("A window minimized, hidden, or on another Space isn't taken for closed: back on screen, its menus join again", arguments: ["minimize", "hide", "space"])
+    @Test("A window minimized, hidden, or on another Space isn't taken for closed, and names none of its app's windows meanwhile: back on screen, its menus join again", arguments: ["minimize", "hide", "space"])
     func windowOutOfSight(how: String) async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
@@ -1082,7 +1082,8 @@ struct ScreencastRecorderTests {
         recorder.followTick()
         #expect(await eventually { system.contentReads == 3 })
         #expect(system.readKinds.last == true, "the on-screen read that doesn't list the window")
-        #expect(system.videoStreams[0].plans.isEmpty, "the last list stays")
+        for _ in 0..<10 { await Task.yield() }
+        #expect(system.videoStreams[0].plans == [.windows(1, includingWindows: [10])], "the window alone, from the watch's read, and the rebuild agrees")
 
         system.screen = Screens.content()
         system.windowFrames[10] = Screens.browserWindow.frame
@@ -1094,7 +1095,7 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("A window that closed stops its app's windows mattering: no more reads for them")
+    @Test("A window that closed names none of its app's windows, and stops them mattering: no more reads for them")
     func windowClosed() async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
@@ -1111,7 +1112,7 @@ struct ScreencastRecorderTests {
             await Task.yield()
         }
         #expect(system.contentReads == 3)
-        #expect(system.videoStreams[0].plans.isEmpty, "the list it had stays")
+        #expect(system.videoStreams[0].plans == [.windows(1, includingWindows: [10])], "only the window it was, and none of its app's")
     }
 
     @available(macOS 15, *)
@@ -1150,6 +1151,181 @@ struct ScreencastRecorderTests {
         system.screen = Screens.content(windows: Screens.content().windows + [Screens.with(untitled, isUntitled: false)])
         recorder.followTick()
         #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13]) })
+    }
+
+    /// Review round 10: on c09e8ae a list the recorder couldn't rebuild was kept, so a window named
+    /// while untitled stayed named after it got a title, for as long as the recorded window was away.
+    @available(macOS 15, *)
+    @Test("A window of the app that gains a title while the recorded window is minimized or closed never shows", arguments: ["minimize", "minimize with an overlay", "close"])
+    func titledWhileAway(how: String) async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        let overlays: [CGWindowID] = how == "minimize with an overlay" ? [31] : []
+        if !overlays.isEmpty {
+            system.ownWindows = [31]
+            await recorder.includeOverlayWindow(31)
+        }
+        // A new window over the recorded one, untitled while its page loads.
+        let untitled = ScreencastContent.Window(id: 14, frame: CGRect(x: 200, y: 200, width: 700, height: 500), layer: 0, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [untitled])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14] + overlays) })
+        let named = system.videoStreams[0].plans.count
+
+        // The recorded window goes away...
+        let away = Screens.content().windows.compactMap { window -> ScreencastContent.Window? in
+            guard window.id == 10 else { return window }
+            return how == "close" ? nil : Screens.with(window, onScreen: false)
+        }
+        system.screen = Screens.content(windows: away + [untitled])
+        system.windowFrames[10] = nil
+        recorder.followTick()
+        let alone = ScreencastFilterPlan.windows(1, includingWindows: [10] + overlays)
+        #expect(await eventually { system.videoStreams[0].plans.last == alone }, "none of its app's windows while it's away")
+        // ...and the new window takes its page's title.
+        system.screen = Screens.content(windows: away + [Screens.with(untitled, isUntitled: false)])
+        for _ in 0..<5 {
+            recorder.followTick()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        #expect(system.videoStreams[0].plans.last == alone)
+        #expect(system.videoStreams[0].plans.dropFirst(named).allSatisfy { plan in
+            if case .windows(_, let ids) = plan { !ids.contains(14) } else { false }
+        }, "named after it went away: never")
+
+        guard how != "close" else { return }
+        // Back on screen: its sheet and menu join again, the titled window doesn't.
+        system.screen = Screens.content(windows: Screens.content().windows + [Screens.with(untitled, isUntitled: false)])
+        system.windowFrames[10] = Screens.browserWindow.frame
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13] + overlays) })
+    }
+
+    @available(macOS 15, *)
+    @Test("While the screen's read or the watch's keeps failing, a window recording names only its window; a good read brings its menus back", arguments: ["screen", "watch"])
+    func failingReadsDropSiblings(read: String) async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder(slowRetryDelay: 0.05)
+        try await start(recorder, .window(10))
+        recorder.followTick()
+        #expect(await eventually { system.contentReads == 2 })
+        let menu = ScreencastContent.Window(id: 14, frame: CGRect(x: 400, y: 300, width: 200, height: 150), layer: 101, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [menu])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+
+        if read == "screen" {
+            system.contentFailures = 1_000
+            // The menu closes, which asks for a rebuild whose read fails.
+            system.screen = Screens.content()
+        } else {
+            system.watchFails = true
+        }
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10]) })
+        let reads = system.contentReads
+        let started = Date()
+        while Date().timeIntervalSince(started) < 0.2 {
+            recorder.followTick()
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(system.videoStreams[0].plans.last == .windows(1, includingWindows: [10]), "still failing: still alone")
+        if read == "screen" { #expect(system.contentReads > reads, "it was tried again meanwhile") }
+
+        system.contentFailures = 0
+        system.watchFails = false
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: read == "screen" ? [10, 11, 13] : [10, 11, 13, 14]) })
+    }
+
+    @available(macOS 15, *)
+    @Test("A named window that gains a title, or that the watch puts below the windows, leaves at once, before the rebuild's read returns", arguments: ["title", "layer"])
+    func leavesBeforeTheRead(change: String) async throws {
+        defer { captures.remove() }
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        recorder.followTick()
+        #expect(await eventually { system.contentReads == 2 })
+        let untitled = ScreencastContent.Window(id: 14, frame: CGRect(x: 200, y: 200, width: 700, height: 500), layer: 0, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [untitled])
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 14]) })
+        let updates = system.videoStreams[0].plans.count
+
+        system.holdsContent = true
+        if change == "title" {
+            system.screen = Screens.content(windows: Screens.content().windows + [Screens.with(untitled, isUntitled: false)])
+        } else {
+            // ScreenCaptureKit still reads it at 0.
+            system.watchLayers[14] = -1
+        }
+        recorder.followTick()
+        #expect(await eventually { system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13]) })
+        #expect(await eventually { system.heldContentCount == 1 }, "the rebuild's read is still out")
+        #expect(system.videoStreams[0].plans.count == updates + 1)
+        system.holdsContent = false
+        system.releaseContent()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(system.videoStreams[0].plans.count == updates + 1, "the rebuild agrees: nothing more to change")
+        #expect(system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13]))
+    }
+
+    @available(macOS 15, *)
+    @Test("A window ScreenCaptureKit reads untitled but the window server names isn't named, from the start on")
+    func eitherReadsTitleCounts() async throws {
+        defer { captures.remove() }
+        let untitled = ScreencastContent.Window(id: 14, frame: CGRect(x: 200, y: 200, width: 700, height: 500), layer: 0, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [untitled])
+        system.watchTitled = [14]
+        let recorder = makeRecorder()
+        try await start(recorder, .window(10))
+        #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 11, 13]))
+        recorder.followTick()
+        #expect(await eventually { system.contentReads == 2 })
+        for _ in 0..<10 { await Task.yield() }
+        #expect(system.videoStreams[0].plans.isEmpty, "the rebuild leaves it out too")
+    }
+
+    @available(macOS 15, *)
+    @Test("A window recording's reads never list the desktop, and Finder's desktop behind the window is never named; a display recording's reads list it", arguments: [true, false])
+    func desktopReads(window: Bool) async throws {
+        defer { captures.remove() }
+        // Finder's desktop as measured: untitled, the display's size, far below the windows. The
+        // fake lists it whatever a read asks, so the filter's rule is what keeps it out.
+        let desktop = ScreencastContent.Window(id: 40, frame: Screens.leftDisplay.frame, layer: -2147483603, processID: Screens.browser, isUntitled: true, isOnScreen: true)
+        system.screen = Screens.content(windows: Screens.content().windows + [desktop])
+        system.ownWindows = [31]
+        let recorder = makeRecorder()
+        try await start(recorder, window ? .window(10) : .display(1))
+        if window {
+            recorder.followTick()
+            #expect(await eventually { system.contentReads == 2 })
+        }
+        await recorder.includeOverlayWindow(31)
+        if window {
+            #expect(videoKind(system.videoStreams.first)?.0 == .windows(1, includingWindows: [10, 11, 13]))
+            #expect(system.videoStreams[0].plans.last == .windows(1, includingWindows: [10, 11, 13, 31]))
+            #expect(system.desktopReads == [false, false, false], "the start, the first tick's rebuild, and the overlay's")
+        } else {
+            #expect(system.desktopReads == [true, true])
+        }
+    }
+
+    @available(macOS 15, *)
+    @Test("When no window but Keybumps's has a name, names can't be read, and every window counts as titled")
+    func namesUnavailable() {
+        let own = Screens.ownProcess
+        let readable = ScreenCaptureKitCaptureSystem.untitled(
+            [(501, "Document"), (501, nil), (501, "  "), (502, ""), (nil, "Menubar")], ownProcessID: own
+        )
+        #expect(readable == [false, true, true, true, false])
+        // As `CGWindowList` reads without Screen Recording access: Keybumps's own names only.
+        let unreadable = ScreenCaptureKitCaptureSystem.untitled(
+            [(501, nil), (501, nil), (502, ""), (own, "Settings"), (nil, nil)], ownProcessID: own
+        )
+        #expect(unreadable == [false, false, false, false, false])
+        #expect(ScreenCaptureKitCaptureSystem.untitled([], ownProcessID: own).isEmpty)
     }
 
     @available(macOS 15, *)

@@ -50,7 +50,9 @@ protocol ScreencastCaptureSystem: AnyObject {
 
     /// What's on screen now, with `onScreenOnly` leaving out windows that aren't: minimized,
     /// hidden, or on other Spaces. Smaller and faster, which is all a window recording needs.
-    func content(onScreenOnly: Bool) async throws -> ScreencastContent
+    /// Without `includesDesktop`, the desktop's windows (its picture and icons) are left out too: a
+    /// window recording never shows them, so its reads never list them.
+    func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent
 
     /// A stream showing `plan`, delivering frames sized by `configuration`, with no sound.
     func makeVideoStream(
@@ -85,11 +87,13 @@ protocol ScreencastCaptureSystem: AnyObject {
     func windowExists(_ id: CGWindowID) -> Bool?
 }
 
-/// One of a recorded app's windows as the recorder watches it: its number, and whether it has a
-/// title, which decides whether a window recording may show it. The title itself is never kept.
+/// One of a recorded app's windows as the recorder watches it: its number, whether it has a
+/// title, and its window server layer, which decide whether a window recording may show it. The
+/// title itself is never kept.
 struct ScreencastWatchedWindow: Hashable, Sendable {
     let id: CGWindowID
     let isUntitled: Bool
+    let layer: Int
 }
 
 extension ScreencastCaptureSystem {
@@ -100,7 +104,7 @@ extension ScreencastCaptureSystem {
     func windowExists(_ id: CGWindowID) -> Bool? { nil }
 
     /// A capture system with one kind of read gives it whatever's asked.
-    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
+    func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent {
         try await content()
     }
 }

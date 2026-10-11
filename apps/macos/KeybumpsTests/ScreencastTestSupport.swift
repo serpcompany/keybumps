@@ -512,6 +512,9 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
     var contentFailures = 0
     /// Each read's `onScreenOnly`, in order.
     private(set) var readKinds: [Bool] = []
+    /// Each read's `includesDesktop`, in order. Every window is listed whatever it says, so the
+    /// filter's own rule for the desktop is what keeps it out.
+    private(set) var desktopReads: [Bool] = []
     /// Holds each snapshot until `releaseContent()`.
     var holdsContent = false
     private var heldContent: [CheckedContinuation<Void, Never>] = []
@@ -524,12 +527,13 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
     }
 
     func content() async throws -> ScreencastContent {
-        try await content(onScreenOnly: false)
+        try await content(onScreenOnly: false, includesDesktop: true)
     }
 
-    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
+    func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent {
         contentReads += 1
         readKinds.append(onScreenOnly)
+        desktopReads.append(includesDesktop)
         if holdsContent { await withCheckedContinuation { heldContent.append($0) } }
         if let contentError { throw contentError }
         if contentFailures > 0 {
@@ -574,9 +578,23 @@ final class FakeCaptureSystem: ScreencastCaptureSystem {
         ownWindows
     }
 
+    /// The watch's reads fail, as `CGWindowListCopyWindowInfo` returning nothing.
+    var watchFails = false
+    /// Windows the watch's read names though ScreenCaptureKit's doesn't.
+    var watchTitled: Set<CGWindowID> = []
+    /// Windows the watch's read puts at this layer, whatever ScreenCaptureKit's says.
+    var watchLayers: [CGWindowID: Int] = [:]
+
     /// From the screen as it is, like `CGWindowList`.
     func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>? {
-        Set(screen.windows.filter { $0.processID == processID && $0.isOnScreen }.map { ScreencastWatchedWindow(id: $0.id, isUntitled: $0.isUntitled) })
+        guard !watchFails else { return nil }
+        return Set(ScreencastScreens.watched(screen, of: processID).map { window in
+            ScreencastWatchedWindow(
+                id: window.id,
+                isUntitled: window.isUntitled && !watchTitled.contains(window.id),
+                layer: watchLayers[window.id] ?? window.layer
+            )
+        })
     }
 
     /// On screen or not; only a window gone from the screen's list is closed.
@@ -627,12 +645,20 @@ enum ScreencastScreens {
         id: 31, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), layer: 3, processID: ownProcess, isUntitled: true, isOnScreen: true
     )
 
-    /// `window` with its on-screen state, frame, or whether it has a title changed.
-    static func with(_ window: ScreencastContent.Window, onScreen: Bool? = nil, frame: CGRect? = nil, isUntitled: Bool? = nil) -> ScreencastContent.Window {
+    /// `window` with its on-screen state, frame, layer, or whether it has a title changed.
+    static func with(_ window: ScreencastContent.Window, onScreen: Bool? = nil, frame: CGRect? = nil, layer: Int? = nil, isUntitled: Bool? = nil) -> ScreencastContent.Window {
         ScreencastContent.Window(
-            id: window.id, frame: frame ?? window.frame, layer: window.layer, processID: window.processID,
+            id: window.id, frame: frame ?? window.frame, layer: layer ?? window.layer, processID: window.processID,
             isUntitled: isUntitled ?? window.isUntitled, isOnScreen: onScreen ?? window.isOnScreen
         )
+    }
+
+    /// `content` as the watch reads it for `processID`: its windows on screen, the desktop's left
+    /// out (`.excludeDesktopElements`, below layer 0), each with its title state and layer.
+    static func watched(_ content: ScreencastContent, of processID: pid_t = browser) -> Set<ScreencastWatchedWindow> {
+        Set(content.windows.filter { $0.processID == processID && $0.isOnScreen && $0.layer >= 0 }.map {
+            ScreencastWatchedWindow(id: $0.id, isUntitled: $0.isUntitled, layer: $0.layer)
+        })
     }
 
     static func content(windows: [ScreencastContent.Window]? = nil, includesOwnApp: Bool = true) -> ScreencastContent {

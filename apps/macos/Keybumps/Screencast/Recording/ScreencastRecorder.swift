@@ -147,10 +147,18 @@ final class ScreencastRecorder {
             // Keybumps's windows before the snapshot, never after: one that opens in between is in
             // the snapshot's filter already, or missing from this list, so the next tick rebuilds.
             let ownWindows = system.ownVisibleWindows()
-            let content = try await system.content()
+            // A window recording never shows the desktop, so its read doesn't list it.
+            let recordsWindow = if case .window = target { true } else { false }
+            let content = try await system.content(onScreenOnly: false, includesDesktop: !recordsWindow)
             try ensureCurrent(generation)
             let overlays = overlayWindows
-            let streams = try Self.streamPlans(for: target, content: content, ownProcessID: ownProcessID, overlays: overlays, options: options)
+            // A window recording's app's windows as the watch reads them, which must agree with the
+            // snapshot before one is named.
+            var watched: Set<ScreencastWatchedWindow>?
+            if case .window(let id) = target, let processID = content.window(id)?.processID {
+                watched = system.onScreenWindows(of: processID)
+            }
+            let streams = try Self.streamPlans(for: target, content: content, watched: watched, ownProcessID: ownProcessID, overlays: overlays, options: options)
             let session = Session(
                 generation: generation,
                 target: target,
@@ -162,6 +170,7 @@ final class ScreencastRecorder {
                 router: makeRouter(generation: generation)
             )
             session.queuedOwnWindows = ownWindows
+            session.latestAppWindows = watched
             started = session
             startingSession = session
 
@@ -271,6 +280,7 @@ final class ScreencastRecorder {
     static func streamPlans(
         for target: ScreencastTarget,
         content: ScreencastContent,
+        watched: Set<ScreencastWatchedWindow>?,
         ownProcessID: pid_t,
         overlays: Set<CGWindowID>,
         options: ScreencastOptions
@@ -305,7 +315,7 @@ final class ScreencastRecorder {
             return [try displayStream(display, area: rect)]
         case .window(let id):
             guard let window = content.window(id),
-                  let plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlays, content: content),
+                  let plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlays, content: content, watched: watched),
                   let display = content.display(plan.displayID),
                   let geometry = ScreencastCaptureGeometry.usableWindow(frame: window.frame, displayFrame: display.frame, scale: display.scale)
             else { throw ScreencastFailure.targetUnavailable }
@@ -520,9 +530,15 @@ final class ScreencastRecorder {
 
     private func drainUpdates(for session: Session) async {
         while session === self.session, session.phase == .live {
-            // During a failed rebuild's backoff, a new request waits for the retry: only `retry`
-            // runs the next attempt, however often the ticks ask.
-            if session.needsFilterRebuild, !session.awaitingRebuildRetry {
+            // A window the watch no longer shows as attached UI leaves first, from the list in
+            // hand, without waiting for a read or a backoff. If that fails, the rebuild asked for
+            // with it, or the next tick, tries again.
+            if session.needsNarrowing {
+                session.needsNarrowing = false
+                _ = await narrowWindowStreams(of: session, watched: session.latestAppWindows)
+            } else if session.needsFilterRebuild, !session.awaitingRebuildRetry {
+                // During a failed rebuild's backoff, a new request waits for the retry: only
+                // `retry` runs the next attempt, however often the ticks ask.
                 session.needsFilterRebuild = false
                 let waiters = session.rebuildWaiters
                 session.rebuildWaiters = []
@@ -605,19 +621,27 @@ final class ScreencastRecorder {
         // snapshot's filter already, or missing from the list, so the next tick rebuilds again.
         // They're the lists this rebuild answers, so a tick that sees them again asks for nothing.
         session.queuedOwnWindows = system.ownVisibleWindows()
+        var watched: Set<ScreencastWatchedWindow>?
         if session.targetProcess != nil, !session.targetGone {
-            session.queuedAppWindows = watchedAppWindows(of: session)
+            watched = watchedAppWindows(of: session)
+            session.queuedAppWindows = watched
+            session.latestAppWindows = watched
         }
         // A window recording needs only what's on screen: a smaller, faster read, so an app's new
         // menu joins sooner. But while overlays are registered it reads every window, so an overlay
         // ordered out for a moment (a click ring between clicks) stays named and shows the moment
-        // it's ordered in. A display recording reads every window, to find Keybumps as an app.
-        let onScreenOnly = overlayWindows.isEmpty
-            && session.streams.allSatisfy { if case .window = $0.source { true } else { false } }
+        // it's ordered in. A display recording reads every window, to find Keybumps as an app, and
+        // only it lists the desktop.
+        let recordsWindows = session.streams.allSatisfy { if case .window = $0.source { true } else { false } }
         let content: ScreencastContent
         do {
-            content = try await system.content(onScreenOnly: onScreenOnly)
+            content = try await system.content(onScreenOnly: overlayWindows.isEmpty && recordsWindows, includesDesktop: !recordsWindows)
         } catch {
+            // Nothing to check the app's windows against: a window recording keeps only its window
+            // and the overlays until a read succeeds.
+            if session === self.session, session.phase == .live {
+                _ = await narrowWindowStreams(of: session, watched: nil)
+            }
             return Self.category(of: error)
         }
         guard session === self.session, session.phase == .live else { return nil }
@@ -630,12 +654,19 @@ final class ScreencastRecorder {
             case .display(let id), .area(let id, _):
                 plan = ScreencastCaptureFilter.displayPlan(display: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
             case .window(let id):
-                plan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
-                // Not in this read: closed, or only out of sight (minimized, its app hidden, on
-                // another Space, or its display just unplugged). Either way the last list stays.
-                // Only a window that no longer exists stops its app's windows mattering; one that
-                // comes back is followed again, and its menus join as before.
-                if plan == nil, system.windowExists(id) == false { session.targetGone = true }
+                if let windowPlan = ScreencastCaptureFilter.windowPlan(window: id, ownProcessID: ownProcessID, overlays: overlayWindows, content: content, watched: watched) {
+                    // A watch read made during this one, newer than `watched`, may have seen a
+                    // window gain a title since.
+                    plan = ScreencastCaptureFilter.narrowed(windowPlan, window: id, overlays: overlayWindows, watched: session.latestAppWindows)
+                } else {
+                    // Not in this read: closed, or only out of sight (minimized, its app hidden, on
+                    // another Space, or its display just unplugged). Either way only the window and
+                    // the overlays stay named, on the display it was on, so nothing of its app shows
+                    // in its place. Only a window that no longer exists stops its app's windows
+                    // mattering; one that comes back is followed again, and its menus join as before.
+                    if system.windowExists(id) == false { session.targetGone = true }
+                    plan = ScreencastCaptureFilter.windowAlone(window: id, display: stream.plan.displayID, ownProcessID: ownProcessID, overlays: overlayWindows, content: content)
+                }
             }
             guard let plan, plan != stream.plan, let running = stream.stream else { continue }
             do {
@@ -647,6 +678,27 @@ final class ScreencastRecorder {
                     // The window moved to another display: read it there.
                     try await running.update(sourceRect: geometry.sourceRect)
                 }
+            } catch {
+                failure = Self.category(of: error)
+            }
+        }
+        return failure
+    }
+
+    /// Takes out of each window recording's list, from the last snapshot and without a new read,
+    /// the windows `watched` no longer shows as attached UI (`ScreencastCaptureFilter.narrowed`);
+    /// with `watched` nil, every window but the recorded one and the overlays. Returns why an update
+    /// failed, or nil.
+    private func narrowWindowStreams(of session: Session, watched: Set<ScreencastWatchedWindow>?) async -> String? {
+        var failure: String?
+        for index in session.streams.indices where session.endedDisplays[index] == nil {
+            let stream = session.streams[index]
+            guard case .window(let id) = stream.source, let running = stream.stream else { continue }
+            let plan = ScreencastCaptureFilter.narrowed(stream.plan, window: id, overlays: overlayWindows, watched: watched)
+            guard plan != stream.plan else { continue }
+            do {
+                try await running.update(plan: plan, content: session.content)
+                session.streams[index].plan = plan
             } catch {
                 failure = Self.category(of: error)
             }
@@ -718,15 +770,27 @@ final class ScreencastRecorder {
     /// A window recording: notices the recorded app opening or closing a window (a menu, sheet, or
     /// popover), which the filter names one by one, or one of its windows gaining or losing a
     /// title, which decides whether it may show; and where the window is now, and moves the crop
-    /// there. Both go through the update queue.
+    /// there. All go through the update queue.
     func followTick() {
         guard let session, state.isActive, session.phase == .live, case .window(let id) = session.target else { return }
-        // A burst (a menu flicked open and shut, submenus, a completion list) costs one rebuild in
-        // flight and one waiting, whose read sees the latest windows.
-        if session.targetProcess != nil, !session.targetGone,
-           let appWindows = watchedAppWindows(of: session), appWindows != session.queuedAppWindows {
-            session.queuedAppWindows = appWindows
-            scheduleFilterRebuild(for: session)
+        if session.targetProcess != nil, !session.targetGone {
+            let appWindows = watchedAppWindows(of: session)
+            session.latestAppWindows = appWindows
+            // A named window that gained a title, or the recorded window gone out of sight, or a
+            // read that failed: what may no longer show leaves at once, before the rebuild's read.
+            let narrows = session.streams.contains { stream in
+                ScreencastCaptureFilter.narrowed(stream.plan, window: id, overlays: overlayWindows, watched: appWindows) != stream.plan
+            }
+            if narrows {
+                session.needsNarrowing = true
+                runUpdates(for: session)
+            }
+            // A burst (a menu flicked open and shut, submenus, a completion list) costs one rebuild
+            // in flight and one waiting, whose read sees the latest windows.
+            if appWindows != session.queuedAppWindows {
+                session.queuedAppWindows = appWindows
+                scheduleFilterRebuild(for: session)
+            }
         }
         guard let frame = system.windowFrame(id), frame != session.followedFrame,
               frame.width >= 2, frame.height >= 2 else { return }
@@ -1140,10 +1204,12 @@ extension ScreencastRecorder {
         var timeline = ScreencastTimeline()
         var followedFrame: CGRect?
         /// A window recording's app; its windows on screen, and which have titles, as the last
-        /// rebuild read them or was queued for (nil until then); and whether the recorded window
+        /// rebuild read them or was queued for (nil until then); as the latest watch read them
+        /// (nil when it failed), which the list is narrowed to; and whether the recorded window
         /// has closed.
         var targetProcess: pid_t?
         var queuedAppWindows: Set<ScreencastWatchedWindow>?
+        var latestAppWindows: Set<ScreencastWatchedWindow>?
         var targetGone = false
         /// Keybumps's visible windows, likewise.
         var queuedOwnWindows: Set<CGWindowID>?
@@ -1157,6 +1223,8 @@ extension ScreencastRecorder {
         var pendingAudioStopToken: Int?
         // The stream update queue.
         var isUpdating = false
+        /// Window recordings: windows to take out of the list now, from the latest watch read.
+        var needsNarrowing = false
         var needsFilterRebuild = false
         var pendingWindowFrame: CGRect?
         var rebuildWaiters: [CheckedContinuation<Void, Never>] = []
