@@ -14,6 +14,10 @@ struct ScreencastScreen: Equatable, Sendable {
     /// What macOS calls it (`NSScreen.localizedName`), such as "Built-in Retina Display"; empty
     /// when it has no name.
     var name: String = ""
+    /// Its UUID (`CGDisplayCreateUUIDFromDisplayID`), which stays the same when it's plugged in
+    /// again or the Mac restarts, unlike `id`: the picker remembers a screen by it. Nil when macOS
+    /// gives none.
+    var uuid: String?
 }
 
 /// The connected displays, and the conversions between AppKit's global space, which the picker's
@@ -28,8 +32,15 @@ struct ScreencastScreenLayout: Equatable, Sendable {
         ScreencastScreenLayout(screens: NSScreen.screens.compactMap { screen in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
                   let id = CGDirectDisplayID(exactly: number.uint32Value) else { return nil }
-            return ScreencastScreen(id: id, frame: screen.frame, scale: screen.backingScaleFactor, name: screen.localizedName)
+            return ScreencastScreen(
+                id: id, frame: screen.frame, scale: screen.backingScaleFactor, name: screen.localizedName, uuid: uuid(of: id)
+            )
         })
+    }
+
+    private static func uuid(of display: CGDirectDisplayID) -> String? {
+        guard let uuid = CGDisplayCreateUUIDFromDisplayID(display)?.takeRetainedValue() else { return nil }
+        return CFUUIDCreateString(nil, uuid) as String?
     }
 
     /// The screens in the order recordings number their files: left to right, then top to bottom.
@@ -69,6 +80,11 @@ struct ScreencastScreenLayout: Equatable, Sendable {
 
     func screen(_ id: CGDirectDisplayID) -> ScreencastScreen? {
         screens.first { $0.id == id }
+    }
+
+    /// The connected screen with this UUID, if it's still connected.
+    func screen(uuid: String) -> ScreencastScreen? {
+        screens.first { $0.uuid == uuid }
     }
 
     /// The screen under `point` (AppKit's space). A point on an edge two screens share belongs to

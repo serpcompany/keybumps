@@ -19,6 +19,25 @@ struct ScreencastPreferences: Equatable {
     /// (`ProductPaths.captures`), or its stand-in in the UI-test sandbox and the unit-test host. It
     /// isn't a setting yet.
     var capturesFolder: URL
+
+    /// The picker's switches, which are these settings too.
+    var switches: ScreencastSwitches {
+        ScreencastSwitches(
+            recordsMicrophone: recordsMicrophone,
+            recordsSystemAudio: recordsSystemAudio,
+            showsShortcuts: showsShortcuts,
+            highlightsClicks: highlightsClicks
+        )
+    }
+}
+
+/// The picker's switches. Each is one of Settings › Screencast's, with one stored value, so the
+/// two never disagree: the picker starts with them, and Record saves what it recorded with (#483).
+struct ScreencastSwitches: Equatable, Sendable {
+    var recordsMicrophone: Bool
+    var recordsSystemAudio: Bool
+    var showsShortcuts: Bool
+    var highlightsClicks: Bool
 }
 
 extension AppPreferences {
@@ -32,6 +51,20 @@ extension AppPreferences {
             highlightsClicks: bool(.screencastHighlightsClicks, for: .screencast),
             capturesFolder: ProductPaths.keybumps().captures
         )
+    }
+
+    /// Saves the picker's switches as Settings › Screencast's. One left as it was isn't stored, so
+    /// one never changed keeps following its default.
+    func setScreencastSwitches(_ switches: ScreencastSwitches) {
+        let values: [(PluginPreference, Bool)] = [
+            (.screencastRecordsMicrophone, switches.recordsMicrophone),
+            (.screencastRecordsSystemAudio, switches.recordsSystemAudio),
+            (.screencastShowsShortcuts, switches.showsShortcuts),
+            (.screencastHighlightsClicks, switches.highlightsClicks),
+        ]
+        for (preference, value) in values where bool(preference, for: .screencast) != value {
+            set(.bool(value), of: preference, for: .screencast)
+        }
     }
 }
 

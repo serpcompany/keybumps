@@ -165,8 +165,10 @@ final class ManualSleeper {
 /// `ScreencastScreens`' two displays as AppKit sees them: the main one on the left, and a taller
 /// one to its right whose top lines up with it, so its AppKit frame starts below zero.
 enum PickerScreens {
-    static let left = ScreencastScreen(id: 1, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), scale: 2)
-    static let right = ScreencastScreen(id: 2, frame: CGRect(x: 1512, y: -98, width: 1920, height: 1080), scale: 1)
+    static let left = ScreencastScreen(id: 1, frame: CGRect(x: 0, y: 0, width: 1512, height: 982), scale: 2, uuid: "MADE-UP-LEFT-DISPLAY")
+    static let right = ScreencastScreen(
+        id: 2, frame: CGRect(x: 1512, y: -98, width: 1920, height: 1080), scale: 1, uuid: "MADE-UP-RIGHT-DISPLAY"
+    )
 
     static let both = ScreencastScreenLayout(screens: [left, right])
     static let leftOnly = ScreencastScreenLayout(screens: [left])

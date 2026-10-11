@@ -280,6 +280,10 @@ final class AppPreferences {
     /// the other settings.
     var screencastAreaMemory: ScreencastAreaMemory { ScreencastAreaMemory(defaults: defaults) }
 
+    /// Area, Window, or Screen, and the screen, as Screencast's picker last took them
+    /// (`screencast.pickerChoices`).
+    var screencastPickerMemory: ScreencastPickerMemory { ScreencastPickerMemory(defaults: defaults) }
+
     /// Where Screencast's control bar was left on each display (`screencast.controlBarPositions`).
     var screencastBarPlacement: ScreencastControlBarPlacement { ScreencastControlBarPlacement(defaults: defaults) }
 
