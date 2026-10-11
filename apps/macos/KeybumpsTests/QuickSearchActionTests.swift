@@ -90,19 +90,23 @@ struct QuickSearchActionTests {
         #expect(old.model.quickSearchActions.map(\.action) == [.toggleKeystrokes])
     }
 
-    @Test("Locked lists no actions")
-    func lockedListsNone() {
+    @Test("Locked lists and runs no actions, even with their plugins saved on, and activating lists them")
+    func lockedListsNone() async throws {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsLocked")
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: [.screencast, .keystrokes], missing: nil, root: root)
+        let licensing = FixedLicenseController(state: .unlicensed)
+        let harness = WiringHarness(enabled: [.quickSearch, .screencast, .keystrokes], missing: nil, root: root, licensing: licensing)
         harness.model.start()
-        #expect(!harness.model.quickSearchActions.isEmpty)
-        let model = harness.model
-        let context = CapabilityContext(
-            enabledCapabilities: [], preferences: model.preferences, shortcuts: model.shortcuts,
-            permissions: model.permissions, permissionReadiness: { model.permissionReadiness(for: $0) }
-        )
-        #expect(model.capabilities.quickSearchActions(context).isEmpty, "Locked runs no capability, so the shell's context has none on")
+        #expect(!harness.model.isLicensed)
+        #expect(harness.model.preferences.enabledCapabilities.isSuperset(of: [.screencast, .keystrokes]), "Saved on")
+        #expect(harness.model.quickSearchActions.isEmpty)
+
+        let keystrokes = try #require(harness.model.capabilities.module(for: .keystrokes) as? KeystrokesModule)
+        harness.model.runQuickSearchAction(Self.keystrokes())
+        #expect(keystrokes.isShowing, "Locked runs nothing")
+
+        await licensing.activate(key: "KEYBUMPS-TEST")
+        #expect(harness.model.quickSearchActions == [Self.keystrokes(), Self.start()])
     }
 
     @Test("Quick Search finds Start Screencast for screencast through the real model, beside Screencast's command")
