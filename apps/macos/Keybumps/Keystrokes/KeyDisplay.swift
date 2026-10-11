@@ -279,6 +279,10 @@ final class KeyDisplay {
     var pointerDisplay: () -> CGDirectDisplayID? = { KeyDisplayScreen.pointerDisplay() }
     /// The main display's height, to turn the pointer tap's top-left coordinates into AppKit's.
     var mainDisplayHeight: () -> CGFloat = { NSScreen.screens.first?.frame.height ?? 0 }
+    /// Called after `isShowing` changes: a holder acquiring or letting go, or Show or Hide
+    /// Keystrokes. The Keystrokes module sets it, so Show Keystrokes in the menu bar menu is checked
+    /// while keys are on screen, a recording's included.
+    var onShowingChange: () -> Void = {}
 
     private let keys: any KeyPressMonitoring
     private let pointer: any PointerEventMonitoring
@@ -288,6 +292,8 @@ final class KeyDisplay {
     private let scheduler: any TimerScheduling
     private let secureInput: () -> Bool
     private var windowHandlers: [KeyDisplayOwner: ([NSWindow]) -> Void] = [:]
+    /// `isShowing` when `onShowingChange` was last called.
+    private var reportedShowing = false
     private var wakeUp: (any TimerScheduledAction)?
     /// The pointer's screen at the newest key.
     private var lastPointerDisplay: CGDirectDisplayID?
@@ -441,6 +447,7 @@ final class KeyDisplay {
     // MARK: Showing
 
     private func apply() {
+        defer { reportShowingChange() }
         guard let configuration = holds.configuration else {
             keys.stop()
             pointer.stop()
@@ -467,6 +474,13 @@ final class KeyDisplay {
         if configuration.keys == .shortcutsOnly { timeline.removeTyping() }
         if !configuration.showsClicks { timeline.removeClicks() }
         present(animated: timeline == before)
+    }
+
+    /// Calls `onShowingChange` if `isShowing` changed since the last call.
+    private func reportShowingChange() {
+        guard holds.isShowing != reportedShowing else { return }
+        reportedShowing = holds.isShowing
+        onShowingChange()
     }
 
     func receive(_ press: KeyPress) {

@@ -28,12 +28,13 @@ extension CapabilityDescriptor {
 }
 
 extension PluginPreference {
-    /// Whether the keys show while the plugin is on: hiding them doesn't turn the plugin off. Drawn
-    /// at the top of its page, under the header.
+    /// Whether the keys show while the plugin is on: hiding them doesn't turn the plugin off. It's
+    /// the remembered state, not what's on screen, which a recording's keys count toward. Drawn at
+    /// the top of its page, under the header, and can't change while the plugin is off.
     static let keystrokesShowing = PluginPreference(
         key: "showing",
         title: "Show keystrokes",
-        subtitle: "Turn this off to take the keys off the screen without turning Keystrokes off. Show Keystrokes in the menu bar menu and the Show & Hide Keystrokes shortcut do the same.",
+        subtitle: "Whether keys show while Keystrokes is on and nothing is recording. Turn this off to take them off the screen without turning Keystrokes off. Show Keystrokes in the menu bar menu and the Show & Hide Keystrokes shortcut hide or show the keys on screen now, and set this to match.",
         group: "Keys on screen",
         kind: .toggle(default: true),
         placement: .top
@@ -129,18 +130,21 @@ extension AppPreferences {
 /// Keeps the shell's key display (`KeyDisplay`) showing, with this plugin's settings, while the
 /// plugin is on, and owns the optional Show & Hide Keystrokes shortcut. It ships off.
 ///
-/// Shown or hidden is its own remembered state (`plugin.keystrokes.showing`), apart from on or off,
-/// and acts on what's on screen now: hiding takes every holder's keys off the screen, a Screencast
-/// recording's included, for the rest of that recording, and showing brings them back, a
-/// recording's in its own look. While hidden, the plugin keeps holding the display with its keys
-/// hidden, so it keeps its place behind a recording that started later; no keyboard tap runs
-/// unless another holder shows keys. A recording that starts later shows its keys whatever Hidden
-/// says. Turning the plugin on shows the keys (`willTurnOn`); a relaunch keeps them hidden.
+/// Shown or hidden is its own remembered state (`plugin.keystrokes.showing`), apart from on or off:
+/// whether its keys show while it's on, which Settings' Show keystrokes switch sets. While hidden,
+/// the plugin keeps holding the display with its keys hidden, so it keeps its place behind a
+/// recording that started later; no keyboard tap runs unless another holder shows keys. A
+/// recording that starts later shows its keys whatever Hidden says. Turning the plugin on shows
+/// the keys (`willTurnOn`); a relaunch keeps them hidden.
 ///
-/// The menu bar's Show Keystrokes item, the shortcut, and Quick Search's actions go through
-/// `setShowing`. Settings' Show keystrokes switch writes the preference through
+/// Show Keystrokes in the menu bar menu, the shortcut, and Quick Search's actions act on what's on
+/// screen now (`toggleShowing`): while any holder's keys show, a Screencast recording's included,
+/// a press hides them all, a recording's for the rest of it, and remembers Hidden; while none do,
+/// it shows them all, a recording's in its own look, and remembers Shown. The item is checked while
+/// keys are on screen, and redraws as a recording starts or ends (`KeyDisplay.onShowingChange`).
+/// They go through `setShowing`. Settings' switch writes the preference through
 /// `AppModel.setPluginPreference`, which applies the capabilities again. Both reach `update`, which
-/// shows or hides the keys on screen when the preference changed. The display belongs to the
+/// shows or hides every holder's keys when the preference changed. The display belongs to the
 /// shell, so a recording holds it with the plugin off or hidden; turning the plugin off lets go of
 /// only its own hold. Its Settings attention is its missing Input Monitoring.
 @MainActor
@@ -165,9 +169,12 @@ final class KeystrokesModule: CapabilityModule {
         self.preferences = preferences
         self.menuBar = menuBar
         self.notices = notices ?? PaletteHUD.shared
+        display.onShowingChange = { [weak self] in self?.listMenuItem() }
     }
 
-    /// Whether the keys show while the plugin is on. Remembered across launches; on by default.
+    /// Whether the plugin's keys show while it's on, as Settings' Show keystrokes switch has it.
+    /// Remembered across launches; on by default. What's on screen now is `KeyDisplay.isShowing`,
+    /// which a recording's keys count toward.
     var isShowing: Bool { preferences.bool(.keystrokesShowing, for: .keystrokes) }
 
     /// Shows or hides the keys on screen now, a recording's included, and remembers it. While the
@@ -182,9 +189,11 @@ final class KeystrokesModule: CapabilityModule {
         }
     }
 
-    /// Shows the keys if they're hidden, or hides them.
+    /// Show Keystrokes and Show & Hide Keystrokes: hides the keys if any are on screen, the
+    /// plugin's or a recording's, or shows them if none are. While the plugin is off, nothing of it
+    /// is on screen, so it switches only the remembered state.
     func toggleShowing(announces: Bool = false) {
-        setShowing(!isShowing, announces: announces)
+        setShowing(!(isOn ? display.isShowing : isShowing), announces: announces)
     }
 
     /// What Show & Hide Keystrokes says: shown or hidden, or why shown keys can't appear.
@@ -226,9 +235,9 @@ final class KeystrokesModule: CapabilityModule {
     }
 
     /// Holds the display while the plugin is on, its keys hidden while they are, and lists Show
-    /// Keystrokes, checked while the keys show, in the menu bar menu. Showing or hiding acts on every
-    /// holder's keys on screen when `actsOnScreen`, or when the preference changed since the last
-    /// apply, as Settings' switch changes it.
+    /// Keystrokes in the menu bar menu. Showing or hiding acts on every holder's keys on screen when
+    /// `actsOnScreen`, or when the preference changed since the last apply, as Settings' switch
+    /// changes it.
     private func update(actsOnScreen: Bool = false) {
         guard isOn else {
             appliedShowing = nil
@@ -242,8 +251,15 @@ final class KeystrokesModule: CapabilityModule {
         }
         appliedShowing = showing
         display.acquire(.keystrokes, configuration: preferences.keystrokesConfiguration, startsHidden: !showing)
+        listMenuItem()
+    }
+
+    /// Lists Show Keystrokes in the menu bar menu while the plugin is on, checked while keys are on
+    /// screen, the plugin's or a recording's. The display calls it again whenever that changes.
+    private func listMenuItem() {
+        guard isOn else { return }
         menuBar?.set(title: nil, spoken: nil, items: [
-            MenuBarItem(id: "keystrokes.showing", title: "Show Keystrokes", systemImage: nil, isChecked: showing) { [weak self] in
+            MenuBarItem(id: "keystrokes.showing", title: "Show Keystrokes", systemImage: nil, isChecked: display.isShowing) { [weak self] in
                 self?.toggleShowing()
             },
         ])

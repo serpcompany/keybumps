@@ -77,7 +77,8 @@ struct PluginPreference: Identifiable, Equatable {
         /// Under its group's heading (`CapabilityDescriptor.preferenceGroups`).
         case inGroup
         /// Under the page's header, before its Commands, with no heading, for a switch that governs
-        /// the rest of the page, such as Keystrokes' Show keystrokes. Its `group` isn't drawn.
+        /// the rest of the page, such as Keystrokes' Show keystrokes. Its `group` isn't drawn, and
+        /// it can't change while the plugin is off.
         case top
     }
 
