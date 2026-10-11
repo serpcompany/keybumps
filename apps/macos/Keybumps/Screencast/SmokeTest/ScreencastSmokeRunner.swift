@@ -68,7 +68,8 @@ struct ScreencastSmokeRig {
     let ownProcessID: pid_t
     /// Where the captures are saved: a folder of the smoke test's own, deleted when it ends.
     let capturesFolder: URL
-    /// The smoke test's own defaults, for the area, the drawing tools, and the bar's position.
+    /// The smoke test's own defaults, for the area, the picker's mode and screen, the drawing tools,
+    /// and the bar's position.
     let defaults: UserDefaults
 
     /// Settings › Screencast for the smoke test: no microphone, no Mac's sound, no countdown, no
@@ -114,7 +115,10 @@ struct ScreencastSmokeRig {
             pickerSystem: pickerSystem,
             presenter: presenter,
             areaMemory: ScreencastAreaMemory(defaults: defaults),
+            pickerMemory: ScreencastPickerMemory(defaults: defaults),
             preferences: { preferences },
+            // Its switches, all off, never become the person's settings.
+            saveSwitches: { _ in },
             screens: screens,
             microphoneAvailable: { false },
             ownProcessID: ownProcessID,

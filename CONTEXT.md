@@ -212,7 +212,7 @@ One screenshot or one recording Screencast took, kept on this Mac in a folder of
 _Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
 
 **Screencast picker**:
-What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens with the last area drawn.
+What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that are Settings › Screencast's own. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens as Record or Capture last left it: area, window, or screen, the same screen or All Screens while connected, the last area drawn, and the switches, which Record or Capture saves to Settings (the microphone's only with Microphone access). A window is never remembered, so Window mode opens with none chosen.
 _Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
 
 **Control bar**:

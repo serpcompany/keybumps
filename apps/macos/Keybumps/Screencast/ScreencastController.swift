@@ -148,7 +148,9 @@ final class ScreencastController {
     @ObservationIgnored private let system: any ScreencastPickerSystem
     @ObservationIgnored private let presenter: any ScreencastOverlayPresenting
     @ObservationIgnored private let areaMemory: ScreencastAreaMemory
+    @ObservationIgnored private let pickerMemory: ScreencastPickerMemory
     @ObservationIgnored private let preferences: @MainActor () -> ScreencastPreferences
+    @ObservationIgnored private let saveSwitches: @MainActor (ScreencastSwitches) -> Void
     @ObservationIgnored private let screens: @MainActor () -> ScreencastScreenLayout
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     @ObservationIgnored private let microphoneAvailable: @MainActor () -> Bool
@@ -188,7 +190,11 @@ final class ScreencastController {
     ///   - system: The screen, for the windows to pick and for screenshots; inert in the unit-test
     ///     host unless a test passes a fake.
     ///   - presenter: The picker's and countdown's windows; inert in the unit-test host.
+    ///   - areaMemory: The last area recorded or captured, which the picker opens with.
+    ///   - pickerMemory: The rest of what was last recorded or captured, which the picker opens
+    ///     with, but the switches.
     ///   - preferences: Settings › Screencast, read each time the picker opens.
+    ///   - saveSwitches: Saves the picker's switches as Settings › Screencast's, at Record or Capture.
     ///   - screens: The displays, read each time the picker opens.
     ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
     ///     its screen.
@@ -207,7 +213,9 @@ final class ScreencastController {
         system: (any ScreencastPickerSystem)? = nil,
         presenter: (any ScreencastOverlayPresenting)? = nil,
         areaMemory: ScreencastAreaMemory,
+        pickerMemory: ScreencastPickerMemory,
         preferences: @escaping @MainActor () -> ScreencastPreferences,
+        saveSwitches: @escaping @MainActor (ScreencastSwitches) -> Void,
         screens: @escaping @MainActor () -> ScreencastScreenLayout = { ScreencastScreenLayout.current() },
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         microphoneAvailable: @escaping @MainActor () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
@@ -224,7 +232,9 @@ final class ScreencastController {
         self.system = system ?? ScreenCaptureKitPickerSystem.current
         self.presenter = presenter ?? (UnitTestHost.isActive ? InertScreencastOverlays() : ScreencastOverlayWindows())
         self.areaMemory = areaMemory
+        self.pickerMemory = pickerMemory
         self.preferences = preferences
+        self.saveSwitches = saveSwitches
         self.screens = screens
         self.pointerLocation = pointerLocation
         self.microphoneAvailable = microphoneAvailable
@@ -306,8 +316,9 @@ final class ScreencastController {
 
     // MARK: Picking
 
-    /// Start Screencast: opens the picker, with the switches as Settings has them and the last
-    /// area drawn. Does nothing while a capture is under way.
+    /// Start Screencast: opens the picker as it was last used to record or capture, with the
+    /// switches as Settings has them and the last area drawn. Does nothing while a capture is under
+    /// way.
     func open() {
         guard phase == .idle, Self.canStart(recorder.state) else { return }
         generation += 1
@@ -318,6 +329,7 @@ final class ScreencastController {
             layout: layout,
             preferences: settings,
             microphoneAvailable: microphoneAvailable(),
+            remembered: pickerMemory.choices,
             rememberedArea: areaMemory.area(in: layout),
             // Read once, now: the bar shows on this screen, and Screen mode starts with it.
             pointerScreen: layout.screen(containing: pointerLocation())?.id
@@ -402,11 +414,14 @@ final class ScreencastController {
         screenObserver = nil
     }
 
-    /// Record or Capture: closes the picker, remembers an area, then takes the screenshot, or counts
-    /// down and starts recording. Does nothing until something is chosen.
+    /// Record or Capture: closes the picker, remembers what it chose and saves its switches as the
+    /// settings, then takes the screenshot, or counts down and starts recording. Does nothing until
+    /// something is chosen.
     func confirm() {
         guard phase == .picking, let model = picker, let choice = model.choice(), let settings else { return }
         if let area = choice.area { areaMemory.save(area.rect) }
+        pickerMemory.save(model.choicesToRemember)
+        saveSwitches(model.switches)
         windowsLoad?.cancel()
         stopWatchingScreens()
         presenter.closePicker()

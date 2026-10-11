@@ -21,8 +21,8 @@ enum ScreencastSmokeTest {
     /// The process ID of the script's helper, whose blank window is the only one the window
     /// captures may take.
     nonisolated static let windowProcessOption = "KBScreencastSmokeWindowPID"
-    /// Its own defaults, so the area it draws never replaces the person's last one. Emptied before
-    /// and after it runs.
+    /// Its own defaults, so the area it draws and the mode and screen it picks never replace the
+    /// person's last ones. Emptied before and after it runs.
     static let defaultsSuite = "com.serp.keybumps.screencast-smoke-test"
     /// Its captures folder, in the temporary folder: emptied before it runs, deleted after, and
     /// deleted by the script too, so a run that crashed leaves nothing for long.
