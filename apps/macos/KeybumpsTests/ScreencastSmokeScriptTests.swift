@@ -78,10 +78,12 @@ struct ScreencastSmokeScriptTests {
         #expect(run.output.contains("\"passed\" : true") && run.output.contains("screencast smoke test: exit 0\n"), "\(run.output)")
         #expect(kill(running, 0) != 0, "the running Keybumps was quit")
         let helper = try #require(bench.helperPID)
-        // The helper's lifetime: the start wait, the time limit, and two minutes.
+        let script = try #require(bench.helperParent)
+        // The helper's lifetime (the start wait, the time limit, and two minutes), and the PID of
+        // the script, its parent, which it watches.
         #expect(bench.calls == [
             "\(SmokeScriptBench.appleScript) -e tell application id \"\(SmokeScriptBench.bundleID)\" to quit",
-            "\(SmokeScriptBench.appleScript) -l JavaScript - \(30 + 180 + 120)",
+            "\(SmokeScriptBench.appleScript) -l JavaScript - \(30 + 180 + 120) \(script)",
             "open -n \(bench.app.path) --args -\(ScreencastSmokeTest.launchOption) YES -\(ScreencastSmokeTest.windowProcessOption) \(helper)",
             "open \(bench.app.path)",
         ], "\(run.output)")
@@ -206,6 +208,21 @@ struct ScreencastSmokeScriptTests {
         #expect(!text.contains("Finder") && !text.contains("System Events"))
         #expect(!text.contains("pkill") && !text.contains("killall"))
     }
+
+    @Test("The helper's window joins every Space, full-screen ones included, and the helper watches the script's PID it's given from its first line")
+    func helperWindow() throws {
+        let text = try String(contentsOf: SmokeScriptBench.script, encoding: .utf8)
+        #expect(text.contains("window.collectionBehavior = 1 | 256;"), "canJoinAllSpaces and fullScreenAuxiliary")
+        #expect(text.contains(" $(( start_wait + timeout + 120 )) $$ "))
+        let run = try #require(text.range(of: "function run(argv) {\n")).upperBound
+        let lines = text[run...].split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        #expect(Array(lines.prefix(3)) == [
+            "const lifetime = Number(argv[0]) || 600;",
+            "const script = Number(argv[1]);",
+            "if ($.getppid() !== script) return;",
+        ])
+        #expect(text.components(separatedBy: "getppid()").count == 3, "only the first line's check and the loop's")
+    }
 }
 
 /// A folder holding a fake installed Keybumps (an Info.plist only), the QA folder under a fake
@@ -232,6 +249,7 @@ private final class SmokeScriptBench {
     private var pidFile: URL { root.appendingPathComponent("smoke.pid") }
     private var helperPIDFile: URL { root.appendingPathComponent("helper.pid") }
     private var helperSeenFile: URL { root.appendingPathComponent("helper-seen") }
+    private var helperParentFile: URL { root.appendingPathComponent("helper-parent") }
     private var leftoversFile: URL { root.appendingPathComponent("leftovers") }
 
     init(version: String = "0.0.3-dev.issue470") throws {
@@ -273,6 +291,7 @@ private final class SmokeScriptBench {
         if [[ "$1" == -l ]]; then
           cat >/dev/null
           print -r -- $$ > "$FAKE_HELPER_PID"
+          print -r -- $PPID > "$FAKE_HELPER_PARENT"
           [[ -z "${FAKE_HELPER_FAILS:-}" ]] || exit 1
           print ready
           exec -a "$FAKE_HELPER_NAME" /bin/zsh -c 'zmodload zsh/zselect; zselect -t 3000'
@@ -335,6 +354,11 @@ private final class SmokeScriptBench {
         (try? String(contentsOf: helperPIDFile, encoding: .utf8)).flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
+    /// The stand-in helper's parent: the script, when it ran the helper itself.
+    var helperParent: pid_t? {
+        (try? String(contentsOf: helperParentFile, encoding: .utf8)).flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    }
+
     /// The window PID the smoke run was opened with, if that process was running then.
     var helperAsSmokeRunOpened: pid_t? {
         (try? String(contentsOf: helperSeenFile, encoding: .utf8)).flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
@@ -364,6 +388,7 @@ private final class SmokeScriptBench {
             "FAKE_SMOKE_PID": pidFile.path,
             "FAKE_HELPER_PID": helperPIDFile.path,
             "FAKE_HELPER_SEEN": helperSeenFile.path,
+            "FAKE_HELPER_PARENT": helperParentFile.path,
             "FAKE_HELPER_NAME": helperName,
             "FAKE_LEFTOVERS": leftoversFile.path,
             "FAKE_RUNNING_PID": root.appendingPathComponent("running.pid").path,

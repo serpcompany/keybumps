@@ -372,19 +372,29 @@ final class ScreencastSmokeRunner {
 
     /// Waits until the script's window is on screen as the picker offers windows, reading the
     /// screen as the picker does. Only that process's window counts: any other could be anything
-    /// of the person's.
+    /// of the person's. `noSmokeWindow` means the screen was read without that window in it; when
+    /// no read worked in time, the capture fails with the last read's own reason instead.
     private func waitForSmokeWindow() async throws {
         guard let processID = environment.windowProcessID else { throw ScreencastSmokeFailure.noSmokeWindow }
         let system = rig.pickerSystem
         let ownProcessID = rig.ownProcessID
         let deadline = ContinuousClock.now + .seconds(configuration.windowTimeout)
+        var readFailure: Error?
+        var readTheScreen = false
         while true {
-            if let content = try? await Self.within(configuration.windowTimeout, { try await system.content() }),
-               ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: ownProcessID, transparent: system.transparentWindows())
-                   .contains(where: { $0.processID == processID }) {
-                return
+            do {
+                let content = try await Self.within(configuration.windowTimeout) { try await system.content() }
+                readTheScreen = true
+                if ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: ownProcessID, transparent: system.transparentWindows())
+                    .contains(where: { $0.processID == processID }) {
+                    return
+                }
+            } catch {
+                readFailure = error
             }
-            guard ContinuousClock.now < deadline else { throw ScreencastSmokeFailure.noSmokeWindow }
+            guard ContinuousClock.now < deadline else {
+                throw readTheScreen ? ScreencastSmokeFailure.noSmokeWindow : readFailure ?? ScreencastSmokeFailure.noSmokeWindow
+            }
             try await Task.sleep(for: configuration.windowPollInterval)
         }
     }

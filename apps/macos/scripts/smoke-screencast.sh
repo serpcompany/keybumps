@@ -3,7 +3,8 @@
 # it records 2 s each of the main display, a blank window, and an area, takes a screenshot of
 # each, checks and deletes every file, and writes a structural result (no titles, app names, file
 # names, or paths). On screen: a blank window titled "Keybumps smoke test" and the macOS recording
-# indicator, for about ten seconds. Nothing asks for a permission.
+# indicator, for about ten seconds. Nothing asks for a permission. If the window captures fail
+# with noSmokeWindow, leave full screen and run it again.
 #
 # It quits the running Keybumps by bundle id first, and reopens it afterwards whatever happened.
 # The blank window comes from a helper process of the script's own (osascript running
@@ -105,18 +106,20 @@ require_candidate
 
 # The blank window the window captures take, shown by a helper of the script's own so the smoke
 # test can tell it by its process ID. It's an accessory app, so it never becomes active or takes
-# keyboard focus; it's on every Space; and it closes when the script is gone, or after its
-# lifetime at most.
+# keyboard focus; it's on every Space, full-screen ones included; and it closes when the script
+# is gone (it's given the script's PID, so that holds from its first line), or after its lifetime
+# at most.
 helper_pid=
 work=
 start_helper() {
   : >| "$work/window-ready"
-  osascript -l JavaScript - $(( start_wait + timeout + 120 )) >| "$work/window-ready" 2>/dev/null <<'JAVASCRIPT' &
+  osascript -l JavaScript - $(( start_wait + timeout + 120 )) $$ >| "$work/window-ready" 2>/dev/null <<'JAVASCRIPT' &
 ObjC.import('Cocoa');
 ObjC.import('unistd');
 function run(argv) {
 	const lifetime = Number(argv[0]) || 600;
-	const parent = $.getppid();
+	const script = Number(argv[1]);
+	if ($.getppid() !== script) return;
 	$.NSApplication.sharedApplication.setActivationPolicy(1); // accessory
 	const visible = $.NSScreen.screens.objectAtIndex(0).visibleFrame;
 	const width = 480, height = 270;
@@ -124,11 +127,11 @@ function run(argv) {
 	const window = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(frame, 1, 2, false); // titled, buffered
 	window.releasedWhenClosed = false;
 	window.title = 'Keybumps smoke test';
-	window.collectionBehavior = 1; // every Space
+	window.collectionBehavior = 1 | 256; // every Space, full-screen ones included
 	window.orderFrontRegardless;
 	$.NSFileHandle.fileHandleWithStandardOutput.writeData($('ready\n').dataUsingEncoding($.NSUTF8StringEncoding));
 	const end = Date.now() + lifetime * 1000;
-	while (Date.now() < end && $.getppid() === parent) {
+	while (Date.now() < end && $.getppid() === script) {
 		$.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.25));
 	}
 }

@@ -38,10 +38,11 @@ enum ScreencastSmokeTest {
         CrashReportTest.isAllowed(version: version) && defaults.bool(forKey: launchOption)
     }
 
-    /// The helper's process ID from `-KBScreencastSmokeWindowPID <pid>`; nil when there's none.
+    /// The helper's process ID from `-KBScreencastSmokeWindowPID <pid>`, which arrives as a string
+    /// like every launch argument; nil when there's none or it isn't a process ID.
     static func windowProcessID(defaults: UserDefaults = .standard) -> pid_t? {
-        let value = defaults.integer(forKey: windowProcessOption)
-        return value > 0 && value <= Int(Int32.max) ? pid_t(value) : nil
+        guard let value = defaults.string(forKey: windowProcessOption).flatMap({ pid_t($0) }), value > 0 else { return nil }
+        return value
     }
 
     /// `~/Library/Developer/Keybumps-QA/screencast-smoke-test.json`, beside the QA candidates'

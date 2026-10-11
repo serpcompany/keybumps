@@ -279,6 +279,44 @@ struct ScreencastSmokeTests {
     }
 
     @available(macOS 15, *)
+    @Test("A window capture whose screen reads all fail gives the read's own reason; noSmokeWindow needs a read that worked")
+    func unreadableScreen() async throws {
+        defer { folder.remove() }
+        let cases: [(name: String, firstReadWorks: Bool, category: String)] = [
+            ("no read worked", false, ScreencastFailure.targetUnavailable.rawValue),
+            ("the first read worked, without the window, and the rest failed", true, ScreencastSmokeFailure.noSmokeWindow.rawValue),
+        ]
+        for item in cases {
+            let smoke = ScreencastSmokeTests(content: Self.content(windows: [ScreencastScreens.browserWindow, Self.finderLikeWindow]))
+            defer { smoke.folder.remove() }
+            let (runner, rig) = smoke.makeRunner()
+            let pickerSystem = smoke.pickerSystem
+            let controller = rig.controller
+            // Only the reads made while a window capture waits, before Start Screencast, fail: the
+            // picker's own reads still work, so the other captures run as usual.
+            var waitReads = 0
+            pickerSystem.onContent = {
+                guard controller.phase == .idle else {
+                    waitReads = 0
+                    pickerSystem.contentError = nil
+                    return
+                }
+                waitReads += 1
+                pickerSystem.contentError = item.firstReadWorks && waitReads == 1 ? nil : .targetUnavailable
+            }
+            let report = await runner.run()
+            pickerSystem.onContent = {}
+
+            let windows = report.captures.filter { $0.mode.target == .window }
+            #expect(windows.count == 2 && windows.allSatisfy { $0.stage == .opening && $0.errorCategory == item.category }, "\(item.name): \(windows.map(\.errorCategory))")
+            #expect(report.captures.filter { $0.mode.target != .window }.allSatisfy { $0.passed }, "\(item.name)")
+            #expect(!smoke.videoPlans.contains { if case .windows = $0 { true } else { false } }, "\(item.name)")
+            #expect(!pickerSystem.plans.contains { if case .window = $0.filter { true } else { false } }, "\(item.name)")
+            #expect(report.exitCode == 1 && report.cleanedUp, "\(item.name)")
+        }
+    }
+
+    @available(macOS 15, *)
     @Test("The window captures wait for the script's window to appear on screen, then take it")
     func lateSmokeWindow() async throws {
         let smoke = ScreencastSmokeTests(content: Self.withSmokeWindow)
@@ -402,6 +440,21 @@ struct ScreencastSmokeTests {
             ScreencastSmokeTest.resultURL(home: URL(fileURLWithPath: "/Users/someone", isDirectory: true)).path
                 == "/Users/someone/Library/Developer/Keybumps-QA/screencast-smoke-test.json"
         )
+    }
+
+    @Test("The helper's PID is read from its launch argument, a string, and anything that isn't a process ID gives none")
+    func windowProcessArgument() {
+        // Launch arguments reach the argument domain as strings, never numbers.
+        func processID(_ value: String?) -> pid_t? {
+            let defaults = InMemoryDefaults()
+            if let value { defaults.register(defaults: [ScreencastSmokeTest.windowProcessOption: value]) }
+            return ScreencastSmokeTest.windowProcessID(defaults: defaults)
+        }
+        #expect(processID("12345") == 12345)
+        #expect(processID(nil) == nil)
+        for value in ["abc", "12abc", "", "0", "-5", "99999999999"] {
+            #expect(processID(value) == nil, "\(value)")
+        }
     }
 
     @available(macOS 15, *)
