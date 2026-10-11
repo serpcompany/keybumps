@@ -2,6 +2,8 @@
 
 Captured 2026-09-12 before implementation.
 
+Code from an approved donor with a permissive license (MIT, BSD, Apache-2.0, CC0) may be copied as is. GPL, AGPL, BSL and unlicensed code is never copied. Every donor still gets its `LICENSE.<name>` file in `apps/macos/`, a ledger row pinned to the commit it came from, and the README attribution. An Apache-2.0 donor also needs its `NOTICE` text kept in `apps/macos/NOTICES.<name>` (as `NOTICES.argmax-oss-swift` is), and every copied file we change carries a note saying it was modified (Apache-2.0 §4).
+
 | Source group | Donor | Commit | Working tree | Disposition |
 | --- | --- | --- | --- | --- |
 | App shell and Shortcut Coaching | `/Users/devin/dev/repos/keyboard-shortcut-coach-mac-app` | `5acf2ccb5d26744033546bc3bfb686c9ca69f439` | Dirty planning-doc changes only | Adapted owned source; code copied from commit working tree |

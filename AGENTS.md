@@ -27,6 +27,7 @@ Across the repo, including the website, use `CONTEXT.md` terminology, preserve t
 - Never take over the owner's screen (computer use, browser control, or other screen control) without an explicit handoff.
 - Do not log or commit user content: searches, filenames, clipboard values, transcripts, recordings, window/document titles, URLs, or coaching content. Logs and fixtures hold only structural state, timing, stage, error category, and recovery.
 - Preserve every `LICENSE.*` and `NOTICES.*` file in `apps/macos/` and the provenance ledger for donor-derived behavior.
+- Donor code with a permissive license may be copied as is; see `docs/provenance/donor-ledger.md` for the licenses and what each donor needs.
 - Do not publish, create a remote, configure commerce, notarize, or distribute without fresh owner authorization. The one standing exception is the website deploy that follows an agent's merge under the listed paths above.
 
 ## Mac app (`apps/macos/`: its code, tests, scripts, and release tooling)
