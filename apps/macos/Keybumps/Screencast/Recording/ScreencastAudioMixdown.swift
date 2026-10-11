@@ -15,6 +15,8 @@ enum ScreencastAudioMixdown {
         case cannotAddInput
         case readerFailed
         case writerFailed
+        /// The file's length, or a setting, isn't one AVFoundation would take.
+        case unusable
     }
 
     /// One track plays everywhere already; two or more need mixing.
@@ -35,6 +37,8 @@ enum ScreencastAudioMixdown {
             throw MixdownError.missingVideoTrack
         }
         let duration = try await asset.load(.duration)
+        // A reader given an invalid or indefinite range raises an exception rather than failing.
+        guard duration.isNumeric, duration > .zero else { throw MixdownError.unusable }
         let transform = try await videoTrack.load(.preferredTransform)
         let formatHint = try await videoTrack.load(.formatDescriptions).first
         let inputs = MixdownInputs(asset: asset, videoTrack: videoTrack, audioTracks: audioTracks)
@@ -119,13 +123,16 @@ enum ScreencastAudioMixdown {
             reader.add(audioOutput)
             var layout = AudioChannelLayout()
             layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
-            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            let audioSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: 48_000,
                 AVNumberOfChannelsKey: 2,
                 AVEncoderBitRateKey: 192_000,
                 AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
-            ])
+            ]
+            // Settings the writer can't use would raise an exception when the input is made.
+            guard writer.canApply(outputSettings: audioSettings, forMediaType: .audio) else { throw MixdownError.unusable }
+            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             audioInput.expectsMediaDataInRealTime = false
             guard writer.canAdd(audioInput) else { throw MixdownError.cannotAddInput }
             writer.add(audioInput)
@@ -187,11 +194,12 @@ enum ScreencastAudioMixdown {
                 while input.isReadyForMoreMediaData {
                     guard !lock.withLock({ failed || finished[index] }) else { return }
                     guard let sample = output.copyNextSampleBuffer() else {
-                        input.markAsFinished()
+                        if writer.status == .writing { input.markAsFinished() }
                         finish(index)
                         return
                     }
-                    guard input.append(sample) else {
+                    // Appending to a writer that's no longer writing raises an exception.
+                    guard writer.status == .writing, input.append(sample) else {
                         fail()
                         return
                     }

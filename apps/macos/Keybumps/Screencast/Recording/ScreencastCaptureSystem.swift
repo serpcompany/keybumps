@@ -50,7 +50,9 @@ protocol ScreencastCaptureSystem: AnyObject {
 
     /// What's on screen now, with `onScreenOnly` leaving out windows that aren't: minimized,
     /// hidden, or on other Spaces. Smaller and faster, which is all a window recording needs.
-    func content(onScreenOnly: Bool) async throws -> ScreencastContent
+    /// Without `includesDesktop`, the desktop's windows (its picture and icons) are left out too: a
+    /// window recording never shows them, so its reads never list them.
+    func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent
 
     /// A stream showing `plan`, delivering frames sized by `configuration`, with no sound.
     func makeVideoStream(
@@ -75,24 +77,34 @@ protocol ScreencastCaptureSystem: AnyObject {
     /// The window numbers of Keybumps's visible windows, to notice when one opens or closes.
     func ownVisibleWindows() -> Set<CGWindowID>
 
-    /// The window numbers of a process's windows on screen now, read cheaply many times a second
-    /// to notice a recorded app opening a menu or sheet; nil when they can't be read.
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>?
+    /// A process's windows on screen now, read cheaply many times a second to notice a recorded
+    /// app opening a menu or sheet, or a window of it gaining or losing a title; nil when they
+    /// can't be read.
+    func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>?
 
     /// Whether a window still exists, on screen or not: minimized, hidden, and on another Space
     /// all count. Nil when it can't be told.
     func windowExists(_ id: CGWindowID) -> Bool?
 }
 
+/// One of a recorded app's windows as the recorder watches it: its number, whether it has a
+/// title, and its window server layer, which decide whether a window recording may show it. The
+/// title itself is never kept.
+struct ScreencastWatchedWindow: Hashable, Sendable {
+    let id: CGWindowID
+    let isUntitled: Bool
+    let layer: Int
+}
+
 extension ScreencastCaptureSystem {
-    /// A capture system that can't tell: window recordings then pick up an app's new windows only
-    /// when something else rebuilds the filter.
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
+    /// A capture system that can't tell: nothing then says a window recording's window is in
+    /// sight, so it writes no frame.
+    func onScreenWindows(of processID: pid_t) -> Set<ScreencastWatchedWindow>? { nil }
 
     func windowExists(_ id: CGWindowID) -> Bool? { nil }
 
     /// A capture system with one kind of read gives it whatever's asked.
-    func content(onScreenOnly: Bool) async throws -> ScreencastContent {
+    func content(onScreenOnly: Bool, includesDesktop: Bool) async throws -> ScreencastContent {
         try await content()
     }
 }
