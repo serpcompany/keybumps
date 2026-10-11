@@ -119,6 +119,16 @@ final class SmokeUITests: XCTestCase {
         return topLeft(CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3]), primaryHeight: numbers[4])
     }
 
+    /// The visible frame, in XCUITest's coordinates, of the runner's screen with the middle of
+    /// `frame` on it.
+    private static func visibleFrameOfScreen(containing frame: CGRect) -> CGRect? {
+        guard let primaryHeight = NSScreen.screens.first?.frame.maxY else { return nil }
+        let middle = CGPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens
+            .first { topLeft($0.frame, primaryHeight: primaryHeight).contains(middle) }
+            .map { topLeft($0.visibleFrame, primaryHeight: primaryHeight) }
+    }
+
     /// AppKit's screen coordinates start at the primary screen's bottom-left corner; XCUITest's at
     /// its top-left.
     private static func topLeft(_ rect: CGRect, primaryHeight: CGFloat) -> CGRect {
@@ -496,11 +506,16 @@ final class SmokeUITests: XCTestCase {
 
     /// #475: a recording's review is a standard window that all but fills the screen: the player edge
     /// to edge, and Discard, Copy, and Save in its toolbar. Nothing to type, no Trim, and Save closes it.
-    func testScreencastReviewOfAVideoFillsTheScreenWithItsActionsInTheToolbar() {
+    func testScreencastReviewOfAVideoFillsTheScreenWithItsActionsInTheToolbar() throws {
         launchScreencastReview("video")
         let window = reviewPanel
-        XCTAssertGreaterThanOrEqual(window.frame.width, 760, "the big window")
-        XCTAssertGreaterThanOrEqual(window.frame.height, 500)
+        // The screen's visible frame, but 16 pt on each side. Up and down the check is looser: the
+        // runner's visible frame can end a few points from the app's (#294).
+        let visible = try XCTUnwrap(Self.visibleFrameOfScreen(containing: window.frame), "the window's screen")
+        XCTAssertEqual(window.frame.minX, visible.minX + 16, accuracy: 2, "it fills the screen but a margin: left \(window.frame) in \(visible)")
+        XCTAssertEqual(window.frame.maxX, visible.maxX - 16, accuracy: 2, "right")
+        XCTAssertEqual(window.frame.minY, visible.minY + 16, accuracy: 5, "top")
+        XCTAssertEqual(window.frame.maxY, visible.maxY - 16, accuracy: 5, "bottom")
         let player = window.descendants(matching: .any).matching(identifier: "screencast.review.playerArea").firstMatch
         XCTAssertTrue(player.exists, "the player")
         XCTAssertEqual(player.frame.minX, window.frame.minX, accuracy: 1, "edge to edge")

@@ -8,8 +8,9 @@ import SwiftUI
 ///
 /// The flow that finishes captures makes one, calls `show` with each capture and the context read
 /// when it started, and hears how each ended through `onFinish`. Captures take turns: one that
-/// arrives while another is under review closes that one first, which saves it. After
-/// `shutDown()`, a capture still waiting is saved without showing.
+/// arrives while another is under review closes that one first, which saves it. A capture starting
+/// does so before its picker opens (`makeWayForNextCapture()`), so the window is never over the
+/// picker or the recording. After `shutDown()`, a capture still waiting is saved without showing.
 @MainActor
 final class ScreencastReviewPanel {
     let window = ScreencastRecordingReviewWindow()
@@ -24,10 +25,19 @@ final class ScreencastReviewPanel {
     private let screen: @MainActor () -> NSScreen?
     private let ordersPanelIn: Bool
     private let makePlayback: @MainActor () -> ScreencastReviewPlayback?
+    private let fullKeyboardAccess: @MainActor () -> Bool
     /// The recording's player, while the window is up.
     private(set) var playback: ScreencastReviewPlayback?
-    /// The app in front before the window took it, which gets it back after.
+    /// The app in front before the window took it, which gets it back after. It's kept while the
+    /// window makes way for what comes next, which hands it back in its turn.
     private var previousApp: NSRunningApplication?
+    /// The window is closing for the next review, which takes the front itself.
+    private var isTakingTurns = false
+    /// The window went for the next capture (`makeWayForNextCapture()`), until its capture is saved.
+    private(set) var isMakingWay = false
+    /// The window had the keyboard when it went for the next capture: `previousApp` gets the front
+    /// back once the picker and the countdown are done (`captureUnderWay()`).
+    private var owesFront = false
     private var keyMonitor: Any?
     /// The last capture's turn, which the next one waits for.
     private var turn: Task<Void, Never>?
@@ -35,21 +45,25 @@ final class ScreencastReviewPanel {
     private(set) var isAccepting = true
 
     /// - Parameters:
+    ///   - pasteboard: Where Copy writes: `.keybumps` for the app, a named pasteboard for a test.
     ///   - keepOutOfClipboardHistory: Marks Copy's write so Clipboard History skips it; the app
     ///     passes `ClipboardHistoryService.suppressCurrentChange`.
     ///   - screen: Where the window shows: the screen with the pointer.
     ///   - ordersPanelIn: False keeps the window off screen, as under the unit-test host.
     ///   - makePlayback: The recording's player, none under the unit-test host unless a test asks.
+    ///   - fullKeyboardAccess: Whether Tab reaches buttons (Keyboard Navigation in System Settings),
+    ///     so a toolbar button can have the keyboard.
     init(
         repositories: ScreencastRepositoryMemory,
         fileManager: FileManager = .default,
-        pasteboard: NSPasteboard = .keybumps,
+        pasteboard: NSPasteboard,
         keepOutOfClipboardHistory: @escaping () -> Void,
         screen: @escaping @MainActor () -> NSScreen? = ScreencastReviewPanel.screenWithPointer,
         ordersPanelIn: Bool = !UnitTestHost.isActive,
         makePlayback: @escaping @MainActor () -> ScreencastReviewPlayback? = {
             UnitTestHost.isActive ? nil : ScreencastReviewPlayback()
-        }
+        },
+        fullKeyboardAccess: @escaping @MainActor () -> Bool = { NSApp.isFullKeyboardAccessEnabled }
     ) {
         self.repositories = repositories
         self.fileManager = fileManager
@@ -58,12 +72,14 @@ final class ScreencastReviewPanel {
         self.screen = screen
         self.ordersPanelIn = ordersPanelIn
         self.makePlayback = makePlayback
+        self.fullKeyboardAccess = fullKeyboardAccess
         window.onClose = { [weak self] in
             Task { await self?.close() }
         }
     }
 
-    var isShown: Bool { model != nil }
+    /// A capture is under review in the window, not one that made way and is still being saved.
+    var isShown: Bool { model != nil && !isMakingWay }
 
     /// Shows the window for `input` once the captures before it are done, guessing its repository
     /// from `context`, or from `contextRead` when it comes. It returns once the window is up, or the
@@ -100,14 +116,41 @@ final class ScreencastReviewPanel {
         model?.saveNow()
     }
 
+    /// A capture is starting, before its picker opens: the window goes at once, so it's never over
+    /// the picker or the recording and never takes their keys, and its capture is saved, as closing
+    /// it does. If the window had the keyboard, the app in front before it gets the front back once
+    /// the capture is under way or cancelled (`captureUnderWay()`): the picker takes the keyboard
+    /// meanwhile.
+    func makeWayForNextCapture() {
+        guard model != nil, !isMakingWay else { return }
+        isMakingWay = true
+        owesFront = window.isKeyWindow
+        // Another app has the front already: nothing to give back.
+        if !owesFront { previousApp = nil }
+        hideWindow()
+        Task { await close() }
+    }
+
+    /// The capture that made the window go is recording, or was cancelled: the front goes back to
+    /// the app that had it before the window, if Keybumps still has it.
+    func captureUnderWay() {
+        guard owesFront else { return }
+        owesFront = false
+        if NSApp.isActive, !isShown { previousApp?.activate() }
+        if !isShown { previousApp = nil }
+    }
+
     private func present(
         _ input: ScreencastReviewInput,
         context: ScreencastCaptureContext,
         contextRead: Task<ScreencastCaptureContext, Never>?
     ) async {
+        // The next window takes the front, and gives it back to the app before this one.
+        isTakingTurns = true
         while model != nil {
             await close()
         }
+        isTakingTurns = false
         let model = makeModel(input, context: context, contextRead: contextRead)
         guard isAccepting else {
             await model.saveWhenContextComes()
@@ -137,6 +180,7 @@ final class ScreencastReviewPanel {
             guard let self, let model, self.model === model else { return }
             self.dismiss()
             self.onFinish?(outcome)
+            self.isMakingWay = false
         }
         self.model = model
         installKeyMonitor()
@@ -157,9 +201,12 @@ final class ScreencastReviewPanel {
         if let visibleFrame = screen()?.visibleFrame {
             window.setFrame(ScreencastRecordingReviewWindow.frame(in: visibleFrame), display: false)
         }
+        owesFront = false
         guard ordersPanelIn else { return }
+        // Keybumps in front means the window before had it, or the picker: the app before them
+        // keeps its claim.
         let front = NSWorkspace.shared.frontmostApplication
-        if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier { previousApp = front }
+        if let front, front.processIdentifier != ProcessInfo.processInfo.processIdentifier { previousApp = front }
         if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -173,19 +220,32 @@ final class ScreencastReviewPanel {
         guard let model else { return }
         await model.close()
         // A capture whose model couldn't finish still leaves the window.
-        if self.model === model { dismiss() }
+        if self.model === model {
+            dismiss()
+            isMakingWay = false
+        }
     }
 
+    /// The review is done with its capture. `onFinish` comes next, with `isMakingWay` still saying
+    /// whether the next capture closed it.
     private func dismiss() {
+        model = nil
+        let hadKeyboard = window.isKeyWindow
+        hideWindow()
+        // The next window, or the next capture's picker, takes the front: the app before keeps
+        // its claim until they're done.
+        guard !isTakingTurns, !isMakingWay else { return }
+        if hadKeyboard { previousApp?.activate() }
+        previousApp = nil
+    }
+
+    /// The window off screen, its keys and player gone. The view stays until the next capture
+    /// replaces it: it may be in the middle of a click.
+    private func hideWindow() {
         removeKeyMonitor()
         playback?.stop()
         playback = nil
-        model = nil
-        // The view stays until the next capture replaces it: it may be in the middle of a click.
-        let hadKeyboard = window.isKeyWindow
         window.orderOut(nil)
-        if hadKeyboard { previousApp?.activate() }
-        previousApp = nil
     }
 
     // MARK: Placement
@@ -215,15 +275,17 @@ final class ScreencastReviewPanel {
         return perform(key, isRepeat: event.isARepeat) ? nil : event
     }
 
-    /// What a key pressed in `keyWindow` does: nothing outside the review's own window.
+    /// What a key pressed in `keyWindow` does: nothing outside the review's own window, or once it
+    /// made way for the next capture.
     func action(forKey keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in keyWindow: NSWindow?) -> ScreencastReviewKey {
-        guard let model, let keyWindow, keyWindow === window else { return .pass }
+        guard let model, !isMakingWay, let keyWindow, keyWindow === window else { return .pass }
         return ScreencastReviewKey.action(
             keyCode: keyCode,
             modifiers: modifiers,
             isComposing: (keyWindow.firstResponder as? NSTextView)?.hasMarkedText() == true,
             isConfirmingDiscard: model.isConfirmingDiscard,
-            isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: keyCode, modifiers: modifiers)
+            isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: keyCode, modifiers: modifiers),
+            controlHasKeyboard: fullKeyboardAccess() && window.toolbarHas(keyWindow.firstResponder)
         )
     }
 
@@ -231,7 +293,7 @@ final class ScreencastReviewPanel {
     /// pauses once, and a held Return or Escape saves once.
     @discardableResult
     func perform(_ key: ScreencastReviewKey, isRepeat: Bool = false) -> Bool {
-        guard let model else { return false }
+        guard let model, !isMakingWay else { return false }
         switch key {
         case .pass: return false
         case .ignore: break
@@ -246,10 +308,11 @@ final class ScreencastReviewPanel {
 
 /// What a key does in the review. Return saves and Escape closes, which saves too; while the
 /// discard question is up, Escape keeps the capture and Return does nothing, so a key never
-/// deletes. Space plays and pauses, as in Snapzy's `VideoEditorWindow`. A text field still
-/// composing (an input method's marked text) keeps its keys, and a key claimed in Keybumps's own
-/// windows (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what
-/// claims it.
+/// deletes. Space plays and pauses, as in Snapzy's `VideoEditorWindow`. A toolbar button that has
+/// the keyboard (Full Keyboard Access's Tab) keeps Space and Return, as any macOS button does,
+/// though Return still never answers the discard question. A text field still composing (an input
+/// method's marked text) keeps its keys, and a key claimed in Keybumps's own windows
+/// (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what claims it.
 enum ScreencastReviewKey: Equatable {
     case save
     case close
@@ -270,13 +333,17 @@ enum ScreencastReviewKey: Equatable {
         modifiers: NSEvent.ModifierFlags,
         isComposing: Bool,
         isConfirmingDiscard: Bool,
-        isClaimed: Bool = false
+        isClaimed: Bool = false,
+        controlHasKeyboard: Bool = false
     ) -> ScreencastReviewKey {
         guard !isClaimed, !isComposing,
               modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
-        if keyCode == spaceKeyCode { return modifiers.contains(.shift) ? .pass : .togglePlay }
+        if keyCode == spaceKeyCode { return modifiers.contains(.shift) || controlHasKeyboard ? .pass : .togglePlay }
         if keyCode == escapeKeyCode { return isConfirmingDiscard ? .keep : .close }
-        if returnKeyCodes.contains(keyCode) { return isConfirmingDiscard ? .ignore : .save }
+        if returnKeyCodes.contains(keyCode) {
+            if isConfirmingDiscard { return .ignore }
+            return controlHasKeyboard ? .pass : .save
+        }
         return .pass
     }
 }

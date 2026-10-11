@@ -196,7 +196,7 @@ final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
     }
 
     /// The picture's encoder: H.264, or HEVC past H.264's limits (`ScreencastVideoFormat`), a
-    /// keyframe a second, no reordered frames. A trim that re-encodes uses it too.
+    /// keyframe a second, no reordered frames.
     static func videoSettings(pixelWidth: Int, pixelHeight: Int, framesPerSecond: Int) -> [String: Any] {
         let format = ScreencastVideoFormat.plan(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: framesPerSecond)
         return [

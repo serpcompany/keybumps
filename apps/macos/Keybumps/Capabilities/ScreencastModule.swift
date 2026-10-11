@@ -245,6 +245,7 @@ final class ScreencastModule: CapabilityModule {
             overlays: overlays
         )
         controller.onCaptureFinished = { [review] result in review.captureFinished(result) }
+        controller.addPhaseObserver { [review] phase in review.capturePhaseChanged(phase) }
         controllerStorage = controller
         return controller
     }

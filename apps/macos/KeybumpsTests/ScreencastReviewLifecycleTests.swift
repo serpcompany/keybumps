@@ -60,6 +60,7 @@ struct ScreencastReviewLifecycleTests {
         let flow = ScreencastReviewFlow(
             services: ScreencastReviewServices(
                 clipboard: fixture.clipboard,
+                pasteboard: fixture.pasteboard,
                 notices: nil,
                 repositories: { [fixture] in fixture.repositories }
             ),
@@ -185,7 +186,7 @@ private final class ContextGate {
 extension ScreencastReviewOutcome {
     var folder: URL? {
         switch self {
-        case .saved(let input), .copied(let input): input.folder
+        case .saved(let input), .copied(let input), .saveFailed(let input, _): input.folder
         case .discarded: nil
         }
     }

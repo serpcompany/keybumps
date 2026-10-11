@@ -8,8 +8,9 @@ import os
 ///
 /// Every way out keeps the capture except Discard. Save, Return, and Copy write the review into
 /// `meta.json` and stay open if that fails, saying why. Escape and closing the window save too, as
-/// far as they can, so nothing is lost: a repository that isn't `owner/name` is left out. Quitting
-/// saves at once (`saveNow`).
+/// far as they can, so nothing is lost: a repository that isn't `owner/name` is left out, and a
+/// review that can't be written ends as `saveFailed`, never `saved`. Quitting saves at once
+/// (`saveNow`).
 ///
 /// The context read when the capture started may still be on its way: the window shows at once, and
 /// the guess fills the repository when it comes.
@@ -63,7 +64,7 @@ final class ScreencastReviewModel {
         contextRead: Task<ScreencastCaptureContext, Never>? = nil,
         repositories: ScreencastRepositoryMemory,
         fileManager: FileManager = .default,
-        pasteboard: NSPasteboard = .keybumps,
+        pasteboard: NSPasteboard,
         keepOutOfClipboardHistory: @escaping () -> Void,
         now: @escaping () -> Date = Date.init
     ) {
@@ -156,7 +157,10 @@ final class ScreencastReviewModel {
         isConfirmingDiscard = false
         let text = repositoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let repository = text.isEmpty ? nil : ScreencastRepository(text)
-        record(repository: repository, strictly: false)
+        if let failure = record(repository: repository) {
+            log(failure)
+            return finish(.saveFailed(input, failure))
+        }
         finish(.saved(input))
     }
 
@@ -206,7 +210,12 @@ final class ScreencastReviewModel {
         let repository = text.isEmpty ? nil : ScreencastRepository(text)
         if !text.isEmpty, repository == nil, strictly { return fail(.invalidRepository) }
 
-        guard record(repository: repository, strictly: strictly) else { return }
+        if let failure = record(repository: repository) {
+            // Stays open to say why; closing anyway ends without claiming it was saved.
+            if strictly { return fail(failure) }
+            log(failure)
+            return finish(.saveFailed(input, failure))
+        }
         if copying {
             guard ScreencastReviewFiles.copy(input, to: pasteboard) else { return fail(.copyFailed) }
             keepOutOfClipboardHistory()
@@ -214,13 +223,14 @@ final class ScreencastReviewModel {
         finish(copying ? .copied(input) : .saved(input))
     }
 
-    /// Remembers a corrected repository and writes the review into `meta.json`. False when that
-    /// failed and `strictly` keeps the window open to say so.
-    @discardableResult
-    private func record(repository: ScreencastRepository?, strictly: Bool) -> Bool {
+    /// Remembers a corrected repository and writes the review into `meta.json`. Returns why that
+    /// failed, or nil.
+    private func record(repository: ScreencastRepository?) -> ScreencastReviewFailure? {
         if let repository, repository != guess?.repository {
             repositories.remember(repository, for: context)
         }
+        // Writing would make the folder again, around nothing but the review.
+        guard recordingExists else { return .recordingMissing }
         let review = ScreencastReview(
             note: Self.oneLine(note),
             type: type,
@@ -231,13 +241,16 @@ final class ScreencastReviewModel {
         do {
             try ScreencastReview.write(review, to: input.metadataURL, fileManager: fileManager)
         } catch {
-            if strictly {
-                fail(.metadataFailed)
-                return false
-            }
-            log(.metadataFailed)
+            return .saving(error, recordingExists: recordingExists)
         }
-        return true
+        return nil
+    }
+
+    /// The capture's folder and every video in it are still there.
+    private var recordingExists: Bool {
+        var isFolder: ObjCBool = false
+        return fileManager.fileExists(atPath: input.folder.path, isDirectory: &isFolder) && isFolder.boolValue
+            && input.mediaFiles.allSatisfy { fileManager.fileExists(atPath: $0.path) }
     }
 
     /// The note on one line: line breaks and tabs become spaces, and the ends are trimmed.

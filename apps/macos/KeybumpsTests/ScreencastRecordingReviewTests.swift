@@ -15,14 +15,16 @@ struct ScreencastRecordingReviewTests {
 
     private func panel(
         outcomes: ReviewOutcomeLog,
-        makePlayback: @escaping @MainActor () -> ScreencastReviewPlayback? = { nil }
+        makePlayback: @escaping @MainActor () -> ScreencastReviewPlayback? = { nil },
+        fullKeyboardAccess: @escaping @MainActor () -> Bool = { false }
     ) -> ScreencastReviewPanel {
         let panel = ScreencastReviewPanel(
             repositories: fixture.repositories,
             pasteboard: fixture.pasteboard,
             keepOutOfClipboardHistory: {},
             screen: { nil },
-            makePlayback: makePlayback
+            makePlayback: makePlayback,
+            fullKeyboardAccess: fullKeyboardAccess
         )
         panel.onFinish = { outcomes.outcomes.append($0) }
         return panel
@@ -33,6 +35,7 @@ struct ScreencastRecordingReviewTests {
         let flow = ScreencastReviewFlow(
             services: ScreencastReviewServices(
                 clipboard: fixture.clipboard,
+                pasteboard: fixture.pasteboard,
                 notices: notices,
                 repositories: { [fixture] in fixture.repositories }
             ),
@@ -221,18 +224,21 @@ struct ScreencastRecordingReviewTests {
         #expect(notices.messages == ["Recording saved", "Recording saved", "Recording saved"])
     }
 
-    @Test("Copy puts the recording on the clipboard and closes the window; the notch then says \"Recording copied\"")
+    @Test("Copy puts the recording on the services' pasteboard and closes the window; the notch then says \"Recording copied\"")
     func copyCloses() async throws {
         defer { fixture.tearDown() }
-        // The panel itself, on the test's named pasteboard: the flow's would be the real one.
         let outcomes = ReviewOutcomeLog()
-        let panel = panel(outcomes: outcomes)
+        let notices = ReviewNotices()
+        // The flow, as the app hangs it: Copy writes to the pasteboard its services name, here the
+        // test's own.
+        let flow = flow(outcomes: outcomes, notices: notices)
         let recording = try fixture.video()
-        await panel.show(recording)
+        await flow.show(recording, context: .none)
+        let panel = try #require(flow.panel)
         await panel.model?.copy()
         #expect(outcomes.outcomes == [.copied(recording)] && !panel.isShown && !panel.window.isVisible)
-        #expect(fixture.pasteboard.pasteboardItems?.isEmpty == false)
-        #expect(ScreencastReviewFlow.notice(for: outcomes.outcomes[0]) == "Recording copied")
+        #expect(fixture.pasteboard.pasteboardItems?.isEmpty == false, "on the test's pasteboard")
+        #expect(notices.messages == ["Recording copied"] && notices.warnings == [false])
     }
 
     @Test("Discard asks first, then deletes and closes, with no notice; turning Screencast off saves")
@@ -263,11 +269,12 @@ struct ScreencastRecordingReviewTests {
         #expect(notices.messages == ["Recording saved"])
     }
 
-    @Test("Nothing is left on screen for the next capture: a saved recording's window is already gone; one not yet saved closes at that capture's turn, which saves it")
+    @Test("Nothing is left on screen for the next capture: a saved recording's window is already gone; one not yet saved closes as the capture starts, which saves it, with no notice")
     func nextCaptureAfterAReview() async throws {
         defer { fixture.tearDown() }
         let outcomes = ReviewOutcomeLog()
-        let flow = flow(outcomes: outcomes, notices: ReviewNotices())
+        let notices = ReviewNotices()
+        let flow = flow(outcomes: outcomes, notices: notices)
 
         let saved = try fixture.video(name: "1791000000")
         await flow.show(saved, context: .none)
@@ -278,22 +285,125 @@ struct ScreencastRecordingReviewTests {
         let unsaved = try fixture.video(name: "1791000100")
         await flow.show(unsaved, context: .none)
         flow.captureStarting()
-        #expect(panel.model?.input == unsaved && panel.model?.isFinished == false, "a review not yet saved stays")
+        #expect(!panel.isShown, "a review not yet saved goes as the capture starts")
+        try await eventually { panel.model == nil }
+        #expect(outcomes.outcomes == [.saved(saved), .saved(unsaved)], "which saves it")
+        #expect(ScreencastReview.read(from: unsaved.metadataURL) != nil, "with its review in meta.json")
+        #expect(notices.messages == ["Recording saved"], "the next capture needs no notice for it")
 
         let next = try fixture.video(name: "1791000200")
         await flow.show(next, context: .none)
-        #expect(outcomes.outcomes == [.saved(saved), .saved(unsaved)], "the next capture's turn saves it first")
-        #expect(panel.model?.input == next)
+        #expect(panel.isShown && panel.model?.input == next, "the next recording opens as usual")
         await panel.close()
+        #expect(notices.messages == ["Recording saved", "Recording saved"])
     }
 
-    @Test("What the notch says: Save and Copy, and nothing for Discard")
+    @Test("From the moment a capture starts, the window before is off screen, never key, deaf to its keys, and its player stopped, while its save is still to come")
+    func nextCaptureNeverHasTheWindow() async throws {
+        defer { fixture.tearDown() }
+        let recording = try await playableRecording()
+        let outcomes = ReviewOutcomeLog()
+        let panel = panel(outcomes: outcomes, makePlayback: { ScreencastReviewPlayback() })
+        await panel.show(recording)
+        let playback = try #require(panel.playback)
+        let window = panel.window
+        #expect(panel.perform(.togglePlay) && playback.isPlaying)
+
+        panel.makeWayForNextCapture()
+        #expect(panel.model?.isFinished == false, "its save still to come")
+        #expect(!panel.isShown && !window.isVisible && !window.isKeyWindow, "gone at once, before the picker opens")
+        #expect(panel.playback == nil && playback.view.player?.currentItem == nil, "the player stopped")
+        for key: UInt16 in [49, 36, 76, 53] {
+            #expect(panel.action(forKey: key, modifiers: [], in: window) == .pass, "key \(key) does nothing to it")
+        }
+        #expect(!panel.perform(.togglePlay) && !panel.perform(.save) && !panel.perform(.close))
+        // The close button can't reach it either; if it could, it would only save the same capture.
+        panel.window.performClose(nil)
+
+        try await eventually { panel.model == nil }
+        #expect(outcomes.outcomes == [.saved(recording)], "saved once")
+        #expect(!panel.isShown && !window.isVisible && !window.isKeyWindow, "and it never comes back")
+    }
+
+    @Test("What the notch says: Save and Copy, the reason as a warning when the recording couldn't be saved, and nothing for Discard")
     func notices() throws {
         defer { fixture.tearDown() }
         let recording = try fixture.video(name: "1791000000")
-        #expect(ScreencastReviewFlow.notice(for: .saved(recording)) == "Recording saved")
-        #expect(ScreencastReviewFlow.notice(for: .copied(recording)) == "Recording copied")
+        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.message == "Recording saved")
+        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.isWarning == false)
+        #expect(ScreencastReviewFlow.notice(for: .copied(recording))?.message == "Recording copied")
+        let failed = ScreencastReviewFlow.notice(for: .saveFailed(recording, .diskFull))
+        #expect(failed?.message == "Couldn’t save the recording: the disk is full." && failed?.isWarning == true)
         #expect(ScreencastReviewFlow.notice(for: .discarded) == nil)
+    }
+
+    // MARK: A save that fails
+
+    @Test("A Save that fails says it couldn't save the recording and why, and stays; closing then warns, never says saved")
+    func failedSaveSaysWhy() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let notices = ReviewNotices()
+        let flow = flow(outcomes: outcomes, notices: notices)
+        let recording = try fixture.video()
+        // A folder where meta.json goes: writing it fails.
+        try FileManager.default.removeItem(at: recording.metadataURL)
+        try FileManager.default.createDirectory(at: recording.metadataURL, withIntermediateDirectories: true)
+        await flow.show(recording, context: .none)
+        let panel = try #require(flow.panel)
+        let model = try #require(panel.model)
+
+        await model.save()
+        #expect(model.failure == .metadataFailed && panel.isShown, "the window stays to say why")
+        let message = try #require(model.failure?.message)
+        #expect(message == "Couldn’t save the recording: its folder can’t be written to.")
+        #expect(!message.contains("note") && !message.localizedCaseInsensitiveContains("saved"))
+        #expect(notices.messages.isEmpty)
+
+        await panel.close()
+        #expect(outcomes.outcomes == [.saveFailed(recording, .metadataFailed)], "never saved")
+        #expect(notices.messages == [message] && notices.warnings == [true], "the notch warns, with the reason")
+        #expect(!notices.messages.contains("Recording saved"))
+    }
+
+    @Test("A recording moved or deleted during its review: Save says so, nothing makes its folder again, and the next capture closing it warns")
+    func recordingGoneSaysSo() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let notices = ReviewNotices()
+        let flow = flow(outcomes: outcomes, notices: notices)
+        let recording = try fixture.video()
+        await flow.show(recording, context: .none)
+        let panel = try #require(flow.panel)
+        let model = try #require(panel.model)
+        try FileManager.default.removeItem(at: recording.folder)
+
+        await model.save()
+        #expect(model.failure == .recordingMissing)
+        #expect(model.failure?.message == "Couldn’t save the recording: it was moved or deleted.")
+        #expect(!FileManager.default.fileExists(atPath: recording.folder.path), "no folder made around the review alone")
+
+        flow.captureStarting()
+        try await eventually { panel.model == nil }
+        #expect(outcomes.outcomes == [.saveFailed(recording, .recordingMissing)])
+        #expect(notices.messages == ["Couldn’t save the recording: it was moved or deleted."] && notices.warnings == [true],
+                "a failure is told even as the next capture starts")
+        #expect(!FileManager.default.fileExists(atPath: recording.folder.path))
+    }
+
+    @Test("Why a review couldn't be written: the recording gone, a full disk, or anything else")
+    func saveFailureReasons() {
+        let outOfSpace = CocoaError(.fileWriteOutOfSpace)
+        #expect(ScreencastReviewFailure.saving(outOfSpace, recordingExists: true) == .diskFull)
+        let noSpace = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError, userInfo: [
+            NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC)),
+        ])
+        #expect(ScreencastReviewFailure.saving(noSpace, recordingExists: true) == .diskFull, "or ENOSPC under it")
+        #expect(ScreencastReviewFailure.saving(CocoaError(.fileWriteNoPermission), recordingExists: true) == .metadataFailed)
+        #expect(ScreencastReviewFailure.saving(outOfSpace, recordingExists: false) == .recordingMissing)
+        for failure in [ScreencastReviewFailure.recordingMissing, .diskFull, .metadataFailed] {
+            #expect(failure.message.hasPrefix("Couldn’t save the recording: "), "what failed, then why")
+        }
     }
 
     // MARK: Space
@@ -314,6 +424,52 @@ struct ScreencastRecordingReviewTests {
 
         #expect(action(36) == .save && action(76) == .save && action(53) == .close)
         #expect(action(53, confirming: true) == .keep && action(36, confirming: true) == .ignore)
+
+        // A toolbar button with the keyboard (Full Keyboard Access) keeps Space and Return.
+        func focused(_ key: UInt16, confirming: Bool = false) -> ScreencastReviewKey {
+            ScreencastReviewKey.action(
+                keyCode: key, modifiers: [], isComposing: false, isConfirmingDiscard: confirming, controlHasKeyboard: true
+            )
+        }
+        #expect(focused(49) == .pass && focused(36) == .pass && focused(76) == .pass)
+        #expect(focused(36, confirming: true) == .ignore, "Return still never answers the discard question")
+        #expect(focused(53) == .close && focused(53, confirming: true) == .keep, "Escape is the window's")
+    }
+
+    @Test("With Full Keyboard Access, Space and Return go to the toolbar button that has the keyboard; with nothing focused, Space plays and Return saves")
+    func focusedButtonKeepsItsKeys() async throws {
+        defer { fixture.tearDown() }
+        let fullKeyboardAccess = KeyboardNavigation()
+        let panel = panel(outcomes: ReviewOutcomeLog(), fullKeyboardAccess: { fullKeyboardAccess.isOn })
+        await panel.show(try fixture.video())
+        let window = panel.window
+        window.contentView?.superview?.layoutSubtreeIfNeeded()
+        #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay, "nothing has the keyboard as it opens")
+        #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save)
+
+        // Where Tab puts the keyboard: a control in the toolbar's Discard part.
+        let part = try #require(window.toolbar?.items.first?.view)
+        let button = FocusableStandIn()
+        part.addSubview(button)
+        #expect(window.makeFirstResponder(button))
+        #expect(window.toolbarHas(window.firstResponder))
+        #expect(panel.action(forKey: 49, modifiers: [], in: window) == .pass, "Space presses the button")
+        #expect(panel.action(forKey: 36, modifiers: [], in: window) == .pass, "and Return is the button's too")
+        #expect(panel.action(forKey: 53, modifiers: [], in: window) == .close)
+
+        fullKeyboardAccess.isOn = false
+        #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay, "without it, no button takes keys")
+
+        // The keyboard in the player's area, not the toolbar: the review's keys again.
+        fullKeyboardAccess.isOn = true
+        let inPlayer = FocusableStandIn()
+        window.contentView?.addSubview(inPlayer)
+        #expect(window.makeFirstResponder(inPlayer) && !window.toolbarHas(window.firstResponder))
+        #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay)
+        #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save)
+        button.removeFromSuperview()
+        inPlayer.removeFromSuperview()
+        await panel.close()
     }
 
     @Test("The window opens with nothing taking the keyboard, so Space plays at once; Return still saves and Escape still closes")
@@ -371,6 +527,17 @@ struct ScreencastRecordingReviewTests {
         await panel.close()
         #expect(panel.playback == nil && playback.view.player?.currentItem == nil, "closing stops the player")
     }
+}
+
+/// A control that takes the keyboard, as a toolbar button does under Full Keyboard Access.
+private final class FocusableStandIn: NSView {
+    override var acceptsFirstResponder: Bool { true }
+}
+
+/// System Settings' Keyboard Navigation, as a test sets it.
+@MainActor
+private final class KeyboardNavigation {
+    var isOn = true
 }
 
 /// The notch's notices.

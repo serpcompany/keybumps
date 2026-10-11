@@ -41,6 +41,9 @@ enum ScreencastReviewOutcome: Equatable {
     case copied(ScreencastReviewInput)
     /// Discard: the capture's folder is deleted.
     case discarded
+    /// Escape, closing, the next capture, or quitting, after the review couldn't be written: the
+    /// recording is wherever it was, without its review, and the notch says why (#479).
+    case saveFailed(ScreencastReviewInput, ScreencastReviewFailure)
 }
 
 /// What a capture reports: a bug, a feature, or feedback, as Clipy's `--type` takes them.
@@ -63,21 +66,40 @@ enum ScreencastReviewType: String, CaseIterable, Codable, Sendable {
 enum ScreencastReviewFailure: String, Error, Equatable {
     /// The repository isn't `owner/name`.
     case invalidRepository
-    /// `meta.json` couldn't be written.
+    /// The capture's folder, or a video in it, is gone, so there's nothing to save.
+    case recordingMissing
+    /// `meta.json` couldn't be written: the disk is full.
+    case diskFull
+    /// `meta.json` couldn't be written, for another reason.
     case metadataFailed
     /// Nothing went on the clipboard.
     case copyFailed
     /// The capture's folder couldn't be deleted, or wasn't the capture's.
     case deleteFailed
 
-    /// What the panel says.
+    /// What the window says, and the notch when it closes anyway: what failed, then why.
     var message: String {
         switch self {
         case .invalidRepository: "Type the repository as owner/name, like serpcompany/keybumps."
-        case .metadataFailed: "Couldn’t save the note. The capture is still in its folder."
+        case .recordingMissing: "Couldn’t save the recording: it was moved or deleted."
+        case .diskFull: "Couldn’t save the recording: the disk is full."
+        case .metadataFailed: "Couldn’t save the recording: its folder can’t be written to."
         case .copyFailed: "Couldn’t copy the capture."
         case .deleteFailed: "Couldn’t delete the capture."
         }
+    }
+
+    /// Why writing `meta.json` failed, from the error and whether the recording is still there.
+    static func saving(_ error: Error, recordingExists: Bool) -> ScreencastReviewFailure {
+        guard recordingExists else { return .recordingMissing }
+        let error = error as NSError
+        let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        let outOfSpace = [error, underlying].contains { error in
+            guard let error else { return false }
+            return (error.domain == NSCocoaErrorDomain && error.code == NSFileWriteOutOfSpaceError)
+                || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOSPC))
+        }
+        return outOfSpace ? .diskFull : .metadataFailed
     }
 }
 

@@ -75,6 +75,13 @@ final class ScreencastRecordingReviewWindow: NSWindow, NSToolbarDelegate {
         trailingPart.rootView = ScreencastRecordingReviewToolbar(model: model, part: .trailing)
     }
 
+    /// Whether `responder` is one of the toolbar's controls, or in one: where Full Keyboard Access's
+    /// Tab puts the keyboard.
+    func toolbarHas(_ responder: NSResponder?) -> Bool {
+        guard let view = responder as? NSView else { return false }
+        return [leadingPart, middlePart, trailingPart].contains { view.isDescendant(of: $0) }
+    }
+
     /// The screen's visible frame (the menu bar and Dock left out), but `screenMargin` on each side,
     /// never smaller than the minimum size unless the screen is, and centered on it.
     static func frame(in visibleFrame: CGRect) -> CGRect {

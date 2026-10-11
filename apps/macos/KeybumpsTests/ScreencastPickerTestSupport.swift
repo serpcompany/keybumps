@@ -208,7 +208,7 @@ enum PickerScreens {
 
 enum ScreencastWait {
     /// Lets the main actor run what was handed to it until `condition` holds, then waits up to
-    /// five seconds for work off the main actor, such as encoding a trim.
+    /// five seconds for work off the main actor, such as a recording starting or saving.
     @MainActor
     static func until(_ condition: () -> Bool) async -> Bool {
         for _ in 0..<500 {

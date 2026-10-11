@@ -5,6 +5,9 @@ import AppKit
 struct ScreencastReviewServices {
     /// Clipboard History: Copy marks its write so Clipboard History skips it.
     var clipboard: ClipboardHistoryService
+    /// Where Copy writes: the app's `.keybumps`, or a test's named pasteboard. There's no default,
+    /// so a test never reaches the real clipboard by leaving it out.
+    var pasteboard: NSPasteboard
     /// The notch, where "Recording saved" and "Recording copied" show; nil shows nothing, as under
     /// the unit-test host.
     var notices: (any PaletteNoticePresenting)?
@@ -16,6 +19,7 @@ struct ScreencastReviewServices {
     static func app(clipboard: ClipboardHistoryService) -> ScreencastReviewServices {
         ScreencastReviewServices(
             clipboard: clipboard,
+            pasteboard: .keybumps,
             notices: UnitTestHost.isActive ? nil : PaletteHUD.shared
         )
     }
@@ -52,13 +56,23 @@ final class ScreencastReviewFlow {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
     }
 
-    /// Start Screencast, from idle: reads the app in front, and a browser's site, before the picker
-    /// covers the screen.
+    /// Start Screencast, from idle: the review window still up goes, and its capture is saved,
+    /// before the picker covers the screen; then the app in front, and a browser's site, are read.
     func captureStarting() {
         isOn = true
         panel?.startAccepting()
+        panel?.makeWayForNextCapture()
         let reader = contextReader
         contextRead = Task { await reader.read() }
+    }
+
+    /// The controller's phase: once the picker and the countdown are done, recording or cancelled,
+    /// the app the review window took the front from gets it back.
+    func capturePhaseChanged(_ phase: ScreencastPhase) {
+        switch phase {
+        case .recording, .idle: panel?.captureUnderWay()
+        default: break
+        }
     }
 
     /// The flow controller saved a capture: the panel opens on it at once, with the context read at
@@ -92,10 +106,14 @@ final class ScreencastReviewFlow {
         let clipboard = services.clipboard
         let panel = ScreencastReviewPanel(
             repositories: services.repositories(),
+            pasteboard: services.pasteboard,
             keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() }
         )
-        panel.onFinish = { [weak self] outcome in
-            if let notice = Self.notice(for: outcome) { services.notices?.showNotice(notice, isWarning: false) }
+        panel.onFinish = { [weak self, weak panel] outcome in
+            // The next capture closed it: only a failure needs saying.
+            if let notice = Self.notice(for: outcome), notice.isWarning || panel?.isMakingWay != true {
+                services.notices?.showNotice(notice.message, isWarning: notice.isWarning)
+            }
             self?.onFinish?(outcome)
         }
         if !isOn { panel.shutDown() }
@@ -104,11 +122,13 @@ final class ScreencastReviewFlow {
     }
 
     /// What the notch says as a review ends. The window closes on Save, Return, Escape, or Copy, so
-    /// the notice is what says the recording was kept. Discard says nothing.
-    static func notice(for outcome: ScreencastReviewOutcome) -> String? {
+    /// the notice is what says the recording was kept, or, as a warning, why it couldn't be.
+    /// Discard says nothing.
+    static func notice(for outcome: ScreencastReviewOutcome) -> (message: String, isWarning: Bool)? {
         switch outcome {
-        case .saved: "Recording saved"
-        case .copied: "Recording copied"
+        case .saved: ("Recording saved", false)
+        case .copied: ("Recording copied", false)
+        case .saveFailed(_, let failure): (failure.message, true)
         case .discarded: nil
         }
     }

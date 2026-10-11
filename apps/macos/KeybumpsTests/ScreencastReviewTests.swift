@@ -117,7 +117,7 @@ struct ScreencastReviewTests {
         #expect(FileManager.default.fileExists(atPath: input.folder.path))
     }
 
-    @Test("A meta.json that can't be written keeps the panel open with Save; closing still finishes")
+    @Test("A meta.json that can't be written keeps the window open with Save; closing still finishes, as a failed save")
     func metadataFailure() async throws {
         defer { fixture.tearDown() }
         let input = try fixture.video()
@@ -132,7 +132,7 @@ struct ScreencastReviewTests {
 
         await model.close()
         #expect(model.isFinished)
-        #expect(fixture.outcomes == [.saved(input)])
+        #expect(fixture.outcomes == [.saveFailed(input, .metadataFailed)], "never .saved")
     }
 
     // MARK: Copy, and the clipboard skip

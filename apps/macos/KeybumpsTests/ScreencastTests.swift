@@ -332,6 +332,7 @@ struct ScreencastTests {
             ),
             review: ScreencastReviewServices(
                 clipboard: clipboard,
+                pasteboard: pasteboard,
                 notices: nil,
                 repositories: { ScreencastRepositoryMemory(storageURL: root.appendingPathComponent("repositories.json")) }
             )
