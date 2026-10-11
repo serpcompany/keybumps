@@ -358,7 +358,8 @@ final class ScreencastReviewPanel {
             isEditing: model.isEditing,
             isFinished: model.isFinished,
             isTyping: responder is NSText || responder is NSTextField,
-            playsRecording: model.input.isVideo
+            playsRecording: model.input.isVideo,
+            isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: keyCode, modifiers: modifiers)
         )
     }
 
@@ -386,7 +387,8 @@ final class ScreencastReviewPanel {
 /// markup is never thrown away. Once a recording's window says it's saved, both close it. In a
 /// recording's window, Space plays and pauses, unless a text field has the keyboard, as in Snapzy's
 /// `VideoEditorWindow`. The player's trim controls and a text field still composing (an input
-/// method's marked text) keep their keys.
+/// method's marked text) keep their keys, and a key claimed in Keybumps's own windows
+/// (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what claims it.
 enum ScreencastReviewKey: Equatable {
     case save
     case close
@@ -411,9 +413,10 @@ enum ScreencastReviewKey: Equatable {
         isEditing: Bool = false,
         isFinished: Bool = false,
         isTyping: Bool = false,
-        playsRecording: Bool = false
+        playsRecording: Bool = false,
+        isClaimed: Bool = false
     ) -> ScreencastReviewKey {
-        guard !isTrimming, !isComposing,
+        guard !isClaimed, !isTrimming, !isComposing,
               modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
         let isEscape = keyCode == escapeKeyCode
         let isReturn = returnKeyCodes.contains(keyCode)

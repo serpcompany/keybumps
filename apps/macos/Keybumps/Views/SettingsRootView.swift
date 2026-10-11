@@ -1801,7 +1801,8 @@ struct SettingsWindowFiller: NSViewRepresentable {
 /// Escape closes the Settings window like Command-W, unless something inside it is using Escape:
 /// a hotkey field that is recording, a sheet or alert, or a text field with text in it. While a
 /// field asks whether to take another action's shortcut, Escape means Cancel instead, even in a
-/// text field with text in it, unless a field is recording (#334).
+/// text field with text in it, unless a field is recording (#334). While something claims Escape in
+/// Keybumps's own windows, such as Screencast's drawing, Settings leaves it to that.
 struct SettingsEscapeCloser: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { EscapeView() }
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -1839,12 +1840,15 @@ enum SettingsEscapePolicy {
     }
 
     /// What Escape does in the Settings window, or nil to leave it to whatever has it: a recording
-    /// hotkey field, a sheet or alert, another window, or a text field with text in it.
-    static func action(event: NSEvent, window: NSWindow) -> Action? {
+    /// hotkey field, a sheet or alert, another window, a text field with text in it, or what claims
+    /// it in Keybumps's own windows (`OwnWindowKeyClaims`), whose monitor AppKit may call after this
+    /// one.
+    static func action(event: NSEvent, window: NSWindow, ownKeys: OwnWindowKeyClaims = .shared) -> Action? {
         guard event.keyCode == UInt16(kVK_Escape),
               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
               event.window === window, window.isKeyWindow,
-              window.attachedSheet == nil, NSApp.modalWindow == nil else { return nil }
+              window.attachedSheet == nil, NSApp.modalWindow == nil,
+              !ownKeys.isClaimed(keyCode: event.keyCode, modifiers: event.modifierFlags) else { return nil }
         return action(isRecording: ShortcutRecorderState.isRecordingAny, isAsking: ShortcutRecorderState.isAskingAny, editor: window.firstResponder)
     }
 

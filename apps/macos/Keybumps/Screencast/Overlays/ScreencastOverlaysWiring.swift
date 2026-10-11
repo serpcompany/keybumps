@@ -219,7 +219,7 @@ final class ScreencastOverlaysWiring {
             keys: keys,
             displays: displays,
             ordersWindowsIn: ordersWindowsIn,
-            watchesOwnKeys: watchesOwnKeys
+            ownKeys: watchesOwnKeys ? .shared : nil
         )
         overlays.style = drawingMemory.style
         let memory = drawingMemory
