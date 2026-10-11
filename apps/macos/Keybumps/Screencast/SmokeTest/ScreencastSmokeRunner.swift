@@ -52,16 +52,15 @@ final class ScreencastSmokePresenter: ScreencastOverlayPresenting {
     }
 }
 
-/// The pieces of Screencast the smoke test drives, wired as `ScreencastModule` wires them for
-/// Start Screencast (`controllerForCapture`): the recorder, the controller, the control bar, and
-/// the overlays. Nothing opens the review panel, no shortcut is registered, and the menu bar is
-/// left alone. The app's pieces are real; tests pass fakes.
+/// The pieces of Screencast the smoke test drives: the recorder, the controller, the control bar,
+/// and the overlays, wired by Start Screencast's own `ScreencastModule.wiredController`. Nothing
+/// opens the review panel, no shortcut is registered, and the menu bar is left alone. The app's
+/// pieces are real; tests pass fakes.
 @available(macOS 15, *)
 @MainActor
 struct ScreencastSmokeRig {
     let controller: ScreencastController
     let presenter: ScreencastSmokePresenter
-    let pickerSystem: any ScreencastPickerSystem
     let recordingControls: ScreencastRecordingControls
     let overlays: ScreencastOverlaysWiring
     /// Where the captures are saved: a folder of the smoke test's own, deleted when it ends.
@@ -94,16 +93,8 @@ struct ScreencastSmokeRig {
     ) -> ScreencastSmokeRig {
         let presenter = ScreencastSmokePresenter(base: base)
         let preferences = preferences(capturesFolder: capturesFolder)
-        let controller = ScreencastController(
-            recorder: recorder,
-            system: pickerSystem,
-            presenter: presenter,
-            areaMemory: ScreencastAreaMemory(defaults: defaults),
-            preferences: { preferences },
-            screens: screens,
-            microphoneAvailable: { false },
-            ownProcessID: ownProcessID
-        )
+        // As `ScreencastModule.init` makes them, with no menu bar, key display, or Keystrokes, and
+        // the smoke test's own defaults.
         let recordingControls = ScreencastRecordingControls(
             menuBar: nil,
             placement: ScreencastControlBarPlacement(defaults: defaults)
@@ -114,16 +105,22 @@ struct ScreencastSmokeRig {
             keystrokesConfiguration: { nil },
             displays: { ScreencastOverlaysWiring.displays(in: screens(), connected: ScreencastOverlayDisplay.connected) }
         )
-        recordingControls.attach(to: controller)
-        overlays.attach(
-            to: controller,
-            bar: { [recordingControls] in recordingControls.bar },
-            windowFrame: { id in captureSystem.windowFrame(id).map { screens().appKitRect(fromTopLeft: $0) } }
+        let controller = ScreencastModule.wiredController(
+            recorder: recorder,
+            captureSystem: captureSystem,
+            pickerSystem: pickerSystem,
+            presenter: presenter,
+            areaMemory: ScreencastAreaMemory(defaults: defaults),
+            preferences: { preferences },
+            screens: screens,
+            microphoneAvailable: { false },
+            ownProcessID: ownProcessID,
+            recordingControls: recordingControls,
+            overlays: overlays
         )
         return ScreencastSmokeRig(
             controller: controller,
             presenter: presenter,
-            pickerSystem: pickerSystem,
             recordingControls: recordingControls,
             overlays: overlays,
             capturesFolder: capturesFolder,
@@ -143,11 +140,16 @@ struct ScreencastSmokeRig {
 /// two seconds of recording, Stop, and the saved files checked and deleted. Only the picker's
 /// windows, the countdown (set to none), and the review panel are skipped.
 ///
+/// The window captures take Finder's frontmost window, which `smoke-screencast.sh` opens on the QA
+/// folder (`~/Library/Developer/Keybumps-QA`) first, and never another app's: with no Finder
+/// window they fail with `noFinderWindow`.
+///
 /// Every step has a time limit, so a hang fails the capture at the stage it reached instead of
 /// holding the app. After each capture the controller is brought back to idle (a start cancelled,
-/// a recording discarded, a late capture deleted); if it can't be, the rest are skipped. The
-/// captures folder is deleted at the end whatever happened, and the result is written after
-/// every stage.
+/// a recording discarded, a late capture waited for) and everything in the captures folder is
+/// deleted, whichever way the capture ended; if the controller can't be brought back, the rest are
+/// skipped. The captures folder is deleted at the end whatever happened, and the result is written
+/// after every stage.
 @available(macOS 15, *)
 @MainActor
 final class ScreencastSmokeRunner {
@@ -172,9 +174,7 @@ final class ScreencastSmokeRunner {
         var screenRecordingGranted: () -> Bool
         /// The display to record a screen of and draw an area on.
         var mainDisplay: () -> CGDirectDisplayID
-        /// The smoke test's own window, which the window video records.
-        var ownWindow: () -> CGWindowID?
-        /// Whether a process is Finder, whose window the window screenshot prefers.
+        /// Whether a process is Finder, whose frontmost window the window captures take.
         var isFinder: (pid_t) -> Bool
         var resultURL: URL
         var fileManager: FileManager = .default
@@ -249,7 +249,7 @@ final class ScreencastSmokeRunner {
         report.captures[current].timings.pickerMs = Self.milliseconds(since: opened)
 
         enter(.picking)
-        let expected = try await choose(mode, on: model)
+        let expected = try choose(mode, on: model)
         guard let choice = model.choice(), choice.kind == mode.kind, choice.target == expected, choice.audio == .none,
               let record = rig.presenter.record else { throw ScreencastSmokeFailure.noChoice }
         let confirmed = ContinuousClock.now
@@ -323,7 +323,7 @@ final class ScreencastSmokeRunner {
 
     /// Makes the picker's choice for `mode` through its model, as its clicks and drags would, with
     /// every switch off, and returns the target it should record.
-    private func choose(_ mode: ScreencastSmokeMode, on model: ScreencastPickerModel) async throws -> ScreencastTarget {
+    private func choose(_ mode: ScreencastSmokeMode, on model: ScreencastPickerModel) throws -> ScreencastTarget {
         model.kind = mode.kind
         model.target = mode.target
         model.recordsMicrophone = false
@@ -345,7 +345,7 @@ final class ScreencastSmokeRunner {
             model.releaseArea()
             return .area(display: screen.id, rect: ScreencastTarget.displayLocalRect(fromAppKit: area, screenFrame: screen.frame))
         case .window:
-            let window = try await window(for: mode, in: model)
+            let window = try finderWindow(in: model)
             // First in the list, so a click on its middle picks it even where another window is in
             // front of it.
             model.windows = [window] + model.windows.filter { $0.id != window.id }
@@ -355,26 +355,14 @@ final class ScreencastSmokeRunner {
         }
     }
 
-    /// The window to capture. The picker lists only other apps' windows, but the recorder records
-    /// one of Keybumps's own when it's the target, so the video records the smoke test's own window
-    /// rather than one of the person's. A screenshot never shows a Keybumps window, so it takes
-    /// Finder's when one is open, else the frontmost window the picker offers.
-    private func window(for mode: ScreencastSmokeMode, in model: ScreencastPickerModel) async throws -> ScreencastContent.Window {
-        if mode.kind == .video {
-            guard let id = environment.ownWindow() else { throw ScreencastSmokeFailure.windowNotListed }
-            let system = rig.pickerSystem
-            let listed = try await Self.within(configuration.pickerTimeout) { try await system.content().window(id) }
-            guard let listed else { throw ScreencastSmokeFailure.windowNotListed }
-            report.captures[current].windowSource = .own
-            return listed
+    /// The window to capture: Finder's frontmost of the windows the picker offers (front to back),
+    /// the one the script opened on the QA folder. Never another app's, which could be anything of
+    /// the person's.
+    private func finderWindow(in model: ScreencastPickerModel) throws -> ScreencastContent.Window {
+        guard let window = model.windows.first(where: { environment.isFinder($0.processID) }) else {
+            throw ScreencastSmokeFailure.noFinderWindow
         }
-        if let finder = model.windows.first(where: { environment.isFinder($0.processID) }) {
-            report.captures[current].windowSource = .finder
-            return finder
-        }
-        guard let front = model.windows.first else { throw ScreencastSmokeFailure.noOtherWindow }
-        report.captures[current].windowSource = .otherApp
-        return front
+        return window
     }
 
     /// A fixed area in the middle of `frame` (AppKit's space): up to 640 × 360 points.
@@ -418,8 +406,9 @@ final class ScreencastSmokeRunner {
     // MARK: Winding down
 
     /// Brings the controller back to idle after a capture: a picker or a start is cancelled, a
-    /// recording discarded, and a capture still being saved waited for, then deleted. False when it
-    /// doesn't get there in time.
+    /// recording discarded, and a capture still being saved waited for. Then everything in the
+    /// captures folder is deleted, whichever way the capture ended, so nothing it saved waits for
+    /// the end. False when the controller doesn't get back in time.
     private func windDown() async -> Bool {
         let controller = rig.controller
         switch controller.phase {
@@ -441,7 +430,14 @@ final class ScreencastSmokeRunner {
         }
         if let saved { try? environment.fileManager.removeItem(at: saved.folder) }
         saved = nil
+        emptyCapturesFolder()
         return settled
+    }
+
+    private func emptyCapturesFolder() {
+        let fileManager = environment.fileManager
+        let items = (try? fileManager.contentsOfDirectory(at: rig.capturesFolder, includingPropertiesForKeys: nil)) ?? []
+        for item in items { try? fileManager.removeItem(at: item) }
     }
 
     private static func isFree(_ state: ScreencastRecorderState) -> Bool {

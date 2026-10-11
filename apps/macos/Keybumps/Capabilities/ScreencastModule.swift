@@ -208,27 +208,62 @@ final class ScreencastModule: CapabilityModule {
             // The recorder runs on the main actor, and asks only as a recording starts.
             microphoneGranted: { MainActor.assumeIsolated { permissions.microphoneGranted } }
         )
-        let controller = ScreencastController(
+        let controller = Self.wiredController(
             recorder: recorder,
-            system: seams.pickerSystem,
+            captureSystem: seams.captureSystem ?? ScreenCaptureKitCaptureSystem.current,
+            pickerSystem: seams.pickerSystem,
             presenter: seams.presenter,
             areaMemory: preferences.screencastAreaMemory,
             preferences: { preferences.screencast },
             screens: seams.screens ?? { ScreencastScreenLayout.current() },
             microphoneAvailable: { permissions.microphoneGranted },
-            sleep: seams.sleep ?? { try await Task.sleep(for: .seconds($0)) }
+            sleep: seams.sleep ?? { try await Task.sleep(for: .seconds($0)) },
+            recordingControls: recordingControls,
+            overlays: overlays
         )
         controller.onCaptureFinished = { [review] result in review.captureFinished(result) }
+        controllerStorage = controller
+        return controller
+    }
+}
+
+extension ScreencastModule {
+    /// Start Screencast's controller for `recorder`, with the control bar and the overlays attached.
+    /// The QA smoke test (`ScreencastSmokeRig`) makes its controller here too, so it runs this
+    /// wiring rather than a copy of it.
+    @available(macOS 15, *)
+    static func wiredController(
+        recorder: ScreencastRecorder,
+        captureSystem: any ScreencastCaptureSystem,
+        pickerSystem: (any ScreencastPickerSystem)?,
+        presenter: (any ScreencastOverlayPresenting)?,
+        areaMemory: ScreencastAreaMemory,
+        preferences: @escaping @MainActor () -> ScreencastPreferences,
+        screens: @escaping @MainActor () -> ScreencastScreenLayout,
+        microphoneAvailable: @escaping @MainActor () -> Bool,
+        sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+        ownProcessID: pid_t = ProcessInfo.processInfo.processIdentifier,
+        recordingControls: ScreencastRecordingControls,
+        overlays: ScreencastOverlaysWiring
+    ) -> ScreencastController {
+        let controller = ScreencastController(
+            recorder: recorder,
+            system: pickerSystem,
+            presenter: presenter,
+            areaMemory: areaMemory,
+            preferences: preferences,
+            screens: screens,
+            microphoneAvailable: microphoneAvailable,
+            sleep: sleep,
+            ownProcessID: ownProcessID
+        )
         recordingControls.attach(to: controller)
         // The engine's own reader, in the screens' AppKit space, so the keys follow a recorded window.
-        let captureSystem = seams.captureSystem ?? ScreenCaptureKitCaptureSystem.current
-        let screens = seams.screens ?? { ScreencastScreenLayout.current() }
         overlays.attach(
             to: controller,
             bar: { [recordingControls] in recordingControls.bar },
             windowFrame: { id in captureSystem.windowFrame(id).map { screens().appKitRect(fromTopLeft: $0) } }
         )
-        controllerStorage = controller
         return controller
     }
 }

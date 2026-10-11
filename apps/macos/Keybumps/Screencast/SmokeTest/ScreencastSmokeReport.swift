@@ -60,10 +60,9 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
     case openRefused
     /// The picker had nothing to record after choosing.
     case noChoice
-    /// The smoke test's own window isn't in what ScreenCaptureKit lists.
-    case windowNotListed
-    /// No other app has a window to take a screenshot of.
-    case noOtherWindow
+    /// Finder has no window to record or take a screenshot of: the script opens one on the QA
+    /// folder, and no other app's window is ever taken instead.
+    case noFinderWindow
     /// The capture ended with no file and no reason.
     case ended
     case controlBarMissing
@@ -99,20 +98,12 @@ struct ScreencastSmokeReport: Codable, Equatable, Sendable {
         var totalMs: Int?
     }
 
-    /// Whose window a window capture took: the smoke test's own, Finder's, or another app's.
-    enum WindowSource: String, Codable, Sendable {
-        case own
-        case finder
-        case otherApp
-    }
-
     struct Capture: Codable, Equatable, Sendable {
         var mode: ScreencastSmokeMode
         var passed = false
         var stage = ScreencastSmokeStage.notStarted
         var errorCategory: String?
         var timings = Timings()
-        var windowSource: WindowSource?
         /// Videos: whether the control bar and the overlays were up while it recorded, and how
         /// many overlay windows the recorder was given.
         var controlBarShown: Bool?
@@ -149,10 +140,13 @@ struct ScreencastSmokeReport: Codable, Equatable, Sendable {
         captures = modes.map(Capture.init(mode:))
     }
 
-    /// 0 when everything passed, 1 when a capture failed, 2 when nothing could be captured.
+    /// 0 when everything passed, 1 when a capture failed, 2 when nothing could be captured: the
+    /// run couldn't start, or Screen Recording was refused. `smoke-screencast.sh` reads the same
+    /// from the result, since `open` doesn't pass the app's exit code on.
     var exitCode: Int32 {
         if passed { return 0 }
-        return errorCategory == nil ? 1 : 2
+        let refused = captures.contains { $0.errorCategory == ScreencastFailure.screenRecordingDenied.rawValue }
+        return errorCategory == nil && !refused ? 1 : 2
     }
 
     func json() throws -> Data {

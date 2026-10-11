@@ -12,23 +12,22 @@ import UniformTypeIdentifiers
 @MainActor
 @Suite("Screencast: the QA smoke test")
 struct ScreencastSmokeTests {
-    /// The smoke test's own window, on the left (main) display, behind the browser window.
-    static let smokeWindow = ScreencastContent.Window(
-        id: 40, frame: CGRect(x: 120, y: 120, width: 360, height: 220), layer: 0,
-        processID: ScreencastScreens.ownProcess, isUntitled: false, isOnScreen: true
-    )
+    /// The person's browser in front, and Finder's window (`ScreencastScreens.otherApp` plays
+    /// Finder) behind it, as the script leaves them.
+    static let withFinder = ScreencastScreens.content(windows: [ScreencastScreens.browserWindow, ScreencastScreens.otherAppWindow])
 
-    static func screen() -> ScreencastContent {
-        ScreencastScreens.content(windows: [ScreencastScreens.browserWindow, smokeWindow, ScreencastScreens.otherAppWindow])
-    }
-
-    let captureSystem = FakeCaptureSystem(content: Self.screen())
-    let pickerSystem = FakePickerSystem(content: Self.screen())
+    let captureSystem: FakeCaptureSystem
+    let pickerSystem: FakePickerSystem
     let writers = FakeWriterFactory()
     let clock = FakeHostClock()
     let overlays = FakeOverlays()
     let defaults = InMemoryDefaults()
     let folder = TemporaryCapturesFolder()
+
+    init(content: ScreencastContent = Self.withFinder) {
+        captureSystem = FakeCaptureSystem(content: content)
+        pickerSystem = FakePickerSystem(content: content)
+    }
 
     var capturesURL: URL { folder.url.appendingPathComponent("captures", isDirectory: true) }
     var resultURL: URL { folder.url.appendingPathComponent("QA/screencast-smoke-test.json") }
@@ -74,7 +73,6 @@ struct ScreencastSmokeTests {
                 displayCount: 2,
                 screenRecordingGranted: { granted },
                 mainDisplay: { 1 },
-                ownWindow: { Self.smokeWindow.id },
                 isFinder: { $0 == ScreencastScreens.otherApp },
                 resultURL: resultURL,
                 record: { seconds in clock.advance(seconds) }
@@ -108,24 +106,24 @@ struct ScreencastSmokeTests {
         let videos = report.captures.filter { $0.mode.kind == .video }
         #expect(videos.allSatisfy { $0.controlBarShown == true && $0.overlaysShown == true && $0.durationSeconds == 2 })
         #expect(videos.allSatisfy { $0.timings.startMs != nil && $0.timings.recordMs != nil })
-        #expect(report.captures[1].windowSource == .own)
-        #expect(report.captures[4].windowSource == .finder)
 
-        // The main display, the smoke test's own window, and an area in the middle of the main
-        // display, with no sound.
+        // The main display, Finder's window rather than the browser in front of it, and an area in
+        // the middle of the main display, with no sound.
         let plans = videoPlans
-        #expect(plans.count == 3 && plans.allSatisfy { $0.displayID == 1 })
+        #expect(plans.count == 3 && plans.first?.displayID == 1 && plans.last?.displayID == 1)
         guard plans.count == 3, case .windows(_, let included) = plans[1] else {
             Issue.record("the window video didn't record a window")
             return
         }
-        #expect(included.contains(Self.smokeWindow.id))
+        #expect(included.contains(ScreencastScreens.otherAppWindow.id) && !included.contains(ScreencastScreens.browserWindow.id))
         #expect(captureSystem.audioStreams.isEmpty)
-        if case .video(_, let configuration) = captureSystem.videoStreams[2].kind {
-            let area = ScreencastSmokeRunner.area(in: PickerScreens.left.frame)
-            #expect(abs(configuration.sourceRect.width - area.width) < 2 && abs(configuration.sourceRect.height - area.height) < 2)
+        guard captureSystem.videoStreams.count == 3, case .video(_, let configuration) = captureSystem.videoStreams[2].kind else {
+            Issue.record("the area video didn't record a video stream")
+            return
         }
-        // Screenshots: the main display, Finder's window rather than the browser in front, the area.
+        let area = ScreencastSmokeRunner.area(in: PickerScreens.left.frame)
+        #expect(abs(configuration.sourceRect.width - area.width) < 2 && abs(configuration.sourceRect.height - area.height) < 2)
+        // Screenshots: the main display, Finder's window, the area.
         #expect(pickerSystem.plans.count == 3)
         #expect(pickerSystem.plans.map(\.filter.displayID) == [1, nil, 1])
         #expect(pickerSystem.plans.dropFirst().first?.filter == .window(ScreencastScreens.otherAppWindow.id))
@@ -152,12 +150,13 @@ struct ScreencastSmokeTests {
         #expect(Set(object.keys) == ["version", "complete", "passed", "macOS", "displayCount", "cleanedUp", "captures"])
         let captures = try #require(object["captures"] as? [[String: Any]])
         let allowed: Set<String> = [
-            "mode", "passed", "stage", "errorCategory", "timings", "windowSource", "controlBarShown", "overlaysShown",
+            "mode", "passed", "stage", "errorCategory", "timings", "controlBarShown", "overlaysShown",
             "overlayWindows", "durationSeconds", "pixelWidth", "pixelHeight", "bytes",
         ]
         #expect(captures.allSatisfy { Set($0.keys).isSubset(of: allowed) })
         let text = String(decoding: data, as: UTF8.self)
         #expect(!text.contains("/") && !text.contains(".mov") && !text.contains(".png"))
+        #expect(!text.localizedCaseInsensitiveContains("finder"), "no app's name")
     }
 
     @available(macOS 15, *)
@@ -194,6 +193,62 @@ struct ScreencastSmokeTests {
 
         writers.writers.forEach { $0.releaseFinish() }
         #expect(await ScreencastWait.until { rig.controller.phase == .idle })
+    }
+
+    @available(macOS 15, *)
+    @Test("A capture saved after its stop timed out is deleted as the controller winds down, and the next capture still runs")
+    func lateSave() async throws {
+        defer { folder.remove() }
+        // The first recording's file is held past its stop's limit. As the next recording starts,
+        // its own folder should be the only one left in the captures folder.
+        let writers = writers
+        let capturesURL = capturesURL
+        var heldFolder: URL?
+        var foldersAsNextStarts: Int?
+        writers.configure = { writer in
+            if writers.writers.isEmpty {
+                writer.holdsFinish = true
+                heldFolder = writer.fileURL.deletingLastPathComponent()
+            } else if foldersAsNextStarts == nil {
+                foldersAsNextStarts = (try? FileManager.default.contentsOfDirectory(atPath: capturesURL.path))?.count
+            }
+        }
+        var configuration = Self.quick
+        configuration.finishTimeout = 0.2
+        configuration.windDownTimeout = 5
+        let (runner, _) = makeRunner(configuration: configuration)
+        let release = Task { @MainActor in
+            _ = await ScreencastWait.until { runner.report.captures[0].errorCategory != nil }
+            writers.writers.first?.releaseFinish()
+        }
+        let report = await runner.run()
+        await release.value
+
+        #expect(report.captures[0].stage == .finishing && report.captures[0].errorCategory == "timeout")
+        #expect(heldFolder?.deletingLastPathComponent().standardizedFileURL == capturesURL.standardizedFileURL, "it saved into the smoke test's folder")
+        #expect(foldersAsNextStarts == 1, "the late capture was deleted before the next one started")
+        #expect(report.captures.dropFirst().allSatisfy { $0.passed && $0.stage == .cleanedUp }, "\(report.captures.map(\.errorCategory))")
+        #expect(report.cleanedUp && report.exitCode == 1)
+        #expect(!FileManager.default.fileExists(atPath: capturesURL.path))
+    }
+
+    @available(macOS 15, *)
+    @Test("With no Finder window, both window captures fail as noFinderWindow and never take another app's window")
+    func noFinderWindow() async throws {
+        let smoke = ScreencastSmokeTests(content: ScreencastScreens.content(windows: [ScreencastScreens.browserWindow]))
+        defer {
+            folder.remove()
+            smoke.folder.remove()
+        }
+        let (runner, _) = smoke.makeRunner()
+        let report = await runner.run()
+
+        let windows = report.captures.filter { $0.mode.target == .window }
+        #expect(windows.count == 2 && windows.allSatisfy { $0.stage == .picking && $0.errorCategory == "noFinderWindow" })
+        #expect(report.captures.filter { $0.mode.target != .window }.allSatisfy { $0.passed })
+        #expect(!smoke.videoPlans.contains { if case .windows = $0 { true } else { false } })
+        #expect(!smoke.pickerSystem.plans.contains { $0.filter == .window(ScreencastScreens.browserWindow.id) })
+        #expect(report.exitCode == 1 && report.cleanedUp)
     }
 
     @available(macOS 15, *)
@@ -298,19 +353,6 @@ struct ScreencastSmokeTests {
             ScreencastSmokeTest.resultURL(home: URL(fileURLWithPath: "/Users/someone", isDirectory: true)).path
                 == "/Users/someone/Library/Developer/Keybumps-QA/screencast-smoke-test.json"
         )
-    }
-
-    @Test("The script launches the option the app reads, reads the result where the app writes it, and never kills by name")
-    func scriptMatchesApp() throws {
-        let script = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("scripts/smoke-screencast.sh")
-        let text = try String(contentsOf: script, encoding: .utf8)
-        #expect(text.contains("option=\(ScreencastSmokeTest.launchOption)\n"))
-        #expect(text.contains("result=\"$HOME/Library/Developer/Keybumps-QA/screencast-smoke-test.json\""))
-        #expect(text.contains("== \(ScreencastSmokeFailure.permissionDenied.rawValue) ]]"))
-        #expect(text.contains("/\(ScreencastSmokeTest.capturesFolderName)\""))
-        #expect(!text.contains("pkill") && !text.contains("killall"))
     }
 
     @available(macOS 15, *)
