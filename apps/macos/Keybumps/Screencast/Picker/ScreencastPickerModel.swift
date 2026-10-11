@@ -88,10 +88,14 @@ final class ScreencastPickerModel {
         }
     }
 
-    /// The window under the pointer.
+    /// The window under the pointer, which a click would choose: none over the bar.
     private(set) var hoveredWindow: CGWindowID?
-    /// The window clicked, which Record records.
+    /// The window clicked, which Record records. Only a click on another window changes it: never
+    /// the pointer moving, and never the bar.
     private(set) var selectedWindow: CGWindowID?
+    /// The bar's frame in AppKit's global space, once it's laid out. The pointer over it is on the
+    /// bar, never on a window under it.
+    @ObservationIgnored var barFrame: CGRect?
     /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
     private(set) var selectedScreen: CGDirectDisplayID?
     /// The choice the pointer is over in the bar's screen choices, which the screens show until it
@@ -262,21 +266,30 @@ final class ScreencastPickerModel {
 
     // MARK: Picking a window (AppKit's global space)
 
+    /// Notes the window under the pointer, if any, which only previews it: the window picked stays.
     func hoverWindow(at point: CGPoint) {
         guard target == .window else { return }
-        let id = ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)?.id
+        let id = window(at: point)?.id
         guard id != hoveredWindow else { return }
         hoveredWindow = id
         changed()
     }
 
-    /// Picks the window under `point`; a click on no window keeps the one picked.
-    func clickWindow(at point: CGPoint) {
-        guard target == .window,
-              let window = ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows) else { return }
+    /// Picks the window under `point`, and says whether there was one. A click on no window, or on
+    /// the bar, keeps the one picked.
+    @discardableResult
+    func clickWindow(at point: CGPoint) -> Bool {
+        guard target == .window, let window = window(at: point) else { return false }
         hoveredWindow = window.id
         selectedWindow = window.id
         changed()
+        return true
+    }
+
+    /// The window under `point`, unless the bar is.
+    private func window(at point: CGPoint) -> ScreencastContent.Window? {
+        if barFrame?.contains(point) == true { return nil }
+        return ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)
     }
 
     /// A pickable window's frame in AppKit's global space.

@@ -220,8 +220,9 @@ final class ScreencastFirstClickHostingView<Content: View>: NSHostingView<Conten
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// One screen's part of the picker: dimmed, with the area being drawn, the window under the
-/// pointer, or the screen marked when it's chosen, and the bar on the screen the pointer was on.
+/// One screen's part of the picker: dimmed, with the area being drawn, the window chosen and the
+/// one under the pointer, or the screen marked when it's chosen, and the bar on the screen the
+/// pointer was on.
 @available(macOS 15, *)
 @MainActor
 final class ScreencastPickerView: NSView {
@@ -260,6 +261,18 @@ final class ScreencastPickerView: NSView {
         bar = host
     }
 
+    override func layout() {
+        super.layout()
+        noteBarFrame()
+    }
+
+    /// Tells the model where the bar is, so the pointer over it, and a click on it, never reach a
+    /// window under it. Its frame changes with what it shows.
+    private func noteBarFrame() {
+        guard let bar else { return }
+        model.barFrame = bar.frame.offsetBy(dx: screen.frame.minX, dy: screen.frame.minY)
+    }
+
     // MARK: Mouse, in AppKit's global space
 
     private func globalPoint(_ event: NSEvent) -> CGPoint {
@@ -273,6 +286,7 @@ final class ScreencastPickerView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeKey()
+        noteBarFrame()
         let point = globalPoint(event)
         switch model.target {
         case .area:
@@ -282,8 +296,8 @@ final class ScreencastPickerView: NSView {
             }
             model.pressArea(at: point, on: screen)
         case .window:
-            model.clickWindow(at: point)
-            if event.clickCount == 2, model.canConfirm { confirm() }
+            // A double click on a window records it; one on the bar or on no window does nothing.
+            if model.clickWindow(at: point), event.clickCount == 2 { confirm() }
         case .screen:
             model.clickScreen(screen)
             if event.clickCount == 2 { confirm() }
@@ -300,6 +314,7 @@ final class ScreencastPickerView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        noteBarFrame()
         let point = globalPoint(event)
         model.hoverWindow(at: point)
         updateCursor(at: point)
@@ -358,15 +373,21 @@ final class ScreencastPickerView: NSView {
         case .window:
             context.setFillColor(Self.dimming.cgColor)
             context.fill(bounds)
-            let shown = [model.selectedWindow, model.hoveredWindow].compactMap { $0 }
-            for id in Set(shown) {
-                guard let frame = model.appKitFrame(of: id) else { continue }
-                let rect = local(frame).intersection(bounds)
-                guard !rect.isNull, !rect.isEmpty else { continue }
+            // The window under the pointer, which a click would choose: lit while none is chosen,
+            // and once one is, only outlined, dashed, so the chosen one stays the one lit.
+            if let id = model.hoveredWindow, id != model.selectedWindow, let rect = shownRect(of: id) {
+                if model.selectedWindow == nil { clear(rect, in: context) }
+                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor)
+                context.setLineWidth(2)
+                context.setLineDash(phase: 0, lengths: [8, 5])
+                context.stroke(rect.insetBy(dx: 1, dy: 1))
+                context.setLineDash(phase: 0, lengths: [])
+            }
+            // The window chosen, last, so nothing drawn over it hides it.
+            if let id = model.selectedWindow, let rect = shownRect(of: id) {
                 clear(rect, in: context)
-                let isSelected = id == model.selectedWindow
-                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(isSelected ? 1 : 0.6).cgColor)
-                context.setLineWidth(isSelected ? 4 : 2)
+                context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                context.setLineWidth(4)
                 context.stroke(rect.insetBy(dx: 2, dy: 2))
             }
         case .screen:
@@ -381,6 +402,13 @@ final class ScreencastPickerView: NSView {
             context.setLineWidth(6)
             context.stroke(bounds.insetBy(dx: 3, dy: 3))
         }
+    }
+
+    /// The part of a pickable window on this screen, in this view's space, or nil if none is.
+    private func shownRect(of id: CGWindowID) -> CGRect? {
+        guard let frame = model.appKitFrame(of: id) else { return nil }
+        let rect = local(frame).intersection(bounds)
+        return rect.isNull || rect.isEmpty ? nil : rect
     }
 
     private func clear(_ rect: CGRect, in context: CGContext) {

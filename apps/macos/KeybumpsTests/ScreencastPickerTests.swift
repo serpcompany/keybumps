@@ -208,6 +208,89 @@ struct ScreencastPickerTests {
         #expect(choice?.regions == [ScreencastChoice.Region(display: 1, frame: CGRect(x: 100, y: 282, width: 800, height: 600))])
     }
 
+    /// In AppKit's space, on the left screen unless said: on the browser window (10) only; on the
+    /// browser's other window (12) only; on the other app's window (20), on the right screen; on no
+    /// window; and on the bar, over window 12.
+    private let onBrowserWindow = CGPoint(x: 150, y: 832)
+    private let onOtherWindow = CGPoint(x: 950, y: 232)
+    private let onRightWindow = CGPoint(x: 2000, y: 582)
+    private let onDesktop = CGPoint(x: 1400, y: 20)
+    private let onBar = CGPoint(x: 920, y: 240)
+
+    /// Window mode over the made-up windows, with the bar laid out over the lower part of the
+    /// browser's other window (12), as it is over whatever window is under it.
+    private func windowModel() -> ScreencastPickerModel {
+        let model = PickerScreens.model()
+        model.target = .window
+        model.windows = ScreencastWindowPicking.pickableWindows(in: Screens.content(), ownProcessID: Screens.ownProcess)
+        model.barFrame = CGRect(x: 250, y: 190, width: 700, height: 100)
+        #expect(ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: onBar), in: model.windows)?.id == 12)
+        return model
+    }
+
+    @Test("A window chosen stays chosen while the pointer crosses other windows, the desktop, and the bar")
+    func windowStaysChosenWhileThePointerMoves() {
+        let model = windowModel()
+        #expect(model.clickWindow(at: onBrowserWindow))
+        #expect(model.selectedWindow == 10)
+
+        model.hoverWindow(at: onOtherWindow)
+        #expect(model.hoveredWindow == 12, "Another window under the pointer is only previewed")
+        #expect(model.selectedWindow == 10)
+        model.hoverWindow(at: onRightWindow)
+        #expect(model.hoveredWindow == 20 && model.selectedWindow == 10)
+        model.hoverWindow(at: onDesktop)
+        #expect(model.hoveredWindow == nil && model.selectedWindow == 10)
+        model.hoverWindow(at: onBar)
+        #expect(model.hoveredWindow == nil, "The pointer on the bar is on no window under it")
+        #expect(model.selectedWindow == 10)
+        #expect(model.hint == "Click another window to change it.")
+        #expect(model.choice()?.target == .window(10))
+    }
+
+    @Test("A click on the bar, or on its buttons and switches, never changes the window chosen")
+    func barNeverChoosesAWindow() {
+        let model = windowModel()
+        #expect(!model.clickWindow(at: onBar), "Before one is chosen, a click on the bar chooses none")
+        #expect(model.selectedWindow == nil && !model.canConfirm)
+
+        model.clickWindow(at: onBrowserWindow)
+        model.hoverWindow(at: onBar)
+        #expect(!model.clickWindow(at: onBar))
+        #expect(model.selectedWindow == 10)
+        // What the bar's buttons and switches set.
+        model.kind = .screenshot
+        model.kind = .video
+        model.recordsMicrophone.toggle()
+        model.recordsSystemAudio.toggle()
+        model.showsShortcuts.toggle()
+        model.highlightsClicks.toggle()
+        model.target = .area
+        model.target = .screen
+        model.target = .window
+        #expect(model.selectedWindow == 10)
+        let choice = model.choice()
+        #expect(choice?.target == .window(10))
+        #expect(choice?.regions == [ScreencastChoice.Region(display: 1, frame: CGRect(x: 100, y: 282, width: 800, height: 600))])
+    }
+
+    @Test("Only a click on another window changes the window chosen, and Record records that one")
+    func clickOnAnotherWindowChangesIt() {
+        let model = windowModel()
+        model.clickWindow(at: onBrowserWindow)
+        #expect(model.clickWindow(at: onOtherWindow))
+        #expect(model.selectedWindow == 12)
+        #expect(model.choice()?.target == .window(12))
+        #expect(model.choice()?.regions == [ScreencastChoice.Region(display: 1, frame: CGRect(x: 200, y: 182, width: 800, height: 600))])
+        #expect(model.clickWindow(at: onRightWindow))
+        #expect(model.choice()?.target == .window(20))
+        #expect(model.choice()?.regions.map(\.display) == [2])
+        // Without a bar laid out, as on a screen without it, the pointer reaches every window.
+        model.barFrame = nil
+        #expect(model.clickWindow(at: onBar))
+        #expect(model.selectedWindow == 12)
+    }
+
     @Test("A picked window that closes is no longer picked")
     func pickedWindowCloses() {
         let model = PickerScreens.model()
