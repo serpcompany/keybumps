@@ -16,6 +16,23 @@ enum PluginLinks {
     static let website = URL(string: "https://keybumps.app/plugins")!
 }
 
+/// Something a plugin does that Quick Search offers, with the kind Action, while the plugin is on
+/// (#468): Start Screencast, or Show or Hide Keystrokes. The manifest declares it; the plugin's
+/// module runs it (`CapabilityModule.perform(_:_:)`) and can name it after its state
+/// (`CapabilityModule.title(for:_:)`).
+struct PluginAction: Hashable, Identifiable {
+    /// Unique across plugins and never changed once shipped: it names the row's accessibility
+    /// identifier (`quickSearch.action.<id>`) and its learned usage (`action:<id>`).
+    let id: String
+    /// Its name when the module doesn't give one for its state.
+    let title: String
+    /// Other words that find it, as a capability's search keywords do.
+    var keywords: [String] = []
+    let systemImage: String
+    /// The plugin's shortcut that does the same, whose keycaps its row shows while one is assigned.
+    var shortcut: CapabilityShortcut?
+}
+
 /// A permission a plugin can use but doesn't need, such as Accessibility to paste, and why it helps.
 /// Its Settings page lists it as Optional; it never counts as missing setup.
 struct PluginOptionalPermission: Equatable {

@@ -282,7 +282,8 @@ final class WiringHarness {
 
     /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder. The
     /// Mac runs macOS 15 unless `compatibility` says otherwise, so the snapshot doesn't depend on the
-    /// Mac recording it; `defaults` holds what was saved before launch.
+    /// Mac recording it; `defaults` holds what was saved before launch. It's licensed unless
+    /// `licensing` says otherwise.
     init(
         enabled: Set<Capability>,
         missing: MacPermission?,
@@ -291,7 +292,8 @@ final class WiringHarness {
         quickSearch: QuickSearchModel? = nil,
         compatibility: PluginCompatibility = PluginCompatibility(macOSMajorVersion: 15),
         defaults: UserDefaults = InMemoryDefaults(),
-        screenshotCapturer: ScreenshotCapturer? = nil
+        screenshotCapturer: ScreenshotCapturer? = nil,
+        licensing: (any LicenseControlling)? = nil
     ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
@@ -346,6 +348,7 @@ final class WiringHarness {
                 openSettings: { _ in }
             ),
             updater: DisabledUpdateController(reason: "Capability wiring snapshot"),
+            licensing: licensing,
             dictationModelManager: DictationModelManager(
                 modelsRoot: directory.appendingPathComponent("models", isDirectory: true),
                 downloader: WhisperKitModelDownloader()

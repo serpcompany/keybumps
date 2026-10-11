@@ -39,6 +39,9 @@ final class QuickSearchModel {
     /// while it's on and Show emoji in Quick Search is too. The palette shows a few of them, or all
     /// under `/`'s Emoji filter (`QuickSearchEmoji.limited`).
     @ObservationIgnored var emoji: (_ query: String) -> [QuickSearchEmoji] = { _ in [] }
+    /// The action commands a query can find: none until the palette supplies them, which lists only
+    /// those of plugins that are on (#468).
+    @ObservationIgnored var actions: () -> [QuickSearchAction] = { [] }
 
     private let applications: [QuickSearchResult]
     /// Whether a query also runs the Spotlight search of the home folder for files and folders.
@@ -114,8 +117,8 @@ final class QuickSearchModel {
             usage: applicationUsage
         )
         items = QuickSearchRanking.items(
-            matching: term, applications: Array(appMatches.prefix(12)), files: [], snippets: snippets(),
-            emoji: emoji(term), usage: applicationUsage
+            matching: term, applications: Array(appMatches.prefix(12)), files: [], actions: actions(),
+            snippets: snippets(), emoji: emoji(term), usage: applicationUsage
         )
         guard searchesFiles else { return }
 
@@ -161,8 +164,8 @@ final class QuickSearchModel {
             if files.count == 30 { break }
         }
         items = QuickSearchRanking.items(
-            matching: term, applications: Array(appMatches.prefix(12)), files: files, snippets: snippets(),
-            emoji: emoji(term), usage: applicationUsage
+            matching: term, applications: Array(appMatches.prefix(12)), files: files, actions: actions(),
+            snippets: snippets(), emoji: emoji(term), usage: applicationUsage
         )
     }
 

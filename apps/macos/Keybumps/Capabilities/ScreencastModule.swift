@@ -19,6 +19,7 @@ extension CapabilityDescriptor {
         ),
         criticalOperations: [],
         searchKeywords: ["screen recording", "record", "recorder", "video", "capture"],
+        actions: [.startScreencast],
         category: .media,
         preferences: [
             .screencastRecordsMicrophone, .screencastRecordsSystemAudio,
@@ -32,6 +33,17 @@ extension CapabilityDescriptor {
         ],
         isOnByDefault: false,
         minimumMacOS: 15
+    )
+}
+
+extension PluginAction {
+    /// Quick Search's Start Screencast, which does what the shortcut does (`ScreencastModule.start`).
+    static let startScreencast = PluginAction(
+        id: "startScreencast",
+        title: "Start Screencast",
+        keywords: ["record", "recording", "screen recording", "capture", "video", "screenshot"],
+        systemImage: "record.circle",
+        shortcut: .screencast
     )
 }
 
@@ -161,6 +173,22 @@ final class ScreencastModule: CapabilityModule {
     func attentionCount(_ context: CapabilityContext) -> Int {
         guard context.isEnabled(capability) else { return 0 }
         return context.permissionReadiness([capability]).missingCount
+    }
+
+    /// Quick Search's Start Screencast takes the shortcut's path.
+    func perform(_ action: PluginAction, _ context: CapabilityContext) {
+        if action == .startScreencast { start() }
+    }
+
+    /// Start Screencast isn't listed while a capture is under way, when it would do nothing.
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool {
+        action != .startScreencast || !isCapturing
+    }
+
+    /// Whether a capture is under way: the picker open, counting down, recording, or saving.
+    var isCapturing: Bool {
+        guard #available(macOS 15, *), let controller else { return false }
+        return controller.phase != .idle
     }
 
     /// Start Screencast: the picker, while Screencast is on, on macOS 15, with Screen Recording.
