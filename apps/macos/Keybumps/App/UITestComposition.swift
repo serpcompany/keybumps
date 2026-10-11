@@ -225,8 +225,14 @@ final class UITestScreencastScreen: ScreencastPickerSystem {
         let main = NSScreen.screens.first?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let lower = (main.height / 2).rounded(.down)
         return ScreencastScreenLayout(screens: [
-            ScreencastScreen(id: 9_001, frame: CGRect(x: main.minX, y: main.minY, width: main.width, height: lower), scale: 2),
-            ScreencastScreen(id: 9_002, frame: CGRect(x: main.minX, y: main.minY + lower, width: main.width, height: main.height - lower), scale: 2),
+            ScreencastScreen(
+                id: 9_001, frame: CGRect(x: main.minX, y: main.minY, width: main.width, height: lower), scale: 2,
+                name: "Made-up Bottom Display"
+            ),
+            ScreencastScreen(
+                id: 9_002, frame: CGRect(x: main.minX, y: main.minY + lower, width: main.width, height: main.height - lower), scale: 2,
+                name: "Made-up Top Display"
+            ),
         ])
     }
 
@@ -236,7 +242,7 @@ final class UITestScreencastScreen: ScreencastPickerSystem {
             ScreencastContent.Display(id: $0.id, frame: layout.topLeftRect(fromAppKit: $0.frame), scale: $0.scale)
         }
         // Both on the top display, in from its top-left corner, in AppKit's space.
-        let top = layout.screens[1].frame
+        let top = layout.screens.max { $0.frame.maxY < $1.frame.maxY }?.frame ?? .zero
         let windows = [
             CGRect(x: top.minX + 60, y: top.maxY - 40 - 220, width: 400, height: 220),
             CGRect(x: top.minX + 200, y: top.maxY - 120 - 180, width: 360, height: 180),

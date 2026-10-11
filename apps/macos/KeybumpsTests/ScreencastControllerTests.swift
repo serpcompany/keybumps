@@ -34,7 +34,8 @@ struct ScreencastControllerTests {
     func makeController(
         countdown: Int = 3,
         microphoneAvailable: Bool = true,
-        writers: (any ScreencastWriterFactory)? = nil
+        writers: (any ScreencastWriterFactory)? = nil,
+        pointer: CGPoint = CGPoint(x: -10_000, y: -10_000)
     ) -> ScreencastController {
         let clock = clock
         let startDate = startDate
@@ -56,6 +57,7 @@ struct ScreencastControllerTests {
             areaMemory: ScreencastAreaMemory(defaults: defaults),
             preferences: { preferences },
             screens: { PickerScreens.both },
+            pointerLocation: { pointer },
             microphoneAvailable: { microphoneAvailable },
             sleep: { try await sleeper.sleep($0) },
             now: { startDate },
@@ -221,7 +223,7 @@ struct ScreencastControllerTests {
     func noCountdown() async throws {
         defer { captures.remove() }
         let controller = makeController(countdown: 0)
-        try await record(controller, .screen)
+        try await record(controller, .screen) { $0.chooseEveryScreen() }
         #expect(controller.phase == .starting)
         #expect(await ScreencastWait.until { controller.phase == .recording })
         #expect(sleeper.requested.isEmpty && overlays.countdowns.isEmpty)
@@ -230,6 +232,15 @@ struct ScreencastControllerTests {
         #expect(!showedHighlight)
         // Every screen isn't an area: the last area stays as it was.
         #expect(ScreencastAreaMemory(defaults: defaults).area(in: PickerScreens.both) == nil)
+    }
+
+    @available(macOS 15, *)
+    @Test("Screen mode starts on the screen with the pointer")
+    func pointerScreen() async throws {
+        defer { captures.remove() }
+        let controller = makeController(pointer: CGPoint(x: 2000, y: 500))
+        controller.open()
+        #expect(controller.picker?.selectedScreen == 2)
     }
 
     @available(macOS 15, *)
@@ -269,7 +280,7 @@ struct ScreencastControllerTests {
     func everyScreenCountdown() async throws {
         defer { captures.remove() }
         let controller = makeController()
-        try await record(controller, .screen)
+        try await record(controller, .screen) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { sleeper.pending == 1 })
         #expect(overlays.events.contains(.countdown(3, frames: [PickerScreens.left.frame, PickerScreens.right.frame])))
     }
@@ -783,7 +794,7 @@ struct ScreencastControllerTests {
         let controller = makeController()
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
-        try await record(controller, .screen, kind: .screenshot)
+        try await record(controller, .screen, kind: .screenshot) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { pickerSystem.isHoldingScreenshot })
         #expect(controller.phase == .finishing)
         await controller.shutDown()
@@ -865,7 +876,7 @@ struct ScreencastControllerTests {
         let controller = makeController()
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
-        try await record(controller, .screen, kind: .screenshot)
+        try await record(controller, .screen, kind: .screenshot) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { !finished.isEmpty })
         #expect(pickerSystem.plans.map(\.filter.displayID) == [1, 2])
         guard case .screenshot(let screenshot) = finished.first else {
@@ -908,6 +919,21 @@ struct ScreencastControllerTests {
         #expect(finished.isEmpty)
         #expect(overlays.messages == [ScreencastMessages.text(for: .screenRecordingDenied, kind: .screenshot)])
         #expect(captures.captureFolders().isEmpty)
+    }
+
+    @Test("A window size that isn't a real number of pixels fails the screenshot instead of trapping")
+    func pixelsFailSafe() {
+        #expect(ScreencastScreenshots.pixels(800, scale: 2) == 1600)
+        #expect(ScreencastScreenshots.pixels(100.2, scale: 1) == 101)
+        #expect(ScreencastScreenshots.pixels(.nan, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(.infinity, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(0, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(-40, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(1e12, scale: 2) == nil)
+        let broken = ScreencastContent.Window(id: 60, frame: CGRect(x: 100, y: 100, width: CGFloat.greatestFiniteMagnitude, height: 600), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true)
+        #expect(throws: ScreencastFailure.targetUnavailable) {
+            try ScreencastScreenshots.plans(for: .window(60), content: Screens.content(windows: [broken]), ownProcessID: Screens.ownProcess)
+        }
     }
 
     @Test("Keybumps's own process is never a window screenshot's target")

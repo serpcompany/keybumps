@@ -358,7 +358,7 @@ final class ScreencastPickerView: NSView {
                 context.stroke(rect.insetBy(dx: 2, dy: 2))
             }
         case .screen:
-            guard model.isChosen(screen) else {
+            guard model.isLit(screen) else {
                 context.setFillColor(Self.dimming.cgColor)
                 context.fill(bounds)
                 return

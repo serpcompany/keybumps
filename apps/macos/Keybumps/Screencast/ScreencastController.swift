@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import CoreGraphics
 import Foundation
@@ -132,6 +133,7 @@ final class ScreencastController {
     @ObservationIgnored private let areaMemory: ScreencastAreaMemory
     @ObservationIgnored private let preferences: @MainActor () -> ScreencastPreferences
     @ObservationIgnored private let screens: @MainActor () -> ScreencastScreenLayout
+    @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     @ObservationIgnored private let microphoneAvailable: @MainActor () -> Bool
     @ObservationIgnored private let sleep: (TimeInterval) async throws -> Void
     @ObservationIgnored private let now: () -> Date
@@ -166,6 +168,8 @@ final class ScreencastController {
     ///   - presenter: The picker's and countdown's windows; inert in the unit-test host.
     ///   - preferences: Settings › Screencast, read each time the picker opens.
     ///   - screens: The displays, read each time the picker opens.
+    ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
+    ///     its screen.
     ///   - microphoneAvailable: Whether Keybumps has Microphone access, so the microphone switch can
     ///     start on without recording ever asking for it.
     ///   - sleep: Waits a number of seconds, for the countdown; tests pass their own clock.
@@ -177,6 +181,7 @@ final class ScreencastController {
         areaMemory: ScreencastAreaMemory,
         preferences: @escaping @MainActor () -> ScreencastPreferences,
         screens: @escaping @MainActor () -> ScreencastScreenLayout = { ScreencastScreenLayout.current() },
+        pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         microphoneAvailable: @escaping @MainActor () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
         gettingReadyDelay: TimeInterval = 0.3,
@@ -190,6 +195,7 @@ final class ScreencastController {
         self.areaMemory = areaMemory
         self.preferences = preferences
         self.screens = screens
+        self.pointerLocation = pointerLocation
         self.microphoneAvailable = microphoneAvailable
         self.sleep = sleep
         self.gettingReadyDelay = gettingReadyDelay
@@ -216,7 +222,8 @@ final class ScreencastController {
             layout: layout,
             preferences: settings,
             microphoneAvailable: microphoneAvailable(),
-            rememberedArea: areaMemory.area(in: layout)
+            rememberedArea: areaMemory.area(in: layout),
+            pointerScreen: layout.screen(containing: pointerLocation())?.id
         )
         picker = model
         choice = nil

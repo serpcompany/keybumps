@@ -281,20 +281,29 @@ final class SmokeUITests: XCTestCase {
         launchScreencastPicker()
         let hint = element("screencast.picker.hint")
         element("screencast.picker.target.screen").click()
-        XCTAssertTrue(waitForText(of: hint, "Every screen, one file each. Click a screen for just that one."))
-        let everyScreen = element("screencast.picker.everyScreen")
-        XCTAssertTrue(everyScreen.exists)
+        // A choice for each made-up screen, named, top first as recordings number them, and All
+        // Screens. It starts on the screen with the pointer, whichever that is on CI.
+        let top = element("screencast.picker.screen.1")
+        let bottom = element("screencast.picker.screen.2")
+        let allScreens = element("screencast.picker.everyScreen")
+        XCTAssertTrue(top.waitForExistence(timeout: 5))
+        XCTAssertTrue(bottom.exists && allScreens.exists)
+        XCTAssertFalse(element("screencast.picker.screen.3").exists)
 
-        // The lower of the two screens, a quarter of the way down it: above the bar, which sits at
-        // the bottom of one of them.
+        bottom.click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Bottom Display."))
+        allScreens.click()
+        XCTAssertTrue(waitForText(of: hint, "Records all screens, one file each."))
+        top.click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Top Display."))
+
+        // A click on a screen still chooses it: the lower one, a quarter of the way down, above
+        // the bar, which sits at the bottom of one of them.
         XCTAssertEqual(pickerPanels.count, 2)
         let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
         let lowerScreen = try XCTUnwrap(panels.max { $0.frame.minY < $1.frame.minY })
         lowerScreen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
-        XCTAssertTrue(waitForText(of: hint, "This screen only. Choose Every Screen for all of them."))
-
-        everyScreen.click()
-        XCTAssertTrue(waitForText(of: hint, "Every screen, one file each. Click a screen for just that one."))
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Bottom Display."))
     }
 
     func testEscapeClosesTheScreencastPicker() {
