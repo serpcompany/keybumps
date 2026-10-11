@@ -75,6 +75,8 @@ targets:
         buildPhase: resources
       - path: LICENSE.snapzy
         buildPhase: resources
+      - path: LICENSE.hop
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.serp.keybumps

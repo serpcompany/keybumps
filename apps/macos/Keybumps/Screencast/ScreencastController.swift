@@ -100,7 +100,9 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 /// - **#449, the overlays,** go up when the phase leaves `.picking` for a video
 ///   (`.countingDown` or `.starting`), as `choice` says (`showsShortcuts`, `highlightsClicks`, and
 ///   the `regions` it shows on), and register their windows with `recorder.includeOverlayWindow`
-///   before it starts, so the first frame has them. They come down when the phase is `.idle` again.
+///   before it starts, so the first frame has them. A restart clears the drawing and the keys
+///   first (`addWillRestartObserver(_:)`) and gives the screen a moment to show that, and they come
+///   down when the phase is `.idle` again.
 /// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved video and screenshot.
 ///
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
@@ -134,6 +136,8 @@ final class ScreencastController {
     /// `addPhaseObserver(_:)`'s observers, in the order they were added.
     @ObservationIgnored private var phaseObservers: [(ScreencastPhaseObservation, (ScreencastPhase) -> Void)] = []
     @ObservationIgnored private var nextPhaseObservation = 0
+    /// `addWillRestartObserver(_:)`'s observers, in the order they were added.
+    @ObservationIgnored private var willRestartObservers: [() -> Bool] = []
     /// Phases entered while the observers are being told of an earlier one, told next, in order.
     @ObservationIgnored private var unannouncedPhases: [ScreencastPhase] = []
     @ObservationIgnored private var isAnnouncingPhase = false
@@ -149,6 +153,7 @@ final class ScreencastController {
     @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     @ObservationIgnored private let microphoneAvailable: @MainActor () -> Bool
     @ObservationIgnored private let sleep: (TimeInterval) async throws -> Void
+    @ObservationIgnored private let restartSettle: TimeInterval
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let ownProcessID: pid_t
@@ -189,7 +194,10 @@ final class ScreencastController {
     ///     its screen.
     ///   - microphoneAvailable: Whether Keybumps has Microphone access, so the microphone switch can
     ///     start on without recording ever asking for it.
-    ///   - sleep: Waits a number of seconds, for the countdown; tests pass their own clock.
+    ///   - sleep: Waits a number of seconds, for the countdown and a restart's settle; tests pass
+    ///     their own clock.
+    ///   - restartSettle: How long a restart waits, once its observers cleared the screen, before
+    ///     the recorder starts the new take (`restartSettle(framesPerSecond:)`).
     ///   - gettingReadyDelay: How long reading the screen may take before "Getting ready…" shows.
     ///   - screenReadTimeout: How long reading the screen may take before the picker gives up and
     ///     says the capture couldn't start.
@@ -204,6 +212,7 @@ final class ScreencastController {
         pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         microphoneAvailable: @escaping @MainActor () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+        restartSettle: TimeInterval = ScreencastController.restartSettle(framesPerSecond: ScreencastOptions().framesPerSecond),
         gettingReadyDelay: TimeInterval = 0.3,
         screenReadTimeout: TimeInterval = 30,
         screenChanges: NotificationCenter = .default,
@@ -220,6 +229,7 @@ final class ScreencastController {
         self.pointerLocation = pointerLocation
         self.microphoneAvailable = microphoneAvailable
         self.sleep = sleep
+        self.restartSettle = restartSettle
         self.gettingReadyDelay = gettingReadyDelay
         self.screenReadTimeout = screenReadTimeout
         self.screenChanges = screenChanges
@@ -255,6 +265,17 @@ final class ScreencastController {
         phaseObservers.removeAll { $0.0 == observation }
     }
 
+    /// Calls `observer` each time a restart is about to throw the take away and start a new one,
+    /// which stays in the same phase. It returns whether it took something off the screen (#449:
+    /// the drawing and the keys), drawn by the time it returns. If any did, the restart waits
+    /// `restartSettle` before the recorder swaps its files, so ScreenCaptureKit has delivered a
+    /// frame of the cleared screen by then: the recorder starts the new take with the last frame
+    /// delivered, and keeps every frame after it. A screen that's slow to show the change could
+    /// still put the old marks or keys in that frame; nothing waits for a particular frame.
+    func addWillRestartObserver(_ observer: @escaping () -> Bool) {
+        willRestartObservers.append(observer)
+    }
+
     /// Tells `onPhaseChange` and the observers about `phase`, or, while they're being told about an
     /// earlier one, once they've heard it (`addPhaseObserver(_:)`).
     private func announce(_ phase: ScreencastPhase) {
@@ -274,6 +295,13 @@ final class ScreencastController {
                 observer(next)
             }
         }
+    }
+
+    /// A restart's settle: three frames at the recording's rate, and never less than 0.1 s. The
+    /// cleared windows draw at the next screen refresh, and ScreenCaptureKit delivers the frame
+    /// that shows them at most one frame later.
+    nonisolated static func restartSettle(framesPerSecond: Int) -> TimeInterval {
+        max(0.1, 3 / Double(max(framesPerSecond, 1)))
     }
 
     // MARK: Picking
@@ -485,14 +513,27 @@ final class ScreencastController {
         recorder.setAudio(source, on: on)
     }
 
-    /// Throws away what's recorded and starts again at once, recording, or paused if `pause()`
-    /// came meanwhile. Refused while another restart is under way, or while a recording that ended
-    /// on its own is saving; a `stop()`, `discard()`, or early end that comes while it waits on the
-    /// recorder wins.
+    /// Throws away what's recorded and starts again, recording, or paused if `pause()` came while
+    /// the recorder restarted. Refused while another restart is under way, or while a recording
+    /// that ended on its own is saving; a `stop()`, `discard()`, `shutDown()`, or early end that
+    /// comes while it waits wins.
+    ///
+    /// The will-restart observers clear the screen first. If they took anything off it, the restart
+    /// waits `restartSettle` for a frame of the cleared screen to reach the recorder, then checks
+    /// again that this recording is still going before restarting it.
     func restart() async {
         guard !noticeEarlyEnd(), phase.isRecording, !restartInFlight else { return }
         restartInFlight = true
         defer { restartInFlight = false }
+        // Every observer is told, whatever the others cleared.
+        let cleared = willRestartObservers.reduce(false) { cleared, observer in observer() || cleared }
+        if cleared {
+            let generation = generation
+            // A cancelled wait still restarts, once the checks below pass.
+            try? await sleep(restartSettle)
+            // A stop, discard, shutdown, or early end came meanwhile, or another recording started.
+            guard generation == self.generation, !noticeEarlyEnd(), phase.isRecording else { return }
+        }
         do {
             try await recorder.restart()
         } catch {

@@ -343,9 +343,6 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Whether Settings lists it. Draw While Recording waits for drawing (#449).
-    var isListed: Bool { self != .screencastDraw }
-
     /// The binding a new install starts with; nil for a shortcut that starts unassigned.
     var defaultBinding: ShortcutBinding? {
         switch self {

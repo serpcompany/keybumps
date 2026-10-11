@@ -58,6 +58,12 @@ final class KeyDisplayOverlayController: KeyDisplayPresenting {
             transaction.disablesAnimations = true
             withTransaction(transaction) { state.content = content }
         }
+        if !animated {
+            // A line an earlier show took away fades on in the view SwiftUI animates it in, whatever
+            // the content says now: each window gets a new view, which draws only `content`. The
+            // windows, and their numbers, stay.
+            for panel in panels.values { panel.window.contentView = view(for: panel.screen) }
+        }
         arrange(animated: animates)
         if !animates {
             // Draw the change now, not at the next display cycle.
@@ -126,15 +132,19 @@ final class KeyDisplayOverlayController: KeyDisplayPresenting {
         if let existing = panels[screen.display] {
             if existing.screen != screen {
                 existing.window.setFrame(screen.frame, display: false)
-                existing.window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
+                existing.window.contentView = view(for: screen)
                 panels[screen.display] = (screen, existing.window)
             }
             return existing.window
         }
         let window = KeyDisplayOverlayWindow(frame: screen.frame)
-        window.contentView = NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
+        window.contentView = view(for: screen)
         panels[screen.display] = (screen, window)
         return window
+    }
+
+    private func view(for screen: KeyDisplayScreen) -> NSView {
+        NSHostingView(rootView: KeyDisplayOverlayView(state: state, screen: screen))
     }
 
     private func close(_ window: NSWindow) {
@@ -180,12 +190,36 @@ final class KeyDisplayOverlayState {
 
 extension KeyDisplayScreen {
     /// How far the visible frame is from each edge, so the keys sit above the Dock.
-    var insets: EdgeInsets {
+    var insets: EdgeInsets { insets(to: visibleFrame) }
+
+    /// Where the keys go on this screen, in AppKit's global space: inside the visible frame by
+    /// `KeyDisplayOverlayView.margin`, or, for an `anchor` on this screen, inside it, so they're in
+    /// what a recording records:
+    /// - inside its part clear of the menu bar and the Dock, by `KeyDisplayOverlayView.anchorMargin`;
+    /// - when that part is too small (a thin strip, or an area mostly over the Dock or the menu
+    ///   bar), inside its part on the screen at all, by a margin it has room for: the overlay is
+    ///   above the menu bar and the Dock.
+    /// Only an anchor that isn't on this screen leaves them where they'd be without one.
+    func keyArea(anchor: CGRect?) -> CGRect {
+        let plain = visibleFrame.insetBy(dx: KeyDisplayOverlayView.margin, dy: KeyDisplayOverlayView.margin)
+        guard let anchor = anchor?.standardized else { return plain }
+        let margin = KeyDisplayOverlayView.anchorMargin
+        let clear = anchor.intersection(visibleFrame)
+        if !clear.isNull, clear.width > margin * 4, clear.height > margin * 4 {
+            return clear.insetBy(dx: margin, dy: margin)
+        }
+        let onScreen = anchor.intersection(frame)
+        guard !onScreen.isNull, onScreen.width > 0, onScreen.height > 0 else { return plain }
+        return onScreen.insetBy(dx: min(margin, onScreen.width / 4), dy: min(margin, onScreen.height / 4))
+    }
+
+    /// How far `rect` is from each edge of the screen.
+    func insets(to rect: CGRect) -> EdgeInsets {
         EdgeInsets(
-            top: frame.maxY - visibleFrame.maxY,
-            leading: visibleFrame.minX - frame.minX,
-            bottom: visibleFrame.minY - frame.minY,
-            trailing: frame.maxX - visibleFrame.maxX
+            top: frame.maxY - rect.maxY,
+            leading: rect.minX - frame.minX,
+            bottom: rect.minY - frame.minY,
+            trailing: frame.maxX - rect.maxX
         )
     }
 }
@@ -195,6 +229,8 @@ extension KeyDisplayScreen {
 struct KeyDisplayOverlayView: View {
     /// How far the keys sit from the visible frame's edges.
     static let margin: CGFloat = 32
+    /// How far they sit from an anchor's edges, such as a recorded window's.
+    static let anchorMargin: CGFloat = 16
 
     let state: KeyDisplayOverlayState
     let screen: KeyDisplayScreen
@@ -210,14 +246,8 @@ struct KeyDisplayOverlayView: View {
                     }
                 }
                 if content.lineDisplays.contains(screen.display) {
-                    let insets = screen.insets
                     KeystrokeStack(content: content, metrics: metrics)
-                        .padding(EdgeInsets(
-                            top: insets.top + Self.margin,
-                            leading: insets.leading + Self.margin,
-                            bottom: insets.bottom + Self.margin,
-                            trailing: insets.trailing + Self.margin
-                        ))
+                        .padding(screen.insets(to: screen.keyArea(anchor: content.configuration.anchor)))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: content.configuration.position.alignment)
                 }
             }

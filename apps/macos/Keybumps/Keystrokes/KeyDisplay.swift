@@ -51,15 +51,22 @@ struct KeyDisplayConfiguration: Equatable, Sendable {
     /// shows a ring on. Nil means the screen the pointer is on when a key is pressed, and a ring on
     /// whichever screen is clicked.
     var displays: Set<CGDirectDisplayID>?
+    /// A rect the keys sit in, in AppKit's global space, such as the area or window a recording
+    /// records: they go along its bottom edge, at `position`, inset, on each of `displays` it's on.
+    /// Nil puts them along the bottom of the screen's visible frame.
+    var anchor: CGRect?
 }
 
 /// Who holds the key display, in the order they took it, what each asked for, and whether its keys
 /// are hidden. The display shows while any holder's keys are shown, and only one shows however many
-/// do. The configuration in effect is the most recent shown holder's, with two exceptions:
+/// do. The configuration in effect is the most recent shown holder's, with these exceptions, each
+/// counting shown holders only, so a hidden holder's keys, screens, or anchor never mix in:
 /// - Show is Shortcuts only if any shown holder asks for it, so a recording that shows shortcuts
 ///   only never records typing the plugin was set to show;
-/// - the screens are the most recent shown holder's that names some, so a recording's screens win
-///   for as long as it holds the display, even if the plugin is turned on after it started.
+/// - while a shown holder keeps the windows on screen (a recording), the screens, the anchor, and
+///   whether clicks show are the most recent such holder's, so what's in its video stays its own
+///   even if the plugin is turned on after it started;
+/// - otherwise the screens and the anchor are the most recent shown holder's that names some.
 ///
 /// The windows stay on screen for the whole hold if any shown holder asks (`keepsWindowsOnScreen`).
 /// A holder that acquires again keeps its place, and whether its keys are hidden, and changes only
@@ -91,7 +98,14 @@ struct KeyDisplayHolds: Equatable {
         let shown = shown
         guard var configuration = shown.last?.configuration else { return nil }
         if shown.contains(where: { $0.configuration.keys == .shortcutsOnly }) { configuration.keys = .shortcutsOnly }
-        configuration.displays = shown.last(where: { $0.configuration.displays != nil })?.configuration.displays
+        if let recording = shown.last(where: \.keepsWindowsOnScreen)?.configuration {
+            configuration.displays = recording.displays
+            configuration.anchor = recording.anchor
+            configuration.showsClicks = recording.showsClicks
+        } else {
+            configuration.displays = shown.last(where: { $0.configuration.displays != nil })?.configuration.displays
+            configuration.anchor = shown.last(where: { $0.configuration.anchor != nil })?.configuration.anchor
+        }
         return configuration
     }
 
@@ -213,8 +227,9 @@ protocol KeyDisplayPresenting: AnyObject {
     var windows: [NSWindow] { get }
     /// Called after `windows` changes: put up, taken down, or replaced as displays come and go.
     var onWindowsChange: (() -> Void)? { get set }
-    /// Shows `content`. Without `animated`, what leaves goes at once, with no fade, as when typing
-    /// must not reach a recording's first frames.
+    /// Shows `content`. Without `animated`, what leaves goes at once, with no fade, and so does
+    /// whatever is still fading out from an earlier show, as when typing must not reach a
+    /// recording's first frames, or old keys a restarted recording's new take.
     func show(_ content: KeyDisplayContent, animated: Bool)
     /// Closes the windows.
     func hide()
@@ -298,6 +313,8 @@ final class KeyDisplay {
     private var wakeUp: (any TimerScheduledAction)?
     /// The pointer's screen at the newest key.
     private var lastPointerDisplay: CGDirectDisplayID?
+    /// Until when lines that expired may still be fading off the screen.
+    private var fadesUntil: Date?
     /// macOS's screenshot shortcuts, when they were read, and Screenshot Tools' hotkeys then. They're
     /// read again when the display starts or changes; on a key once they're older than
     /// `screenshotKeysLifetime`, or once Screenshot Tools' hotkeys differ, since Keybumps turns
@@ -418,6 +435,19 @@ final class KeyDisplay {
         present(animated: false)
     }
 
+    /// Takes every line and ring off the screen at once, with no fade, and draws that, as when a
+    /// recording restarts and its new take must start with none. Unlike `pauseForScreenshot()`, the
+    /// next key shows. Returns whether anything was on screen: a line or a ring, or a line still
+    /// fading out, which goes at once too. With every holder's keys hidden there's nothing to clear.
+    @discardableResult
+    func clearLines() -> Bool {
+        guard holds.isShowing else { return false }
+        let wasShown = !timeline.entries.isEmpty || !timeline.clicks.isEmpty || fadesUntil.map { now() < $0 } == true
+        timeline.removeAll()
+        present(animated: false)
+        return wasShown
+    }
+
     /// Whether `press` takes a screenshot, by the shortcuts macOS and Keybumps have now.
     func isScreenshotShortcut(_ press: KeyPress) -> Bool {
         let keybumps = keybumpsScreenshotBindings()
@@ -462,6 +492,7 @@ final class KeyDisplay {
             isWatchingClicks = false
             isPausedForScreenshot = false
             timeline.removeAll()
+            fadesUntil = nil
             wakeUp?.cancel()
             wakeUp = nil
             presenter.hide()
@@ -523,12 +554,16 @@ final class KeyDisplay {
     /// their own clock.
     func expire() {
         guard let configuration = holds.configuration else { return }
+        let before = timeline
         timeline.expire(at: now(), linger: configuration.linger)
+        if timeline != before { fadesUntil = now().addingTimeInterval(KeyDisplayOverlayController.fadeDuration) }
         present()
     }
 
     private func present(animated: Bool = true) {
         guard let configuration = holds.configuration else { return }
+        // Without animation, the presenter ends every fade too.
+        if !animated { fadesUntil = nil }
         presenter.show(
             KeyDisplayContent(
                 configuration: configuration,

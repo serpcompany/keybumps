@@ -767,6 +767,163 @@ struct ScreencastControllerTests {
         #expect(await ScreencastWait.until { captures.captureFolders().isEmpty }, "discarded footage is deleted")
     }
 
+    // MARK: Restarting with the screen cleared (round-3 review of #465)
+
+    /// What comes while a restart waits for a frame of the cleared screen.
+    enum SettleInterruption: String, CaseIterable, Sendable {
+        case stop, discard, shutDown, endedEarly
+    }
+
+    /// Records one screen with a will-restart observer that cleared something, and starts a
+    /// restart that's waiting out its settle. Returns the restart and the number of files the take
+    /// had, which every restart makes again.
+    @available(macOS 15, *)
+    private func settlingRestart(
+        _ controller: ScreencastController,
+        observed: @escaping () -> Void = {}
+    ) async throws -> (restarting: Task<Void, Never>, files: Int) {
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let files = writers.writers.count
+        controller.addWillRestartObserver {
+            observed()
+            return true
+        }
+        let restarting = Task { await controller.restart() }
+        #expect(await ScreencastWait.until { sleeper.pending == 1 }, "the restart waits")
+        return (restarting, files)
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart's settle is three frames at the recording's rate, and at least 0.1 s")
+    func restartSettle() {
+        #expect(ScreencastController.restartSettle(framesPerSecond: ScreencastOptions().framesPerSecond) == 0.1)
+        #expect(ScreencastController.restartSettle(framesPerSecond: 60) == 0.1)
+        #expect(ScreencastController.restartSettle(framesPerSecond: 24) == 0.125)
+        #expect(ScreencastController.restartSettle(framesPerSecond: 0) == 3, "never a division by zero")
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart clears the screen, waits its settle, and only then restarts the recorder")
+    func restartWaitsAfterClearing() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var events: [String] = []
+        var filesAtClear: Int?
+        let (restarting, files) = try await settlingRestart(controller) {
+            events.append("cleared")
+            filesAtClear = writers.writers.count
+            #expect(sleeper.requested.isEmpty, "cleared before the settle")
+        }
+        #expect(events == ["cleared"])
+        #expect(filesAtClear == files)
+        #expect(sleeper.requested == [0.1])
+        for _ in 0..<50 { await Task.yield() }
+        #expect(writers.writers.count == files, "the recorder hasn't restarted during the settle")
+        #expect(controller.phase == .recording)
+
+        sleeper.advance()
+        await restarting.value
+        #expect(writers.writers.count == 2 * files, "then the new take's files")
+        #expect(controller.phase == .recording && controller.recorder.state == .recording)
+        #expect(events == ["cleared"])
+        await controller.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("With nothing cleared, a restart doesn't wait")
+    func restartWithNothingCleared() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let files = writers.writers.count
+        var told = 0
+        controller.addWillRestartObserver {
+            told += 1
+            return false
+        }
+        await controller.restart()
+        #expect(told == 1)
+        #expect(sleeper.requested.isEmpty)
+        #expect(writers.writers.count == 2 * files)
+        #expect(controller.phase == .recording)
+        await controller.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("A stop, discard, shutdown, or early end during a restart's settle wins, and nothing restarts", arguments: SettleInterruption.allCases)
+    func interruptedSettle(_ interruption: SettleInterruption) async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        let (restarting, files) = try await settlingRestart(controller)
+
+        switch interruption {
+        case .stop:
+            await controller.stop()
+            #expect(finished.count == 1, "the old take is kept")
+        case .discard:
+            await controller.discard()
+            #expect(finished.isEmpty)
+        case .shutDown:
+            await controller.shutDown()
+            #expect(finished.isEmpty, "kept in the captures folder, and nothing opens")
+            #expect(captures.captureFolders().count == 1)
+        case .endedEarly:
+            captureSystem.videoStreams[0].handler.stopped(.stoppedByMacOS)
+            #expect(await ScreencastWait.until { finished.count == 1 })
+            #expect(overlays.messages == ["macOS stopped the recording. What was recorded is saved."])
+        }
+        #expect(controller.phase == .idle)
+
+        sleeper.advance()
+        await restarting.value
+        #expect(writers.writers.count == files, "the recorder never restarted")
+        #expect(controller.phase == .idle)
+        #expect(controller.recorder.state != .recording)
+        if interruption != .endedEarly { #expect(overlays.messages.isEmpty) }
+    }
+
+    @available(macOS 15, *)
+    @Test("A second restart during the settle is refused: the recording restarts once")
+    func secondRestartDuringSettle() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var told = 0
+        let (first, files) = try await settlingRestart(controller) { told += 1 }
+
+        await controller.restart()
+        #expect(told == 1, "the second never cleared again")
+        #expect(sleeper.requested.count == 1 && sleeper.pending == 1)
+        #expect(writers.writers.count == files)
+
+        sleeper.advance()
+        await first.value
+        #expect(writers.writers.count == 2 * files, "one restart")
+        #expect(controller.phase == .recording)
+        await controller.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("A recording started after a stop during the settle isn't restarted by it")
+    func newRecordingDuringSettle() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        let (restarting, _) = try await settlingRestart(controller)
+        await controller.stop()
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let files = writers.writers.count
+
+        sleeper.advance()
+        await restarting.value
+        #expect(writers.writers.count == files, "the new recording keeps its take")
+        #expect(controller.phase == .recording)
+        await controller.stop()
+    }
+
     // MARK: Getting ready
 
     @available(macOS 15, *)
