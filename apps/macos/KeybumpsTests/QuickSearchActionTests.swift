@@ -21,8 +21,31 @@ struct QuickSearchActionTests {
         QuickSearchAction(capability: .screencast, action: .startScreencast, title: "Start Screencast", shortcut: shortcut)
     }
 
-    private static func keystrokes(_ title: String = "Hide Keystrokes") -> QuickSearchAction {
+    /// Named Show Keystrokes by default: the harness's keyboard tap never starts, so no keys are on
+    /// screen.
+    private static func keystrokes(_ title: String = "Show Keystrokes") -> QuickSearchAction {
         QuickSearchAction(capability: .keystrokes, action: .toggleKeystrokes, title: title)
+    }
+
+    /// A key display that draws nothing, with secure input off, whose keyboard tap starts only when
+    /// `listens`, as macOS lets it only with Input Monitoring granted.
+    private static func display(listens: Bool) -> KeyDisplay {
+        KeyDisplay(keys: StandInKeys(listens: listens), pointer: InertPointerEventMonitor(), secureInput: { false })
+    }
+
+    private static func keystrokesContext(
+        enabled: Set<Capability> = [.keystrokes], _ preferences: AppPreferences, inputMonitoring granted: Bool
+    ) -> CapabilityContext {
+        CapabilityContext(
+            enabledCapabilities: enabled, preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: SilentHotKeys()),
+            permissions: PermissionCoordinator(inputMonitoringAuthorized: { granted }),
+            permissionReadiness: {
+                PermissionReadinessSnapshot.resolve(
+                    enabledCapabilities: $0, states: [.inputMonitoring: granted ? .granted : .denied], permissionsRequiringRelaunch: []
+                )
+            }
+        )
     }
 
     private static func temporaryRoot(_ name: String) -> URL {
@@ -67,7 +90,7 @@ struct QuickSearchActionTests {
 
         let on = WiringHarness(enabled: [.quickSearch, .keystrokes, .screencast], missing: nil, root: root)
         on.model.start()
-        #expect(on.model.quickSearchActions == [Self.keystrokes(), Self.start()], "Registry order; keys show while it's on")
+        #expect(on.model.quickSearchActions == [Self.keystrokes(), Self.start()], "Registry order")
 
         on.model.preferences.setCapabilityShortcut(Self.startScreencastKeys, for: .screencast)
         #expect(on.model.quickSearchActions.last == Self.start("⌃⌥⇧R"), "Its shortcut's keycaps, once assigned")
@@ -96,6 +119,7 @@ struct QuickSearchActionTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let licensing = FixedLicenseController(state: .unlicensed)
         let harness = WiringHarness(enabled: [.quickSearch, .screencast, .keystrokes], missing: nil, root: root, licensing: licensing)
+        harness.model.preferences.set(.bool(false), of: .keystrokesShowing, for: .keystrokes)
         harness.model.start()
         #expect(!harness.model.isLicensed)
         #expect(harness.model.preferences.enabledCapabilities.isSuperset(of: [.screencast, .keystrokes]), "Saved on")
@@ -103,7 +127,7 @@ struct QuickSearchActionTests {
 
         let keystrokes = try #require(harness.model.capabilities.module(for: .keystrokes) as? KeystrokesModule)
         harness.model.runQuickSearchAction(Self.keystrokes())
-        #expect(keystrokes.isShowing, "Locked runs nothing")
+        #expect(!keystrokes.isShowing, "Locked runs nothing: running it would show the hidden keys")
 
         await licensing.activate(key: "KEYBUMPS-TEST")
         #expect(harness.model.quickSearchActions == [Self.keystrokes(), Self.start()])
@@ -236,69 +260,97 @@ struct QuickSearchActionTests {
 
     @Test("Show and Hide Keystrokes take the keys off the screen and back without turning the plugin off, named for what they'll do")
     func keystrokesShowAndHide() {
-        let display = KeyDisplay(keys: InertKeyTypingMonitor(), pointer: InertPointerEventMonitor())
+        var opened: [SettingsSection] = []
+        let display = Self.display(listens: true)
         let notices = NoticeRecorder()
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.setCapability(.keystrokes, enabled: true)
-        let module = KeystrokesModule(display: display, preferences: preferences, notices: notices)
-        let context = CapabilityContext(
-            enabledCapabilities: [.keystrokes], preferences: preferences,
-            shortcuts: GlobalShortcutCoordinator(backend: SilentHotKeys()),
-            permissions: PermissionCoordinator(inputMonitoringAuthorized: { true }),
-            permissionReadiness: { _ in PermissionReadinessSnapshot.resolve(enabledCapabilities: [], states: [:], permissionsRequiringRelaunch: []) }
-        )
+        let module = KeystrokesModule(display: display, preferences: preferences, notices: notices, openSettings: { opened.append($0) })
+        let context = Self.keystrokesContext(preferences, inputMonitoring: true)
         module.apply(context)
-        #expect(module.isShowing && display.holds(.keystrokes))
+        #expect(module.isShowing && display.isOnScreen)
         #expect(module.title(for: .toggleKeystrokes, context) == "Hide Keystrokes")
 
         module.perform(.toggleKeystrokes, context)
-        #expect(!module.isShowing && !display.holds(.keystrokes))
+        #expect(!module.isShowing && !display.isOnScreen)
+        #expect(display.holds(.keystrokes) && display.isHidden(.keystrokes), "Hidden, it still holds the display, its keys hidden")
         #expect(module.title(for: .toggleKeystrokes, context) == "Show Keystrokes")
         #expect(preferences.enabledCapabilities.contains(.keystrokes), "The plugin stays on")
 
         module.perform(.toggleKeystrokes, context)
-        #expect(module.isShowing && display.holds(.keystrokes))
-        #expect(notices.messages == ["Keystrokes hidden", "Showing keystrokes"], "The shortcut's notices")
+        #expect(module.isShowing && display.isOnScreen && !display.isHidden(.keystrokes))
+        #expect(notices.messages == ["Keystrokes hidden", "Keystrokes shown"], "The shortcut's notices")
+        #expect(notices.warnings == [false, false])
+        #expect(opened.isEmpty, "With Input Monitoring, Settings stays shut")
 
         module.setShowing(true, announces: true)
-        #expect(module.isShowing && display.holds(.keystrokes))
-        #expect(notices.messages.count == 3, "Already showing: it stays, and says so again")
+        #expect(module.isShowing && display.isOnScreen)
+        #expect(notices.messages.count == 3, "Already shown: it stays, and says so again")
         #expect(module.title(for: .startScreencast, context) == nil)
 
-        module.apply(CapabilityContext(
-            enabledCapabilities: [], preferences: preferences, shortcuts: context.shortcuts,
-            permissions: context.permissions, permissionReadiness: context.permissionReadiness
-        ))
+        module.apply(Self.keystrokesContext(enabled: [], preferences, inputMonitoring: true))
         module.setShowing(false, announces: true)
         #expect(!display.holds(.keystrokes), "Off: nothing shows")
         #expect(notices.messages.count == 4 && notices.messages.last == "Keystrokes hidden", "Off: hiding is only remembered, and still says so")
     }
 
-    @Test("Without Input Monitoring, Show Keystrokes opens Keystrokes' page, which asks for it, and Hide Keystrokes still hides")
+    @Test("Show or Hide Keystrokes is named for the keys on screen, so a recording's keys make it Hide Keystrokes though Hidden is saved")
+    func keystrokesTitleFollowsTheScreen() {
+        let display = Self.display(listens: true)
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let module = KeystrokesModule(display: display, preferences: preferences, notices: NoticeRecorder())
+        let context = Self.keystrokesContext(preferences, inputMonitoring: true)
+        let title = { module.title(for: .toggleKeystrokes, context) }
+        module.apply(context)
+        #expect(title() == "Hide Keystrokes")
+        module.setShowing(false)
+        #expect(title() == "Show Keystrokes", "Hidden, and nothing else shows keys")
+
+        var recordingLook = KeyDisplayConfiguration()
+        recordingLook.position = .bottomRight
+        recordingLook.displays = [2]
+        display.acquire(.screencast, configuration: recordingLook, keepsWindowsOnScreen: true)
+        #expect(!module.isShowing && display.isOnScreen)
+        #expect(title() == "Hide Keystrokes", "A recording's keys are on screen")
+
+        module.perform(.toggleKeystrokes, context)
+        #expect(display.isHidden(.screencast) && !display.isOnScreen, "It hides the recording's keys too")
+        #expect(title() == "Show Keystrokes")
+
+        module.perform(.toggleKeystrokes, context)
+        #expect(module.isShowing && display.isOnScreen)
+        #expect(display.configuration?.position == .bottomRight, "Shown again, in the recording's look")
+        #expect(title() == "Hide Keystrokes")
+
+        display.release(.screencast)
+        module.setShowing(false)
+        #expect(title() == "Show Keystrokes", "The recording over and the plugin's keys hidden")
+    }
+
+    @Test("Without Input Monitoring no keys are on screen: Show Keystrokes shows them, says why none can appear, and opens Keystrokes' page, which asks for it")
     func showKeystrokesWithoutInputMonitoringOpensItsPage() {
         var opened: [SettingsSection] = []
-        let display = KeyDisplay(keys: InertKeyTypingMonitor(), pointer: InertPointerEventMonitor())
+        let display = Self.display(listens: false)
         let notices = NoticeRecorder()
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         let module = KeystrokesModule(display: display, preferences: preferences, notices: notices, openSettings: { opened.append($0) })
-        let context = CapabilityContext(
-            enabledCapabilities: [.keystrokes], preferences: preferences,
-            shortcuts: GlobalShortcutCoordinator(backend: SilentHotKeys()),
-            permissions: PermissionCoordinator(inputMonitoringAuthorized: { false }),
-            permissionReadiness: {
-                PermissionReadinessSnapshot.resolve(enabledCapabilities: $0, states: [.inputMonitoring: .denied], permissionsRequiringRelaunch: [])
-            }
-        )
+        let context = Self.keystrokesContext(preferences, inputMonitoring: false)
         module.apply(context)
+        #expect(module.isShowing && display.isShowing && !display.isOnScreen, "Shown, but the tap is refused, so none can appear")
+        #expect(module.title(for: .toggleKeystrokes, context) == "Show Keystrokes")
 
         module.perform(.toggleKeystrokes, context)
-        #expect(!module.isShowing && opened.isEmpty)
-        #expect(notices.messages == ["Keystrokes hidden"])
+        #expect(module.isShowing && display.isShowing, "A press shows them, never hides")
+        #expect(opened == [.keystrokes])
+        #expect(notices.messages == ["Keystrokes can't show keys without Input Monitoring"])
+        #expect(notices.warnings == [true])
 
+        module.setShowing(false)
         #expect(module.title(for: .toggleKeystrokes, context) == "Show Keystrokes")
         module.perform(.toggleKeystrokes, context)
-        #expect(opened == [.keystrokes])
-        #expect(!module.isShowing && notices.messages.count == 1, "No notice says keys show when none can")
+        #expect(module.isShowing && !display.isHidden(.keystrokes), "Hidden was saved: a press shows them and saves Shown")
+        #expect(opened == [.keystrokes, .keystrokes])
+        #expect(notices.messages == Array(repeating: "Keystrokes can't show keys without Input Monitoring", count: 2), "Never Keystrokes hidden")
     }
 }
 
@@ -312,5 +364,18 @@ private final class SilentHotKeys: GlobalHotKeyRegistering {
 
 private final class NoticeRecorder: PaletteNoticePresenting {
     private(set) var messages: [String] = []
-    func showNotice(_ message: String, isWarning: Bool) { messages.append(message) }
+    private(set) var warnings: [Bool] = []
+    func showNotice(_ message: String, isWarning: Bool) {
+        messages.append(message)
+        warnings.append(isWarning)
+    }
+}
+
+/// A keyboard tap that never hears a key, and starts only when `listens`.
+private final class StandInKeys: KeyPressMonitoring {
+    var onPress: ((KeyPress) -> Void)?
+    private let listens: Bool
+    init(listens: Bool) { self.listens = listens }
+    func start() -> Bool { listens }
+    func stop() {}
 }
