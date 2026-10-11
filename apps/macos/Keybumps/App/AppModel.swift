@@ -364,12 +364,13 @@ final class AppModel {
                 speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
+            // Settings never opens under unit tests.
             KeystrokesModule(
                 display: keyDisplay,
                 preferences: preferences,
-                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes)
+                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes),
+                openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) }
             ),
-            // Settings never opens under unit tests.
             ScreencastModule(
                 preferences: preferences,
                 permissions: permissions,

@@ -152,6 +152,8 @@ final class KeystrokesModule: CapabilityModule {
     private let preferences: AppPreferences
     private let menuBar: CapabilityMenuBarStatus?
     private let notices: any PaletteNoticePresenting
+    /// Opens Settings on a page; nothing unless the app passes it, so tests never open Settings.
+    private let openSettings: @MainActor (SettingsSection) -> Void
     /// Whether the plugin is on, as last applied.
     private var isOn = false
 
@@ -159,12 +161,14 @@ final class KeystrokesModule: CapabilityModule {
         display: KeyDisplay,
         preferences: AppPreferences,
         menuBar: CapabilityMenuBarStatus? = nil,
-        notices: (any PaletteNoticePresenting)? = nil
+        notices: (any PaletteNoticePresenting)? = nil,
+        openSettings: @escaping @MainActor (SettingsSection) -> Void = { _ in }
     ) {
         self.display = display
         self.preferences = preferences
         self.menuBar = menuBar
         self.notices = notices ?? PaletteHUD.shared
+        self.openSettings = openSettings
     }
 
     /// Whether the keys show while the plugin is on. Remembered across launches; on by default.
@@ -212,8 +216,14 @@ final class KeystrokesModule: CapabilityModule {
     }
 
     /// Quick Search's Show or Hide Keystrokes does what the shortcut does, with its notch notice.
+    /// Without Input Monitoring no keys could show, so Show Keystrokes opens Keystrokes' page,
+    /// which asks for it, as Start Screencast opens Screencast's.
     func perform(_ action: PluginAction, _ context: CapabilityContext) {
         guard action == .toggleKeystrokes else { return }
+        if !isShowing, context.permissionReadiness([capability]).missingCount > 0 {
+            openSettings(.keystrokes)
+            return
+        }
         toggleShowing(announces: true)
     }
 

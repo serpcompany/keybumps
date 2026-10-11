@@ -273,6 +273,33 @@ struct QuickSearchActionTests {
         #expect(!display.holds(.keystrokes), "Off: nothing shows")
         #expect(notices.messages.count == 4 && notices.messages.last == "Keystrokes hidden", "Off: hiding is only remembered, and still says so")
     }
+
+    @Test("Without Input Monitoring, Show Keystrokes opens Keystrokes' page, which asks for it, and Hide Keystrokes still hides")
+    func showKeystrokesWithoutInputMonitoringOpensItsPage() {
+        var opened: [SettingsSection] = []
+        let display = KeyDisplay(keys: InertKeyTypingMonitor(), pointer: InertPointerEventMonitor())
+        let notices = NoticeRecorder()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let module = KeystrokesModule(display: display, preferences: preferences, notices: notices, openSettings: { opened.append($0) })
+        let context = CapabilityContext(
+            enabledCapabilities: [.keystrokes], preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: SilentHotKeys()),
+            permissions: PermissionCoordinator(inputMonitoringAuthorized: { false }),
+            permissionReadiness: {
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: $0, states: [.inputMonitoring: .denied], permissionsRequiringRelaunch: [])
+            }
+        )
+        module.apply(context)
+
+        module.perform(.toggleKeystrokes, context)
+        #expect(!module.isShowing && opened.isEmpty)
+        #expect(notices.messages == ["Keystrokes hidden"])
+
+        #expect(module.title(for: .toggleKeystrokes, context) == "Show Keystrokes")
+        module.perform(.toggleKeystrokes, context)
+        #expect(opened == [.keystrokes])
+        #expect(!module.isShowing && notices.messages.count == 1, "No notice says keys show when none can")
+    }
 }
 
 @MainActor
