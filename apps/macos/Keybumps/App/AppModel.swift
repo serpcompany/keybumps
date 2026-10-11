@@ -403,6 +403,7 @@ final class AppModel {
             return ScreenshotToolsModule.captureShortcuts.compactMap { registered[$0.shortcut.ownerID] }
         }
         keyDisplay.symbolicHotKeys = { [symbolicHotKeys] in try? symbolicHotKeys.readSymbolicHotKeys() }
+        screenshotModule.systemShortcuts.didChange = { [keyDisplay] in keyDisplay.systemScreenshotShortcutsDidChange() }
         screenshotModule.willCapture = { [keyDisplay] in keyDisplay.pauseForScreenshot() }
         detector.onEvent = { [weak self] event in Task { @MainActor in self?.deliver(event) } }
         dictationModule.onShortcut = { [weak self] in self?.handleDictationShortcut() }
@@ -569,7 +570,11 @@ final class AppModel {
             if isPermissionWalkthroughActive, permissionWalkthroughCapability == capability { endPermissionWalkthrough() }
             if capability == .dictation { dismissDictationSetupCards() }
         }
+        let wasOn = preferences.enabledCapabilities.contains(capability)
         preferences.setCapability(capability, enabled: enabled)
+        if !wasOn, preferences.enabledCapabilities.contains(capability) {
+            capabilities.willTurnOn(capability, context: capabilityContext)
+        }
         applyCapabilities()
         CrashReporter.recordPlugins(preferences.enabledCapabilities)
     }

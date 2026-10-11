@@ -57,58 +57,90 @@ struct KeyDisplayConfiguration: Equatable, Sendable {
     var anchor: CGRect?
 }
 
-/// Who holds the key display, in the order they took it, and what each asked for. The display
-/// shows while anyone holds it, and only one shows however many do. The configuration in effect is
-/// the most recent holder's, with these exceptions:
-/// - Show is Shortcuts only if any holder asks for it, so a recording that shows shortcuts only
-///   never records typing the plugin was set to show;
-/// - while a holder keeps the windows on screen (a recording), the screens, the anchor, and
+/// Who holds the key display, in the order they took it, what each asked for, and whether its keys
+/// are hidden. The display shows while any holder's keys are shown, and only one shows however many
+/// do. The configuration in effect is the most recent shown holder's, with these exceptions, each
+/// counting shown holders only, so a hidden holder's keys, screens, or anchor never mix in:
+/// - Show is Shortcuts only if any shown holder asks for it, so a recording that shows shortcuts
+///   only never records typing the plugin was set to show;
+/// - while a shown holder keeps the windows on screen (a recording), the screens, the anchor, and
 ///   whether clicks show are the most recent such holder's, so what's in its video stays its own
 ///   even if the plugin is turned on after it started;
-/// - otherwise the screens and the anchor are the most recent holder's that names some.
+/// - otherwise the screens and the anchor are the most recent shown holder's that names some.
 ///
-/// The windows stay on screen for the whole hold if any holder asks (`keepsWindowsOnScreen`). A
-/// holder that acquires again keeps its place and changes only what it asked for.
+/// The windows stay on screen for the whole hold if any shown holder asks (`keepsWindowsOnScreen`).
+/// A holder that acquires again keeps its place, and whether its keys are hidden, and changes only
+/// what it asked for. Hide Keystrokes hides every holder's keys (`hide`), until Show Keystrokes
+/// (`show`) or each lets go, so a recording hidden now stays hidden until it ends, and one that
+/// starts later shows its keys.
 struct KeyDisplayHolds: Equatable {
     struct Holder: Equatable {
         let owner: KeyDisplayOwner
         var configuration: KeyDisplayConfiguration
         var keepsWindowsOnScreen: Bool
+        var isHidden = false
     }
 
     private(set) var holders: [Holder] = []
+    private var shown: [Holder] { holders.filter { !$0.isHidden } }
 
     var owners: [KeyDisplayOwner] { holders.map(\.owner) }
     var isHeld: Bool { !holders.isEmpty }
-    var keepsWindowsOnScreen: Bool { holders.contains(where: \.keepsWindowsOnScreen) }
+    /// Whether any holder's keys are shown: the display runs only then.
+    var isShowing: Bool { holders.contains { !$0.isHidden } }
+    var keepsWindowsOnScreen: Bool { shown.contains(where: \.keepsWindowsOnScreen) }
 
     func holds(_ owner: KeyDisplayOwner) -> Bool { holders.contains { $0.owner == owner } }
+    func isHidden(_ owner: KeyDisplayOwner) -> Bool { holders.first { $0.owner == owner }?.isHidden ?? false }
 
-    /// The configuration in effect, or nil while nobody holds the display.
+    /// The configuration in effect, or nil while no holder's keys are shown.
     var configuration: KeyDisplayConfiguration? {
-        guard var configuration = holders.last?.configuration else { return nil }
-        if holders.contains(where: { $0.configuration.keys == .shortcutsOnly }) { configuration.keys = .shortcutsOnly }
-        if let recording = holders.last(where: \.keepsWindowsOnScreen)?.configuration {
+        let shown = shown
+        guard var configuration = shown.last?.configuration else { return nil }
+        if shown.contains(where: { $0.configuration.keys == .shortcutsOnly }) { configuration.keys = .shortcutsOnly }
+        if let recording = shown.last(where: \.keepsWindowsOnScreen)?.configuration {
             configuration.displays = recording.displays
             configuration.anchor = recording.anchor
             configuration.showsClicks = recording.showsClicks
         } else {
-            configuration.displays = holders.last(where: { $0.configuration.displays != nil })?.configuration.displays
-            configuration.anchor = holders.last(where: { $0.configuration.anchor != nil })?.configuration.anchor
+            configuration.displays = shown.last(where: { $0.configuration.displays != nil })?.configuration.displays
+            configuration.anchor = shown.last(where: { $0.configuration.anchor != nil })?.configuration.anchor
         }
         return configuration
     }
 
-    /// Adds `owner`, or changes what it asked for. Returns whether anything changed.
+    /// Adds `owner`, its keys hidden if `startsHidden`, or changes what it asked for. Returns whether
+    /// anything changed.
     @discardableResult
-    mutating func acquire(_ owner: KeyDisplayOwner, configuration: KeyDisplayConfiguration, keepsWindowsOnScreen: Bool = false) -> Bool {
-        let holder = Holder(owner: owner, configuration: configuration, keepsWindowsOnScreen: keepsWindowsOnScreen)
+    mutating func acquire(
+        _ owner: KeyDisplayOwner,
+        configuration: KeyDisplayConfiguration,
+        keepsWindowsOnScreen: Bool = false,
+        startsHidden: Bool = false
+    ) -> Bool {
         if let index = holders.firstIndex(where: { $0.owner == owner }) {
+            var holder = holders[index]
+            holder.configuration = configuration
+            holder.keepsWindowsOnScreen = keepsWindowsOnScreen
             guard holders[index] != holder else { return false }
             holders[index] = holder
         } else {
-            holders.append(holder)
+            holders.append(Holder(owner: owner, configuration: configuration, keepsWindowsOnScreen: keepsWindowsOnScreen, isHidden: startsHidden))
         }
+        return true
+    }
+
+    /// Hides every holder's keys. Returns whether anything changed.
+    @discardableResult
+    mutating func hide() -> Bool { setHidden(true) }
+
+    /// Shows every holder's keys again. Returns whether anything changed.
+    @discardableResult
+    mutating func show() -> Bool { setHidden(false) }
+
+    private mutating func setHidden(_ isHidden: Bool) -> Bool {
+        guard holders.contains(where: { $0.isHidden != isHidden }) else { return false }
+        for index in holders.indices { holders[index].isHidden = isHidden }
         return true
     }
 
@@ -215,13 +247,14 @@ final class InertKeyDisplayPresenter: KeyDisplayPresenting {
 /// optionally where they click. One display serves everything that wants it, so only one ever
 /// shows: the Keystrokes plugin holds it while it's on, and a Screencast recording holds it for the
 /// recording (#449), with the plugin on or off. Each holder `acquire`s it with its own
-/// configuration and `release`s it when done; it runs while anyone holds it (`KeyDisplayHolds`
-/// decides whose configuration applies).
+/// configuration and `release`s it when done; it runs while any holder's keys are shown
+/// (`KeyDisplayHolds` decides whose configuration applies). Show and Hide Keystrokes act on every
+/// holder's keys at once (`showKeys`, `hideKeys`).
 ///
-/// While held it listens to the keyboard through `KeyPressMonitoring`, which needs Input
+/// While it runs it listens to the keyboard through `KeyPressMonitoring`, which needs Input
 /// Monitoring, and, while the configuration shows clicks, to the pointer through
-/// `PointerEventMonitoring`. Nothing it hears is logged or stored: a keystroke stays in memory only
-/// while it's on screen.
+/// `PointerEventMonitoring`. Hidden keys need neither, so neither runs for them. Nothing it hears
+/// is logged or stored: a keystroke stays in memory only while it's on screen.
 ///
 /// The keys show on the configuration's screens, or the pointer's. An overlay window covers each
 /// screen that has something to show, and goes after it fades. A holder that records the screen
@@ -260,6 +293,11 @@ final class KeyDisplay {
     var pointerDisplay: () -> CGDirectDisplayID? = { KeyDisplayScreen.pointerDisplay() }
     /// The main display's height, to turn the pointer tap's top-left coordinates into AppKit's.
     var mainDisplayHeight: () -> CGFloat = { NSScreen.screens.first?.frame.height ?? 0 }
+    /// Called after `isShowing` or `isListening` changes: a holder acquiring or letting go, Show or
+    /// Hide Keystrokes, or the keyboard tap starting once Input Monitoring is granted. The Keystrokes
+    /// module sets it, so Show Keystrokes in the menu bar menu is checked while keys can be on screen
+    /// (`isOnScreen`), a recording's included.
+    var onShowingChange: () -> Void = {}
 
     private let keys: any KeyPressMonitoring
     private let pointer: any PointerEventMonitoring
@@ -269,13 +307,19 @@ final class KeyDisplay {
     private let scheduler: any TimerScheduling
     private let secureInput: () -> Bool
     private var windowHandlers: [KeyDisplayOwner: ([NSWindow]) -> Void] = [:]
+    /// `isShowing` and `isListening` when `onShowingChange` was last called.
+    private var reported = (isShowing: false, isListening: false)
     private var wakeUp: (any TimerScheduledAction)?
     /// The pointer's screen at the newest key.
     private var lastPointerDisplay: CGDirectDisplayID?
-    /// macOS's screenshot shortcuts, and when they were read: again when the display starts or
-    /// changes, and on a key once they're older than `screenshotKeysLifetime`.
+    /// macOS's screenshot shortcuts, when they were read, and Screenshot Tools' hotkeys then. They're
+    /// read again when the display starts or changes; on a key once they're older than
+    /// `screenshotKeysLifetime`, or once Screenshot Tools' hotkeys differ, since Keybumps turns
+    /// macOS's ⇧⌘3 and ⇧⌘4 off and on with them; and on the next key after Keybumps writes macOS's
+    /// shortcuts (`systemScreenshotShortcutsDidChange`).
     private var systemScreenshotKeys = KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: nil)
     private var systemScreenshotKeysRead: Date?
+    private var keybumpsScreenshotBindingsRead: [ShortcutBinding] = []
     static let screenshotKeysLifetime: TimeInterval = 10
 
     init(
@@ -312,27 +356,51 @@ final class KeyDisplay {
     // MARK: Holding
 
     var owners: [KeyDisplayOwner] { holds.owners }
-    var isShowing: Bool { holds.isHeld }
-    /// The configuration in effect, or nil while nobody holds the display.
+    /// Whether any holder's keys are shown, so the display runs.
+    var isShowing: Bool { holds.isShowing }
+    /// Whether keys can be on screen now: some holder's are shown and the keyboard tap is listening.
+    /// Without Input Monitoring macOS refuses the tap, so no key can appear though a holder shows
+    /// them. Secure input doesn't count: it's brief, and macOS gives no notice when it ends.
+    var isOnScreen: Bool { holds.isShowing && isListening }
+    /// The configuration in effect, or nil while no holder's keys are shown.
     var configuration: KeyDisplayConfiguration? { holds.configuration }
     func holds(_ owner: KeyDisplayOwner) -> Bool { holds.holds(owner) }
+    func isHidden(_ owner: KeyDisplayOwner) -> Bool { holds.isHidden(owner) }
+    /// Whether secure input is on now, so nothing shows.
+    var isSecureInputOn: Bool { secureInput() }
 
-    /// Holds the display for `owner` with its configuration, showing it if it wasn't. With
+    /// Holds the display for `owner` with its configuration, showing it if it wasn't, or with its
+    /// keys hidden if `startsHidden`, as the Keystrokes plugin does while its keys are hidden. With
     /// `keepsWindowsOnScreen`, as a recording passes, a window covers each of its screens for the
     /// whole hold; otherwise windows come and go with what there is to show. Acquiring again changes
-    /// all of these and replaces the handler, keeping the owner's place. `onOverlayWindowsChange` is
-    /// called at once with `overlayWindows`, then whenever they're put up or replaced, until `owner`
-    /// releases the display.
+    /// those two and replaces the handler, keeping the owner's place and whether its keys are hidden.
+    /// `onOverlayWindowsChange` is called at once with `overlayWindows`, then whenever they're put up
+    /// or replaced, until `owner` releases the display.
     func acquire(
         _ owner: KeyDisplayOwner,
         configuration: KeyDisplayConfiguration,
         keepsWindowsOnScreen: Bool = false,
+        startsHidden: Bool = false,
         onOverlayWindowsChange: (([NSWindow]) -> Void)? = nil
     ) {
-        let changed = holds.acquire(owner, configuration: configuration, keepsWindowsOnScreen: keepsWindowsOnScreen)
+        let changed = holds.acquire(owner, configuration: configuration, keepsWindowsOnScreen: keepsWindowsOnScreen, startsHidden: startsHidden)
         if changed { apply() }
         windowHandlers[owner] = onOverlayWindowsChange
         onOverlayWindowsChange?(overlayWindows)
+    }
+
+    /// Hide Keystrokes: takes every holder's keys off the screen at once, a recording's included,
+    /// until `showKeys` or each holder lets go. With nothing shown, the keyboard and pointer taps
+    /// stop and the windows close. A holder that acquires afterwards, such as a new recording,
+    /// shows its keys.
+    func hideKeys() {
+        if holds.hide() { apply() }
+    }
+
+    /// Show Keystrokes: shows every holder's keys again, each holder keeping its place, so a
+    /// recording's look still applies while it holds the display.
+    func showKeys() {
+        if holds.show() { apply() }
     }
 
     /// Lets go for `owner`. The display keeps running for anyone else holding it, and stops, closing
@@ -344,8 +412,10 @@ final class KeyDisplay {
     }
 
     /// Starts the keyboard tap that macOS refused earlier, once Input Monitoring may have been
-    /// granted. `AppModel` calls it whenever it re-reads permissions.
+    /// granted, and tells `onShowingChange` if it did. `AppModel` calls it whenever it re-reads
+    /// permissions.
     func permissionsDidRefresh() {
+        defer { reportShowingChange() }
         guard let configuration = holds.configuration else { return }
         if !isListening { isListening = keys.start() }
         if configuration.showsClicks, !isWatchingClicks { isWatchingClicks = pointer.start() }
@@ -356,7 +426,7 @@ final class KeyDisplay {
     /// A screenshot shortcut heard by the tap calls it, and so does Screenshot Tools before it
     /// captures, in case the tap never hears a hotkey Keybumps registered.
     func pauseForScreenshot() {
-        guard holds.isHeld else { return }
+        guard holds.isShowing else { return }
         isPausedForScreenshot = true
         timeline.removeAll()
         present(animated: false)
@@ -364,15 +434,22 @@ final class KeyDisplay {
 
     /// Whether `press` takes a screenshot, by the shortcuts macOS and Keybumps have now.
     func isScreenshotShortcut(_ press: KeyPress) -> Bool {
-        if systemScreenshotKeysRead.map({ now().timeIntervalSince($0) >= Self.screenshotKeysLifetime }) ?? true {
-            readSystemScreenshotKeys()
-        }
-        return KeystrokeFilter.isScreenshotShortcut(press, system: systemScreenshotKeys, keybumps: keybumpsScreenshotBindings())
+        let keybumps = keybumpsScreenshotBindings()
+        let isOld = systemScreenshotKeysRead.map { now().timeIntervalSince($0) >= Self.screenshotKeysLifetime } ?? true
+        if isOld || keybumps != keybumpsScreenshotBindingsRead { readSystemScreenshotKeys(keybumps: keybumps) }
+        return KeystrokeFilter.isScreenshotShortcut(press, system: systemScreenshotKeys, keybumps: keybumps)
     }
 
-    private func readSystemScreenshotKeys() {
+    /// Reads macOS's screenshot shortcuts again at the next key. Screenshot Tools' takeover calls it
+    /// after it turns macOS's ⇧⌘3 or ⇧⌘4 off or on, also when its own hotkeys didn't register.
+    func systemScreenshotShortcutsDidChange() {
+        systemScreenshotKeysRead = nil
+    }
+
+    private func readSystemScreenshotKeys(keybumps: [ShortcutBinding]? = nil) {
         systemScreenshotKeys = KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: symbolicHotKeys())
         systemScreenshotKeysRead = now()
+        keybumpsScreenshotBindingsRead = keybumps ?? keybumpsScreenshotBindings()
     }
 
     // MARK: Overlay windows
@@ -391,6 +468,7 @@ final class KeyDisplay {
     // MARK: Showing
 
     private func apply() {
+        defer { reportShowingChange() }
         guard let configuration = holds.configuration else {
             keys.stop()
             pointer.stop()
@@ -417,6 +495,14 @@ final class KeyDisplay {
         if configuration.keys == .shortcutsOnly { timeline.removeTyping() }
         if !configuration.showsClicks { timeline.removeClicks() }
         present(animated: timeline == before)
+    }
+
+    /// Calls `onShowingChange` if `isShowing` or `isListening` changed since the last call.
+    private func reportShowingChange() {
+        let current = (isShowing: holds.isShowing, isListening: isListening)
+        guard current != reported else { return }
+        reported = current
+        onShowingChange()
     }
 
     func receive(_ press: KeyPress) {

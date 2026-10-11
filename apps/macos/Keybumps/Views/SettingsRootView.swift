@@ -1142,9 +1142,12 @@ private struct PermissionWalkthroughView: View {
 }
 
 /// The top of a capability's page, as on a Raycast extension page: its icon, name, and summary,
-/// a banner while it's turned off, then its command with the hotkey. The enable switch lives in the
-/// toolbar.
+/// a banner while it's turned off, any preference its manifest places at the top (such as
+/// Keystrokes' Show keystrokes), then its command with the hotkey. The enable switch lives in the
+/// toolbar. A preference at the top governs what the plugin does while it's on, so it can't change
+/// while the plugin is off.
 struct CapabilityControl: View {
+    @Environment(AppModel.self) private var model
     let capability: Capability
     var shortcuts: [CapabilityShortcut] = []
     var byline: String?
@@ -1159,6 +1162,13 @@ struct CapabilityControl: View {
             byline: byline
         )
         CapabilityOffBanner(capability: capability)
+        let top = descriptor.topPreferences
+        if !top.isEmpty {
+            SettingsGroup {
+                ForEach(top) { PluginPreferenceRow(capability: capability, preference: $0) }
+            }
+            .disabled(!model.preferences.enabledCapabilities.contains(capability))
+        }
         if !shortcuts.isEmpty {
             SettingsGroup("Commands") {
                 ForEach(shortcuts) { CapabilityShortcutEditor(shortcut: $0) }
@@ -1246,7 +1256,7 @@ struct CapabilityToggleBinding {
     }
 }
 
-struct CapabilityShortcutEditor: View {
+private struct CapabilityShortcutEditor: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
     let shortcut: CapabilityShortcut

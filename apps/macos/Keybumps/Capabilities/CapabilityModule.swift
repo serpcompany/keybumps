@@ -131,6 +131,9 @@ protocol CapabilityModule: AnyObject {
     var descriptor: CapabilityDescriptor { get }
     /// Registers or releases owned shortcuts and starts or stops owned resources for the enabled set.
     func apply(_ context: CapabilityContext)
+    /// Runs when the person turns the module on, just before it's applied: not at launch, and not
+    /// when a license comes back.
+    func willTurnOn(_ context: CapabilityContext)
     /// Runs immediately before the module is turned off: closes its surfaces and cancels its work.
     func deactivate(_ context: CapabilityContext)
     /// Resumes resources that were waiting on a permission after `PermissionCoordinator` re-reads macOS.
@@ -154,6 +157,7 @@ protocol CapabilityModule: AnyObject {
 
 extension CapabilityModule {
     var capability: Capability { descriptor.capability }
+    func willTurnOn(_ context: CapabilityContext) {}
     func permissionsDidRefresh(_ context: CapabilityContext) {}
     func attentionCount(_ context: CapabilityContext) -> Int { 0 }
     var paletteContent: (any CapabilityPaletteContent)? { nil }
@@ -257,6 +261,10 @@ final class CapabilityRegistry {
 
     func apply(_ context: CapabilityContext) {
         for module in modules { module.apply(context) }
+    }
+
+    func willTurnOn(_ capability: Capability, context: CapabilityContext) {
+        module(for: capability)?.willTurnOn(context)
     }
 
     func deactivate(_ capability: Capability, context: CapabilityContext) {
