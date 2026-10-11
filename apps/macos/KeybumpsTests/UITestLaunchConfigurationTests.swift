@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Keybumps
@@ -193,5 +194,28 @@ struct UITestFakeCompositionTests {
         service.start()
 
         #expect(service.phase == .failed("Audio capture is unavailable in this session."))
+    }
+
+    @Test("Screencast's made-up screens are a top and a bottom display, each as wide as the main screen, with two windows pickable at the same place on each")
+    func screencastMadeUpScreens() async throws {
+        let layout = UITestScreencastScreen.layout
+        let main = try #require(NSScreen.screens.first?.frame)
+        #expect(layout.screens.count == 2)
+        #expect(layout.screens.allSatisfy { $0.frame.width == main.width && $0.frame.minX == main.minX })
+        let (bottom, top) = (layout.screens[0], layout.screens[1])
+        #expect(bottom.frame.maxY == top.frame.minY && bottom.frame.minY == main.minY && top.frame.maxY == main.maxY)
+
+        let system = UITestScreencastScreen()
+        let content = try await system.content()
+        let pickable = ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: ProcessInfo.processInfo.processIdentifier)
+        #expect(pickable.count == 4)
+        // In from each screen's top-left corner: the window chooser's UI tests use the screen with
+        // the bar, whichever that is.
+        for screen in [top, bottom] {
+            let offsets = pickable.map { layout.appKitRect(fromTopLeft: $0.frame) }
+                .filter { screen.frame.contains($0) }
+                .map { CGRect(x: $0.minX - screen.frame.minX, y: screen.frame.maxY - $0.maxY, width: $0.width, height: $0.height) }
+            #expect(offsets == [CGRect(x: 60, y: 40, width: 400, height: 220), CGRect(x: 200, y: 120, width: 360, height: 180)])
+        }
     }
 }

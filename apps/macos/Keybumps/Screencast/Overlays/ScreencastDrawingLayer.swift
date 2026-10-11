@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 
 /// A screen the overlays cover: its ID, as the recorder's targets name it, and its frames in
 /// AppKit's global space.
@@ -61,8 +62,14 @@ final class ScreencastDrawingLayer {
         didSet { for window in inkWindows.values { window.canvas.delegate = delegate } }
     }
     /// Called with the marks' windows whenever they change: when the layer shows, when a recorded
-    /// display goes or comes back, and with none when it hides.
+    /// display goes or comes back, when a window gets its number late, and with none when it hides.
     var onWindowsChange: (([CGWindowID]) -> Void)?
+    /// The windows last reported to `onWindowsChange`.
+    private var reportedIDs: [CGWindowID] = []
+    /// How many of the marks' windows had no number at the last report, which is logged when it
+    /// changes.
+    private var unnumberedCount = 0
+    private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
     private(set) var isDrawing = false
     /// The displays it's on, in order.
@@ -76,7 +83,8 @@ final class ScreencastDrawingLayer {
         self.ordersWindowsIn = ordersWindowsIn
     }
 
-    /// The marks' windows, which the recorder shows in the video, in display order.
+    /// The marks' windows, which the recorder shows in the video, in display order. A window the
+    /// window server hasn't numbered is left out until it has a number.
     var windowIDs: [CGWindowID] {
         displays.compactMap { inkWindows[$0.id]?.windowID }
     }
@@ -92,7 +100,6 @@ final class ScreencastDrawingLayer {
     /// Covers exactly `displays`: a display already covered keeps its windows, moved to its frame
     /// if that changed; a new one gets windows, and one no longer listed loses them.
     func show(on displays: [ScreencastOverlayDisplay]) {
-        let before = windowIDs
         let wanted = Set(displays.map(\.id))
         for id in Array(inkWindows.keys) where !wanted.contains(id) {
             inkWindows.removeValue(forKey: id)?.closeOverlay()
@@ -121,19 +128,36 @@ final class ScreencastDrawingLayer {
             }
         }
         self.displays = displays
-        if windowIDs != before { onWindowsChange?(windowIDs) }
+        reportWindows()
     }
 
     /// Takes every window off screen and closes it.
     func hide() {
         setDrawing(false)
-        let hadWindows = !inkWindows.isEmpty
         for window in inkWindows.values { window.closeOverlay() }
         for window in borderWindows.values { window.closeOverlay() }
         inkWindows.removeAll()
         borderWindows.removeAll()
         displays = []
-        if hadWindows { onWindowsChange?([]) }
+        reportWindows()
+    }
+
+    /// Tells `onWindowsChange` the windows, if they changed since it was last told: a window that
+    /// had no number when it was made is reported at the next show, refresh, or drawing switch.
+    /// Until then its marks aren't in the video, which is logged, since it shouldn't happen.
+    private func reportWindows() {
+        let ids = windowIDs
+        let unnumbered = displays.filter { inkWindows[$0.id] != nil }.count - ids.count
+        if unnumbered != unnumberedCount {
+            unnumberedCount = unnumbered
+            if unnumbered > 0 {
+                let shown = displays.count
+                logger.error("screencast drawing window has no number count=\(unnumbered, privacy: .public) displays=\(shown, privacy: .public)")
+            }
+        }
+        guard ids != reportedIDs else { return }
+        reportedIDs = ids
+        onWindowsChange?(ids)
     }
 
     // MARK: Drawing
@@ -144,20 +168,28 @@ final class ScreencastDrawingLayer {
         isDrawing = drawing
         for window in inkWindows.values { window.ignoresMouseEvents = Self.ignoresMouseEvents(isDrawing: drawing) }
         for window in borderWindows.values { window.isShowingBorder = drawing }
+        reportWindows()
     }
 
     /// Redraws `rect` of `display` (its points from the top-left), or all of it.
     func redraw(_ rect: CGRect? = nil, on display: CGDirectDisplayID) {
         guard let canvas = inkWindows[display]?.canvas else { return }
-        if let rect, !rect.isNull {
-            canvas.setNeedsDisplay(rect.intersection(canvas.bounds))
-        } else {
+        guard let rect else {
             canvas.needsDisplay = true
+            return
         }
+        let dirty = rect.intersection(canvas.bounds)
+        guard !dirty.isNull, !dirty.isEmpty else { return }
+        canvas.setNeedsDisplay(dirty)
     }
 
     func redrawAll() {
         for window in inkWindows.values { window.canvas.needsDisplay = true }
+    }
+
+    /// Draws what needs drawing now, not at the next display cycle, as before a restart.
+    func displayNow() {
+        for window in inkWindows.values { window.displayIfNeeded() }
     }
 }
 
@@ -186,8 +218,15 @@ final class ScreencastDrawingWindow: NSPanel {
         setFrame(display.frame, display: false)
     }
 
-    /// Its window server ID, which `SCWindow.windowID` matches.
-    var windowID: CGWindowID { CGWindowID(windowNumber) }
+    /// Its window server ID, which `SCWindow.windowID` matches, or nil while it has none: the
+    /// window number is -1 for a window the window server hasn't made, or one that's closed.
+    var windowID: CGWindowID? { Self.windowID(forNumber: windowNumber) }
+
+    /// A window number as a window ID: nil for none (-1 or 0) or one that doesn't fit, never a trap.
+    nonisolated static func windowID(forNumber number: Int) -> CGWindowID? {
+        guard let id = CGWindowID(exactly: number), id > 0 else { return nil }
+        return id
+    }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }

@@ -14,6 +14,10 @@ struct ScreencastStreamConfiguration: Equatable, Sendable {
     /// A window recording: a resized window scales into the fixed-size video instead of being
     /// cropped.
     let scalesToFit: Bool
+    /// ScreenCaptureKit's `includeChildWindows`. Off for window recordings, whose filter names
+    /// every window it shows, so a child window nobody named, such as one an overlay or the
+    /// recorded app attaches, stays out. Left at ScreenCaptureKit's default, on, elsewhere.
+    var includesChildWindows = true
 }
 
 /// Where a stream delivers its samples, on its own queue. A stream that stops on its own (the
@@ -41,7 +45,8 @@ protocol ScreencastStream: AnyObject {
 /// Errors it throws are `ScreencastFailure`s.
 @MainActor
 protocol ScreencastCaptureSystem: AnyObject {
-    /// What's on screen now.
+    /// What's on screen now: every display, and every window, on screen or not (minimized,
+    /// hidden, or on another Space), so a window recording's window is listed while it's away.
     func content() async throws -> ScreencastContent
 
     /// A stream showing `plan`, delivering frames sized by `configuration`, with no sound.
@@ -67,13 +72,11 @@ protocol ScreencastCaptureSystem: AnyObject {
     /// The window numbers of Keybumps's visible windows, to notice when one opens or closes.
     func ownVisibleWindows() -> Set<CGWindowID>
 
-    /// The window numbers of a process's windows on screen now, read cheaply many times a second
-    /// to notice a recorded app opening a menu or sheet; nil when they can't be read.
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>?
+    /// Whether a window still exists, on screen or not: minimized, hidden, and on another Space
+    /// all count. Nil when it can't be told.
+    func windowExists(_ id: CGWindowID) -> Bool?
 }
 
 extension ScreencastCaptureSystem {
-    /// A capture system that can't tell: window recordings then pick up an app's new windows only
-    /// when something else rebuilds the filter.
-    func onScreenWindows(of processID: pid_t) -> Set<CGWindowID>? { nil }
+    func windowExists(_ id: CGWindowID) -> Bool? { nil }
 }

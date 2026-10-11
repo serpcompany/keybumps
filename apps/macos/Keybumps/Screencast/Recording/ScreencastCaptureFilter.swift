@@ -19,8 +19,8 @@ struct ScreencastContent {
         /// The window server layer: 0 for ordinary windows, higher for menus and panels.
         let layer: Int
         let processID: pid_t
-        /// Untitled: a sheet, popover, or panel rather than a document window. The title itself is
-        /// never read into this.
+        /// No title (an empty window name). The title itself is never read into this, and no
+        /// filter rule uses it.
         let isUntitled: Bool
         let isOnScreen: Bool
     }
@@ -64,15 +64,21 @@ enum ScreencastFilterPlan: Equatable, Sendable {
     /// (its overlays), which come back. Display and area recordings. Excluding the whole app keeps
     /// windows it opens mid-recording out too.
     case display(CGDirectDisplayID, excludingProcess: pid_t?, exceptingWindows: [CGWindowID])
-    /// Only these windows on the display. Window recordings: the window, its app's menus, sheets,
-    /// and popovers on screen, and Keybumps's overlays, each named; no app is included whole, so a
-    /// window opened later shows only once a rebuild names it.
+    /// Only these windows on the display. Window recordings: the window and Keybumps's overlays,
+    /// each named; no app is included whole, so no other window can show, not even one opened
+    /// later. `ScreencastCaptureFilter.narrowed` takes overlays since removed out of it without a
+    /// read.
     case windows(CGDirectDisplayID, includingWindows: [CGWindowID])
 
     var displayID: CGDirectDisplayID {
         switch self {
         case .display(let id, _, _), .windows(let id, _): id
         }
+    }
+
+    /// The windows a window plan names; none for a display plan.
+    var windowIDs: [CGWindowID] {
+        if case .windows(_, let ids) = self { ids } else { [] }
     }
 
     /// Whether a window Keybumps (`ownProcessID`) opens later would show until the filter is
@@ -114,41 +120,42 @@ enum ScreencastCaptureFilter {
         )
     }
 
-    /// A window recording, on the display showing most of it, as a list of windows: the window;
-    /// its app's other windows on screen on that display, except its ordinary windows, which would
-    /// cover the chosen one where they overlap it, so its menus, sheets, and popovers show; and
-    /// Keybumps's registered overlays. Keybumps itself is never included whole: none of its other
-    /// windows (a notice, the Command Palette, typed keys) can be in the video, even for a frame.
-    /// The recorder rebuilds it when the app's windows change. Nil when the window or its display
-    /// is gone.
+    /// A window recording, on the display showing most of it, as a list of windows: the window,
+    /// and Keybumps's registered overlays (drawing, keys), on screen or not, so one shows the
+    /// moment it's ordered in.
+    ///
+    /// Nothing else (the owner's decision for the MVP): none of its app's other windows, titled or
+    /// not, wherever they are (its menus, sheets, popovers, tooltips, completion lists, Settings
+    /// window, another document); nothing below the windows (Finder's desktop and its icons); no
+    /// other app's window; and none of Keybumps's but the overlays, so a notice or the Command
+    /// Palette can't be in the video, even for a frame. Record an area or the screen to show menus
+    /// and sheets; #473 brings them to window recordings.
+    ///
+    /// Nil when the window or its display isn't in `content` (closed): a filter built from
+    /// `content` couldn't name the window, so the recorder builds none from it. Nil too for one of
+    /// Keybumps's windows, which is never recorded (the picker doesn't offer one).
     static func windowPlan(
         window windowID: CGWindowID,
         ownProcessID: pid_t,
         overlays: Set<CGWindowID>,
         content: ScreencastContent
     ) -> ScreencastFilterPlan? {
-        guard let window = content.window(windowID),
+        guard let window = content.window(windowID), window.processID != ownProcessID,
               let display = content.display(mostOverlapping: window.frame) else { return nil }
-        let siblings = content.windows.filter { $0.processID == window.processID && $0.id != window.id }
-        let hidden = windowsToHide(recording: window, others: siblings)
-        let appWindows = siblings.filter { sibling in
-            sibling.isOnScreen && !hidden.contains(sibling.id) && sibling.frame.intersects(display.frame)
-                // Recording one of Keybumps's own windows: its others only when they're overlays.
-                && (window.processID != ownProcessID || overlays.contains(sibling.id))
-        }
-        let ownOverlays = content.windows.filter { $0.processID == ownProcessID && $0.id != window.id && overlays.contains($0.id) }
-        let included = Set([window.id] + appWindows.map(\.id) + ownOverlays.map(\.id))
-        return .windows(display.id, includingWindows: included.sorted())
+        let shownOverlays = content.windows.filter { $0.processID == ownProcessID && overlays.contains($0.id) }.map(\.id)
+        return .windows(display.id, includingWindows: Set([window.id] + shownOverlays).sorted())
     }
 
-    /// The other windows of a recorded window's app to leave out: its ordinary windows (layer 0).
-    /// Menus, popovers, and sheets that open later still come through, and so does an untitled
-    /// window already over the chosen one when recording starts: that's its sheet or popover.
-    static func windowsToHide(recording chosen: ScreencastContent.Window, others: [ScreencastContent.Window]) -> Set<CGWindowID> {
-        Set(others.compactMap { other -> CGWindowID? in
-            guard other.id != chosen.id, other.layer == 0 else { return nil }
-            if other.isUntitled, other.frame.intersects(chosen.frame) { return nil }
-            return other.id
-        })
+    /// A window recording's `plan` with only the windows it may still show: the recorded window
+    /// and Keybumps's registered overlays (`overlays`). It takes out an overlay since removed, and
+    /// never adds one, so it's applied from the read the list in hand was built from, without a new
+    /// read. A display plan is unchanged.
+    static func narrowed(
+        _ plan: ScreencastFilterPlan,
+        window windowID: CGWindowID,
+        overlays: Set<CGWindowID>
+    ) -> ScreencastFilterPlan {
+        guard case .windows(let display, let included) = plan else { return plan }
+        return .windows(display, includingWindows: included.filter { $0 == windowID || overlays.contains($0) })
     }
 }

@@ -11,6 +11,8 @@ import Testing
 final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
     var onWindowsChange: (() -> Void)?
     private(set) var last: KeyDisplayContent?
+    /// Whether the last change was animated: a fade, rather than at once.
+    private(set) var lastAnimated: Bool?
     private(set) var everWindowIDs: Set<CGWindowID> = []
     private var byDisplay: [CGDirectDisplayID: NSWindow] = [:]
 
@@ -18,6 +20,7 @@ final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
 
     func show(_ content: KeyDisplayContent, animated: Bool) {
         last = content
+        lastAnimated = animated
         // 0 stands for the pointer's screen, for a configuration that names none.
         let screens = content.configuration.displays ?? [0]
         let hasSomething = !content.entries.isEmpty || !content.clicks.isEmpty
@@ -38,7 +41,7 @@ final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: .borderless, backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             byDisplay[display] = window
-            everWindowIDs.insert(CGWindowID(window.windowNumber))
+            if let id = CGWindowID(exactly: window.windowNumber), id > 0 { everWindowIDs.insert(id) }
             changed = true
         }
         if changed { onWindowsChange?() }
@@ -46,7 +49,7 @@ final class FakeKeyDisplayPresenter: KeyDisplayPresenting {
 }
 
 /// Types the same letter whatever the key: enough for the display to show typing.
-private final class LetterLayout: KeyboardLayoutTranslating {
+final class FakeLetterLayout: KeyboardLayoutTranslating {
     func character(for keyCode: UInt16, with modifiers: KeyModifiers) -> String? { "a" }
 }
 
@@ -85,7 +88,7 @@ struct OverlaysFlow {
             keys: InertKeyTypingMonitor(),
             pointer: InertPointerEventMonitor(),
             presenter: presenter,
-            layout: LetterLayout(),
+            layout: FakeLetterLayout(),
             scheduler: KeyDisplayManualScheduler(),
             secureInput: { false }
         )
@@ -181,6 +184,14 @@ struct OverlaysFlow {
     var exceptedWindows: [CGWindowID]? {
         guard let stream = flow.captureSystem.videoStreams.first, case .video(let plan, _) = stream.kind,
               case .display(_, _, let excepting) = plan else { return nil }
+        return excepting
+    }
+
+    /// The windows the first video stream's filter puts back now: its latest update while
+    /// recording, or the filter it started with.
+    var currentExceptedWindows: [CGWindowID]? {
+        guard let stream = flow.captureSystem.videoStreams.first, case .video(let initial, _) = stream.kind,
+              case .display(_, _, let excepting) = stream.plans.last ?? initial else { return nil }
         return excepting
     }
 }
@@ -408,6 +419,12 @@ struct ScreencastOverlaysWiringTests {
         }
         flows.keyDisplay.expire()
         flows.type()
+        // Hide and Show close the plugin's window and put up a new one, which stays out too.
+        let beforeShow = flows.presenter.everWindowIDs
+        flows.keyDisplay.hideKeys()
+        flows.keyDisplay.showKeys()
+        flows.type()
+        #expect(!flows.presenter.everWindowIDs.subtracting(beforeShow).isEmpty, "Show put up a new window")
         await flows.wiring.recorderUpdated()
 
         let drawing = try #require(flows.wiring.overlays?.overlayWindowIDs)
@@ -420,6 +437,89 @@ struct ScreencastOverlaysWiringTests {
 
         await flows.stop()
         #expect(Set(askedFor).isDisjoint(with: flows.presenter.everWindowIDs))
+    }
+
+    @available(macOS 15, *)
+    @Test("Hide Keystrokes during a recording takes the key windows out of the recording, and Show puts its new ones in, in the recording's look")
+    func hideAndShowDuringRecording() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        flows.turnOnKeystrokes(KeyDisplayConfiguration(style: .bezel, keys: .allKeys, showsClicks: true))
+        var keyIDs: Set<CGWindowID> = []
+        var drawing: [CGWindowID] = []
+        try await flows.record(showsShortcuts: true, beforeStart: {
+            keyIDs = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+            drawing = flows.wiring.overlays?.overlayWindowIDs ?? []
+            flows.showOwnWindows(drawing + keyIDs.sorted())
+        })
+        let recording = try #require(flows.keyDisplay.configuration)
+        #expect(keyIDs.count == 1 && !drawing.isEmpty)
+        #expect(flows.recorder.overlayWindows == keyIDs.union(drawing))
+        #expect(Set(flows.currentExceptedWindows ?? []).isSuperset(of: keyIDs))
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(flows.presenter.last?.entries.count == 1)
+
+        flows.keyDisplay.hideKeys()
+        await flows.wiring.recorderUpdated()
+        #expect(flows.keyDisplay.overlayWindows.isEmpty, "the key windows close")
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows == Set(drawing), "the recorder lets them go and keeps the drawing")
+        #expect(Set(flows.currentExceptedWindows ?? []).isDisjoint(with: keyIDs), "the running stream's filter leaves them out")
+        flows.type(kVK_ANSI_V, modifiers: [.command])
+        #expect(flows.keyDisplay.overlayWindows.isEmpty, "a press while hidden puts nothing up")
+        #expect(!flows.wiring.willRestart(), "a restart has no keys to clear, so it doesn't wait for a frame")
+
+        flows.keyDisplay.showKeys()
+        let shownIDs = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+        flows.showOwnWindows(drawing + shownIDs.sorted())
+        await flows.wiring.recorderUpdated()
+        #expect(shownIDs.count == 1, "a window on the recorded screen again, before the first key")
+        #expect(shownIDs.isDisjoint(with: keyIDs), "a new window, with a new number")
+        #expect(flows.wiring.includedWindowIDs == shownIDs.union(drawing))
+        #expect(flows.recorder.overlayWindows == shownIDs.union(drawing))
+        #expect(Set(flows.currentExceptedWindows ?? []).isSuperset(of: shownIDs), "the running stream's filter has it")
+        #expect(flows.keyDisplay.configuration == recording, "the recording's look, screens, and no rings")
+        flows.type()
+        #expect(flows.presenter.last?.entries.isEmpty == true, "still shortcuts only")
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(flows.presenter.last?.entries.count == 1)
+
+        await flows.stop()
+        #expect(flows.recorder.overlayWindows.isEmpty)
+    }
+
+    @available(macOS 15, *)
+    @Test("A recording whose keys are hidden gives the recorder no key window, even beside Keystrokes showing All keys")
+    func hiddenRecordingRecordsNoKeys() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.recordBrowserWindow()
+        let drawing = try #require(flows.wiring.overlays?.overlayWindowIDs)
+        flows.keyDisplay.hideKeys()
+        await flows.wiring.recorderUpdated()
+        #expect(flows.keyDisplay.isHidden(.screencast))
+
+        // Keystrokes' module never starts a shown hold while the recording's keys are hidden; the
+        // overlays mustn't rely on that.
+        flows.turnOnKeystrokes(KeyDisplayConfiguration(keys: .allKeys))
+        flows.type()
+        let typing = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+        #expect(!typing.isEmpty && flows.presenter.last?.entries.isEmpty == false, "the plugin shows typing")
+        await flows.wiring.recorderUpdated()
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows == Set(drawing), "a window that appears isn't given to the recorder")
+
+        // The window moves, so the recording holds the display again, which hands it the windows at once.
+        let moved = OverlaysFlow.browserFrame.offsetBy(dx: 200, dy: -100)
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = moved
+        flows.wiring.followWindow()
+        #expect(!flows.keyDisplay.overlayWindows.isEmpty, "the plugin's window is still up")
+        await flows.wiring.recorderUpdated()
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows.isDisjoint(with: flows.presenter.everWindowIDs), "nor is one already up")
+
+        await flows.stop()
+        #expect(flows.recorder.overlayWindows.isEmpty)
     }
 
     // MARK: Inside what's recorded
@@ -497,8 +597,8 @@ struct ScreencastOverlaysWiringTests {
     }
 
     @available(macOS 15, *)
-    @Test("A restart's new take starts with no marks")
-    func restartClearsTheMarks() async throws {
+    @Test("A restart clears the marks and the keys on screen before the recorder starts the new take")
+    func restartClearsFirst() async throws {
         let flows = OverlaysFlow()
         defer { flows.flow.captures.remove() }
         try await flows.record()
@@ -507,13 +607,89 @@ struct ScreencastOverlaysWiringTests {
         overlays.startDrawing()
         overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
         overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
-        #expect(overlays.hasMarks)
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(overlays.hasMarks && flows.presenter.last?.entries.isEmpty == false)
+        flows.flow.clock.advance(5)
+        flows.recorder.refreshElapsed()
+        #expect(flows.recorder.elapsed > 0)
 
+        // Told after the overlays, which were attached first.
+        var atRestart: (hasMarks: Bool, lines: Int?, elapsed: TimeInterval)?
+        flows.controller.addWillRestartObserver {
+            atRestart = (overlays.hasMarks, flows.presenter.last?.entries.count, flows.recorder.elapsed)
+            return false
+        }
         await flows.controller.restart()
+        let seen = try #require(atRestart)
+        #expect(!seen.hasMarks, "the marks went first")
+        #expect(seen.lines == 0, "and the keys")
+        #expect(seen.elapsed > 0, "while the recorder still had the old take")
+        #expect(flows.recorder.elapsed == 0, "then it restarted")
         #expect(flows.controller.phase == .recording)
         #expect(!overlays.hasMarks && overlays.drawing.isEmpty)
         #expect(overlays.isDrawing, "drawing stays on for the new take")
         #expect(flows.wiring.overlays === overlays, "the same windows, so the recorder keeps them")
+
+        flows.type(kVK_ANSI_V, modifiers: [.command])
+        #expect(flows.presenter.last?.entries.count == 1, "the new take's keys show")
+        await flows.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("Before a restart, the overlays say whether they took anything off the screen, and draw the cleared canvases")
+    func willRestartReportsClearing() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.record()
+        let overlays = try #require(flows.wiring.overlays)
+        let canvas = try #require(overlays.layer.window(on: PickerScreens.left.id)?.canvas)
+        #expect(!flows.wiring.willRestart(), "nothing on screen: the restart needn't wait")
+
+        overlays.style.lifetime = .stays
+        overlays.startDrawing()
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
+        #expect(flows.wiring.willRestart(), "a mark went")
+        #expect(!overlays.hasMarks)
+        #expect(!canvas.needsDisplay, "drawn now, not at the next display cycle")
+        #expect(!flows.wiring.willRestart())
+
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(flows.wiring.willRestart(), "a shortcut went")
+        #expect(flows.presenter.last?.entries.isEmpty == true)
+        #expect(!flows.wiring.willRestart())
+
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        #expect(flows.wiring.willRestart(), "so did a mark still being drawn")
+        await flows.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("When the drawing follows a window to another screen, the marks it left go, so Undo and Clear count only what shows")
+    func marksLeftBehindGo() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.recordBrowserWindow()
+        let overlays = try #require(flows.wiring.overlays)
+        overlays.style.lifetime = .stays
+        overlays.startDrawing()
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
+        #expect(overlays.hasMarks)
+
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = CGRect(x: 1600, y: 200, width: 800, height: 600)
+        flows.wiring.followWindow()
+        #expect(!overlays.hasMarks && overlays.drawing.isEmpty)
+
+        overlays.pointerDown(at: CGPoint(x: 50, y: 50), on: PickerScreens.right.id)
+        overlays.pointerUp(at: CGPoint(x: 250, y: 150), on: PickerScreens.right.id)
+        overlays.undo()
+        #expect(overlays.drawing.isEmpty, "⌘Z takes the mark that shows")
+
+        // Back on the left screen, the old mark doesn't come back.
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = OverlaysFlow.browserFrame
+        flows.wiring.followWindow()
+        #expect(overlays.visibleMarks(on: PickerScreens.left.id).isEmpty)
         await flows.stop()
     }
 

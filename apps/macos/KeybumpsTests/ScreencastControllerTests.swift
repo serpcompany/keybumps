@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -34,7 +35,12 @@ struct ScreencastControllerTests {
     func makeController(
         countdown: Int = 3,
         microphoneAvailable: Bool = true,
-        writers: (any ScreencastWriterFactory)? = nil
+        writers: (any ScreencastWriterFactory)? = nil,
+        pointer: @escaping @MainActor () -> CGPoint = { CGPoint(x: -10_000, y: -10_000) },
+        screens: @escaping @MainActor () -> ScreencastScreenLayout = { PickerScreens.both },
+        gettingReadyDelay: TimeInterval = 0.3,
+        screenReadTimeout: TimeInterval = 30,
+        screenChanges: NotificationCenter = NotificationCenter()
     ) -> ScreencastController {
         let clock = clock
         let startDate = startDate
@@ -55,9 +61,13 @@ struct ScreencastControllerTests {
             presenter: overlays,
             areaMemory: ScreencastAreaMemory(defaults: defaults),
             preferences: { preferences },
-            screens: { PickerScreens.both },
+            screens: screens,
+            pointerLocation: pointer,
             microphoneAvailable: { microphoneAvailable },
             sleep: { try await sleeper.sleep($0) },
+            gettingReadyDelay: gettingReadyDelay,
+            screenReadTimeout: screenReadTimeout,
+            screenChanges: screenChanges,
             now: { startDate },
             ownProcessID: Screens.ownProcess
         )
@@ -129,15 +139,17 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
-    @Test("Without the screen, the picker still opens, with no windows to pick")
+    @Test("If the screen can't be read, the picker never shows, and the message says why")
     func openWithoutScreen() async throws {
         defer { captures.remove() }
         pickerSystem.contentError = .screenRecordingDenied
         let controller = makeController()
         controller.open()
-        #expect(await ScreencastWait.until { overlays.picker != nil })
-        #expect(controller.phase == .picking)
-        #expect(controller.picker?.windows.isEmpty == true)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(controller.picker == nil)
+        #expect(!overlays.events.contains(.showPicker))
+        #expect(!overlays.isWatchingEscape)
+        #expect(overlays.messages == [ScreencastMessages.text(for: .screenRecordingDenied, kind: .video)])
     }
 
     @available(macOS 15, *)
@@ -221,7 +233,7 @@ struct ScreencastControllerTests {
     func noCountdown() async throws {
         defer { captures.remove() }
         let controller = makeController(countdown: 0)
-        try await record(controller, .screen)
+        try await record(controller, .screen) { $0.chooseEveryScreen() }
         #expect(controller.phase == .starting)
         #expect(await ScreencastWait.until { controller.phase == .recording })
         #expect(sleeper.requested.isEmpty && overlays.countdowns.isEmpty)
@@ -230,6 +242,31 @@ struct ScreencastControllerTests {
         #expect(!showedHighlight)
         // Every screen isn't an area: the last area stays as it was.
         #expect(ScreencastAreaMemory(defaults: defaults).area(in: PickerScreens.both) == nil)
+    }
+
+    @available(macOS 15, *)
+    @Test("Screen mode starts on the screen with the pointer")
+    func pointerScreen() async throws {
+        defer { captures.remove() }
+        let controller = makeController(pointer: { CGPoint(x: 2000, y: 500) })
+        controller.open()
+        #expect(controller.picker?.selectedScreen == 2)
+    }
+
+    @available(macOS 15, *)
+    @Test("The bar and Screen mode both use the screen the pointer was on at Start Screencast, even if it moves while the screen is read")
+    func pointerReadOnce() async throws {
+        defer { captures.remove() }
+        var pointer = CGPoint(x: 2000, y: 500)
+        pickerSystem.holdsContent = true
+        let controller = makeController(pointer: { pointer })
+        controller.open()
+        // To answer an alert macOS shows on the other screen, say.
+        pointer = CGPoint(x: 100, y: 100)
+        pickerSystem.releaseContent()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        #expect(overlays.picker?.pointerScreen == PickerScreens.right)
+        #expect(overlays.picker?.selectedScreen == 2)
     }
 
     @available(macOS 15, *)
@@ -265,11 +302,38 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
+    @Test("A window chosen, then the pointer over other windows and the bar, and a click and a double click there: Record records the window chosen")
+    func windowChosenBeforeTheBar() async throws {
+        defer { captures.remove() }
+        let controller = makeController()
+        try await record(controller, .window) { model in
+            // The bar over the browser's other window (12), and a point on it over only that one.
+            model.barFrame = CGRect(x: 250, y: 190, width: 700, height: 100)
+            let onBar = CGPoint(x: 920, y: 240)
+            for point in [CGPoint(x: 975, y: 232), CGPoint(x: 1400, y: 20), onBar] {
+                model.hoverWindow(at: point)
+            }
+            #expect(!model.press(at: onBar, on: PickerScreens.left, clickCount: 1))
+            #expect(!model.press(at: onBar, on: PickerScreens.left, clickCount: 2))
+            #expect(model.selectedWindow == 10)
+        }
+        #expect(await ScreencastWait.until { sleeper.pending == 1 })
+        #expect(overlays.events.contains(.countdown(3, frames: [leftArea.rect])))
+        for remaining in [2, 1] {
+            sleeper.advance()
+            #expect(await ScreencastWait.until { controller.phase == .countingDown(remaining: remaining) })
+        }
+        sleeper.advance()
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        #expect(controller.recorder.target == .window(10))
+    }
+
+    @available(macOS 15, *)
     @Test("Every screen counts down on every screen")
     func everyScreenCountdown() async throws {
         defer { captures.remove() }
         let controller = makeController()
-        try await record(controller, .screen)
+        try await record(controller, .screen) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { sleeper.pending == 1 })
         #expect(overlays.events.contains(.countdown(3, frames: [PickerScreens.left.frame, PickerScreens.right.frame])))
     }
@@ -703,6 +767,163 @@ struct ScreencastControllerTests {
         #expect(await ScreencastWait.until { captures.captureFolders().isEmpty }, "discarded footage is deleted")
     }
 
+    // MARK: Restarting with the screen cleared (round-3 review of #465)
+
+    /// What comes while a restart waits for a frame of the cleared screen.
+    enum SettleInterruption: String, CaseIterable, Sendable {
+        case stop, discard, shutDown, endedEarly
+    }
+
+    /// Records one screen with a will-restart observer that cleared something, and starts a
+    /// restart that's waiting out its settle. Returns the restart and the number of files the take
+    /// had, which every restart makes again.
+    @available(macOS 15, *)
+    private func settlingRestart(
+        _ controller: ScreencastController,
+        observed: @escaping () -> Void = {}
+    ) async throws -> (restarting: Task<Void, Never>, files: Int) {
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let files = writers.writers.count
+        controller.addWillRestartObserver {
+            observed()
+            return true
+        }
+        let restarting = Task { await controller.restart() }
+        #expect(await ScreencastWait.until { sleeper.pending == 1 }, "the restart waits")
+        return (restarting, files)
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart's settle is three frames at the recording's rate, and at least 0.1 s")
+    func restartSettle() {
+        #expect(ScreencastController.restartSettle(framesPerSecond: ScreencastOptions().framesPerSecond) == 0.1)
+        #expect(ScreencastController.restartSettle(framesPerSecond: 60) == 0.1)
+        #expect(ScreencastController.restartSettle(framesPerSecond: 24) == 0.125)
+        #expect(ScreencastController.restartSettle(framesPerSecond: 0) == 3, "never a division by zero")
+    }
+
+    @available(macOS 15, *)
+    @Test("A restart clears the screen, waits its settle, and only then restarts the recorder")
+    func restartWaitsAfterClearing() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var events: [String] = []
+        var filesAtClear: Int?
+        let (restarting, files) = try await settlingRestart(controller) {
+            events.append("cleared")
+            filesAtClear = writers.writers.count
+            #expect(sleeper.requested.isEmpty, "cleared before the settle")
+        }
+        #expect(events == ["cleared"])
+        #expect(filesAtClear == files)
+        #expect(sleeper.requested == [0.1])
+        for _ in 0..<50 { await Task.yield() }
+        #expect(writers.writers.count == files, "the recorder hasn't restarted during the settle")
+        #expect(controller.phase == .recording)
+
+        sleeper.advance()
+        await restarting.value
+        #expect(writers.writers.count == 2 * files, "then the new take's files")
+        #expect(controller.phase == .recording && controller.recorder.state == .recording)
+        #expect(events == ["cleared"])
+        await controller.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("With nothing cleared, a restart doesn't wait")
+    func restartWithNothingCleared() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let files = writers.writers.count
+        var told = 0
+        controller.addWillRestartObserver {
+            told += 1
+            return false
+        }
+        await controller.restart()
+        #expect(told == 1)
+        #expect(sleeper.requested.isEmpty)
+        #expect(writers.writers.count == 2 * files)
+        #expect(controller.phase == .recording)
+        await controller.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("A stop, discard, shutdown, or early end during a restart's settle wins, and nothing restarts", arguments: SettleInterruption.allCases)
+    func interruptedSettle(_ interruption: SettleInterruption) async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
+        let (restarting, files) = try await settlingRestart(controller)
+
+        switch interruption {
+        case .stop:
+            await controller.stop()
+            #expect(finished.count == 1, "the old take is kept")
+        case .discard:
+            await controller.discard()
+            #expect(finished.isEmpty)
+        case .shutDown:
+            await controller.shutDown()
+            #expect(finished.isEmpty, "kept in the captures folder, and nothing opens")
+            #expect(captures.captureFolders().count == 1)
+        case .endedEarly:
+            captureSystem.videoStreams[0].handler.stopped(.stoppedByMacOS)
+            #expect(await ScreencastWait.until { finished.count == 1 })
+            #expect(overlays.messages == ["macOS stopped the recording. What was recorded is saved."])
+        }
+        #expect(controller.phase == .idle)
+
+        sleeper.advance()
+        await restarting.value
+        #expect(writers.writers.count == files, "the recorder never restarted")
+        #expect(controller.phase == .idle)
+        #expect(controller.recorder.state != .recording)
+        if interruption != .endedEarly { #expect(overlays.messages.isEmpty) }
+    }
+
+    @available(macOS 15, *)
+    @Test("A second restart during the settle is refused: the recording restarts once")
+    func secondRestartDuringSettle() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        var told = 0
+        let (first, files) = try await settlingRestart(controller) { told += 1 }
+
+        await controller.restart()
+        #expect(told == 1, "the second never cleared again")
+        #expect(sleeper.requested.count == 1 && sleeper.pending == 1)
+        #expect(writers.writers.count == files)
+
+        sleeper.advance()
+        await first.value
+        #expect(writers.writers.count == 2 * files, "one restart")
+        #expect(controller.phase == .recording)
+        await controller.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("A recording started after a stop during the settle isn't restarted by it")
+    func newRecordingDuringSettle() async throws {
+        defer { captures.remove() }
+        let controller = makeController(countdown: 0)
+        let (restarting, _) = try await settlingRestart(controller)
+        await controller.stop()
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+        let files = writers.writers.count
+
+        sleeper.advance()
+        await restarting.value
+        #expect(writers.writers.count == files, "the new recording keeps its take")
+        #expect(controller.phase == .recording)
+        await controller.stop()
+    }
+
     // MARK: Getting ready
 
     @available(macOS 15, *)
@@ -736,6 +957,24 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
+    @Test("A read that takes too long gives up: the cue hides, the message says why, and the picker never shows")
+    func screenReadTimesOut() async throws {
+        defer { captures.remove() }
+        pickerSystem.holdsContent = true
+        let controller = makeController(gettingReadyDelay: 0.01, screenReadTimeout: 0.1)
+        controller.open()
+        #expect(await ScreencastWait.until { !overlays.messages.isEmpty })
+        #expect(controller.phase == .idle && controller.picker == nil)
+        #expect(overlays.events == [
+            .watchEscape, .gettingReady, .hideGettingReady, .closePicker, .stopWatchingEscape,
+            .message(ScreencastMessages.text(for: .captureFailed, kind: .video)),
+        ])
+        pickerSystem.releaseContent()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!overlays.events.contains(.showPicker))
+    }
+
+    @available(macOS 15, *)
     @Test("A quick read never shows Getting ready…")
     func quickReadNoCue() async throws {
         defer { captures.remove() }
@@ -744,6 +983,71 @@ struct ScreencastControllerTests {
         #expect(await ScreencastWait.until { overlays.picker != nil })
         try await Task.sleep(for: .milliseconds(450))
         #expect(!overlays.events.contains(.gettingReady))
+    }
+
+    // MARK: Displays changing
+
+    @available(macOS 15, *)
+    @Test("A display unplugged while the picker is open closes it and says so; the next one offers only the screens left")
+    func displayUnpluggedWhilePicking() async throws {
+        defer { captures.remove() }
+        var layout = PickerScreens.both
+        let screenChanges = NotificationCenter()
+        let controller = makeController(screens: { layout }, screenChanges: screenChanges)
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+
+        layout = PickerScreens.leftOnly
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        #expect(controller.picker == nil && overlays.picker == nil)
+        #expect(!overlays.isWatchingEscape)
+        #expect(overlays.messages == [ScreencastMessages.screensChanged])
+
+        controller.open()
+        let model = try #require(controller.picker)
+        #expect(model.layout == PickerScreens.leftOnly)
+        #expect(model.layout.orderedScreens.map(\.id) == [1] && !model.offersEveryScreen)
+        #expect(model.selectedScreen == 1)
+    }
+
+    @available(macOS 15, *)
+    @Test("A display change while the screen is read cancels, and the picker never shows")
+    func displayChangeWhileReading() async throws {
+        defer { captures.remove() }
+        var layout = PickerScreens.both
+        let screenChanges = NotificationCenter()
+        pickerSystem.holdsContent = true
+        let controller = makeController(screens: { layout }, screenChanges: screenChanges)
+        controller.open()
+        layout = PickerScreens.leftOnly
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        #expect(await ScreencastWait.until { controller.phase == .idle })
+        pickerSystem.releaseContent()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(!overlays.events.contains(.showPicker))
+        #expect(overlays.messages == [ScreencastMessages.screensChanged])
+    }
+
+    @available(macOS 15, *)
+    @Test("A screen notice that changes nothing leaves the picker open, and none is heard once it closes")
+    func screenNoticeWithoutChange() async throws {
+        defer { captures.remove() }
+        var layout = PickerScreens.both
+        let screenChanges = NotificationCenter()
+        let controller = makeController(screens: { layout }, screenChanges: screenChanges)
+        controller.open()
+        #expect(await ScreencastWait.until { overlays.picker != nil })
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(controller.phase == .picking && overlays.picker != nil)
+
+        overlays.pressEscape()
+        layout = PickerScreens.leftOnly
+        screenChanges.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(controller.phase == .idle)
+        #expect(overlays.messages.isEmpty)
     }
 
     // MARK: Turning off
@@ -783,7 +1087,7 @@ struct ScreencastControllerTests {
         let controller = makeController()
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
-        try await record(controller, .screen, kind: .screenshot)
+        try await record(controller, .screen, kind: .screenshot) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { pickerSystem.isHoldingScreenshot })
         #expect(controller.phase == .finishing)
         await controller.shutDown()
@@ -865,7 +1169,7 @@ struct ScreencastControllerTests {
         let controller = makeController()
         var finished: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
-        try await record(controller, .screen, kind: .screenshot)
+        try await record(controller, .screen, kind: .screenshot) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { !finished.isEmpty })
         #expect(pickerSystem.plans.map(\.filter.displayID) == [1, 2])
         guard case .screenshot(let screenshot) = finished.first else {
@@ -908,6 +1212,21 @@ struct ScreencastControllerTests {
         #expect(finished.isEmpty)
         #expect(overlays.messages == [ScreencastMessages.text(for: .screenRecordingDenied, kind: .screenshot)])
         #expect(captures.captureFolders().isEmpty)
+    }
+
+    @Test("A window size that isn't a real number of pixels fails the screenshot instead of trapping")
+    func pixelsFailSafe() {
+        #expect(ScreencastScreenshots.pixels(800, scale: 2) == 1600)
+        #expect(ScreencastScreenshots.pixels(100.2, scale: 1) == 101)
+        #expect(ScreencastScreenshots.pixels(.nan, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(.infinity, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(0, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(-40, scale: 2) == nil)
+        #expect(ScreencastScreenshots.pixels(1e12, scale: 2) == nil)
+        let broken = ScreencastContent.Window(id: 60, frame: CGRect(x: 100, y: 100, width: CGFloat.greatestFiniteMagnitude, height: 600), layer: 0, processID: Screens.browser, isUntitled: false, isOnScreen: true)
+        #expect(throws: ScreencastFailure.targetUnavailable) {
+            try ScreencastScreenshots.plans(for: .window(60), content: Screens.content(windows: [broken]), ownProcessID: Screens.ownProcess)
+        }
     }
 
     @Test("Keybumps's own process is never a window screenshot's target")

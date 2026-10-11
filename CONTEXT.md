@@ -212,7 +212,7 @@ One screenshot or one recording Screencast took, kept on this Mac in a folder of
 _Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
 
 **Screencast picker**:
-What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one clicked, or every screen), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens with the last area drawn.
+What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), as a screenshot or a video, with switches for the microphone, the Mac's sound, shortcuts, and clicks that start as Settings › Screencast has them. Record counts a video down; Capture takes a screenshot at once. Escape cancels until recording starts. It opens with the last area drawn.
 _Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
 
 **Control bar**:
@@ -220,7 +220,7 @@ The floating bar on the recorded screen while Screencast records, never in the v
 _Avoid_: HUD, toolbar, recording panel, status bar (macOS's menu bar)
 
 **Drawing**:
-Marking up the screen while Screencast records, in the video: a pen, an arrow, a highlighter, or a rectangle, in a few colors, each mark fading a few seconds after it's drawn or staying until cleared. Draw on the control bar, or its shortcut, turns it on and off; while it's on, the recorded screens take the pointer, with a yellow border that isn't in the video, the drawing tools show above the control bar, and Escape stops, Delete clears, and ⌘Z undoes the last mark. The tools' choices carry over to the next recording; the marks don't.
+Marking up the screen while Screencast records, in the video: a pen, an arrow, a highlighter, or a rectangle, in a few colors, each mark fading a few seconds after it's drawn or staying until cleared. Draw on the control bar, or its shortcut, turns it on and off; while it's on, the recorded screens take the pointer, with a yellow border that isn't in the video, the drawing tools show above the control bar, and Escape stops, Delete clears, and ⌘Z undoes the last mark. The tools' choices carry over to the next recording; the marks don't, and Restart clears them and the keys on screen before the new take starts.
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Review panel**:

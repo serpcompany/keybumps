@@ -226,6 +226,18 @@ struct ScreencastDrawingTests {
         #expect(drawing.cancel() == nil)
     }
 
+    @Test("The marks on displays the drawing leaves go, the one being drawn too")
+    func removeMarksNotOn() {
+        var drawing = ScreencastDrawing()
+        draw([CGPoint(x: 0, y: 0), CGPoint(x: 30, y: 30)], on: Self.display, into: &drawing)
+        draw([CGPoint(x: 0, y: 0), CGPoint(x: 30, y: 30)], on: Self.other, into: &drawing)
+        drawing.begin(at: CGPoint(x: 5, y: 5), on: Self.display, style: ScreencastDrawingStyle())
+        let removed = drawing.removeMarks(notOn: [Self.other])
+        #expect(removed.count == 2 && removed.allSatisfy { $0.display == Self.display })
+        #expect(drawing.marks.map(\.display) == [Self.other] && drawing.current == nil)
+        #expect(drawing.removeMarks(notOn: [Self.other]).isEmpty)
+    }
+
     @Test("Each display shows only its own marks")
     func perDisplay() {
         var drawing = ScreencastDrawing()

@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import CoreGraphics
 import Foundation
@@ -99,8 +100,9 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 /// - **#449, the overlays,** go up when the phase leaves `.picking` for a video
 ///   (`.countingDown` or `.starting`), as `choice` says (`showsShortcuts`, `highlightsClicks`, and
 ///   the `regions` it shows on), and register their windows with `recorder.includeOverlayWindow`
-///   before it starts, so the first frame has them. A restart clears the drawing
-///   (`addRestartObserver(_:)`), and they come down when the phase is `.idle` again.
+///   before it starts, so the first frame has them. A restart clears the drawing and the keys
+///   first (`addWillRestartObserver(_:)`) and gives the screen a moment to show that, and they come
+///   down when the phase is `.idle` again.
 /// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved video and screenshot.
 ///
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
@@ -121,8 +123,7 @@ final class ScreencastController {
     private(set) var phase: ScreencastPhase = .idle {
         didSet {
             guard phase != oldValue else { return }
-            onPhaseChange?(phase)
-            for (_, observer) in phaseObservers { observer(phase) }
+            announce(phase)
         }
     }
 
@@ -135,8 +136,11 @@ final class ScreencastController {
     /// `addPhaseObserver(_:)`'s observers, in the order they were added.
     @ObservationIgnored private var phaseObservers: [(ScreencastPhaseObservation, (ScreencastPhase) -> Void)] = []
     @ObservationIgnored private var nextPhaseObservation = 0
-    /// `addRestartObserver(_:)`'s observers, in the order they were added.
-    @ObservationIgnored private var restartObservers: [() -> Void] = []
+    /// `addWillRestartObserver(_:)`'s observers, in the order they were added.
+    @ObservationIgnored private var willRestartObservers: [() -> Bool] = []
+    /// Phases entered while the observers are being told of an earlier one, told next, in order.
+    @ObservationIgnored private var unannouncedPhases: [ScreencastPhase] = []
+    @ObservationIgnored private var isAnnouncingPhase = false
     /// A video or screenshot was saved: the review panel takes it from here. A recording that
     /// ended early comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
@@ -146,8 +150,10 @@ final class ScreencastController {
     @ObservationIgnored private let areaMemory: ScreencastAreaMemory
     @ObservationIgnored private let preferences: @MainActor () -> ScreencastPreferences
     @ObservationIgnored private let screens: @MainActor () -> ScreencastScreenLayout
+    @ObservationIgnored private let pointerLocation: @MainActor () -> CGPoint
     @ObservationIgnored private let microphoneAvailable: @MainActor () -> Bool
     @ObservationIgnored private let sleep: (TimeInterval) async throws -> Void
+    @ObservationIgnored private let restartSettle: TimeInterval
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let ownProcessID: pid_t
@@ -166,10 +172,14 @@ final class ScreencastController {
     @ObservationIgnored private var earlyEndWaiters: [CheckedContinuation<Void, Never>] = []
     /// A restart is under way: another is refused until it returns.
     @ObservationIgnored private var restartInFlight = false
-    /// The "Getting ready…" cue, shown if reading the screen takes a moment.
+    /// The "Getting ready…" cue, shown if reading the screen takes a moment, and the read's deadline.
     @ObservationIgnored private var gettingReadyCue: Task<Void, Never>?
     @ObservationIgnored private var showsGettingReady = false
     @ObservationIgnored private let gettingReadyDelay: TimeInterval
+    @ObservationIgnored private let screenReadTimeout: TimeInterval
+    /// Where the displays changing is heard, while the picker is open.
+    @ObservationIgnored private let screenChanges: NotificationCenter
+    @ObservationIgnored private var screenObserver: (any NSObjectProtocol)?
     /// False after `shutDown()`: what's saved stays in the captures folder and nothing opens.
     @ObservationIgnored private var opensFinishedCaptures = true
 
@@ -180,10 +190,18 @@ final class ScreencastController {
     ///   - presenter: The picker's and countdown's windows; inert in the unit-test host.
     ///   - preferences: Settings › Screencast, read each time the picker opens.
     ///   - screens: The displays, read each time the picker opens.
+    ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
+    ///     its screen.
     ///   - microphoneAvailable: Whether Keybumps has Microphone access, so the microphone switch can
     ///     start on without recording ever asking for it.
-    ///   - sleep: Waits a number of seconds, for the countdown; tests pass their own clock.
+    ///   - sleep: Waits a number of seconds, for the countdown and a restart's settle; tests pass
+    ///     their own clock.
+    ///   - restartSettle: How long a restart waits, once its observers cleared the screen, before
+    ///     the recorder starts the new take (`restartSettle(framesPerSecond:)`).
     ///   - gettingReadyDelay: How long reading the screen may take before "Getting ready…" shows.
+    ///   - screenReadTimeout: How long reading the screen may take before the picker gives up and
+    ///     says the capture couldn't start.
+    ///   - screenChanges: Where `NSApplication.didChangeScreenParametersNotification` is posted.
     init(
         recorder: ScreencastRecorder? = nil,
         system: (any ScreencastPickerSystem)? = nil,
@@ -191,9 +209,13 @@ final class ScreencastController {
         areaMemory: ScreencastAreaMemory,
         preferences: @escaping @MainActor () -> ScreencastPreferences,
         screens: @escaping @MainActor () -> ScreencastScreenLayout = { ScreencastScreenLayout.current() },
+        pointerLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
         microphoneAvailable: @escaping @MainActor () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
         sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+        restartSettle: TimeInterval = ScreencastController.restartSettle(framesPerSecond: ScreencastOptions().framesPerSecond),
         gettingReadyDelay: TimeInterval = 0.3,
+        screenReadTimeout: TimeInterval = 30,
+        screenChanges: NotificationCenter = .default,
         now: @escaping () -> Date = Date.init,
         fileManager: FileManager = .default,
         ownProcessID: pid_t = ProcessInfo.processInfo.processIdentifier
@@ -204,9 +226,13 @@ final class ScreencastController {
         self.areaMemory = areaMemory
         self.preferences = preferences
         self.screens = screens
+        self.pointerLocation = pointerLocation
         self.microphoneAvailable = microphoneAvailable
         self.sleep = sleep
+        self.restartSettle = restartSettle
         self.gettingReadyDelay = gettingReadyDelay
+        self.screenReadTimeout = screenReadTimeout
+        self.screenChanges = screenChanges
         self.now = now
         self.fileManager = fileManager
         self.ownProcessID = ownProcessID
@@ -221,6 +247,12 @@ final class ScreencastController {
     /// Calls `observer` with each phase as it's entered, after `onPhaseChange` and the observers
     /// added before it. The control bar, the overlays, and the review panel each add their own, so
     /// adding one never replaces another. Keep the observation to remove it.
+    ///
+    /// An observer may change the phase, or add or remove observers, while it's told. Every
+    /// observer is still told every phase once, in order: a phase entered meanwhile waits until the
+    /// current one has reached everyone, so the controller's own `phase` may already be ahead of the
+    /// one an observer is given. An observer removed meanwhile isn't told anything more, and one
+    /// added meanwhile starts with the next phase.
     @discardableResult
     func addPhaseObserver(_ observer: @escaping (ScreencastPhase) -> Void) -> ScreencastPhaseObservation {
         nextPhaseObservation += 1
@@ -233,10 +265,43 @@ final class ScreencastController {
         phaseObservers.removeAll { $0.0 == observation }
     }
 
-    /// Calls `observer` each time a restart has started a new take, which stays in the same phase:
-    /// the overlays clear the drawing then (#449).
-    func addRestartObserver(_ observer: @escaping () -> Void) {
-        restartObservers.append(observer)
+    /// Calls `observer` each time a restart is about to throw the take away and start a new one,
+    /// which stays in the same phase. It returns whether it took something off the screen (#449:
+    /// the drawing and the keys), drawn by the time it returns. If any did, the restart waits
+    /// `restartSettle` before the recorder swaps its files, so ScreenCaptureKit has delivered a
+    /// frame of the cleared screen by then: the recorder starts the new take with the last frame
+    /// delivered, and keeps every frame after it. A screen that's slow to show the change could
+    /// still put the old marks or keys in that frame; nothing waits for a particular frame.
+    func addWillRestartObserver(_ observer: @escaping () -> Bool) {
+        willRestartObservers.append(observer)
+    }
+
+    /// Tells `onPhaseChange` and the observers about `phase`, or, while they're being told about an
+    /// earlier one, once they've heard it (`addPhaseObserver(_:)`).
+    private func announce(_ phase: ScreencastPhase) {
+        unannouncedPhases.append(phase)
+        guard !isAnnouncingPhase else { return }
+        isAnnouncingPhase = true
+        defer { isAnnouncingPhase = false }
+        var rounds = 0
+        while !unannouncedPhases.isEmpty {
+            rounds += 1
+            assert(rounds < 100, "Screencast's phase observers keep changing the phase")
+            let next = unannouncedPhases.removeFirst()
+            onPhaseChange?(next)
+            for observation in phaseObservers.map(\.0) {
+                // Removed by an observer told before it: told nothing more.
+                guard let observer = phaseObservers.first(where: { $0.0 == observation })?.1 else { continue }
+                observer(next)
+            }
+        }
+    }
+
+    /// A restart's settle: three frames at the recording's rate, and never less than 0.1 s. The
+    /// cleared windows draw at the next screen refresh, and ScreenCaptureKit delivers the frame
+    /// that shows them at most one frame later.
+    nonisolated static func restartSettle(framesPerSecond: Int) -> TimeInterval {
+        max(0.1, 3 / Double(max(framesPerSecond, 1)))
     }
 
     // MARK: Picking
@@ -253,45 +318,88 @@ final class ScreencastController {
             layout: layout,
             preferences: settings,
             microphoneAvailable: microphoneAvailable(),
-            rememberedArea: areaMemory.area(in: layout)
+            rememberedArea: areaMemory.area(in: layout),
+            // Read once, now: the bar shows on this screen, and Screen mode starts with it.
+            pointerScreen: layout.screen(containing: pointerLocation())?.id
         )
         picker = model
         choice = nil
         opensFinishedCaptures = true
         phase = .picking
         presenter.watchEscape { [weak self] in self?.cancel() }
+        watchScreens()
 
         // The screen is read before the picker covers it, so an alert macOS shows for the read
         // (such as its monthly question about apps that record the screen) is never under it. If
-        // the read takes a moment, "Getting ready…" says Start Screencast was heard.
+        // the read takes a moment, "Getting ready…" says Start Screencast was heard, and stays
+        // until the read ends. A read that fails, or takes too long, says why instead.
         let generation = generation
         let delay = gettingReadyDelay
+        let timeout = screenReadTimeout
         gettingReadyCue = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled, let self, self.generation == generation, self.phase == .picking else { return }
             self.showsGettingReady = true
             self.presenter.showGettingReady()
+            try? await Task.sleep(for: .seconds(max(timeout - delay, 0)))
+            guard !Task.isCancelled, self.generation == generation, self.phase == .picking else { return }
+            self.pickerUnavailable(ScreencastFailure.captureFailed)
         }
         windowsLoad = Task { [weak self] in
             guard let self else { return }
+            let content: ScreencastContent
             do {
-                let content = try await self.system.content()
-                if self.generation == generation, self.picker === model {
-                    model.windows = ScreencastWindowPicking.pickableWindows(
-                        in: content,
-                        ownProcessID: self.ownProcessID,
-                        transparent: self.system.transparentWindows()
-                    )
-                }
+                content = try await self.system.content()
             } catch {
-                // Window picking offers nothing; Record says why if the screen can't be read.
-                self.logger.error("screencast picker windows unavailable category=\(Self.category(of: error), privacy: .public)")
+                guard self.generation == generation, self.picker === model, self.phase == .picking else { return }
+                self.pickerUnavailable(error)
+                return
             }
             guard self.generation == generation, self.picker === model, self.phase == .picking else { return }
+            model.windows = ScreencastWindowPicking.pickableWindows(
+                in: content,
+                ownProcessID: self.ownProcessID,
+                transparent: self.system.transparentWindows()
+            )
             self.endGettingReady()
             self.presenter.showPicker(model, confirm: { [weak self] in self?.confirm() }, cancel: { [weak self] in self?.cancel() })
             self.logger.info("screencast picker opened displays=\(layout.screens.count, privacy: .public)")
         }
+    }
+
+    /// The screen couldn't be read, or reading it took too long: the picker never shows, and the
+    /// message says why.
+    private func pickerUnavailable(_ error: Error) {
+        guard phase == .picking else { return }
+        let failure = (error as? ScreencastFailure) ?? .captureFailed
+        let kind = picker?.kind ?? .video
+        logger.error("screencast picker unavailable category=\(failure.rawValue, privacy: .public)")
+        cancel()
+        presenter.showMessage(ScreencastMessages.text(for: failure, kind: kind))
+    }
+
+    /// The displays changed while the picker is open, such as one unplugged. Its panels and its
+    /// screen choices were made for the displays as they were, so it closes and says so, rather
+    /// than offer a screen that's gone. A notice that leaves the displays as they were does nothing.
+    private func screensChanged() {
+        guard phase == .picking, let model = picker, screens() != model.layout else { return }
+        logger.info("screencast picker closed: displays changed")
+        cancel()
+        presenter.showMessage(ScreencastMessages.screensChanged)
+    }
+
+    private func watchScreens() {
+        stopWatchingScreens()
+        screenObserver = screenChanges.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.screensChanged() }
+        }
+    }
+
+    private func stopWatchingScreens() {
+        if let screenObserver { screenChanges.removeObserver(screenObserver) }
+        screenObserver = nil
     }
 
     /// Record or Capture: closes the picker, remembers an area, then takes the screenshot, or counts
@@ -300,6 +408,7 @@ final class ScreencastController {
         guard phase == .picking, let model = picker, let choice = model.choice(), let settings else { return }
         if let area = choice.area { areaMemory.save(area.rect) }
         windowsLoad?.cancel()
+        stopWatchingScreens()
         presenter.closePicker()
         picker = nil
         self.choice = choice
@@ -325,6 +434,7 @@ final class ScreencastController {
         case .picking:
             windowsLoad?.cancel()
             endGettingReady()
+            stopWatchingScreens()
             presenter.closePicker()
             picker = nil
         case .countingDown:
@@ -403,14 +513,27 @@ final class ScreencastController {
         recorder.setAudio(source, on: on)
     }
 
-    /// Throws away what's recorded and starts again at once, recording, or paused if `pause()`
-    /// came meanwhile. Refused while another restart is under way, or while a recording that ended
-    /// on its own is saving; a `stop()`, `discard()`, or early end that comes while it waits on the
-    /// recorder wins.
+    /// Throws away what's recorded and starts again, recording, or paused if `pause()` came while
+    /// the recorder restarted. Refused while another restart is under way, or while a recording
+    /// that ended on its own is saving; a `stop()`, `discard()`, `shutDown()`, or early end that
+    /// comes while it waits wins.
+    ///
+    /// The will-restart observers clear the screen first. If they took anything off it, the restart
+    /// waits `restartSettle` for a frame of the cleared screen to reach the recorder, then checks
+    /// again that this recording is still going before restarting it.
     func restart() async {
         guard !noticeEarlyEnd(), phase.isRecording, !restartInFlight else { return }
         restartInFlight = true
         defer { restartInFlight = false }
+        // Every observer is told, whatever the others cleared.
+        let cleared = willRestartObservers.reduce(false) { cleared, observer in observer() || cleared }
+        if cleared {
+            let generation = generation
+            // A cancelled wait still restarts, once the checks below pass.
+            try? await sleep(restartSettle)
+            // A stop, discard, shutdown, or early end came meanwhile, or another recording started.
+            guard generation == self.generation, !noticeEarlyEnd(), phase.isRecording else { return }
+        }
         do {
             try await recorder.restart()
         } catch {
@@ -420,7 +543,6 @@ final class ScreencastController {
             return
         }
         guard !noticeEarlyEnd(), phase.isRecording else { return }
-        for observer in restartObservers { observer() }
         switch recorder.state {
         case .recording: phase = .recording
         case .paused: phase = .paused
@@ -631,6 +753,9 @@ enum ScreencastMessages {
             "Nothing was recorded."
         }
     }
+
+    /// The displays changed while the picker was open.
+    static let screensChanged = "The screens changed. Start Screencast again."
 
     /// A recording that stopped on its own: why, and whether what it recorded is saved.
     static func endedEarly(_ failure: ScreencastFailure, kept: Bool) -> String {

@@ -90,7 +90,7 @@ struct ScreencastOverlaysTests {
         #expect(changes == [ids])
         let laptop = try #require(overlays.layer.window(on: 1))
         let left = try #require(overlays.layer.window(on: 3))
-        #expect(ids == [laptop.windowID, left.windowID])
+        #expect(ids == [laptop.windowID, left.windowID].compactMap { $0 })
         #expect(laptop.frame == FakeOverlayDisplays.laptop.frame)
         #expect(left.frame == FakeOverlayDisplays.left.frame)
         #expect(overlays.layer.window(on: 2) == nil && overlays.layer.borderWindow(on: 2) == nil)
@@ -103,6 +103,38 @@ struct ScreencastOverlaysTests {
         }
         #expect(!overlays.toolbar.panel.isVisible)
         overlays.hide()
+    }
+
+    @Test("A window number that's none, or doesn't fit a window ID, gives no ID rather than a trap")
+    func windowNumbers() {
+        #expect(ScreencastDrawingWindow.windowID(forNumber: -1) == nil, "not made by the window server, or closed")
+        #expect(ScreencastDrawingWindow.windowID(forNumber: 0) == nil)
+        #expect(ScreencastDrawingWindow.windowID(forNumber: Int(UInt32.max) + 1) == nil)
+        #expect(ScreencastDrawingWindow.windowID(forNumber: Int.min) == nil)
+        #expect(ScreencastDrawingWindow.windowID(forNumber: 4_242) == 4_242)
+        #expect(ScreencastDrawingWindow.windowID(forNumber: Int(UInt32.max)) == UInt32.max)
+        #expect(ScreencastOverlaysWiring.windowIDs(of: []).isEmpty)
+    }
+
+    @Test("A mark whose opacity isn't a finite number draws nothing")
+    func degenerateMarks() {
+        let pen = ScreencastMark(display: 1, kind: .pen([CGPoint(x: 10, y: 50), CGPoint(x: 90, y: 50)]))
+        let drawn = ScreencastDrawingTests.Canvas()
+        ScreencastDrawingRenderer.draw(pen, opacity: 1, in: drawn.context)
+        #expect(drawn.pixel(50, 50).a > 0, "the same mark at full opacity shows")
+
+        // An infinite opacity passes `opacity > 0` and isn't below 1, so without the finite check
+        // it drew the mark at full strength.
+        let infinite = ScreencastDrawingTests.Canvas()
+        ScreencastDrawingRenderer.draw(pen, opacity: .infinity, in: infinite.context)
+        #expect(infinite.pixel(50, 50).a == 0)
+
+        // Smoke only: these drew nothing before the guard too. NaN fails `opacity > 0`, and an empty
+        // pen strokes nothing, though its null bounds no longer open a transparency layer.
+        let smoke = ScreencastDrawingTests.Canvas()
+        ScreencastDrawingRenderer.draw(pen, opacity: .nan, in: smoke.context)
+        ScreencastDrawingRenderer.draw(ScreencastMark(display: 1, kind: .pen([])), opacity: 0.5, in: smoke.context)
+        #expect(smoke.pixel(50, 50).a == 0)
     }
 
     @Test("Not drawing, the drawing layer lets every click through; drawing, it takes them and shows the border")

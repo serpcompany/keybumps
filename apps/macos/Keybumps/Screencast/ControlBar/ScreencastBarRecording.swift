@@ -35,11 +35,19 @@ extension ScreencastBarRecording {
     }
 }
 
-/// The controller acts; its recorder says how long, which sounds, and how loud.
+/// The controller acts; its recorder says how long, which sounds, and how loud. While the
+/// recording starts, before the recorder has its sounds, they're as the picker chose them.
 @available(macOS 15, *)
 extension ScreencastController: ScreencastBarRecording {
     var elapsed: TimeInterval { recorder.elapsed }
-    var microphone: ScreencastAudioSourceState { recorder.microphone }
-    var systemAudio: ScreencastAudioSourceState { recorder.systemAudio }
+    var microphone: ScreencastAudioSourceState { sound(.microphone) }
+    var systemAudio: ScreencastAudioSourceState { sound(.systemAudio) }
     var microphoneLevel: Float { recorder.microphoneLevel }
+
+    private func sound(_ source: ScreencastAudioSource) -> ScreencastAudioSourceState {
+        guard phase == .starting else {
+            return source == .microphone ? recorder.microphone : recorder.systemAudio
+        }
+        return choice?.audio.contains(source) == true ? .on : .notRecorded
+    }
 }
