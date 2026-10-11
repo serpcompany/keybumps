@@ -7,16 +7,20 @@ import Foundation
 /// against fake capture, so this is what first runs ScreenCaptureKit, AVFoundation, and the
 /// control bar's and overlays' windows for real before a candidate reaches the owner.
 ///
-/// It records 2 seconds each of the main display, Finder's window on the QA folder (which the
-/// script opens), and an area in the middle of the main display, with no sound, shortcuts, or
-/// click highlights, and takes a screenshot of each (`ScreencastSmokeRunner`); checks each file,
-/// deletes it, writes a structural result to `resultURL()`, and exits 0 when everything passed.
+/// It records 2 seconds each of the main display, the blank window the script shows from a helper
+/// process (`windowProcessOption`), and an area in the middle of the main display, with no sound,
+/// shortcuts, or click highlights, and takes a screenshot of each (`ScreencastSmokeRunner`);
+/// checks each file, deletes it, writes a structural result to `resultURL()`, and exits 0 when
+/// everything passed.
 /// Nothing of the person's is composed: no `AppModel`, shortcuts, menu bar item, or updater. It
 /// needs Screen Recording already granted and never asks for it.
 /// `apps/macos/scripts/smoke-screencast.sh` runs it on the installed candidate.
 @MainActor
 enum ScreencastSmokeTest {
     nonisolated static let launchOption = "KBScreencastSmokeTest"
+    /// The process ID of the script's helper, whose blank window is the only one the window
+    /// captures may take.
+    nonisolated static let windowProcessOption = "KBScreencastSmokeWindowPID"
     /// Its own defaults, so the area it draws never replaces the person's last one. Emptied before
     /// and after it runs.
     static let defaultsSuite = "com.serp.keybumps.screencast-smoke-test"
@@ -32,6 +36,12 @@ enum ScreencastSmokeTest {
 
     static func isRequested(version: String, defaults: UserDefaults) -> Bool {
         CrashReportTest.isAllowed(version: version) && defaults.bool(forKey: launchOption)
+    }
+
+    /// The helper's process ID from `-KBScreencastSmokeWindowPID <pid>`; nil when there's none.
+    static func windowProcessID(defaults: UserDefaults = .standard) -> pid_t? {
+        let value = defaults.integer(forKey: windowProcessOption)
+        return value > 0 && value <= Int(Int32.max) ? pid_t(value) : nil
     }
 
     /// `~/Library/Developer/Keybumps-QA/screencast-smoke-test.json`, beside the QA candidates'
@@ -100,7 +110,7 @@ enum ScreencastSmokeTest {
                 displayCount: displayCount,
                 screenRecordingGranted: { CGPreflightScreenCaptureAccess() },
                 mainDisplay: { CGMainDisplayID() },
-                isFinder: { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier == "com.apple.finder" },
+                windowProcessID: windowProcessID(),
                 resultURL: resultURL
             )
         )

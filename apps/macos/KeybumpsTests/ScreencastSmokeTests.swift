@@ -12,9 +12,26 @@ import UniformTypeIdentifiers
 @MainActor
 @Suite("Screencast: the QA smoke test")
 struct ScreencastSmokeTests {
-    /// The person's browser in front, and Finder's window (`ScreencastScreens.otherApp` plays
-    /// Finder) behind it, as the script leaves them.
-    static let withFinder = ScreencastScreens.content(windows: [ScreencastScreens.browserWindow, ScreencastScreens.otherAppWindow])
+    /// The script's helper, whose blank window the window captures take.
+    nonisolated static let helperProcess: pid_t = 503
+    static let smokeWindow = ScreencastContent.Window(
+        id: 40, frame: CGRect(x: 1000, y: 600, width: 480, height: 270), layer: 0, processID: helperProcess, isUntitled: false, isOnScreen: true
+    )
+    /// One of the person's Finder-like windows (`ScreencastScreens.otherApp`), covering the
+    /// script's window.
+    static let finderLikeWindow = ScreencastContent.Window(
+        id: 41, frame: CGRect(x: 900, y: 500, width: 800, height: 450), layer: 0, processID: ScreencastScreens.otherApp, isUntitled: false, isOnScreen: true
+    )
+    /// The person's browser and Finder-like windows in front, and the script's window behind them.
+    static let withSmokeWindow = content(windows: [ScreencastScreens.browserWindow, finderLikeWindow, smokeWindow])
+
+    static func content(windows: [ScreencastContent.Window]) -> ScreencastContent {
+        ScreencastContent(
+            displays: [ScreencastScreens.rightDisplay, ScreencastScreens.leftDisplay],
+            windows: windows,
+            applicationProcessIDs: [ScreencastScreens.browser, ScreencastScreens.otherApp, helperProcess, ScreencastScreens.ownProcess]
+        )
+    }
 
     let captureSystem: FakeCaptureSystem
     let pickerSystem: FakePickerSystem
@@ -24,9 +41,9 @@ struct ScreencastSmokeTests {
     let defaults = InMemoryDefaults()
     let folder = TemporaryCapturesFolder()
 
-    init(content: ScreencastContent = Self.withFinder) {
-        captureSystem = FakeCaptureSystem(content: content)
-        pickerSystem = FakePickerSystem(content: content)
+    init(content: ScreencastContent? = nil) {
+        captureSystem = FakeCaptureSystem(content: content ?? Self.withSmokeWindow)
+        pickerSystem = FakePickerSystem(content: content ?? Self.withSmokeWindow)
     }
 
     var capturesURL: URL { folder.url.appendingPathComponent("captures", isDirectory: true) }
@@ -35,7 +52,8 @@ struct ScreencastSmokeTests {
     @available(macOS 15, *)
     static var quick: ScreencastSmokeRunner.Configuration {
         ScreencastSmokeRunner.Configuration(
-            pickerTimeout: 2, startTimeout: 2, finishTimeout: 2, checkTimeout: 2, windDownTimeout: 2, pollInterval: .milliseconds(2)
+            pickerTimeout: 2, startTimeout: 2, finishTimeout: 2, checkTimeout: 2, windDownTimeout: 2,
+            windowTimeout: 0.3, windowPollInterval: .milliseconds(20), pollInterval: .milliseconds(2)
         )
     }
 
@@ -43,6 +61,7 @@ struct ScreencastSmokeTests {
     func makeRunner(
         configuration: ScreencastSmokeRunner.Configuration? = nil,
         granted: Bool = true,
+        windowProcessID: pid_t? = Self.helperProcess,
         video: ScreencastSmokeVideoFacts = ScreencastSmokeVideoFacts(videoTracks: 1, duration: 2, pixelWidth: 64, pixelHeight: 36)
     ) -> (ScreencastSmokeRunner, ScreencastSmokeRig) {
         let clock = clock
@@ -73,7 +92,7 @@ struct ScreencastSmokeTests {
                 displayCount: 2,
                 screenRecordingGranted: { granted },
                 mainDisplay: { 1 },
-                isFinder: { $0 == ScreencastScreens.otherApp },
+                windowProcessID: windowProcessID,
                 resultURL: resultURL,
                 record: { seconds in clock.advance(seconds) }
             )
@@ -107,15 +126,15 @@ struct ScreencastSmokeTests {
         #expect(videos.allSatisfy { $0.controlBarShown == true && $0.overlaysShown == true && $0.durationSeconds == 2 })
         #expect(videos.allSatisfy { $0.timings.startMs != nil && $0.timings.recordMs != nil })
 
-        // The main display, Finder's window rather than the browser in front of it, and an area in
-        // the middle of the main display, with no sound.
+        // The main display, the script's window rather than the browser's or the Finder-like one
+        // in front of it, and an area in the middle of the main display, with no sound.
         let plans = videoPlans
         #expect(plans.count == 3 && plans.first?.displayID == 1 && plans.last?.displayID == 1)
         guard plans.count == 3, case .windows(_, let included) = plans[1] else {
             Issue.record("the window video didn't record a window")
             return
         }
-        #expect(included.contains(ScreencastScreens.otherAppWindow.id) && !included.contains(ScreencastScreens.browserWindow.id))
+        #expect(included == [Self.smokeWindow.id], "\(included)")
         #expect(captureSystem.audioStreams.isEmpty)
         guard captureSystem.videoStreams.count == 3, case .video(_, let configuration) = captureSystem.videoStreams[2].kind else {
             Issue.record("the area video didn't record a video stream")
@@ -123,10 +142,10 @@ struct ScreencastSmokeTests {
         }
         let area = ScreencastSmokeRunner.area(in: PickerScreens.left.frame)
         #expect(abs(configuration.sourceRect.width - area.width) < 2 && abs(configuration.sourceRect.height - area.height) < 2)
-        // Screenshots: the main display, Finder's window, the area.
+        // Screenshots: the main display, the script's window, the area.
         #expect(pickerSystem.plans.count == 3)
         #expect(pickerSystem.plans.map(\.filter.displayID) == [1, nil, 1])
-        #expect(pickerSystem.plans.dropFirst().first?.filter == .window(ScreencastScreens.otherAppWindow.id))
+        #expect(pickerSystem.plans.dropFirst().first?.filter == .window(Self.smokeWindow.id))
 
         // The picker's windows never opened; the area's highlight did, and closed; nothing is left.
         #expect(!overlays.events.contains(.showPicker))
@@ -233,22 +252,52 @@ struct ScreencastSmokeTests {
     }
 
     @available(macOS 15, *)
-    @Test("With no Finder window, both window captures fail as noFinderWindow and never take another app's window")
-    func noFinderWindow() async throws {
-        let smoke = ScreencastSmokeTests(content: ScreencastScreens.content(windows: [ScreencastScreens.browserWindow]))
+    @Test("Without the script's window on screen, both window captures fail as noSmokeWindow and never take another window")
+    func noSmokeWindow() async throws {
+        defer { folder.remove() }
+        let offSpace = ScreencastContent.Window(
+            id: Self.smokeWindow.id, frame: Self.smokeWindow.frame, layer: 0, processID: Self.helperProcess, isUntitled: false, isOnScreen: false
+        )
+        let cases: [(name: String, content: ScreencastContent, processID: pid_t?)] = [
+            ("the helper has no window", Self.content(windows: [ScreencastScreens.browserWindow, Self.finderLikeWindow]), Self.helperProcess),
+            ("its window is on another Space", Self.content(windows: [ScreencastScreens.browserWindow, Self.finderLikeWindow, offSpace]), Self.helperProcess),
+            ("the script couldn't show it", Self.withSmokeWindow, nil),
+        ]
+        for item in cases {
+            let smoke = ScreencastSmokeTests(content: item.content)
+            defer { smoke.folder.remove() }
+            let (runner, _) = smoke.makeRunner(windowProcessID: item.processID)
+            let report = await runner.run()
+
+            let windows = report.captures.filter { $0.mode.target == .window }
+            #expect(windows.count == 2 && windows.allSatisfy { $0.stage == .opening && $0.errorCategory == "noSmokeWindow" }, "\(item.name)")
+            #expect(report.captures.filter { $0.mode.target != .window }.allSatisfy { $0.passed }, "\(item.name)")
+            #expect(!smoke.videoPlans.contains { if case .windows = $0 { true } else { false } }, "\(item.name)")
+            #expect(!smoke.pickerSystem.plans.contains { if case .window = $0.filter { true } else { false } }, "\(item.name)")
+            #expect(report.exitCode == 1 && report.cleanedUp, "\(item.name)")
+        }
+    }
+
+    @available(macOS 15, *)
+    @Test("The window captures wait for the script's window to appear on screen, then take it")
+    func lateSmokeWindow() async throws {
+        let smoke = ScreencastSmokeTests(content: Self.withSmokeWindow)
         defer {
             folder.remove()
             smoke.folder.remove()
         }
+        let pickerSystem = smoke.pickerSystem
+        pickerSystem.screen = Self.content(windows: [ScreencastScreens.browserWindow, Self.finderLikeWindow])
+        var readsBeforeWindow = 0
+        pickerSystem.onContent = {
+            readsBeforeWindow += 1
+            if readsBeforeWindow == 4 { pickerSystem.screen = Self.withSmokeWindow }
+        }
         let (runner, _) = smoke.makeRunner()
         let report = await runner.run()
 
-        let windows = report.captures.filter { $0.mode.target == .window }
-        #expect(windows.count == 2 && windows.allSatisfy { $0.stage == .picking && $0.errorCategory == "noFinderWindow" })
-        #expect(report.captures.filter { $0.mode.target != .window }.allSatisfy { $0.passed })
-        #expect(!smoke.videoPlans.contains { if case .windows = $0 { true } else { false } })
-        #expect(!smoke.pickerSystem.plans.contains { $0.filter == .window(ScreencastScreens.browserWindow.id) })
-        #expect(report.exitCode == 1 && report.cleanedUp)
+        #expect(report.passed && report.exitCode == 0, "\(report.captures.map(\.errorCategory))")
+        #expect(pickerSystem.plans.dropFirst().first?.filter == .window(Self.smokeWindow.id))
     }
 
     @available(macOS 15, *)

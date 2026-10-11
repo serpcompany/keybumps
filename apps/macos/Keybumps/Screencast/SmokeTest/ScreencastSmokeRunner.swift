@@ -63,6 +63,9 @@ struct ScreencastSmokeRig {
     let presenter: ScreencastSmokePresenter
     let recordingControls: ScreencastRecordingControls
     let overlays: ScreencastOverlaysWiring
+    /// What the picker reads the screen with, to wait for the script's window.
+    let pickerSystem: any ScreencastPickerSystem
+    let ownProcessID: pid_t
     /// Where the captures are saved: a folder of the smoke test's own, deleted when it ends.
     let capturesFolder: URL
     /// The smoke test's own defaults, for the area, the drawing tools, and the bar's position.
@@ -123,6 +126,8 @@ struct ScreencastSmokeRig {
             presenter: presenter,
             recordingControls: recordingControls,
             overlays: overlays,
+            pickerSystem: pickerSystem,
+            ownProcessID: ownProcessID,
             capturesFolder: capturesFolder,
             defaults: defaults
         )
@@ -140,9 +145,10 @@ struct ScreencastSmokeRig {
 /// two seconds of recording, Stop, and the saved files checked and deleted. Only the picker's
 /// windows, the countdown (set to none), and the review panel are skipped.
 ///
-/// The window captures take Finder's frontmost window, which `smoke-screencast.sh` opens on the QA
-/// folder (`~/Library/Developer/Keybumps-QA`) first, and never another app's: with no Finder
-/// window they fail with `noFinderWindow`.
+/// The window captures take only the blank window `smoke-screencast.sh` shows from a helper
+/// process of its own, found by that process's ID (`environment.windowProcessID`), whatever is in
+/// front of it. Without that window on screen in time they fail with `noSmokeWindow`; no other
+/// window is ever taken instead.
 ///
 /// Every step has a time limit, so a hang fails the capture at the stage it reached instead of
 /// holding the app. After each capture the controller is brought back to idle (a start cancelled,
@@ -164,6 +170,10 @@ final class ScreencastSmokeRunner {
         var finishTimeout: TimeInterval = 20
         var checkTimeout: TimeInterval = 15
         var windDownTimeout: TimeInterval = 10
+        /// How long the script's window has to appear on screen, and how often the screen is read
+        /// for it.
+        var windowTimeout: TimeInterval = 10
+        var windowPollInterval: Duration = .milliseconds(250)
         var pollInterval: Duration = .milliseconds(20)
     }
 
@@ -174,8 +184,9 @@ final class ScreencastSmokeRunner {
         var screenRecordingGranted: () -> Bool
         /// The display to record a screen of and draw an area on.
         var mainDisplay: () -> CGDirectDisplayID
-        /// Whether a process is Finder, whose frontmost window the window captures take.
-        var isFinder: (pid_t) -> Bool
+        /// The script's helper, whose blank window is the only one the window captures take; nil
+        /// when the script couldn't show it.
+        var windowProcessID: pid_t?
         var resultURL: URL
         var fileManager: FileManager = .default
         /// Waits while a video records; tests move their clock here.
@@ -242,6 +253,7 @@ final class ScreencastSmokeRunner {
     private func perform(_ mode: ScreencastSmokeMode) async throws {
         let controller = rig.controller
         enter(.opening)
+        if mode.target == .window { try await waitForSmokeWindow() }
         let opened = ContinuousClock.now
         controller.open()
         guard controller.phase == .picking, let model = controller.picker else { throw ScreencastSmokeFailure.openRefused }
@@ -345,7 +357,10 @@ final class ScreencastSmokeRunner {
             model.releaseArea()
             return .area(display: screen.id, rect: ScreencastTarget.displayLocalRect(fromAppKit: area, screenFrame: screen.frame))
         case .window:
-            let window = try finderWindow(in: model)
+            guard let processID = environment.windowProcessID,
+                  let window = model.windows.first(where: { $0.processID == processID }) else {
+                throw ScreencastSmokeFailure.noSmokeWindow
+            }
             // First in the list, so a click on its middle picks it even where another window is in
             // front of it.
             model.windows = [window] + model.windows.filter { $0.id != window.id }
@@ -355,14 +370,23 @@ final class ScreencastSmokeRunner {
         }
     }
 
-    /// The window to capture: Finder's frontmost of the windows the picker offers (front to back),
-    /// the one the script opened on the QA folder. Never another app's, which could be anything of
-    /// the person's.
-    private func finderWindow(in model: ScreencastPickerModel) throws -> ScreencastContent.Window {
-        guard let window = model.windows.first(where: { environment.isFinder($0.processID) }) else {
-            throw ScreencastSmokeFailure.noFinderWindow
+    /// Waits until the script's window is on screen as the picker offers windows, reading the
+    /// screen as the picker does. Only that process's window counts: any other could be anything
+    /// of the person's.
+    private func waitForSmokeWindow() async throws {
+        guard let processID = environment.windowProcessID else { throw ScreencastSmokeFailure.noSmokeWindow }
+        let system = rig.pickerSystem
+        let ownProcessID = rig.ownProcessID
+        let deadline = ContinuousClock.now + .seconds(configuration.windowTimeout)
+        while true {
+            if let content = try? await Self.within(configuration.windowTimeout, { try await system.content() }),
+               ScreencastWindowPicking.pickableWindows(in: content, ownProcessID: ownProcessID, transparent: system.transparentWindows())
+                   .contains(where: { $0.processID == processID }) {
+                return
+            }
+            guard ContinuousClock.now < deadline else { throw ScreencastSmokeFailure.noSmokeWindow }
+            try await Task.sleep(for: configuration.windowPollInterval)
         }
-        return window
     }
 
     /// A fixed area in the middle of `frame` (AppKit's space): up to 640 × 360 points.

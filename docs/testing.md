@@ -8,7 +8,7 @@ Decisions for how Keybumps is tested, researched against current sources on 2026
 | --- | --- | --- | --- |
 | Deterministic tests | Domain logic, state, adapter contracts, wiring snapshots, release scripts | Swift Testing (new) and XCTest (existing) in `KeybumpsTests` | Every PR that touches app code; locally before every hand-off; as the first gate of every release build |
 | UI smoke tests | App launches; Settings, palette tabs, and editor open and respond | XCUITest in a `KeybumpsUITests` target, driven by launch arguments with faked permissions | Every PR that touches app code; as a gate of every release build; on demand |
-| Signed runtime and installed artifact | Global hot keys, real permissions, cross-app paste/insertion, window movement, real screenshots | `apps/macos/scripts/build-qa-candidate.sh` plus a short manual checklist; `apps/macos/scripts/smoke-screencast.sh` runs Screencast's real capture path on the candidate with no input | Owner's Mac (agent first pass headless; screen only when handed over) |
+| Signed runtime and installed artifact | Global hot keys, real permissions, cross-app paste/insertion, window movement, real screenshots | `apps/macos/scripts/build-qa-candidate.sh` plus a short manual checklist; `apps/macos/scripts/smoke-screencast.sh` runs Screencast's real capture path on the candidate with no input (on screen: a blank window and the recording indicator for about 10 s; no prompts) | Owner's Mac (agent first pass headless; screen only when handed over) |
 | Owner acceptance | The scoped workflow works for the owner | Issue hit list | Owner's Mac |
 
 No automated level substitutes for a higher one.

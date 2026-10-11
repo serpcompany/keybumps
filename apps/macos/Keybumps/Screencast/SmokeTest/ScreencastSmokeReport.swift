@@ -60,9 +60,10 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
     case openRefused
     /// The picker had nothing to record after choosing.
     case noChoice
-    /// Finder has no window to record or take a screenshot of: the script opens one on the QA
-    /// folder, and no other app's window is ever taken instead.
-    case noFinderWindow
+    /// The blank window the script shows from a helper process wasn't on screen in time, or the
+    /// script couldn't show it (no `-KBScreencastSmokeWindowPID`). No other window is ever taken
+    /// instead.
+    case noSmokeWindow
     /// The capture ended with no file and no reason.
     case ended
     case controlBarMissing
