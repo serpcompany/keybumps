@@ -51,9 +51,11 @@ struct ScreencastDrawingMemory {
 ///   recorded displays for the whole recording, showing shortcuts only, in the Keystrokes plugin's
 ///   style while the plugin is on, and gives the recorder those windows too. The keys sit inside
 ///   what's recorded: along the bottom of the area, or of the window, or of the screen for a
-///   screen recording (`KeyDisplayConfiguration.anchor`). With Show shortcuts off it never holds
-///   the display, and the display's windows never go to the recorder, so keys the plugin shows
-///   (typing included, in All keys) stay out of the video.
+///   screen recording (`KeyDisplayConfiguration.anchor`). Hide Keystrokes closes those windows, and
+///   the recorder lets them go; Show puts up new ones, which it adds back as they come, so the
+///   first frames after Show can lack the keys. With Show shortcuts off it never holds the
+///   display, and the display's windows never go to the recorder, so keys the plugin shows (typing
+///   included, in All keys) stay out of the video.
 /// - A window recording follows its window (`followWindow()`, 20 times a second, as often as the
 ///   recorder follows it): the keys move with it, and when it moves to another display, so do the
 ///   drawing and the keys. The two read the frame on their own timers, so for a moment after a
