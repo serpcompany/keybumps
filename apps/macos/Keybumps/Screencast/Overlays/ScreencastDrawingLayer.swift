@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 
 /// A screen the overlays cover: its ID, as the recorder's targets name it, and its frames in
 /// AppKit's global space.
@@ -65,6 +66,10 @@ final class ScreencastDrawingLayer {
     var onWindowsChange: (([CGWindowID]) -> Void)?
     /// The windows last reported to `onWindowsChange`.
     private var reportedIDs: [CGWindowID] = []
+    /// How many of the marks' windows had no number at the last report, which is logged when it
+    /// changes.
+    private var unnumberedCount = 0
+    private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
     private(set) var isDrawing = false
     /// The displays it's on, in order.
@@ -139,8 +144,17 @@ final class ScreencastDrawingLayer {
 
     /// Tells `onWindowsChange` the windows, if they changed since it was last told: a window that
     /// had no number when it was made is reported at the next show, refresh, or drawing switch.
+    /// Until then its marks aren't in the video, which is logged, since it shouldn't happen.
     private func reportWindows() {
         let ids = windowIDs
+        let unnumbered = displays.filter { inkWindows[$0.id] != nil }.count - ids.count
+        if unnumbered != unnumberedCount {
+            unnumberedCount = unnumbered
+            if unnumbered > 0 {
+                let shown = displays.count
+                logger.error("screencast drawing window has no number count=\(unnumbered, privacy: .public) displays=\(shown, privacy: .public)")
+            }
+        }
         guard ids != reportedIDs else { return }
         reportedIDs = ids
         onWindowsChange?(ids)
