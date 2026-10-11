@@ -227,8 +227,9 @@ protocol KeyDisplayPresenting: AnyObject {
     var windows: [NSWindow] { get }
     /// Called after `windows` changes: put up, taken down, or replaced as displays come and go.
     var onWindowsChange: (() -> Void)? { get set }
-    /// Shows `content`. Without `animated`, what leaves goes at once, with no fade, as when typing
-    /// must not reach a recording's first frames.
+    /// Shows `content`. Without `animated`, what leaves goes at once, with no fade, and so does
+    /// whatever is still fading out from an earlier show, as when typing must not reach a
+    /// recording's first frames, or old keys a restarted recording's new take.
     func show(_ content: KeyDisplayContent, animated: Bool)
     /// Closes the windows.
     func hide()
@@ -434,6 +435,19 @@ final class KeyDisplay {
         present(animated: false)
     }
 
+    /// Takes every line and ring off the screen at once, with no fade, and draws that, as when a
+    /// recording restarts and its new take must start with none. Unlike `pauseForScreenshot()`, the
+    /// next key shows. Returns whether anything was on screen: a line or a ring, or a line still
+    /// fading out, which goes at once too. With every holder's keys hidden there's nothing to clear.
+    @discardableResult
+    func clearLines() -> Bool {
+        guard holds.isShowing else { return false }
+        let wasShown = !timeline.entries.isEmpty || !timeline.clicks.isEmpty || fadesUntil.map { now() < $0 } == true
+        timeline.removeAll()
+        present(animated: false)
+        return wasShown
+    }
+
     /// Whether `press` takes a screenshot, by the shortcuts macOS and Keybumps have now.
     func isScreenshotShortcut(_ press: KeyPress) -> Bool {
         let keybumps = keybumpsScreenshotBindings()
@@ -452,20 +466,6 @@ final class KeyDisplay {
         systemScreenshotKeys = KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: symbolicHotKeys())
         systemScreenshotKeysRead = now()
         keybumpsScreenshotBindingsRead = keybumps ?? keybumpsScreenshotBindings()
-    }
-
-    /// Takes every line and ring off the screen at once, with no fade, and draws that, as when a
-    /// recording restarts and its new take must start with none. Unlike `pauseForScreenshot()`, the
-    /// next key shows. Returns whether anything was on screen: a line or a ring, or one still
-    /// fading out.
-    @discardableResult
-    func clearLines() -> Bool {
-        guard holds.isHeld else { return false }
-        let wasShown = !timeline.entries.isEmpty || !timeline.clicks.isEmpty || fadesUntil.map { now() < $0 } == true
-        timeline.removeAll()
-        fadesUntil = nil
-        present(animated: false)
-        return wasShown
     }
 
     // MARK: Overlay windows
@@ -492,6 +492,7 @@ final class KeyDisplay {
             isWatchingClicks = false
             isPausedForScreenshot = false
             timeline.removeAll()
+            fadesUntil = nil
             wakeUp?.cancel()
             wakeUp = nil
             presenter.hide()
@@ -561,6 +562,8 @@ final class KeyDisplay {
 
     private func present(animated: Bool = true) {
         guard let configuration = holds.configuration else { return }
+        // Without animation, the presenter ends every fade too.
+        if !animated { fadesUntil = nil }
         presenter.show(
             KeyDisplayContent(
                 configuration: configuration,

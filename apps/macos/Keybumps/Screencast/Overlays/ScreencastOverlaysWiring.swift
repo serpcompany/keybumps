@@ -51,9 +51,12 @@ struct ScreencastDrawingMemory {
 ///   recorded displays for the whole recording, showing shortcuts only, in the Keystrokes plugin's
 ///   style while the plugin is on, and gives the recorder those windows too. The keys sit inside
 ///   what's recorded: along the bottom of the area, or of the window, or of the screen for a
-///   screen recording (`KeyDisplayConfiguration.anchor`). With Show shortcuts off it never holds
-///   the display, and the display's windows never go to the recorder, so keys the plugin shows
-///   (typing included, in All keys) stay out of the video.
+///   screen recording (`KeyDisplayConfiguration.anchor`). Hide Keystrokes closes those windows, and
+///   the recorder lets them go; Show puts up new ones, which it adds back as they come, so the
+///   first frames after Show can lack the keys. While the recording's keys are hidden, no key
+///   window goes to the recorder, whatever another holder shows. With Show shortcuts off it never
+///   holds the display, and the display's windows never go to the recorder, so keys the plugin
+///   shows (typing included, in All keys) stay out of the video.
 /// - A window recording follows its window (`followWindow()`, 20 times a second, as often as the
 ///   recorder follows it): the keys move with it, and when it moves to another display, so do the
 ///   drawing and the keys. The two read the frame on their own timers, so for a moment after a
@@ -70,7 +73,8 @@ final class ScreencastOverlaysWiring {
     private(set) var overlays: ScreencastOverlays?
     /// Whether this recording holds the key display: Show shortcuts was on.
     private(set) var holdsKeyDisplay = false
-    /// The windows given to the recorder: the drawing's, and the key display's while it's held.
+    /// The windows given to the recorder: the drawing's, and the key display's while it's held with
+    /// the recording's keys shown.
     private(set) var includedWindowIDs: Set<CGWindowID> = []
 
     private let keyDisplay: KeyDisplay?
@@ -242,8 +246,11 @@ final class ScreencastOverlaysWiring {
             configuration: Self.keyConfiguration(plugin: keystrokesConfiguration(), displays: recordedDisplays, anchor: anchor),
             keepsWindowsOnScreen: true
         ) { [weak self] windows in
-            self?.keyWindowIDs = Self.windowIDs(of: windows)
-            self?.updateRecorder()
+            guard let self else { return }
+            // While the recording's keys are hidden, the windows on screen are another holder's, such
+            // as the plugin's showing typing in All keys, so none go to the recorder.
+            self.keyWindowIDs = self.keyDisplay?.isHidden(.screencast) == true ? [] : Self.windowIDs(of: windows)
+            self.updateRecorder()
         }
     }
 

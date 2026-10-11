@@ -122,6 +122,63 @@ struct KeyDisplayAnchorTests {
         #expect(plain.configuration?.anchor == nil && plain.configuration?.displays == nil)
     }
 
+    @Test("A hidden holder adds nothing: hidden Keystrokes in All keys never adds its keys, look, screens, anchor, or rings to a recording's, and a hidden recording's never pin a holder that shows")
+    func hiddenHoldersAddNothing() {
+        // Keystrokes, hidden and newer than the recording, in All keys with rings, naming a screen
+        // and an anchor of its own.
+        let plugin = KeyDisplayConfiguration(
+            style: .bezel, position: .bottomRight, keys: .allKeys, size: .large, showsClicks: true,
+            displays: [2], anchor: CGRect(x: 0, y: 0, width: 500, height: 500)
+        )
+        var holds = KeyDisplayHolds()
+        holds.acquire(.screencast, configuration: Self.recording, keepsWindowsOnScreen: true)
+        holds.acquire(.keystrokes, configuration: plugin, startsHidden: true)
+        #expect(holds.configuration == Self.recording, "only the recording's own")
+        #expect(holds.keepsWindowsOnScreen)
+
+        // A recording hidden mid-take, then a holder that shows its keys.
+        var later = KeyDisplayHolds()
+        later.acquire(.screencast, configuration: Self.recording, keepsWindowsOnScreen: true)
+        later.hide()
+        let shown = KeyDisplayConfiguration(keys: .allKeys, showsClicks: true)
+        later.acquire(.keystrokes, configuration: shown)
+        #expect(later.configuration == shown, "the pointer's screen, no anchor, its own keys and rings")
+        #expect(!later.keepsWindowsOnScreen)
+    }
+
+    @Test("While every holder's keys are hidden, clearing the lines finds nothing and draws nothing, even with a line fading when they were hidden")
+    func clearLinesWhileHidden() {
+        let presenter = FakeKeyDisplayPresenter()
+        var time = Date(timeIntervalSince1970: 1_000)
+        let display = KeyDisplay(
+            keys: InertKeyTypingMonitor(),
+            pointer: InertPointerEventMonitor(),
+            presenter: presenter,
+            layout: FakeLetterLayout(),
+            now: { time },
+            scheduler: KeyDisplayManualScheduler(),
+            secureInput: { false }
+        )
+        display.acquire(.screencast, configuration: Self.recording, keepsWindowsOnScreen: true)
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command]))
+        time += Self.recording.linger
+        display.expire()
+        #expect(presenter.last?.entries.isEmpty == true && presenter.lastAnimated == true, "fading out")
+
+        display.hideKeys()
+        #expect(display.overlayWindows.isEmpty)
+        let drawn = presenter.last
+        #expect(!display.clearLines(), "nothing to clear while hidden")
+        #expect(presenter.last == drawn && presenter.lastAnimated == true, "and nothing drawn")
+        #expect(display.overlayWindows.isEmpty, "no window comes back")
+
+        display.showKeys()
+        #expect(!display.clearLines(), "shown again, with nothing on screen")
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_V), modifiers: [.command]))
+        #expect(display.clearLines(), "a new line clears as before")
+        display.release(.screencast)
+    }
+
     @Test("Clearing the lines takes them off at once, with no fade, and the next key still shows")
     func clearLines() throws {
         let presenter = FakeKeyDisplayPresenter()

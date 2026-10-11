@@ -186,6 +186,14 @@ struct OverlaysFlow {
               case .display(_, _, let excepting) = plan else { return nil }
         return excepting
     }
+
+    /// The windows the first video stream's filter puts back now: its latest update while
+    /// recording, or the filter it started with.
+    var currentExceptedWindows: [CGWindowID]? {
+        guard let stream = flow.captureSystem.videoStreams.first, case .video(let initial, _) = stream.kind,
+              case .display(_, _, let excepting) = stream.plans.last ?? initial else { return nil }
+        return excepting
+    }
 }
 
 @MainActor
@@ -411,6 +419,12 @@ struct ScreencastOverlaysWiringTests {
         }
         flows.keyDisplay.expire()
         flows.type()
+        // Hide and Show close the plugin's window and put up a new one, which stays out too.
+        let beforeShow = flows.presenter.everWindowIDs
+        flows.keyDisplay.hideKeys()
+        flows.keyDisplay.showKeys()
+        flows.type()
+        #expect(!flows.presenter.everWindowIDs.subtracting(beforeShow).isEmpty, "Show put up a new window")
         await flows.wiring.recorderUpdated()
 
         let drawing = try #require(flows.wiring.overlays?.overlayWindowIDs)
@@ -423,6 +437,89 @@ struct ScreencastOverlaysWiringTests {
 
         await flows.stop()
         #expect(Set(askedFor).isDisjoint(with: flows.presenter.everWindowIDs))
+    }
+
+    @available(macOS 15, *)
+    @Test("Hide Keystrokes during a recording takes the key windows out of the recording, and Show puts its new ones in, in the recording's look")
+    func hideAndShowDuringRecording() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        flows.turnOnKeystrokes(KeyDisplayConfiguration(style: .bezel, keys: .allKeys, showsClicks: true))
+        var keyIDs: Set<CGWindowID> = []
+        var drawing: [CGWindowID] = []
+        try await flows.record(showsShortcuts: true, beforeStart: {
+            keyIDs = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+            drawing = flows.wiring.overlays?.overlayWindowIDs ?? []
+            flows.showOwnWindows(drawing + keyIDs.sorted())
+        })
+        let recording = try #require(flows.keyDisplay.configuration)
+        #expect(keyIDs.count == 1 && !drawing.isEmpty)
+        #expect(flows.recorder.overlayWindows == keyIDs.union(drawing))
+        #expect(Set(flows.currentExceptedWindows ?? []).isSuperset(of: keyIDs))
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(flows.presenter.last?.entries.count == 1)
+
+        flows.keyDisplay.hideKeys()
+        await flows.wiring.recorderUpdated()
+        #expect(flows.keyDisplay.overlayWindows.isEmpty, "the key windows close")
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows == Set(drawing), "the recorder lets them go and keeps the drawing")
+        #expect(Set(flows.currentExceptedWindows ?? []).isDisjoint(with: keyIDs), "the running stream's filter leaves them out")
+        flows.type(kVK_ANSI_V, modifiers: [.command])
+        #expect(flows.keyDisplay.overlayWindows.isEmpty, "a press while hidden puts nothing up")
+        #expect(!flows.wiring.willRestart(), "a restart has no keys to clear, so it doesn't wait for a frame")
+
+        flows.keyDisplay.showKeys()
+        let shownIDs = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+        flows.showOwnWindows(drawing + shownIDs.sorted())
+        await flows.wiring.recorderUpdated()
+        #expect(shownIDs.count == 1, "a window on the recorded screen again, before the first key")
+        #expect(shownIDs.isDisjoint(with: keyIDs), "a new window, with a new number")
+        #expect(flows.wiring.includedWindowIDs == shownIDs.union(drawing))
+        #expect(flows.recorder.overlayWindows == shownIDs.union(drawing))
+        #expect(Set(flows.currentExceptedWindows ?? []).isSuperset(of: shownIDs), "the running stream's filter has it")
+        #expect(flows.keyDisplay.configuration == recording, "the recording's look, screens, and no rings")
+        flows.type()
+        #expect(flows.presenter.last?.entries.isEmpty == true, "still shortcuts only")
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(flows.presenter.last?.entries.count == 1)
+
+        await flows.stop()
+        #expect(flows.recorder.overlayWindows.isEmpty)
+    }
+
+    @available(macOS 15, *)
+    @Test("A recording whose keys are hidden gives the recorder no key window, even beside Keystrokes showing All keys")
+    func hiddenRecordingRecordsNoKeys() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.recordBrowserWindow()
+        let drawing = try #require(flows.wiring.overlays?.overlayWindowIDs)
+        flows.keyDisplay.hideKeys()
+        await flows.wiring.recorderUpdated()
+        #expect(flows.keyDisplay.isHidden(.screencast))
+
+        // Keystrokes' module never starts a shown hold while the recording's keys are hidden; the
+        // overlays mustn't rely on that.
+        flows.turnOnKeystrokes(KeyDisplayConfiguration(keys: .allKeys))
+        flows.type()
+        let typing = ScreencastOverlaysWiring.windowIDs(of: flows.keyDisplay.overlayWindows)
+        #expect(!typing.isEmpty && flows.presenter.last?.entries.isEmpty == false, "the plugin shows typing")
+        await flows.wiring.recorderUpdated()
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows == Set(drawing), "a window that appears isn't given to the recorder")
+
+        // The window moves, so the recording holds the display again, which hands it the windows at once.
+        let moved = OverlaysFlow.browserFrame.offsetBy(dx: 200, dy: -100)
+        flows.windows.frames[ScreencastScreens.browserWindow.id] = moved
+        flows.wiring.followWindow()
+        #expect(!flows.keyDisplay.overlayWindows.isEmpty, "the plugin's window is still up")
+        await flows.wiring.recorderUpdated()
+        #expect(flows.wiring.includedWindowIDs == Set(drawing))
+        #expect(flows.recorder.overlayWindows.isDisjoint(with: flows.presenter.everWindowIDs), "nor is one already up")
+
+        await flows.stop()
+        #expect(flows.recorder.overlayWindows.isEmpty)
     }
 
     // MARK: Inside what's recorded
