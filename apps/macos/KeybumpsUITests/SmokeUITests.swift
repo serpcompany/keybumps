@@ -232,7 +232,7 @@ final class SmokeUITests: XCTestCase {
     func testScreencastShipsOffAndTurnsOnInSettings() {
         // Its page is drawn by the plugin template: Screen Recording, the Microphone as an optional
         // permission, its preferences, and its captures folder. CI's Mac runs macOS 15 or later, so
-        // it can be turned on. Nothing records yet (#446).
+        // it can be turned on.
         launch(permissions: "denied", ["-KBOpenSettings", "screencast"])
         let toggle = element("capability.toggle.screencast")
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
@@ -248,6 +248,137 @@ final class SmokeUITests: XCTestCase {
         element("capability.offBanner.turnOn.screencast").click()
         XCTAssertTrue(waitForValue(of: toggle, 1))
         XCTAssertTrue(element("capability.offBanner.screencast").waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastPickerOpensAndSwitchesModes() {
+        // The UI-test composition's made-up screens: the main screen split into a top and a bottom
+        // display, each as wide as it, two made-up windows on each, and a recorder that never
+        // starts.
+        launchScreencastPicker()
+        XCTAssertEqual(pickerPanels.count, 2, "One picker panel per screen")
+        let confirm = element("screencast.picker.confirm")
+        let hint = element("screencast.picker.hint")
+        XCTAssertTrue(waitForLabel(of: confirm, "Record"))
+        XCTAssertTrue(waitForText(of: hint, "Drag to choose an area."))
+        for key in ["microphone", "systemAudio", "shortcuts", "clicks"] {
+            XCTAssertTrue(element("screencast.picker.\(key)").exists, key)
+        }
+
+        element("screencast.picker.kind.screenshot").click()
+        XCTAssertTrue(waitForLabel(of: confirm, "Capture"))
+        XCTAssertTrue(element("screencast.picker.microphone").waitForNonExistence(timeout: 5), "A screenshot has no sound")
+        XCTAssertFalse(element("screencast.picker.systemAudio").exists)
+
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+
+        element("screencast.picker.kind.video").click()
+        XCTAssertTrue(waitForLabel(of: confirm, "Record"))
+        XCTAssertTrue(element("screencast.picker.microphone").waitForExistence(timeout: 5))
+    }
+
+    func testScreencastPickerChoosesOneScreenOrEveryScreen() throws {
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        element("screencast.picker.target.screen").click()
+        // A choice for each made-up screen, named, top first as recordings number them, and All
+        // Screens. It starts on the screen with the pointer, whichever that is on CI.
+        let top = element("screencast.picker.screen.1")
+        let bottom = element("screencast.picker.screen.2")
+        let allScreens = element("screencast.picker.everyScreen")
+        XCTAssertTrue(top.waitForExistence(timeout: 5))
+        XCTAssertTrue(bottom.exists && allScreens.exists)
+        XCTAssertFalse(element("screencast.picker.screen.3").exists)
+
+        bottom.click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Bottom Display."))
+        allScreens.click()
+        XCTAssertTrue(waitForText(of: hint, "Records all screens, one file each."))
+        top.click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Top Display."))
+
+        // A click on a screen still chooses it: the one with the bar, a quarter of the way down,
+        // above the bar at its bottom, once the bar has chosen the other one. A click aimed at the
+        // other screen's panel would count this key one as an interruption and never land.
+        let screen = try pickerPanelWithTheBar()
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        let other = try XCTUnwrap(panels.first { $0.frame != screen.frame })
+        let barOnTop = screen.frame.minY < other.frame.minY
+        (barOnTop ? bottom : top).click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up \(barOnTop ? "Bottom" : "Top") Display."))
+        screen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up \(barOnTop ? "Top" : "Bottom") Display."))
+    }
+
+    func testScreencastPickerRecordsTheWindowChosen() throws {
+        // The made-up windows on the screen with the bar, in from its top-left corner: the first,
+        // 400 × 220 at (60, 40), in front of the second, 360 × 180 at (200, 120), whose lower part
+        // is under the bar. The picker shows them undimmed, so this click proves its panel takes a
+        // click there rather than letting it through to whatever is under it.
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        let confirm = element("screencast.picker.confirm")
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+        let screen = try pickerPanelWithTheBar()
+        let frame = screen.frame
+        let corner = screen.coordinate(withNormalizedOffset: .zero)
+
+        // A click chooses the first window, where the second isn't.
+        corner.withOffset(CGVector(dx: 100, dy: 100)).click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+        // The pointer over the second window, then beside both, then on the bar, over the second
+        // window, and a click on the bar's words, change nothing.
+        corner.withOffset(CGVector(dx: 520, dy: 200)).hover()
+        corner.withOffset(CGVector(dx: frame.width - 100, dy: 60)).hover()
+        hint.hover()
+        hint.click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+        XCTAssertTrue(confirm.isEnabled)
+        // Nor does a double click on the bar's words: it records nothing.
+        hint.doubleClick()
+        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
+        XCTAssertFalse(countdown.waitForExistence(timeout: 2))
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+
+        // Record counts down on the window chosen: centered on the first window, not the second.
+        confirm.click()
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        XCTAssertEqual(countdown.frame.midX, frame.minX + 260, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, frame.minY + 150, accuracy: 2)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastPickerRecordsAWindowDoubleClicked() throws {
+        // The made-up windows as above: the first chosen, then a double click on the second.
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+        let screen = try pickerPanelWithTheBar()
+        let frame = screen.frame
+        let corner = screen.coordinate(withNormalizedOffset: .zero)
+        corner.withOffset(CGVector(dx: 100, dy: 100)).click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+
+        // It counts down on the second window: centered on it, at (200, 120), 360 × 180.
+        corner.withOffset(CGVector(dx: 520, dy: 200)).doubleClick()
+        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        XCTAssertEqual(countdown.frame.midX, frame.minX + 380, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, frame.minY + 210, accuracy: 2)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+    }
+
+    func testEscapeClosesTheScreencastPicker() {
+        launchScreencastPicker()
+        XCTAssertEqual(pickerPanels.count, 2, "The picker is up before Escape")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(pickerPanels.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(pickerPanels.count, 0)
+        XCTAssertFalse(element("screencast.picker.bar").exists)
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -525,6 +656,40 @@ final class SmokeUITests: XCTestCase {
             "-KBDisableHotKeys", "YES",
         ] + arguments
         app.launch()
+    }
+
+    /// Turns Screencast on (it ships off) and opens its picker, as Start Screencast does.
+    private func launchScreencastPicker() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES"])
+        XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 20))
+    }
+
+    /// The picker's panels, one per screen. macOS reports a borderless, non-activating panel as a
+    /// dialog, not a window, so `app.windows` never lists them.
+    private var pickerPanels: XCUIElementQuery {
+        app.dialogs.matching(identifier: "screencastPicker")
+    }
+
+    /// The picker panel on the screen with the bar: the screen the pointer was on, whichever that
+    /// is on CI. It's the key panel, and the one a click on a window there makes key again, so
+    /// clicks aimed through it never count the other picker panel as an interruption, as clicks
+    /// aimed through that one would.
+    private func pickerPanelWithTheBar() throws -> XCUIElement {
+        XCTAssertEqual(pickerPanels.count, 2)
+        let bar = element("screencast.picker.bar").frame
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        return try XCTUnwrap(panels.first { $0.frame.contains(CGPoint(x: bar.midX, y: bar.midY)) })
+    }
+
+    private func waitForLabel(of element: XCUIElement, _ label: String) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", label)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
+    }
+
+    /// A text's words, which macOS gives as its label or its value.
+    private func waitForText(of element: XCUIElement, _ text: String) -> Bool {
+        let predicate = NSPredicate(format: "label == %@ OR value == %@", text, text)
+        return XCTWaiter().wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5) == .completed
     }
 
     private func element(_ identifier: String) -> XCUIElement {

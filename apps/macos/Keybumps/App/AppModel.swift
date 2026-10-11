@@ -184,6 +184,7 @@ final class AppModel {
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil,
+        screencast injectedScreencast: ScreencastSeams = ScreencastSeams(),
         permissionPollInterval: Duration = .seconds(1)
     ) {
         self.preferences = preferences; self.inbox = inbox; self.presenceController = presenceController; self.detector = detector
@@ -368,8 +369,13 @@ final class AppModel {
                 preferences: preferences,
                 menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes)
             ),
-            // Start Screencast opens its page until there's a recorder to start; never under unit tests.
-            ScreencastModule(openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) }),
+            // Settings never opens under unit tests.
+            ScreencastModule(
+                preferences: preferences,
+                permissions: permissions,
+                openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) },
+                seams: injectedScreencast
+            ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
         // The key display names a Keybumps shortcut only while it's registered, and in the Command
@@ -996,6 +1002,11 @@ final class AppModel {
     func showDictationHistory() { guard isLicensed else { return }; commandPalette.show(.dictation) }
     func showKeyboardShortcutterHistory() { guard isLicensed else { return }; commandPalette.show(.keyboardShortcutter) }
     func showCommandPalette(_ tab: CommandPaletteTab) { guard isLicensed else { return }; commandPalette.show(tab) }
+    /// What Start Screencast does: the picker, or Screencast's page when something's missing.
+    func startScreencast() {
+        guard isLicensed else { return }
+        (capabilities.module(for: .screencast) as? ScreencastModule)?.start()
+    }
     /// Shows the sample tip in the notch without adding it to history.
     func showSampleTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
     func openPermissionSettings(_ permission: MacPermission) {

@@ -19,6 +19,8 @@ struct UITestLaunchConfiguration: Equatable {
     static let seedRecentKeybumpsArgument = "-KBUITestSeedRecentKeybumps"
     static let seedSnippetsArgument = "-KBUITestSeedSnippets"
     static let licenseStateArgument = "-KBLicenseState"
+    static let enableCapabilitiesArgument = "-KBUITestEnableCapabilities"
+    static let openScreencastPickerArgument = "-KBOpenScreencastPicker"
 
     /// The fixed license state a UI test starts in (`active` unless `-KBLicenseState` says otherwise).
     enum LicenseStateMode: String, Equatable {
@@ -50,6 +52,11 @@ struct UITestLaunchConfiguration: Equatable {
     /// Adds three made-up plain snippets, so a test can select several.
     private(set) var seedsSnippets = false
     private(set) var licenseState: LicenseStateMode = .active
+    /// Plugins turned on at launch, such as those that ship off (`screencast,keystrokes`). Names
+    /// that aren't a `Capability` are ignored.
+    private(set) var enabledCapabilities: Set<Capability> = []
+    /// Opens Screencast's picker once, at launch, as Start Screencast does (Screencast must be on).
+    private(set) var opensScreencastPicker = false
 
     var isUITesting: Bool { permissions != nil }
 
@@ -68,6 +75,12 @@ struct UITestLaunchConfiguration: Equatable {
         seedsSnippets = Self.flag(Self.seedSnippetsArgument, in: arguments)
         licenseState = Self.value(after: Self.licenseStateArgument, in: arguments)
             .flatMap(LicenseStateMode.init(rawValue:)) ?? .active
+        enabledCapabilities = Set(
+            (Self.value(after: Self.enableCapabilitiesArgument, in: arguments) ?? "")
+                .split(separator: ",")
+                .compactMap { Capability(rawValue: $0.trimmingCharacters(in: .whitespaces)) }
+        )
+        opensScreencastPicker = Self.flag(Self.openScreencastPickerArgument, in: arguments)
     }
 
     /// Accepts both `-Flag` and `-Flag YES`, since Foundation's argument domain pairs every `-key` with a value.
