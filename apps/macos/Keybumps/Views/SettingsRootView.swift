@@ -1245,7 +1245,7 @@ struct CapabilityToggleBinding {
     }
 }
 
-private struct CapabilityShortcutEditor: View {
+struct CapabilityShortcutEditor: View {
     @Environment(AppModel.self) private var model
     @State private var recorder = ShortcutRecorderState()
     let shortcut: CapabilityShortcut

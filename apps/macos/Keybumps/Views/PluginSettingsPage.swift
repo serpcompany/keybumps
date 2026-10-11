@@ -66,14 +66,20 @@ struct PluginPermissionsGroup: View {
 }
 
 /// A plugin's declared preferences, a `SettingsGroup` for each of their groups. A page drawn by hand,
-/// as Dictation's is, lists them here too, so they move to the template unchanged.
+/// as Dictation's is, lists them here too, so they move to the template unchanged. `excluding`
+/// leaves out the keys such a page draws elsewhere with `PluginPreferenceRow`, as Keystrokes' page
+/// puts its Show keys on screen switch at the top.
 struct PluginPreferenceGroups: View {
     let capability: Capability
+    var excluding: Set<String> = []
 
     var body: some View {
         ForEach(capability.descriptor.preferenceGroups, id: \.title) { group in
-            SettingsGroup(group.title) {
-                ForEach(group.preferences) { PluginPreferenceRow(capability: capability, preference: $0) }
+            let shown = group.preferences.filter { !excluding.contains($0.key) }
+            if !shown.isEmpty {
+                SettingsGroup(group.title) {
+                    ForEach(shown) { PluginPreferenceRow(capability: capability, preference: $0) }
+                }
             }
         }
     }
@@ -81,7 +87,7 @@ struct PluginPreferenceGroups: View {
 
 /// One declared preference: a switch or a menu. A change applies the capabilities again, so the
 /// plugin's module picks it up at once.
-private struct PluginPreferenceRow: View {
+struct PluginPreferenceRow: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
     let preference: PluginPreference

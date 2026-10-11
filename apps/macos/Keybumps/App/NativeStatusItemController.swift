@@ -255,6 +255,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         for (new, shown) in zip(items, statusMenuItems) {
             if shown.item.title != new.title { shown.item.title = new.title }
             shown.item.image = new.systemImage.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+            shown.item.state = new.isChecked ? .on : .off
             statusActions[new.id] = new.action
         }
     }
@@ -286,6 +287,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
                 item.target = self
                 item.representedObject = statusItem.id
                 item.image = statusItem.systemImage.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
+                item.state = statusItem.isChecked ? .on : .off
                 statusMenuItems.append((statusItem.id, item))
                 statusActions[statusItem.id] = statusItem.action
             }

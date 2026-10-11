@@ -363,7 +363,11 @@ final class AppModel {
                 speaker: injectedTranslationSpeaker ?? (UnitTestHost.isActive ? InertTranslationSpeaker() : TranslatedSpeechPlayer()),
                 openSystemSettings: { [permissions] page in permissions.openSystemSettings(page) }
             ),
-            KeystrokesModule(display: keyDisplay),
+            KeystrokesModule(
+                display: keyDisplay,
+                preferences: preferences,
+                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes)
+            ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
         // The key display names a Keybumps shortcut only while it's registered, and in the Command
