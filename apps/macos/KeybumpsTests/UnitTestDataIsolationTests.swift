@@ -43,6 +43,7 @@ struct UnitTestDataIsolationTests {
     private func expectInRunFolder(_ paths: ProductPaths, _ what: String, sourceLocation: SourceLocation = #_sourceLocation) {
         expectInRunFolder(paths.applicationSupport, "\(what) Application Support", sourceLocation: sourceLocation)
         expectInRunFolder(paths.recordings, "\(what) recordings", sourceLocation: sourceLocation)
+        expectInRunFolder(paths.captures, "\(what) Screencast captures", sourceLocation: sourceLocation)
         expectInRunFolder(paths.dictationModels, "\(what) Dictation models", sourceLocation: sourceLocation)
         expectInRunFolder(paths.translatedSpeechTemporary, "\(what) translated audio", sourceLocation: sourceLocation)
     }
@@ -54,7 +55,7 @@ struct UnitTestDataIsolationTests {
         try #require(ProductPaths.sandboxRoot == nil, "Only UI test mode sets the sandbox", sourceLocation: sourceLocation)
         let paths = ProductPaths.keybumps()
         let locations = [
-            paths.applicationSupport, paths.recordings, paths.dictationModels, paths.translatedSpeechTemporary,
+            paths.applicationSupport, paths.recordings, paths.captures, paths.dictationModels, paths.translatedSpeechTemporary,
             ScreenshotLocationResolver.system.homeDirectory,
         ]
         for url in locations {
@@ -117,6 +118,7 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(model.clipboard.mediaDirectoryURL, "AppModel's Clipboard History media")
         expectInRunFolder(model.dictation.recoveryURL, "AppModel's Dictation recovery file")
         expectInRunFolder(model.dictationModels.modelsRoot, "AppModel's Dictation models")
+        expectInRunFolder(model.preferences.screencast.capturesFolder, "AppModel's Screencast captures")
     }
 
     /// Checked by type only: nothing reads or writes symbolic hotkeys here.
@@ -143,6 +145,7 @@ struct UnitTestDataIsolationTests {
 
         #expect(paths.applicationSupport == support)
         #expect(paths.recordings == documents.appendingPathComponent("recordings", isDirectory: true))
+        #expect(paths.captures == documents.appendingPathComponent("captures", isDirectory: true))
         #expect(paths.dictationModels == support.appendingPathComponent("DictationModels", isDirectory: true))
         #expect(paths.translatedSpeechTemporary == FileManager.default.temporaryDirectory
             .appendingPathComponent("Keybumps", isDirectory: true)
@@ -156,7 +159,7 @@ struct UnitTestDataIsolationTests {
         let rootedRoot = URL(fileURLWithPath: "/private/tmp/KeybumpsRooted-\(UUID().uuidString)", isDirectory: true)
 
         let sandboxed = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: sandbox, unitTestRoot: run)
-        for url in [sandboxed.applicationSupport, sandboxed.recordings, sandboxed.dictationModels, sandboxed.translatedSpeechTemporary] {
+        for url in [sandboxed.applicationSupport, sandboxed.recordings, sandboxed.captures, sandboxed.dictationModels, sandboxed.translatedSpeechTemporary] {
             #expect(Self.isInside(url, sandbox))
         }
 
@@ -168,6 +171,7 @@ struct UnitTestDataIsolationTests {
         )
         #expect(Self.isInside(rooted.applicationSupport, rootedRoot))
         #expect(Self.isInside(rooted.recordings, rootedRoot))
+        #expect(Self.isInside(rooted.captures, rootedRoot))
         #expect(Self.isInside(rooted.dictationModels, rootedRoot))
         // That file manager keeps the real temporary folder, so it moves to the run's folder.
         #expect(Self.isInside(rooted.translatedSpeechTemporary, run))
@@ -196,10 +200,11 @@ struct UnitTestDataIsolationTests {
                 return subfolder.map { folder.appendingPathComponent($0, isDirectory: true) } ?? folder
             }
             let support = root("Application Support").appendingPathComponent("Keybumps", isDirectory: true)
+            let documents = root("Documents").appendingPathComponent("Keybumps", isDirectory: true)
             return ProductPaths(
                 applicationSupport: support,
-                recordings: root("Documents").appendingPathComponent("Keybumps", isDirectory: true)
-                    .appendingPathComponent("recordings", isDirectory: true),
+                recordings: documents.appendingPathComponent("recordings", isDirectory: true),
+                captures: documents.appendingPathComponent("captures", isDirectory: true),
                 dictationModels: support.appendingPathComponent("DictationModels", isDirectory: true),
                 translatedSpeechTemporary: root("tmp").appendingPathComponent("Keybumps", isDirectory: true)
                     .appendingPathComponent("TranslatedAudio", isDirectory: true)

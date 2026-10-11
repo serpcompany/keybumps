@@ -1755,7 +1755,10 @@ final class KeybumpsFeatureTests: XCTestCase {
     func testCapabilitiesDefaultEnabledAndPersist() {
         let defaults = InMemoryDefaults()
         let first = AppPreferences(defaults: defaults)
-        XCTAssertEqual(first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation, .keystrokes]), "Emoji Picker, Translation, and Keystrokes ship off")
+        XCTAssertEqual(
+            first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation, .keystrokes, .screencast]),
+            "Emoji Picker, Translation, Keystrokes, and Screencast ship off"
+        )
         first.setCapability(.dictation, enabled: false)
         XCTAssertFalse(AppPreferences(defaults: defaults).enabledCapabilities.contains(.dictation))
     }

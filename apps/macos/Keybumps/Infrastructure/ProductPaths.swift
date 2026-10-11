@@ -3,6 +3,8 @@ import Foundation
 struct ProductPaths: Equatable {
     let applicationSupport: URL
     let recordings: URL
+    /// Screencast's captures, each in its own `<timestamp>/` folder (ADR 0009).
+    let captures: URL
     let dictationModels: URL
     let translatedSpeechTemporary: URL
 
@@ -12,7 +14,7 @@ struct ProductPaths: Equatable {
     /// Keybumps's folders. In UI test mode they're in `sandboxRoot`. Under the unit-test host, the
     /// owner's real folders become folders in `UnitTestHost.dataDirectory`, this run's own
     /// temporary root, so a default Dictation History, Clipboard History, Shortcut Coach history,
-    /// model folder, or translated audio never reaches the installed app's data.
+    /// model folder, translated audio, or Screencast capture never reaches the installed app's data.
     static func keybumps(fileManager: FileManager = .default) -> ProductPaths {
         make(
             productDirectoryName: "Keybumps",
@@ -61,6 +63,9 @@ struct ProductPaths: Equatable {
             recordings: documentsRoot
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("recordings", isDirectory: true),
+            captures: documentsRoot
+                .appendingPathComponent(productDirectoryName, isDirectory: true)
+                .appendingPathComponent("captures", isDirectory: true),
             dictationModels: applicationSupportRoot
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("DictationModels", isDirectory: true),

@@ -27,10 +27,10 @@ struct TranslationGateTests {
         preferences.setCapability(.translation, enabled: true)
         #expect(!preferences.enabledCapabilities.contains(.translation))
         preferences.enabledCapabilities = Set(Capability.allCases)
-        #expect(preferences.enabledCapabilities == Set(Capability.allCases).subtracting([.translation]))
+        #expect(preferences.enabledCapabilities == Set(Capability.allCases).subtracting([.translation, .screencast]))
 
-        // Every other plugin is unaffected.
-        for capability in Capability.allCases where capability != .translation {
+        // Every plugin that runs on macOS 14 is unaffected; Screencast needs 15 too.
+        for capability in Capability.allCases where capability.descriptor.minimumMacOS == nil {
             #expect(preferences.compatibility.supports(capability))
             #expect(preferences.compatibility.requirement(for: capability) == nil)
         }

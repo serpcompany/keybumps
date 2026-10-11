@@ -32,7 +32,7 @@ enum MacPermission: String, CaseIterable, Identifiable, Hashable {
         case .inputMonitoring: "Lets Shortcut Coach recognize supported mouse and keyboard actions outside Keybumps, Snippets notice when you type a keyword, and Keystrokes show the shortcuts you press."
         case .microphone: "Lets Dictation record only while its recording indicator is visible."
         case .speechRecognition: "Lets Apple transcribe Dictation locally on this Mac."
-        case .screenRecording: "Lets Screenshot Tools take screenshots with its hotkeys."
+        case .screenRecording: "Lets Screenshot Tools take screenshots with its hotkeys, and Screencast record the screen and the Mac’s sound."
         }
     }
 
