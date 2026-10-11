@@ -219,7 +219,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertTrue(waitForValue(of: toggle, 0), "Keystrokes ships off")
         XCTAssertTrue(app.staticTexts["Input Monitoring"].exists)
-        for key in ["style", "position", "size", "duration", "keys", "namesActions", "showsClicks"] {
+        for key in ["showing", "style", "position", "size", "duration", "keys", "namesActions", "showsClicks"] {
             XCTAssertTrue(element("plugin.keystrokes.\(key)").exists, key)
         }
         XCTAssertTrue(element("capability.offBanner.keystrokes").exists, "Its page says it's off")
