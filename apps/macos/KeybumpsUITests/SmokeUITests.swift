@@ -297,13 +297,17 @@ final class SmokeUITests: XCTestCase {
         top.click()
         XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Top Display."))
 
-        // A click on a screen still chooses it: the lower one, a quarter of the way down, above
-        // the bar, which sits at the bottom of one of them.
-        XCTAssertEqual(pickerPanels.count, 2)
+        // A click on a screen still chooses it: the one with the bar, a quarter of the way down,
+        // above the bar at its bottom, once the bar has chosen the other one. A click aimed at the
+        // other screen's panel would count this key one as an interruption and never land.
+        let screen = try pickerPanelWithTheBar()
         let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
-        let lowerScreen = try XCTUnwrap(panels.max { $0.frame.minY < $1.frame.minY })
-        lowerScreen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
-        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Bottom Display."))
+        let other = try XCTUnwrap(panels.first { $0.frame != screen.frame })
+        let barOnTop = screen.frame.minY < other.frame.minY
+        (barOnTop ? bottom : top).click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up \(barOnTop ? "Bottom" : "Top") Display."))
+        screen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).click()
+        XCTAssertTrue(waitForText(of: hint, "Records all of Made-up \(barOnTop ? "Top" : "Bottom") Display."))
     }
 
     func testScreencastPickerRecordsTheWindowChosen() throws {
