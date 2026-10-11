@@ -88,10 +88,14 @@ final class ScreencastPickerModel {
         }
     }
 
-    /// The window under the pointer.
+    /// The window under the pointer, which a click would choose: none over the bar.
     private(set) var hoveredWindow: CGWindowID?
-    /// The window clicked, which Record records.
+    /// The window clicked, which Record records. Only a click on another window changes it: never
+    /// the pointer moving, and never the bar.
     private(set) var selectedWindow: CGWindowID?
+    /// The bar's frame in AppKit's global space, once it's laid out. The pointer over it is on the
+    /// bar, never on a window under it, and a press on it changes no choice (`press`).
+    @ObservationIgnored var barFrame: CGRect?
     /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
     private(set) var selectedScreen: CGDirectDisplayID?
     /// The choice the pointer is over in the bar's screen choices, which the screens show until it
@@ -207,6 +211,34 @@ final class ScreencastPickerModel {
         }
     }
 
+    // MARK: A press on a screen (AppKit's global space)
+
+    /// A press on `screen`'s part of the picker, the only way a press reaches a choice: in Area it
+    /// draws, moves, or resizes the area, in Window it chooses the window under it, and in Screen it
+    /// chooses that screen. Says whether it records: a double click in the area, on a window, or on
+    /// a screen. A press on the bar does none of it, in every mode: the bar's controls take their
+    /// own clicks, and one it passes on (its padding, the hint, the gaps) stops here. With no
+    /// gesture started, the drag and release that follow do nothing either.
+    func press(at point: CGPoint, on screen: ScreencastScreen, clickCount: Int) -> Bool {
+        if isOnBar(point) { return false }
+        switch target {
+        case .area:
+            if clickCount == 2, let area, area.rect.contains(point) { return true }
+            pressArea(at: point, on: screen)
+            return false
+        case .window:
+            return clickWindow(at: point) && clickCount == 2
+        case .screen:
+            clickScreen(screen)
+            return clickCount == 2
+        }
+    }
+
+    /// Whether `point` is on the bar, never on what's under it.
+    private func isOnBar(_ point: CGPoint) -> Bool {
+        barFrame?.contains(point) == true
+    }
+
     // MARK: Choosing a screen
 
     /// Screen mode: a click on a screen chooses it.
@@ -262,21 +294,29 @@ final class ScreencastPickerModel {
 
     // MARK: Picking a window (AppKit's global space)
 
+    /// Notes the window under the pointer, if any, which only previews it: the window picked stays.
+    /// Over the bar, it's on no window.
     func hoverWindow(at point: CGPoint) {
         guard target == .window else { return }
-        let id = ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)?.id
+        let id = isOnBar(point) ? nil : window(at: point)?.id
         guard id != hoveredWindow else { return }
         hoveredWindow = id
         changed()
     }
 
-    /// Picks the window under `point`; a click on no window keeps the one picked.
-    func clickWindow(at point: CGPoint) {
-        guard target == .window,
-              let window = ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows) else { return }
+    /// Picks the window under `point`, and says whether there was one. A click on no window keeps
+    /// the one picked; `press` keeps the bar's clicks from reaching here.
+    @discardableResult
+    func clickWindow(at point: CGPoint) -> Bool {
+        guard target == .window, let window = window(at: point) else { return false }
         hoveredWindow = window.id
         selectedWindow = window.id
         changed()
+        return true
+    }
+
+    private func window(at point: CGPoint) -> ScreencastContent.Window? {
+        ScreencastWindowPicking.window(at: layout.topLeftPoint(fromAppKit: point), in: windows)
     }
 
     /// A pickable window's frame in AppKit's global space.

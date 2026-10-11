@@ -306,6 +306,70 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForText(of: hint, "Records all of Made-up Bottom Display."))
     }
 
+    func testScreencastPickerRecordsTheWindowChosen() throws {
+        // The made-up windows on the top screen, in from its top-left corner: the first, 400 × 220
+        // at (60, 40), in front of the second, 360 × 180 at (200, 120).
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        let confirm = element("screencast.picker.confirm")
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+        XCTAssertEqual(pickerPanels.count, 2)
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        let topScreen = try XCTUnwrap(panels.min { $0.frame.minY < $1.frame.minY })
+        let top = topScreen.frame
+        let corner = topScreen.coordinate(withNormalizedOffset: .zero)
+
+        // A click chooses the first window, where the second isn't.
+        corner.withOffset(CGVector(dx: 100, dy: 100)).click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+        // The pointer over the second window, then beside both, then on the bar (over the second
+        // window when the bar is on the top screen), and a click on the bar's words, change nothing.
+        corner.withOffset(CGVector(dx: 520, dy: 200)).hover()
+        corner.withOffset(CGVector(dx: top.width - 100, dy: 60)).hover()
+        hint.hover()
+        hint.click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+        XCTAssertTrue(confirm.isEnabled)
+        // Nor does a double click on the bar's words: it records nothing.
+        hint.doubleClick()
+        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
+        XCTAssertFalse(countdown.waitForExistence(timeout: 2))
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+
+        // Record counts down on the window chosen: centered on the first window, not the second.
+        confirm.click()
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        XCTAssertEqual(countdown.frame.midX, top.minX + 260, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, top.minY + 150, accuracy: 2)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+    }
+
+    func testScreencastPickerRecordsAWindowDoubleClicked() throws {
+        // The made-up windows as above: the first chosen, then a double click on the second.
+        launchScreencastPicker()
+        let hint = element("screencast.picker.hint")
+        element("screencast.picker.target.window").click()
+        XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
+        XCTAssertEqual(pickerPanels.count, 2)
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        let topScreen = try XCTUnwrap(panels.min { $0.frame.minY < $1.frame.minY })
+        let top = topScreen.frame
+        let corner = topScreen.coordinate(withNormalizedOffset: .zero)
+        corner.withOffset(CGVector(dx: 100, dy: 100)).click()
+        XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
+
+        // It counts down on the second window: centered on it, at (200, 120), 360 × 180.
+        corner.withOffset(CGVector(dx: 520, dy: 200)).doubleClick()
+        let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
+        XCTAssertTrue(countdown.waitForExistence(timeout: 5))
+        XCTAssertEqual(countdown.frame.midX, top.minX + 380, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, top.minY + 210, accuracy: 2)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+    }
+
     func testEscapeClosesTheScreencastPicker() {
         launchScreencastPicker()
         XCTAssertEqual(pickerPanels.count, 2, "The picker is up before Escape")
