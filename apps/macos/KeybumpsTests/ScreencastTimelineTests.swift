@@ -145,14 +145,14 @@ struct ScreencastGeometryTests {
         #expect(ScreencastCaptureGeometry.usableWindow(frame: off, displayFrame: display.frame, scale: 1) == nil, "none of it on the display")
     }
 
-    /// Screenshots and the picker's size badge read the region's own pixels; only a recording's
-    /// stream is fitted to the writer, in `ScreencastRecorder`.
+    /// The picker's size badge reads the region's own pixels; only a recording's stream is fitted
+    /// to the writer, in `ScreencastRecorder`.
     @Test("A display larger than the writer takes keeps its full size; fitted for a recording, it's scaled down whole, its shape kept")
     func largerThanTheWriterTakes() {
         // A 57-inch ultrawide at a HiDPI scale: 10240 × 2880 pixels.
         let wide = ScreencastCaptureGeometry.display(size: CGSize(width: 5120, height: 1440), scale: 2)
         #expect(wide.sourceRect == CGRect(x: 0, y: 0, width: 5120, height: 1440))
-        #expect(wide.pixelWidth == 10240 && wide.pixelHeight == 2880, "a screenshot keeps every pixel")
+        #expect(wide.pixelWidth == 10240 && wide.pixelHeight == 2880, "the region keeps every pixel")
         let fittedWide = wide.fitting(longestSide: ScreencastMovieWriter.maximumPixels)
         #expect(fittedWide.sourceRect == wide.sourceRect, "the whole display, not a crop")
         #expect(fittedWide.pixelWidth == ScreencastMovieWriter.maximumPixels && fittedWide.pixelHeight == 2304)

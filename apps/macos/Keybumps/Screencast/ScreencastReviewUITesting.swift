@@ -3,9 +3,9 @@ import AppKit
 import AVFoundation
 import SwiftUI
 
-// UI test mode's `-KBUITestScreencastReview video|screenshot`: Screencast's review panel on a
-// capture made up in the sandbox's captures folder, as the flow controller would save one, since
-// UI tests can't record the screen. Debug builds only, like the rest of UI test mode.
+// UI test mode's `-KBUITestScreencastReview video`: Screencast's review panel on a recording made
+// up in the sandbox's captures folder, as the flow controller would save one, since UI tests can't
+// record the screen. Debug builds only, like the rest of UI test mode.
 
 extension AppModel {
     /// Opens the review panel on a made-up capture, through the same flow a saved capture takes
@@ -26,8 +26,8 @@ extension AppModel {
     }
 }
 
-/// A made-up capture in its own `<timestamp>` folder: a one-second silent video of a changing
-/// gray, or a PNG, each with its `meta.json`.
+/// A made-up recording in its own `<timestamp>` folder: a one-second silent video of a changing
+/// gray, with its `meta.json`.
 @MainActor
 enum ScreencastReviewUITestCapture {
     static let videoSize = (width: 64, height: 36)
@@ -38,13 +38,6 @@ enum ScreencastReviewUITestCapture {
         guard (try? fileManager.createDirectory(at: capturesFolder, withIntermediateDirectories: true)) != nil,
               let folder = try? ScreencastCaptureFolder.create(in: capturesFolder, startedAt: now, fileManager: fileManager) else { return nil }
         switch kind {
-        case .screenshot:
-            let file = folder.appendingPathComponent(ScreencastCaptureFolder.screenshotName(index: 0))
-            guard let sample = UITestSandbox.writeSampleImage(in: folder),
-                  (try? fileManager.moveItem(at: sample, to: file)) != nil else { return nil }
-            let screenshot = ScreencastScreenshot(folder: folder, images: [.init(file: file, pixelWidth: 320, pixelHeight: 200)])
-            try? ScreencastScreenshotMetadata(screenshot: screenshot, target: .display(9_001), startedAt: now).write(to: screenshot.metadataURL)
-            return .screenshot(screenshot)
         case .video:
             let file = folder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: 0))
             guard await writeVideo(to: file) else { return nil }

@@ -3,33 +3,18 @@ import AppKit
 /// What Screencast's review panel (#450) takes from the rest of the app. Each is read for each
 /// capture, so a plugin turned on or off since the last one counts.
 struct ScreencastReviewServices {
-    /// Clipboard History: Copy marks its write so Clipboard History skips it, and "Also add to
-    /// Screenshots (⌘3)" adds a screenshot there while it's on.
+    /// Clipboard History: Copy marks its write so Clipboard History skips it.
     var clipboard: ClipboardHistoryService
-    var isClipboardHistoryOn: @MainActor () -> Bool
-    /// Screenshot Tools' editor, while Screenshot Tools is on.
-    var editor: @MainActor () -> (any ScreencastScreenshotEditing)?
-    /// Where the panel remembers its switch.
-    var settings: ScreencastReviewSettings
     /// Where "Copied to Clipboard" shows; nil shows nothing, as under the unit-test host.
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
 
-    /// The app's: its Clipboard History, Screenshot Tools' editor, and preferences.
+    /// The app's: its Clipboard History.
     @MainActor
-    static func app(
-        clipboard: ClipboardHistoryService,
-        screenshotTools: ScreenshotToolsModule,
-        preferences: AppPreferences
-    ) -> ScreencastReviewServices {
+    static func app(clipboard: ClipboardHistoryService) -> ScreencastReviewServices {
         ScreencastReviewServices(
             clipboard: clipboard,
-            isClipboardHistoryOn: { [preferences] in preferences.enabledCapabilities.contains(.clipboardHistory) },
-            editor: { [weak screenshotTools, preferences] in
-                preferences.enabledCapabilities.contains(.screenshotTools) ? screenshotTools?.editor : nil
-            },
-            settings: preferences.screencastReviewSettings,
             notices: UnitTestHost.isActive ? nil : PaletteHUD.shared
         )
     }
@@ -117,10 +102,7 @@ final class ScreencastReviewFlow {
         let clipboard = services.clipboard
         let panel = ScreencastReviewPanel(
             repositories: services.repositories(),
-            keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() },
-            editor: services.editor,
-            screenshots: { [weak clipboard] in services.isClipboardHistoryOn() ? clipboard : nil },
-            settings: services.settings
+            keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() }
         )
         panel.onFinish = { [weak self] outcome in
             // As the palette confirms its copies.

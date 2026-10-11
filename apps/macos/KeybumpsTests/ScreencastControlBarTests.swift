@@ -118,7 +118,6 @@ struct ScreencastFlow {
             screens: { PickerScreens.both },
             microphoneAvailable: { true },
             sleep: { _ in },
-            now: { startDate },
             ownProcessID: ScreencastScreens.ownProcess
         )
         self.captureSystem = captureSystem
