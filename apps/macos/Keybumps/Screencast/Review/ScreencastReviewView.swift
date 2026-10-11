@@ -6,9 +6,7 @@ enum ScreencastReviewID {
     static let panel = "screencast.review.panel"
     static let player = "screencast.review.player"
     static let image = "screencast.review.image"
-    static let duration = "screencast.review.duration"
     static let display = "screencast.review.display"
-    static let trim = "screencast.review.trim"
     static let edit = "screencast.review.edit"
     static let addToScreenshots = "screencast.review.addToScreenshots"
     static let note = "screencast.review.note"
@@ -25,20 +23,9 @@ enum ScreencastReviewID {
     static let confirmDiscard = "screencast.review.confirmDiscard"
     static let keep = "screencast.review.keep"
     static let failure = "screencast.review.failure"
-    /// A recording's review window (#475), its player, and its sidebar.
+    /// A recording's review window (#475), and its player.
     static let window = "screencast.review.window"
     static let playerArea = "screencast.review.playerArea"
-    static let sidebar = "screencast.review.sidebar"
-    /// What the window says once the recording is saved or copied, its Show in Finder, and Done.
-    static let confirmation = "screencast.review.confirmation"
-    static let showInFinder = "screencast.review.showInFinder"
-    static let done = "screencast.review.done"
-}
-
-/// The review's text fields, which take the keyboard first.
-enum ScreencastReviewField: Hashable {
-    case note
-    case repository
 }
 
 /// The review panel, for a screenshot: the screenshot with Edit, then the note, type, and
@@ -52,13 +39,14 @@ struct ScreencastReviewView: View {
 
     @Bindable var model: ScreencastReviewModel
 
-    @FocusState private var focus: ScreencastReviewField?
+    private enum Field: Hashable { case note, repository }
+    @FocusState private var focus: Field?
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
         VStack(alignment: .leading, spacing: 12) {
             screenshotPreview
-            ScreencastReviewFields(model: model, focus: $focus)
+            fields
             destination
             if let failure = model.failure {
                 Text(failure.message)
@@ -126,19 +114,94 @@ struct ScreencastReviewView: View {
         .accessibilityIdentifier(ScreencastReviewID.edit)
     }
 
+    // MARK: Note, type, repository
+
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("Note", text: $model.note, prompt: Text("What happened?"))
+                .textFieldStyle(.roundedBorder)
+                .focused($focus, equals: .note)
+                .accessibilityLabel("Note")
+                .accessibilityIdentifier(ScreencastReviewID.note)
+
+            Picker("Type", selection: $model.type) {
+                ForEach(ScreencastReviewType.allCases, id: \.self) { type in
+                    Text(type.title).tag(type)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel("Type")
+            .accessibilityIdentifier(ScreencastReviewID.type)
+
+            VStack(alignment: .leading, spacing: 4) {
+                TextField("Repository", text: $model.repositoryText, prompt: Text("owner/name"))
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focus, equals: .repository)
+                    .accessibilityLabel("Repository")
+                    .accessibilityIdentifier(ScreencastReviewID.repository)
+                if let hint = model.repositoryHint {
+                    Text(hint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .accessibilityIdentifier(ScreencastReviewID.repositoryHint)
+                }
+            }
+        }
+        .disabled(model.isWorking || model.isFinished)
+    }
+
     // MARK: Destination and actions
 
     private var destination: some View {
         HStack(spacing: 8) {
-            ScreencastReviewDestination(model: model)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Destination")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(model.destinationTitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Destination")
+            .accessibilityValue(model.destinationTitle)
+            .accessibilityIdentifier(ScreencastReviewID.destination)
             Spacer()
-            ScreencastReviewSendButtons(model: model)
+            Button("Send and Delete") {}
+                .buttonStyle(PalettePillButtonStyle())
+                .disabled(!model.canSend)
+                .help("No destination is connected yet")
+                .accessibilityIdentifier(ScreencastReviewID.sendAndDelete)
+            Button("Save and Send") {}
+                .buttonStyle(PalettePillButtonStyle())
+                .disabled(!model.canSend)
+                .help("No destination is connected yet")
+                .accessibilityIdentifier(ScreencastReviewID.saveAndSend)
         }
     }
 
     @ViewBuilder private var actions: some View {
         if model.isConfirmingDiscard {
-            ScreencastReviewDiscardQuestion(model: model)
+            HStack(spacing: 8) {
+                Text("Discard this capture?")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Button("Keep", action: model.keep)
+                    .buttonStyle(PalettePillButtonStyle())
+                    .help("Keep the capture")
+                    .accessibilityIdentifier(ScreencastReviewID.keep)
+                Button("Discard", role: .destructive) {
+                    Task { model.confirmDiscard() }
+                }
+                .buttonStyle(ScreencastReviewFilledButtonStyle(tint: .red))
+                .help("Delete the capture and its folder")
+                .accessibilityIdentifier(ScreencastReviewID.confirmDiscard)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Discard this capture?")
         } else {
             HStack(spacing: 8) {
                 Button("Discard", role: .destructive, action: model.askToDiscard)
@@ -169,9 +232,8 @@ struct ScreencastReviewView: View {
     }
 }
 
-// MARK: Shared with a recording's window (`ScreencastRecordingReviewView`)
-
-/// Which display's video or image shows, for a capture of every display.
+/// Which display's video or image shows, for a capture of every display: in the panel and in a
+/// recording's window.
 struct ScreencastReviewDisplayPicker: View {
     @Bindable var model: ScreencastReviewModel
 
@@ -192,130 +254,8 @@ struct ScreencastReviewDisplayPicker: View {
     }
 }
 
-/// The note, type, and repository.
-struct ScreencastReviewFields: View {
-    @Bindable var model: ScreencastReviewModel
-    let focus: FocusState<ScreencastReviewField?>.Binding
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TextField("Note", text: $model.note, prompt: Text("What happened?"))
-                .textFieldStyle(.roundedBorder)
-                .focused(focus, equals: .note)
-                .accessibilityLabel("Note")
-                .accessibilityIdentifier(ScreencastReviewID.note)
-
-            Picker("Type", selection: $model.type) {
-                ForEach(ScreencastReviewType.allCases, id: \.self) { type in
-                    Text(type.title).tag(type)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityLabel("Type")
-            .accessibilityIdentifier(ScreencastReviewID.type)
-
-            VStack(alignment: .leading, spacing: 4) {
-                TextField("Repository", text: $model.repositoryText, prompt: Text("owner/name"))
-                    .textFieldStyle(.roundedBorder)
-                    .focused(focus, equals: .repository)
-                    .accessibilityLabel("Repository")
-                    .accessibilityIdentifier(ScreencastReviewID.repository)
-                if let hint = model.repositoryHint {
-                    Text(hint)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .accessibilityIdentifier(ScreencastReviewID.repositoryHint)
-                }
-            }
-        }
-        .disabled(model.isWorking || model.isFinished)
-    }
-}
-
-/// Where Send goes: none until destinations come (#451).
-struct ScreencastReviewDestination: View {
-    let model: ScreencastReviewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("Destination")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            Text(model.destinationTitle)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Destination")
-        .accessibilityValue(model.destinationTitle)
-        .accessibilityIdentifier(ScreencastReviewID.destination)
-    }
-}
-
-/// Send and Delete, and Save and Send, off until a destination is connected.
-struct ScreencastReviewSendButtons: View {
-    let model: ScreencastReviewModel
-
-    var body: some View {
-        Button("Send and Delete") {}
-            .buttonStyle(PalettePillButtonStyle())
-            .disabled(!model.canSend)
-            .help("No destination is connected yet")
-            .accessibilityIdentifier(ScreencastReviewID.sendAndDelete)
-        Button("Save and Send") {}
-            .buttonStyle(PalettePillButtonStyle())
-            .disabled(!model.canSend)
-            .help("No destination is connected yet")
-            .accessibilityIdentifier(ScreencastReviewID.saveAndSend)
-    }
-}
-
-/// "Discard this capture?", with Keep and Discard, in place of the actions.
-struct ScreencastReviewDiscardQuestion: View {
-    let model: ScreencastReviewModel
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("Discard this capture?")
-                .font(.system(size: 13, weight: .semibold))
-            Spacer()
-            Button("Keep", action: model.keep)
-                .buttonStyle(PalettePillButtonStyle())
-                .help("Keep the capture")
-                .accessibilityIdentifier(ScreencastReviewID.keep)
-            Button("Discard", role: .destructive) {
-                Task { model.confirmDiscard() }
-            }
-            .buttonStyle(ScreencastReviewFilledButtonStyle(tint: .red))
-            .help("Delete the capture and its folder")
-            .accessibilityIdentifier(ScreencastReviewID.confirmDiscard)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Discard this capture?")
-    }
-}
-
-/// The length in a recording's player's corner, Snapzy's duration badge.
-struct ScreencastReviewBadge: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Color.black.opacity(0.7)))
-            .padding(6)
-            .allowsHitTesting(false)
-    }
-}
-
 /// Save, and Discard answering the question: a filled capsule, in the pill buttons' size.
-struct ScreencastReviewFilledButtonStyle: ButtonStyle {
+private struct ScreencastReviewFilledButtonStyle: ButtonStyle {
     let tint: Color
 
     func makeBody(configuration: Configuration) -> some View {

@@ -12,22 +12,15 @@ protocol ScreencastScreenshotEditing: AnyObject {
     func editScreenshot(at image: URL, copiesToClipboard: Bool, onFinish: @escaping (URL?) -> Void) -> Bool
 }
 
-/// Shows the player's own trim controls (`AVPlayerView.beginTrimming`). Tests pass a fake.
-@MainActor
-protocol ScreencastTrimPresenting: AnyObject {
-    /// `completion` gets the part kept, in seconds, after Trim, or nil after Cancel. False when the
-    /// player can't trim now.
-    func beginTrimming(_ completion: @escaping (ClosedRange<TimeInterval>?) -> Void) -> Bool
-}
-
-/// The review panel's state and actions, for `ScreencastReviewView` and for tests: the note, type,
-/// and repository the person gives a capture, a recording's trim, and Save, Copy, and Discard.
+/// The review's state and actions, for `ScreencastReviewView`, `ScreencastRecordingReviewView`, and
+/// tests: the note, type, and repository the person gives a screenshot, and Save, Copy, and
+/// Discard. A recording's window has no fields, so its review keeps the type and the guessed
+/// repository as they start.
 ///
 /// Every way out keeps the capture except Discard. Save, Return, and Copy write the review into
-/// `meta.json` (and apply a trim) and stay open if that fails, saying why. Escape and closing the
-/// panel save too, as far as they can, so nothing is lost: a repository that isn't `owner/name`
-/// is left out, and a recording whose trim fails is kept untrimmed. Quitting saves at once
-/// (`saveNow`), without a trim. Saving a screenshot also adds it to the Screenshots tab (⌘3) while
+/// `meta.json` and stay open if that fails, saying why. Escape and closing the panel save too, as
+/// far as they can, so nothing is lost: a repository that isn't `owner/name` is left out. Quitting
+/// saves at once (`saveNow`). Saving a screenshot also adds it to the Screenshots tab (⌘3) while
 /// "Also add to Screenshots" is on; Copy never does, since it keeps the capture out of Clipboard
 /// History.
 ///
@@ -40,8 +33,7 @@ protocol ScreencastTrimPresenting: AnyObject {
 @MainActor
 @Observable
 final class ScreencastReviewModel {
-    /// The capture, updated once a trim replaces its files.
-    private(set) var input: ScreencastReviewInput
+    let input: ScreencastReviewInput
     /// The app, and a browser's site, in front when the capture started; `.none` until it's read.
     private(set) var context: ScreencastCaptureContext
     /// One line, as the person types it; Save keeps it on one line.
@@ -56,10 +48,6 @@ final class ScreencastReviewModel {
     var selectedDisplay = 0 {
         didSet { refreshImage() }
     }
-    /// What Save keeps of a recording; nil keeps all of it.
-    private(set) var trimRange: ScreencastTrimRange?
-    /// The player's trim controls are up: Return and Escape are theirs, and the actions wait.
-    private(set) var isTrimming = false
     /// A screenshot's marked-up copies, by display, which Copy and Send use in place of the originals.
     private(set) var editedImages: [Int: URL] = [:]
     /// The display whose screenshot the Screenshot Editor is open on.
@@ -77,8 +65,6 @@ final class ScreencastReviewModel {
     private(set) var isWorking = false
     private(set) var failure: ScreencastReviewFailure?
     private(set) var isFinished = false
-    /// How the review ended, once it has: what a recording's window says after Save or Copy.
-    private(set) var outcome: ScreencastReviewOutcome?
 
     /// Called once, when the panel is done with the capture.
     @ObservationIgnored var onFinish: ((ScreencastReviewOutcome) -> Void)?
@@ -91,12 +77,9 @@ final class ScreencastReviewModel {
     @ObservationIgnored private let pasteboard: NSPasteboard
     @ObservationIgnored private let keepOutOfClipboardHistory: () -> Void
     @ObservationIgnored private let editor: (any ScreencastScreenshotEditing)?
-    @ObservationIgnored private let trimmer: any ScreencastTrimming
     @ObservationIgnored private let screenshots: (any ScreencastScreenshotsLibrary)?
     @ObservationIgnored private let settings: ScreencastReviewSettings
     @ObservationIgnored private let now: () -> Date
-    /// A trim already applied whose durations `meta.json` doesn't have yet.
-    @ObservationIgnored private var unrecordedTrim: ScreencastCapture?
     /// `close()` calls waiting for a Save or Copy to finish.
     @ObservationIgnored private var waitingForWork: [CheckedContinuation<Void, Never>] = []
     /// `waitUntilFinished()` calls.
@@ -130,7 +113,6 @@ final class ScreencastReviewModel {
         pasteboard: NSPasteboard = .keybumps,
         keepOutOfClipboardHistory: @escaping () -> Void,
         editor: (any ScreencastScreenshotEditing)? = nil,
-        trimmer: any ScreencastTrimming = ScreencastFileTrimmer(),
         screenshots: (any ScreencastScreenshotsLibrary)? = nil,
         settings: ScreencastReviewSettings,
         now: @escaping () -> Date = Date.init
@@ -142,7 +124,6 @@ final class ScreencastReviewModel {
         self.pasteboard = pasteboard
         self.keepOutOfClipboardHistory = keepOutOfClipboardHistory
         self.editor = editor
-        self.trimmer = trimmer
         self.screenshots = screenshots
         self.settings = settings
         addsToScreenshots = settings.addsToScreenshots
@@ -187,8 +168,8 @@ final class ScreencastReviewModel {
 
     // MARK: What the panel shows
 
-    /// The actions act one at a time, and wait for the editor and the trim controls.
-    var acceptsActions: Bool { !isWorking && !isFinished && !isEditing && !isTrimming }
+    /// The actions act one at a time, and wait for the editor.
+    var acceptsActions: Bool { !isWorking && !isFinished && !isEditing }
 
     /// The Screenshot Editor is open on one of the screenshot's images.
     var isEditing: Bool { editingDisplay != nil }
@@ -212,18 +193,6 @@ final class ScreencastReviewModel {
     /// How many displays the capture has a video or an image of.
     var displayCount: Int { input.isVideo ? videos.count : screenshotFiles.count }
 
-    /// The recording's length, after the trim, as `mm:ss`.
-    var durationText: String? {
-        guard case .video(let capture) = input else { return nil }
-        return Self.minutesAndSeconds(trimRange?.duration ?? capture.duration)
-    }
-
-    /// `mm:ss`, minutes going on past 59, as the control bar's timer shows a recording.
-    static func minutesAndSeconds(_ duration: TimeInterval) -> String {
-        let seconds = duration.isFinite ? Int(min(max(duration, 0), 1_000_000_000).rounded()) : 0
-        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-    }
-
     var canEdit: Bool { editor != nil && !input.isVideo }
 
     /// The switch is for screenshots, and only while Clipboard History, which keeps ⌘3's items, is on.
@@ -245,24 +214,7 @@ final class ScreencastReviewModel {
         }
     }
 
-    // MARK: Trim and Edit
-
-    /// Shows the player's trim controls; what they keep, Save cuts the files to.
-    func trim(with presenter: any ScreencastTrimPresenting) {
-        guard acceptsActions, let video = currentVideo else { return }
-        failure = nil
-        isTrimming = true
-        let started = presenter.beginTrimming { [weak self] kept in
-            guard let self else { return }
-            isTrimming = false
-            if let kept { setTrim(ScreencastTrimRange(start: kept.lowerBound, end: kept.upperBound, within: video.duration)) }
-        }
-        if !started { isTrimming = false }
-    }
-
-    func setTrim(_ range: ScreencastTrimRange?) {
-        trimRange = range
-    }
+    // MARK: Edit
 
     /// Opens the Screenshot Editor on the image shown, or its marked-up copy after an earlier edit.
     /// Its Save doesn't copy: the panel's Copy does that, so a capture later discarded leaves nothing
@@ -338,7 +290,7 @@ final class ScreencastReviewModel {
     }
 
     /// Keybumps is quitting or relaunching, or the capture won't be shown: writes the review into
-    /// `meta.json` at once. A trim not yet applied is skipped, which keeps the originals.
+    /// `meta.json` at once.
     func saveNow() {
         guard !isFinished else { return }
         isConfirmingDiscard = false
@@ -375,7 +327,7 @@ final class ScreencastReviewModel {
         finish(.discarded)
     }
 
-    /// Writes the review (and a trim), copies if asked, and finishes. `strictly` stops at the first
+    /// Writes the review, copies if asked, and finishes. `strictly` stops at the first
     /// thing that fails, so the person can fix it; otherwise it keeps going, saving what it can.
     private func conclude(copying: Bool, strictly: Bool) async {
         guard !isFinished, !isWorking, !strictly || acceptsActions else { return }
@@ -394,26 +346,6 @@ final class ScreencastReviewModel {
         let text = repositoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let repository = text.isEmpty ? nil : ScreencastRepository(text)
         if !text.isEmpty, repository == nil, strictly { return fail(.invalidRepository) }
-
-        if case .video(let capture) = input, let range = trimRange {
-            do {
-                let trimmed = try await ScreencastReviewFiles.trim(capture, to: range, trimmer: trimmer, fileManager: fileManager)
-                input = .video(trimmed)
-                trimRange = nil
-                unrecordedTrim = trimmed
-            } catch {
-                if strictly, !isFinished { return fail(.trimFailed) }
-                log(.trimFailed)
-            }
-            // Saved at once meanwhile (a quit): a cut now in place still gets its durations recorded.
-            if isFinished {
-                if unrecordedTrim != nil, let savedReview {
-                    try? ScreencastReview.write(savedReview, trimmed: unrecordedTrim, to: input.metadataURL, fileManager: fileManager)
-                    unrecordedTrim = nil
-                }
-                return
-            }
-        }
 
         guard record(repository: repository, strictly: strictly) else { return }
         if copying {
@@ -441,8 +373,7 @@ final class ScreencastReviewModel {
             reviewedAt: now()
         )
         do {
-            try ScreencastReview.write(review, trimmed: unrecordedTrim, to: input.metadataURL, fileManager: fileManager)
-            unrecordedTrim = nil
+            try ScreencastReview.write(review, to: input.metadataURL, fileManager: fileManager)
         } catch {
             if strictly {
                 fail(.metadataFailed)
@@ -501,7 +432,6 @@ final class ScreencastReviewModel {
     private func finish(_ outcome: ScreencastReviewOutcome) {
         guard !isFinished else { return }
         isFinished = true
-        self.outcome = outcome
         onFinish?(outcome)
         let waiting = waitingForFinish
         waitingForFinish = []

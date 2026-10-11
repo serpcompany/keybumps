@@ -72,8 +72,6 @@ enum ScreencastReviewType: String, CaseIterable, Codable, Sendable {
 enum ScreencastReviewFailure: String, Error, Equatable {
     /// The repository isn't `owner/name`.
     case invalidRepository
-    /// A trimmed copy couldn't be written or swapped in. The recording is as it was.
-    case trimFailed
     /// `meta.json` couldn't be written.
     case metadataFailed
     /// Nothing went on the clipboard.
@@ -87,7 +85,6 @@ enum ScreencastReviewFailure: String, Error, Equatable {
     var message: String {
         switch self {
         case .invalidRepository: "Type the repository as owner/name, like serpcompany/keybumps."
-        case .trimFailed: "Couldn’t trim the recording. It’s kept as it was."
         case .metadataFailed: "Couldn’t save the note. The capture is still in its folder."
         case .copyFailed: "Couldn’t copy the capture."
         case .deleteFailed: "Couldn’t delete the capture."
@@ -115,11 +112,9 @@ struct ScreencastReview: Codable, Equatable, Sendable {
     var reviewedAt: Date
 
     /// Puts `review` in the `meta.json` at `url`, keeping everything the recorder or the screenshot
-    /// wrote there, and, after a trim, `trimmed`'s new durations. From then on the file holds user
-    /// content, so only the person can read it (0600).
+    /// wrote there. From then on the file holds user content, so only the person can read it (0600).
     static func write(
         _ review: ScreencastReview,
-        trimmed: ScreencastCapture? = nil,
         to url: URL,
         fileManager: FileManager = .default
     ) throws {
@@ -130,7 +125,6 @@ struct ScreencastReview: Codable, Equatable, Sendable {
             metadata = ((try? JSONSerialization.jsonObject(with: existing)) as? [String: Any]) ?? [:]
         }
         metadata[key] = try JSONSerialization.jsonObject(with: encoder.encode(review))
-        if let trimmed { record(trimmed, in: &metadata) }
         let data = try JSONSerialization.data(
             withJSONObject: metadata,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -145,18 +139,6 @@ struct ScreencastReview: Codable, Equatable, Sendable {
               let review = metadata[key],
               let reviewData = try? JSONSerialization.data(withJSONObject: review) else { return nil }
         return try? decoder.decode(ScreencastReview.self, from: reviewData)
-    }
-
-    /// A trimmed recording's durations, in the recorder's `ScreencastMetadata` fields.
-    private static func record(_ capture: ScreencastCapture, in metadata: inout [String: Any]) {
-        metadata["duration"] = capture.duration
-        guard var videos = metadata["videos"] as? [[String: Any]] else { return }
-        for index in videos.indices {
-            guard let name = videos[index]["file"] as? String,
-                  let video = capture.videos.first(where: { $0.file.lastPathComponent == name }) else { continue }
-            videos[index]["duration"] = video.duration
-        }
-        metadata["videos"] = videos
     }
 
     private static let encoder: JSONEncoder = {

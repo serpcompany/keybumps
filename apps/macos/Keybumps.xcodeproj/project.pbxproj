@@ -187,7 +187,6 @@
 		9198579854CC8F0979A2D87D /* SystemServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF5180228D1F28AB0362C61 /* SystemServices.swift */; };
 		91F074E383122DC99C8BF05C /* LICENSE.shotnix in Resources */ = {isa = PBXBuildFile; fileRef = A660F126D44D431EBC8A7A20 /* LICENSE.shotnix */; };
 		924524C9291A150C1ED22EAA /* ApplicationUsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 655FDDBD20D3B108B6CC84CD /* ApplicationUsageStore.swift */; };
-		931415EA6F489CF20CE398E9 /* ScreencastTrimEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA07B6A0613B974E2121824A /* ScreencastTrimEncoder.swift */; };
 		9331398905CF4D5BFC769F4C /* PalettePasteRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA9C2CC21396F16E615BBC8D /* PalettePasteRoute.swift */; };
 		94283DE96BCBA34B4D8BA539 /* ScreencastAudioMixdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A93B963A93E2394EA3F990 /* ScreencastAudioMixdown.swift */; };
 		952BFAC50F37CBE088DC6D6F /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13C5DD5F845097BB1BA796D /* UpdateController.swift */; };
@@ -652,7 +651,6 @@
 		F63DBB997EBF672EB4A1A306 /* ScreenshotToolsModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotToolsModule.swift; sourceTree = "<group>"; };
 		F7EB00B5645500C8BA99C799 /* CapabilityCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityCommandTests.swift; sourceTree = "<group>"; };
 		F948CF2A71F167EF581221DA /* NativeStatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStatusItemController.swift; sourceTree = "<group>"; };
-		FA07B6A0613B974E2121824A /* ScreencastTrimEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastTrimEncoder.swift; sourceTree = "<group>"; };
 		FC5FCE1909CF4C7647F9E3A1 /* ApplicationsMoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationsMoveTests.swift; sourceTree = "<group>"; };
 		FE17DFA0D287D62711BA73C2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		FE7069286CA59628B99261C8 /* UITestComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestComposition.swift; sourceTree = "<group>"; };
@@ -988,7 +986,6 @@
 				E2B7362DF808CB5412CE9F31 /* ScreencastReviewPanel.swift */,
 				35404A16455B31764E692333 /* ScreencastReviewScreenshots.swift */,
 				10C79E76D532FA30D117A956 /* ScreencastReviewView.swift */,
-				FA07B6A0613B974E2121824A /* ScreencastTrimEncoder.swift */,
 			);
 			path = Review;
 			sourceTree = "<group>";
@@ -1665,7 +1662,6 @@
 				BA98D25146AC30BC0475C6BA /* ScreencastSmokeRunner.swift in Sources */,
 				E00B62A5496A6382852F0A8B /* ScreencastSmokeTest.swift in Sources */,
 				D839CC4F738D60CFDDF1CEC3 /* ScreencastTimeline.swift in Sources */,
-				931415EA6F489CF20CE398E9 /* ScreencastTrimEncoder.swift in Sources */,
 				BB33464154D611CDC86E8691 /* ScreencastWriterCore.swift in Sources */,
 				E997BE984EF0D51BCBF3B621 /* ScreenshotAnnotation.swift in Sources */,
 				AC51777E49844030C638FFDB /* ScreenshotAnnotationRenderer.swift in Sources */,

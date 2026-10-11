@@ -31,7 +31,7 @@ enum ScreencastCaptureFolder {
 /// A capture's `meta.json`. The recorder writes structure only: what was recorded, how long, which
 /// tracks, and how many displays, never a window, app, title, or address. The review panel (#450)
 /// adds `review`, the note, type, repository, and capture-time context, which are user content and
-/// stay on this Mac; it trims a recording in place and updates the durations here.
+/// stay on this Mac.
 struct ScreencastMetadata: Codable, Equatable {
     static let fileName = "meta.json"
     static let currentVersion = 1

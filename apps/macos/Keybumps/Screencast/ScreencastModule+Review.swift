@@ -11,7 +11,8 @@ struct ScreencastReviewServices {
     var editor: @MainActor () -> (any ScreencastScreenshotEditing)?
     /// Where the panel remembers its switch.
     var settings: ScreencastReviewSettings
-    /// Where "Copied to Clipboard" shows; nil shows nothing, as under the unit-test host.
+    /// The notch, where "Recording saved" and the copies' notices show; nil shows nothing, as under
+    /// the unit-test host.
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
@@ -50,7 +51,6 @@ final class ScreencastReviewFlow {
     /// Called when the panel is done with a capture, after its own notice.
     var onFinish: ((ScreencastReviewOutcome) -> Void)?
     private var isOn = true
-    private var didRecoverTrims = false
     private var terminationObserver: NSObjectProtocol?
 
     init(services: ScreencastReviewServices?, contextReader: ScreencastCaptureContextReader) {
@@ -67,13 +67,11 @@ final class ScreencastReviewFlow {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
     }
 
-    /// Start Screencast, from idle: closes a recording's window already saved, so it isn't left on
-    /// screen through the next recording, and reads the app in front, and a browser's site, before
-    /// the picker covers the screen.
+    /// Start Screencast, from idle: reads the app in front, and a browser's site, before the picker
+    /// covers the screen.
     func captureStarting() {
         isOn = true
         panel?.startAccepting()
-        panel?.captureStarting()
         let reader = contextReader
         contextRead = Task { await reader.read() }
     }
@@ -103,16 +101,6 @@ final class ScreencastReviewFlow {
         panel?.saveNow()
     }
 
-    /// Once a launch, when Screencast is on: puts back what a trim interrupted by a quit or a crash
-    /// left aside (`ScreencastReviewFiles.recoverInterruptedTrims`), off the main actor.
-    func recoverInterruptedTrims(in capturesFolder: URL) {
-        guard !didRecoverTrims else { return }
-        didRecoverTrims = true
-        Task.detached(priority: .utility) {
-            await ScreencastReviewFiles.recoverInterruptedTrims(in: capturesFolder, fileManager: .default)
-        }
-    }
-
     private func panelForReview() -> ScreencastReviewPanel? {
         if let panel { return panel }
         guard let services else { return nil }
@@ -125,12 +113,22 @@ final class ScreencastReviewFlow {
             settings: services.settings
         )
         panel.onFinish = { [weak self] outcome in
-            // As the palette confirms its copies.
-            if case .copied = outcome { services.notices?.showNotice("Copied to Clipboard", isWarning: false) }
+            if let notice = Self.notice(for: outcome) { services.notices?.showNotice(notice, isWarning: false) }
             self?.onFinish?(outcome)
         }
         if !isOn { panel.shutDown() }
         self.panel = panel
         return panel
+    }
+
+    /// What the notch says as a review ends. A recording's window closes on Save, Return, Escape, or
+    /// Copy, so the notice is what says the recording was kept; a screenshot's Copy is confirmed as
+    /// the palette confirms its copies. Discard says nothing.
+    static func notice(for outcome: ScreencastReviewOutcome) -> String? {
+        switch outcome {
+        case .saved(let input): input.isVideo ? "Recording saved" : nil
+        case .copied(let input): input.isVideo ? "Recording copied" : "Copied to Clipboard"
+        case .discarded: nil
+        }
     }
 }

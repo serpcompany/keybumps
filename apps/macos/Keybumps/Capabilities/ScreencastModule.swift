@@ -145,7 +145,6 @@ final class ScreencastModule: CapabilityModule {
 
     func apply(_ context: CapabilityContext) {
         isOn = context.isEnabled(capability)
-        if isOn { review.recoverInterruptedTrims(in: preferences.screencast.capturesFolder) }
         context.configureShortcut(
             owner: CapabilityShortcut.screencast.ownerID,
             for: capability,
