@@ -2,9 +2,11 @@ import Observation
 import SwiftUI
 
 /// The picker's bar, on the screen the pointer was on: Video or Screenshot; Area, Window, or
-/// Screen (and Every Screen, with more than one); for a video, the microphone, the Mac's sound,
-/// shortcuts, and clicks; then Record (or Capture) and close. What to do next shows above it. One slim bar, after Screendrop's
-/// `RecordingPickerBar` (CC0-1.0, see LICENSE.screendrop): an input that's off is dimmed, not hidden.
+/// Screen; for a video, the microphone, the Mac's sound, shortcuts, and clicks; then Record (or
+/// Capture) and close. What to do next shows above it, and in Screen mode, a choice for each screen
+/// by name and All Screens. One
+/// slim bar, after Screendrop's `RecordingPickerBar` (CC0-1.0, see LICENSE.screendrop): an input
+/// that's off is dimmed, not hidden.
 struct ScreencastPickerBar: View {
     @Bindable var model: ScreencastPickerModel
     let confirm: () -> Void
@@ -20,86 +22,180 @@ struct ScreencastPickerBar: View {
                 .background(.black.opacity(0.65), in: Capsule())
                 .accessibilityIdentifier("screencast.picker.hint")
 
-            HStack(spacing: 4) {
-                ForEach(ScreencastCaptureKind.allCases, id: \.self) { kind in
-                    option(kind.title, systemImage: kind.systemImage, isSelected: model.kind == kind, identifier: "screencast.picker.kind.\(kind.rawValue)") {
-                        model.kind = kind
-                    }
+            if model.target == .screen {
+                // Each screen by name, or by number (its name in the tooltip) when the names
+                // don't fit.
+                ViewThatFits(in: .horizontal) {
+                    screenChoices(byName: true)
+                    screenChoices(byName: false)
                 }
-                divider
-                ForEach(ScreencastPickerTarget.allCases, id: \.self) { target in
-                    option(
-                        target.title,
-                        systemImage: target.systemImage(screens: model.layout.screens.count),
-                        isSelected: model.target == target,
-                        identifier: "screencast.picker.target.\(target.rawValue)"
-                    ) {
-                        model.target = target
-                    }
-                }
-                if model.target == .screen, model.offersEveryScreen {
-                    option("Every Screen", systemImage: "rectangle.on.rectangle", isSelected: model.selectedScreen == nil, identifier: "screencast.picker.everyScreen") {
-                        model.chooseEveryScreen()
-                    }
-                }
-                if model.kind == .video {
-                    divider
-                    toggle(
-                        "Microphone", on: "mic.fill", off: "mic.slash", isOn: $model.recordsMicrophone, identifier: "screencast.picker.microphone",
-                        help: model.microphoneAvailable
-                            ? "Record your voice"
-                            : "To record your voice, give Keybumps Microphone access in Settings › Screencast"
-                    )
-                    .disabled(!model.microphoneAvailable)
-                    toggle("Mac’s sound", on: "speaker.wave.2.fill", off: "speaker.slash", isOn: $model.recordsSystemAudio, identifier: "screencast.picker.systemAudio", help: "Record what your apps play")
-                    toggle("Shortcuts", on: "command", off: "command", isOn: $model.showsShortcuts, identifier: "screencast.picker.shortcuts", help: "Show the shortcuts you press")
-                    toggle("Clicks", on: "cursorarrow.click.2", off: "cursorarrow", isOn: $model.highlightsClicks, identifier: "screencast.picker.clicks", help: "Highlight where you click")
-                }
-                divider
-                Button(action: confirm) {
-                    Label(model.confirmTitle, systemImage: model.kind == .video ? "record.circle" : "camera")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(Capsule().fill(model.canConfirm ? Color.red : Color.gray.opacity(0.5)))
-                }
-                .buttonStyle(.plain)
-                .disabled(!model.canConfirm)
-                .help("\(model.confirmTitle) (Return)")
-                .accessibilityIdentifier("screencast.picker.confirm")
-                Button(action: cancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(ScreencastBarButtonStyle(isSelected: false))
-                .help("Cancel (Esc)")
-                .accessibilityLabel("Cancel")
-                .accessibilityIdentifier("screencast.picker.cancel")
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .paletteFloatingSurface()
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("screencast.picker.bar")
+
+            // On a screen too narrow for the whole bar, the options drop their titles.
+            ViewThatFits(in: .horizontal) {
+                controls(showsTitles: true)
+                controls(showsTitles: false)
+            }
         }
         .padding(12)
+    }
+
+    /// Screen mode's choices: every connected screen, in the order recordings number them, and All
+    /// Screens with more than one. The pointer over one shows that choice on the screens.
+    private func screenChoices(byName: Bool) -> some View {
+        let layout = model.layout
+        return HStack(spacing: 4) {
+            ForEach(layout.orderedScreens, id: \.id) { screen in
+                let number = layout.number(of: screen)
+                let title = layout.title(of: screen)
+                screenChoice(
+                    byName ? title : "\(number)",
+                    help: title,
+                    isSelected: model.selectedScreen == screen.id,
+                    identifier: "screencast.picker.screen.\(number)",
+                    preview: .screen(screen.id)
+                ) {
+                    model.chooseScreen(screen.id)
+                }
+            }
+            if model.offersEveryScreen {
+                Divider().frame(height: 18).padding(.horizontal, 2)
+                screenChoice(
+                    "All Screens",
+                    help: "Every screen, one file each",
+                    isSelected: model.selectedScreen == nil,
+                    identifier: "screencast.picker.everyScreen",
+                    preview: .all
+                ) {
+                    model.chooseEveryScreen()
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .paletteFloatingSurface()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("screencast.picker.screens")
+    }
+
+    private func screenChoice(
+        _ label: String,
+        help: String,
+        isSelected: Bool,
+        identifier: String,
+        preview: ScreencastScreenPreview,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .frame(minWidth: 28, minHeight: 26)
+        }
+        .buttonStyle(ScreencastBarButtonStyle(isSelected: isSelected))
+        .help(help)
+        .onHover { inside in
+            if inside {
+                model.previewScreens(preview)
+            } else if model.previewedScreens == preview {
+                model.previewScreens(nil)
+            }
+        }
+        .accessibilityLabel(help == label ? label : "\(label), \(help)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func controls(showsTitles: Bool) -> some View {
+        HStack(spacing: 4) {
+            ForEach(ScreencastCaptureKind.allCases, id: \.self) { kind in
+                option(kind.title, systemImage: kind.systemImage, showsTitle: showsTitles, isSelected: model.kind == kind, identifier: "screencast.picker.kind.\(kind.rawValue)") {
+                    model.kind = kind
+                }
+            }
+            divider
+            ForEach(ScreencastPickerTarget.allCases, id: \.self) { target in
+                option(
+                    target.title,
+                    systemImage: target.systemImage(screens: model.layout.screens.count),
+                    showsTitle: showsTitles,
+                    isSelected: model.target == target,
+                    identifier: "screencast.picker.target.\(target.rawValue)"
+                ) {
+                    model.target = target
+                }
+            }
+            if model.kind == .video {
+                divider
+                toggle(
+                    "Microphone", on: "mic.fill", off: "mic.slash", isOn: $model.recordsMicrophone, identifier: "screencast.picker.microphone",
+                    help: model.microphoneAvailable
+                        ? "Record your voice"
+                        : "To record your voice, give Keybumps Microphone access in Settings › Screencast"
+                )
+                .disabled(!model.microphoneAvailable)
+                toggle("Mac’s sound", on: "speaker.wave.2.fill", off: "speaker.slash", isOn: $model.recordsSystemAudio, identifier: "screencast.picker.systemAudio", help: "Record what your apps play")
+                toggle("Shortcuts", on: "command", off: "command", isOn: $model.showsShortcuts, identifier: "screencast.picker.shortcuts", help: "Show the shortcuts you press")
+                toggle("Clicks", on: "cursorarrow.click.2", off: "cursorarrow", isOn: $model.highlightsClicks, identifier: "screencast.picker.clicks", help: "Highlight where you click")
+            }
+            divider
+            Button(action: confirm) {
+                Label(model.confirmTitle, systemImage: model.kind == .video ? "record.circle" : "camera")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(Capsule().fill(model.canConfirm ? Color.red : Color.gray.opacity(0.5)))
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canConfirm)
+            .help("\(model.confirmTitle) (Return)")
+            .accessibilityIdentifier("screencast.picker.confirm")
+            Button(action: cancel) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(ScreencastBarButtonStyle(isSelected: false))
+            .help("Cancel (Esc)")
+            .accessibilityLabel("Cancel")
+            .accessibilityIdentifier("screencast.picker.cancel")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .paletteFloatingSurface()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("screencast.picker.bar")
     }
 
     private var divider: some View {
         Divider().frame(height: 20).padding(.horizontal, 4)
     }
 
-    private func option(_ title: String, systemImage: String, isSelected: Bool, identifier: String, action: @escaping () -> Void) -> some View {
+    private func option(
+        _ title: String,
+        systemImage: String,
+        showsTitle: Bool,
+        isSelected: Bool,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 12, weight: .medium))
-                .padding(.horizontal, 8)
-                .frame(height: 28)
+            Group {
+                if showsTitle {
+                    Label(title, systemImage: systemImage)
+                } else {
+                    Label(title, systemImage: systemImage).labelStyle(.iconOnly)
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 8)
+            .frame(height: 28)
         }
         .buttonStyle(ScreencastBarButtonStyle(isSelected: isSelected))
+        .help(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier(identifier)
     }

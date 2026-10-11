@@ -22,23 +22,24 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
     private var highlightPanel: NSPanel?
     private var escapeMonitors: [Any] = []
     private var escapeHandler: (() -> Void)?
+    /// The notch notices, shared with every other surface.
+    private let notices: PaletteHUD
+    /// "Getting ready…", as `notices` numbered it, while it may still be showing.
+    private var gettingReadyNotice: Int?
+
+    init(notices: PaletteHUD = .shared) {
+        self.notices = notices
+    }
 
     // MARK: The picker
 
     func showPicker(_ model: ScreencastPickerModel, confirm: @escaping () -> Void, cancel: @escaping () -> Void) {
         closePicker()
         let layout = model.layout
-        let barScreen = layout.screen(containing: NSEvent.mouseLocation) ?? layout.screens.first
         var keyPanel: ScreencastKeyPanel?
         for screen in layout.screens {
-            let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
-            panel.acceptsMouseMovedEvents = true
-            let view = ScreencastPickerView(model: model, screen: screen, confirm: confirm)
-            panel.contentView = view
-            if screen.id == barScreen?.id {
-                view.showBar(ScreencastPickerBar(model: model, confirm: confirm, cancel: cancel), bottomInset: Self.dockInset(of: screen))
-                keyPanel = panel
-            }
+            let panel = Self.pickerPanel(on: screen, model: model, confirm: confirm, cancel: cancel)
+            if screen.id == model.pointerScreen?.id { keyPanel = panel }
             panel.hideDuringUnitTests()
             panel.orderFrontRegardless()
             pickerPanels.append(panel)
@@ -53,6 +54,28 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
             if model?.canConfirm == true { confirm() }
             return nil
         }
+    }
+
+    /// One screen's part of the picker, not yet shown, with the bar on the screen the pointer was on
+    /// at Start Screencast, which Screen mode starts with too.
+    static func pickerPanel(
+        on screen: ScreencastScreen,
+        model: ScreencastPickerModel,
+        confirm: @escaping () -> Void,
+        cancel: @escaping () -> Void
+    ) -> ScreencastKeyPanel {
+        let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
+        panel.acceptsMouseMovedEvents = true
+        // Every click, said outright: left unsaid, the window server sends a click on a clear part
+        // of a window that isn't opaque to the window under it, so a click on the window being
+        // chosen, which the picker shows undimmed, would reach that window and never the picker.
+        panel.ignoresMouseEvents = false
+        let view = ScreencastPickerView(model: model, screen: screen, confirm: confirm)
+        panel.contentView = view
+        if screen.id == model.pointerScreen?.id {
+            view.showBar(ScreencastPickerBar(model: model, confirm: confirm, cancel: cancel), bottomInset: Self.dockInset(of: screen))
+        }
+        return panel
     }
 
     func closePicker() {
@@ -163,15 +186,19 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
     }
 
     func showMessage(_ message: String) {
-        PaletteHUD.shared.show(message, systemImage: "exclamationmark.triangle.fill", tint: .orange, duration: 4)
+        notices.show(message, systemImage: "exclamationmark.triangle.fill", tint: .orange, duration: 4)
     }
 
+    /// Up until `hideGettingReady()`, when the screen has been read or reading it failed, however
+    /// long that takes.
     func showGettingReady() {
-        PaletteHUD.shared.show("Getting ready…", systemImage: "record.circle", tint: .secondary, duration: 10)
+        gettingReadyNotice = notices.show("Getting ready…", systemImage: "record.circle", tint: .secondary, duration: .infinity)
     }
 
+    /// Hides "Getting ready…" only: a notice that replaced it, such as a Shortcut Coach tip, stays.
     func hideGettingReady() {
-        PaletteHUD.shared.dismiss()
+        if let gettingReadyNotice { notices.dismiss(notice: gettingReadyNotice) }
+        gettingReadyNotice = nil
     }
 }
 
@@ -208,12 +235,15 @@ final class ScreencastFirstClickHostingView<Content: View>: NSHostingView<Conten
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// One screen's part of the picker: dimmed, with the area being drawn, the window under the
-/// pointer, or the screen marked when it's chosen, and the bar on the screen the pointer was on.
+/// One screen's part of the picker: dimmed, with the area being drawn, the window chosen and the
+/// one under the pointer, or the screen marked when it's chosen, and the bar on the screen the
+/// pointer was on.
 @available(macOS 15, *)
 @MainActor
 final class ScreencastPickerView: NSView {
     private static let dimming = NSColor.black.withAlphaComponent(0.32)
+    /// What `undim` leaves: as good as clear to the eye, but not to the window server.
+    private static let undimmed = NSColor.black.withAlphaComponent(0.01)
 
     private let model: ScreencastPickerModel
     private let screen: ScreencastScreen
@@ -241,8 +271,23 @@ final class ScreencastPickerView: NSView {
         NSLayoutConstraint.activate([
             host.centerXAnchor.constraint(equalTo: centerXAnchor),
             host.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -bottomInset),
+            // Kept inside a narrow screen, where the bar's options drop their titles to fit.
+            host.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
+            host.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
         ])
         bar = host
+    }
+
+    override func layout() {
+        super.layout()
+        noteBarFrame()
+    }
+
+    /// Tells the model where the bar is, so the pointer over it, and a press on it, never reach the
+    /// area, window, or screen under it. Its frame changes with what it shows.
+    private func noteBarFrame() {
+        guard let bar else { return }
+        model.barFrame = bar.frame.offsetBy(dx: screen.frame.minX, dy: screen.frame.minY)
     }
 
     // MARK: Mouse, in AppKit's global space
@@ -256,23 +301,13 @@ final class ScreencastPickerView: NSView {
         rect.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
     }
 
+    /// A press reaches the model's choices only through `press`, which ignores one on the bar in
+    /// every mode. The drag and mouse-up that follow come here even over the bar, so an area drawn
+    /// from elsewhere can end on it.
     override func mouseDown(with event: NSEvent) {
         window?.makeKey()
-        let point = globalPoint(event)
-        switch model.target {
-        case .area:
-            if event.clickCount == 2, let area = model.area, area.rect.contains(point) {
-                confirm()
-                return
-            }
-            model.pressArea(at: point, on: screen)
-        case .window:
-            model.clickWindow(at: point)
-            if event.clickCount == 2, model.canConfirm { confirm() }
-        case .screen:
-            model.clickScreen(screen)
-            if event.clickCount == 2 { confirm() }
-        }
+        noteBarFrame()
+        if model.press(at: globalPoint(event), on: screen, clickCount: event.clickCount) { confirm() }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -285,6 +320,7 @@ final class ScreencastPickerView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        noteBarFrame()
         let point = globalPoint(event)
         model.hoverWindow(at: point)
         updateCursor(at: point)
@@ -343,19 +379,25 @@ final class ScreencastPickerView: NSView {
         case .window:
             context.setFillColor(Self.dimming.cgColor)
             context.fill(bounds)
-            let shown = [model.selectedWindow, model.hoveredWindow].compactMap { $0 }
-            for id in Set(shown) {
-                guard let frame = model.appKitFrame(of: id) else { continue }
-                let rect = local(frame).intersection(bounds)
-                guard !rect.isNull, !rect.isEmpty else { continue }
-                clear(rect, in: context)
-                let isSelected = id == model.selectedWindow
-                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(isSelected ? 1 : 0.6).cgColor)
-                context.setLineWidth(isSelected ? 4 : 2)
+            // The window under the pointer, which a click would choose: lit while none is chosen,
+            // and once one is, only outlined, dashed, so the chosen one stays the one lit.
+            if let id = model.hoveredWindow, id != model.selectedWindow, let rect = shownRect(of: id) {
+                if model.selectedWindow == nil { undim(rect, in: context) }
+                context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor)
+                context.setLineWidth(2)
+                context.setLineDash(phase: 0, lengths: [8, 5])
+                context.stroke(rect.insetBy(dx: 1, dy: 1))
+                context.setLineDash(phase: 0, lengths: [])
+            }
+            // The window chosen, last, so nothing drawn over it hides it.
+            if let id = model.selectedWindow, let rect = shownRect(of: id) {
+                undim(rect, in: context)
+                context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+                context.setLineWidth(4)
                 context.stroke(rect.insetBy(dx: 2, dy: 2))
             }
         case .screen:
-            guard model.isChosen(screen) else {
+            guard model.isLit(screen) else {
                 context.setFillColor(Self.dimming.cgColor)
                 context.fill(bounds)
                 return
@@ -368,14 +410,26 @@ final class ScreencastPickerView: NSView {
         }
     }
 
-    private func clear(_ rect: CGRect, in context: CGContext) {
-        context.setBlendMode(.clear)
+    /// The part of a pickable window on this screen, in this view's space, or nil if none is.
+    private func shownRect(of id: CGWindowID) -> CGRect? {
+        guard let frame = model.appKitFrame(of: id) else { return nil }
+        let rect = local(frame).intersection(bounds)
+        return rect.isNull || rect.isEmpty ? nil : rect
+    }
+
+    /// Shows what's under `rect` undimmed, but never fully clear: the window server sends a click on
+    /// a fully clear part of a window that isn't opaque to the window under it. The panel also says
+    /// it takes every click (`pickerPanel`); this keeps the click here without relying on that alone,
+    /// and a hundredth of black can't be seen.
+    private func undim(_ rect: CGRect, in context: CGContext) {
+        context.setBlendMode(.copy)
+        context.setFillColor(Self.undimmed.cgColor)
         context.fill(rect)
         context.setBlendMode(.normal)
     }
 
     private func drawArea(_ rect: CGRect, editor: ScreencastAreaEditor, in context: CGContext) {
-        clear(rect, in: context)
+        undim(rect, in: context)
         context.setStrokeColor(NSColor.white.cgColor)
         context.setLineWidth(1.5)
         if editor.isDrawing { context.setLineDash(phase: 0, lengths: [6, 4]) }

@@ -227,9 +227,13 @@ enum PickerScreens {
     static func model(
         layout: ScreencastScreenLayout = both,
         microphoneAvailable: Bool = true,
-        rememberedArea: ScreencastPickedArea? = nil
+        rememberedArea: ScreencastPickedArea? = nil,
+        pointerScreen: CGDirectDisplayID? = nil
     ) -> ScreencastPickerModel {
-        ScreencastPickerModel(layout: layout, preferences: preferences(), microphoneAvailable: microphoneAvailable, rememberedArea: rememberedArea)
+        ScreencastPickerModel(
+            layout: layout, preferences: preferences(), microphoneAvailable: microphoneAvailable,
+            rememberedArea: rememberedArea, pointerScreen: pointerScreen
+        )
     }
 }
 

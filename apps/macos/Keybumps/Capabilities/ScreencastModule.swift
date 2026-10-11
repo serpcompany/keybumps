@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 extension CapabilityDescriptor {
@@ -179,6 +180,17 @@ final class ScreencastModule: CapabilityModule {
         if action == .startScreencast { start() }
     }
 
+    /// Start Screencast isn't listed while a capture is under way, when it would do nothing.
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool {
+        action != .startScreencast || !isCapturing
+    }
+
+    /// Whether a capture is under way: the picker open, counting down, recording, or saving.
+    var isCapturing: Bool {
+        guard #available(macOS 15, *), let controller else { return false }
+        return controller.phase != .idle
+    }
+
     /// Start Screencast: the picker, while Screencast is on, on macOS 15, with Screen Recording.
     /// Otherwise Screencast's page, which says what's missing; the picker never makes macOS ask.
     func start() {
@@ -205,8 +217,12 @@ final class ScreencastModule: CapabilityModule {
         let preferences = preferences
         let recorder = ScreencastRecorder(
             system: seams.captureSystem,
-            // The recorder runs on the main actor, and asks only as a recording starts.
-            microphoneGranted: { MainActor.assumeIsolated { permissions.microphoneGranted } }
+            // The recorder asks on the main actor, as a recording starts. Asked anywhere else, it
+            // reads macOS's answer directly rather than trapping.
+            microphoneGranted: {
+                guard Thread.isMainThread else { return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
+                return MainActor.assumeIsolated { permissions.microphoneGranted }
+            }
         )
         let controller = Self.wiredController(
             recorder: recorder,

@@ -276,12 +276,14 @@ final class WiringHarness {
     let log = LifecycleLog()
     let model: AppModel
     private let coordinator: GlobalShortcutCoordinator
+    private let hotKeys: LoggingHotKeyBackend
     private let pasteboard: NSPasteboard
     private var lastShortcuts: [String: String] = [:]
 
     /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder. The
     /// Mac runs macOS 15 unless `compatibility` says otherwise, so the snapshot doesn't depend on the
-    /// Mac recording it; `defaults` holds what was saved before launch.
+    /// Mac recording it; `defaults` holds what was saved before launch. It's licensed unless
+    /// `licensing` says otherwise.
     init(
         enabled: Set<Capability>,
         missing: MacPermission?,
@@ -289,7 +291,9 @@ final class WiringHarness {
         didCompleteOnboarding: Bool = true,
         quickSearch: QuickSearchModel? = nil,
         compatibility: PluginCompatibility = PluginCompatibility(macOSMajorVersion: 15),
-        defaults: UserDefaults = InMemoryDefaults()
+        defaults: UserDefaults = InMemoryDefaults(),
+        screenshotCapturer: ScreenshotCapturer? = nil,
+        licensing: (any LicenseControlling)? = nil
     ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
@@ -303,7 +307,9 @@ final class WiringHarness {
 
         let log = log
         let grants = FakePermissionState(missing: missing)
-        coordinator = GlobalShortcutCoordinator(backend: LoggingHotKeyBackend(log: log))
+        let hotKeys = LoggingHotKeyBackend(log: log)
+        self.hotKeys = hotKeys
+        coordinator = GlobalShortcutCoordinator(backend: hotKeys)
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsCapabilityWiring-\(id)"))
         self.pasteboard = pasteboard
         let clipboard = SpyClipboardHistoryService(
@@ -342,6 +348,7 @@ final class WiringHarness {
                 openSettings: { _ in }
             ),
             updater: DisabledUpdateController(reason: "Capability wiring snapshot"),
+            licensing: licensing,
             dictationModelManager: DictationModelManager(
                 modelsRoot: directory.appendingPathComponent("models", isDirectory: true),
                 downloader: WhisperKitModelDownloader()
@@ -355,7 +362,8 @@ final class WiringHarness {
             windows: SpyWindowManagementService(log: log),
             screenshotTools: screenshotTools,
             dictationIndicator: SilentDictationIndicator(),
-            dictationFileManager: SandboxedFileManager(root: directory)
+            dictationFileManager: SandboxedFileManager(root: directory),
+            screenshotCapturer: screenshotCapturer
         )
         _ = log.drain()
         lastShortcuts = shortcuts()
@@ -370,6 +378,11 @@ final class WiringHarness {
     /// Named pasteboards live in the pasteboard server until released, so drop each one with its harness.
     deinit {
         pasteboard.releaseGlobally()
+    }
+
+    /// Presses a registered global shortcut, as Carbon would.
+    func pressHotKey(_ binding: ShortcutBinding) {
+        hotKeys.press(binding)
     }
 
     func shortcuts() -> [String: String] {
@@ -441,12 +454,24 @@ private final class LoggingHotKeyBackend: GlobalHotKeyRegistering {
     let registrationScope = GlobalHotKeyRegistrationScope.systemWide
     private let log: LifecycleLog
     private var escapeIdentifiers: Set<UInt32> = []
+    private var handler: ((UInt32) -> Void)?
+    private var registered: [UInt32: ShortcutBinding] = [:]
 
     init(log: LifecycleLog) { self.log = log }
 
-    func installHandler(_ handler: @escaping (UInt32) -> Void) {}
+    func installHandler(_ handler: @escaping (UInt32) -> Void) {
+        self.handler = handler
+    }
+
+    /// Runs what's registered for `binding`, as Carbon does when its keys are pressed.
+    func press(_ binding: ShortcutBinding) {
+        for (identifier, registeredBinding) in registered where registeredBinding.usesSameKeys(as: binding) {
+            handler?(identifier)
+        }
+    }
 
     func register(binding: ShortcutBinding, identifier: UInt32) -> Bool {
+        registered[identifier] = binding
         if binding == DefaultShortcut.cancelDictation {
             escapeIdentifiers.insert(identifier)
             log.append("dictationEscape.register")
@@ -455,6 +480,7 @@ private final class LoggingHotKeyBackend: GlobalHotKeyRegistering {
     }
 
     func unregister(identifier: UInt32) {
+        registered[identifier] = nil
         if escapeIdentifiers.remove(identifier) != nil {
             log.append("dictationEscape.unregister")
         }

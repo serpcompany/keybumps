@@ -131,6 +131,9 @@ protocol CapabilityModule: AnyObject {
     var descriptor: CapabilityDescriptor { get }
     /// Registers or releases owned shortcuts and starts or stops owned resources for the enabled set.
     func apply(_ context: CapabilityContext)
+    /// Runs when the person turns the module on, just before it's applied: not at launch, and not
+    /// when a license comes back.
+    func willTurnOn(_ context: CapabilityContext)
     /// Runs immediately before the module is turned off: closes its surfaces and cancels its work.
     func deactivate(_ context: CapabilityContext)
     /// Resumes resources that were waiting on a permission after `PermissionCoordinator` re-reads macOS.
@@ -147,15 +150,20 @@ protocol CapabilityModule: AnyObject {
     /// What one of its actions is called now, when that follows its state (Show or Hide
     /// Keystrokes); nil keeps the declared title.
     func title(for action: PluginAction, _ context: CapabilityContext) -> String?
+    /// Whether Quick Search lists one of its actions now: false while picking it would do nothing,
+    /// such as Start Screencast during a capture.
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool
 }
 
 extension CapabilityModule {
     var capability: Capability { descriptor.capability }
+    func willTurnOn(_ context: CapabilityContext) {}
     func permissionsDidRefresh(_ context: CapabilityContext) {}
     func attentionCount(_ context: CapabilityContext) -> Int { 0 }
     var paletteContent: (any CapabilityPaletteContent)? { nil }
     func perform(_ action: PluginAction, _ context: CapabilityContext) {}
     func title(for action: PluginAction, _ context: CapabilityContext) -> String? { nil }
+    func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool { true }
 }
 
 /// What the shell hands a module each time it applies, deactivates, or refreshes it.
@@ -255,6 +263,10 @@ final class CapabilityRegistry {
         for module in modules { module.apply(context) }
     }
 
+    func willTurnOn(_ capability: Capability, context: CapabilityContext) {
+        module(for: capability)?.willTurnOn(context)
+    }
+
     func deactivate(_ capability: Capability, context: CapabilityContext) {
         module(for: capability)?.deactivate(context)
     }
@@ -271,10 +283,11 @@ final class CapabilityRegistry {
 
     /// Quick Search's action commands: the declared actions of every module that's on, in registry
     /// order, each named as its module names it now and with its shortcut's keycaps while one is
-    /// assigned. A plugin that's off, or that this Mac's macOS can't run, lists none.
+    /// assigned. A plugin that's off, or that this Mac's macOS can't run, lists none, and a module
+    /// leaves out those it doesn't offer now.
     func quickSearchActions(_ context: CapabilityContext) -> [QuickSearchAction] {
         modules.filter { context.isEnabled($0.capability) }.flatMap { module in
-            module.descriptor.actions.map { action in
+            module.descriptor.actions.filter { module.offers($0, context) }.map { action in
                 QuickSearchAction(
                     capability: module.capability,
                     action: action,

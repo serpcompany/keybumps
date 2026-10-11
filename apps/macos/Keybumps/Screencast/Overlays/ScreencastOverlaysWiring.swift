@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 extension KeyDisplayOwner {
     /// A Screencast recording, which holds the key display while it records with Show shortcuts on.
@@ -38,22 +39,28 @@ struct ScreencastDrawingMemory {
 
 /// Puts Screencast's overlays up around each video it records, and into the video (#449).
 /// `ScreencastModule` attaches it to its `ScreencastController`, which tells it each phase
-/// (`addPhaseObserver`) and each restart (`addRestartObserver`).
+/// (`addPhaseObserver`) and each restart, before it (`addWillRestartObserver`).
 ///
 /// - When a video's phase leaves `.picking` (counting down or starting), the drawing goes up on the
 ///   recorded displays (`ScreencastOverlays`) with the tools as they were last left, and its
 ///   windows go to the recorder (`includeOverlayWindow`) before it starts, so the first frame can
 ///   have them. The control bar's Draw button and the Draw shortcut toggle it, and a restart
-///   clears it, so a new take starts clean.
+///   clears it and the keys on screen, then waits a moment for a frame of the cleared screen to
+///   reach the recorder before the new take starts (`ScreencastController.restart()`).
 /// - With Show shortcuts on for the recording, it holds the key display (`KeyDisplay`) on the
 ///   recorded displays for the whole recording, showing shortcuts only, in the Keystrokes plugin's
 ///   style while the plugin is on, and gives the recorder those windows too. The keys sit inside
 ///   what's recorded: along the bottom of the area, or of the window, or of the screen for a
-///   screen recording (`KeyDisplayConfiguration.anchor`). With Show shortcuts off it never holds
-///   the display, and the display's windows never go to the recorder, so keys the plugin shows
-///   (typing included, in All keys) stay out of the video.
-/// - A window recording follows its window (`followWindow()`, a few times a second): the keys
-///   move with it, and when it moves to another display, so do the drawing and the keys.
+///   screen recording (`KeyDisplayConfiguration.anchor`). Hide Keystrokes closes those windows, and
+///   the recorder lets them go; Show puts up new ones, which it adds back as they come, so the
+///   first frames after Show can lack the keys. While the recording's keys are hidden, no key
+///   window goes to the recorder, whatever another holder shows. With Show shortcuts off it never
+///   holds the display, and the display's windows never go to the recorder, so keys the plugin
+///   shows (typing included, in All keys) stay out of the video.
+/// - A window recording follows its window (`followWindow()`, 20 times a second, as often as the
+///   recorder follows it): the keys move with it, and when it moves to another display, so do the
+///   drawing and the keys. The two read the frame on their own timers, so for a moment after a
+///   move the video can be on the new display before the overlays are.
 /// - Click highlights are ScreenCaptureKit's, drawn into the video only
 ///   (`ScreencastOptions.showsMouseClicks`, which the controller sets from the choice); the key
 ///   display's rings stay off while recording, so a click isn't highlighted twice.
@@ -66,7 +73,8 @@ final class ScreencastOverlaysWiring {
     private(set) var overlays: ScreencastOverlays?
     /// Whether this recording holds the key display: Show shortcuts was on.
     private(set) var holdsKeyDisplay = false
-    /// The windows given to the recorder: the drawing's, and the key display's while it's held.
+    /// The windows given to the recorder: the drawing's, and the key display's while it's held with
+    /// the recording's keys shown.
     private(set) var includedWindowIDs: Set<CGWindowID> = []
 
     private let keyDisplay: KeyDisplay?
@@ -111,7 +119,7 @@ final class ScreencastOverlaysWiring {
         displays: @escaping @MainActor () -> [ScreencastOverlayDisplay] = { ScreencastOverlayDisplay.connected },
         ordersWindowsIn: Bool = !UnitTestHost.isActive,
         watchesOwnKeys: Bool = !UnitTestHost.isActive,
-        followInterval: TimeInterval? = 0.1
+        followInterval: TimeInterval? = 0.05
     ) {
         self.keyDisplay = keyDisplay
         self.drawingMemory = drawingMemory
@@ -134,7 +142,7 @@ final class ScreencastOverlaysWiring {
         windowFrame: @escaping @MainActor (CGWindowID) -> CGRect? = { _ in nil }
     ) {
         controller.addPhaseObserver { [weak self] phase in self?.phaseChanged(phase) }
-        controller.addRestartObserver { [weak self] in self?.restarted() }
+        controller.addWillRestartObserver { [weak self] in self?.willRestart() ?? false }
         let recorder = controller.recorder
         attach(
             choice: { [weak controller] in controller?.choice },
@@ -147,7 +155,7 @@ final class ScreencastOverlaysWiring {
     }
 
     /// The pieces of a capture flow the overlays follow. Its phase changes then come through
-    /// `phaseChanged(_:)`, and its restarts through `restarted()`.
+    /// `phaseChanged(_:)`, and its restarts through `willRestart()`.
     func attach(
         choice: @escaping @MainActor () -> ScreencastChoice?,
         bar: @escaping @MainActor () -> ScreencastControlBar?,
@@ -185,9 +193,20 @@ final class ScreencastOverlaysWiring {
         }
     }
 
-    /// A restart started a new take: it starts with no marks.
-    func restarted() {
+    /// A restart is about to start a new take: the marks and the keys on screen go now, and the
+    /// cleared windows are drawn and sent to the window server before it returns. Returns whether
+    /// anything went, so the controller waits for a frame of the cleared screen before restarting.
+    @discardableResult
+    func willRestart() -> Bool {
+        // A mark being drawn counts: it's on screen too.
+        let clearedMarks = overlays.map { !$0.drawing.isEmpty } ?? false
         overlays?.clear()
+        let clearedKeys = holdsKeyDisplay && keyDisplay?.clearLines() == true
+        guard clearedMarks || clearedKeys else { return false }
+        // The key display draws its change at once; the drawing's canvases only need display.
+        overlays?.layer.displayNow()
+        CATransaction.flush()
+        return true
     }
 
     private func begin() {
@@ -227,8 +246,11 @@ final class ScreencastOverlaysWiring {
             configuration: Self.keyConfiguration(plugin: keystrokesConfiguration(), displays: recordedDisplays, anchor: anchor),
             keepsWindowsOnScreen: true
         ) { [weak self] windows in
-            self?.keyWindowIDs = Self.windowIDs(of: windows)
-            self?.updateRecorder()
+            guard let self else { return }
+            // While the recording's keys are hidden, the windows on screen are another holder's, such
+            // as the plugin's showing typing in All keys, so none go to the recorder.
+            self.keyWindowIDs = self.keyDisplay?.isHidden(.screencast) == true ? [] : Self.windowIDs(of: windows)
+            self.updateRecorder()
         }
     }
 

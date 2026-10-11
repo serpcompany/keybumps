@@ -87,6 +87,7 @@ struct ScreencastVideoFormat: Equatable, Sendable {
     let averageBitRate: Int
 
     static func plan(pixelWidth: Int, pixelHeight: Int, framesPerSecond: Int) -> ScreencastVideoFormat {
+        let framesPerSecond = ScreencastNumbers.framesPerSecond(framesPerSecond)
         let hevc = !fitsH264(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: framesPerSecond)
         return ScreencastVideoFormat(
             codec: hevc ? .hevc : .h264,
@@ -96,17 +97,19 @@ struct ScreencastVideoFormat: Equatable, Sendable {
 
     /// Level 5.2: at most 4096 pixels a side, 36,864 macroblocks a frame, and 2,073,600 a second.
     static func fitsH264(pixelWidth: Int, pixelHeight: Int, framesPerSecond: Int) -> Bool {
+        guard pixelWidth > 0, pixelHeight > 0, pixelWidth <= 4096, pixelHeight <= 4096 else { return false }
         let macroblocks = ((pixelWidth + 15) / 16) * ((pixelHeight + 15) / 16)
-        return pixelWidth <= 4096 && pixelHeight <= 4096
-            && macroblocks <= 36_864
-            && macroblocks * max(framesPerSecond, 1) <= 2_073_600
+        return macroblocks <= 36_864
+            && macroblocks * ScreencastNumbers.framesPerSecond(framesPerSecond) <= 2_073_600
     }
 
     /// About 0.08 bits a pixel a frame, which keeps text sharp; HEVC needs about 70% of that.
     /// Screen content usually comes in well under it.
     static func bitRate(pixelWidth: Int, pixelHeight: Int, framesPerSecond: Int, hevc: Bool) -> Int {
-        let raw = Double(max(pixelWidth, 1) * max(pixelHeight, 1) * max(framesPerSecond, 1)) * 0.08 * (hevc ? 0.7 : 1)
-        return Int(min(max(raw, 2_000_000), 40_000_000))
+        // In floating point, so no size can overflow.
+        let pixels = Double(max(pixelWidth, 1)) * Double(max(pixelHeight, 1))
+        let raw = pixels * Double(ScreencastNumbers.framesPerSecond(framesPerSecond)) * 0.08 * (hevc ? 0.7 : 1)
+        return ScreencastNumbers.int(raw, in: 2_000_000...40_000_000, fallback: 2_000_000)
     }
 }
 
@@ -125,6 +128,8 @@ struct ScreencastVideoFormat: Equatable, Sendable {
 ///   surfaces at once instead of passing for a live recording.
 final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
     static let fragmentInterval = CMTime(seconds: 2, preferredTimescale: 600)
+    /// The largest side, in pixels, a file is written at.
+    static let maximumPixels = 8_192
 
     let fileURL: URL
     let pixelWidth: Int
@@ -156,17 +161,25 @@ final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         writer.movieFragmentInterval = fragmentInterval
 
-        let video = AVAssetWriterInput(
-            mediaType: .video,
-            outputSettings: Self.videoSettings(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: options.framesPerSecond)
-        )
+        let framesPerSecond = ScreencastNumbers.framesPerSecond(options.framesPerSecond)
+        let videoSettings = Self.videoSettings(pixelWidth: pixelWidth, pixelHeight: pixelHeight, framesPerSecond: framesPerSecond)
+        // An input made from settings the writer can't use raises an Objective-C exception, which
+        // would end the app: ask first, and fail the recording with a category instead. Apple
+        // silicon's encoders stop at 8192 pixels a side.
+        guard (1...Self.maximumPixels).contains(pixelWidth), (1...Self.maximumPixels).contains(pixelHeight),
+              writer.canApply(outputSettings: videoSettings, forMediaType: .video) else {
+            throw ScreencastFailure.writerFailed
+        }
+        let video = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         video.expectsMediaDataInRealTime = true
         guard writer.canAdd(video) else { throw ScreencastFailure.writerFailed }
         writer.add(video)
 
         var audioInputs: [ScreencastAudioSource: AVAssetWriterInput] = [:]
         for source in audio {
-            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.audioSettings(for: source))
+            let settings = Self.audioSettings(for: source)
+            guard writer.canApply(outputSettings: settings, forMediaType: .audio) else { throw ScreencastFailure.writerFailed }
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
             input.expectsMediaDataInRealTime = true
             guard writer.canAdd(input) else { throw ScreencastFailure.writerFailed }
             writer.add(input)
@@ -179,7 +192,7 @@ final class ScreencastMovieWriter: ScreencastMovieWriting, @unchecked Sendable {
         }
         self.writer = writer
         sink = AssetWriterSink(writer: writer, video: video, audio: audioInputs, audioSources: audio)
-        core = ScreencastWriterCore(sink: sink, framesPerSecond: options.framesPerSecond, onFailure: onFailure)
+        core = ScreencastWriterCore(sink: sink, framesPerSecond: framesPerSecond, onFailure: onFailure)
     }
 
     /// The picture's encoder: H.264, or HEVC past H.264's limits (`ScreencastVideoFormat`), a
@@ -312,6 +325,8 @@ private final class AssetWriterSink: ScreencastMovieSink {
     var hasFailed: Bool { writer.status == .failed }
 
     func startSession() {
+        // Starting a session on a writer that isn't writing raises an exception.
+        guard writer.status == .writing else { return }
         writer.startSession(atSourceTime: .zero)
     }
 
