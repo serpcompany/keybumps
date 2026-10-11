@@ -47,11 +47,14 @@ extension PluginAction {
     )
 }
 
-/// What a composition gives Screencast in place of the screen, its windows, the countdown's clock,
-/// and the app in front: the UI-test composition's made-up screens and inert recorder, or unit
-/// tests' fakes. Anything left nil is the app's own, which is inert under the unit-test host.
+/// What a composition gives Screencast in place of the screen, its windows, the files a recording
+/// writes, the countdown's clock, and the app in front: the UI-test composition's made-up screens
+/// and inert recorder, or unit tests' fakes. Anything left nil is the app's own, which is inert
+/// under the unit-test host.
 struct ScreencastSeams {
     var captureSystem: (any ScreencastCaptureSystem)?
+    /// Writes each recording's movie files and its mixdown.
+    var writers: (any ScreencastWriterFactory)?
     var pickerSystem: (any ScreencastPickerSystem)?
     var presenter: (any ScreencastOverlayPresenting)?
     var screens: (@MainActor () -> ScreencastScreenLayout)?
@@ -64,6 +67,7 @@ struct ScreencastSeams {
 
     init(
         captureSystem: (any ScreencastCaptureSystem)? = nil,
+        writers: (any ScreencastWriterFactory)? = nil,
         pickerSystem: (any ScreencastPickerSystem)? = nil,
         presenter: (any ScreencastOverlayPresenting)? = nil,
         screens: (@MainActor () -> ScreencastScreenLayout)? = nil,
@@ -72,6 +76,7 @@ struct ScreencastSeams {
         contextReader: ScreencastCaptureContextReader? = nil
     ) {
         self.captureSystem = captureSystem
+        self.writers = writers
         self.pickerSystem = pickerSystem
         self.presenter = presenter
         self.screens = screens
@@ -217,6 +222,7 @@ final class ScreencastModule: CapabilityModule {
         let preferences = preferences
         let recorder = ScreencastRecorder(
             system: seams.captureSystem,
+            writers: seams.writers ?? AVAssetScreencastWriterFactory(),
             // The recorder asks on the main actor, as a recording starts. Asked anywhere else, it
             // reads macOS's answer directly rather than trapping.
             microphoneGranted: {

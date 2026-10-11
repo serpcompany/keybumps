@@ -7,6 +7,9 @@ final class AppPreferences {
     private enum Key {
         /// Retired: the old presentation-channel list. Removed on load.
         static let retiredSelectedChannels = "selectedNotificationChannels"
+        /// Retired: Screencast's "Also add to Screenshots (⌘3)", which only QA builds had (#464,
+        /// #485). Removed on load.
+        static let retiredScreencastAddsToScreenshots = "plugin.screencast.addsToScreenshots"
         static let showInDockAndSwitcher = "showInDockAndSwitcher"
         static let enabledCapabilities = "enabledCapabilities"
         static let knownCapabilities = "knownCapabilities"
@@ -261,6 +264,7 @@ final class AppPreferences {
         }
 
         defaults.removeObject(forKey: Key.retiredSelectedChannels)
+        defaults.removeObject(forKey: Key.retiredScreencastAddsToScreenshots)
         if introducedShortcuts {
             persistCapabilityShortcuts()
         }

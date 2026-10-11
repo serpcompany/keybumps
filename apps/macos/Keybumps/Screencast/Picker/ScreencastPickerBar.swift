@@ -3,8 +3,8 @@ import SwiftUI
 
 /// The picker's bar, on the screen the pointer was on: Area, Window, or Screen; the microphone, the
 /// Mac's sound, shortcuts, and clicks; then Record and close. What to do next shows above it, and in
-/// Screen mode, a choice for each screen by name and All Screens. One slim bar, after Screendrop's `RecordingPickerBar` (CC0-1.0, see LICENSE.screendrop): an input
-/// that's off is dimmed, not hidden.
+/// Screen mode, a choice for each screen by name and All Screens. One slim bar, after Screendrop's
+/// `RecordingPickerBar` (CC0-1.0, see LICENSE.screendrop): an input that's off is dimmed, not hidden.
 struct ScreencastPickerBar: View {
     @Bindable var model: ScreencastPickerModel
     let confirm: () -> Void
