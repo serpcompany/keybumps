@@ -30,10 +30,8 @@ option=KBScreencastSmokeTest
 result="$HOME/Library/Developer/Keybumps-QA/screencast-smoke-test.json"
 
 plist_value() { /usr/libexec/PlistBuddy -c "Print :$1" "$installed_app/Contents/Info.plist" 2>/dev/null || true }
-# Match only the installed copy, never a Debug build or test host running from DerivedData, and
-# for the smoke run only the process this script started with the option.
+# Match only the installed copy, never a Debug build or test host running from DerivedData.
 installed_pids() { pgrep -f "^$executable" || true }
-smoke_pids() { pgrep -f "^$executable -$option" || true }
 json_value() { /usr/bin/plutil -extract "$1" raw -o - "$result" 2>/dev/null || true }
 
 [[ -d "$installed_app" ]] || { print -u2 "no installed app at $installed_app"; exit 66 }
@@ -46,11 +44,15 @@ require_candidate() {
 }
 require_candidate
 
-# Stops only the smoke run this script started: politely, then for good.
+# The smoke run this script started, once it's running. Only it is ever stopped: politely, then
+# for good.
+smoke_pid=
 stop_smoke() {
-  for pid in $(smoke_pids); do kill "$pid" 2>/dev/null || true; done
-  for _ in {1..20}; do [[ -z "$(smoke_pids)" ]] && return 0; sleep 0.25; done
-  for pid in $(smoke_pids); do kill -KILL "$pid" 2>/dev/null || true; done
+  [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null || return 0
+  kill "$smoke_pid" 2>/dev/null || true
+  for _ in {1..20}; do kill -0 "$smoke_pid" 2>/dev/null || return 0; sleep 0.25; done
+  kill -KILL "$smoke_pid" 2>/dev/null || true
+  for _ in {1..20}; do kill -0 "$smoke_pid" 2>/dev/null || return 0; sleep 0.25; done
 }
 reopen() {
   local code=$?
@@ -75,10 +77,17 @@ rm -f "$result"
 # Opened through Launch Services, not run from this shell, so macOS checks Screen Recording for
 # Keybumps rather than for the terminal that started the script.
 open -n "$installed_app" --args "-$option" YES
-for _ in {1..40}; do [[ -n "$(smoke_pids)" || -f "$result" ]] && break; sleep 0.25; done
+# Keybumps was quit above, so the installed copy running now is the smoke run just opened.
+for _ in {1..40}; do
+  smoke_pid=$(installed_pids | head -1)
+  [[ -n "$smoke_pid" || -f "$result" ]] && break
+  sleep 0.25
+done
+# The result can appear between a look for the process and a look for the file.
+[[ -n "$smoke_pid" ]] || smoke_pid=$(installed_pids | head -1)
 timed_out=0
 deadline=$(( SECONDS + timeout ))
-while [[ -n "$(smoke_pids)" ]]; do
+while [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null; do
   if (( SECONDS >= deadline )); then
     timed_out=1
     print -u2 "the smoke test didn't finish in ${timeout}s; stopping it"
@@ -94,7 +103,7 @@ if [[ -f "$result" ]]; then
   print
   if [[ "$(json_value complete)" != true ]]; then
     print -u2 "the smoke test stopped before it finished (it crashed or hung); the last stage reached is above"
-  elif [[ "$(json_value errorCategory)" == permissionDenied ]]; then
+  elif [[ "$(json_value errorCategory)" == permissionDenied ]] || grep -q '"screenRecordingDenied"' "$result"; then
     print -u2 "permission-denied: grant Screen Recording to the installed Keybumps, then rerun"
     status=2
   elif [[ "$(json_value passed)" == true ]]; then
