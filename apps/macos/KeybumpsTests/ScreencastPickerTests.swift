@@ -259,6 +259,8 @@ struct ScreencastPickerTests {
         model.windows = [Screens.browserWindow]
         model.clickWindow(at: CGPoint(x: 150, y: 832))
         model.target = .screen
+        #expect(model.choice()?.target == .display(1), "It starts on a screen, not all of them")
+        model.chooseEveryScreen()
         #expect(model.choice()?.target == .everyDisplay)
         #expect(model.choice()?.regions.map(\.display) == [1, 2])
         model.target = .area
@@ -272,22 +274,72 @@ struct ScreencastPickerTests {
         let model = PickerScreens.model()
         model.target = .screen
         #expect(model.offersEveryScreen)
-        #expect(model.isChosen(left) && model.isChosen(right))
-        #expect(model.choice()?.target == .everyDisplay)
+        // No pointer screen given: the first screen in recording order.
+        #expect(model.selectedScreen == 1 && model.choice()?.target == .display(1))
+        #expect(model.hint == "Records all of Screen 1.")
         model.clickScreen(right)
         #expect(model.choice()?.target == .display(2))
         #expect(model.choice()?.regions == [ScreencastChoice.Region(display: 2, frame: right.frame)])
         #expect(model.isChosen(right) && !model.isChosen(left))
-        #expect(model.hint == "This screen only. Choose Every Screen for all of them.")
+        #expect(model.hint == "Records all of Screen 2.")
         model.chooseEveryScreen()
         #expect(model.choice()?.target == .everyDisplay)
-        #expect(model.hint == "Every screen, one file each. Click a screen for just that one.")
+        #expect(model.isChosen(left) && model.isChosen(right))
+        #expect(model.hint == "Records all screens, one file each.")
+        model.kind = .screenshot
+        #expect(model.hint == "Captures all screens, one image each.")
+        model.chooseScreen(1)
+        #expect(model.hint == "Captures all of Screen 1.")
 
         // A click picks a screen only in Screen mode.
         model.target = .area
-        model.clickScreen(left)
-        #expect(model.selectedScreen == nil)
-        #expect(!PickerScreens.model(layout: PickerScreens.leftOnly).offersEveryScreen)
+        model.clickScreen(right)
+        #expect(model.selectedScreen == 1)
+    }
+
+    @Test("Screen mode starts on the screen with the pointer, and one screen has no All Screens")
+    func screenWithThePointer() {
+        #expect(PickerScreens.model(pointerScreen: 2).selectedScreen == 2)
+        #expect(PickerScreens.model(pointerScreen: 77).selectedScreen == 1, "A screen that isn't there: the first")
+        // The bar's screen is the same one.
+        #expect(PickerScreens.model(pointerScreen: 2).pointerScreen == PickerScreens.right)
+        #expect(PickerScreens.model(pointerScreen: 77).pointerScreen == PickerScreens.left)
+        // Without the pointer on a screen, both start on the main one, which `NSScreen` lists
+        // first, even when it isn't leftmost.
+        let mainOnRight = PickerScreens.model(layout: ScreencastScreenLayout(screens: [PickerScreens.right, PickerScreens.left]))
+        #expect(mainOnRight.pointerScreen == PickerScreens.right && mainOnRight.selectedScreen == 2)
+        let single = PickerScreens.model(layout: PickerScreens.leftOnly)
+        single.target = .screen
+        #expect(!single.offersEveryScreen && single.selectedScreen == 1)
+        single.chooseEveryScreen()
+        #expect(single.selectedScreen == 1 && single.choice()?.target == .display(1))
+    }
+
+    @Test("Screens are named as macOS names them, or numbered in recording order")
+    func screenNames() {
+        let named = ScreencastScreen(id: 7, frame: CGRect(x: -1920, y: 0, width: 1920, height: 1080), scale: 1, name: "Studio Display")
+        let layout = ScreencastScreenLayout(screens: [left, right, named])
+        #expect(layout.orderedScreens.map(\.id) == [7, 1, 2])
+        #expect(layout.number(of: left) == 2)
+        #expect(layout.title(of: named) == "Studio Display")
+        #expect(layout.title(of: right) == "Screen 3")
+        // Stacked screens: the top one first.
+        let top = ScreencastScreen(id: 8, frame: CGRect(x: 0, y: 982, width: 1512, height: 982), scale: 2)
+        #expect(ScreencastScreenLayout(screens: [left, top]).orderedScreens.map(\.id) == [8, 1])
+    }
+
+    @Test("The pointer over a screen choice shows it on the screens until it leaves")
+    func screenPreview() {
+        let model = PickerScreens.model()
+        model.target = .screen
+        #expect(model.isLit(left) && !model.isLit(right))
+        model.previewScreens(.screen(2))
+        #expect(!model.isLit(left) && model.isLit(right))
+        model.previewScreens(.all)
+        #expect(model.isLit(left) && model.isLit(right))
+        model.previewScreens(nil)
+        #expect(model.isLit(left) && !model.isLit(right))
+        #expect(model.choice()?.target == .display(1), "A preview chooses nothing")
     }
 
     @Test("Every screen of one screen is that display")
@@ -317,5 +369,37 @@ struct ScreencastPickerTests {
         model.target = .window
         model.pressArea(at: CGPoint(x: 10, y: 10), on: left)
         #expect(model.areaEditor?.bounds == right.frame)
+    }
+}
+
+/// "Getting ready…" in the notch, through Screencast's own overlays and a notch notice of the
+/// test's own.
+@MainActor
+@Suite("Screencast: Getting ready…")
+struct ScreencastGettingReadyNoticeTests {
+    @available(macOS 15, *)
+    @Test("Hiding Getting ready… hides it, and never a notice that replaced it, such as a Shortcut Coach tip")
+    func hidesOnlyItself() throws {
+        let notices = PaletteHUD()
+        defer { notices.dismiss() }
+        let overlays = ScreencastOverlayWindows(notices: notices)
+
+        overlays.showGettingReady()
+        #expect(notices.shownNotice != nil)
+        overlays.hideGettingReady()
+        #expect(notices.shownNotice == nil)
+
+        overlays.showGettingReady()
+        notices.showCoach(NotchCoachPresentation(event: .sample))
+        let tip = try #require(notices.shownNotice)
+        overlays.hideGettingReady()
+        #expect(notices.shownNotice == tip, "the tip stays")
+
+        // Nor a notice that came after one that hid on its own.
+        overlays.showGettingReady()
+        notices.dismiss()
+        let later = notices.show("Copied to Clipboard")
+        overlays.hideGettingReady()
+        #expect(later != nil && notices.shownNotice == later)
     }
 }

@@ -8,13 +8,19 @@ enum ScreencastCaptureKind: String, CaseIterable, Equatable, Sendable {
     case screenshot
 }
 
+/// A screen choice in the picker's bar that the pointer is over.
+enum ScreencastScreenPreview: Equatable, Sendable {
+    case screen(CGDirectDisplayID)
+    case all
+}
+
 /// What the picker chooses on screen.
 enum ScreencastPickerTarget: String, CaseIterable, Equatable, Sendable {
     /// An area dragged on one screen.
     case area
     /// A window clicked.
     case window
-    /// A screen clicked, or every screen, one file each.
+    /// A screen chosen in the bar or clicked, or all screens, one file each.
     case screen
 }
 
@@ -70,6 +76,9 @@ final class ScreencastPickerModel {
     let microphoneAvailable: Bool
 
     let layout: ScreencastScreenLayout
+    /// The screen the pointer was on at Start Screencast, or else the main one: the bar shows on
+    /// it, and Screen mode starts with it chosen. Read once, so the two always agree.
+    let pointerScreen: ScreencastScreen?
     /// Windows that can be picked, front to back (`ScreencastWindowPicking`). Empty until what's on
     /// screen has been read, and when it can't be.
     var windows: [ScreencastContent.Window] = [] {
@@ -83,8 +92,11 @@ final class ScreencastPickerModel {
     private(set) var hoveredWindow: CGWindowID?
     /// The window clicked, which Record records.
     private(set) var selectedWindow: CGWindowID?
-    /// The screen clicked in Screen mode; nil for every screen, as it starts.
+    /// The screen chosen in Screen mode, at first `pointerScreen`; nil for all screens.
     private(set) var selectedScreen: CGDirectDisplayID?
+    /// The choice the pointer is over in the bar's screen choices, which the screens show until it
+    /// leaves.
+    private(set) var previewedScreens: ScreencastScreenPreview?
     private(set) var areaEditor: ScreencastAreaEditor?
 
     /// Runs after anything the windows draw changes, so they redraw. The bar observes the model.
@@ -94,7 +106,8 @@ final class ScreencastPickerModel {
         layout: ScreencastScreenLayout,
         preferences: ScreencastPreferences,
         microphoneAvailable: Bool,
-        rememberedArea: ScreencastPickedArea? = nil
+        rememberedArea: ScreencastPickedArea? = nil,
+        pointerScreen: CGDirectDisplayID? = nil
     ) {
         self.layout = layout
         self.microphoneAvailable = microphoneAvailable
@@ -102,6 +115,9 @@ final class ScreencastPickerModel {
         recordsSystemAudio = preferences.recordsSystemAudio
         showsShortcuts = preferences.showsShortcuts
         highlightsClicks = preferences.highlightsClicks
+        let startScreen = pointerScreen.flatMap { layout.screen($0) } ?? layout.screens.first
+        self.pointerScreen = startScreen
+        selectedScreen = startScreen?.id
         if let rememberedArea, let screen = layout.screen(rememberedArea.display) {
             areaEditor = ScreencastAreaEditor(rect: rememberedArea.rect, bounds: screen.frame)
         }
@@ -133,17 +149,15 @@ final class ScreencastPickerModel {
         case .window:
             selectedWindow == nil ? "Click a window to choose it." : "Click another window to change it."
         case .screen:
-            if layout.screens.count < 2 {
-                "The whole screen."
-            } else if selectedScreen == nil {
-                "Every screen, one file each. Click a screen for just that one."
+            if let id = selectedScreen, let screen = layout.screen(id) {
+                kind == .video ? "Records all of \(layout.title(of: screen))." : "Captures all of \(layout.title(of: screen))."
             } else {
-                "This screen only. Choose Every Screen for all of them."
+                kind == .video ? "Records all screens, one file each." : "Captures all screens, one image each."
             }
         }
     }
 
-    /// Whether Screen mode offers Every Screen: with more than one screen.
+    /// Whether Screen mode offers All Screens: with more than one screen.
     var offersEveryScreen: Bool { layout.screens.count > 1 }
 
     /// What Record would capture now, or nil while nothing is chosen.
@@ -171,31 +185,54 @@ final class ScreencastPickerModel {
                 return make(.display(id), regions: [.init(display: id, frame: screen.frame)])
             }
             // Left to right, as the recorder numbers its files.
-            let screens = layout.screens.sorted { ($0.frame.minX, -$0.frame.maxY) < ($1.frame.minX, -$1.frame.maxY) }
+            let screens = layout.orderedScreens
             guard let first = screens.first else { return nil }
             let target: ScreencastTarget = screens.count == 1 ? .display(first.id) : .everyDisplay
             return make(target, regions: screens.map { .init(display: $0.id, frame: $0.frame) })
         }
     }
 
-    /// Whether Screen mode would capture `screen`: the one clicked, or every screen.
+    /// Whether Screen mode would capture `screen`: the one chosen, or all screens.
     func isChosen(_ screen: ScreencastScreen) -> Bool {
         selectedScreen == nil || selectedScreen == screen.id
     }
 
+    /// Whether Screen mode shows `screen` as what's recorded: the choice the pointer is over in the
+    /// bar, or else what's chosen.
+    func isLit(_ screen: ScreencastScreen) -> Bool {
+        switch previewedScreens {
+        case .all: true
+        case .screen(let id): id == screen.id
+        case nil: isChosen(screen)
+        }
+    }
+
     // MARK: Choosing a screen
 
-    /// Screen mode: just this screen.
+    /// Screen mode: a click on a screen chooses it.
     func clickScreen(_ screen: ScreencastScreen) {
-        guard target == .screen, layout.screen(screen.id) != nil, selectedScreen != screen.id else { return }
-        selectedScreen = screen.id
+        guard target == .screen else { return }
+        chooseScreen(screen.id)
+    }
+
+    /// One of the bar's screen choices: just this screen.
+    func chooseScreen(_ id: CGDirectDisplayID) {
+        guard layout.screen(id) != nil, selectedScreen != id else { return }
+        selectedScreen = id
         changed()
     }
 
-    /// Screen mode: every screen again.
+    /// The bar's All Screens, with more than one screen.
     func chooseEveryScreen() {
-        guard selectedScreen != nil else { return }
+        guard offersEveryScreen, selectedScreen != nil else { return }
         selectedScreen = nil
+        changed()
+    }
+
+    /// The pointer moved onto a screen choice in the bar, or off them (nil).
+    func previewScreens(_ preview: ScreencastScreenPreview?) {
+        guard previewedScreens != preview else { return }
+        previewedScreens = preview
         changed()
     }
 
