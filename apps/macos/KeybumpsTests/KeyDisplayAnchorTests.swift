@@ -133,17 +133,48 @@ struct KeyDisplayAnchorTests {
             scheduler: KeyDisplayManualScheduler(),
             secureInput: { false }
         )
-        display.clearLines()
+        #expect(!display.clearLines())
         #expect(presenter.last == nil, "nothing while nobody holds it")
         display.acquire(.screencast, configuration: Self.recording, keepsWindowsOnScreen: true)
+        #expect(!display.clearLines(), "nothing on screen yet")
         display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command]))
         #expect(presenter.last?.entries.count == 1)
-        display.clearLines()
+        #expect(display.clearLines(), "a line was on screen")
         #expect(presenter.last?.entries.isEmpty == true)
         #expect(presenter.lastAnimated == false, "no fade into the new take")
         #expect(!display.isPausedForScreenshot)
         display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_V), modifiers: [.command]))
         #expect(presenter.last?.entries.count == 1)
+        display.release(.screencast)
+    }
+
+    @Test("A line that just expired is still fading out, so clearing the lines counts it until the fade ends")
+    func clearLinesWhileFading() {
+        let presenter = FakeKeyDisplayPresenter()
+        var time = Date(timeIntervalSince1970: 1_000)
+        let display = KeyDisplay(
+            keys: InertKeyTypingMonitor(),
+            pointer: InertPointerEventMonitor(),
+            presenter: presenter,
+            layout: FakeLetterLayout(),
+            now: { time },
+            scheduler: KeyDisplayManualScheduler(),
+            secureInput: { false }
+        )
+        let linger = Self.recording.linger
+        display.acquire(.screencast, configuration: Self.recording, keepsWindowsOnScreen: true)
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_C), modifiers: [.command]))
+        time += linger
+        display.expire()
+        #expect(presenter.last?.entries.isEmpty == true && presenter.lastAnimated == true)
+        #expect(display.clearLines(), "still fading")
+        #expect(!display.clearLines(), "cleared at once, so nothing fades any more")
+
+        display.receive(KeyPress(keyCode: UInt16(kVK_ANSI_V), modifiers: [.command]))
+        time += linger
+        display.expire()
+        time += KeyDisplayOverlayController.fadeDuration
+        #expect(!display.clearLines(), "faded out")
         display.release(.screencast)
     }
 

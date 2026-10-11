@@ -267,6 +267,8 @@ final class KeyDisplay {
     private var wakeUp: (any TimerScheduledAction)?
     /// The pointer's screen at the newest key.
     private var lastPointerDisplay: CGDirectDisplayID?
+    /// Until when lines that expired may still be fading off the screen.
+    private var fadesUntil: Date?
 
     init(
         keys: any KeyPressMonitoring,
@@ -352,12 +354,18 @@ final class KeyDisplay {
         present(animated: false)
     }
 
-    /// Takes every line and ring off the screen at once, with no fade, as when a recording restarts
-    /// and its new take must start with none. Unlike `pauseForScreenshot()`, the next key shows.
-    func clearLines() {
-        guard holds.isHeld else { return }
+    /// Takes every line and ring off the screen at once, with no fade, and draws that, as when a
+    /// recording restarts and its new take must start with none. Unlike `pauseForScreenshot()`, the
+    /// next key shows. Returns whether anything was on screen: a line or a ring, or one still
+    /// fading out.
+    @discardableResult
+    func clearLines() -> Bool {
+        guard holds.isHeld else { return false }
+        let wasShown = !timeline.entries.isEmpty || !timeline.clicks.isEmpty || fadesUntil.map { now() < $0 } == true
         timeline.removeAll()
+        fadesUntil = nil
         present(animated: false)
+        return wasShown
     }
 
     // MARK: Overlay windows
@@ -434,7 +442,9 @@ final class KeyDisplay {
     /// their own clock.
     func expire() {
         guard let configuration = holds.configuration else { return }
+        let before = timeline
         timeline.expire(at: now(), linger: configuration.linger)
+        if timeline != before { fadesUntil = now().addingTimeInterval(KeyDisplayOverlayController.fadeDuration) }
         present()
     }
 

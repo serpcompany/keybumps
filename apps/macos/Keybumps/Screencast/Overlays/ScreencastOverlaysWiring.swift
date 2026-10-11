@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 extension KeyDisplayOwner {
     /// A Screencast recording, which holds the key display while it records with Show shortcuts on.
@@ -38,13 +39,14 @@ struct ScreencastDrawingMemory {
 
 /// Puts Screencast's overlays up around each video it records, and into the video (#449).
 /// `ScreencastModule` attaches it to its `ScreencastController`, which tells it each phase
-/// (`addPhaseObserver`) and each restart, just before it (`addWillRestartObserver`).
+/// (`addPhaseObserver`) and each restart, before it (`addWillRestartObserver`).
 ///
 /// - When a video's phase leaves `.picking` (counting down or starting), the drawing goes up on the
 ///   recorded displays (`ScreencastOverlays`) with the tools as they were last left, and its
 ///   windows go to the recorder (`includeOverlayWindow`) before it starts, so the first frame can
 ///   have them. The control bar's Draw button and the Draw shortcut toggle it, and a restart
-///   clears it and the keys on screen just before the new take starts, so it starts clean.
+///   clears it and the keys on screen, then waits a moment for a frame of the cleared screen to
+///   reach the recorder before the new take starts (`ScreencastController.restart()`).
 /// - With Show shortcuts on for the recording, it holds the key display (`KeyDisplay`) on the
 ///   recorded displays for the whole recording, showing shortcuts only, in the Keystrokes plugin's
 ///   style while the plugin is on, and gives the recorder those windows too. The keys sit inside
@@ -136,7 +138,7 @@ final class ScreencastOverlaysWiring {
         windowFrame: @escaping @MainActor (CGWindowID) -> CGRect? = { _ in nil }
     ) {
         controller.addPhaseObserver { [weak self] phase in self?.phaseChanged(phase) }
-        controller.addWillRestartObserver { [weak self] in self?.willRestart() }
+        controller.addWillRestartObserver { [weak self] in self?.willRestart() ?? false }
         let recorder = controller.recorder
         attach(
             choice: { [weak controller] in controller?.choice },
@@ -187,11 +189,20 @@ final class ScreencastOverlaysWiring {
         }
     }
 
-    /// A restart is about to start a new take: the marks and the keys on screen go now, so its
-    /// first frame has none.
-    func willRestart() {
+    /// A restart is about to start a new take: the marks and the keys on screen go now, and the
+    /// cleared windows are drawn and sent to the window server before it returns. Returns whether
+    /// anything went, so the controller waits for a frame of the cleared screen before restarting.
+    @discardableResult
+    func willRestart() -> Bool {
+        // A mark being drawn counts: it's on screen too.
+        let clearedMarks = overlays.map { !$0.drawing.isEmpty } ?? false
         overlays?.clear()
-        if holdsKeyDisplay { keyDisplay?.clearLines() }
+        let clearedKeys = holdsKeyDisplay && keyDisplay?.clearLines() == true
+        guard clearedMarks || clearedKeys else { return false }
+        // The key display draws its change at once; the drawing's canvases only need display.
+        overlays?.layer.displayNow()
+        CATransaction.flush()
+        return true
     }
 
     private func begin() {

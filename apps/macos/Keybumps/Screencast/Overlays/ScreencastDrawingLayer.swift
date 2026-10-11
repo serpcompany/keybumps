@@ -172,6 +172,11 @@ final class ScreencastDrawingLayer {
     func redrawAll() {
         for window in inkWindows.values { window.canvas.needsDisplay = true }
     }
+
+    /// Draws what needs drawing now, not at the next display cycle, as before a restart.
+    func displayNow() {
+        for window in inkWindows.values { window.displayIfNeeded() }
+    }
 }
 
 // MARK: - The windows

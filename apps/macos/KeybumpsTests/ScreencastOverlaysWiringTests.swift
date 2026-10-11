@@ -520,6 +520,7 @@ struct ScreencastOverlaysWiringTests {
         var atRestart: (hasMarks: Bool, lines: Int?, elapsed: TimeInterval)?
         flows.controller.addWillRestartObserver {
             atRestart = (overlays.hasMarks, flows.presenter.last?.entries.count, flows.recorder.elapsed)
+            return false
         }
         await flows.controller.restart()
         let seen = try #require(atRestart)
@@ -534,6 +535,35 @@ struct ScreencastOverlaysWiringTests {
 
         flows.type(kVK_ANSI_V, modifiers: [.command])
         #expect(flows.presenter.last?.entries.count == 1, "the new take's keys show")
+        await flows.stop()
+    }
+
+    @available(macOS 15, *)
+    @Test("Before a restart, the overlays say whether they took anything off the screen, and draw the cleared canvases")
+    func willRestartReportsClearing() async throws {
+        let flows = OverlaysFlow()
+        defer { flows.flow.captures.remove() }
+        try await flows.record()
+        let overlays = try #require(flows.wiring.overlays)
+        let canvas = try #require(overlays.layer.window(on: PickerScreens.left.id)?.canvas)
+        #expect(!flows.wiring.willRestart(), "nothing on screen: the restart needn't wait")
+
+        overlays.style.lifetime = .stays
+        overlays.startDrawing()
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        overlays.pointerUp(at: CGPoint(x: 300, y: 200), on: PickerScreens.left.id)
+        #expect(flows.wiring.willRestart(), "a mark went")
+        #expect(!overlays.hasMarks)
+        #expect(!canvas.needsDisplay, "drawn now, not at the next display cycle")
+        #expect(!flows.wiring.willRestart())
+
+        flows.type(kVK_ANSI_C, modifiers: [.command])
+        #expect(flows.wiring.willRestart(), "a shortcut went")
+        #expect(flows.presenter.last?.entries.isEmpty == true)
+        #expect(!flows.wiring.willRestart())
+
+        overlays.pointerDown(at: CGPoint(x: 100, y: 100), on: PickerScreens.left.id)
+        #expect(flows.wiring.willRestart(), "so did a mark still being drawn")
         await flows.stop()
     }
 
