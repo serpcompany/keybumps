@@ -252,8 +252,8 @@ final class SmokeUITests: XCTestCase {
 
     func testScreencastPickerOpensAndSwitchesModes() {
         // The UI-test composition's made-up screens: the main screen split into a top and a bottom
-        // display, each as wide as it, two made-up windows on the top one, and a recorder that
-        // records them but captures nothing.
+        // display, each as wide as it, two made-up windows on each, and a recorder that records
+        // them but captures nothing.
         launchScreencastPicker()
         XCTAssertEqual(pickerPanels.count, 2, "One picker panel per screen")
         let confirm = element("screencast.picker.confirm")
@@ -307,26 +307,26 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testScreencastPickerRecordsTheWindowChosen() throws {
-        // The made-up windows on the top screen, in from its top-left corner: the first, 400 × 220
-        // at (60, 40), in front of the second, 360 × 180 at (200, 120).
+        // The made-up windows on the screen with the bar, in from its top-left corner: the first,
+        // 400 × 220 at (60, 40), in front of the second, 360 × 180 at (200, 120), whose lower part
+        // is under the bar. The picker shows them undimmed, so this click proves its panel takes a
+        // click there rather than letting it through to whatever is under it.
         launchScreencastPicker()
         let hint = element("screencast.picker.hint")
         let confirm = element("screencast.picker.confirm")
         element("screencast.picker.target.window").click()
         XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
-        XCTAssertEqual(pickerPanels.count, 2)
-        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
-        let topScreen = try XCTUnwrap(panels.min { $0.frame.minY < $1.frame.minY })
-        let top = topScreen.frame
-        let corner = topScreen.coordinate(withNormalizedOffset: .zero)
+        let screen = try pickerPanelWithTheBar()
+        let frame = screen.frame
+        let corner = screen.coordinate(withNormalizedOffset: .zero)
 
         // A click chooses the first window, where the second isn't.
         corner.withOffset(CGVector(dx: 100, dy: 100)).click()
         XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
-        // The pointer over the second window, then beside both, then on the bar (over the second
-        // window when the bar is on the top screen), and a click on the bar's words, change nothing.
+        // The pointer over the second window, then beside both, then on the bar, over the second
+        // window, and a click on the bar's words, change nothing.
         corner.withOffset(CGVector(dx: 520, dy: 200)).hover()
-        corner.withOffset(CGVector(dx: top.width - 100, dy: 60)).hover()
+        corner.withOffset(CGVector(dx: frame.width - 100, dy: 60)).hover()
         hint.hover()
         hint.click()
         XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
@@ -340,8 +340,8 @@ final class SmokeUITests: XCTestCase {
         // Record counts down on the window chosen: centered on the first window, not the second.
         confirm.click()
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
-        XCTAssertEqual(countdown.frame.midX, top.minX + 260, accuracy: 2)
-        XCTAssertEqual(countdown.frame.midY, top.minY + 150, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midX, frame.minX + 260, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, frame.minY + 150, accuracy: 2)
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
     }
@@ -352,11 +352,9 @@ final class SmokeUITests: XCTestCase {
         let hint = element("screencast.picker.hint")
         element("screencast.picker.target.window").click()
         XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
-        XCTAssertEqual(pickerPanels.count, 2)
-        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
-        let topScreen = try XCTUnwrap(panels.min { $0.frame.minY < $1.frame.minY })
-        let top = topScreen.frame
-        let corner = topScreen.coordinate(withNormalizedOffset: .zero)
+        let screen = try pickerPanelWithTheBar()
+        let frame = screen.frame
+        let corner = screen.coordinate(withNormalizedOffset: .zero)
         corner.withOffset(CGVector(dx: 100, dy: 100)).click()
         XCTAssertTrue(waitForText(of: hint, "Click another window to change it."))
 
@@ -364,8 +362,8 @@ final class SmokeUITests: XCTestCase {
         corner.withOffset(CGVector(dx: 520, dy: 200)).doubleClick()
         let countdown = app.dialogs.matching(identifier: "screencastCountdown").firstMatch
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
-        XCTAssertEqual(countdown.frame.midX, top.minX + 380, accuracy: 2)
-        XCTAssertEqual(countdown.frame.midY, top.minY + 210, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midX, frame.minX + 380, accuracy: 2)
+        XCTAssertEqual(countdown.frame.midY, frame.minY + 210, accuracy: 2)
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
     }
@@ -870,6 +868,17 @@ final class SmokeUITests: XCTestCase {
     /// dialog, not a window, so `app.windows` never lists them.
     private var pickerPanels: XCUIElementQuery {
         app.dialogs.matching(identifier: "screencastPicker")
+    }
+
+    /// The picker panel on the screen with the bar: the screen the pointer was on, whichever that
+    /// is on CI. It's the key panel, and the one a click on a window there makes key again, so
+    /// clicks aimed through it never count the other picker panel as an interruption, as clicks
+    /// aimed through that one would.
+    private func pickerPanelWithTheBar() throws -> XCUIElement {
+        XCTAssertEqual(pickerPanels.count, 2)
+        let bar = element("screencast.picker.bar").frame
+        let panels = (0..<pickerPanels.count).map { pickerPanels.element(boundBy: $0) }
+        return try XCTUnwrap(panels.first { $0.frame.contains(CGPoint(x: bar.midX, y: bar.midY)) })
     }
 
     private func waitForLabel(of element: XCUIElement, _ label: String) -> Bool {

@@ -232,8 +232,8 @@ private final class InertGlobalHotKeyBackend: GlobalHotKeyRegistering {
 
 /// Screencast's made-up screen in UI test mode: the main screen split into a top and a bottom
 /// display, each as wide as it (CI's screen is 1024 points wide, and the picker's bar needs most of
-/// that), with two windows of a made-up app on the top one, so a test can switch modes and pick a
-/// screen without reading the real screen. Screenshots are blank.
+/// that), with two windows of a made-up app on each, so a test can switch modes, pick a screen, and
+/// pick a window on the screen with the bar, without reading the real screen. Screenshots are blank.
 @MainActor
 final class UITestScreencastScreen: ScreencastPickerSystem {
     static let madeUpProcess: pid_t = 1
@@ -259,12 +259,14 @@ final class UITestScreencastScreen: ScreencastPickerSystem {
         let displays = layout.screens.map {
             ScreencastContent.Display(id: $0.id, frame: layout.topLeftRect(fromAppKit: $0.frame), scale: $0.scale)
         }
-        // Both on the top display, in from its top-left corner, in AppKit's space.
-        let top = layout.screens.max { $0.frame.maxY < $1.frame.maxY }?.frame ?? .zero
-        let windows = [
-            CGRect(x: top.minX + 60, y: top.maxY - 40 - 220, width: 400, height: 220),
-            CGRect(x: top.minX + 200, y: top.maxY - 120 - 180, width: 360, height: 180),
-        ]
+        // On each display, at the same place in from its top-left corner (in AppKit's space): the
+        // first in front of the second, where they overlap.
+        let windows = layout.screens.flatMap { screen in
+            [
+                CGRect(x: screen.frame.minX + 60, y: screen.frame.maxY - 40 - 220, width: 400, height: 220),
+                CGRect(x: screen.frame.minX + 200, y: screen.frame.maxY - 120 - 180, width: 360, height: 180),
+            ]
+        }
         .enumerated()
         .map { index, frame in
             ScreencastContent.Window(

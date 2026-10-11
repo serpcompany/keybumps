@@ -588,6 +588,273 @@ struct ScreencastPickerViewTests {
     }
 }
 
+/// The picker on a laptop's screen with a larger screen above it, offset left, both Retina, built
+/// as Start Screencast builds it (`ScreencastOverlayWindows.pickerPanel`) in panels that are never
+/// shown, with the bar on either screen, and mouse events sent to its views as AppKit sends them.
+@MainActor
+@Suite("Screencast: the picker on two screens")
+struct ScreencastPickerOnTwoScreensTests {
+    @available(macOS 15, *)
+    @Test("The bar's frame is the bar as laid out, in AppKit's global space, on either screen", arguments: twoScreens)
+    func barFrame(barScreen: CGDirectDisplayID) throws {
+        let picker = TwoScreenPicker(barScreen: barScreen)
+        defer { picker.close() }
+        let screen = try #require(picker.model.layout.screen(barScreen))
+        let host = try #require(picker.view(on: barScreen).subviews.first, "The bar's hosting view")
+        let bar = try #require(picker.model.barFrame)
+        #expect(bar == host.frame.offsetBy(dx: screen.frame.minX, dy: screen.frame.minY))
+        #expect(bar.size == host.fittingSize, "The bar's own size, not its screen's")
+        #expect(screen.frame.contains(bar))
+        #expect(abs(bar.midX - screen.frame.midX) <= 1)
+        #expect(bar.minY >= screen.frame.minY + 28, "Clear of the screen's bottom edge and its Dock")
+        #expect(bar.height < 200 && bar.width < screen.frame.width - 16)
+        let other = try #require(twoScreens.first { $0 != barScreen })
+        #expect(picker.view(on: other).subviews.isEmpty, "The other screen has no bar")
+    }
+
+    @available(macOS 15, *)
+    @Test("Nothing the picker draws is fully clear, so the window server sends it every click: the window under the pointer, the window chosen, the area", arguments: twoScreens)
+    func nothingIsFullyClear(barScreen: CGDirectDisplayID) throws {
+        let picker = TwoScreenPicker(barScreen: barScreen)
+        defer { picker.close() }
+        picker.model.target = .window
+        for (id, point) in TwoScreenPicker.windowCentres {
+            picker.move(to: point)
+            #expect(picker.model.hoveredWindow == id)
+            #expect(picker.opacity(at: point) > 0, "The window under the pointer, lit, takes the click")
+        }
+        picker.click(at: TwoScreenPicker.windowCentres[0].point)
+        for (_, point) in TwoScreenPicker.windowCentres {
+            picker.move(to: point)
+            #expect(picker.opacity(at: point) > 0, "The window chosen, and another under the pointer")
+        }
+        #expect(picker.opacity(at: TwoScreenPicker.onDesktop) > 0)
+
+        picker.model.target = .area
+        let area = try #require(picker.drawArea(from: CGPoint(x: 200, y: 600), to: CGPoint(x: 900, y: 1000)))
+        #expect(picker.opacity(at: CGPoint(x: area.rect.midX, y: area.rect.midY)) > 0, "Inside the area, lit, a press moves it")
+
+        picker.model.target = .screen
+        picker.model.chooseScreen(1)
+        #expect(picker.opacity(at: CGPoint(x: 800, y: 700)) > 0)
+        #expect(picker.opacity(at: TwoScreenPicker.windowCentres[1].point) > 0)
+    }
+
+    @available(macOS 15, *)
+    @Test("A click on a window on either screen chooses it; the pointer on the bar and a click there keep it for Record", arguments: twoScreens)
+    func clickChoosesAWindow(barScreen: CGDirectDisplayID) throws {
+        let picker = TwoScreenPicker(barScreen: barScreen)
+        defer { picker.close() }
+        picker.model.target = .window
+        for (id, point) in TwoScreenPicker.windowCentres {
+            picker.move(to: point)
+            picker.click(at: point)
+            #expect(picker.model.selectedWindow == id)
+            #expect(picker.model.hint == "Click another window to change it.")
+
+            let bar = try #require(picker.model.barFrame)
+            picker.move(to: CGPoint(x: bar.midX, y: bar.midY))
+            #expect(picker.model.hoveredWindow == nil, "The pointer on the bar is on no window")
+            picker.click(at: CGPoint(x: bar.midX, y: bar.minY + 20))
+            #expect(picker.model.selectedWindow == id, "Still chosen with the pointer on the bar")
+            let choice = try #require(picker.model.choice(), "Record is on")
+            #expect(choice.target == .window(id))
+            let screen = try #require(picker.model.layout.screen(containing: point))
+            #expect(choice.regions.map(\.display) == [screen.id])
+        }
+        #expect(picker.recorded == 0)
+    }
+
+    @available(macOS 15, *)
+    @Test("A double click on a window on either screen records it", arguments: twoScreens)
+    func doubleClickRecordsAWindow(barScreen: CGDirectDisplayID) {
+        let picker = TwoScreenPicker(barScreen: barScreen)
+        defer { picker.close() }
+        picker.model.target = .window
+        for (count, (id, point)) in TwoScreenPicker.windowCentres.enumerated() {
+            picker.move(to: point)
+            picker.doubleClick(at: point)
+            #expect(picker.model.selectedWindow == id)
+            #expect(picker.recorded == count + 1)
+        }
+    }
+
+    @available(macOS 15, *)
+    @Test("Nothing anywhere on the bar's rect changes the window, area, or screen chosen, or records", arguments: twoScreens)
+    func barChangesNothing(barScreen: CGDirectDisplayID) throws {
+        let picker = TwoScreenPicker(barScreen: barScreen)
+        defer { picker.close() }
+        let bar = try #require(picker.model.barFrame)
+        let onBar = [
+            CGPoint(x: bar.minX + 1, y: bar.minY + 1), CGPoint(x: bar.maxX - 1, y: bar.minY + 1),
+            CGPoint(x: bar.minX + 1, y: bar.maxY - 1), CGPoint(x: bar.maxX - 1, y: bar.maxY - 1),
+            CGPoint(x: bar.midX, y: bar.midY), CGPoint(x: bar.midX, y: bar.maxY - 8),
+        ]
+        // The window under the bar, chosen where it shows above the bar.
+        let (under, abovePart) = TwoScreenPicker.windowUnderTheBar(on: barScreen)
+        for point in onBar {
+            #expect(ScreencastWindowPicking.window(at: picker.model.layout.topLeftPoint(fromAppKit: point), in: picker.model.windows)?.id == under)
+        }
+
+        picker.model.target = .window
+        for point in onBar { picker.doubleClick(at: point) }
+        #expect(picker.model.selectedWindow == nil && picker.recorded == 0, "Before one is chosen, the bar chooses none")
+        picker.click(at: abovePart)
+        #expect(picker.model.selectedWindow == under)
+        picker.click(at: TwoScreenPicker.windowCentres[0].point)
+        for point in onBar {
+            picker.move(to: point)
+            picker.doubleClick(at: point)
+        }
+        #expect(picker.model.selectedWindow == TwoScreenPicker.windowCentres[0].id && picker.recorded == 0)
+
+        picker.model.target = .area
+        let area = try #require(picker.drawArea(from: CGPoint(x: 200, y: 600), to: CGPoint(x: 900, y: 1000)))
+        for point in onBar { picker.doubleClick(at: point) }
+        #expect(picker.model.area == area && picker.recorded == 0)
+
+        picker.model.target = .screen
+        picker.model.chooseEveryScreen()
+        for point in onBar { picker.doubleClick(at: point) }
+        #expect(picker.model.selectedScreen == nil && picker.recorded == 0)
+    }
+
+    @available(macOS 15, *)
+    @Test("Area and Screen modes work on either screen, and a double click records", arguments: twoScreens)
+    func areaAndScreenModes(barScreen: CGDirectDisplayID) throws {
+        let picker = TwoScreenPicker(barScreen: barScreen)
+        defer { picker.close() }
+        picker.model.target = .area
+        let low = try #require(picker.drawArea(from: CGPoint(x: 200, y: 600), to: CGPoint(x: 900, y: 1000)))
+        #expect(low.display == 1)
+        picker.doubleClick(at: CGPoint(x: low.rect.midX, y: low.rect.midY))
+        #expect(picker.recorded == 1)
+        let high = try #require(picker.drawArea(from: CGPoint(x: 1300, y: 1800), to: CGPoint(x: 1900, y: 2300)))
+        #expect(high.display == 2 && high.rect == CGRect(x: 1300, y: 1800, width: 600, height: 500))
+        picker.doubleClick(at: CGPoint(x: high.rect.midX, y: high.rect.midY))
+        #expect(picker.recorded == 2)
+
+        picker.model.target = .screen
+        let other = try #require(twoScreens.first { $0 != barScreen })
+        picker.click(at: other == 1 ? CGPoint(x: 800, y: 700) : CGPoint(x: 800, y: 2000))
+        #expect(picker.model.selectedScreen == other)
+        picker.doubleClick(at: barScreen == 1 ? CGPoint(x: 800, y: 700) : CGPoint(x: 800, y: 2000))
+        #expect(picker.model.selectedScreen == barScreen && picker.recorded == 3)
+    }
+}
+
+/// The two screens' displays: the laptop's, then the one above it.
+private let twoScreens: [CGDirectDisplayID] = [1, 2]
+
+/// A laptop's screen (1) at AppKit's origin and a larger screen (2) above it, offset left, as a
+/// common pair is arranged, with a window in the middle of each and one under where each screen's
+/// bar would be. Only the screen with the pointer shows the bar.
+@available(macOS 15, *)
+@MainActor
+final class TwoScreenPicker {
+    static let laptop = ScreencastScreen(id: 1, frame: CGRect(x: 0, y: 0, width: 1728, height: 1117), scale: 2)
+    static let above = ScreencastScreen(id: 2, frame: CGRect(x: -272, y: 1117, width: 2560, height: 1440), scale: 2)
+    static let layout = ScreencastScreenLayout(screens: [laptop, above])
+
+    /// In AppKit's space, front to back: one in the middle of each screen, then one under each bar.
+    static let windowFrames: [(id: CGWindowID, frame: CGRect)] = [
+        (41, CGRect(x: 300, y: 500, width: 700, height: 450)),
+        (42, CGRect(x: 100, y: 1700, width: 900, height: 600)),
+        (43, CGRect(x: 200, y: 0, width: 1300, height: 400)),
+        (44, CGRect(x: 300, y: 1117, width: 1900, height: 500)),
+    ]
+    /// The centres of the windows in the middle of each screen, the laptop's first.
+    static let windowCentres: [(id: CGWindowID, point: CGPoint)] = windowFrames.prefix(2).map { ($0.id, CGPoint(x: $0.frame.midX, y: $0.frame.midY)) }
+    static let onDesktop = CGPoint(x: 1600, y: 1050)
+
+    /// The window under the bar on `screen`, and a point where it shows above the bar.
+    static func windowUnderTheBar(on screen: CGDirectDisplayID) -> (CGWindowID, CGPoint) {
+        screen == 1 ? (43, CGPoint(x: 700, y: 350)) : (44, CGPoint(x: 1800, y: 1500))
+    }
+
+    let model: ScreencastPickerModel
+    private(set) var panels: [ScreencastKeyPanel] = []
+    private(set) var recorded = 0
+
+    init(barScreen: CGDirectDisplayID) {
+        model = ScreencastPickerModel(
+            layout: Self.layout, preferences: PickerScreens.preferences(), microphoneAvailable: true, pointerScreen: barScreen
+        )
+        model.windows = Self.windowFrames.map {
+            ScreencastContent.Window(
+                id: $0.id, frame: Self.layout.topLeftRect(fromAppKit: $0.frame), layer: 0,
+                processID: ScreencastScreens.otherApp, isUntitled: false, isOnScreen: true
+            )
+        }
+        panels = Self.layout.screens.map { screen in
+            ScreencastOverlayWindows.pickerPanel(on: screen, model: model, confirm: { [weak self] in self?.recorded += 1 }, cancel: {})
+        }
+        panels.forEach { $0.contentView?.layoutSubtreeIfNeeded() }
+    }
+
+    func close() {
+        panels.forEach { $0.contentView = nil }
+    }
+
+    func view(on id: CGDirectDisplayID) -> ScreencastPickerView {
+        let index = Self.layout.screens.firstIndex { $0.id == id }!
+        return panels[index].contentView as! ScreencastPickerView
+    }
+
+    /// The screen's view under `point`, as AppKit sends the event to its panel, and the point in
+    /// that panel.
+    private func target(_ point: CGPoint) -> (ScreencastPickerView, ScreencastKeyPanel, CGPoint) {
+        let screen = Self.layout.screen(containing: point)!
+        let index = Self.layout.screens.firstIndex { $0.id == screen.id }!
+        let local = CGPoint(x: point.x - screen.frame.minX, y: point.y - screen.frame.minY)
+        return (panels[index].contentView as! ScreencastPickerView, panels[index], local)
+    }
+
+    private func event(_ type: NSEvent.EventType, at point: CGPoint, in panel: NSWindow, clickCount: Int = 1) -> NSEvent {
+        NSEvent.mouseEvent(
+            with: type, location: point, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+            context: nil, eventNumber: 0, clickCount: clickCount, pressure: 1
+        )!
+    }
+
+    func move(to point: CGPoint) {
+        let (view, panel, local) = target(point)
+        view.mouseMoved(with: event(.mouseMoved, at: local, in: panel))
+    }
+
+    func click(at point: CGPoint, clickCount: Int = 1) {
+        let (view, panel, local) = target(point)
+        view.mouseDown(with: event(.leftMouseDown, at: local, in: panel, clickCount: clickCount))
+        view.mouseUp(with: event(.leftMouseUp, at: local, in: panel, clickCount: clickCount))
+    }
+
+    func doubleClick(at point: CGPoint) {
+        click(at: point, clickCount: 1)
+        click(at: point, clickCount: 2)
+    }
+
+    /// Drags in Area mode from `start` to `end`, both on one screen, and returns the area drawn.
+    func drawArea(from start: CGPoint, to end: CGPoint) -> ScreencastPickedArea? {
+        let (view, panel, local) = target(start)
+        let screen = Self.layout.screen(containing: start)!
+        let localEnd = CGPoint(x: end.x - screen.frame.minX, y: end.y - screen.frame.minY)
+        view.mouseDown(with: event(.leftMouseDown, at: local, in: panel))
+        view.mouseDragged(with: event(.leftMouseDragged, at: localEnd, in: panel))
+        view.mouseUp(with: event(.leftMouseUp, at: localEnd, in: panel))
+        return model.area
+    }
+
+    /// How opaque the picker draws `point`: 0 where it's fully clear, where the window server
+    /// would send a click to the window under the picker.
+    func opacity(at point: CGPoint) -> CGFloat {
+        let (view, _, local) = target(point)
+        let rect = CGRect(x: local.x - 2, y: local.y - 2, width: 4, height: 4)
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { return -1 }
+        view.cacheDisplay(in: rect, to: rep)
+        return rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)?.alphaComponent ?? -1
+    }
+}
+
 /// "Getting ready…" in the notch, through Screencast's own overlays and a notch notice of the
 /// test's own.
 @MainActor

@@ -38,15 +38,8 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
         let layout = model.layout
         var keyPanel: ScreencastKeyPanel?
         for screen in layout.screens {
-            let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
-            panel.acceptsMouseMovedEvents = true
-            let view = ScreencastPickerView(model: model, screen: screen, confirm: confirm)
-            panel.contentView = view
-            // The screen the pointer was on at Start Screencast, which Screen mode starts with too.
-            if screen.id == model.pointerScreen?.id {
-                view.showBar(ScreencastPickerBar(model: model, confirm: confirm, cancel: cancel), bottomInset: Self.dockInset(of: screen))
-                keyPanel = panel
-            }
+            let panel = Self.pickerPanel(on: screen, model: model, confirm: confirm, cancel: cancel)
+            if screen.id == model.pointerScreen?.id { keyPanel = panel }
             panel.hideDuringUnitTests()
             panel.orderFrontRegardless()
             pickerPanels.append(panel)
@@ -61,6 +54,28 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
             if model?.canConfirm == true { confirm() }
             return nil
         }
+    }
+
+    /// One screen's part of the picker, not yet shown, with the bar on the screen the pointer was on
+    /// at Start Screencast, which Screen mode starts with too.
+    static func pickerPanel(
+        on screen: ScreencastScreen,
+        model: ScreencastPickerModel,
+        confirm: @escaping () -> Void,
+        cancel: @escaping () -> Void
+    ) -> ScreencastKeyPanel {
+        let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
+        panel.acceptsMouseMovedEvents = true
+        // Every click, said outright: left unsaid, the window server sends a click on a clear part
+        // of a window that isn't opaque to the window under it, so a click on the window being
+        // chosen, which the picker shows undimmed, would reach that window and never the picker.
+        panel.ignoresMouseEvents = false
+        let view = ScreencastPickerView(model: model, screen: screen, confirm: confirm)
+        panel.contentView = view
+        if screen.id == model.pointerScreen?.id {
+            view.showBar(ScreencastPickerBar(model: model, confirm: confirm, cancel: cancel), bottomInset: Self.dockInset(of: screen))
+        }
+        return panel
     }
 
     func closePicker() {
@@ -227,6 +242,8 @@ final class ScreencastFirstClickHostingView<Content: View>: NSHostingView<Conten
 @MainActor
 final class ScreencastPickerView: NSView {
     private static let dimming = NSColor.black.withAlphaComponent(0.32)
+    /// What `undim` leaves: as good as clear to the eye, but not to the window server.
+    private static let undimmed = NSColor.black.withAlphaComponent(0.01)
 
     private let model: ScreencastPickerModel
     private let screen: ScreencastScreen
@@ -365,7 +382,7 @@ final class ScreencastPickerView: NSView {
             // The window under the pointer, which a click would choose: lit while none is chosen,
             // and once one is, only outlined, dashed, so the chosen one stays the one lit.
             if let id = model.hoveredWindow, id != model.selectedWindow, let rect = shownRect(of: id) {
-                if model.selectedWindow == nil { clear(rect, in: context) }
+                if model.selectedWindow == nil { undim(rect, in: context) }
                 context.setStrokeColor(NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor)
                 context.setLineWidth(2)
                 context.setLineDash(phase: 0, lengths: [8, 5])
@@ -374,7 +391,7 @@ final class ScreencastPickerView: NSView {
             }
             // The window chosen, last, so nothing drawn over it hides it.
             if let id = model.selectedWindow, let rect = shownRect(of: id) {
-                clear(rect, in: context)
+                undim(rect, in: context)
                 context.setStrokeColor(NSColor.controlAccentColor.cgColor)
                 context.setLineWidth(4)
                 context.stroke(rect.insetBy(dx: 2, dy: 2))
@@ -400,14 +417,19 @@ final class ScreencastPickerView: NSView {
         return rect.isNull || rect.isEmpty ? nil : rect
     }
 
-    private func clear(_ rect: CGRect, in context: CGContext) {
-        context.setBlendMode(.clear)
+    /// Shows what's under `rect` undimmed, but never fully clear: the window server sends a click on
+    /// a fully clear part of a window that isn't opaque to the window under it. The panel also says
+    /// it takes every click (`pickerPanel`); this keeps the click here without relying on that alone,
+    /// and a hundredth of black can't be seen.
+    private func undim(_ rect: CGRect, in context: CGContext) {
+        context.setBlendMode(.copy)
+        context.setFillColor(Self.undimmed.cgColor)
         context.fill(rect)
         context.setBlendMode(.normal)
     }
 
     private func drawArea(_ rect: CGRect, editor: ScreencastAreaEditor, in context: CGContext) {
-        clear(rect, in: context)
+        undim(rect, in: context)
         context.setStrokeColor(NSColor.white.cgColor)
         context.setLineWidth(1.5)
         if editor.isDrawing { context.setLineDash(phase: 0, lengths: [6, 4]) }
