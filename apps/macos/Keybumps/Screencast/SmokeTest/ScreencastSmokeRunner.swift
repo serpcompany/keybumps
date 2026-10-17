@@ -72,7 +72,7 @@ struct ScreencastSmokeRig {
     /// and the bar's position.
     let defaults: UserDefaults
 
-    /// Settings › Screengrabs for the smoke test: no microphone, no Mac's sound, no countdown, no
+    /// Settings › ScreenGrabs for the smoke test: no microphone, no Mac's sound, no countdown, no
     /// shortcuts or click highlights, and its own captures folder.
     static func preferences(capturesFolder: URL) -> ScreencastPreferences {
         ScreencastPreferences(
@@ -149,7 +149,10 @@ struct ScreencastSmokeRig {
 /// two seconds of recording, Stop, and the saved files checked and deleted. Only the picker's
 /// windows, the countdown (set to none), and the review panel are skipped.
 ///
-/// The window capture takes only the blank window `smoke-screencast.sh` shows from a helper
+/// Its screenshots (`ScreenshotSmokeRunner`, #491) run first, once Screen Recording is known to be
+/// granted, and their lines go in the same result.
+///
+/// The window capture takes only the blank window `smoke-screengrabs.sh` shows from a helper
 /// process of its own, found by that process's ID (`environment.windowProcessID`), whatever is in
 /// front of it. Without that window on screen in time it fails with `noSmokeWindow`; no other
 /// window is ever taken instead.
@@ -199,6 +202,8 @@ final class ScreencastSmokeRunner {
 
     private let rig: ScreencastSmokeRig
     private let inspector: ScreencastSmokeInspector
+    /// The screenshots taken before the recordings; nil takes none.
+    private let screenshots: ScreenshotSmokeRunner?
     private let configuration: Configuration
     private let environment: Environment
     private(set) var report: ScreencastSmokeReport
@@ -206,15 +211,28 @@ final class ScreencastSmokeRunner {
     /// The capture the controller handed over for the capture under way.
     private var saved: ScreencastCaptureResult?
 
-    init(rig: ScreencastSmokeRig, inspector: ScreencastSmokeInspector, configuration: Configuration = Configuration(), environment: Environment) {
+    init(
+        rig: ScreencastSmokeRig,
+        inspector: ScreencastSmokeInspector,
+        screenshots: ScreenshotSmokeRunner? = nil,
+        configuration: Configuration = Configuration(),
+        environment: Environment
+    ) {
         self.rig = rig
         self.inspector = inspector
+        self.screenshots = screenshots
         self.configuration = configuration
         self.environment = environment
-        report = ScreencastSmokeReport(macOS: environment.macOS, displayCount: environment.displayCount, modes: configuration.modes)
+        report = ScreencastSmokeReport(
+            macOS: environment.macOS,
+            displayCount: environment.displayCount,
+            modes: configuration.modes,
+            screenshots: screenshots?.screenshots ?? []
+        )
     }
 
-    /// Runs every capture and returns the result, also written to `environment.resultURL`.
+    /// Takes the screenshots, runs every capture, and returns the result, also written to
+    /// `environment.resultURL`.
     func run() async -> ScreencastSmokeReport {
         write()
         guard environment.screenRecordingGranted() else {
@@ -222,6 +240,14 @@ final class ScreencastSmokeRunner {
             return finish()
         }
         try? environment.fileManager.createDirectory(at: rig.capturesFolder, withIntermediateDirectories: true)
+        if let screenshots {
+            screenshots.onChange = { [weak self] lines in
+                self?.report.screenshots = lines
+                self?.write()
+            }
+            report.screenshots = await screenshots.run()
+            screenshots.onChange = nil
+        }
         rig.controller.onCaptureFinished = { [weak self] result in self?.saved = result }
         var windsDown = true
         for index in report.captures.indices {
@@ -473,7 +499,8 @@ final class ScreencastSmokeRunner {
     private func finish() -> ScreencastSmokeReport {
         try? environment.fileManager.removeItem(at: rig.capturesFolder)
         report.cleanedUp = !environment.fileManager.fileExists(atPath: rig.capturesFolder.path)
-        report.passed = report.errorCategory == nil && report.cleanedUp && report.captures.allSatisfy(\.passed)
+        report.passed = report.errorCategory == nil && report.cleanedUp
+            && report.captures.allSatisfy(\.passed) && report.screenshots.allSatisfy(\.passed)
         report.complete = true
         write()
         return report
