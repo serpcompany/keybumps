@@ -3,7 +3,7 @@ import SwiftUI
 /// The rows of a Command Palette tab that a capability module supplies itself, so the palette needs
 /// no case of its own for the tab. The palette keeps the search field, the tab bar, the selection,
 /// the arrow keys, Escape, and the footer's chrome; the content answers for its rows, for Return,
-/// ⌘C, ⌘P, Space, and Delete on them, and for what the footer says those keys do.
+/// ⌘Return, ⌘C, ⌘P, Space, and Delete on them, and for what the footer says those keys do.
 @MainActor
 protocol CapabilityPaletteContent: AnyObject {
     /// The tab these rows fill; it is the owning module's `paletteTab`.
@@ -19,9 +19,12 @@ protocol CapabilityPaletteContent: AnyObject {
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int?
     /// The rows Up and Down move through, for the text in the search field.
     func rowCount(query: String) -> Int
-    /// Return on the selected row: the tab's main action, such as Copy. ⌘Return does the same, and
-    /// never pastes (#370).
+    /// Return on the selected row: the tab's main action, such as Copy. ⌘Return does the same unless
+    /// the tab gives it an action of its own (`commandActivate`).
     func activate(row: Int, query: String, palette: PaletteContentActions)
+    /// ⌘Return on the selected row: what Return does, unless the tab gives it an action of its own,
+    /// such as the ScreenGrabs tab's Edit (`PaletteKeyAction.edit`). It never pastes (#370).
+    func commandActivate(row: Int, query: String, palette: PaletteContentActions)
     /// ⌘C on the selected row: copies it, as Return does in most tabs. A row that doesn't copy does
     /// nothing.
     func copy(row: Int, query: String, palette: PaletteContentActions)
@@ -44,8 +47,10 @@ protocol CapabilityPaletteContent: AnyObject {
     /// `charactersIgnoringModifiers` reports them, lowercased. The palette's own Command keys (the
     /// tab numbers and ⌘,) come first.
     var commandKeys: Set<String> { get }
-    /// One of `commandKeys`, pressed with Command. A held key's repeats don't come here.
-    func handleCommandKey(_ characters: String, query: String)
+    /// One of `commandKeys`, pressed with Command, on the selected row, such as ⌘E, which edits the
+    /// selected screenshot. A held key's repeats don't come here, nor do keys pressed while `/`'s
+    /// list of filters hides the rows.
+    func handleCommandKey(_ characters: String, row: Int, query: String, palette: PaletteContentActions)
     /// Runs each time the palette shows the tab: when it opens on it, or switches to it.
     func didShow(palette: PaletteContentActions)
     /// Runs when the palette stops showing the tab: it closes, or switches to another tab.
@@ -59,6 +64,9 @@ extension CapabilityPaletteContent {
     func isGrid(query: String) -> Bool { false }
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int? { nil }
     func activate(row: Int, query: String, palette: PaletteContentActions) {}
+    func commandActivate(row: Int, query: String, palette: PaletteContentActions) {
+        activate(row: row, query: query, palette: palette)
+    }
     func copy(row: Int, query: String, palette: PaletteContentActions) {}
     func paste(row: Int, query: String, palette: PaletteContentActions) {}
     func playback(row: Int, query: String) -> PalettePlayback? { nil }
@@ -66,7 +74,7 @@ extension CapabilityPaletteContent {
     func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation? { nil }
     func footerActions(row: Int, query: String) -> PaletteFooterActions { PaletteFooterActions(tab: tab) }
     var commandKeys: Set<String> { [] }
-    func handleCommandKey(_ characters: String, query: String) {}
+    func handleCommandKey(_ characters: String, row: Int, query: String, palette: PaletteContentActions) {}
     func didShow(palette: PaletteContentActions) {}
     func didHide() {}
 }
@@ -168,6 +176,16 @@ struct PaletteContentActions {
     /// Deletes a row as the Delete key does, as from a detail pane's Delete button: a row whose
     /// Delete asks first (`deletionConfirmation(row:query:)`) shows its question.
     var deleteRow: (Int) -> Void = { _ in }
+    /// Puts a Clipboard History item back on the clipboard, then closes the palette and confirms the
+    /// copy at the notch, as the Clipboard tab's Return does.
+    var copyClipboardEntry: (ClipboardEntry) -> Void = { _ in }
+    /// Puts a Clipboard History item back on the clipboard, then closes the palette and pastes it into
+    /// the app that was in front when it opened (⌘P), as the Clipboard tab's ⌘P does. It stays on the
+    /// clipboard afterwards.
+    var pasteClipboardEntry: (ClipboardEntry) -> Void = { _ in }
+    /// Closes the palette and opens an image item in the Screenshot Editor, as ⌘E does in the
+    /// Clipboard tab. It does nothing for text, or while ScreenGrabs is off.
+    var editClipboardImage: (ClipboardEntry) -> Void = { _ in }
 }
 
 /// An arrow key in a grid tab.

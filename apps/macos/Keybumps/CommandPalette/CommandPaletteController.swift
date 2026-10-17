@@ -28,7 +28,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     /// The tabs `CommandPaletteController` draws itself. Every other tab's rows come from its
     /// module (`CapabilityPaletteContent`).
-    static let drawnByPalette: Set<CommandPaletteTab> = [.search, .clipboard, .dictation, .screenshots, .snippets]
+    static let drawnByPalette: Set<CommandPaletteTab> = [.search, .clipboard, .dictation, .snippets]
     var prompt: String { registration.prompt }
 
     /// The tabs in the tab bar: those of plugins that are on, and whose data source is on too (the
@@ -66,36 +66,6 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     /// Shown in the footer after the primary action, each with its key, such as Paste ⌘P.
     var secondaryActions: [PaletteKeyAction] { registration.secondaryActions }
-}
-
-/// What the Screenshots tab shows: only screen captures from Clipboard History.
-enum ScreenshotPaletteContent: Equatable {
-    case disabled
-    case empty
-    case entries([ClipboardEntry])
-
-    static func resolve(entries: [ClipboardEntry], query: String, isEnabled: Bool) -> ScreenshotPaletteContent {
-        guard isEnabled else { return .disabled }
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = entries.filter { $0.isScreenshot && (trimmed.isEmpty || $0.searchableText.localizedCaseInsensitiveContains(trimmed)) }
-        return matches.isEmpty ? .empty : .entries(matches)
-    }
-
-    var entries: [ClipboardEntry] {
-        guard case .entries(let entries) = self else { return [] }
-        return entries
-    }
-}
-
-/// What choosing a screenshot does. Return or a click copies it, as in the Clipboard tab.
-/// Command-Return or Command-click opens it in the Screenshot Editor.
-enum ScreenshotPaletteAction: Equatable {
-    case copy
-    case edit
-
-    init(withCommand: Bool) {
-        self = withCommand ? .edit : .copy
-    }
 }
 
 struct CommandPaletteTabLabel: Equatable {
@@ -674,7 +644,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 chooseClipboardEntry: { [weak self] entry in self?.chooseClipboardEntry(entry) },
                 copyClipboardEntry: { [weak self] entry in self?.copyClipboardEntry(entry) },
                 editClipboardEntry: { [weak self] entry in _ = self?.editClipboardImage(entry) },
-                chooseScreenshot: { [weak self] entry in self?.chooseScreenshot(entry) },
                 copyDictationText: { [weak self] text in
                     self?.copy(text, suppressClipboardHistory: true)
                 },
@@ -799,10 +768,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 run(command)
                 return nil
             }
-            if let tabContent, let characters = event.charactersIgnoringModifiers?.lowercased(),
+            // While `/`'s list hides the rows, their Command keys wait.
+            if let tabContent, filterMenu == nil, let characters = event.charactersIgnoringModifiers?.lowercased(),
                tabContent.commandKeys.contains(characters) {
                 // Holding the key down does it once, so a held ⌘T doesn't keep swapping.
-                if !event.isARepeat { tabContent.handleCommandKey(characters, query: state.historyQuery) }
+                if !event.isARepeat {
+                    tabContent.handleCommandKey(characters, row: state.selection, query: state.historyQuery, palette: contentActions)
+                }
                 return nil
             }
             switch event.charactersIgnoringModifiers?.lowercased() {
@@ -821,7 +793,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             default:
                 break
             }
-            if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard || state.tab == .screenshots, filterMenu == nil {
+            if event.charactersIgnoringModifiers?.lowercased() == "e", state.tab == .clipboard, filterMenu == nil {
                 editSelectedClipboardImage()
                 return nil
             }
@@ -830,11 +802,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         }
 
-        // A grid tab's rows take the plain arrow keys; with Shift, Option, Command, or Control, or
-        // while an input method is composing, they stay with the search field. Down goes into the
-        // grid and Up from its top row comes back out; outside it, Left and Right switch tabs.
-        if let tabContent, tabContent.isGrid(query: state.historyQuery), let move = PaletteMove(keyCode: event.keyCode),
-           !isComposingText, event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
+        // A grid tab's rows take Up and Down, as a list's do, and the plain Left and Right; with
+        // text in the search field, Shift, Option, Command, or Control, or while an input method is
+        // composing, Left and Right stay with the search field. Down goes into the grid and Up from
+        // its top row comes back out; outside it, Left and Right switch tabs. `/`'s list is a list.
+        if isGridTab, let tabContent, let move = PaletteMove(keyCode: event.keyCode),
+           move == .up || move == .down
+               || activeQuery.isEmpty && !isComposingText && event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
             // Until an arrow key moves within the grid, Left and Right switch tabs, even after the
             // pointer highlighted a tile on its way across.
             guard state.isBrowsingGrid, !(state.gridEnteredByPointer && (move == .left || move == .right)) else {
@@ -843,13 +817,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
             if !(0..<itemCount).contains(state.selection) {
                 state.selection = 0
-                state.gridEnteredByPointer = false
             } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
-                state.gridEnteredByPointer = false
             } else if move == .up {
                 leaveGrid()
+                return nil
             }
+            // A key has moved within the grid, even at its edge, so Left and Right do too from here.
+            state.gridEnteredByPointer = false
             return nil
         }
 
@@ -863,31 +838,17 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
             return nil
         case 125:
-            if isScreenshotGrid, !state.isBrowsingGrid {
-                enterGrid(or: .down)
-            } else {
-                moveSelection(isScreenshotGrid ? ScreenshotGrid.columnCount : 1)
-            }
+            moveSelection(1)
             return nil
         case 126:
-            if isScreenshotGrid, state.selection < ScreenshotGrid.columnCount {
-                leaveGrid()
-            } else {
-                moveSelection(isScreenshotGrid ? -ScreenshotGrid.columnCount : -1)
-            }
+            moveSelection(-1)
             return nil
         case 123, 124:
-            // With text in the search field, Left and Right move the caret. Otherwise they move
-            // through the screenshot grid once Down has gone into it, or switch to the tab beside
-            // this one.
+            // With text in the search field, Left and Right move the caret. Otherwise they switch to
+            // the tab beside this one.
             guard activeQuery.isEmpty, !isComposingText,
                   event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) else { return event }
-            let offset = event.keyCode == 124 ? 1 : -1
-            if isScreenshotGrid, state.isBrowsingGrid, !state.gridEnteredByPointer {
-                if (0..<itemCount).contains(state.selection + offset) { state.selection += offset }
-            } else {
-                switchTab(by: offset)
-            }
+            switchTab(by: event.keyCode == 124 ? 1 : -1)
             return nil
         case 36:
             // While an input method is composing, Return commits its candidate in the search field.
@@ -978,16 +939,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func moveSelection(_ delta: Int) {
         let count = itemCount
         guard count > 0 else { return }
-        // Up and Down in the screenshot grid move within it, so Left and Right do too from here.
-        state.gridEnteredByPointer = false
-        if abs(delta) > 1 {
-            // Moving a grid row stops at the edges instead of wrapping to another column.
-            let target = state.selection + delta
-            guard (0..<count).contains(target) else { return }
-            state.selection = target
-        } else {
-            state.selection = (state.selection + delta + count) % count
-        }
+        state.selection = (state.selection + delta + count) % count
     }
 
     /// The rows of the open tab, when its module supplies them.
@@ -1007,7 +959,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.pasteText(text, restoresClipboard: restoresClipboard, for: self.state.tab.owner)
             },
-            deleteRow: { [weak self] row in _ = self?.deleteContentRow(row) }
+            deleteRow: { [weak self] row in _ = self?.deleteContentRow(row) },
+            copyClipboardEntry: { [weak self] entry in self?.copyClipboardEntry(entry) },
+            pasteClipboardEntry: { [weak self] entry in
+                guard let self else { return }
+                self.pasteClipboardEntry(entry, for: self.state.tab.owner)
+            },
+            editClipboardImage: { [weak self] entry in _ = self?.editClipboardImage(entry) }
         )
     }
 
@@ -1023,8 +981,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             filteredClipboard.count
         case .dictation:
             filteredDictations.count
-        case .screenshots:
-            screenshotContent.entries.count
         case .snippets:
             snippetContent.entries.count
         default:
@@ -1040,10 +996,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// Whether the open tab lays its items out in a grid. `/`'s list of filters is always a list.
     private var isGridTab: Bool {
-        filterMenu == nil && (state.tab == .screenshots || tabContent?.isGrid(query: state.historyQuery) == true)
+        filterMenu == nil && tabContent?.isGrid(query: state.historyQuery) == true
     }
-
-    private var isScreenshotGrid: Bool { state.tab == .screenshots && filterMenu == nil }
 
     /// The filters `/` lists while the search field starts with it, or nil.
     private var filterMenu: [PaletteFilter]? {
@@ -1152,10 +1106,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .clipboard:
             guard filteredClipboard.indices.contains(index) else { return false }
             clipboard.removeFromClipboardTab(filteredClipboard[index])
-        case .screenshots:
-            let entries = screenshotContent.entries
-            guard entries.indices.contains(index) else { return false }
-            clipboard.delete(entries[index])
         case .dictation:
             // A recording can't be made again, and a hover on the way to Delete can change which
             // one is highlighted, so Delete asks first.
@@ -1174,14 +1124,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
         state.selection = min(index, max(0, itemCount - 1))
         return true
-    }
-
-    private var screenshotContent: ScreenshotPaletteContent {
-        ScreenshotPaletteContent.resolve(
-            entries: state.filter.apply(clipboard.entries) { $0.matches($1) },
-            query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.screenshotTools)
-        )
     }
 
     private var filteredClipboard: [ClipboardEntry] {
@@ -1214,14 +1156,19 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     /// Return on the highlighted row, or ⌘Return with `reveal`: the same, except that ⌘Return
-    /// reveals a Quick Search result in Finder and opens a screenshot in the Screenshot Editor.
+    /// reveals a Quick Search result in Finder, and does what a module tab gives it
+    /// (`commandActivate`), such as opening a screenshot in the Screenshot Editor.
     private func activateSelection(reveal: Bool) {
         if let filterMenu {
             if filterMenu.indices.contains(state.selection) { chooseFilter(filterMenu[state.selection]) }
             return
         }
         if let tabContent {
-            tabContent.activate(row: state.selection, query: state.historyQuery, palette: contentActions)
+            if reveal {
+                tabContent.commandActivate(row: state.selection, query: state.historyQuery, palette: contentActions)
+            } else {
+                tabContent.activate(row: state.selection, query: state.historyQuery, palette: contentActions)
+            }
             return
         }
         switch state.tab {
@@ -1250,10 +1197,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             let text = filteredDictations[state.selection].text
             guard !text.isEmpty else { return }
             copy(text, suppressClipboardHistory: true)
-        case .screenshots:
-            let entries = screenshotContent.entries
-            guard entries.indices.contains(state.selection) else { return }
-            chooseScreenshot(entries[state.selection], withCommand: reveal)
         case .snippets:
             let entries = snippetContent.entries
             guard entries.indices.contains(state.selection) else { return }
@@ -1288,8 +1231,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         case .clipboard:
             copyClipboardEntry(filteredClipboard[index])
-        case .screenshots:
-            copyClipboardEntry(screenshotContent.entries[index])
         case .dictation:
             let text = filteredDictations[index].text
             guard !text.isEmpty else { return }
@@ -1321,8 +1262,6 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         case .clipboard:
             pasteClipboardEntry(filteredClipboard[index], for: .clipboardHistory)
-        case .screenshots:
-            pasteClipboardEntry(screenshotContent.entries[index], for: .screenshotTools)
         case .dictation:
             let text = filteredDictations[index].text
             guard !text.isEmpty else { return }
@@ -1613,22 +1552,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     private func editSelectedClipboardImage() {
-        let entries = state.tab == .screenshots ? screenshotContent.entries : filteredClipboard
-        guard entries.indices.contains(state.selection) else { return }
-        editClipboardImage(entries[state.selection])
-    }
-
-    /// A click on a screenshot copies it; Command-click edits it.
-    private func chooseScreenshot(_ entry: ClipboardEntry) {
-        chooseScreenshot(entry, withCommand: NSEvent.modifierFlags.contains(.command))
-    }
-
-    /// Return and a click copy a screenshot; with Command held they open it in the Screenshot Editor.
-    private func chooseScreenshot(_ entry: ClipboardEntry, withCommand: Bool) {
-        switch ScreenshotPaletteAction(withCommand: withCommand) {
-        case .copy: copyClipboardEntry(entry)
-        case .edit: editClipboardImage(entry)
-        }
+        guard filteredClipboard.indices.contains(state.selection) else { return }
+        editClipboardImage(filteredClipboard[state.selection])
     }
 
     @discardableResult
@@ -1663,7 +1588,6 @@ private struct CommandPaletteView: View {
     /// Always copies, whatever keys are held (the context menu's Copy).
     let copyClipboardEntry: (ClipboardEntry) -> Void
     let editClipboardEntry: (ClipboardEntry) -> Void
-    let chooseScreenshot: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
     let snippetActions: SnippetPaletteActions
     /// Delete on a recording asks first (`requestDictationDeletion`); the alert's Delete deletes.
@@ -1707,7 +1631,7 @@ private struct CommandPaletteView: View {
                     PaletteFooter(
                         tab: state.tab,
                         isGrid: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) == nil
-                            && (state.tab == .screenshots || tabContents[state.tab]?.isGrid(query: state.historyQuery) == true),
+                            && tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
                         isBrowsingGrid: state.isBrowsingGrid,
                         isChoosingFilter: PaletteFilter.menu(
                             in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
@@ -1831,33 +1755,6 @@ private struct CommandPaletteView: View {
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
             .environment(\.dictationTranslationPair, preferences.dictationTranslationPair)
-        case .screenshots:
-            switch screenshotContent {
-            case .disabled:
-                PaletteResultsContainer {
-                    PaletteEmptyState(title: "\(Capability.screenshotTools.title) is turned off", systemImage: "camera.viewfinder")
-                }
-            case .empty:
-                PaletteResultsContainer {
-                    PaletteEmptyState(
-                        title: state.historyQuery.isEmpty ? "Take a screenshot with ⇧⌘4 and it appears here" : "No matching screenshots",
-                        systemImage: "camera.viewfinder"
-                    )
-                }
-            case .entries(let entries):
-                ScreenshotGrid(
-                    entries: entries,
-                    selection: state.isBrowsingGrid ? state.selection : -1,
-                    select: {
-                        state.selection = $0
-                        state.isBrowsingGrid = true
-                    },
-                    choose: chooseScreenshot,
-                    delete: clipboard.delete,
-                    clear: clipboard.clearScreenshots,
-                    confirmationPresentationChanged: confirmationPresentationChanged
-                )
-            }
         case .snippets:
             SnippetPaletteResults(
                 content: SnippetPaletteContent.resolve(
@@ -1875,14 +1772,6 @@ private struct CommandPaletteView: View {
             // Module tabs are drawn by their content, above.
             EmptyView()
         }
-    }
-
-    private var screenshotContent: ScreenshotPaletteContent {
-        ScreenshotPaletteContent.resolve(
-            entries: state.filter.apply(clipboard.entries) { $0.matches($1) },
-            query: state.historyQuery,
-            isEnabled: preferences.enabledCapabilities.contains(.screenshotTools)
-        )
     }
 
     private var filteredClipboard: [ClipboardEntry] {
@@ -2629,7 +2518,9 @@ enum ClipboardSourceAppIcons {
     }
 }
 
-private struct ClipboardEntryPreview: View {
+/// A Clipboard History item's preview in its Clipboard tab row; the ScreenGrabs tab's tiles load
+/// their thumbnails through it too (`loadThumbnail`).
+struct ClipboardEntryPreview: View {
     /// A text item's preview: lines of text, not a document.
     static let textSymbol = "text.alignleft"
 
@@ -2677,123 +2568,6 @@ private struct ClipboardEntryPreview: View {
             }
             return NSImage(cgImage: image, size: .zero)
         }.value
-    }
-}
-
-/// Raycast's Search Screenshots: a grid of large thumbnails with the name and age underneath,
-/// so screenshots are recognizable at a glance. Arrow keys move through the grid.
-private struct ScreenshotGrid: View {
-    static let columnCount = 3
-
-    let entries: [ClipboardEntry]
-    let selection: Int
-    let select: (Int) -> Void
-    let choose: (ClipboardEntry) -> Void
-    let delete: (ClipboardEntry) -> Void
-    let clear: () -> Void
-    let confirmationPresentationChanged: (Bool) -> Void
-
-    var body: some View {
-        PaletteResultsContainer {
-            VStack(spacing: 0) {
-                PaletteListHeader(title: "Recent") {
-                    ClearAllButton(
-                        confirmationTitle: "Clear screenshots?",
-                        confirmationMessage: "This removes screenshots from Keybumps history. The screenshot files stay where macOS saved them.",
-                        disabled: entries.isEmpty,
-                        confirmationPresentationChanged: confirmationPresentationChanged,
-                        clear: clear
-                    )
-                    .buttonStyle(PalettePillButtonStyle())
-                }
-
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: Self.columnCount),
-                            spacing: 14
-                        ) {
-                            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                                ScreenshotCard(
-                                    entry: entry,
-                                    isSelected: index == selection,
-                                    choose: { select(index); choose(entry) },
-                                    delete: { delete(entry) }
-                                )
-                                .paletteHoverHighlights(row: index)
-                                .id(entry.id)
-                            }
-                        }
-                        // The first thumbnail sits where the list tabs' first well does (#381).
-                        .padding(.horizontal, PaletteRowMetrics.wellX)
-                        .padding(.vertical, PaletteRowMetrics.verticalInset)
-                    }
-                    .paletteScrollsToSelection(selection, proxy: proxy) { entries.indices.contains($0) ? entries[$0].id : nil }
-                }
-            }
-        }
-    }
-}
-
-private struct ScreenshotCard: View {
-    let entry: ClipboardEntry
-    let isSelected: Bool
-    let choose: () -> Void
-    let delete: () -> Void
-    @State private var thumbnail: NSImage?
-    @State private var isHovering = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        VStack(alignment: .leading, spacing: 6) {
-            Button(action: choose) {
-                ZStack {
-                    PaletteTheme.keycapFill
-                    if let thumbnail {
-                        Image(nsImage: thumbnail)
-                            .resizable()
-                            .scaledToFit()
-                    } else {
-                        Image(systemName: "photo")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .aspectRatio(16 / 10, contentMode: .fit)
-                .clipShape(shape)
-                .overlay(shape.strokeBorder(isSelected ? Color.accentColor : PaletteTheme.border, lineWidth: isSelected ? 3 : 1))
-                .contentShape(shape)
-            }
-            .buttonStyle(.plain)
-            .paletteLayoutProbe(.gridItem)
-            .overlay(alignment: .topTrailing) {
-                if isHovering || isSelected {
-                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
-                        .buttonStyle(PalettePillButtonStyle(isCircular: true))
-                        .padding(8)
-                        .help("Delete (⌫)")
-                        .accessibilityLabel("Delete screenshot \(entry.displayText)")
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.displayText)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(entry.capturedAt, style: .relative)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 2)
-        }
-        .onHover { isHovering = $0 }
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .task(id: entry.mediaPath) {
-            guard let imageURL = entry.imageURL else { return }
-            thumbnail = await ClipboardEntryPreview.loadThumbnail(from: imageURL, maxPixelSize: 640)
-        }
     }
 }
 

@@ -27,17 +27,19 @@ struct CapabilityModuleTests {
         }
     }
 
-    @Test("Shortcut Coach's, Timer's, Emoji Picker's, and Translation's modules supply their tabs' rows, and the app gives them to the palette")
+    @Test("ScreenGrabs', Shortcut Coach's, Timer's, Emoji Picker's, and Translation's modules supply their tabs' rows, and the app gives them to the palette")
     func moduleRowsComeFromTheModules() {
         let harness = ModuleHarness()
         defer { harness.tearDown() }
 
-        #expect(Set(harness.model.capabilities.paletteContents.keys) == [.keyboardShortcutter, .timers, .emoji, .translate])
+        let supplied: Set<CommandPaletteTab> = [.screenshots, .keyboardShortcutter, .timers, .emoji, .translate]
+        #expect(Set(harness.model.capabilities.paletteContents.keys) == supplied)
+        #expect(harness.model.capabilities.module(for: .screenshotTools)?.paletteContent?.tab == .screenshots)
         #expect(harness.model.capabilities.module(for: .keyboardShortcutter)?.paletteContent?.tab == .keyboardShortcutter)
         #expect(harness.model.capabilities.module(for: .timer)?.paletteContent?.tab == .timers)
         #expect(harness.model.capabilities.module(for: .emojiPicker)?.paletteContent?.tab == .emoji)
         #expect(harness.model.capabilities.module(for: .translation)?.paletteContent?.tab == .translate)
-        #expect(Set(harness.model.commandPalette.tabContents.keys) == [.keyboardShortcutter, .timers, .emoji, .translate])
+        #expect(Set(harness.model.commandPalette.tabContents.keys) == supplied)
     }
 
     @Test("Every palette tab is drawn by the palette or supplied by its module, never neither or both")

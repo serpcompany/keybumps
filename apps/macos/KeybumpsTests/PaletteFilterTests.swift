@@ -213,6 +213,7 @@ private final class PaletteFilterFixture {
         let dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -222,12 +223,15 @@ private final class PaletteFilterFixture {
                 paster: InertTextPaster(),
                 allowsSystemAccess: false
             ),
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            preferences: preferences,
             snippets: folder.makeStore(),
             pasteboard: pasteboard,
             notices: SilentFilterNotices(),
             search: search
         )
+        palette.tabContents = [
+            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
+        ]
     }
 
     func tearDown() {

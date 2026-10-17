@@ -233,6 +233,22 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.tab == .search)
     }
 
+    @Test("In a grid, Up and Down with a modifier move as without, as in a list; Left and Right with one stay with the search field")
+    func gridArrowsWithModifiers() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 6
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .shift)) == nil)
+        #expect(fixture.palette.state.isBrowsingGrid)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .option)) == nil)
+        #expect(fixture.palette.state.selection == 3)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_RightArrow, modifiers: .shift)) != nil)
+        #expect(fixture.palette.state.selection == 3)
+    }
+
     @Test("Screenshots: Left and Right switch tabs until Down goes into the grid, then move between screenshots")
     func screenshotsGridNeedsDown() throws {
         let fixture = ModuleTabFixture()
@@ -456,6 +472,7 @@ private final class ModuleTabFixture {
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
         search = QuickSearchModel.forTests(in: root)
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -465,14 +482,17 @@ private final class ModuleTabFixture {
                 paster: InertTextPaster(),
                 allowsSystemAccess: false
             ),
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            preferences: preferences,
             snippets: folder.makeStore(),
             pasteboard: pasteboard,
             notices: SilentNotices(),
             search: search
         )
         content = RecordingPaletteContent(resetsSelectionWhileTyping: resetsSelectionWhileTyping)
-        palette.tabContents = [.keyboardShortcutter: content]
+        palette.tabContents = [
+            .keyboardShortcutter: content,
+            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
+        ]
     }
 
     func tearDown() {

@@ -326,6 +326,7 @@ final class AppModel {
             service: screenshotTools,
             palette: commandPalette,
             clipboard: clipboard,
+            preferences: preferences,
             delivery: screenshotDelivery,
             capturer: screenshotCapturer ?? ScreenshotCapturer(),
             systemShortcuts: SystemScreenshotShortcutTakeover(
