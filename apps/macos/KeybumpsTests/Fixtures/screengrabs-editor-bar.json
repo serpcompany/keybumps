@@ -11,11 +11,12 @@
       {
         "help" : "Copy to clipboard and save an edited copy (Return)",
         "isDefault" : false,
-        "key" : "↵",
+        "key" : "↩",
         "style" : "prominent",
         "title" : "Save"
       }
     ],
+    "hasHistory" : true,
     "state" : "editing",
     "window" : "screenshotEditor"
   },
@@ -45,6 +46,7 @@
         "title" : "Save"
       }
     ],
+    "hasHistory" : false,
     "state" : "reviewing",
     "window" : "recording"
   },
@@ -65,6 +67,7 @@
         "title" : "Discard"
       }
     ],
+    "hasHistory" : false,
     "question" : "Discard this recording?",
     "state" : "askingToDiscard",
     "window" : "recording"

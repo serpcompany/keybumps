@@ -37,7 +37,7 @@ enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Number key in toolbar order: 1 Blur … 5 Text.
+    /// Number key in the editor bar's order: 1 Blur … 5 Text.
     var number: String { String((Self.allCases.firstIndex(of: self) ?? 0) + 1) }
 
     /// Matches a number (1–5) or letter (B/R/A/D/T) shortcut.

@@ -22,6 +22,10 @@ final class ScreencastRecordingReviewWindow: NSWindow {
 
     /// Closing: the review saves the recording, then closes the window.
     var onClose: (() -> Void)?
+    /// Whether the bar's controls may take the keyboard: not as the window opens, so Space plays the
+    /// recording even with Keyboard Navigation on, which gives the first button the keyboard. The
+    /// first Tab or Shift-Tab lets them (`ScreencastReviewKey.tab`); the next recording takes it back.
+    var barTakesKeyboard = false
 
     init() {
         super.init(
@@ -47,13 +51,22 @@ final class ScreencastRecordingReviewWindow: NSWindow {
     override var canBecomeKey: Bool { !UnitTestHost.isActive }
     override var canBecomeMain: Bool { !UnitTestHost.isActive }
 
+    /// Refuses the bar the keyboard until `barTakesKeyboard`. SwiftUI's buttons aren't views, so a
+    /// focused one makes the content view, the bar's host, the first responder.
+    @discardableResult
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        if !barTakesKeyboard, barHas(responder) { return false }
+        return super.makeFirstResponder(responder)
+    }
+
     override func performClose(_ sender: Any?) {
         guard let onClose else { return super.performClose(sender) }
         onClose()
     }
 
     /// Whether `responder` is one of the bar's controls, or in one: where Full Keyboard Access's Tab
-    /// puts the keyboard. Everything in the window's content but the player is the bar's.
+    /// puts the keyboard. Everything in the window's content but the player is the bar's, the content
+    /// view too, which has the keyboard for whichever SwiftUI button has it.
     func barHas(_ responder: NSResponder?) -> Bool {
         guard let view = responder as? NSView, let contentView, view.isDescendant(of: contentView) else { return false }
         return !sequence(first: view, next: \.superview).contains { $0 is AVPlayerView }

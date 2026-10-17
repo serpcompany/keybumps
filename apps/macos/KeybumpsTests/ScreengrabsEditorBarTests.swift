@@ -5,13 +5,14 @@ import Testing
 @testable import Keybumps
 
 /// The bar the Screenshot Editor and the recording window share (#511): each window's actions, in
-/// order, with their keys and the default button, recorded in a fixture, and the bar as each window
+/// order, with their keys and the default button, and whether it has undo and redo, recorded in a
+/// fixture; the editor's tools, colors, and undo and redo through its bar; and the bar as each window
 /// lays it out, drawn off screen. No window is ordered in, and the review writes to a named pasteboard.
 ///
 /// Re-record the fixture only with `KEYBUMPS_RECORD_SNAPSHOTS=1` (through xcodebuild:
 /// `TEST_RUNNER_KEYBUMPS_RECORD_SNAPSHOTS=1`), running this suite alone.
 @MainActor
-@Suite("Screengrabs: the editor bar")
+@Suite("ScreenGrabs: the editor bar")
 struct ScreengrabsEditorBarTests {
     static let fixtureURL = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -27,7 +28,7 @@ struct ScreengrabsEditorBarTests {
         let titles = actions.map(\.title)
         #expect(titles == ["Cancel", "Save"])
         let keys = actions.map(\.key)
-        #expect(keys == ["esc", "↵"])
+        #expect(keys == ["esc", "↩"])
         let styles = actions.map(\.style)
         #expect(styles == [.standard, .prominent])
         let defaults = actions.filter(\.isDefault)
@@ -63,7 +64,56 @@ struct ScreengrabsEditorBarTests {
         #expect(answers.allSatisfy { $0.key == nil && !$0.isDefault }, "no key deletes")
     }
 
-    @Test("Both windows' bars match the fixture: each action's title, key, style, default button, identifier, and help, in order")
+    // MARK: What moved into the bar
+
+    @Test("The Screenshot Editor's bar picks its tools and colors, and dims the colors for a tool drawn in none")
+    func screenshotEditorToolsAndColors() throws {
+        let model = ScreenshotEditorModel()
+        let bar = ScreenshotEditorBar(model: model, cancel: {}, save: {})
+        let titles = bar.tools.map(\.title)
+        #expect(titles == ["Blur", "Redact", "Arrow", "Draw", "Text"])
+        #expect(bar.tools.filter(\.isSelected).map(\.title) == ["Blur"])
+        #expect(!bar.swatchesAreEnabled, "Blur has no color")
+
+        try #require(bar.tools.last).select()
+        #expect(model.tool == .text)
+        #expect(bar.tools.filter(\.isSelected).map(\.title) == ["Text"])
+        #expect(bar.swatchesAreEnabled)
+
+        let colors = bar.swatches.map(\.color)
+        #expect(colors == ScreenshotAnnotationColor.allCases)
+        try #require(bar.swatches.first { $0.color == .blue }).pick()
+        #expect(model.color == .blue)
+        #expect(bar.swatches.filter(\.isSelected).map(\.color) == [.blue])
+    }
+
+    @Test("The Screenshot Editor's bar undoes and redoes the model's marks, each only when there's one to take back or put back")
+    func screenshotEditorUndoAndRedo() throws {
+        let model = ScreenshotEditorModel()
+        let bar = ScreenshotEditorBar(model: model, cancel: {}, save: {})
+        let fresh = try #require(bar.history)
+        #expect(!fresh.canUndo && !fresh.canRedo)
+
+        model.add(ScreenshotAnnotation(kind: .arrow(start: .zero, end: CGPoint(x: 40, y: 0))))
+        let marked = try #require(bar.history)
+        #expect(marked.canUndo && !marked.canRedo)
+        marked.undo()
+        #expect(model.history.isEmpty)
+
+        let undone = try #require(bar.history)
+        #expect(!undone.canUndo && undone.canRedo)
+        undone.redo()
+        #expect(model.history.annotations.count == 1)
+    }
+
+    @Test("The recording window's bar has no undo or redo until it has tools (#517)")
+    func recordingBarHasNoHistory() throws {
+        defer { fixture.tearDown() }
+        let bar = ScreencastRecordingReviewBar(model: fixture.model(try fixture.video()))
+        #expect(bar.history == nil)
+    }
+
+    @Test("Both windows' bars match the fixture: whether each has undo and redo, and each action's title, key, style, default button, identifier, and help, in order")
     func barsMatchTheFixture() throws {
         defer { fixture.tearDown() }
         let actual = try Self.encode(try snapshot())
@@ -83,7 +133,7 @@ struct ScreengrabsEditorBarTests {
     @Test("Each window's bar fits the window at its narrowest, 64 points tall: the Screenshot Editor's at 840 points, the recording window's at 640, with two displays' picker or the discard question")
     func barsFitTheirWindows() throws {
         defer { fixture.tearDown() }
-        let editor = NSHostingView(rootView: ScreenshotEditorToolbar(model: ScreenshotEditorModel(), cancel: {}, save: {}))
+        let editor = NSHostingView(rootView: ScreenshotEditorBar(model: ScreenshotEditorModel(), cancel: {}, save: {}))
         let editorSize = editor.fittingSize
         #expect(editorSize.width <= ScreenshotEditorWindowController.minimumWidth, "\(editorSize.width) points wide")
         #expect(editorSize.height == ScreengrabsEditorBarMetrics.height)
@@ -134,16 +184,27 @@ struct ScreengrabsEditorBarTests {
 
     /// What the fixture records: each window's bar, in each of its states.
     private func snapshot() throws -> [EditorBarSnapshot] {
-        let editor = ScreenshotEditorWindowController.barActions(cancel: {}, save: {})
+        let editor = ScreenshotEditorBar(model: ScreenshotEditorModel(), cancel: {}, save: {})
+        let editorActions = ScreenshotEditorWindowController.barActions(cancel: {}, save: {})
         let model = fixture.model(try fixture.video())
-        let recording = ScreencastRecordingReviewBar.actions(for: model)
+        let recording = ScreencastRecordingReviewBar(model: model)
+        let reviewing = ScreencastRecordingReviewBar.actions(for: model)
         model.askToDiscard()
         let asking = ScreencastRecordingReviewBar.actions(for: model)
         let question = model.isConfirmingDiscard ? ScreencastRecordingReviewBar.discardQuestion : nil
         return [
-            EditorBarSnapshot(window: "screenshotEditor", state: "editing", question: nil, actions: editor),
-            EditorBarSnapshot(window: "recording", state: "reviewing", question: nil, actions: recording),
-            EditorBarSnapshot(window: "recording", state: "askingToDiscard", question: question, actions: asking),
+            EditorBarSnapshot(
+                window: "screenshotEditor", state: "editing", hasHistory: editor.history != nil, question: nil,
+                actions: editorActions
+            ),
+            EditorBarSnapshot(
+                window: "recording", state: "reviewing", hasHistory: recording.history != nil, question: nil,
+                actions: reviewing
+            ),
+            EditorBarSnapshot(
+                window: "recording", state: "askingToDiscard", hasHistory: recording.history != nil, question: question,
+                actions: asking
+            ),
         ]
     }
 
@@ -182,12 +243,15 @@ private struct EditorBarSnapshot: Encodable {
 
     let window: String
     let state: String
+    /// Undo and redo show.
+    let hasHistory: Bool
     let question: String?
     let actions: [Action]
 
-    init(window: String, state: String, question: String?, actions: [ScreengrabsEditorAction]) {
+    init(window: String, state: String, hasHistory: Bool, question: String?, actions: [ScreengrabsEditorAction]) {
         self.window = window
         self.state = state
+        self.hasHistory = hasHistory
         self.question = question
         self.actions = actions.map { action in
             Action(

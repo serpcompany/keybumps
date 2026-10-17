@@ -16,7 +16,7 @@ final class ScreenshotEditorModel {
     func redo() { history.redo() }
 }
 
-/// Hosts the canvas and toolbar for one image. Save flattens, copies, and saves an
+/// Hosts the canvas and editor bar for one image. Save flattens, copies, and saves an
 /// `(edited)` copy; Cancel discards. Never logs image content, text, or filenames.
 @MainActor
 final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelegate {
@@ -57,7 +57,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         super.init(window: window)
         window.delegate = self
 
-        // One SwiftUI root (toolbar above the AppKit canvas) so the toolbar always renders.
+        // One SwiftUI root (the editor bar above the AppKit canvas) so the bar always renders.
         let root = NSHostingView(rootView: ScreenshotEditorRootView(
             model: model,
             canvas: canvas,
@@ -168,7 +168,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         [
             ScreengrabsEditorAction(title: "Cancel", key: "esc", help: "Discard changes (Esc)", perform: cancel),
             ScreengrabsEditorAction(
-                title: "Save", key: "↵", style: .prominent,
+                title: "Save", key: ScreengrabsEditorAction.returnSign, style: .prominent,
                 help: "Copy to clipboard and save an edited copy (Return)", perform: save
             ),
         ]
@@ -176,14 +176,14 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
 
     /// Fits the whole bar, including the Cancel and Save key hints, without truncating.
     static let minimumWidth: CGFloat = 840
-    static let toolbarHeight: CGFloat = ScreengrabsEditorBarMetrics.height
+    static let barHeight: CGFloat = ScreengrabsEditorBarMetrics.height
 
     private static func initialFrame(for imageSize: CGSize) -> NSRect {
         let visible = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
-        let maxSize = CGSize(width: visible.width * 0.8, height: visible.height * 0.8 - toolbarHeight)
+        let maxSize = CGSize(width: visible.width * 0.8, height: visible.height * 0.8 - barHeight)
         let scale = min(1, maxSize.width / max(imageSize.width, 1), maxSize.height / max(imageSize.height, 1))
         let width = max(minimumWidth, imageSize.width * scale + 32)
-        let height = max(420, imageSize.height * scale + 32 + toolbarHeight)
+        let height = max(420, imageSize.height * scale + 32 + barHeight)
         return NSRect(x: 0, y: 0, width: width, height: height)
     }
 }
@@ -196,7 +196,7 @@ private struct ScreenshotEditorRootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenshotEditorToolbar(model: model, cancel: cancel, save: save)
+            ScreenshotEditorBar(model: model, cancel: cancel, save: save)
             CanvasHost(canvas: canvas)
         }
     }
@@ -210,51 +210,80 @@ private struct CanvasHost: NSViewRepresentable {
 
 /// The editor's bar (`ScreengrabsEditorBar`, shared with the recording window): the tools and the
 /// colors, then undo and redo, Cancel, and Save.
-struct ScreenshotEditorToolbar: View {
+struct ScreenshotEditorBar: View {
     @Bindable var model: ScreenshotEditorModel
     let cancel: () -> Void
     let save: () -> Void
 
     var body: some View {
         ScreengrabsEditorBar(
-            history: ScreengrabsEditorHistory(
-                canUndo: model.history.canUndo,
-                canRedo: model.history.canRedo,
-                undo: { model.undo() },
-                redo: { model.redo() }
-            ),
+            history: history,
             actions: ScreenshotEditorWindowController.barActions(cancel: cancel, save: save)
         ) {
             ScreengrabsEditorTools {
-                ForEach(ScreenshotEditorTool.allCases) { tool in
-                    ScreengrabsEditorToolButton(
-                        title: tool.title,
-                        systemImage: tool.systemImage,
-                        number: tool.number,
-                        key: tool.key,
-                        isSelected: model.tool == tool
-                    ) { model.tool = tool }
-                }
+                ForEach(tools, id: \.title) { $0 }
             }
 
             HStack(spacing: 4) {
-                ForEach(ScreenshotAnnotationColor.allCases) { color in
-                    Button { model.color = color } label: {
-                        Circle()
-                            .fill(Color(nsColor: color.nsColor))
-                            .frame(width: 16, height: 16)
-                            .overlay(Circle().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
-                            .padding(2)
-                            .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: model.color == color ? 2 : 0))
-                    }
-                    .buttonStyle(.plain)
-                    .help(color.rawValue.capitalized)
-                    .accessibilityLabel(color.rawValue.capitalized)
-                }
+                ForEach(swatches, id: \.color) { $0 }
             }
-            .opacity(model.tool.usesColor ? 1 : 0.35)
-            .disabled(!model.tool.usesColor)
+            .opacity(swatchesAreEnabled ? 1 : 0.35)
+            .disabled(!swatchesAreEnabled)
         }
+    }
+
+    /// Undo and redo, from the model's history.
+    var history: ScreengrabsEditorHistory? {
+        ScreengrabsEditorHistory(
+            canUndo: model.history.canUndo,
+            canRedo: model.history.canRedo,
+            undo: { model.undo() },
+            redo: { model.redo() }
+        )
+    }
+
+    /// A button for each tool, in order, the model's tool picked.
+    var tools: [ScreengrabsEditorToolButton] {
+        ScreenshotEditorTool.allCases.map { tool in
+            ScreengrabsEditorToolButton(
+                title: tool.title,
+                systemImage: tool.systemImage,
+                number: tool.number,
+                key: tool.key,
+                isSelected: model.tool == tool
+            ) { model.tool = tool }
+        }
+    }
+
+    /// A swatch for each color, the model's color picked.
+    var swatches: [ScreenshotEditorSwatch] {
+        ScreenshotAnnotationColor.allCases.map { color in
+            ScreenshotEditorSwatch(color: color, isSelected: model.color == color) { model.color = color }
+        }
+    }
+
+    /// The colors are for the tools that draw in one: dimmed and off for the others.
+    var swatchesAreEnabled: Bool { model.tool.usesColor }
+}
+
+/// One color in the editor's bar, ringed with the accent color while it's picked.
+struct ScreenshotEditorSwatch: View {
+    let color: ScreenshotAnnotationColor
+    let isSelected: Bool
+    let pick: () -> Void
+
+    var body: some View {
+        Button(action: pick) {
+            Circle()
+                .fill(Color(nsColor: color.nsColor))
+                .frame(width: 16, height: 16)
+                .overlay(Circle().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
+                .padding(2)
+                .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: isSelected ? 2 : 0))
+        }
+        .buttonStyle(.plain)
+        .help(color.rawValue.capitalized)
+        .accessibilityLabel(color.rawValue.capitalized)
     }
 }
 
@@ -275,7 +304,7 @@ final class ScreenshotEditorCanvasView: NSView, NSTextFieldDelegate {
         self.renderer = renderer
         super.init(frame: .zero)
         // macOS 14 no longer clips views by default, and dirty rects can extend past
-        // bounds; without this the canvas background painted over the toolbar.
+        // bounds; without this the canvas background painted over the editor bar.
         clipsToBounds = true
     }
 

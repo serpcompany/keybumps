@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The bar along the top of Screengrabs' editing windows, the Screenshot Editor and the recording
+/// The bar along the top of ScreenGrabs' editing windows, the Screenshot Editor and the recording
 /// window (#511), so both look and work alike: the window's tools on the left, then on the right
 /// anything else the window shows there, undo and redo, and the actions, each with the key that also
 /// does it as a keycap after its title. A question the actions answer, such as "Discard this
@@ -86,6 +86,9 @@ struct ScreengrabsEditorHistory {
 
 /// One of the bar's actions: its title, the key that also does it, and how it looks.
 struct ScreengrabsEditorAction: Identifiable {
+    /// Return, as macOS shows it beside a menu item: both windows' Save key.
+    static let returnSign = "↩"
+
     enum Style: String, Equatable {
         /// An ordinary button.
         case standard

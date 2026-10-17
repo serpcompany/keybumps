@@ -148,7 +148,7 @@ struct ScreencastRecordingReviewTests {
         #expect(styles == [.destructive, .standard, .prominent])
         let keys = actions.map(\.key)
         #expect(keys == [nil, "⌘C", "↩"])
-        #expect(ScreencastRecordingReviewBar.returnSign == "↩")
+        #expect(ScreengrabsEditorAction.returnSign == "↩")
         #expect(ScreencastRecordingReviewBar.copyKey == "⌘C")
         await panel.close()
     }
@@ -162,7 +162,7 @@ struct ScreencastRecordingReviewTests {
         let action = try #require(ScreencastRecordingReviewBar.actions(for: model).last)
         let save = NSHostingView(rootView: ScreengrabsEditorActionButton(action: action)).fittingSize.width
         let plain = NSHostingView(rootView: Button("Save") {}.buttonStyle(.borderedProminent)).fittingSize.width
-        let sign = NSHostingView(rootView: Text(ScreencastRecordingReviewBar.returnSign)).fittingSize.width
+        let sign = NSHostingView(rootView: Text(ScreengrabsEditorAction.returnSign)).fittingSize.width
         #expect(save >= plain + sign, "Save is \(save) points wide; a plain Save button \(plain), and the sign \(sign)")
         await panel.close()
     }
@@ -641,9 +641,11 @@ struct ScreencastRecordingReviewTests {
         #expect(action(53, confirming: true) == .keep && action(36, confirming: true) == .ignore)
 
         // ⌘C copies, as Copy's keycap says; never while Discard is asked, and not with other modifiers.
-        func copyKey(_ modifiers: NSEvent.ModifierFlags, _ characters: String = "c", confirming: Bool = false) -> ScreencastReviewKey {
+        func copyKey(
+            _ modifiers: NSEvent.ModifierFlags, _ characters: String = "c", keyCode: UInt16 = 8, confirming: Bool = false
+        ) -> ScreencastReviewKey {
             ScreencastReviewKey.action(
-                keyCode: 8, modifiers: modifiers, characters: characters, isComposing: false, isConfirmingDiscard: confirming
+                keyCode: keyCode, modifiers: modifiers, characters: characters, isComposing: false, isConfirmingDiscard: confirming
             )
         }
         #expect(copyKey(.command) == .copy)
@@ -654,6 +656,17 @@ struct ScreencastRecordingReviewTests {
         #expect(copyKey([.command, .option]) == .pass)
         #expect(copyKey([]) == .pass, "C alone does nothing")
         #expect(copyKey(.command, "v") == .pass)
+
+        // The layout's C wherever it is, or the C key on a layout with no Latin letters, as menus do.
+        #expect(copyKey(.command, "\u{441}") == .copy, "Russian's С, on the C key")
+        #expect(copyKey(.command, "\u{43C}", keyCode: 9) == .pass, "Russian's М, on the V key")
+        #expect(copyKey(.command, "\u{441}", confirming: true) == .ignore)
+        #expect(copyKey(.command, "j") == .pass, "Dvorak's J, on the C key")
+        #expect(copyKey(.command, "c", keyCode: 34) == .copy, "Dvorak's C, on the I key")
+
+        // Tab and Shift-Tab let the bar take the keyboard, and go on to the window.
+        #expect(action(48) == .tab && action(48, .shift) == .tab)
+        #expect(action(48, .command) == .pass, "⌘Tab is macOS's")
 
         // A button in the bar with the keyboard (Full Keyboard Access) keeps Space; Return still saves.
         func focused(_ key: UInt16, confirming: Bool = false) -> ScreencastReviewKey {
@@ -678,10 +691,14 @@ struct ScreencastRecordingReviewTests {
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay, "nothing has the keyboard as it opens")
         #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save)
 
-        // Where Tab puts the keyboard: a control in the bar, in the window's content.
+        // A focused SwiftUI button isn't a view: the content view, the bar's host, has the keyboard.
         let content = try #require(window.contentView)
+        #expect(window.barHas(content))
+
+        // Where Tab puts the keyboard: a control in the bar, in the window's content.
         let button = FocusableStandIn()
         content.addSubview(button)
+        #expect(!panel.perform(.tab), "Tab goes on to the window")
         #expect(window.makeFirstResponder(button))
         #expect(window.barHas(window.firstResponder))
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .pass, "Space presses the button")
@@ -705,6 +722,28 @@ struct ScreencastRecordingReviewTests {
         button.removeFromSuperview()
         player.removeFromSuperview()
         await panel.close()
+    }
+
+    @Test("With Keyboard Navigation on, nothing in the bar takes the keyboard until Tab, so Space plays at open, for each recording")
+    func barWaitsForTab() async throws {
+        defer { fixture.tearDown() }
+        let panel = panel(outcomes: ReviewOutcomeLog(), fullKeyboardAccess: { true })
+        for name in ["1791000000", "1791000100"] {
+            await panel.show(try fixture.video(name: name))
+            let window = panel.window
+            let button = FocusableStandIn()
+            try #require(window.contentView).addSubview(button)
+            #expect(!window.makeFirstResponder(button), "as it opens")
+            #expect(!window.barHas(window.firstResponder))
+            #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay, "Space plays")
+
+            #expect(panel.action(forKey: 48, modifiers: [.shift], in: window) == .tab)
+            #expect(!panel.perform(.tab))
+            #expect(window.makeFirstResponder(button), "after Tab")
+            #expect(panel.action(forKey: 49, modifiers: [], in: window) == .pass, "Space presses it")
+            button.removeFromSuperview()
+            await panel.close()
+        }
     }
 
     @Test("The window opens with nothing taking the keyboard, so Space plays at once; Return still saves and Escape still closes")

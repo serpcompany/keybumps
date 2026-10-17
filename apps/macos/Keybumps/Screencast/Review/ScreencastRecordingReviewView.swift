@@ -64,8 +64,6 @@ struct ScreencastRecordingReviewView: View {
 /// recording of every display, and Discard, Copy, and Save, Save the window's default button. While
 /// Discard is asked, "Discard this recording?" with Keep and Discard takes their place.
 struct ScreencastRecordingReviewBar: View {
-    /// Return, as macOS shows it beside a menu item: Save's key.
-    static let returnSign = "↩"
     /// Copy's key.
     static let copyKey = "⌘C"
     static let discardQuestion = "Discard this recording?"
@@ -74,6 +72,7 @@ struct ScreencastRecordingReviewBar: View {
 
     var body: some View {
         ScreengrabsEditorBar(
+            history: history,
             question: model.isConfirmingDiscard ? Self.discardQuestion : nil,
             actions: Self.actions(for: model)
         ) {
@@ -87,6 +86,9 @@ struct ScreencastRecordingReviewBar: View {
             ScreencastReviewDisplayPicker(model: model)
         }
     }
+
+    /// No undo or redo: there's nothing to take back until the recording has tools (#517).
+    var history: ScreengrabsEditorHistory? { nil }
 
     /// Discard, Copy, and Save, or, while Discard is asked, Keep and Discard, which no key answers.
     /// Return saves and ⌘C copies through the review's key monitor (`ScreencastReviewKey`).
@@ -116,7 +118,7 @@ struct ScreencastRecordingReviewBar: View {
                 Task { await model.copy() }
             },
             ScreengrabsEditorAction(
-                title: "Save", key: returnSign, style: .prominent, isDefault: true,
+                title: "Save", key: ScreengrabsEditorAction.returnSign, style: .prominent, isDefault: true,
                 help: "Keep the recording in the recordings folder (Return)",
                 identifier: ScreencastReviewID.save, isEnabled: model.acceptsActions
             ) {
