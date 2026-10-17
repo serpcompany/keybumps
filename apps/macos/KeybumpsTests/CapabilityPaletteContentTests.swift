@@ -233,6 +233,97 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.tab == .search)
     }
 
+    @Test("A grid takes only the plain arrow keys, as Emoji's does: with a modifier, Up and Down step one item and wrap, as in a list, and Left and Right stay with the search field; spaces alone in the field leave the grid its arrow keys; Down at the last row after a hover leaves Left switching tabs, but Shift-Down gives Left to the grid")
+    func gridArrowsWithModifiers() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 6
+        let palette = fixture.palette
+        var pointer = NSPoint(x: -1000, y: -1000)
+        palette.state.mouseLocation = { pointer }
+        palette.selectOnOpening(.keyboardShortcutter)
+
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .shift)) == nil)
+        #expect(!palette.state.isBrowsingGrid, "Shift-Down doesn't go into the grid")
+        #expect(palette.state.selection == 1, "It steps one item")
+        #expect(palette.handleKeyDown(Self.key(kVK_UpArrow, modifiers: .option)) == nil)
+        #expect(palette.handleKeyDown(Self.key(kVK_UpArrow, modifiers: .option)) == nil)
+        #expect(palette.state.selection == 5, "Option-Up wraps to the last item")
+
+        palette.selectOnOpening(.keyboardShortcutter)
+        #expect(palette.handleKeyDown(Self.downKey) == nil)
+        #expect(palette.state.isBrowsingGrid)
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .shift)) == nil)
+        #expect(palette.state.selection == 1, "In the grid too, Shift-Down steps one item, not a row")
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow, modifiers: .shift)) != nil)
+        #expect(palette.state.selection == 1)
+        #expect(fixture.content.moves.isEmpty, "Only the plain arrow keys reach the grid")
+
+        // Spaces alone aren't a search: the grid stays, and so do its Left and Right.
+        palette.state.historyQuery = "  "
+        #expect(palette.handleKeyDown(Self.downKey) == nil)
+        #expect(palette.state.isBrowsingGrid)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.selection == 1, "Right moves within the grid")
+
+        // The pointer brings the highlight to the last row. Down has nowhere to go, so no key has
+        // moved within the grid yet, and Left still switches tabs (Hotkeys is the last tab).
+        palette.state.historyQuery = ""
+        palette.selectOnOpening(.keyboardShortcutter)
+        pointer = NSPoint(x: 10, y: 20)
+        palette.hover(row: 4)
+        #expect(palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.downKey) == nil)
+        #expect(palette.state.selection == 4)
+        _ = palette.handleKeyDown(Self.key(kVK_LeftArrow))
+        #expect(palette.state.tab != .keyboardShortcutter)
+
+        // Shift-Down after the pointer came in is a key moving the highlight, so Left moves within
+        // the grid from then on instead of switching tabs.
+        palette.selectOnOpening(.keyboardShortcutter)
+        pointer = NSPoint(x: 30, y: 40)
+        palette.hover(row: 1)
+        #expect(palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .shift)) == nil)
+        #expect(palette.state.selection == 2)
+        #expect(!palette.state.gridEnteredByPointer)
+        let moves = fixture.content.moves.count
+        #expect(palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(palette.state.tab == .keyboardShortcutter, "Left stays in the grid")
+        #expect(fixture.content.moves.count == moves + 1)
+        #expect(palette.state.selection == 1)
+    }
+
+    @Test("While an input method composes, a grid's Up and Down step one item and wrap, as in a list, and Left and Right stay with the input method")
+    func gridArrowsWhileComposing() async throws {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 6
+        let palette = fixture.palette
+        let panel = try #require(palette.layOutForTesting(.keyboardShortcutter))
+        defer { panel.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(100))
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let field = try #require(PaletteCopyPasteKeyTests.searchField(in: panel.contentView))
+        #expect(panel.makeFirstResponder(field))
+        let editor = try #require(panel.firstResponder as? NSTextView)
+        editor.setMarkedText("きょう", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.hasMarkedText())
+        #expect(palette.state.historyQuery.isEmpty, "The search waits for the input method to commit")
+
+        #expect(palette.handleKeyDown(Self.downKey) == nil)
+        #expect(!palette.state.isBrowsingGrid, "Down doesn't go into the grid")
+        #expect(palette.state.selection == 1, "It steps one item")
+        #expect(palette.handleKeyDown(Self.upKey) == nil)
+        #expect(palette.handleKeyDown(Self.upKey) == nil)
+        #expect(palette.state.selection == 5, "Up wraps to the last item")
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil, "Right goes to the input method")
+        #expect(fixture.content.moves.isEmpty)
+        editor.unmarkText()
+    }
+
     @Test("Screenshots: Left and Right switch tabs until Down goes into the grid, then move between screenshots")
     func screenshotsGridNeedsDown() throws {
         let fixture = ModuleTabFixture()
@@ -456,6 +547,7 @@ private final class ModuleTabFixture {
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
         search = QuickSearchModel.forTests(in: root)
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -465,14 +557,17 @@ private final class ModuleTabFixture {
                 paster: InertTextPaster(),
                 allowsSystemAccess: false
             ),
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            preferences: preferences,
             snippets: folder.makeStore(),
             pasteboard: pasteboard,
             notices: SilentNotices(),
             search: search
         )
         content = RecordingPaletteContent(resetsSelectionWhileTyping: resetsSelectionWhileTyping)
-        palette.tabContents = [.keyboardShortcutter: content]
+        palette.tabContents = [
+            .keyboardShortcutter: content,
+            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
+        ]
     }
 
     func tearDown() {
@@ -519,8 +614,8 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
 
     func rowCount(query: String) -> Int { rows }
 
-    /// A grid only while the search is empty, as emoji to browse.
-    func isGrid(query: String) -> Bool { isGrid && query.isEmpty }
+    /// A grid only while the search is empty or only spaces, as emoji to browse.
+    func isGrid(query: String) -> Bool { isGrid && query.trimmingCharacters(in: .whitespaces).isEmpty }
 
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int? {
         moves.append(move)

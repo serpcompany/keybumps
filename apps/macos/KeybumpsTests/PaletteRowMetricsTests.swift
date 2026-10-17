@@ -203,6 +203,7 @@ final class PaletteMetricsFixture {
         )
         let emojiLibrary = EmojiLibrary(catalog: try EmojiCatalog.bundled(), canDraw: { _ in true })
         palette.tabContents = [
+            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
             .timers: TimerPaletteContent(store: timers, preferences: preferences, notices: MetricsNotices()),
             .emoji: EmojiPaletteContent(
                 preferences: preferences,
