@@ -56,7 +56,8 @@ extension Array where Element == ScreencastTimeRange {
 /// Times are the recording's own, from its start, so a trim never moves a cut or a blur, and trimmed
 /// and cut parts can be brought back. A trim and its cuts apply to every display, so the videos stay
 /// in step; a crop and blurs belong to one display (`displays`). Times past a shorter display's end
-/// (one whose stream stopped early) simply have nothing of it.
+/// (one whose stream stopped early) simply have nothing of it; a display with nothing in the kept
+/// part keeps its video as it was recorded (`keepsSomething(ofVideoLasting:)`).
 struct ScreencastRecordingEdits: Equatable, Sendable {
     /// The shortest the edited recording can be: a trim or a cut stops there.
     static let minimumLength: Double = 0.5
@@ -103,6 +104,15 @@ struct ScreencastRecordingEdits: Equatable, Sendable {
     func keptRanges(within videoDuration: Double) -> [ScreencastTimeRange] {
         let video = ScreencastTimeRange(start: 0, end: max(videoDuration, 0))
         return keptRanges.compactMap { $0.clamped(to: video) }
+    }
+
+    /// Less of a display's video than this is nothing: too short for a frame to be written.
+    static let shortestDisplayPart: Double = 0.1
+
+    /// Whether anything of a display's video `videoDuration` long is kept. A display whose stream
+    /// stopped before the kept part has nothing in it: Save keeps its video as it was recorded.
+    func keepsSomething(ofVideoLasting videoDuration: Double) -> Bool {
+        keptRanges(within: videoDuration).reduce(0) { $0 + $1.duration } >= Self.shortestDisplayPart
     }
 
     /// How long the edited recording plays.

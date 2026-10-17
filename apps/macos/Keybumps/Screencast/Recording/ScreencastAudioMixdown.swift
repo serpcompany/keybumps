@@ -19,6 +19,12 @@ enum ScreencastAudioMixdown {
         case unusable
     }
 
+    /// The writer's failure: its own error when it has one, so a full disk reads as one
+    /// (`ScreencastExportFailure.from`), or `writerFailed`.
+    static func writerFailure(_ error: Error?) -> Error {
+        error ?? MixdownError.writerFailed
+    }
+
     /// One track plays everywhere already; two or more need mixing.
     static func isNeeded(audioTrackCount: Int) -> Bool {
         audioTrackCount > 1
@@ -139,7 +145,7 @@ enum ScreencastAudioMixdown {
             pairs.append((audioOutput, audioInput))
         }
 
-        guard writer.startWriting() else { throw MixdownError.writerFailed }
+        guard writer.startWriting() else { throw writerFailure(writer.error) }
         guard reader.startReading() else {
             writer.cancelWriting()
             throw MixdownError.readerFailed
@@ -151,7 +157,7 @@ enum ScreencastAudioMixdown {
         let finished = DispatchSemaphore(value: 0)
         writer.finishWriting { finished.signal() }
         finished.wait()
-        guard writer.status == .completed else { throw MixdownError.writerFailed }
+        guard writer.status == .completed else { throw writerFailure(writer.error) }
     }
 
     /// Pulls every output into its input, each on its own queue, until all are done or one fails.
@@ -207,6 +213,6 @@ enum ScreencastAudioMixdown {
             }
         }
         group.wait()
-        if lock.withLock({ failed }) { throw MixdownError.writerFailed }
+        if lock.withLock({ failed }) { throw writerFailure(writer.error) }
     }
 }

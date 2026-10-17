@@ -38,21 +38,26 @@ enum ScreencastSamples {
     }
 
     /// `frames` of float PCM in `channels`, every sample `value`, stamped `host`: non-interleaved
-    /// at 48 kHz, as the writer pads with, unless `sampleRate` or `interleaved` say otherwise.
+    /// at 48 kHz, as the writer pads with, unless `sampleRate` or `interleaved` say otherwise. With
+    /// `wave`, each sample is what it says for the sample's host time instead.
     static func audio(
         at host: Double,
         frames: Int = audioFrames,
         channels: Int = 2,
         value: Float = 0.5,
         sampleRate rate: Double = sampleRate,
-        interleaved: Bool = false
+        interleaved: Bool = false,
+        wave: ((Double) -> Float)? = nil
     ) -> CMSampleBuffer {
         let format = pcmFormat(channels: channels, sampleRate: rate, interleaved: interleaved)
         let pcm = AVAudioPCMBuffer(pcmFormat: AVAudioFormat(cmAudioFormatDescription: format), frameCapacity: AVAudioFrameCount(frames))!
         pcm.frameLength = AVAudioFrameCount(frames)
         for buffer in UnsafeMutableAudioBufferListPointer(pcm.mutableAudioBufferList) {
             let samples = buffer.mData!.assumingMemoryBound(to: Float.self)
-            for index in 0..<(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size) { samples[index] = value }
+            for index in 0..<(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size) {
+                let frame = interleaved ? index / max(channels, 1) : index
+                samples[index] = wave?(host + Double(frame) / rate) ?? value
+            }
         }
         var sample: CMSampleBuffer?
         CMAudioSampleBufferCreateWithPacketDescriptions(

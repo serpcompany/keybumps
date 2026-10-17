@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// What Screencast's review panel (#450) takes from the rest of the app. Each is read for each
 /// capture, so a plugin turned on or off since the last one counts.
@@ -31,8 +32,9 @@ struct ScreencastReviewServices {
 /// The review panel hung on the flow controller: the context is read as a capture starts, and
 /// each saved capture opens the panel at once, the guess following when the read comes. Turning
 /// Screencast off saves the capture under review, and any still waiting, without showing them.
-/// Quitting or relaunching saves the one under review at once. A composition without services (a
-/// module test's) leaves captures in their folder and shows nothing.
+/// Quitting or relaunching saves the one under review at once; what an export of its edits leaves
+/// is cleaned up then, or at the next launch. A composition without services (a module test's)
+/// leaves captures in their folder and shows nothing.
 @MainActor
 final class ScreencastReviewFlow {
     private let services: ScreencastReviewServices?
@@ -44,6 +46,8 @@ final class ScreencastReviewFlow {
     var onFinish: ((ScreencastReviewOutcome) -> Void)?
     private var isOn = true
     private var terminationObserver: NSObjectProtocol?
+    /// Whether this launch has cleaned up after exports a quit or a crash cut short.
+    private var hasRecovered = false
 
     init(services: ScreencastReviewServices?, contextReader: ScreencastCaptureContextReader) {
         self.services = services
@@ -101,6 +105,21 @@ final class ScreencastReviewFlow {
     /// Keybumps is quitting or relaunching: the review under way is written at once.
     func saveNow() {
         panel?.saveNow()
+    }
+
+    /// Once a launch, as ScreenGrabs comes on: what an export of edits (#517) cut short by a quit or
+    /// a crash left in the recordings' folders is cleaned up, off the main thread
+    /// (`ScreencastEditExporter.recoverInterruptedExports(in:)`). Counts are logged, never a name.
+    func recoverInterruptedExports(in capturesFolder: URL) {
+        guard services != nil, !hasRecovered else { return }
+        hasRecovered = true
+        Task.detached(priority: .utility) {
+            let recovery = ScreencastEditExporter.recoverInterruptedExports(in: capturesFolder)
+            guard recovery != ScreencastEditExporter.Recovery() else { return }
+            Logger(subsystem: "com.serp.keybumps", category: "screencast").info(
+                "screencast export recovery removed=\(recovery.removed, privacy: .public) restored=\(recovery.restored, privacy: .public)"
+            )
+        }
     }
 
     private func panelForReview() -> ScreencastReviewPanel? {

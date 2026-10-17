@@ -193,7 +193,12 @@ final class ScreencastReviewModel {
     /// `meta.json` at once.
     func saveNow() {
         guard !isFinished else { return }
-        exportCancellation?.cancel()
+        if let cancellation = exportCancellation, case .video(let capture) = input {
+            // Returns once a swap under way is done; the app may quit before the export's own
+            // clean-up, so its edited copies go now.
+            cancellation.cancel()
+            ScreencastEditExporter.removePartialFiles(of: capture, fileManager: fileManager)
+        }
         isConfirmingDiscard = false
         isAskingToSaveEdits = false
         let text = repositoryText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,6 +242,7 @@ final class ScreencastReviewModel {
     /// thing that fails, so the person can fix it; otherwise it keeps going, saving what it can.
     private func conclude(copying: Bool, strictly: Bool, withEdits: Bool = true) async {
         guard !isFinished, !isWorking, !strictly || acceptsActions else { return }
+        endDrag()
         isConfirmingDiscard = false
         isAskingToSaveEdits = false
         failure = nil
@@ -291,12 +297,14 @@ final class ScreencastReviewModel {
     /// Picks `tool`, or puts it down if it's picked.
     func pick(_ tool: ScreencastEditTool) {
         guard acceptsEdits else { return }
+        endDrag()
         self.tool = self.tool == tool ? nil : tool
         trimSelection = nil
     }
 
     /// Escape with a tool picked: puts it down.
     func putToolDown() {
+        endDrag()
         tool = nil
         trimSelection = nil
     }
@@ -305,12 +313,14 @@ final class ScreencastReviewModel {
     var canRedo: Bool { acceptsEdits && !redoStack.isEmpty }
 
     func undo() {
+        endDrag()
         guard canUndo, let previous = undoStack.popLast() else { return }
         redoStack.append(edits)
         apply(previous)
     }
 
     func redo() {
+        endDrag()
         guard canRedo, let next = redoStack.popLast() else { return }
         undoStack.append(edits)
         apply(next)
@@ -319,6 +329,7 @@ final class ScreencastReviewModel {
     /// Makes one edit that can be undone, if `change` says it changed something.
     func edit(_ change: (inout ScreencastRecordingEdits) -> Bool) {
         guard acceptsEdits else { return }
+        endDrag()
         var changed = edits
         guard change(&changed), changed != edits else { return }
         undoStack.append(edits)
@@ -326,7 +337,9 @@ final class ScreencastReviewModel {
         apply(changed)
     }
 
-    /// A drag starts: its changes are one edit, made when it ends.
+    /// A drag starts: its changes are one edit, made when it ends, or when something else happens
+    /// first (a tool picked or put down, undo, redo, another edit, Save), since the drag may then
+    /// never say it ended. A drag that goes on after that is a new one.
     func beginDrag() {
         guard acceptsEdits, editsBeforeDrag == nil else { return }
         editsBeforeDrag = edits
@@ -338,7 +351,7 @@ final class ScreencastReviewModel {
         change(&edits)
     }
 
-    /// The drag ends: what it changed is one edit.
+    /// The drag ends: what it changed is one edit. Nothing without a drag.
     func endDrag() {
         guard let before = editsBeforeDrag else { return }
         editsBeforeDrag = nil
@@ -397,6 +410,22 @@ final class ScreencastReviewModel {
 
     /// Save or Copy is writing the edited recording.
     var isExporting: Bool { exportProgress != nil }
+
+    /// The displays (from 0) with nothing in the kept part, their streams having stopped before it:
+    /// Save keeps their videos as they were recorded.
+    var displaysWithNothingKept: [Int] {
+        guard edits.isTrimmed else { return [] }
+        return videos.indices.filter { !edits.keepsSomething(ofVideoLasting: videos[$0].duration) }
+    }
+
+    /// What the window says about them, or nil.
+    var nothingKeptNotice: String? {
+        let names = displaysWithNothingKept.map { "\($0 + 1)" }
+        guard let last = names.last else { return nil }
+        guard names.count > 1 else { return "Display \(last) has nothing in the kept part. Save keeps it as it was recorded." }
+        let list = names.dropLast().joined(separator: ", ") + " and " + last
+        return "Displays \(list) have nothing in the kept part. Save keeps them as they were recorded."
+    }
 
     /// Closing the window asks first: there are edits Save or Copy hasn't written.
     var asksBeforeClosing: Bool { acceptsActions && !edits.isEmpty }
@@ -463,6 +492,8 @@ final class ScreencastReviewModel {
             apply(Self.noEdits(for: input))
             return true
         } catch {
+            // The export deletes what it wrote; a stand-in, or one cut short, may not have.
+            ScreencastEditExporter.removePartialFiles(of: capture, fileManager: fileManager)
             let failure = ScreencastExportFailure.from(error)
             guard failure != .cancelled else { return false }
             exportFailure = failure
