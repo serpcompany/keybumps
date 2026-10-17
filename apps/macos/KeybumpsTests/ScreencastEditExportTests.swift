@@ -222,7 +222,9 @@ struct ScreencastEditExportTests {
 
         // 30 a second, but Pause and Resume left 8 ms between two frames.
         let resumed = folder.url.appendingPathComponent("resumed.mov")
-        let resumedTimes = (0..<30).map { Double($0) / 30 } + [29.0 / 30 + 0.008] + (31..<75).map { Double($0) / 30 }
+        let beforePause: [Double] = (0..<30).map { Double($0) / 30 }
+        let afterResume: [Double] = (31..<75).map { Double($0) / 30 }
+        let resumedTimes: [Double] = beforePause + [29.0 / 30 + 0.008] + afterResume
         try await EditTestMovie.write(to: resumed, seconds: 3, picture: .movingBar, sounds: false, frameTimes: resumedTimes)
         let resumedTrack = try #require(try await AVURLAsset(url: resumed).loadTracks(withMediaType: .video).first)
         let gap = try await resumedTrack.load(.minFrameDuration).seconds
