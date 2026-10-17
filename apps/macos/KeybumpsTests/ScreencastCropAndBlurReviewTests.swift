@@ -278,6 +278,33 @@ struct ScreencastCropAndBlurReviewTests {
         return RenderedOverlay(rep: rep)
     }
 
+    @Test("In the window, with Blur picked, Tab picks the next blur and ⌫ deletes the picked one")
+    func windowKeys() async throws {
+        defer { fixture.tearDown() }
+        let panel = ScreencastReviewPanel(
+            repositories: fixture.repositories, pasteboard: fixture.pasteboard, keepOutOfClipboardHistory: {},
+            screen: { nil }, makePlayback: { nil }, export: FakeEditExport().export
+        )
+        await panel.show(try fixture.video())
+        let model = try #require(panel.model)
+        model.pick(.blur)
+        let none = panel.action(forKey: 48, modifiers: [], in: panel.window)
+        #expect(none == .tab, "no blurs yet")
+        draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 100))
+        draw(model, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 300, y: 300))
+        let ids = model.blurs.map(\.id)
+
+        let tab = panel.action(forKey: 48, modifiers: [], in: panel.window)
+        #expect(tab == .selectNextBlur)
+        panel.perform(tab)
+        #expect(model.selectedBlurID == ids[0])
+        let delete = panel.action(forKey: 51, modifiers: [], in: panel.window)
+        #expect(delete == .deleteBlur)
+        panel.perform(delete)
+        #expect(model.blurs.map(\.id) == [ids[1]])
+        await panel.close()
+    }
+
     // MARK: What Save gets
 
     @Test("What Crop and Blur make is what Save's export gets: each display's crop, and its blurs with their rects, strengths, and times")

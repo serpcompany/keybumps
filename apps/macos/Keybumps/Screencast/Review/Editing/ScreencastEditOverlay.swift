@@ -27,6 +27,12 @@ struct ScreencastEditOverlay: View {
             .coordinateSpace(name: Self.space)
         }
     }
+
+    /// Where presses on `rect` reach the overlay: the part of it within `reach`, or nowhere.
+    static func shape(_ rect: CGRect, within reach: CGRect) -> Path {
+        let reachable = rect.intersection(reach)
+        return reachable.isNull ? Path() : Path(reachable)
+    }
 }
 
 /// Crop's rectangle over the whole frame, after Shotnix's `VideoCropOverlay` (MIT, see
@@ -71,7 +77,7 @@ struct ScreencastCropOverlay: View {
                 .allowsHitTesting(false)
 
             Color.clear
-                .contentShape(Path(rect.intersection(reach)))
+                .contentShape(ScreencastEditOverlay.shape(rect, within: reach))
                 .onHover { inside in (inside ? NSCursor.openHand : NSCursor.arrow).set() }
                 .gesture(moveGesture)
 
@@ -81,8 +87,8 @@ struct ScreencastCropOverlay: View {
 
             ForEach(ScreencastRectHandle.allCases, id: \.self) { handle in
                 ScreencastCropHandle(handle: handle)
-                    .position(handle.point(in: rect))
                     .gesture(resizeGesture(handle))
+                    .position(handle.point(in: rect))
             }
         }
         .accessibilityElement(children: .ignore)
@@ -214,7 +220,7 @@ struct ScreencastBlurOverlay: View {
         let video = geometry.videoRect
         ZStack(alignment: .topLeading) {
             Color.clear
-                .contentShape(Path(video.intersection(reach)))
+                .contentShape(ScreencastEditOverlay.shape(video, within: reach))
                 .gesture(pressGesture)
 
             ZStack(alignment: .topLeading) {
@@ -243,8 +249,8 @@ struct ScreencastBlurOverlay: View {
                         .frame(width: 9, height: 9)
                         .frame(width: 20, height: 20)
                         .contentShape(Rectangle())
-                        .position(handle.point(in: rect))
                         .gesture(resizeGesture(handle, blur: selected))
+                        .position(handle.point(in: rect))
                 }
             }
         }

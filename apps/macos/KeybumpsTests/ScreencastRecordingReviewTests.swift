@@ -654,7 +654,7 @@ struct ScreencastRecordingReviewTests {
         #expect(copyKey(.command, confirming: true) == .ignore, "never while Discard is asked")
         #expect(copyKey([.command, .shift]) == .pass)
         #expect(copyKey([.command, .option]) == .pass)
-        #expect(copyKey([]) == .pass, "C alone does nothing")
+        #expect(copyKey([]) == .tool(.crop), "C alone picks Crop (#517), never copies")
         #expect(copyKey(.command, "v") == .pass)
 
         // The layout's C wherever it is, or the C key on a layout with no Latin letters, as menus do.
