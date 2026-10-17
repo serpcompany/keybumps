@@ -320,7 +320,10 @@ final class AppModel {
             menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screenshotTools),
             keyDisplay: keyDisplay,
             seams: injectedScreencast,
-            review: .app(clipboard: clipboard)
+            review: .app(
+                clipboard: clipboard,
+                recordings: .makeDefault(importMemory: preferences.recordingImportMemory, screenshots: clipboard)
+            )
         )
         let screenshotModule = ScreenshotToolsModule(
             service: screenshotTools,

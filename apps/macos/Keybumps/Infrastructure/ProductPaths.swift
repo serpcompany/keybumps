@@ -8,6 +8,8 @@ struct ProductPaths: Equatable {
     let captures: URL
     let dictationModels: URL
     let translatedSpeechTemporary: URL
+    /// Keybumps's caches, such as recordings' poster frames: `~/Library/Caches/Keybumps`.
+    let caches: URL
 
     /// Set once at launch in UI test mode so every store reads and writes a disposable directory.
     nonisolated(unsafe) static var sandboxRoot: URL?
@@ -56,6 +58,7 @@ struct ProductPaths: Equatable {
         }
         let documentsRoot = root("Documents") { $0.urls(for: .documentDirectory, in: .userDomainMask)[0] }
         let temporaryRoot = root("tmp") { $0.temporaryDirectory }
+        let cachesRoot = root("Caches") { $0.urls(for: .cachesDirectory, in: .userDomainMask)[0] }
         return ProductPaths(
             applicationSupport: applicationSupportRoot.appendingPathComponent(
                 productDirectoryName,
@@ -72,7 +75,8 @@ struct ProductPaths: Equatable {
                 .appendingPathComponent("DictationModels", isDirectory: true),
             translatedSpeechTemporary: temporaryRoot
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
-                .appendingPathComponent("TranslatedAudio", isDirectory: true)
+                .appendingPathComponent("TranslatedAudio", isDirectory: true),
+            caches: cachesRoot.appendingPathComponent(productDirectoryName, isDirectory: true)
         )
     }
 

@@ -17,14 +17,19 @@ struct ScreencastReviewServices {
     /// Who has the front, which the review window takes and gives back: macOS's, or a test's
     /// stand-in.
     var front: ScreencastReviewFront = .app
+    /// The recordings index (#492): each recording is added as the recorder finishes writing it,
+    /// read again when the window saves or copies it, and removed when it discards it. Nil indexes
+    /// nothing, as in a test that doesn't ask.
+    var recordings: RecordingLibrary?
 
-    /// The app's: its Clipboard History.
+    /// The app's: its Clipboard History and recordings index.
     @MainActor
-    static func app(clipboard: ClipboardHistoryService) -> ScreencastReviewServices {
+    static func app(clipboard: ClipboardHistoryService, recordings: RecordingLibrary?) -> ScreencastReviewServices {
         ScreencastReviewServices(
             clipboard: clipboard,
             pasteboard: .keybumps,
-            notices: UnitTestHost.isActive ? nil : PaletteHUD.shared
+            notices: UnitTestHost.isActive ? nil : PaletteHUD.shared,
+            recordings: recordings
         )
     }
 }
@@ -85,6 +90,7 @@ final class ScreencastReviewFlow {
     /// The flow controller saved a capture: the panel opens on it at once, with the context read at
     /// the start to follow.
     func captureFinished(_ result: ScreencastCaptureResult) {
+        if case .video(let capture) = result { services?.recordings?.add(capture) }
         let read = contextRead
         contextRead = nil
         guard let panel = panelForReview() else { return }
@@ -134,6 +140,7 @@ final class ScreencastReviewFlow {
             front: services.front
         )
         panel.onFinish = { [weak self, weak panel] outcome in
+            services.recordings?.reviewEnded(outcome)
             // The next capture closed it: only a failure needs saying.
             if let notice = Self.notice(for: outcome), notice.isWarning || panel?.isMakingWay != true {
                 services.notices?.showNotice(notice.message, isWarning: notice.isWarning)

@@ -373,6 +373,9 @@ final class AppPreferences {
     /// The drawing tools' last choices while recording (`screencast.drawingStyle`).
     var screencastDrawingMemory: ScreencastDrawingMemory { ScreencastDrawingMemory(defaults: defaults) }
 
+    /// Whether the recordings index's one-time import ran (`screencast.recordingsImported`, #492).
+    var recordingImportMemory: RecordingImportMemory { RecordingImportMemory(defaults: defaults) }
+
     /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {
         if enabled { enabledCapabilities.insert(capability) }

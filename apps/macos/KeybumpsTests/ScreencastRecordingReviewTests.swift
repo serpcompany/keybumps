@@ -354,7 +354,7 @@ struct ScreencastRecordingReviewTests {
         #expect(panel.action(forKey: 36, modifiers: [], in: panel.window) == .ignore, "Return doesn't answer it")
         #expect(panel.action(forKey: 53, modifiers: [], in: panel.window) == .keep, "Escape keeps it")
         panel.model?.confirmDiscard()
-        #expect(!panel.isShown && outcomes.outcomes == [.discarded])
+        #expect(!panel.isShown && outcomes.outcomes == [.discarded(discarded)])
         #expect(!FileManager.default.fileExists(atPath: discarded.folder.path))
         #expect(notices.messages.isEmpty)
 
@@ -362,7 +362,7 @@ struct ScreencastRecordingReviewTests {
         await flow.show(kept, context: .none)
         flow.close()
         try await eventually { !panel.isShown }
-        #expect(outcomes.outcomes == [.discarded, .saved(kept)])
+        #expect(outcomes.outcomes == [.discarded(discarded), .saved(kept)])
         #expect(notices.messages == [savedNotice])
     }
 
@@ -438,7 +438,7 @@ struct ScreencastRecordingReviewTests {
         #expect(ScreencastReviewFlow.notice(for: .copied(recording))?.message == "Recording copied")
         let failed = ScreencastReviewFlow.notice(for: .saveFailed(recording, .diskFull))
         #expect(failed?.message == "Couldn’t save the recording: the disk is full." && failed?.isWarning == true)
-        #expect(ScreencastReviewFlow.notice(for: .discarded) == nil)
+        #expect(ScreencastReviewFlow.notice(for: .discarded(recording)) == nil)
     }
 
     // MARK: A save that fails
