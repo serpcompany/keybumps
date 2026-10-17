@@ -2,6 +2,8 @@
 
 Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329. Amended 2026-10-12 (#485): Screencast records video only, and screenshots stay with Screenshot Tools. Amended 2026-10-12 (#475): the review is a window with a player, and no note, type, repository, or Trim; see Amendments.
 
+Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17, #488). It replaces decision 1 (Screencast is part of Screengrabs, one plugin that ships on), decision 3's screenshot parts, decision 4's review panel and folder, and the Open question about a palette tab. Recordings save to their own folder, which defaults to the Mac's screenshot folder and has its own Choose… in Settings › Screengrabs, instead of `~/Documents/Keybumps/captures` or the folder Settings › Screencast shows. The rest of decisions 3 and 4 stands (video, the audio switches, the control bar, keys, drawing, and a recording staying on the Mac until it's sent), as do decisions 2 and 5–8.
+
 ## Context
 
 The owner builds many sites and apps and keeps finding bugs and changes while using them. Turning one into a useful report takes too long: a screenshot, a recording, typing out what happened, finding the right repository, filing the issue. The owner wants one hotkey that captures what's on screen (a screenshot or a video, with their voice, the Mac's sound, the keys they press, and drawing) and one more keypress that turns it into a GitHub issue a person or an agent can act on. #329 asked for quick screen recordings with annotations and for pushing videos into a Clipy account.
