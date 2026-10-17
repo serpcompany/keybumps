@@ -121,7 +121,7 @@ The Command Palette tab label for Shortcut Coach history; everywhere else, inclu
 
 **ScreenGrabs**:
 Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, ScreenGrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.
-_Avoid_: Screenshot Tools and Screencast (former names), screen grabs, screen capture, CleanShot clone
+_Avoid_: Screenshot Tools and Screencast (former names), Screengrabs (lowercase g), screen grabs, screen capture, CleanShot clone
 
 **Screengrab**:
 One screenshot or one recording that ScreenGrabs took.
