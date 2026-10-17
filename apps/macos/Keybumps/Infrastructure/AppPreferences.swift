@@ -53,6 +53,7 @@ final class AppPreferences {
         didSet { defaults.set(storedEnabledCapabilities.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities) }
     }
 
+    /// A locale identifier such as `en-US`, or Automatic (`DictationLanguage`), the default.
     var dictationLanguage: String {
         didSet { defaults.set(dictationLanguage, forKey: Key.dictationLanguage) }
     }
@@ -284,7 +285,8 @@ final class AppPreferences {
             defaults.set(initial.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities)
         }
         defaults.set(Capability.allCases.map(\.rawValue).sorted(), forKey: Key.knownCapabilities)
-        dictationLanguage = defaults.string(forKey: Key.dictationLanguage) ?? "en-US"
+        // Automatic unless a language was saved (#530); English was the default before.
+        dictationLanguage = defaults.string(forKey: Key.dictationLanguage) ?? DictationLanguage.automatic
         if defaults.object(forKey: Key.dictationDurationLimit) != nil,
            let storedLimit = DictationDurationLimit(rawValue: defaults.integer(forKey: Key.dictationDurationLimit)) {
             dictationDurationLimit = storedLimit

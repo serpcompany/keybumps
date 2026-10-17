@@ -104,6 +104,10 @@ _Avoid_: Source URL, page address (the full address is never kept)
 A session that records speech, transcribes it locally, and inserts the text at the original cursor. It inserts through the clipboard, kept out of Clipboard History, then puts the clipboard back unless something else was copied meanwhile; turning off Put the clipboard back after inserting, in Settings › Dictation, leaves the transcript there. The Dictation tab's ⌘P leaves the transcript on the clipboard either way.
 _Avoid_: Voice guide, assistant
 
+**Recognition language**:
+Dictation's language, in Settings › Dictation: **Automatic**, the default, or one language someone chose. With Automatic, a multilingual Whisper model detects the language of each recording, and Dictation History records the one it detected; Apple Speech uses the Mac's language (English if its on-device speech doesn't support it), and Whisper Medium English uses English.
+_Avoid_: Input language, auto-detect setting
+
 **Dictation History**:
 The local archive of completed Dictation recordings and their transcripts.
 _Avoid_: Cloud transcript

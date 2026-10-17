@@ -4,7 +4,7 @@ import WhisperKit
 @MainActor
 final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscribing {
     private let whisper: WhisperKit
-    private var activeTask: Task<String, Error>?
+    private var activeTask: Task<DictationTranscription, Error>?
 
     private(set) var partialTranscript = ""
 
@@ -29,23 +29,28 @@ final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
+        try await transcription(audioURL: audioURL, language: language, recordedDuration: recordedDuration).text
+    }
+
+    /// A chosen language is reported as given (`ja-JP`); one detected for Automatic as
+    /// WhisperKit's code for it (`ja`), or as Automatic when it detected none.
+    func transcription(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> DictationTranscription {
         partialTranscript = ""
-        let languageCode = Locale(identifier: language).language.languageCode?.identifier
+        let options = Self.decodingOptions(language: language)
+        let detects = options.detectLanguage
         let whisper = whisper
 
-        let task = Task<String, Error> {
+        let task = Task<DictationTranscription, Error> {
             try Task.checkCancellation()
 
             let results = try await whisper.transcribe(
                 audioPath: audioURL.path,
                 audioInputOptions: AudioInputOptions(audioLoadingMode: .incremental),
-                decodeOptions: DecodingOptions(
-                    task: .transcribe,
-                    language: languageCode,
-                    usePrefillPrompt: true,
-                    detectLanguage: false,
-                    chunkingStrategy: .vad
-                )
+                decodeOptions: options
             )
             try Task.checkCancellation()
             let transcript = results
@@ -59,14 +64,39 @@ final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
                     userInfo: [NSLocalizedDescriptionKey: "No speech was detected."]
                 )
             }
-            return transcript
+            let detected = detects ? Self.dominantLanguage(of: results.map { ($0.language, $0.text) }) : nil
+            return DictationTranscription(text: transcript, language: detected ?? language)
         }
 
         activeTask = task
         defer { activeTask = nil }
-        let transcript = try await task.value
-        partialTranscript = transcript
-        return transcript
+        let transcription = try await task.value
+        partialTranscript = transcription.text
+        return transcription
+    }
+
+    /// Automatic leaves the language out and detects it (a multilingual model only; WhisperKit
+    /// ignores it for an English one). A chosen language is set, and never detected.
+    static func decodingOptions(language: String) -> DecodingOptions {
+        let detects = DictationLanguage.isAutomatic(language)
+        return DecodingOptions(
+            task: .transcribe,
+            language: detects ? nil : Locale(identifier: language).language.languageCode?.identifier,
+            usePrefillPrompt: true,
+            detectLanguage: detects,
+            chunkingStrategy: .vad
+        )
+    }
+
+    /// The language most of the transcript is in, by characters, from WhisperKit's language for
+    /// each part it transcribed; nil when it reports none.
+    static func dominantLanguage(of parts: [(language: String, text: String)]) -> String? {
+        var characters: [String: Int] = [:]
+        for part in parts where !part.language.isEmpty {
+            characters[part.language, default: 0] += part.text.count
+        }
+        // Ties go to the code that sorts first, so the result never depends on dictionary order.
+        return characters.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
     }
 
     func cancel() {

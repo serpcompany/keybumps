@@ -55,9 +55,19 @@ enum DictationTranscriptionEngine: String, Codable, CaseIterable, Identifiable, 
     /// The model Settings marks Recommended: the fastest, and as accurate as any (ADR 0008).
     var isRecommended: Bool { self == .whisperCppTurbo }
 
+    /// Whether the model detects the spoken language, so Automatic is detected per recording
+    /// (#530). Apple Speech needs one language, and Medium English knows only English.
+    var detectsLanguage: Bool {
+        switch self {
+        case .appleSpeech, .whisperMediumEnglish: false
+        case .whisperMediumMultilingual, .whisperTurboCompressed, .whisperCppTurbo: true
+        }
+    }
+
+    /// Every model takes Automatic: one that can't detect falls back (`DictationLanguage.resolved`).
     func supports(language identifier: String) -> Bool {
         guard self == .whisperMediumEnglish else { return true }
-        return identifier.lowercased().hasPrefix("en")
+        return DictationLanguage.isAutomatic(identifier) || identifier.lowercased().hasPrefix("en")
     }
 }
 

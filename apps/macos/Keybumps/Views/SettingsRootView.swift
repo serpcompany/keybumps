@@ -491,9 +491,14 @@ struct DictationSettingsView: View {
                     SettingsDropdown(
                         title: "Recognition language",
                         selection: Binding(get: { model.preferences.dictationLanguage }, set: { model.setDictationLanguage($0) }),
-                        options: model.dictation.availableLanguages.map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
+                        options: DictationLanguage.menuOptions(available: model.dictation.availableLanguages)
                     )
                     .accessibilityIdentifier("settings.dictation.language")
+                }
+                if DictationLanguage.isAutomatic(model.preferences.dictationLanguage),
+                   let note = DictationLanguage.automaticNote(engine: model.preferences.dictationTranscriptionEngine) {
+                    SettingsNote(note)
+                        .accessibilityIdentifier("settings.dictation.language.automaticNote")
                 }
             }
             DictationTranscriptionEngineSection()
