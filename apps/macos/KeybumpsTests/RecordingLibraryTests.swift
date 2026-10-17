@@ -4,9 +4,10 @@ import Testing
 @testable import Keybumps
 
 /// ScreenGrabs' recordings index (#492): what adds, reads again, marks missing, and removes an
-/// entry; the one-time import and what it leaves alone; and an index that's missing, corrupt, or a
-/// later build's. Everything is in a temporary folder, with generated videos, made-up PNGs, a
-/// named pasteboard, and `InMemoryDefaults`.
+/// entry; the one-time import and what it leaves alone; each launch's check of the recordings
+/// folder and poster frames; file names that leave their folder; and an index that's missing,
+/// corrupt, partly readable, unreadable, or a later build's. Everything is in a temporary folder,
+/// with generated videos, made-up PNGs, a named pasteboard, and `InMemoryDefaults`.
 @MainActor
 @Suite("ScreenGrabs: the recordings index")
 struct RecordingLibraryTests {
@@ -221,21 +222,211 @@ struct RecordingLibraryTests {
         #expect(fixture.savedRecordings()?.count == 1)
     }
 
-    @Test("A later build's index is listed but never written over")
-    func laterBuildsIndex() async throws {
+    @Test(
+        "A later build's index, however it's laid out, is left byte for byte, and the index is read-only",
+        arguments: ["version 1's layout", "recordings keyed by ID", "no recordings list"]
+    )
+    func laterBuildsIndex(layout: String) async throws {
         defer { fixture.tearDown() }
         try await fixture.recording(at: 100)
         fixture.library().load()
-        let later = try fixture.indexText().replacingOccurrences(of: "\"version\" : 1", with: "\"version\" : 2")
-        try later.write(to: fixture.indexURL, atomically: true, encoding: .utf8)
+        let current = try #require(JSONSerialization.jsonObject(with: Data(fixture.indexText().utf8)) as? [String: Any])
+        let entry = try #require((current["recordings"] as? [Any])?.first as? [String: Any])
+        let id = try #require(entry["id"] as? String)
+        let later: [String: Any] = switch layout {
+        case "version 1's layout": ["version": 2, "recordings": [entry]]
+        case "recordings keyed by ID": ["version": 2, "recordings": [id: entry]]
+        default: ["version": 2, "entries": [entry], "folders": [["path": "elsewhere"]]]
+        }
+        let data = try JSONSerialization.data(withJSONObject: later, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: fixture.indexURL)
 
         let library = fixture.library()
         library.load()
         #expect(library.state == .readOnly)
-        #expect(library.recordings.count == 1)
+        #expect(library.recordings.count == (layout == "version 1's layout" ? 1 : 0), "what reads as version 1's entries")
+        await library.launchCheck?.value
+        #expect(library.recordings.count == 1, "the recordings folder's recording, listed once")
         library.add(try await fixture.recording(at: 200))
         #expect(library.recordings.count == 2)
-        #expect(try fixture.indexText() == later)
+        #expect(try Data(contentsOf: fixture.indexURL) == data)
+        #expect(!FileManager.default.fileExists(atPath: library.unreadableCopyURL.path))
+    }
+
+    @Test(
+        "A partly readable index keeps what it read, adds the recordings folder's, and is set aside once it's replaced",
+        arguments: [true, false]
+    )
+    func partialIndex(importDone: Bool) async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        fixture.library().load()
+        let kept = try #require(fixture.savedRecordings()?.first)
+        try await fixture.recording(at: 200)
+        let partial = try fixture.addUnreadableEntry()
+        if !importDone { fixture.defaults.removeObject(forKey: RecordingImportMemory.key) }
+
+        let library = fixture.library()
+        library.load()
+        #expect(library.state == .ready)
+        #expect(library.recordings.map(\.startedAt) == [Self.date(200), Self.date(100)])
+        #expect(library.recordings.last?.id == kept.id)
+        #expect(fixture.savedRecordings() == library.recordings)
+        #expect(try Data(contentsOf: library.unreadableCopyURL) == partial)
+        #expect(fixture.importMemory.isDone)
+    }
+
+    @Test("A partly readable index whose replacement can't be written stays as it was, and the index is read-only")
+    func partialIndexWriteFails() async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        fixture.library().load()
+        try await fixture.recording(at: 200)
+        let partial = try fixture.addUnreadableEntry()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: fixture.support.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fixture.support.path) }
+
+        let library = fixture.library()
+        library.load()
+        #expect(library.state == .readOnly)
+        #expect(library.recordings.map(\.startedAt) == [Self.date(200), Self.date(100)], "listed all the same")
+        library.add(try await fixture.recording(at: 300))
+        await library.launchCheck?.value
+        #expect(try Data(contentsOf: fixture.indexURL) == partial)
+        #expect(!FileManager.default.fileExists(atPath: library.unreadableCopyURL.path))
+    }
+
+    @Test(
+        "An index that's there but can't be read lists the recordings folder, and is never written",
+        arguments: ["no permission", "a folder in its place"]
+    )
+    func unreadableIndex(cause: String) async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        fixture.library().load()
+        let original = try Data(contentsOf: fixture.indexURL)
+        if cause == "no permission" {
+            try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: fixture.indexURL.path)
+        } else {
+            try FileManager.default.removeItem(at: fixture.indexURL)
+            try FileManager.default.createDirectory(at: fixture.indexURL, withIntermediateDirectories: false)
+        }
+
+        let library = fixture.library()
+        library.load()
+        #expect(library.state == .readOnly)
+        #expect(library.recordings.map(\.startedAt) == [Self.date(100)])
+        library.add(try await fixture.recording(at: 200))
+        #expect(library.recordings.count == 2)
+        await library.launchCheck?.value
+        #expect(!FileManager.default.fileExists(atPath: library.unreadableCopyURL.path))
+        if cause == "no permission" {
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fixture.indexURL.path)
+            #expect(try Data(contentsOf: fixture.indexURL) == original)
+        } else {
+            #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.indexURL.path).isEmpty)
+        }
+    }
+
+    @Test("Each launch adds a recording saved to the recordings folder behind the index's back, after the load")
+    func launchCheckAddsRecordings() async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        fixture.library().load()
+        let indexed = try #require(fixture.savedRecordings()?.first)
+        try await fixture.recording(at: 200)
+
+        let library = fixture.library()
+        library.load()
+        #expect(library.recordings.map(\.id) == [indexed.id], "not read in the load itself")
+        await library.launchCheck?.value
+        #expect(library.recordings.map(\.startedAt) == [Self.date(200), Self.date(100)])
+        #expect(library.recordings.last?.id == indexed.id)
+        #expect(fixture.savedRecordings() == library.recordings)
+    }
+
+    @Test("The launch check never lists an indexed recording twice, however either folder is spelled")
+    func launchCheckMatchesResolvedPaths() async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        let library = fixture.library()
+        library.load()
+        // One indexed through a link to the recordings folder.
+        let alias = fixture.root.url.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: fixture.captures)
+        let capture = try await fixture.recording(at: 200)
+        let linked = alias.appendingPathComponent("200", isDirectory: true)
+        library.add(ScreencastCapture(folder: linked, videos: capture.videos, duration: capture.duration, endedEarly: nil))
+        #expect(library.recordings.map(\.folder.path).contains(linked.path))
+        let index = try fixture.indexText()
+
+        for folder in [fixture.captures, alias] {
+            let reloaded = fixture.library(capturesFolder: folder)
+            reloaded.load()
+            await reloaded.launchCheck?.value
+            #expect(reloaded.recordings.count == 2)
+            #expect(try fixture.indexText() == index)
+        }
+    }
+
+    @Test("A name in recordings.json or meta.json that leaves its folder, such as `..`, is treated as missing")
+    func fileNamesStayInTheirFolders() async throws {
+        defer { fixture.tearDown() }
+        let capture = try await fixture.recording(at: 100)
+        let victim = fixture.root.url.appendingPathComponent("victim.jpg")
+        try Data("not a poster frame".utf8).write(to: victim)
+        let id = UUID()
+        let entry: [String: Any] = [
+            "id": id.uuidString, "folder": capture.folder.path, "startedAt": RecordingLibraryFixture.iso8601(100),
+            "posterFrame": "../victim.jpg",
+            "videos": [
+                ["file": "../200/video-1.mov"], ["file": "video-1.mov", "mixdown": ".."],
+                ["file": ""], ["file": "."], ["file": "nested/video-1.mov"],
+            ],
+        ]
+        try FileManager.default.createDirectory(at: fixture.support, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: ["version": 1, "recordings": [entry]]).write(to: fixture.indexURL)
+        fixture.importMemory.markDone()
+        // meta.json: one recording with only a video outside its folder, one with such a mixdown.
+        let outsideOnly = try await fixture.recording(at: 300)
+        let outsideMixdown = try await fixture.recording(at: 400)
+        try fixture.editMetadata(of: outsideOnly.folder) { $0["videos"] = [["file": "../100/video-1.mov"]] }
+        try fixture.editMetadata(of: outsideMixdown.folder) { $0["videos"] = [["file": "video-1.mov", "mixdown": "../../x.mp4"]] }
+
+        let library = fixture.library()
+        library.load()
+        await library.launchCheck?.value
+        #expect(library.recordings.map(\.startedAt) == [Self.date(400), Self.date(100)])
+        let checked = try #require(library.recordings.last)
+        #expect(checked.videos == [IndexedRecording.Video(file: "video-1.mov", mixdown: nil)])
+        #expect(checked.posterFrame == "\(id.uuidString).jpg")
+        #expect(checked.sharingURLs.map(\.path) == [capture.folder.appendingPathComponent("video-1.mov").path])
+        #expect(library.recordings.first?.videos == [IndexedRecording.Video(file: "video-1.mov", mixdown: nil)])
+
+        var escaping = checked
+        escaping.posterFrame = "../victim.jpg"
+        #expect(library.posterFrames.url(for: escaping) == nil)
+        library.posterFrames.remove(for: escaping)
+        library.remove(folder: capture.folder)
+        #expect(FileManager.default.fileExists(atPath: victim.path))
+    }
+
+    @Test("Poster frames no entry names are deleted when the index loads, and named ones kept")
+    func orphanPosterFrames() async throws {
+        defer { fixture.tearDown() }
+        let library = fixture.library()
+        library.load()
+        library.add(try await fixture.recording(at: 100))
+        let entry = try #require(library.recordings.first)
+        let kept = try #require(await library.posterFrame(for: entry))
+        let orphan = fixture.posters.appendingPathComponent("\(UUID().uuidString).jpg")
+        try Data("an old frame".utf8).write(to: orphan)
+
+        let reloaded = fixture.library()
+        reloaded.load()
+        await reloaded.launchCheck?.value
+        #expect(!FileManager.default.fileExists(atPath: orphan.path))
+        #expect(FileManager.default.fileExists(atPath: kept.path))
     }
 
     @Test("The index holds structure only: never the review, its note, or the app in front")
@@ -285,6 +476,7 @@ final class RecordingLibraryFixture {
     var captures: URL { root.url.appendingPathComponent("captures", isDirectory: true) }
     var support: URL { root.url.appendingPathComponent("support", isDirectory: true) }
     var indexURL: URL { support.appendingPathComponent(RecordingIndexFile.fileName) }
+    var posters: URL { root.url.appendingPathComponent("posters", isDirectory: true) }
     var importMemory: RecordingImportMemory { RecordingImportMemory(defaults: defaults) }
     lazy var clipboard = ClipboardHistoryService(
         storageURL: support.appendingPathComponent("clipboard-history.json"),
@@ -294,11 +486,11 @@ final class RecordingLibraryFixture {
     )
     private var movie: URL?
 
-    func library() -> RecordingLibrary {
+    func library(capturesFolder: URL? = nil) -> RecordingLibrary {
         RecordingLibrary(
             storageURL: indexURL,
-            capturesFolder: captures,
-            posterFrames: RecordingPosterFrames(folder: root.url.appendingPathComponent("posters", isDirectory: true)),
+            capturesFolder: capturesFolder ?? captures,
+            posterFrames: RecordingPosterFrames(folder: posters),
             importMemory: importMemory,
             screenshots: clipboard,
             now: { Date(timeIntervalSince1970: 1_000) }
@@ -407,6 +599,15 @@ final class RecordingLibraryFixture {
         })
     }
 
+    /// Adds an entry no build can decode to the index, returning the file's bytes.
+    func addUnreadableEntry() throws -> Data {
+        var index = try JSONSerialization.jsonObject(with: Data(contentsOf: indexURL)) as? [String: Any] ?? [:]
+        index["recordings"] = (index["recordings"] as? [Any] ?? []) + [["id": "not an ID"]]
+        let data = try JSONSerialization.data(withJSONObject: index)
+        try data.write(to: indexURL)
+        return data
+    }
+
     func indexText() throws -> String {
         try String(contentsOf: indexURL, encoding: .utf8)
     }
@@ -431,7 +632,7 @@ final class RecordingLibraryFixture {
         return url
     }
 
-    private func editMetadata(of folder: URL, _ edit: (inout [String: Any]) -> Void) throws {
+    func editMetadata(of folder: URL, _ edit: (inout [String: Any]) -> Void) throws {
         let url = folder.appendingPathComponent(ScreencastMetadata.fileName)
         var meta = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] ?? [:]
         edit(&meta)
@@ -450,7 +651,7 @@ final class RecordingLibraryFixture {
         try data.write(to: url)
     }
 
-    private static func iso8601(_ seconds: TimeInterval) -> String {
+    static func iso8601(_ seconds: TimeInterval) -> String {
         ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: seconds))
     }
 }
