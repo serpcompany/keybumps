@@ -1137,11 +1137,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         return true
     }
 
+    /// The Clipboard tab's rows: its filter and search come before its limit of 50.
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let entries = state.filter.apply(clipboard.clipboardTabEntries) { $0.matches($1) }
-        guard !query.isEmpty else { return entries }
-        return entries.filter { $0.matches(query) }
+        let filter = state.filter
+        return clipboard.clipboardTabEntries(matching: { entry in
+            (filter?.matches(entry) ?? true) && (query.isEmpty || entry.matches(query))
+        })
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
@@ -1785,11 +1787,13 @@ private struct CommandPaletteView: View {
         }
     }
 
+    /// The Clipboard tab's rows: its filter and search come before its limit of 50.
     private var filteredClipboard: [ClipboardEntry] {
         let query = state.historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let entries = state.filter.apply(clipboard.clipboardTabEntries) { $0.matches($1) }
-        guard !query.isEmpty else { return entries }
-        return entries.filter { $0.matches(query) }
+        let filter = state.filter
+        return clipboard.clipboardTabEntries(matching: { entry in
+            (filter?.matches(entry) ?? true) && (query.isEmpty || entry.matches(query))
+        })
     }
 
     private var filteredDictations: [DictationHistoryEntry] {
