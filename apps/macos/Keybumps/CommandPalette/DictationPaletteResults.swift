@@ -242,7 +242,7 @@ private struct DictationPaletteDetail: View {
         PaletteInformation {
             PaletteInformationRow("Recorded", entry.capturedAt.formatted(date: .abbreviated, time: .shortened))
             PaletteInformationRow("Duration", DictationHistoryCard.durationFormatter.string(from: entry.duration) ?? "0:00")
-            PaletteInformationRow("Language", Locale.current.localizedString(forIdentifier: entry.language) ?? entry.language)
+            PaletteInformationRow("Language", entry.languageName)
             PaletteInformationRow("Status", status)
         }
     }

@@ -107,6 +107,36 @@ struct DictationAutomaticLanguageTests {
         #expect(language == "en-GB")
     }
 
+    @Test("Without the Mac's region, the language's likely region comes before the rest", arguments: [
+        ("en-DE", "en-US"), ("es-AR", "es-ES"),
+    ])
+    func theLikelyRegionNext(_ preferred: String, _ expected: String) {
+        let language = DictationLanguage.macLanguage(
+            preferred: preferred, region: nil, supported: ["en-AU", "en-ID", "en-US", "es-CL", "es-ES", "es-MX"]
+        ) { _ in true }
+        #expect(language == expected)
+    }
+
+    @Test("The Mac's region without on-device speech falls to the likely region")
+    func theMacRegionUnavailable() {
+        let language = DictationLanguage.macLanguage(
+            preferred: "en-GB", region: nil, supported: ["en-AU", "en-GB", "en-ID", "en-US"]
+        ) { $0 != "en-GB" }
+        #expect(language == "en-US")
+    }
+
+    @Test("A language with no on-device region falls to English, and Settings says so")
+    func noOnDeviceRegionFallsToEnglish() {
+        let macLanguage = {
+            DictationLanguage.macLanguage(
+                preferred: "es-MX", region: nil, supported: ["en-US", "es-CL", "es-ES", "es-MX"]
+            ) { $0 == "en-US" }
+        }
+        let note = DictationLanguage.automaticNote(engine: .appleSpeech, preferred: "es-MX", macLanguage: macLanguage)
+        #expect(macLanguage() == "en-US")
+        #expect(note == "With Apple Speech, Automatic uses English: on-device speech doesn't support your Mac's language.")
+    }
+
     @Test("English when on-device speech doesn't support the Mac's language")
     func englishWhenUnsupported() {
         let language = DictationLanguage.macLanguage(
@@ -166,6 +196,13 @@ struct DictationAutomaticLanguageTests {
         let options = WhisperKitCompletedAudioTranscriber.decodingOptions(language: Self.automatic)
         #expect(options.detectLanguage)
         #expect(options.language == nil)
+    }
+
+    @Test("A language WhisperKit detected once is set for the whole recording")
+    func whisperKitUsesTheLanguageDetectedOnce() {
+        let options = WhisperKitCompletedAudioTranscriber.decodingOptions(language: Self.automatic, detected: "ja")
+        #expect(!options.detectLanguage)
+        #expect(options.language == "ja")
     }
 
     @Test("A chosen language is set for WhisperKit, which never detects it")
@@ -254,6 +291,22 @@ struct DictationAutomaticLanguageTests {
 
         #expect(session.transcriber.languages == [Self.automatic])
         #expect(session.history.entries.first?.language == "ja")
+    }
+
+    @Test("An unfinished Automatic entry's Language row says Automatic; the others name a language")
+    func unfinishedAutomaticEntryReadsAutomatic() throws {
+        let session = try ServiceFixture(transcriber: FixedLanguageTranscriber(reports: "ja"))
+        defer { session.remove() }
+        let failed = try session.failedEntry(language: Self.automatic)
+        let chosen = try session.failedEntry(language: "ja-JP")
+        let recording = try session.history.prepareRecording(language: Self.automatic)
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: recording.audioURL)
+        let finished = try session.history.completeRecording(
+            recording, text: "made-up words", language: "ja", duration: 1, transcriptionError: nil
+        )
+        #expect(failed.languageName == "Automatic")
+        #expect(chosen.languageName == Locale.current.localizedString(forIdentifier: "ja-JP"))
+        #expect(finished.languageName == Locale.current.localizedString(forIdentifier: "ja"))
     }
 
     @Test("Translation gets a real source language from an unfinished Automatic entry")

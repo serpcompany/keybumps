@@ -40,12 +40,21 @@ final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         recordedDuration: TimeInterval
     ) async throws -> DictationTranscription {
         partialTranscript = ""
-        let options = Self.decodingOptions(language: language)
-        let detects = options.detectLanguage
+        let detects = DictationLanguage.isAutomatic(language)
         let whisper = whisper
 
         let task = Task<DictationTranscription, Error> {
             try Task.checkCancellation()
+
+            // Automatic detects once per recording, from its first 30 seconds as whisper.cpp
+            // does, and transcribes every chunk in that language; left to itself, WhisperKit
+            // would detect again in each 30-second window. If that fails, each window detects.
+            var once: String?
+            if detects, let code = try? await whisper.detectLanguage(audioPath: audioURL.path).language, !code.isEmpty {
+                once = code
+            }
+            try Task.checkCancellation()
+            let options = Self.decodingOptions(language: language, detected: once)
 
             let results = try await whisper.transcribe(
                 audioPath: audioURL.path,
@@ -64,7 +73,7 @@ final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
                     userInfo: [NSLocalizedDescriptionKey: "No speech was detected."]
                 )
             }
-            let detected = detects ? Self.dominantLanguage(of: results.map { ($0.language, $0.text) }) : nil
+            let detected = detects ? once ?? Self.dominantLanguage(of: results.map { ($0.language, $0.text) }) : nil
             return DictationTranscription(text: transcript, language: detected ?? language)
         }
 
@@ -75,15 +84,18 @@ final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         return transcription
     }
 
-    /// Automatic leaves the language out and detects it (a multilingual model only; WhisperKit
-    /// ignores it for an English one). A chosen language is set, and never detected.
-    static func decodingOptions(language: String) -> DecodingOptions {
-        let detects = DictationLanguage.isAutomatic(language)
+    /// Automatic sets the language detected once for the recording (`detected`, WhisperKit's
+    /// code such as `ja`), or leaves it out and detects it in each window when none was (a
+    /// multilingual model only; WhisperKit ignores it for an English one). A chosen language is
+    /// set, and never detected.
+    static func decodingOptions(language: String, detected: String? = nil) -> DecodingOptions {
+        let automatic = DictationLanguage.isAutomatic(language)
+        let code = automatic ? detected : Locale(identifier: language).language.languageCode?.identifier
         return DecodingOptions(
             task: .transcribe,
-            language: detects ? nil : Locale(identifier: language).language.languageCode?.identifier,
+            language: code,
             usePrefillPrompt: true,
-            detectLanguage: detects,
+            detectLanguage: automatic && code == nil,
             chunkingStrategy: .vad
         )
     }

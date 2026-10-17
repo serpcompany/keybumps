@@ -41,7 +41,8 @@ enum DictationLanguage {
 
     /// The Mac's language where Apple's on-device speech supports it, otherwise English: what
     /// Automatic uses with Apple Speech, which needs one language. The Mac's own region comes
-    /// first, so a British Mac gets `en-GB` rather than `en-US`.
+    /// first, so a British Mac gets `en-GB` rather than `en-US`; then the language's likely
+    /// region, so English on a German Mac gets `en-US` rather than `en-ID`; then the rest.
     static func macLanguage(
         preferred: String? = Locale.preferredLanguages.first,
         region: Locale.Region? = Locale.current.region,
@@ -53,12 +54,18 @@ enum DictationLanguage {
         guard let preferred else { return english }
         let mac = Locale.Language(identifier: preferred)
         let macRegion = mac.region ?? region
+        // Likely subtags: en → en-Latn-US, es → es-Latn-ES, zh-Hant → zh-Hant-TW.
+        let likelyRegion = Locale.Language(
+            identifier: Locale.Language(languageCode: mac.languageCode, script: mac.script).maximalIdentifier
+        ).region
+        let regionOf = { (identifier: String) in Locale.Language(identifier: identifier).region }
         let sameLanguage = supported.sorted().filter {
             Locale.Language(identifier: $0).languageCode == mac.languageCode
         }
-        let sameRegion = sameLanguage.filter { Locale.Language(identifier: $0).region == macRegion }
-        let otherRegions = sameLanguage.filter { Locale.Language(identifier: $0).region != macRegion }
-        return (sameRegion + otherRegions).first(where: supportsOnDevice) ?? english
+        let sameRegion = sameLanguage.filter { regionOf($0) == macRegion }
+        let likely = sameLanguage.filter { regionOf($0) == likelyRegion && regionOf($0) != macRegion }
+        let otherRegions = sameLanguage.filter { regionOf($0) != macRegion && regionOf($0) != likelyRegion }
+        return (sameRegion + likely + otherRegions).first(where: supportsOnDevice) ?? english
     }
 
     /// What Settings › Dictation says under its menu while Automatic is chosen with a model that
