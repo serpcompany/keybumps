@@ -467,7 +467,7 @@ struct ClipboardSettingsView: View {
             CapabilityControl(capability: .clipboardHistory, shortcuts: [.clipboardHistory])
             PluginPermissionsGroup(capability: .clipboardHistory)
             SettingsGroup("History") {
-                SettingsNote("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
+                SettingsNote("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac, plus the \(ClipboardHistoryService.screenshotCapacity) most recent screenshots. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
             }
         }.navigationTitle("Clipboard History")
     }

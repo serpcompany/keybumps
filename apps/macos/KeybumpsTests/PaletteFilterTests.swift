@@ -167,6 +167,29 @@ struct PaletteFilterTests {
         #expect(fixture.clipboard.entries.count == 1)
     }
 
+    @Test("A copy older than the Clipboard tab's newest 50 rows is still found by Text and by search, and Delete removes it (#493)")
+    func clipboardFindsCopiesPastItsNewestFifty() throws {
+        let fixture = PaletteFilterFixture()
+        defer { fixture.tearDown() }
+        fixture.clipboard.ingestForTesting("made-up older copy")
+        for index in 0..<ClipboardHistoryService.screenshotCapacity {
+            let file = fixture.folder.url.appendingPathComponent("Screenshot \(index).png")
+            try Data("made-up pixels \(index)".utf8).write(to: file)
+            #expect(fixture.clipboard.ingestImageFile(at: file))
+        }
+
+        fixture.palette.selectOnOpening(.clipboard)
+        fixture.palette.chooseFilter(.text)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Return, "\r")) == nil)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up older copy")
+
+        fixture.palette.selectOnOpening(.clipboard)
+        fixture.palette.state.filter = nil
+        fixture.palette.state.historyQuery = "older"
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_Delete, "\u{7f}", command: true)) == nil)
+        #expect(fixture.clipboard.entries.allSatisfy { $0.isScreenshot })
+    }
+
     @Test("On Screenshots, / lists filters as rows, so Down doesn't go into the grid")
     func screenshotsMenuIsAList() {
         let fixture = PaletteFilterFixture()

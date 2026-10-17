@@ -22,8 +22,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     /// The website's domain (the page address's host only), when the browser said which page it was.
     let sourceDomain: String?
     /// True for a screenshot cleared or deleted from the Clipboard tab. It stays, with its media, for
-    /// the Screenshots tab and still counts toward the capacity. Copying it again shows it in the
-    /// Clipboard tab again. History saved before this existed decodes it as false.
+    /// the ScreenGrabs tab and still counts toward the screenshot limit. Copying it again shows it in
+    /// the Clipboard tab again. History saved before this existed decodes it as false.
     var isHiddenFromClipboardTab: Bool
 
     init(
@@ -102,7 +102,13 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 @MainActor
 @Observable
 class ClipboardHistoryService {
+    /// How many items that aren't screenshots are kept, and the most the Clipboard tab lists.
     nonisolated static let capacity = 50
+    /// How many screenshot items are kept, apart from `capacity`: a copy never pushes out a
+    /// screenshot, and a screenshot never pushes out a copy. An older build loads only the newest
+    /// `capacity` items, whatever their kind, and drops the rest on its next save, leaving their
+    /// media in `clipboard-media`.
+    nonisolated static let screenshotCapacity = 50
     nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 
     /// Every item, newest first, including screenshots hidden from the Clipboard tab.
@@ -138,7 +144,8 @@ class ClipboardHistoryService {
         try? fileManager.createDirectory(at: self.mediaDirectoryURL, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: self.storageURL),
            let decoded = try? JSONDecoder().decode([ClipboardEntry].self, from: data) {
-            entries = Array(decoded.prefix(Self.capacity))
+            // History saved under one shared limit is within both, so it loads unchanged.
+            entries = Self.splitAtCapacity(decoded).kept
         }
     }
 
@@ -154,8 +161,16 @@ class ClipboardHistoryService {
 
     func stop() { timer?.invalidate(); timer = nil }
 
-    /// What the Clipboard tab lists: every item except screenshots cleared or deleted there.
-    var clipboardTabEntries: [ClipboardEntry] { entries.filter { !$0.isHiddenFromClipboardTab } }
+    /// What the Clipboard tab lists: the newest `capacity` items, leaving out screenshots cleared
+    /// or deleted there.
+    var clipboardTabEntries: [ClipboardEntry] { clipboardTabEntries(matching: { _ in true }) }
+
+    /// What the Clipboard tab lists for its filter and search, which `matches` applies: the newest
+    /// `capacity` items that match. Matching comes before the limit, so every stored copy can still
+    /// be found, filtered, and deleted one at a time.
+    func clipboardTabEntries(matching matches: (ClipboardEntry) -> Bool) -> [ClipboardEntry] {
+        Array(entries.filter { !$0.isHiddenFromClipboardTab && matches($0) }.prefix(Self.capacity))
+    }
 
     /// Removes an item from both tabs, with its media copy.
     func delete(_ entry: ClipboardEntry) {
@@ -309,6 +324,12 @@ class ClipboardHistoryService {
             .map { String(format: "%02x", $0) }
             .joined()
         guard !repeatsNewest(fingerprint) else { return false }
+        // A copy of a screenshot's bytes, such as its file copied in Finder, moves the screenshot
+        // up instead of replacing it with an image item the ScreenGrabs tab leaves out.
+        if !isScreenCapture, let screenshot = entries.first(where: { $0.isScreenshot && $0.fingerprint == fingerprint }) {
+            moveToTop(screenshot.id)
+            return true
+        }
 
         let id = UUID()
         let mediaURL = mediaDirectoryURL.appendingPathComponent("\(id.uuidString).\(payload.fileExtension)")
@@ -340,11 +361,31 @@ class ClipboardHistoryService {
         duplicates.forEach(removeMedia)
         entries.removeAll { $0.contentKey == entry.contentKey }
         entries.insert(entry, at: 0)
-        if entries.count > Self.capacity {
-            entries.suffix(from: Self.capacity).forEach(removeMedia)
-            entries.removeLast(entries.count - Self.capacity)
-        }
+        let (kept, dropped) = Self.splitAtCapacity(entries)
+        dropped.forEach(removeMedia)
+        entries = kept
         persist()
+    }
+
+    /// Splits items, newest first, into the newest within each limit and the older ones past it,
+    /// keeping their order. Screenshots count only toward `screenshotCapacity`, the rest toward `capacity`.
+    private static func splitAtCapacity(_ items: [ClipboardEntry]) -> (kept: [ClipboardEntry], dropped: [ClipboardEntry]) {
+        var screenshots = 0
+        var others = 0
+        var kept: [ClipboardEntry] = []
+        var dropped: [ClipboardEntry] = []
+        for item in items {
+            let fits: Bool
+            if item.isScreenshot {
+                screenshots += 1
+                fits = screenshots <= screenshotCapacity
+            } else {
+                others += 1
+                fits = others <= capacity
+            }
+            if fits { kept.append(item) } else { dropped.append(item) }
+        }
+        return (kept, dropped)
     }
 
     /// Whether this content repeats the newest item. That adds nothing, but a screenshot hidden
@@ -353,6 +394,15 @@ class ClipboardHistoryService {
         guard let newest = entries.first, newest.contentKey == contentKey else { return false }
         showInClipboardTab(newest.id)
         return true
+    }
+
+    /// Moves an item to the top as a new copy would, showing it in the Clipboard tab again.
+    private func moveToTop(_ id: UUID) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = entries.remove(at: index)
+        entry.isHiddenFromClipboardTab = false
+        entries.insert(entry, at: 0)
+        persist()
     }
 
     private func showInClipboardTab(_ id: UUID) {
