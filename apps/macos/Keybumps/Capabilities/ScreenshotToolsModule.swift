@@ -180,11 +180,10 @@ final class ScreenshotToolsModule: CapabilityModule {
             return
         }
         willCapture?()
-        capturer.capture(mode) { [weak self] files in
-            guard opensEditor, let self, let file = delivery.addForEditing(files) else { return }
-            if let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) {
-                _ = editor.edit(entry)
-            }
+        delivery.capture(mode, with: capturer, watcher: service, forEditing: opensEditor) { [weak self] files in
+            guard opensEditor, let self, let file = files.first,
+                  let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) else { return }
+            _ = editor.edit(entry)
         }
     }
 }
