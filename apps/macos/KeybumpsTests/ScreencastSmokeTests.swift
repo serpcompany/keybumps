@@ -6,7 +6,8 @@ import Testing
 /// The QA smoke test's runner (#470), driven through the real controller, control bar, and
 /// overlays with the recorder's fake capture system and writers, a made-up screen, and overlays
 /// that draw nothing. Nothing here captures the screen, shows a window, or asks for a permission:
-/// the real path runs only on an installed QA candidate (`apps/macos/scripts/smoke-screencast.sh`).
+/// the real path runs only on an installed QA candidate (`apps/macos/scripts/smoke-screengrabs.sh`).
+/// Its screenshots have their own tests (`ScreenshotSmokeTests`); `withScreenshots` runs both.
 @MainActor
 @Suite("Screencast: the QA smoke test")
 struct ScreencastSmokeTests {
@@ -45,7 +46,7 @@ struct ScreencastSmokeTests {
     }
 
     var capturesURL: URL { folder.url.appendingPathComponent("captures", isDirectory: true) }
-    var resultURL: URL { folder.url.appendingPathComponent("QA/screencast-smoke-test.json") }
+    var resultURL: URL { folder.url.appendingPathComponent("QA/screengrabs-smoke-test.json") }
 
     @available(macOS 15, *)
     static var quick: ScreencastSmokeRunner.Configuration {
@@ -60,7 +61,8 @@ struct ScreencastSmokeTests {
         configuration: ScreencastSmokeRunner.Configuration? = nil,
         granted: Bool = true,
         windowProcessID: pid_t? = Self.helperProcess,
-        video: ScreencastSmokeVideoFacts = ScreencastSmokeVideoFacts(videoTracks: 1, duration: 2, pixelWidth: 64, pixelHeight: 36)
+        video: ScreencastSmokeVideoFacts = ScreencastSmokeVideoFacts(videoTracks: 1, duration: 2, pixelWidth: 64, pixelHeight: 36),
+        screenshots: ScreenshotSmokeRunner? = nil
     ) -> (ScreencastSmokeRunner, ScreencastSmokeRig) {
         let clock = clock
         let recorder = ScreencastRecorder(
@@ -84,6 +86,7 @@ struct ScreencastSmokeTests {
         let runner = ScreencastSmokeRunner(
             rig: rig,
             inspector: ScreencastSmokeInspector(video: { _ in video }),
+            screenshots: screenshots,
             configuration: configuration ?? Self.quick,
             environment: ScreencastSmokeRunner.Environment(
                 macOS: "15.6.1",
@@ -160,7 +163,7 @@ struct ScreencastSmokeTests {
         let data = try Data(contentsOf: resultURL)
         #expect(try JSONDecoder().decode(ScreencastSmokeReport.self, from: data) == report)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(Set(object.keys) == ["version", "complete", "passed", "macOS", "displayCount", "cleanedUp", "captures"])
+        #expect(Set(object.keys) == ["version", "complete", "passed", "macOS", "displayCount", "cleanedUp", "captures", "screenshots"])
         let captures = try #require(object["captures"] as? [[String: Any]])
         let allowed: Set<String> = [
             "mode", "passed", "stage", "errorCategory", "timings", "controlBarShown", "overlaysShown",
@@ -170,6 +173,63 @@ struct ScreencastSmokeTests {
         let text = String(decoding: data, as: UTF8.self)
         #expect(!text.contains("/") && !text.contains(".mov") && !text.contains(".png"))
         #expect(!text.localizedCaseInsensitiveContains("finder"), "no app's name")
+    }
+
+    @available(macOS 15, *)
+    @Test("The screenshots come first, in the captures folder, and their lines go in the result with only structure in them")
+    func withScreenshots() async throws {
+        defer { folder.remove() }
+        let display = ScreenshotSmokeDisplay(frame: CGRect(x: 0, y: 0, width: 320, height: 200), scale: 2)
+        let tool = FakeScreencaptureTool(displays: [display])
+        let screenshots = ScreenshotSmokeRunner(
+            configuration: ScreenshotSmokeRunner.Configuration(captureTimeout: 2, listTimeout: 4, pollInterval: .milliseconds(20)),
+            environment: ScreenshotSmokeRunner.Environment(
+                screenshotsFolder: capturesURL.appendingPathComponent(ScreencastSmokeTest.screenshotsFolderName, isDirectory: true),
+                clipboardFolder: capturesURL.appendingPathComponent(ScreencastSmokeTest.clipboardFolderName, isDirectory: true),
+                runner: tool,
+                displays: [display]
+            )
+        )
+        let (runner, _) = makeRunner(screenshots: screenshots)
+        let report = await runner.run()
+
+        #expect(report.passed && report.exitCode == 0, "\(report.screenshots.map(\.errorCategory))")
+        #expect(report.version == 2)
+        #expect(report.screenshots.map(\.kind) == [.screen, .area])
+        #expect(report.screenshots.allSatisfy { $0.passed && $0.stage == .cleanedUp })
+        #expect(report.captures.allSatisfy { $0.passed })
+        #expect(tool.arguments.count == 2)
+        #expect(!FileManager.default.fileExists(atPath: capturesURL.path))
+
+        let data = try Data(contentsOf: resultURL)
+        #expect(try JSONDecoder().decode(ScreencastSmokeReport.self, from: data) == report)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let lines = try #require(object["screenshots"] as? [[String: Any]])
+        let allowed: Set<String> = [
+            "kind", "display", "displayCount", "passed", "stage", "errorCategory", "pixelWidth", "pixelHeight",
+            "expectedPixelWidth", "expectedPixelHeight", "bytes", "captureMs", "listMs",
+        ]
+        #expect(lines.count == 2 && lines.allSatisfy { Set($0.keys).isSubset(of: allowed) })
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(!text.contains("/") && !text.contains(".png") && !text.contains("Screenshot "))
+
+        // A screenshot that fails fails the run as a capture does: exit 1.
+        let failing = ScreencastSmokeTests()
+        defer { failing.folder.remove() }
+        let wrong = FakeScreencaptureTool(displays: [display])
+        wrong.areaOutput = .notPNG
+        let failingScreenshots = ScreenshotSmokeRunner(
+            configuration: ScreenshotSmokeRunner.Configuration(captureTimeout: 2, listTimeout: 4, pollInterval: .milliseconds(20)),
+            environment: ScreenshotSmokeRunner.Environment(
+                screenshotsFolder: failing.capturesURL.appendingPathComponent("screenshots", isDirectory: true),
+                clipboardFolder: failing.capturesURL.appendingPathComponent("clipboard", isDirectory: true),
+                runner: wrong,
+                displays: [display]
+            )
+        )
+        let failed = await failing.makeRunner(screenshots: failingScreenshots).0.run()
+        #expect(!failed.passed && failed.exitCode == 1 && failed.captures.allSatisfy { $0.passed })
+        #expect(failed.screenshots.map(\.errorCategory) == [nil, "notPNG"])
     }
 
     @available(macOS 15, *)
@@ -334,15 +394,26 @@ struct ScreencastSmokeTests {
     }
 
     @available(macOS 15, *)
-    @Test("Without Screen Recording nothing is read or captured, and the result says why")
+    @Test("Without Screen Recording nothing is read, captured, or taken, and the result says why")
     func permissionDenied() async throws {
         defer { folder.remove() }
-        let (runner, _) = makeRunner(granted: false)
+        let tool = FakeScreencaptureTool(displays: [ScreenshotSmokeDisplay(frame: CGRect(x: 0, y: 0, width: 320, height: 200), scale: 2)])
+        let screenshots = ScreenshotSmokeRunner(
+            environment: ScreenshotSmokeRunner.Environment(
+                screenshotsFolder: capturesURL.appendingPathComponent("screenshots", isDirectory: true),
+                clipboardFolder: capturesURL.appendingPathComponent("clipboard", isDirectory: true),
+                runner: tool,
+                displays: tool.displays
+            )
+        )
+        let (runner, _) = makeRunner(granted: false, screenshots: screenshots)
         let report = await runner.run()
 
         #expect(report.errorCategory == "permissionDenied" && report.exitCode == 2 && !report.passed && report.complete)
         #expect(report.captures.allSatisfy { $0.stage == .notStarted })
+        #expect(report.screenshots.count == 2 && report.screenshots.allSatisfy { $0.stage == .notStarted })
         #expect(pickerSystem.contentReads == 0 && captureSystem.contentReads == 0 && overlays.events.isEmpty)
+        #expect(tool.arguments.isEmpty, "no screenshot was taken")
     }
 
     @available(macOS 15, *)
@@ -424,7 +495,7 @@ struct ScreencastSmokeTests {
         #expect(!ScreencastSmokeTest.isRequested(version: "0.0.3-beta.25", defaults: defaults))
         #expect(
             ScreencastSmokeTest.resultURL(home: URL(fileURLWithPath: "/Users/someone", isDirectory: true)).path
-                == "/Users/someone/Library/Developer/Keybumps-QA/screencast-smoke-test.json"
+                == "/Users/someone/Library/Developer/Keybumps-QA/screengrabs-smoke-test.json"
         )
     }
 

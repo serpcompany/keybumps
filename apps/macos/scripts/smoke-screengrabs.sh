@@ -1,10 +1,12 @@
 #!/bin/zsh
-# Run Screencast's QA smoke test (-KBScreencastSmokeTest, #470) on the installed QA candidate:
-# it records 2 s each of the main display, a blank window, and an area, checks and deletes every
-# file, and writes a structural result (no titles, app names, file names, or paths). On screen: a
-# blank window titled "Keybumps smoke test" and the macOS recording indicator, for about ten
-# seconds. Nothing asks for a permission. If the window capture fails with noSmokeWindow, leave
-# full screen and run it again.
+# Run Screengrabs' QA smoke test (-KBScreengrabsSmokeTest, #470, #491) on the installed QA
+# candidate: it takes a screenshot of each display and one of an area through Screengrabs' own
+# screencapture path, checks each and that its watcher would list it in ⌘3, then records 2 s each
+# of the main display, a blank window, and an area. It checks and deletes every file, and writes a
+# structural result (no titles, app names, file names, or paths). On screen: a blank window titled
+# "Keybumps smoke test" and the macOS recording indicator, for about ten seconds, and the
+# screenshot sound twice. Nothing asks for a permission. If the window capture fails with
+# noSmokeWindow, leave full screen and run it again.
 #
 # It quits the running Keybumps by bundle id first, and reopens it afterwards whatever happened.
 # The blank window comes from a helper process of the script's own (osascript running
@@ -12,14 +14,16 @@
 # and the smoke test records only that process's window, never one of the person's. Screen
 # Recording must already be granted to the installed app: without it the run reports
 # permission-denied, and nothing opens a prompt or System Settings. It never touches the person's
-# captures folder or settings. On every exit (Ctrl-C and a closed terminal included) it stops the
-# smoke run and the helper, and deletes the smoke test's temporary captures folder once
-# the smoke run is gone.
+# screenshot folder, Desktop, recordings folder, Clipboard History, or settings: screenshots and
+# recordings go in the smoke test's temporary captures folder, and the screenshots' Clipboard
+# History is the smoke test's own, in that folder. On every exit (Ctrl-C and a closed terminal
+# included) it stops the smoke run and the helper, and deletes that folder once the smoke run is
+# gone.
 #
-# usage: apps/macos/scripts/smoke-screencast.sh [--timeout <seconds>]
-#        apps/macos/scripts/smoke-screencast.sh --evaluate <result.json>   (that result's exit code)
-# exit:  0 passed; 1 a capture failed; 2 permission-denied, or the app couldn't run the captures;
-#        3 no complete result (it crashed, hung, timed out, or didn't start).
+# usage: apps/macos/scripts/smoke-screengrabs.sh [--timeout <seconds>]
+#        apps/macos/scripts/smoke-screengrabs.sh --evaluate <result.json>   (that result's exit code)
+# exit:  0 passed; 1 a screenshot or a recording failed; 2 permission-denied, or the app couldn't
+#        run the captures; 3 no complete result (it crashed, hung, timed out, or didn't start).
 #        The script couldn't run it: 64 usage; 66 no installed app; 67 not a QA candidate;
 #        68 Keybumps didn't quit; 69 couldn't prepare or open it; 130 stopped (Ctrl-C, or the
 #        terminal closed).
@@ -66,7 +70,7 @@ evaluate() {
 
 if [[ -n "$evaluate_only" ]]; then
   evaluate "$evaluate_only"
-  print "screencast smoke test: exit $result_code"
+  print "screengrabs smoke test: exit $result_code"
   exit $result_code
 fi
 
@@ -74,8 +78,8 @@ fi
 # (ScreencastSmokeScriptTests).
 installed_app=${KEYBUMPS_SMOKE_APP:-/Applications/Keybumps.app}
 executable="$installed_app/Contents/MacOS/Keybumps"
-option=KBScreencastSmokeTest
-window_option=KBScreencastSmokeWindowPID
+option=KBScreengrabsSmokeTest
+window_option=KBScreengrabsSmokeWindowPID
 # How long the smoke run has to appear after it's opened, and how much longer the clean-up looks
 # for one that appears later still.
 start_wait=${KEYBUMPS_SMOKE_START_WAIT:-30}
@@ -83,11 +87,11 @@ start_wait=${KEYBUMPS_SMOKE_START_WAIT:-30}
 late_wait=10
 # Fixed: the app writes here (ScreencastSmokeTest.resultURL), beside build-qa-candidate.sh's backups.
 qa_folder="$HOME/Library/Developer/Keybumps-QA"
-result="$qa_folder/screencast-smoke-test.json"
+result="$qa_folder/screengrabs-smoke-test.json"
 # The smoke test's own captures folder (ScreencastSmokeTest.capturesFolderName), in the app's
 # temporary folder.
 temporary=${KEYBUMPS_SMOKE_TEMPORARY:-$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)}
-captures="${temporary%/}/Keybumps-screencast-smoke-test"
+captures="${temporary%/}/Keybumps-screengrabs-smoke-test"
 
 plist_value() { /usr/libexec/PlistBuddy -c "Print :$1" "$installed_app/Contents/Info.plist" 2>/dev/null || true }
 # Match only the installed copy, never a Debug build or test host running from DerivedData.
@@ -254,5 +258,5 @@ done
 evaluated=1
 evaluate "$result"
 if (( timed_out )); then result_code=3; fi
-print "screencast smoke test: exit $result_code"
+print "screengrabs smoke test: exit $result_code"
 exit $result_code

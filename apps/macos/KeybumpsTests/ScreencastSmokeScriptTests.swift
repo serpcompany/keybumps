@@ -2,13 +2,13 @@ import Foundation
 import Testing
 @testable import Keybumps
 
-/// `apps/macos/scripts/smoke-screencast.sh` (#470), run under /bin/zsh as the orchestrator runs
+/// `apps/macos/scripts/smoke-screengrabs.sh` (#470, #491), run under /bin/zsh as the orchestrator runs
 /// it, against a fake installed app in a folder of the test's own. `open` and the AppleScript
 /// runner are stand-ins on `PATH` that log their arguments: the smoke run is a process named as
 /// the fake app's executable that waits, then writes a result, and the window helper is a process
 /// that says it's ready and waits. Nothing here opens Keybumps or a window, or quits anything but
 /// the test's own processes.
-@Suite("Screencast: the QA smoke script")
+@Suite("Screengrabs: the QA smoke script")
 struct ScreencastSmokeScriptTests {
     // MARK: The result's exit code
 
@@ -20,9 +20,15 @@ struct ScreencastSmokeScriptTests {
             complete: Bool = true,
             passed: Bool = false,
             errorCategory: String? = nil,
-            captureError: String? = nil
+            captureError: String? = nil,
+            screenshotError: String? = nil
         ) -> ScreencastSmokeReport {
-            var report = ScreencastSmokeReport(macOS: "15.6.1", displayCount: 1, modes: ScreencastSmokeMode.allCases)
+            var report = ScreencastSmokeReport(
+                macOS: "15.6.1",
+                displayCount: 1,
+                modes: ScreencastSmokeMode.allCases,
+                screenshots: ScreencastSmokeReport.Screenshot.planned(displayCount: 1)
+            )
             report.complete = complete
             report.passed = passed
             report.cleanedUp = complete
@@ -31,9 +37,22 @@ struct ScreencastSmokeScriptTests {
                 report.captures[index].passed = passed
                 report.captures[index].stage = passed ? .cleanedUp : .notStarted
             }
+            for index in report.screenshots.indices {
+                report.screenshots[index].passed = passed || screenshotError != nil
+                report.screenshots[index].stage = passed || screenshotError != nil ? .cleanedUp : .notStarted
+            }
             if let captureError {
                 report.captures[1].stage = .starting
                 report.captures[1].errorCategory = captureError
+            }
+            if let screenshotError {
+                for index in report.captures.indices {
+                    report.captures[index].passed = true
+                    report.captures[index].stage = .cleanedUp
+                }
+                report.screenshots[1].passed = false
+                report.screenshots[1].stage = .saved
+                report.screenshots[1].errorCategory = screenshotError
             }
             return report
         }
@@ -41,6 +60,8 @@ struct ScreencastSmokeScriptTests {
             ("passed", report(passed: true), 0),
             ("a capture failed", report(captureError: ScreencastFailure.captureFailed.rawValue), 1),
             ("a capture timed out", report(captureError: ScreencastSmokeFailure.timeout.rawValue), 1),
+            ("a screenshot was the wrong size", report(screenshotError: ScreencastSmokeFailure.wrongSize.rawValue), 1),
+            ("a screenshot wasn't listed", report(screenshotError: ScreencastSmokeFailure.notListed.rawValue), 1),
             ("permission denied", report(errorCategory: ScreencastSmokeFailure.permissionDenied.rawValue), 2),
             ("a capture refused Screen Recording", report(captureError: ScreencastFailure.screenRecordingDenied.rawValue), 2),
             ("unsupported macOS", report(errorCategory: ScreencastSmokeFailure.unsupportedMacOS.rawValue), 2),
@@ -51,13 +72,39 @@ struct ScreencastSmokeScriptTests {
             try item.report.write(to: file)
             let run = try bench.run(["--evaluate", file.path])
             #expect(run.status == item.code, "\(item.name): \(run.output)")
-            #expect(run.output.contains("screencast smoke test: exit \(item.code)\n"), "\(item.name): \(run.output)")
+            #expect(run.output.contains("screengrabs smoke test: exit \(item.code)\n"), "\(item.name): \(run.output)")
             if item.report.complete {
                 #expect(item.report.exitCode == item.code, "the app's own code for \(item.name)")
             }
         }
         let missing = try bench.run(["--evaluate", bench.root.appendingPathComponent("missing.json").path])
         #expect(missing.status == 3 && missing.output.contains("no result"), "\(missing.output)")
+        #expect(bench.calls.isEmpty, "evaluating opens and quits nothing")
+    }
+
+    @Test("A complete result in the fixture, with a line for each screenshot, parses as the app writes it and evaluates as passed")
+    func evaluatesTheFixture() throws {
+        let bench = try SmokeScriptBench()
+        defer { bench.remove() }
+        let data = try Data(contentsOf: SmokeScriptBench.fixture)
+        let report = try JSONDecoder().decode(ScreencastSmokeReport.self, from: data)
+        #expect(report.version == ScreencastSmokeReport.currentVersion)
+        #expect(report.complete && report.passed && report.exitCode == 0)
+
+        let screenshots = report.screenshots
+        #expect(screenshots.map(\.kind) == [.screen, .screen, .area])
+        #expect(screenshots.map(\.display) == [1, 2, 1])
+        #expect(screenshots.map(\.displayCount) == [2, 2, 1])
+        #expect(screenshots.allSatisfy { $0.passed && $0.stage == .cleanedUp && $0.errorCategory == nil })
+        let widths = screenshots.map(\.pixelWidth)
+        let heights = screenshots.map(\.pixelHeight)
+        #expect(widths == [3024, 1920, 1280] && heights == [1964, 1080, 720])
+        #expect(widths == screenshots.map(\.expectedPixelWidth) && heights == screenshots.map(\.expectedPixelHeight))
+        #expect(screenshots.allSatisfy { $0.bytes != nil && $0.captureMs != nil && $0.listMs != nil })
+
+        let run = try bench.run(["--evaluate", SmokeScriptBench.fixture.path])
+        #expect(run.status == 0, "\(run.output)")
+        #expect(run.output.contains("screengrabs smoke test: exit 0\n"), "\(run.output)")
         #expect(bench.calls.isEmpty, "evaluating opens and quits nothing")
     }
 
@@ -75,7 +122,7 @@ struct ScreencastSmokeScriptTests {
         let run = try bench.run([], result: result, runFor: 1)
 
         #expect(run.status == 0, "\(run.output)")
-        #expect(run.output.contains("\"passed\" : true") && run.output.contains("screencast smoke test: exit 0\n"), "\(run.output)")
+        #expect(run.output.contains("\"passed\" : true") && run.output.contains("screengrabs smoke test: exit 0\n"), "\(run.output)")
         #expect(kill(running, 0) != 0, "the running Keybumps was quit")
         let helper = try #require(bench.helperPID)
         let script = try #require(bench.helperParent)
@@ -122,7 +169,7 @@ struct ScreencastSmokeScriptTests {
         let run = try bench.run(["--timeout", "1"], result: nil, runFor: 30)
 
         #expect(run.status == 3, "\(run.output)")
-        #expect(run.output.contains("didn't finish in 1s") && run.output.contains("screencast smoke test: exit 3\n"), "\(run.output)")
+        #expect(run.output.contains("didn't finish in 1s") && run.output.contains("screengrabs smoke test: exit 3\n"), "\(run.output)")
         #expect(bench.smokePID != nil && bench.helperPID != nil)
         bench.expectAllStoppedAndCleanedUp()
     }
@@ -230,7 +277,11 @@ struct ScreencastSmokeScriptTests {
 private final class SmokeScriptBench {
     static let script = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("scripts/smoke-screencast.sh")
+        .appendingPathComponent("scripts/smoke-screengrabs.sh")
+    /// A passing result as the app writes it, with two displays (#491).
+    static let fixture = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/screengrabs-smoke-test.json")
     static let bundleID = "com.serp.keybumps.smoke-script-test"
     /// The AppleScript runner's name, joined so the prompt scan (`PermissionPromptSourceTests`)
     /// doesn't take this stand-in for a real call.

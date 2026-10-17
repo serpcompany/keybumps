@@ -1,0 +1,114 @@
+{
+  "captures" : [
+    {
+      "bytes" : 1843211,
+      "controlBarShown" : true,
+      "durationSeconds" : 2.017,
+      "mode" : "video-screen",
+      "overlaysShown" : true,
+      "overlayWindows" : 3,
+      "passed" : true,
+      "pixelHeight" : 1964,
+      "pixelWidth" : 3024,
+      "stage" : "cleanedUp",
+      "timings" : {
+        "checkMs" : 41,
+        "finishMs" : 212,
+        "pickerMs" : 96,
+        "recordMs" : 2004,
+        "startMs" : 388,
+        "totalMs" : 2803
+      }
+    },
+    {
+      "bytes" : 96204,
+      "controlBarShown" : true,
+      "durationSeconds" : 1.983,
+      "mode" : "video-window",
+      "overlaysShown" : true,
+      "overlayWindows" : 3,
+      "passed" : true,
+      "pixelHeight" : 540,
+      "pixelWidth" : 960,
+      "stage" : "cleanedUp",
+      "timings" : {
+        "checkMs" : 22,
+        "finishMs" : 187,
+        "pickerMs" : 88,
+        "recordMs" : 2002,
+        "startMs" : 341,
+        "totalMs" : 2702
+      }
+    },
+    {
+      "bytes" : 412977,
+      "controlBarShown" : true,
+      "durationSeconds" : 2.004,
+      "mode" : "video-area",
+      "overlaysShown" : true,
+      "overlayWindows" : 3,
+      "passed" : true,
+      "pixelHeight" : 720,
+      "pixelWidth" : 1280,
+      "stage" : "cleanedUp",
+      "timings" : {
+        "checkMs" : 25,
+        "finishMs" : 194,
+        "pickerMs" : 91,
+        "recordMs" : 2003,
+        "startMs" : 352,
+        "totalMs" : 2731
+      }
+    }
+  ],
+  "cleanedUp" : true,
+  "complete" : true,
+  "displayCount" : 2,
+  "macOS" : "26.1.0",
+  "passed" : true,
+  "screenshots" : [
+    {
+      "bytes" : 6203114,
+      "captureMs" : 412,
+      "display" : 1,
+      "displayCount" : 2,
+      "expectedPixelHeight" : 1964,
+      "expectedPixelWidth" : 3024,
+      "kind" : "screen",
+      "listMs" : 836,
+      "passed" : true,
+      "pixelHeight" : 1964,
+      "pixelWidth" : 3024,
+      "stage" : "cleanedUp"
+    },
+    {
+      "bytes" : 2310872,
+      "captureMs" : 412,
+      "display" : 2,
+      "displayCount" : 2,
+      "expectedPixelHeight" : 1080,
+      "expectedPixelWidth" : 1920,
+      "kind" : "screen",
+      "listMs" : 836,
+      "passed" : true,
+      "pixelHeight" : 1080,
+      "pixelWidth" : 1920,
+      "stage" : "cleanedUp"
+    },
+    {
+      "bytes" : 905331,
+      "captureMs" : 187,
+      "display" : 1,
+      "displayCount" : 1,
+      "expectedPixelHeight" : 720,
+      "expectedPixelWidth" : 1280,
+      "kind" : "area",
+      "listMs" : 821,
+      "passed" : true,
+      "pixelHeight" : 720,
+      "pixelWidth" : 1280,
+      "stage" : "cleanedUp"
+    }
+  ],
+  "version" : 2
+}

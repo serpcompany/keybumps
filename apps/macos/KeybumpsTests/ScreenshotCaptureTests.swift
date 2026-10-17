@@ -9,7 +9,7 @@ import Testing
 struct ScreenshotCaptureTests {
     private static let date = Date(timeIntervalSince1970: 1_790_000_000)
 
-    @Test("Screens capture one macOS-named file per display; an area captures one, interactively")
+    @Test("Screens capture one macOS-named file per display; an area captures one, interactively, or with no selection for the smoke test")
     func planNamesAndArguments() {
         let folder = URL(fileURLWithPath: "/tmp/shots", isDirectory: true)
         let screens = ScreenshotCapturePlan.files(in: folder, at: Self.date, displayCount: 2, mode: .screens)
@@ -22,6 +22,13 @@ struct ScreenshotCaptureTests {
         let area = ScreenshotCapturePlan.files(in: folder, at: Self.date, displayCount: 3, mode: .area)
         #expect(area.count == 1)
         #expect(ScreenshotCapturePlan.arguments(for: .area, files: area) == ["-i", "-t", "png", area[0].path])
+
+        // The QA smoke test's area: no selection, in whole points from the main display's top left.
+        let fixed = ScreenshotCaptureMode.fixedArea(CGRect(x: 436, y: 311.4, width: 640, height: 360))
+        let fixedFiles = ScreenshotCapturePlan.files(in: folder, at: Self.date, displayCount: 3, mode: fixed)
+        #expect(fixedFiles == area)
+        #expect(ScreenshotCapturePlan.arguments(for: fixed, files: fixedFiles) == ["-R", "436,311,640,361", "-t", "png", area[0].path])
+        #expect(ScreenshotCapturePlan.rectangle(.null) == "0,0,0,0", "no trap on a rect that isn't finite")
     }
 
     @Test("Only written files are reported, and they are marked as screen captures")
