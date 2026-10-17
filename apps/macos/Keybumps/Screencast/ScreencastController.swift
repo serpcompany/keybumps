@@ -668,7 +668,7 @@ final class ScreencastController {
         if opensFinishedCaptures {
             onCaptureFinished?(result)
         } else {
-            logger.info("screencast capture kept while turned off")
+            logger.info("screencast recording kept while turned off")
         }
     }
 
@@ -712,12 +712,12 @@ final class ScreencastController {
     }
 }
 
-/// What Screencast says when a capture can't start or save.
+/// What Screengrabs says when a recording can't start or save.
 enum ScreencastMessages {
     static func text(for failure: ScreencastFailure) -> String {
         switch failure {
         case .screenRecordingDenied:
-            "Turn on Screen Recording for Keybumps in System Settings to capture your screen."
+            "Turn on Screen Recording for Keybumps in System Settings to record your screen."
         case .targetUnavailable:
             "That window or screen isn’t there anymore."
         case .captureFailed:
@@ -725,9 +725,9 @@ enum ScreencastMessages {
         case .stoppedByMacOS:
             "macOS stopped the recording."
         case .writerFailed:
-            "The capture couldn’t be saved. Check that the disk has room."
+            "The recording couldn’t be saved. Check that the disk has room."
         case .folderUnavailable:
-            "The captures folder couldn’t be created."
+            "The recordings folder couldn’t be created."
         case .noFootage:
             "Nothing was recorded."
         }

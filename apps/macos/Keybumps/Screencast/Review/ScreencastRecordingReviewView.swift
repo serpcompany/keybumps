@@ -12,7 +12,7 @@ enum ScreencastReviewID {
     static let save = "screencast.review.save"
     static let copy = "screencast.review.copy"
     static let discard = "screencast.review.discard"
-    /// Discard, answering "Discard this capture?".
+    /// Discard, answering "Discard this recording?".
     static let confirmDiscard = "screencast.review.confirmDiscard"
     static let keep = "screencast.review.keep"
     static let failure = "screencast.review.failure"
@@ -57,7 +57,7 @@ struct ScreencastRecordingReviewView: View {
 }
 
 /// One control of a recording's window's toolbar, each its own toolbar item: Discard on the left, or
-/// "Discard this capture?" with Keep and Discard in its place; the window's title in the middle, with
+/// "Discard this recording?" with Keep and Discard in its place; the window's title in the middle, with
 /// the display picker for a recording of every display; and Copy and Save on the right, Save the
 /// window's default button, with Return's sign in it. Nothing until a review shows, nor while the
 /// part makes way (`Part.isShown`).
@@ -69,7 +69,7 @@ struct ScreencastRecordingReviewToolbar: View {
     enum Part: CaseIterable {
         /// Discard, until it's asked.
         case discard
-        /// "Discard this capture?", then Keep and Discard, while it's asked.
+        /// "Discard this recording?", then Keep and Discard, while it's asked.
         case question
         case keep
         case confirmDiscard
@@ -101,16 +101,16 @@ struct ScreencastRecordingReviewToolbar: View {
                 Button("Discard", role: .destructive, action: model.askToDiscard)
                     .buttonStyle(.bordered)
                     .disabled(!model.acceptsActions)
-                    .help("Delete this capture")
+                    .help("Delete this recording")
                     .accessibilityIdentifier(ScreencastReviewID.discard)
             case .question:
-                Text("Discard this capture?")
+                Text("Discard this recording?")
                     .font(.system(size: 13, weight: .semibold))
                     .fixedSize()
             case .keep:
                 Button("Keep", action: model.keep)
                     .buttonStyle(.bordered)
-                    .help("Keep the capture")
+                    .help("Keep the recording")
                     .accessibilityIdentifier(ScreencastReviewID.keep)
             case .confirmDiscard:
                 Button("Discard", role: .destructive) {
@@ -118,7 +118,7 @@ struct ScreencastRecordingReviewToolbar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
-                .help("Delete the capture and its folder")
+                .help("Delete the recording and its folder")
                 .accessibilityIdentifier(ScreencastReviewID.confirmDiscard)
             case .title:
                 title(model)
@@ -147,7 +147,7 @@ struct ScreencastRecordingReviewToolbar: View {
                 // The window's default button. Return is the review's key monitor's, which saves.
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.acceptsActions)
-                .help("Keep the recording in the captures folder (Return)")
+                .help("Keep the recording in the recordings folder (Return)")
                 .accessibilityLabel("Save")
                 .accessibilityIdentifier(ScreencastReviewID.save)
             }
