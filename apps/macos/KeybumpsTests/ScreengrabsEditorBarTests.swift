@@ -120,7 +120,7 @@ struct ScreengrabsEditorBarTests {
         #expect(!undone.canUndo && undone.canRedo)
     }
 
-    @Test("Both windows' bars match the fixture: whether each has undo and redo, and each action's title, key, style, default button, identifier, and help, in order")
+    @Test("Both windows' bars match the fixture: whether each has undo and redo, and each action's title, key, style, default button, identifier, and help, in order; the recording window's tools, and Crop's and Blur's options")
     func barsMatchTheFixture() async throws {
         defer { fixture.tearDown() }
         let actual = try Self.encode(try await snapshot())
@@ -137,7 +137,7 @@ struct ScreengrabsEditorBarTests {
 
     // MARK: As laid out
 
-    @Test("Each window's bar fits the window at its narrowest, 64 points tall: the Screenshot Editor's at 840 points, the recording window's at 640, with two displays' picker or the discard question")
+    @Test("Each window's bar fits the window at its narrowest, 64 points tall: the Screenshot Editor's at 840 points, the recording window's at 760, with two displays' picker or the discard question; with Trim's, Crop's, or Blur's options in full, the narrowest Mac screen")
     func barsFitTheirWindows() throws {
         defer { fixture.tearDown() }
         let editor = NSHostingView(rootView: ScreenshotEditorBar(model: ScreenshotEditorModel(), cancel: {}, save: {}))
@@ -162,6 +162,15 @@ struct ScreengrabsEditorBarTests {
         model.pick(.trim)
         let trimming = NSHostingView(rootView: ScreencastRecordingReviewBar(model: model)).fittingSize
         #expect(trimming.width <= 1_280 - 2 * ScreencastRecordingReviewWindow.screenMargin, "trimming, \(trimming.width) points wide")
+        model.pick(.crop)
+        model.setCropAspect(.square)
+        let cropping = NSHostingView(rootView: ScreencastRecordingReviewBar(model: model)).fittingSize
+        #expect(cropping.width <= 1_280 - 2 * ScreencastRecordingReviewWindow.screenMargin, "cropping, \(cropping.width) points wide")
+        model.pick(.blur)
+        model.addBlur(CGRect(x: 0.1, y: 0.1, width: 0.3, height: 0.2))
+        let blurring = NSHostingView(rootView: ScreencastRecordingReviewBar(model: model)).fittingSize
+        #expect(blurring.width <= 1_280 - 2 * ScreencastRecordingReviewWindow.screenMargin, "blurring, \(blurring.width) points wide")
+        #expect(blurring.height == ScreengrabsEditorBarMetrics.height)
     }
 
     @Test("An action's keycap follows its title, in full")
@@ -213,6 +222,15 @@ struct ScreengrabsEditorBarTests {
         model.edit { $0.setTrim(start: 1, end: 3) }
         let trimming = ScreencastRecordingReviewBar.actions(for: model)
         let trimTools = Self.tools(of: model)
+        model.pick(.crop)
+        model.setCropAspect(.square)
+        let cropTools = Self.tools(of: model)
+        let cropOptions = Self.options(of: model)
+        model.pick(.blur)
+        let blurTools = Self.tools(of: model)
+        let blurOptions = Self.options(of: model)
+        model.addBlur(CGRect(x: 0.1, y: 0.1, width: 0.3, height: 0.2))
+        let blurPickedOptions = Self.options(of: model)
         model.askToSaveEdits()
         let askingToSave = ScreencastRecordingReviewBar.actions(for: model)
         let saveQuestion = ScreencastRecordingReviewBar.question(for: model)
@@ -239,6 +257,18 @@ struct ScreengrabsEditorBarTests {
                 window: "recording", state: "trimming", hasHistory: true, question: nil, actions: trimming, tools: trimTools
             ),
             EditorBarSnapshot(
+                window: "recording", state: "cropping", hasHistory: true, question: nil, actions: trimming, tools: cropTools,
+                options: cropOptions
+            ),
+            EditorBarSnapshot(
+                window: "recording", state: "blurring", hasHistory: true, question: nil, actions: trimming, tools: blurTools,
+                options: blurOptions
+            ),
+            EditorBarSnapshot(
+                window: "recording", state: "blurPicked", hasHistory: true, question: nil, actions: trimming, tools: blurTools,
+                options: blurPickedOptions
+            ),
+            EditorBarSnapshot(
                 window: "recording", state: "askingToSaveEdits", hasHistory: true, question: saveQuestion, actions: askingToSave
             ),
             EditorBarSnapshot(
@@ -254,6 +284,26 @@ struct ScreengrabsEditorBarTests {
                 title: tool.title, number: tool.number, key: tool.key, isSelected: model.tool == tool,
                 identifier: ScreencastReviewID.tool(tool)
             )
+        }
+    }
+
+    /// Crop's or Blur's options as the bar shows them (`ScreencastCropOptions`, `ScreencastBlurOptions`).
+    private static func options(of model: ScreencastReviewModel) -> EditorBarSnapshot.Options? {
+        switch model.tool {
+        case .crop:
+            EditorBarSnapshot.Options(
+                label: "Aspect", segments: ScreencastCropAspect.allCases.map(\.title), picked: model.cropAspect.title,
+                buttons: ["Reset Crop" + (model.hasCrop ? "" : " (off)")],
+                identifiers: [ScreencastReviewID.cropAspect, ScreencastReviewID.resetCrop]
+            )
+        case .blur:
+            EditorBarSnapshot.Options(
+                label: "Strength", segments: ScreencastBlurStrength.allCases.map(\.title), picked: model.blurStrength.title,
+                buttons: model.selectedBlur == nil ? [] : ["Delete \(ScreencastBlurOptions.deleteKey)"],
+                identifiers: [ScreencastReviewID.blurStrength] + (model.selectedBlur == nil ? [] : [ScreencastReviewID.deleteBlur])
+            )
+        case .trim, nil:
+            nil
         }
     }
 
@@ -298,6 +348,15 @@ private struct EditorBarSnapshot: Encodable {
         let identifier: String
     }
 
+    /// Crop's or Blur's options: a label, a segmented control, and buttons.
+    struct Options: Encodable {
+        let label: String
+        let segments: [String]
+        let picked: String
+        let buttons: [String]
+        let identifiers: [String]
+    }
+
     let window: String
     let state: String
     /// Undo and redo show.
@@ -306,16 +365,19 @@ private struct EditorBarSnapshot: Encodable {
     let actions: [Action]
     /// The recording window's tools, where recorded.
     let tools: [Tool]?
+    /// The picked tool's options, where recorded.
+    let options: Options?
 
     init(
         window: String, state: String, hasHistory: Bool, question: String?, actions: [ScreengrabsEditorAction],
-        tools: [Tool]? = nil
+        tools: [Tool]? = nil, options: Options? = nil
     ) {
         self.window = window
         self.state = state
         self.hasHistory = hasHistory
         self.question = question
         self.tools = tools
+        self.options = options
         self.actions = actions.map { action in
             Action(
                 title: action.title, key: action.key, style: action.style.rawValue,

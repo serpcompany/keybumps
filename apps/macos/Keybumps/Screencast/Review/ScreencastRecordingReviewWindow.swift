@@ -15,8 +15,8 @@ import AVKit
 /// Under the unit-test host it never becomes key or main.
 final class ScreencastRecordingReviewWindow: NSWindow {
     static let identifier = NSUserInterfaceItemIdentifier(ScreencastReviewID.window)
-    /// A player still big enough to watch, and the bar's buttons.
-    static let minimumSize = CGSize(width: 640, height: 400)
+    /// A player still big enough to watch, and the bar's three tools (#517) and buttons.
+    static let minimumSize = CGSize(width: 760, height: 400)
     /// Kept clear between the window and the edges of the screen's visible frame.
     static let screenMargin: CGFloat = 16
 

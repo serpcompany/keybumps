@@ -107,6 +107,226 @@
         "key" : "t",
         "number" : "1",
         "title" : "Trim"
+      },
+      {
+        "identifier" : "screencast.review.tool.crop",
+        "isSelected" : false,
+        "key" : "c",
+        "number" : "2",
+        "title" : "Crop"
+      },
+      {
+        "identifier" : "screencast.review.tool.blur",
+        "isSelected" : false,
+        "key" : "b",
+        "number" : "3",
+        "title" : "Blur"
+      }
+    ],
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Delete this recording",
+        "identifier" : "screencast.review.discard",
+        "isDefault" : false,
+        "style" : "destructive",
+        "title" : "Discard"
+      },
+      {
+        "help" : "Save, and copy the recording’s file (⌘C)",
+        "identifier" : "screencast.review.copy",
+        "isDefault" : false,
+        "key" : "⌘C",
+        "style" : "standard",
+        "title" : "Copy"
+      },
+      {
+        "help" : "Keep the recording in the recordings folder (Return)",
+        "identifier" : "screencast.review.save",
+        "isDefault" : true,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save"
+      }
+    ],
+    "hasHistory" : true,
+    "options" : {
+      "buttons" : [
+        "Reset Crop"
+      ],
+      "identifiers" : [
+        "screencast.review.cropAspect",
+        "screencast.review.resetCrop"
+      ],
+      "label" : "Aspect",
+      "picked" : "1:1",
+      "segments" : [
+        "Free",
+        "16:9",
+        "1:1"
+      ]
+    },
+    "state" : "cropping",
+    "tools" : [
+      {
+        "identifier" : "screencast.review.tool.trim",
+        "isSelected" : false,
+        "key" : "t",
+        "number" : "1",
+        "title" : "Trim"
+      },
+      {
+        "identifier" : "screencast.review.tool.crop",
+        "isSelected" : true,
+        "key" : "c",
+        "number" : "2",
+        "title" : "Crop"
+      },
+      {
+        "identifier" : "screencast.review.tool.blur",
+        "isSelected" : false,
+        "key" : "b",
+        "number" : "3",
+        "title" : "Blur"
+      }
+    ],
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Delete this recording",
+        "identifier" : "screencast.review.discard",
+        "isDefault" : false,
+        "style" : "destructive",
+        "title" : "Discard"
+      },
+      {
+        "help" : "Save, and copy the recording’s file (⌘C)",
+        "identifier" : "screencast.review.copy",
+        "isDefault" : false,
+        "key" : "⌘C",
+        "style" : "standard",
+        "title" : "Copy"
+      },
+      {
+        "help" : "Keep the recording in the recordings folder (Return)",
+        "identifier" : "screencast.review.save",
+        "isDefault" : true,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save"
+      }
+    ],
+    "hasHistory" : true,
+    "options" : {
+      "buttons" : [
+
+      ],
+      "identifiers" : [
+        "screencast.review.blurStrength"
+      ],
+      "label" : "Strength",
+      "picked" : "High",
+      "segments" : [
+        "Low",
+        "Medium",
+        "High"
+      ]
+    },
+    "state" : "blurring",
+    "tools" : [
+      {
+        "identifier" : "screencast.review.tool.trim",
+        "isSelected" : false,
+        "key" : "t",
+        "number" : "1",
+        "title" : "Trim"
+      },
+      {
+        "identifier" : "screencast.review.tool.crop",
+        "isSelected" : false,
+        "key" : "c",
+        "number" : "2",
+        "title" : "Crop"
+      },
+      {
+        "identifier" : "screencast.review.tool.blur",
+        "isSelected" : true,
+        "key" : "b",
+        "number" : "3",
+        "title" : "Blur"
+      }
+    ],
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Delete this recording",
+        "identifier" : "screencast.review.discard",
+        "isDefault" : false,
+        "style" : "destructive",
+        "title" : "Discard"
+      },
+      {
+        "help" : "Save, and copy the recording’s file (⌘C)",
+        "identifier" : "screencast.review.copy",
+        "isDefault" : false,
+        "key" : "⌘C",
+        "style" : "standard",
+        "title" : "Copy"
+      },
+      {
+        "help" : "Keep the recording in the recordings folder (Return)",
+        "identifier" : "screencast.review.save",
+        "isDefault" : true,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save"
+      }
+    ],
+    "hasHistory" : true,
+    "options" : {
+      "buttons" : [
+        "Delete ⌫"
+      ],
+      "identifiers" : [
+        "screencast.review.blurStrength",
+        "screencast.review.deleteBlur"
+      ],
+      "label" : "Strength",
+      "picked" : "High",
+      "segments" : [
+        "Low",
+        "Medium",
+        "High"
+      ]
+    },
+    "state" : "blurPicked",
+    "tools" : [
+      {
+        "identifier" : "screencast.review.tool.trim",
+        "isSelected" : false,
+        "key" : "t",
+        "number" : "1",
+        "title" : "Trim"
+      },
+      {
+        "identifier" : "screencast.review.tool.crop",
+        "isSelected" : false,
+        "key" : "c",
+        "number" : "2",
+        "title" : "Crop"
+      },
+      {
+        "identifier" : "screencast.review.tool.blur",
+        "isSelected" : true,
+        "key" : "b",
+        "number" : "3",
+        "title" : "Blur"
       }
     ],
     "window" : "recording"

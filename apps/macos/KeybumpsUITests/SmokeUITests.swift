@@ -584,6 +584,39 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
     }
 
+    /// #517: Crop puts its shapes and Reset Crop in the bar and its rectangle over the video; Blur
+    /// opens the timeline, and a drag over the video draws a blur, picked, with Delete in the bar and
+    /// a bar on the timeline, which ⌫ deletes. Escape puts Blur down first; with no edits left,
+    /// Escape then closes the window, which saves.
+    func testScreencastReviewCropAndBlurTools() {
+        launchScreencastReview("video")
+        let crop = element("screencast.review.tool.crop")
+        XCTAssertTrue(crop.waitForExistence(timeout: 5), "Crop is in the bar")
+        crop.click()
+        XCTAssertTrue(element("screencast.review.cropAspect").waitForExistence(timeout: 5), "Crop's shapes are in the bar")
+        XCTAssertTrue(element("screencast.review.resetCrop").exists, "and Reset Crop")
+        XCTAssertTrue(element("screencast.review.cropOverlay").exists, "and its rectangle is over the video")
+
+        element("screencast.review.tool.blur").click()
+        let timeline = element("screencast.review.timeline")
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5), "Blur opens the timeline")
+        XCTAssertTrue(element("screencast.review.blurStrength").exists, "and puts Strength in the bar")
+        let player = element("screencast.review.playerArea")
+        player.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.2))
+            .press(forDuration: 0.1, thenDragTo: player.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)))
+        let delete = element("screencast.review.deleteBlur")
+        XCTAssertTrue(delete.waitForExistence(timeout: 5), "a drag over the video draws a blur, picked, with Delete in the bar")
+        XCTAssertTrue(element("screencast.review.blurLanes").exists, "and its bar on the timeline")
+        app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: delete), "⌫ deletes it")
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: timeline), "Escape puts Blur down first")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "then Escape closes it")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
+    }
+
     /// #517: Trim, the bar's first tool, opens the timeline under the player with its options in the
     /// bar; Escape puts it down first, and the window stays; with no edits, Escape then closes it,
     /// which saves.

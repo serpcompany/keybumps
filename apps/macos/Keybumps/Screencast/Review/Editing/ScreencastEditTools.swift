@@ -1,21 +1,27 @@
 import SwiftUI
 
 /// The recording window's tools (#517), in the bar's order, each with its number and letter keys.
-/// Crop and Blur join Trim in #517's second part.
+/// Blur has the Screenshot Editor's Blur's icon and letter.
 enum ScreencastEditTool: String, CaseIterable, Identifiable {
     case trim
+    case crop
+    case blur
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .trim: "Trim"
+        case .crop: "Crop"
+        case .blur: "Blur"
         }
     }
 
     var systemImage: String {
         switch self {
         case .trim: "timeline.selection"
+        case .crop: "crop"
+        case .blur: ScreenshotEditorTool.pixelate.systemImage
         }
     }
 
@@ -23,6 +29,8 @@ enum ScreencastEditTool: String, CaseIterable, Identifiable {
     var key: String {
         switch self {
         case .trim: "t"
+        case .crop: "c"
+        case .blur: ScreenshotEditorTool.pixelate.key
         }
     }
 
@@ -73,10 +81,15 @@ struct ScreencastEditToolsBar: View {
             .disabled(!model.acceptsEdits)
             .opacity(model.acceptsEdits ? 1 : 0.35)
 
-            if model.tool == .trim {
-                ScreencastTrimOptions(model: model)
-                    .disabled(!model.acceptsEdits)
+            Group {
+                switch model.tool {
+                case .trim: ScreencastTrimOptions(model: model)
+                case .crop: ScreencastCropOptions(model: model)
+                case .blur: ScreencastBlurOptions(model: model)
+                case nil: EmptyView()
+                }
             }
+            .disabled(!model.acceptsEdits)
         }
     }
 }
@@ -134,6 +147,103 @@ struct ScreencastTrimOptions: View {
             .font(.system(size: 12).monospacedDigit())
             .foregroundStyle(.secondary)
             .accessibilityLabel("Length \(length) of \(whole)")
+    }
+}
+
+/// Crop's options in the bar: its shape, Free, 16:9, or 1:1, and Reset Crop. Narrow, they drop
+/// their label and Reset Crop its title.
+struct ScreencastCropOptions: View {
+    let model: ScreencastReviewModel
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            options(titled: true)
+            options(titled: false)
+        }
+    }
+
+    private func options(titled: Bool) -> some View {
+        HStack(spacing: 10) {
+            if titled { ScreencastOptionLabel(title: "Aspect") }
+            Picker("Aspect", selection: Binding(get: { model.cropAspect }, set: model.setCropAspect)) {
+                ForEach(ScreencastCropAspect.allCases) { aspect in
+                    Text(aspect.title).tag(aspect)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("The crop’s shape")
+            .accessibilityIdentifier(ScreencastReviewID.cropAspect)
+
+            Button(action: model.resetCrop) {
+                if titled { Text("Reset Crop") } else { Image(systemName: "arrow.counterclockwise") }
+            }
+            .disabled(!model.hasCrop)
+            .help("Bring back the whole frame")
+            .accessibilityLabel("Reset Crop")
+            .accessibilityIdentifier(ScreencastReviewID.resetCrop)
+        }
+        .fixedSize()
+    }
+}
+
+/// Blur's options in the bar: the strength of the picked blur, or of the next one drawn, Low,
+/// Medium, or High (decision 4), and, while a blur is picked, Delete. Narrow, they drop their label
+/// and Delete its title.
+struct ScreencastBlurOptions: View {
+    static let deleteKey = "⌫"
+
+    let model: ScreencastReviewModel
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            options(titled: true)
+            options(titled: false)
+        }
+    }
+
+    private func options(titled: Bool) -> some View {
+        HStack(spacing: 10) {
+            if titled { ScreencastOptionLabel(title: "Strength") }
+            Picker("Strength", selection: Binding(get: { model.blurStrength }, set: model.setBlurStrength)) {
+                ForEach(ScreencastBlurStrength.allCases, id: \.self) { strength in
+                    Text(strength.title).tag(strength)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("How coarse the blur is; even Low hides text")
+            .accessibilityIdentifier(ScreencastReviewID.blurStrength)
+
+            if model.selectedBlur != nil {
+                Button(action: model.deleteSelectedBlur) {
+                    if titled {
+                        ScreengrabsEditorActionLabel(title: "Delete", key: Self.deleteKey)
+                    } else {
+                        Image(systemName: "trash")
+                    }
+                }
+                .help("Delete the selected blur (⌫)")
+                .accessibilityLabel("Delete Blur")
+                .accessibilityIdentifier(ScreencastReviewID.deleteBlur)
+            }
+        }
+        .fixedSize()
+    }
+}
+
+/// An option's name before it in the bar, as the mockups have it.
+private struct ScreencastOptionLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .fixedSize()
+            .accessibilityHidden(true)
     }
 }
 
