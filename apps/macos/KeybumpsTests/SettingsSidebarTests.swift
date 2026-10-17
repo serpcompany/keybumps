@@ -28,6 +28,7 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "Screencast") == [[.screenshotTools]])
         let record: [[SettingsSection]] = SettingsSidebar.groups(matching: "record")
         #expect(record.joined().contains(.screenshotTools))
+        #expect(SettingsSidebar.groups(matching: "recordings") == [[.dictation, .screenshotTools]])
         #expect(SettingsSidebar.groups(matching: "countdown") == [[.timer]])
     }
 

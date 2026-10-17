@@ -32,7 +32,7 @@ extension CapabilityDescriptor {
         criticalOperations: [.unsavedWork],
         searchKeywords: [
             "screenshots", "screenshot", "screen", "capture", "annotate",
-            "screen recording", "record", "recorder", "video", "screencast",
+            "screen recording", "recordings", "record", "recorder", "video", "screencast",
         ],
         actions: [.startScreencast],
         category: .media,

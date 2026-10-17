@@ -111,6 +111,7 @@ struct CapabilityCommandTests {
             ("record", .capability(.screenshotTools)),
             ("video", .capability(.screenshotTools)),
             ("screen recording", .capability(.screenshotTools)),
+            ("recordings", .capability(.screenshotTools)),
             ("capture", .capability(.screenshotTools)),
         ]
     )
