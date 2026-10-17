@@ -74,7 +74,7 @@ struct ScreencastSeams {
 /// Record Screen opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
 /// until then it opens ScreenGrabs' page, so the picker never makes macOS ask. Turning ScreenGrabs
 /// off, or Keybumps becoming Locked, cancels a recording that hasn't started and keeps one under
-/// way in the recordings folder. While it records, `ScreencastRecordingControls` shows the control
+/// way in the Recordings folder. While it records, `ScreencastRecordingControls` shows the control
 /// bar and the time in the menu bar, and registers the recording shortcuts, and
 /// `ScreencastOverlaysWiring` puts the drawing and, with Show shortcuts on, the key display on the
 /// recorded screens and into the video. Each saved recording opens the recording window (`review`,
@@ -148,7 +148,10 @@ final class ScreencastModule {
         }
         recordingControls.apply(context)
         overlays.apply(context)
-        if isOn { review.recoverInterruptedExports(in: context.preferences.screencast.capturesFolder) }
+        // Wherever recordings are: the folders the index looks in, or, with no index, the Recordings folder.
+        if isOn {
+            review.recoverInterruptedExports(in: recordings?.recordingsFolders ?? [context.preferences.screencast.capturesFolder])
+        }
     }
 
     /// ScreenGrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,

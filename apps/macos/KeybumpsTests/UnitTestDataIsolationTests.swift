@@ -108,7 +108,12 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(DictationService(language: "en-US", allowsSystemAccess: false).recoveryURL, "The Dictation recovery file")
         expectInRunFolder(ScreenshotLocationResolver.system.resolve(), "The screenshot folder")
         expectInRunFolder(ScreencastRepositoryMemory.defaultStorageURL, "Screencast's repository memory")
-        let recordings = RecordingLibrary.makeDefault(importMemory: RecordingImportMemory(defaults: InMemoryDefaults()), screenshots: nil)
+        let recordingDefaults = InMemoryDefaults()
+        let recordings = RecordingLibrary.makeDefault(
+            importMemory: RecordingImportMemory(defaults: recordingDefaults),
+            folderMemory: RecordingFolderMemory(defaults: recordingDefaults),
+            screenshots: nil
+        )
         expectInRunFolder(recordings.storageURL, "The recordings index")
         expectInRunFolder(recordings.capturesFolder, "The recordings index's import")
         expectInRunFolder(recordings.posterFrames.folder, "Recordings' poster frames")
@@ -124,7 +129,8 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(model.clipboard.mediaDirectoryURL, "AppModel's Clipboard History media")
         expectInRunFolder(model.dictation.recoveryURL, "AppModel's Dictation recovery file")
         expectInRunFolder(model.dictationModels.modelsRoot, "AppModel's Dictation models")
-        expectInRunFolder(model.preferences.screencast.capturesFolder, "AppModel's Screencast captures")
+        expectInRunFolder(model.preferences.screencast.capturesFolder, "AppModel's Recordings folder")
+        expectInRunFolder(model.preferences.screengrabFolders.folder(for: .screenshots), "AppModel's Screenshots folder")
         let recordings = try #require(model.recording?.recordings)
         expectInRunFolder(recordings.storageURL, "AppModel's recordings index")
         expectInRunFolder(recordings.posterFrames.folder, "AppModel's poster frames")

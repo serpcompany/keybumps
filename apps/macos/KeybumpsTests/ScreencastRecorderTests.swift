@@ -103,6 +103,32 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
+    @Test("A Recordings folder that can't take the recording's folder falls back to the default, so nothing is lost; with no fallback, it fails (#504)")
+    func folderFallsBack() async throws {
+        defer { captures.remove() }
+        // A file where the chosen folder should be: no folder can be made in it.
+        let blocked = captures.url.appendingPathComponent("Chosen", isDirectory: true)
+        try Data("not a folder".utf8).write(to: URL(fileURLWithPath: blocked.path))
+        let fallback = captures.url.appendingPathComponent("Default", isDirectory: true)
+
+        let recorder = makeRecorder()
+        try await recorder.start(
+            target: .display(1), audio: ScreencastAudio(microphone: true, systemAudio: true),
+            capturesFolder: blocked, fallbackFolder: fallback
+        )
+        let writer = try #require(writers.writers.first)
+        #expect(writer.fileURL == fallback.appendingPathComponent("1791000000").appendingPathComponent("video-1.mov"))
+        clock.advance(2)
+        let capture = try await recorder.stop()
+        #expect(capture.folder == fallback.appendingPathComponent("1791000000", isDirectory: true))
+
+        let alone = makeRecorder()
+        await #expect(throws: ScreencastFailure.folderUnavailable) {
+            try await alone.start(target: .display(1), audio: .none, capturesFolder: blocked)
+        }
+    }
+
+    @available(macOS 15, *)
     @Test("Stopping closes the files, writes a mixdown for two sounds and meta.json, and goes idle")
     func stop() async throws {
         defer { captures.remove() }

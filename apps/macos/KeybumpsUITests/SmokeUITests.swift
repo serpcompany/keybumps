@@ -271,8 +271,9 @@ final class SmokeUITests: XCTestCase {
     func testScreengrabsPageShowsRecording() {
         // Recording is part of ScreenGrabs, which ships on (#490). Its page is drawn by the plugin
         // template: Screen Recording, the Microphone and Input Monitoring as optional permissions,
-        // the Recordings group's preferences at Screencast's keys, and the recordings folder. CI's
-        // Mac runs macOS 15 or later, so it can record.
+        // the Recordings group's preferences at Screencast's keys, and the Screenshots and Recordings
+        // folders, each with Show in Finder and Choose… (#504). CI's Mac runs macOS 15 or later, so it
+        // can record.
         launch(permissions: "denied", ["-KBOpenSettings", "screenshotTools"])
         let toggle = element("capability.toggle.screenshotTools")
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
@@ -284,6 +285,9 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(element("plugin.screencast.\(key)").exists, key)
         }
         XCTAssertTrue(element("plugin.screencast.showCaptures").exists)
+        for identifier in ["plugin.screenshotTools.show.screenshots", "plugin.screenshotTools.choose.screenshots", "plugin.screenshotTools.choose.recordings"] {
+            XCTAssertTrue(element(identifier).exists, identifier)
+        }
         XCTAssertFalse(element("plugin.screenshotTools.recordingRequirement").exists, "Recording works here")
         XCTAssertFalse(element("capability.offBanner.screenshotTools").exists)
     }

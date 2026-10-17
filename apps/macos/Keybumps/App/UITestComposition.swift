@@ -79,7 +79,14 @@ extension AppModel {
         let defaults = UserDefaults(suiteName: uiTestDefaultsSuite) ?? .standard
         defaults.removePersistentDomain(forName: uiTestDefaultsSuite)
         defaults.set(true, forKey: "didCompleteOnboarding")
-        let preferences = AppPreferences(defaults: defaults)
+        // The sandbox's screenshot folder stands in for macOS's, for the watcher and for ScreenGrabs'
+        // save folders' default, so screenshots and recordings stay in the sandbox.
+        let screenshotLocation = ScreenshotLocationResolver(
+            preferredLocation: { sandbox.screenshots.path },
+            homeDirectory: sandbox.root,
+            isDirectory: { _ in true }
+        )
+        let preferences = AppPreferences(defaults: defaults, screenshotLocation: screenshotLocation)
         for capability in configuration.enabledCapabilities {
             preferences.setCapability(capability, enabled: true)
         }
@@ -153,11 +160,7 @@ extension AppModel {
             translator: InertTextTranslator(),
             translationSpeaker: InertTranslationSpeaker(),
             screenshotTools: ScreenshotToolsService(
-                resolver: ScreenshotLocationResolver(
-                    preferredLocation: { sandbox.screenshots.path },
-                    homeDirectory: sandbox.root,
-                    isDirectory: { _ in true }
-                ),
+                resolver: screenshotLocation,
                 reader: FakeScreenshotDirectoryReader(granted: granted),
                 ingest: { clipboard.ingestImageFile(at: $0, isScreenCapture: true) }
             ),

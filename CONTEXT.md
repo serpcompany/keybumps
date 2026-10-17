@@ -132,8 +132,11 @@ One screenshot or one recording that ScreenGrabs took.
 _Avoid_: Capture, clip, grab
 
 **Screenshot**:
-A PNG of the screens or an area, taken with ScreenGrabs' hotkeys or macOS's own, in the folder macOS saves screenshots to.
+A PNG of the screens or an area, taken with ScreenGrabs' hotkeys, in the Screenshots folder, or with macOS's own, in the folder macOS saves screenshots to.
 _Avoid_: Snap
+
+**Screenshots folder**:
+Where ScreenGrabs' hotkeys and the Screenshot Editor save screenshots: the folder chosen in Settings › ScreenGrabs, or, until one is, the folder macOS saves screenshots to (else the Desktop), following macOS's setting. A chosen folder that's gone or can't be written to stays chosen, and screenshots go to the default until it's back.
 
 **ScreenGrabs tab**:
 The Command Palette tab (⌘3) showing Clipboard History's newest 50 screenshot items. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it.
@@ -220,7 +223,7 @@ A video ScreenGrabs made of an area, a window, or the screens, with the micropho
 _Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission), Dictation's audio
 
 **Recordings folder**:
-Where recordings are saved, each in a folder of its own: `~/Documents/Keybumps/captures` (`ProductPaths.captures`). Settings › ScreenGrabs shows it.
+Where recordings are saved, each in a folder of its own: the folder chosen in Settings › ScreenGrabs, apart from the Screenshots folder, or, until one is, the folder macOS saves screenshots to (else the Desktop). A chosen folder that's gone or can't be written to falls back the same way. Recordings saved before #504 stay in `~/Documents/Keybumps/captures` (`ProductPaths.captures`), still listed.
 _Avoid_: Captures folder; Dictation's recordings folder (`ProductPaths.recordings`)
 
 **Recordings index**:

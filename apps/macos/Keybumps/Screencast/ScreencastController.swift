@@ -492,6 +492,7 @@ final class ScreencastController {
                 target: choice.target,
                 audio: choice.audio,
                 capturesFolder: settings.capturesFolder,
+                fallbackFolder: settings.fallbackFolder,
                 options: ScreencastOptions(showsMouseClicks: choice.highlightsClicks)
             )
         } catch is CancellationError {
