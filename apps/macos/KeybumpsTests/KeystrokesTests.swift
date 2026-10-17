@@ -748,17 +748,19 @@ struct KeystrokesTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let press = KeyPress(keyCode: UInt16(kVK_ANSI_5), modifiers: [.shift, .command])
         // macOS's ⇧⌘5 as the takeover leaves it: turned off.
-        let takenOver: [String: Any] = ["184": ["enabled": false] as [String: Any]]
+        let takenOver: [String: Any] = ["184": ["enabled": NSNumber(value: false)] as [String: Any]]
 
         let off = WiringHarness(enabled: [.keystrokes], missing: nil, root: root)
-        off.model.start()
         off.model.keyDisplay.symbolicHotKeys = { takenOver }
+        off.model.start()
+        off.model.keyDisplay.systemScreenshotShortcutsDidChange()
         off.model.keyDisplay.receive(press)
         #expect(!off.model.keyDisplay.isPausedForScreenshot, "Neither macOS's nor Record Screen's")
 
         let on = WiringHarness(enabled: [.keystrokes, .screenshotTools], missing: nil, root: root)
-        on.model.start()
         on.model.keyDisplay.symbolicHotKeys = { takenOver }
+        on.model.start()
+        on.model.keyDisplay.systemScreenshotShortcutsDidChange()
         on.model.keyDisplay.receive(press)
         #expect(on.model.keyDisplay.isPausedForScreenshot)
         #expect(on.model.keyDisplay.timeline.entries.isEmpty)

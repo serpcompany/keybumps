@@ -349,7 +349,10 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     /// Whether it records, so it does nothing, and Settings says so, where Screengrabs can't
     /// record (`PluginCompatibility.supportsRecording`).
     var needsRecording: Bool {
-        self == .screencast || ScreencastRecordingControls.shortcuts.contains(self)
+        switch self {
+        case .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: true
+        default: false
+        }
     }
 
     /// The note under its title on this Mac: `detail`, or for a recording shortcut where Screengrabs

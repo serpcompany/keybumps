@@ -41,7 +41,7 @@ struct ScreencastTests {
         #expect(PluginSettingsPage<EmptyView, EmptyView, EmptyView>.byline(descriptor) == "Official plugin by Keybumps · Media")
     }
 
-    @Test("It needs Screen Recording, which says so, and can use Accessibility, the Microphone, and Input Monitoring, each with its own reason")
+    @Test("It needs Screen Recording, and can use Accessibility, the Microphone, and Input Monitoring, each with its own reason; Screen Recording and the Microphone name it on the Permissions page")
     func permissions() throws {
         let descriptor = CapabilityDescriptor.screenshotTools
         #expect(descriptor.requiredPermissions == [.screenRecording])
@@ -49,7 +49,7 @@ struct ScreencastTests {
         #expect(descriptor.optionalPermissions.map(\.permission) == [.accessibility, .microphone, .inputMonitoring])
         let reasons = descriptor.optionalPermissions.map(\.reason)
         #expect(reasons[1].contains("voice") && reasons[2].contains("shortcuts"))
-        #expect(!MacPermission.microphone.explanation.contains("Screengrabs"), "Optional: its reason is its own")
+        #expect(MacPermission.microphone.explanation.contains("Screengrabs"), "Settings › Permissions names it (#490)")
         #expect(!MacPermission.inputMonitoring.explanation.contains("Screengrabs"), "Optional: its reason is its own")
         #expect(PermissionSetupPlan.requiredPermissions(for: [.screenshotTools]) == [.screenRecording])
     }

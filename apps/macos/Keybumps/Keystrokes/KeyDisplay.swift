@@ -457,7 +457,7 @@ final class KeyDisplay {
     }
 
     /// Reads macOS's screenshot shortcuts again at the next key. Screengrabs' takeover calls it
-    /// after it turns macOS's ⇧⌘3 or ⇧⌘4 off or on, also when its own hotkeys didn't register.
+    /// after it turns macOS's ⇧⌘3, ⇧⌘4, or ⇧⌘5 off or on, also when its own hotkeys didn't register.
     func systemScreenshotShortcutsDidChange() {
         systemScreenshotKeysRead = nil
     }
