@@ -53,7 +53,7 @@ final class ScreencastReviewPanel {
     ///   - ordersPanelIn: False keeps the window off screen, as under the unit-test host.
     ///   - makePlayback: The recording's player, none under the unit-test host unless a test asks.
     ///   - fullKeyboardAccess: Whether Tab reaches buttons (Keyboard Navigation in System Settings),
-    ///     so a toolbar button can have the keyboard.
+    ///     so a button in the bar can have the keyboard.
     ///   - front: Who has the front and the keyboard, which the window takes and gives back.
     init(
         repositories: ScreencastRepositoryMemory,
@@ -201,8 +201,8 @@ final class ScreencastReviewPanel {
         if let playback, let video = model.currentVideo { playback.show(video) }
         let host = NSHostingView(rootView: ScreencastRecordingReviewView(model: model, playback: playback))
         host.sizingOptions = [.minSize]
+        window.barTakesKeyboard = false
         window.contentView = host
-        window.showActions(for: model)
         if let visibleFrame = screen()?.visibleFrame {
             window.setFrame(ScreencastRecordingReviewWindow.frame(in: visibleFrame), display: false)
         }
@@ -214,8 +214,8 @@ final class ScreencastReviewPanel {
         if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        // Nothing has the keyboard at first, so Space plays the recording at once. Return and Escape
-        // are the key monitor's either way.
+        // Nothing has the keyboard at first, so Space plays the recording at once, even with Keyboard
+        // Navigation on (`barTakesKeyboard`). Return and Escape are the key monitor's either way.
         window.makeFirstResponder(nil)
     }
 
@@ -275,26 +275,31 @@ final class ScreencastReviewPanel {
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
-        let key = action(forKey: event.keyCode, modifiers: event.modifierFlags, in: event.window)
+        let key = action(
+            forKey: event.keyCode, modifiers: event.modifierFlags, characters: event.charactersIgnoringModifiers, in: event.window
+        )
         return perform(key, isRepeat: event.isARepeat) ? nil : event
     }
 
     /// What a key pressed in `keyWindow` does: nothing outside the review's own window, or once it
-    /// made way for the next capture.
-    func action(forKey keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in keyWindow: NSWindow?) -> ScreencastReviewKey {
+    /// made way for the next capture. `characters` are the key's, ignoring modifiers, as ⌘C reads.
+    func action(
+        forKey keyCode: UInt16, modifiers: NSEvent.ModifierFlags, characters: String? = nil, in keyWindow: NSWindow?
+    ) -> ScreencastReviewKey {
         guard let model, !isMakingWay, let keyWindow, keyWindow === window else { return .pass }
         return ScreencastReviewKey.action(
             keyCode: keyCode,
             modifiers: modifiers,
+            characters: characters,
             isComposing: (keyWindow.firstResponder as? NSTextView)?.hasMarkedText() == true,
             isConfirmingDiscard: model.isConfirmingDiscard,
             isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: keyCode, modifiers: modifiers),
-            controlHasKeyboard: fullKeyboardAccess() && window.toolbarHas(keyWindow.firstResponder)
+            controlHasKeyboard: fullKeyboardAccess() && window.barHas(keyWindow.firstResponder)
         )
     }
 
     /// Does what a key asks, and says whether it took the key. A held key acts once: Space plays or
-    /// pauses once, and a held Return or Escape saves once.
+    /// pauses once, a held Return or Escape saves once, and a held ⌘C copies once.
     @discardableResult
     func perform(_ key: ScreencastReviewKey, isRepeat: Bool = false) -> Bool {
         guard let model, !isMakingWay else { return false }
@@ -302,28 +307,38 @@ final class ScreencastReviewPanel {
         case .pass: return false
         case .ignore: break
         case .save: if !isRepeat { Task { await model.save() } }
+        case .copy: if !isRepeat { Task { await model.copy() } }
         case .close: if !isRepeat { Task { await self.close() } }
         case .keep: model.keep()
         case .togglePlay: if !isRepeat { playback?.togglePlay() }
+        case .tab:
+            window.barTakesKeyboard = true
+            return false
         }
         return true
     }
 }
 
-/// What a key does in the review. Return saves and Escape closes, which saves too; while the
-/// discard question is up, Escape keeps the capture and Return does nothing, so a key never
-/// deletes. Space plays and pauses, as in Snapzy's `VideoEditorWindow`. A toolbar button that has
-/// the keyboard (Full Keyboard Access's Tab) keeps Space, which presses it, as Space does any macOS
-/// button. Return still saves then: on macOS, Return is the window's action, never the focused
-/// button's, and this window's is Save. A text field still composing (an input
-/// method's marked text) keeps its keys, and a key claimed in Keybumps's own windows
-/// (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what claims it.
+/// What a key does in the review. Return saves, ⌘C copies, and Escape closes, which saves too;
+/// while the discard question is up, Escape keeps the capture and Return and ⌘C do nothing, so a key
+/// never deletes. Space plays and pauses, as in Snapzy's `VideoEditorWindow`. A button in the bar
+/// that has the keyboard (Full Keyboard Access's Tab) keeps Space, which presses it, as Space does
+/// any macOS button; none has it until Tab is pressed. Return still saves then: on macOS, Return is
+/// the window's action, never the focused button's, and this window's is Save. A text field still
+/// composing (an input method's marked text) keeps its keys, and a key claimed in Keybumps's own
+/// windows (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what
+/// claims it.
 enum ScreencastReviewKey: Equatable {
     case save
+    /// ⌘C, Copy's key.
+    case copy
     case close
     case keep
     /// Space.
     case togglePlay
+    /// Tab or Shift-Tab: from now on the bar's controls may take the keyboard, and the window moves
+    /// it as usual.
+    case tab
     /// Swallowed.
     case ignore
     /// Left to the window's controls.
@@ -332,21 +347,39 @@ enum ScreencastReviewKey: Equatable {
     static let escapeKeyCode: UInt16 = 53
     static let returnKeyCodes: Set<UInt16> = [36, 76]
     static let spaceKeyCode: UInt16 = 49
+    static let tabKeyCode: UInt16 = 48
+    /// ⌘C's character, read from the key ignoring modifiers, so it follows the keyboard layout.
+    static let copyCharacter = "c"
+    /// The C key (kVK_ANSI_C), ⌘C on a layout with no Latin letters, such as Russian, as for menus.
+    static let copyKeyCode: UInt16 = 8
 
     static func action(
         keyCode: UInt16,
         modifiers: NSEvent.ModifierFlags,
+        characters: String? = nil,
         isComposing: Bool,
         isConfirmingDiscard: Bool,
         isClaimed: Bool = false,
         controlHasKeyboard: Bool = false
     ) -> ScreencastReviewKey {
-        guard !isClaimed, !isComposing,
-              modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
+        guard !isClaimed, !isComposing else { return .pass }
+        if modifiers.intersection([.command, .control, .option, .shift]) == .command,
+           isCopyKey(keyCode: keyCode, characters: characters) {
+            return isConfirmingDiscard ? .ignore : .copy
+        }
+        guard modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
+        if keyCode == tabKeyCode { return .tab }
         if keyCode == spaceKeyCode { return modifiers.contains(.shift) || controlHasKeyboard ? .pass : .togglePlay }
         if keyCode == escapeKeyCode { return isConfirmingDiscard ? .keep : .close }
         if returnKeyCodes.contains(keyCode) { return isConfirmingDiscard ? .ignore : .save }
         return .pass
+    }
+
+    /// The layout's C, wherever it is, or, on a layout with no Latin letters, the C key.
+    static func isCopyKey(keyCode: UInt16, characters: String?) -> Bool {
+        let characters = characters?.lowercased() ?? ""
+        guard characters.unicodeScalars.contains(where: \.isASCII) else { return keyCode == copyKeyCode }
+        return characters == copyCharacter
     }
 }
 
