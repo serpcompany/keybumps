@@ -105,8 +105,9 @@ class ClipboardHistoryService {
     /// How many items that aren't screenshots are kept, and the most the Clipboard tab lists.
     nonisolated static let capacity = 50
     /// How many screenshot items are kept, apart from `capacity`: a copy never pushes out a
-    /// screenshot, and a screenshot never pushes out a copy. An older build loads only the first
-    /// `capacity` items of either kind and drops the rest on its next save, leaving their media.
+    /// screenshot, and a screenshot never pushes out a copy. An older build loads only the newest
+    /// `capacity` items, whatever their kind, and drops the rest on its next save, leaving their
+    /// media in `clipboard-media`.
     nonisolated static let screenshotCapacity = 50
     nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 
@@ -162,8 +163,13 @@ class ClipboardHistoryService {
 
     /// What the Clipboard tab lists: the newest `capacity` items, leaving out screenshots cleared
     /// or deleted there.
-    var clipboardTabEntries: [ClipboardEntry] {
-        Array(entries.lazy.filter { !$0.isHiddenFromClipboardTab }.prefix(Self.capacity))
+    var clipboardTabEntries: [ClipboardEntry] { clipboardTabEntries(matching: { _ in true }) }
+
+    /// What the Clipboard tab lists for its filter and search, which `matches` applies: the newest
+    /// `capacity` items that match. Matching comes before the limit, so every stored copy can still
+    /// be found, filtered, and deleted one at a time.
+    func clipboardTabEntries(matching matches: (ClipboardEntry) -> Bool) -> [ClipboardEntry] {
+        Array(entries.filter { !$0.isHiddenFromClipboardTab && matches($0) }.prefix(Self.capacity))
     }
 
     /// Removes an item from both tabs, with its media copy.
@@ -354,6 +360,12 @@ class ClipboardHistoryService {
         guard payload.data.count <= Self.maximumImageBytes else { return false }
         let fingerprint = Self.fingerprint(of: payload.data)
         guard !repeatsNewest(fingerprint) else { return false }
+        // A copy of a screenshot's bytes, such as its file copied in Finder, moves the screenshot
+        // up instead of replacing it with an image item the ScreenGrabs tab leaves out.
+        if !isScreenCapture, let screenshot = entries.first(where: { $0.isScreenshot && $0.fingerprint == fingerprint }) {
+            moveToTop(screenshot.id)
+            return true
+        }
 
         let id = UUID()
         let mediaURL = mediaDirectoryURL.appendingPathComponent("\(id.uuidString).\(payload.fileExtension)")
@@ -422,6 +434,15 @@ class ClipboardHistoryService {
         guard let newest = entries.first, newest.contentKey == contentKey else { return false }
         showInClipboardTab(newest.id)
         return true
+    }
+
+    /// Moves an item to the top as a new copy would, showing it in the Clipboard tab again.
+    private func moveToTop(_ id: UUID) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = entries.remove(at: index)
+        entry.isHiddenFromClipboardTab = false
+        entries.insert(entry, at: 0)
+        persist()
     }
 
     private func showInClipboardTab(_ id: UUID) {

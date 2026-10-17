@@ -89,7 +89,7 @@ How often and how recently the user picked each app or Quick Search command from
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
-The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50, leaving out screenshots cleared or deleted there.
+The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50 that match its filter and search, leaving out screenshots cleared or deleted there.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Source app**:

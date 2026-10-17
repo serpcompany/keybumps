@@ -567,6 +567,7 @@ struct ClipboardHistoryLimitTests {
         #expect(screenshots == (70..<120).reversed().map { "Screenshot \($0)" })
         #expect(copies == (10..<60).reversed().map { "copy \($0)" })
         #expect(try Self.mediaFiles(fixture) == Set(entries.compactMap(\.imageURL?.lastPathComponent)))
+        #expect(Tabs.exists(fixture.root.appendingPathComponent("Screenshot 0.png")), "originals stay")
         #expect(Tabs.reload(fixture).entries.map(\.id) == entries.map(\.id))
     }
 
@@ -619,6 +620,33 @@ struct ClipboardHistoryLimitTests {
         #expect(fixture.clipboard.entries.count == 100)
         #expect(Tabs.screenshotsTab(fixture.clipboard).first?.id == newest.id)
         #expect(Tabs.exists(newest.imageURL))
+
+        // Its Clear All also deletes the copies it no longer lists.
+        fixture.clipboard.clearClipboardTab()
+        #expect(fixture.clipboard.entries.allSatisfy { $0.isScreenshot })
+        #expect(fixture.clipboard.entries.count == 50)
+        #expect(fixture.clipboard.clipboardTabEntries.isEmpty)
+    }
+
+    @Test("Copying a screenshot's file in Finder moves the screenshot up and keeps it in the ScreenGrabs tab")
+    func copyingAScreenshotsFileKeepsTheScreenshot() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let file = try fixture.screenshot()
+        #expect(fixture.clipboard.ingestImageFile(at: file))
+        let shot = try #require(fixture.clipboard.entries.first)
+        fixture.clipboard.ingestForTesting("copied text")
+        fixture.clipboard.removeFromClipboardTab(shot)
+
+        fixture.pasteboard.clearContents()
+        fixture.pasteboard.writeObjects([file as NSURL])
+        fixture.clipboard.pollForTesting()
+
+        #expect(fixture.clipboard.entries.first == shot, "unchanged, and in the Clipboard tab again")
+        #expect(fixture.clipboard.entries.count == 2)
+        #expect(Tabs.screenshotsTab(fixture.clipboard).map(\.id) == [shot.id])
+        #expect(Tabs.exists(shot.imageURL))
+        #expect(try Self.mediaFiles(fixture).count == 1, "no second media copy")
     }
 
     /// An item as a build with one shared limit saved it, newest first by `index`.
