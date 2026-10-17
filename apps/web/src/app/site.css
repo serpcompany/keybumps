@@ -1659,6 +1659,26 @@ body:has(#questions:target) .plugin-tabs a:first-child {
   }
 }
 
+/*
+ * The hero's six-tile row is 552px, and its outer icons sit 20px inside it, so the icons span 512px.
+ * Each scale keeps them 16px from the edge at the narrowest width it covers (512 × 0.72 + 32 ≈ 401,
+ * × 0.64 + 32 ≈ 360, × 0.56 + 32 ≈ 319). The margins keep the space above and below the 178px-tall
+ * icons as it is at 0.72.
+ */
+@media (max-width: 400px) {
+  .hero-icons {
+    margin: -21px 0 13px;
+    transform: scale(0.64);
+  }
+}
+
+@media (max-width: 359px) {
+  .hero-icons {
+    margin: -28px 0 6px;
+    transform: scale(0.56);
+  }
+}
+
 @media (max-width: 480px) {
   .plugin-card-meta > .meta-category {
     display: none;
