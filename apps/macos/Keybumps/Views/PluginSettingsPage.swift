@@ -153,13 +153,7 @@ struct PluginPreferenceRow: View {
             .toggleStyle(SettingsSwitchToggleStyle())
             .accessibilityIdentifier(identifier)
         case .choice(let options, _):
-            Picker(selection: Binding(
-                get: {
-                    if case .choice(let value) = model.preferences.value(of: preference, for: capability) { return value }
-                    return ""
-                },
-                set: { update(.choice($0)) }
-            )) {
+            Picker(selection: Self.selection(of: preference, for: capability, in: model)) {
                 ForEach(options, id: \.value) { Text($0.title).tag($0.value) }
             } label: {
                 SettingsRowLabel(title: preference.title, subtitle: preference.subtitle)
@@ -184,5 +178,17 @@ struct PluginPreferenceRow: View {
 
     private func update(_ value: PluginPreference.Value) {
         model.setPluginPreference(preference, to: value, for: capability)
+    }
+
+    /// A menu row's selection: the value stored, or the default, and choosing one sets it as any
+    /// change on the page does (`AppModel.setPluginPreference`). Tests drive it as the menu does.
+    static func selection(of preference: PluginPreference, for capability: Capability, in model: AppModel) -> Binding<String> {
+        Binding(
+            get: {
+                if case .choice(let value) = model.preferences.value(of: preference, for: capability) { return value }
+                return ""
+            },
+            set: { model.setPluginPreference(preference, to: .choice($0), for: capability) }
+        )
     }
 }
