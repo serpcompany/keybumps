@@ -203,33 +203,46 @@ struct ScreencastEditExportTests {
         #expect(placing.videoComposition.renderSize == CGSize(width: 192, height: 108))
     }
 
-    @Test("A mostly still recording is drawn and encoded at the rate it was made at, not its average")
+    @Test("A recording is drawn and encoded at the rate it was made at: not its average while still, nor a resume's short gap")
     func mostlyStillKeepsItsRate() async throws {
         defer { folder.remove() }
         try FileManager.default.createDirectory(at: folder.url, withIntermediateDirectories: true)
-        let file = folder.url.appendingPathComponent("still.mov")
-        // Ten frames at 60 a second, then one a second: the screen went still.
-        let times = (0..<10).map { Double($0) / 60 } + [1, 2]
-        try await EditTestMovie.write(to: file, seconds: 3, picture: .movingBar, sounds: false, framesPerSecond: 60, frameTimes: times)
-        let track = try #require(try await AVURLAsset(url: file).loadTracks(withMediaType: .video).first)
-        let average = try await track.load(.nominalFrameRate)
-        #expect(average < 10, "the average reads low: \(average)")
-
         var edits = ScreencastRecordingEdits(duration: 3, displayCount: 1)
         edits.setTrim(start: 0, end: 2.5)
-        let edit = try await ScreencastEditComposition.make(source: file, edits: edits, display: 0)
-        #expect(edit.framesPerSecond == 60)
-        #expect(edit.videoComposition.frameDuration == CMTime(value: 1, timescale: 60))
+
+        // Ten frames at 30 a second, then one a second: the screen went still.
+        let still = folder.url.appendingPathComponent("still.mov")
+        let stillTimes = (0..<10).map { Double($0) / 30 } + [1, 2]
+        try await EditTestMovie.write(to: still, seconds: 3, picture: .movingBar, sounds: false, frameTimes: stillTimes)
+        let stillTrack = try #require(try await AVURLAsset(url: still).loadTracks(withMediaType: .video).first)
+        let average = try await stillTrack.load(.nominalFrameRate)
+        #expect(average < 10, "the average reads low: \(average)")
+        let fromStill = try await ScreencastEditComposition.make(source: still, edits: edits, display: 0)
+        #expect(fromStill.framesPerSecond == 30)
+
+        // 30 a second, but Pause and Resume left 8 ms between two frames.
+        let resumed = folder.url.appendingPathComponent("resumed.mov")
+        let resumedTimes = (0..<30).map { Double($0) / 30 } + [29.0 / 30 + 0.008] + (31..<75).map { Double($0) / 30 }
+        try await EditTestMovie.write(to: resumed, seconds: 3, picture: .movingBar, sounds: false, frameTimes: resumedTimes)
+        let resumedTrack = try #require(try await AVURLAsset(url: resumed).loadTracks(withMediaType: .video).first)
+        let gap = try await resumedTrack.load(.minFrameDuration).seconds
+        #expect(gap < 0.01, "the short gap is in the file: \(gap) s")
+        let fromResumed = try await ScreencastEditComposition.make(source: resumed, edits: edits, display: 0)
+        #expect(fromResumed.framesPerSecond == 30)
+        #expect(fromResumed.videoComposition.frameDuration == CMTime(value: 1, timescale: 30))
     }
 
-    @Test("The rate: the higher of the average and the shortest gap's, 1 to 120, or 30 when neither is known")
+    @Test("The rate: the higher of the average and the shortest gap's, from 1 up to the recorder's 30, or 30 when neither is known")
     func framesPerSecond() {
-        let sixtieth = CMTime(value: 1, timescale: 60)
-        #expect(ScreencastEditComposition.framesPerSecond(nominal: 5, minFrameDuration: sixtieth) == 60)
+        #expect(ScreencastEditComposition.recordedFramesPerSecond == 30)
+        let twentieth = CMTime(value: 1, timescale: 20)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: 5, minFrameDuration: twentieth) == 20)
+        let resumeGap = CMTime(value: 8, timescale: 1_000)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: 5, minFrameDuration: resumeGap) == 30)
         #expect(ScreencastEditComposition.framesPerSecond(nominal: 30, minFrameDuration: .invalid) == 30)
         #expect(ScreencastEditComposition.framesPerSecond(nominal: .nan, minFrameDuration: .zero) == 30)
         let tiny = CMTime(value: 1, timescale: 1_000_000)
-        #expect(ScreencastEditComposition.framesPerSecond(nominal: .infinity, minFrameDuration: tiny) == 120)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: .infinity, minFrameDuration: tiny) == 30)
     }
 
     // MARK: Several displays
@@ -343,6 +356,41 @@ struct ScreencastEditExportTests {
         await #expect(throws: ScreencastExportFailure.recordingMissing) {
             _ = try await export(original, edits)
         }
+    }
+
+    @Test("Cancel stops the mixdown at once, and deletes what it wrote")
+    func cancelStopsTheMixdown() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar])
+        let source = original.videos[0].file
+        let mixdown = original.folder.appendingPathComponent(ScreencastCaptureFolder.mixdownName(index: 0))
+        let destination = ScreencastEditExporter.editingURL(for: mixdown)
+        let asks = CancelAsks(cancelFrom: 5)
+        await #expect(throws: CancellationError.self) {
+            try await ScreencastAudioMixdown.write(from: source, to: destination) { asks.next() }
+        }
+        #expect(!FileManager.default.fileExists(atPath: destination.path), "nothing left for the next launch")
+        let count = asks.count
+        #expect(count < 20, "it stopped rather than reading the rest: asked \(count) times")
+    }
+
+    @Test("Cancel partway through the picture, with both sounds copying, stops there and leaves the original as it was")
+    func cancelPartway() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar], mixdowns: true)
+        let before = try Data(contentsOf: original.videos[0].file)
+        var edits = ScreencastRecordingEdits(duration: 3, displayCount: 1)
+        edits.setTrim(start: 0.5, end: 3)
+        let cancellation = ScreencastExportCancellation()
+        await #expect(throws: ScreencastExportFailure.cancelled) {
+            _ = try await ScreencastEditExporter.export(original, edits: edits, cancellation: cancellation) { fraction in
+                if fraction > 0.3 { cancellation.cancel() }
+            }
+        }
+        let after = try Data(contentsOf: original.videos[0].file)
+        #expect(after == before, "the original is untouched")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: original.folder.path).filter { $0.hasPrefix(".") }
+        #expect(leftovers.isEmpty, "\(leftovers)")
     }
 
     @Test("A full disk, or an AVFoundation error, says which")
@@ -481,6 +529,26 @@ private final class ProgressLog: @unchecked Sendable {
 }
 
 /// Short movies made for a test through the recorder's writer, and what's read back from them.
+/// Says cancelled from its `cancelFrom`th ask on, and counts the asks.
+private final class CancelAsks: @unchecked Sendable {
+    private let lock = NSLock()
+    private let cancelFrom: Int
+    private var asked = 0
+
+    init(cancelFrom: Int) {
+        self.cancelFrom = cancelFrom
+    }
+
+    var count: Int { lock.withLock { asked } }
+
+    func next() -> Bool {
+        lock.withLock {
+            asked += 1
+            return asked >= cancelFrom
+        }
+    }
+}
+
 enum EditTestMovie {
     static let width = 192
     static let height = 108

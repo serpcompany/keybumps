@@ -171,15 +171,23 @@ struct ScreencastEditComposition {
         )
     }
 
+    /// The rate the recorder records at (`ScreencastOptions.framesPerSecond`), which an edited
+    /// recording is never drawn or encoded faster than.
+    static let recordedFramesPerSecond = ScreencastNumbers.framesPerSecond(ScreencastOptions().framesPerSecond)
+
     /// The rate the recording was made at, which the edited one is drawn and encoded at. The
     /// recorder writes only the frames ScreenCaptureKit delivers, which is fewer while the screen is
-    /// still, so the average (`nominalFrameRate`) can read 5 for a 60 fps recording; the shortest
-    /// gap between two frames says 60. The higher of the two, 1 to 120, or 30 when neither is known.
+    /// still, so the average (`nominalFrameRate`) can read 5 for a 30 fps recording; the shortest
+    /// gap between two frames says 30. A gap can be shorter than the rate, though: Pause leaves its
+    /// time out, so the gap at a resume can be a few milliseconds, which would read as 120. So the
+    /// higher of the two, from 1 up to the rate the recorder records at, or that rate when neither
+    /// is known.
     static func framesPerSecond(nominal: Double, minFrameDuration: CMTime) -> Int {
+        let recorded = recordedFramesPerSecond
         let shortest = minFrameDuration.isNumeric && minFrameDuration > .zero ? 1 / minFrameDuration.seconds : 0
         let rate = max(nominal.isFinite ? nominal : 0, shortest.isFinite ? shortest : 0)
-        guard rate >= 1 else { return 30 }
-        return ScreencastNumbers.framesPerSecond(ScreencastNumbers.int(rate.rounded(), in: 1...120, fallback: 30))
+        guard rate >= 1 else { return recorded }
+        return ScreencastNumbers.int(rate.rounded(), in: 1...recorded, fallback: recorded)
     }
 
     static func time(_ seconds: Double) -> CMTime {

@@ -194,6 +194,42 @@ struct ScreencastReviewEditingTests {
         #expect(playback.recordingTime == 2, "the place is kept")
     }
 
+    @Test("A display left less than a frame by its recorded length, though more by its file's: the window, the player, and Save all keep it as recorded")
+    func nothingKeptOnTheEdge() async throws {
+        defer { fixture.tearDown() }
+        let folder = fixture.folder.url.appendingPathComponent("1791000000", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var videos: [ScreencastVideo] = []
+        for (index, seconds) in [3.0, 1.0].enumerated() {
+            let file = folder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: index))
+            try await EditTestMovie.write(to: file, seconds: seconds, picture: .movingBar, sounds: false)
+            // As the recorder says: the last frame's time. The file runs a frame past it.
+            let recorded = try await EditTestMovie.duration(of: file) - 1.0 / 30
+            videos.append(ScreencastVideo(
+                file: file, mixdown: nil, pixelWidth: EditTestMovie.width, pixelHeight: EditTestMovie.height,
+                audioTracks: [], duration: recorded
+            ))
+        }
+        let capture = ScreencastCapture(folder: folder, videos: videos, duration: videos[0].duration, endedEarly: nil)
+        let second = videos[1]
+        let model = fixture.model(.video(capture))
+        // 0.08 s of display 2 by its recorded length, 0.113 s by its file's.
+        model.edit { $0.setTrim(start: second.duration - 0.08, end: capture.duration) }
+        #expect(model.displaysWithNothingKept == [1], "the window")
+
+        let playback = ScreencastReviewPlayback()
+        defer { playback.stop() }
+        playback.show(second, display: 1, edits: model.edits)
+        #expect(playback.blank == .nothingKept, "the player")
+
+        let before = try Data(contentsOf: second.file)
+        let cancellation = ScreencastExportCancellation()
+        let edited = try await ScreencastEditExporter.export(capture, edits: model.edits, cancellation: cancellation)
+        #expect(edited.videos[1] == second, "Save")
+        let after = try Data(contentsOf: second.file)
+        #expect(after == before, "its file untouched")
+    }
+
     @Test("The player plays the edits and says where it is in the recording's own time; a trimmed-off time goes to where it plays on")
     func playerPlaysTheEdits() async throws {
         defer { fixture.tearDown() }

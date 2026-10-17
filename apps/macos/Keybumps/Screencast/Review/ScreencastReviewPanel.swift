@@ -619,7 +619,7 @@ final class ScreencastReviewPlayback {
             if !isNewVideo { seek(toRecordingTime: place) }
             return
         }
-        guard edits.keepsSomething(ofVideoLasting: video.duration) else { return showBlank(.nothingKept) }
+        guard edits.keepsSomething(of: video) else { return showBlank(.nothingKept) }
         let generation = generation
         Task { [weak self] in
             let edit = try? await ScreencastEditComposition.make(source: url, edits: edits, display: display, crops: crops)

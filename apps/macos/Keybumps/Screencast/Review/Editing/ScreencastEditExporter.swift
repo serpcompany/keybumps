@@ -107,6 +107,12 @@ enum ScreencastEditExporter {
             for (index, video) in capture.videos.enumerated() {
                 if cancellation.isCancelled { throw ScreencastExportFailure.cancelled }
                 let report: @Sendable (Double) -> Void = { fraction in progress((Double(index) + fraction) / count) }
+                guard edits.keepsSomething(of: video) else {
+                    // Its video stays as it was recorded, as the window says.
+                    report(1)
+                    videos.append(video)
+                    continue
+                }
                 let editedFile = editingURL(for: video.file)
                 written.append((video.file, editedFile))
                 let facts: MovieFacts
@@ -115,7 +121,8 @@ enum ScreencastEditExporter {
                         from: video.file, to: editedFile, edits: edits, display: index, cancellation: cancellation
                     ) { report($0 * movieShare) }
                 } catch ScreencastEditComposition.CompositionError.nothingKept {
-                    // Nothing was written: its video stays as it was recorded, as the window says.
+                    // A backstop: the composition's own check, from the file's length, which runs a
+                    // frame past the recorded one, so it can't find less than the check above.
                     written.removeLast()
                     report(1)
                     videos.append(video)
@@ -123,9 +130,10 @@ enum ScreencastEditExporter {
                 }
                 var editedMixdown: URL?
                 if let mixdown = video.mixdown {
+                    if cancellation.isCancelled { throw ScreencastExportFailure.cancelled }
                     let url = editingURL(for: mixdown)
                     written.append((mixdown, url))
-                    try await ScreencastAudioMixdown.write(from: editedFile, to: url)
+                    try await ScreencastAudioMixdown.write(from: editedFile, to: url) { cancellation.isCancelled }
                     editedMixdown = mixdown
                 }
                 if cancellation.isCancelled { throw ScreencastExportFailure.cancelled }
@@ -221,8 +229,6 @@ enum ScreencastEditExporter {
         private let cancellation: ScreencastExportCancellation
         private let progress: @Sendable (Double) -> Void
         private let lock = NSLock()
-        private var finished: [Bool]
-        private var failed = false
         private var lastReported = -1.0
 
         init(
@@ -278,11 +284,10 @@ enum ScreencastEditExporter {
                 pairs.append((output, input))
             }
             self.pairs = pairs
-            finished = Array(repeating: false, count: pairs.count)
         }
 
-        /// Copies every output into its input, each on its own queue, then finishes the file and
-        /// calls `completion` once.
+        /// Copies every output into its input, each on its own queue (`ScreencastSampleCopier`),
+        /// then finishes the file and calls `completion` once.
         func run(completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
             guard writer.startWriting() else {
                 return completion(.failure(writer.error ?? ScreencastExportFailure.failed))
@@ -292,70 +297,24 @@ enum ScreencastEditExporter {
                 return completion(.failure(reader.error ?? ScreencastExportFailure.failed))
             }
             writer.startSession(atSourceTime: .zero)
-            let group = DispatchGroup()
-            for (index, pair) in pairs.enumerated() {
-                group.enter()
-                let queue = DispatchQueue(label: "com.serp.keybumps.screencast.export.\(index)", qos: .userInitiated)
-                pair.input.requestMediaDataWhenReady(on: queue) { [self] in
-                    pump(index, group: group)
-                }
-            }
-            group.notify(queue: .global(qos: .userInitiated)) { [self] in
-                finish(completion)
-            }
+            let copier = ScreencastSampleCopier(
+                reader: reader, writer: writer, pairs: pairs,
+                label: "com.serp.keybumps.screencast.export", qos: .userInitiated
+            ) { [cancellation] in cancellation.isCancelled }
+            copier.run(onSample: { [self] index, sample in
+                if index == 0 { report(CMSampleBufferGetPresentationTimeStamp(sample).seconds) }
+            }, completion: { [self] in
+                finish(stopped: copier.didStop, completion)
+            })
         }
 
-        /// Appends what the input will take, in an autorelease pool per sample, as Shotnix's
-        /// `MovieJob` does: without one, every decoded frame stays alive until the queue pauses.
-        private func pump(_ index: Int, group: DispatchGroup) {
-            let (output, input) = pairs[index]
-            while input.isReadyForMoreMediaData {
-                guard !lock.withLock({ failed || finished[index] }) else { return }
-                if cancellation.isCancelled { return fail(group: group) }
-                let appended = autoreleasepool { () -> Bool? in
-                    guard let sample = output.copyNextSampleBuffer() else { return nil }
-                    if index == 0 { report(CMSampleBufferGetPresentationTimeStamp(sample).seconds) }
-                    return input.append(sample)
-                }
-                switch appended {
-                case nil:
-                    if writer.status == .writing { input.markAsFinished() }
-                    return markFinished(index, group: group)
-                case false?:
-                    return fail(group: group)
-                case true?:
-                    continue
-                }
-            }
-        }
-
-        private func markFinished(_ index: Int, group: DispatchGroup) {
-            lock.withLock {
-                guard !finished[index] else { return }
-                finished[index] = true
-                group.leave()
-            }
-        }
-
-        /// Stops both sides once, and leaves the group for every input still copying: a cancelled
-        /// writer never asks them for more.
-        private func fail(group: DispatchGroup) {
-            let isFirst = lock.withLock {
-                defer { failed = true }
-                return !failed
-            }
-            guard isFirst else { return }
-            reader.cancelReading()
-            writer.cancelWriting()
-            pairs.indices.forEach { markFinished($0, group: group) }
-        }
-
-        private func finish(_ completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
+        /// Runs once no queue is copying: the copier has cancelled both sides if it stopped.
+        private func finish(stopped: Bool, _ completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
             if cancellation.isCancelled {
                 if writer.status == .writing { writer.cancelWriting() }
                 return completion(.failure(ScreencastExportFailure.cancelled))
             }
-            if lock.withLock({ failed }) || reader.status == .failed {
+            if stopped || reader.status == .failed {
                 if writer.status == .writing { writer.cancelWriting() }
                 return completion(.failure(writer.error ?? reader.error ?? ScreencastExportFailure.failed))
             }
