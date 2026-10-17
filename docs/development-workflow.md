@@ -55,7 +55,7 @@ Before handing a candidate to the owner, the agent verifies what it can without 
 - Deterministic tests, extended for the changed behavior.
 - Offscreen renders of changed surfaces (for example SwiftUI `ImageRenderer` snapshots) inspected by the agent for layout, truncation, and state.
 - The installed candidate launches from `/Applications`, has a valid signature and matching designated requirement, stays running, and loads existing local data. Check persisted data structurally only (counts, kinds, schema) and never read or report user content.
-- For changes to Screengrabs, `apps/macos/scripts/smoke-screengrabs.sh` on the installed candidate runs its real paths (`-KBScreengrabsSmokeTest YES`, QA candidates only), then reopens Keybumps:
+- For changes to ScreenGrabs, `apps/macos/scripts/smoke-screengrabs.sh` on the installed candidate runs its real paths (`-KBScreengrabsSmokeTest YES`, QA candidates only), then reopens Keybumps:
   - Screenshots through `screencapture`: one of each display, and one of an area (`-R`). Each must be a PNG of the expected size, marked as a screen capture, and listed in ⌘3, added the way the Screen hotkey adds them, to a Clipboard History of the smoke test's own.
   - Recordings of 2 s each: a screen, a window, and an area, checked for a picture of about that length.
   - It deletes every file and prints a structural result, with a line for each screenshot and recording. Nothing goes in the screenshot folder, the Desktop, the recordings folder, or the person's Clipboard History.

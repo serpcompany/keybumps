@@ -22,7 +22,7 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "change") == [[.changelog]])
     }
 
-    @Test("Search also finds a plugin's page by its search keywords, such as Screengrabs by its former names (#490)")
+    @Test("Search also finds a plugin's page by its search keywords, such as ScreenGrabs by its former names (#490)")
     func searchFindsPluginsByKeyword() {
         #expect(SettingsSidebar.groups(matching: "screenshot") == [[.screenshotTools]])
         #expect(SettingsSidebar.groups(matching: "Screencast") == [[.screenshotTools]])
@@ -57,7 +57,7 @@ struct SettingsSidebarTests {
         #expect(PluginsTable.tabKey(for: .screenshotTools, showsHotkeysTab: false) == "⌘3")
 
         let key = ShortcutBinding(keyCode: 1, modifiers: 0, displayName: "⇧⌘2")
-        // Screengrabs' three screenshot hotkeys and Record Screen; the recording shortcuts work only while recording.
+        // ScreenGrabs' three screenshot hotkeys and Record Screen; the recording shortcuts work only while recording.
         #expect(PluginsTable.shortcutText(for: .screenshotTools) { _ in key } == "⇧⌘2 +3")
         #expect(PluginsTable.shortcutText(for: .screenshotTools) { $0 == .screenshotArea ? key : nil } == "⇧⌘2")
         #expect(PluginsTable.shortcutText(for: .timer) { _ in nil } == "", "Unassigned")

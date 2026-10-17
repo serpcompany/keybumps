@@ -238,7 +238,7 @@ struct CapabilityModuleTests {
         }
     }
 
-    @Test("Screengrabs stops and reports Requires Clipboard History while Clipboard History is off")
+    @Test("ScreenGrabs stops and reports Requires Clipboard History while Clipboard History is off")
     func screenshotToolsDependsOnClipboardHistory() {
         let harness = ModuleHarness()
         defer { harness.tearDown() }
@@ -249,7 +249,7 @@ struct CapabilityModuleTests {
         harness.model.setCapability(.clipboardHistory, enabled: false)
         #expect(harness.model.screenshotTools.status == .requiresClipboardHistory)
         #expect(harness.model.settingsAttentionCount(for: .screenshotTools) == 1)
-        // The edit action is Screengrabs' own contribution, so it stays while the module is on.
+        // The edit action is ScreenGrabs' own contribution, so it stays while the module is on.
         #expect(harness.model.commandPalette.editImage != nil)
 
         harness.model.setCapability(.clipboardHistory, enabled: true)
@@ -275,7 +275,7 @@ struct CapabilityModuleTests {
 
         let defaults = InMemoryDefaults()
 
-        // An install from before per-capability tracking gets Screengrabs, Snippets, and Timer once.
+        // An install from before per-capability tracking gets ScreenGrabs, Snippets, and Timer once.
         defaults.set(["dictation", "quickSearch"], forKey: "enabledCapabilities")
         let upgraded = AppPreferences(defaults: defaults)
         #expect(upgraded.enabledCapabilities == [.dictation, .quickSearch, .screenshotTools, .snippets, .timer])
@@ -288,7 +288,7 @@ struct CapabilityModuleTests {
         upgraded.setCapability(.timer, enabled: false)
         #expect(AppPreferences(defaults: defaults).enabledCapabilities == [.dictation, .quickSearch])
 
-        // An install that already knew Screengrabs, but not Snippets or Timer, gets only those.
+        // An install that already knew ScreenGrabs, but not Snippets or Timer, gets only those.
         let screenshotsKnown = InMemoryDefaults()
         screenshotsKnown.set(["quickSearch"], forKey: "enabledCapabilities")
         screenshotsKnown.set(
@@ -377,7 +377,7 @@ private final class ModuleHarness {
         displayName: "⌃⌥⇧K"
     )
 
-    /// A binding for Screengrabs' Record Screen, in place of its ⇧⌘5.
+    /// A binding for ScreenGrabs' Record Screen, in place of its ⇧⌘5.
     static let screencastBinding = ShortcutBinding(
         keyCode: UInt32(kVK_ANSI_R),
         modifiers: UInt32(controlKey | optionKey | shiftKey),

@@ -81,7 +81,7 @@ struct ShortcutConflictTests {
         #expect(old.capabilityShortcut(for: .screenshotArea) == keys)
         #expect(old.capabilityShortcut(for: .screencast) == nil, "Two actions never share the keys, for an update to macOS 15")
         let note: String? = old.movedShortcut(for: .capability(.screencast))?.note
-        #expect(note == "⇧⌘5 moved to Screengrabs › Screenshot Area.")
+        #expect(note == "⇧⌘5 moved to ScreenGrabs › Screenshot Area.")
     }
 
     @Test("On macOS 15, Record Screen's ⇧⌘5 is a conflict like any other")
@@ -89,7 +89,7 @@ struct ShortcutConflictTests {
         let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
         let asked: ShortcutOwner? = current.shortcutConflict(for: DefaultShortcut.recordScreen, assigningTo: .capability(.screenshotArea))
         #expect(asked == .capability(.screencast))
-        #expect(asked?.displayName == "Screengrabs › Record Screen")
+        #expect(asked?.displayName == "ScreenGrabs › Record Screen")
     }
 
     // MARK: Replace and Cancel
@@ -275,7 +275,7 @@ struct ShortcutConflictTests {
         edit.recorder.confirmReplacement()
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == area, "Nothing moves without asking about Screenshot Screen")
         #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotScreen))
-        #expect(edit.recorder.pendingReplacement?.message == "⇧⌘4 is used by Screengrabs › Screenshot Screen.")
+        #expect(edit.recorder.pendingReplacement?.message == "⇧⌘4 is used by ScreenGrabs › Screenshot Screen.")
 
         edit.recorder.confirmReplacement()
         #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == area)
@@ -350,7 +350,7 @@ struct ShortcutConflictTests {
 
         edit.recorder.confirmReplacement()
         #expect(heard.count == 2)
-        #expect(heard.last?.contains("used by Screenshot Screen in Screengrabs.") == true)
+        #expect(heard.last?.contains("used by Screenshot Screen in ScreenGrabs.") == true)
     }
 
     // MARK: One field records at a time (#345)

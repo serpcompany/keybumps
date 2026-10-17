@@ -219,7 +219,7 @@ class ScreenshotToolsService {
         self.ingest = ingest
     }
 
-    /// Screengrabs only runs while Clipboard History is enabled, because screenshots
+    /// ScreenGrabs only runs while Clipboard History is enabled, because screenshots
     /// are presented as Clipboard History items.
     func apply(enabled: Bool, clipboardHistoryEnabled: Bool) {
         guard enabled else { stop(); return }

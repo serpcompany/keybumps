@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 
-/// What a Screengrabs hotkey captures.
+/// What a ScreenGrabs hotkey captures.
 enum ScreenshotCaptureMode: Equatable {
     /// Every display, one file each.
     case screens
@@ -118,10 +118,10 @@ final class ScreenshotCapturer {
 }
 
 /// Turns off macOS's own "save picture of screen" (⇧⌘3), "save picture of selected area" (⇧⌘4),
-/// and "screenshot and recording options" (⇧⌘5) shortcuts while a Screengrabs shortcut uses the
-/// same keys, and turns them back on when Screengrabs is off or the shortcut moves. Only shortcuts
+/// and "screenshot and recording options" (⇧⌘5) shortcuts while a ScreenGrabs shortcut uses the
+/// same keys, and turns them back on when ScreenGrabs is off or the shortcut moves. Only shortcuts
 /// Keybumps turned off are restored. `ScreenshotToolsModule` passes Record Screen's keys only where
-/// Screengrabs can record, so macOS 14 keeps its own ⇧⌘5 (ADR 0010).
+/// ScreenGrabs can record, so macOS 14 keeps its own ⇧⌘5 (ADR 0010).
 @MainActor
 final class SystemScreenshotShortcutTakeover {
     /// macOS symbolic hotkey IDs and their defaults: (ascii, keyCode, Cocoa modifiers).

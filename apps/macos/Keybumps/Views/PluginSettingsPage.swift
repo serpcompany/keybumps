@@ -3,14 +3,14 @@ import SwiftUI
 /// A plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
 /// extension's settings: its header with who makes it, any preference placed at the top, its
 /// Commands, the permissions it needs and then the ones it can use (marked Optional), a slot for
-/// parts of its own that come before its declared preferences (such as Screengrabs' Screenshots
+/// parts of its own that come before its declared preferences (such as ScreenGrabs' Screenshots
 /// group), its other declared preferences by group, each ending with any rows the page adds to it
-/// (such as Screengrabs' recordings folder under Recordings), and last a slot for parts no
+/// (such as ScreenGrabs' recordings folder under Recordings), and last a slot for parts no
 /// declaration covers (such as a library to edit). The slots are empty unless the page fills them.
 /// The other plugins move over one at a time.
 struct PluginSettingsPage<AbovePreferences: View, GroupRows: View, Custom: View>: View {
     let capability: Capability
-    /// The headings of declared groups whose preferences can't change now, such as Screengrabs'
+    /// The headings of declared groups whose preferences can't change now, such as ScreenGrabs'
     /// Recordings where it can't record.
     let unavailableGroups: Set<String>
     let abovePreferences: AbovePreferences

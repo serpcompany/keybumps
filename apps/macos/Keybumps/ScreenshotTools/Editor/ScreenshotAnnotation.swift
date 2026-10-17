@@ -1,6 +1,6 @@
 import AppKit
 
-/// Editor tools for the v1 Screengrabs markup editor.
+/// Editor tools for the v1 ScreenGrabs markup editor.
 enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
     case pixelate, redact, arrow, draw, text
 
