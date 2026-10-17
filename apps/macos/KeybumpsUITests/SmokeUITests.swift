@@ -63,18 +63,22 @@ final class SmokeUITests: XCTestCase {
     /// #286: Dictation's dropdowns open and change the setting. It drives Recognition language,
     /// which is near the top, so no scrolling is needed; the last row (Recording length) is the
     /// same `SettingsDropdown`. Before #294, CI's 1024×768 screen put that row under the Dock.
+    /// #530: Automatic is listed first, and fresh defaults choose it.
     func testDictationDropdownsOpenAndChangeTheSetting() {
         launch(permissions: "granted", ["-KBOpenSettings", "dictation"])
         let language = element("settings.dictation.language")
         XCTAssertTrue(language.waitForExistence(timeout: 20))
         XCTAssertTrue(element("settings.dictation.durationLimit").exists)
+        XCTAssertEqual(language.value as? String, "Automatic", "Automatic is the default")
 
         language.click()
         // The pop-up's own items; `app.menuItems` would also match the menu bar's.
         let first = language.menuItems.element(boundBy: 0)
         XCTAssertTrue(first.waitForExistence(timeout: 5), "The language dropdown opens its menu")
-        let title = first.title
-        first.click()
+        XCTAssertEqual(first.title, "Automatic", "Automatic is listed first")
+        let second = language.menuItems.element(boundBy: 1)
+        let title = second.title
+        second.click()
         XCTAssertEqual(language.value as? String, title, "Picking a language changes the setting")
     }
 

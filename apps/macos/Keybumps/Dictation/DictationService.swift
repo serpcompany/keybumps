@@ -163,6 +163,7 @@ final class DictationService {
     private(set) var lastError: String?
     private(set) var recoveredTranscript: String?
     private(set) var retryingEntryID: String?
+    /// The recognition language setting: a locale identifier, or Automatic (`DictationLanguage`).
     var selectedLanguage: String
     var onPhaseChange: ((DictationPhase) -> Void)?
     /// The microphone's loudness while recording, 0 (silence) to 1, on the main actor.
@@ -233,6 +234,10 @@ final class DictationService {
             }
     }
 
+    /// The one language Apple's on-device speech is checked for before recording: the selected
+    /// one, or for Automatic the one Apple Speech falls back to (#530).
+    var onDeviceSpeechLanguage: String { DictationLanguage.resolved(selectedLanguage) }
+
     var microphoneGranted: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
     var speechGranted: Bool { SFSpeechRecognizer.authorizationStatus() == .authorized }
 
@@ -256,8 +261,9 @@ final class DictationService {
             fail("Microphone and Speech Recognition permissions are required.")
             return
         }
-        guard SFSpeechRecognizer(locale: Locale(identifier: selectedLanguage))?.supportsOnDeviceRecognition == true else {
-            fail("On-device speech is unavailable for \(selectedLanguage).")
+        let onDeviceLanguage = onDeviceSpeechLanguage
+        guard SFSpeechRecognizer(locale: Locale(identifier: onDeviceLanguage))?.supportsOnDeviceRecognition == true else {
+            fail("On-device speech is unavailable for \(onDeviceLanguage).")
             return
         }
         destination = NSWorkspace.shared.frontmostApplication.map(DictationInsertionTarget.init)
@@ -336,20 +342,23 @@ final class DictationService {
               let audioURL = entry.audioURL else { return }
 
         let entry = history.prepareRetry(entry)
-        let language = entry.language == "und" ? selectedLanguage : entry.language
+        // A retry uses the setting the entry was recorded with, Automatic included, so it's
+        // detected again; one recovered without it uses today's.
+        let recorded = entry.recordedLanguageSetting
+        let language = recorded == "und" ? selectedLanguage : recorded
         retryingEntryID = entry.id
         lastError = nil
         do {
             try history.markTranscribing(entry, language: language)
-            let transcript = try await transcribeCompletedAudio(
+            let transcription = try await transcribeCompletedAudio(
                 at: audioURL,
                 language: language,
                 recordedDuration: entry.duration
             )
             _ = try history.completeTranscription(
                 of: entry,
-                text: transcript,
-                language: language
+                text: transcription.text,
+                language: transcription.language
             )
         } catch is CancellationError {
             _ = try? history.completeTranscription(
@@ -384,25 +393,28 @@ final class DictationService {
         durationTimer = nil
         stopAudio()
         let stoppedAt = Date()
+        // Until a transcription says which language it's in, the entry keeps the setting.
+        let language = selectedLanguage
         do {
             guard let recording else { throw CocoaError(.fileNoSuchFile) }
             try history.markTranscribing(
                 recording,
-                language: selectedLanguage,
+                language: language,
                 duration: duration
             )
-            let transcript = try await transcribeCompletedAudio(
+            let transcription = try await transcribeCompletedAudio(
                 at: recording.audioURL,
-                language: selectedLanguage,
+                language: language,
                 recordedDuration: duration
             )
+            let transcript = transcription.text
             guard session == self.session else { return }
             try transcript.write(to: recoveryURL, atomically: true, encoding: .utf8)
             recoveredTranscript = transcript
             try history.completeRecording(
                 recording,
                 text: transcript,
-                language: selectedLanguage,
+                language: transcription.language,
                 duration: duration,
                 processingTime: Date().timeIntervalSince(stoppedAt)
             )
@@ -422,7 +434,7 @@ final class DictationService {
                 _ = try? history.completeRecording(
                     recording,
                     text: transcriber.partialTranscript,
-                    language: selectedLanguage,
+                    language: language,
                     duration: duration,
                     transcriptionError: error.localizedDescription
                 )
@@ -436,15 +448,21 @@ final class DictationService {
         }
     }
 
+    /// The transcript, and the language it's in: never Automatic, even from a transcriber that
+    /// reports it as given.
     private func transcribeCompletedAudio(
         at audioURL: URL,
         language: String,
         recordedDuration: TimeInterval
-    ) async throws -> String {
-        try await transcriber.transcribe(
+    ) async throws -> DictationTranscription {
+        let transcription = try await transcriber.transcription(
             audioURL: audioURL,
             language: language,
             recordedDuration: recordedDuration
+        )
+        return DictationTranscription(
+            text: transcription.text,
+            language: DictationLanguage.resolved(transcription.language)
         )
     }
 

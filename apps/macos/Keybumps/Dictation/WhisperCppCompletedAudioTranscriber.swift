@@ -43,6 +43,16 @@ final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
+        try await transcription(audioURL: audioURL, language: language, recordedDuration: recordedDuration).text
+    }
+
+    /// A chosen language is reported as given (`ja-JP`); one detected for Automatic as
+    /// whisper.cpp's code for it (`ja`), or as Automatic when it detected none.
+    func transcription(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> DictationTranscription {
         partialTranscript = ""
         let call = WhisperCppAbortFlag()
         activeCall = call
@@ -53,12 +63,18 @@ final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
         // whisper.cpp keeps the previous call's audio features and decodes them again when it's
         // given no samples, so an empty recording must never reach it.
         guard !samples.isEmpty else { throw Self.noSpeech }
-        let languageCode = Locale(identifier: language).language.languageCode?.identifier ?? "auto"
-        let transcript = try await runtime.transcribe(samples: samples, language: languageCode, abort: call)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await runtime.transcribe(samples: samples, language: Self.languageCode(for: language), abort: call)
+        let transcript = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !transcript.isEmpty else { throw Self.noSpeech }
         partialTranscript = transcript
-        return transcript
+        let detected = DictationLanguage.isAutomatic(language) ? result.language : nil
+        return DictationTranscription(text: transcript, language: detected ?? language)
+    }
+
+    /// whisper.cpp's code for `language` (`ja` for `ja-JP`). Automatic is `auto`, which detects it.
+    static func languageCode(for language: String) -> String {
+        guard !DictationLanguage.isAutomatic(language) else { return DictationLanguage.automatic }
+        return Locale(identifier: language).language.languageCode?.identifier ?? DictationLanguage.automatic
     }
 
     func cancel() {
@@ -78,9 +94,15 @@ final class WhisperCppCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
     )
 }
 
+/// What whisper.cpp transcribed, and its code for the language it transcribed in (`ja`).
+struct WhisperCppTranscript: Equatable, Sendable {
+    let text: String
+    let language: String?
+}
+
 /// A loaded whisper.cpp model; a seam so tests can stand in for the real one.
 protocol WhisperCppTranscribing: AnyObject, Sendable {
-    func transcribe(samples: [Float], language: String, abort: WhisperCppAbortFlag) async throws -> String
+    func transcribe(samples: [Float], language: String, abort: WhisperCppAbortFlag) async throws -> WhisperCppTranscript
     func free() async
 }
 
@@ -121,12 +143,13 @@ final class WhisperCppRuntime: WhisperCppTranscribing, @unchecked Sendable {
         return runtime
     }
 
-    /// Greedy decoding over full 30-second windows, without timestamps. Setting `abort` stops it
-    /// with `CancellationError`.
-    func transcribe(samples: [Float], language: String, abort abortFlag: WhisperCppAbortFlag) async throws -> String {
+    /// Greedy decoding over full 30-second windows, without timestamps. A `language` of `auto`
+    /// detects the language from the first 30 seconds. Setting `abort` stops it with
+    /// `CancellationError`.
+    func transcribe(samples: [Float], language: String, abort abortFlag: WhisperCppAbortFlag) async throws -> WhisperCppTranscript {
         try await run { [self] in
             guard let context, !abortFlag.isSet else { throw CancellationError() }
-            guard !samples.isEmpty else { return "" }
+            guard !samples.isEmpty else { return WhisperCppTranscript(text: "", language: nil) }
             var parameters = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
             parameters.n_threads = Int32(min(4, max(1, ProcessInfo.processInfo.activeProcessorCount)))
             parameters.no_timestamps = true
@@ -134,6 +157,8 @@ final class WhisperCppRuntime: WhisperCppTranscribing, @unchecked Sendable {
             parameters.print_realtime = false
             parameters.print_timestamps = false
             parameters.print_special = false
+            // `language` = "auto" detects the language and then transcribes in it. Setting
+            // `detect_language` would make whisper_full return after detecting, with no text.
             parameters.detect_language = false
             parameters.abort_callback = { data in
                 guard let data else { return false }
@@ -154,10 +179,17 @@ final class WhisperCppRuntime: WhisperCppTranscribing, @unchecked Sendable {
                     userInfo: [NSLocalizedDescriptionKey: "Transcription failed (whisper.cpp \(status))."]
                 )
             }
-            return (0..<whisper_full_n_segments(context))
+            let text = (0..<whisper_full_n_segments(context))
                 .map { String(cString: whisper_full_get_segment_text(context, $0)) }
                 .joined()
+            return WhisperCppTranscript(text: text, language: Self.languageCode(whisper_full_lang_id(context)))
         }
+    }
+
+    /// whisper.cpp's code for a language ID (`ja`), or nil for none.
+    static func languageCode(_ id: Int32) -> String? {
+        guard id >= 0, let code = whisper_lang_str(id) else { return nil }
+        return String(cString: code)
     }
 
     func free() async {

@@ -11,6 +11,14 @@ protocol CompletedAudioTranscribing: AnyObject {
         recordedDuration: TimeInterval
     ) async throws -> String
 
+    /// `transcribe`, and the language the transcript is in. Automatic
+    /// (`DictationLanguage.automatic`) asks a model that detects the language to detect it.
+    func transcription(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> DictationTranscription
+
     /// Gets ready for a dictation that has started recording, such as by loading a model, so the
     /// wait after the recording stops is shorter. It must not block, and failures are left for
     /// `transcribe` to report.
@@ -21,6 +29,16 @@ protocol CompletedAudioTranscribing: AnyObject {
 
 extension CompletedAudioTranscribing {
     func prepare(language: String) {}
+
+    /// A transcriber that never detects reports the language it was given.
+    func transcription(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> DictationTranscription {
+        let text = try await transcribe(audioURL: audioURL, language: language, recordedDuration: recordedDuration)
+        return DictationTranscription(text: text, language: language)
+    }
 }
 
 @MainActor
@@ -79,11 +97,23 @@ final class AppleSpeechCompletedAudioTranscriber: CompletedAudioTranscribing {
 
     var partialTranscript: String { transcriptAssembler.transcript }
 
+    /// Apple's speech can't detect a language: Automatic uses the Mac's (`DictationLanguage`).
+    func transcription(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> DictationTranscription {
+        let language = DictationLanguage.resolved(language)
+        let text = try await transcribe(audioURL: audioURL, language: language, recordedDuration: recordedDuration)
+        return DictationTranscription(text: text, language: language)
+    }
+
     func transcribe(
         audioURL: URL,
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
+        let language = DictationLanguage.resolved(language)
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: language)),
               recognizer.supportsOnDeviceRecognition else {
             throw NSError(
@@ -179,6 +209,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
     private let whisperFactory: WhisperFactory
     private let idleScheduler: any DictationRuntimeIdleScheduling
     private let idleTimeout: TimeInterval
+    private let macLanguage: () -> String
     private var activeTranscriber: (any CompletedAudioTranscribing)?
     private var cachedWhisper: (modelFolder: URL, transcriber: any UnloadableCompletedAudioTranscribing)?
     private var pendingWhisper: WhisperLoad?
@@ -198,7 +229,8 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         appleTranscriber: (any CompletedAudioTranscribing)? = nil,
         whisperFactory: WhisperFactory? = nil,
         idleScheduler: (any DictationRuntimeIdleScheduling)? = nil,
-        idleTimeout: TimeInterval = 300
+        idleTimeout: TimeInterval = 300,
+        macLanguage: @escaping () -> String = { DictationLanguage.macLanguage() }
     ) {
         self.selectedEngine = selectedEngine
         self.modelManager = modelManager
@@ -206,6 +238,7 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         self.whisperFactory = whisperFactory ?? Self.loadInstalledWhisperRuntime
         self.idleScheduler = idleScheduler ?? TaskDictationRuntimeIdleScheduler()
         self.idleTimeout = idleTimeout
+        self.macLanguage = macLanguage
     }
 
     /// Loads the runtime for the model in `modelFolder`: whisper.cpp for a ggml model file,
@@ -222,8 +255,21 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         language: String,
         recordedDuration: TimeInterval
     ) async throws -> String {
+        try await transcription(audioURL: audioURL, language: language, recordedDuration: recordedDuration).text
+    }
+
+    /// Transcribes with the selected engine, or Apple Speech until its model is installed.
+    /// Automatic is detected by a model that can; Apple Speech and Medium English fall back
+    /// (`DictationLanguage.request`). The language returned is always a real one.
+    func transcription(
+        audioURL: URL,
+        language: String,
+        recordedDuration: TimeInterval
+    ) async throws -> DictationTranscription {
         let transcriber = try await resolveTranscriber(language: language, cancellationsBefore: cancellations)
         let isWhisper = transcriber is any UnloadableCompletedAudioTranscribing
+        // Read once the runtime is resolved: a model change during its load resolves it again.
+        let engine = isWhisper ? selectedEngine() : .appleSpeech
         if isWhisper {
             idleCancellation?.cancel()
             idleCancellation = nil
@@ -231,13 +277,15 @@ final class DictationTranscriptionCoordinator: CompletedAudioTranscribing {
         activeTranscriber = transcriber
         defer { activeTranscriber = nil }
         do {
-            let transcript = try await transcriber.transcribe(
+            let result = try await transcriber.transcription(
                 audioURL: audioURL,
-                language: language,
+                language: DictationLanguage.request(language, engine: engine, macLanguage: macLanguage),
                 recordedDuration: recordedDuration
             )
             if isWhisper { scheduleIdleEviction() }
-            return transcript
+            // Nothing detected: the language the model would have fallen back to.
+            let recorded = DictationLanguage.resolved(result.language, engine: engine, macLanguage: macLanguage)
+            return DictationTranscription(text: result.text, language: recorded)
         } catch {
             if isWhisper { scheduleIdleEviction() }
             throw error
