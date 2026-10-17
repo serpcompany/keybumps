@@ -885,16 +885,9 @@ kbd {
   margin-bottom: 36px;
 }
 
+/* A row of five over a row of six, each centered, so they stagger by half a tile. */
 .hero-icons-row {
   display: flex;
-}
-
-.hero-icons-row:first-child {
-  transform: translateX(-23px);
-}
-
-.hero-icons-row:last-child {
-  transform: translateX(23px);
 }
 
 .hero-icon {

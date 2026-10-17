@@ -310,7 +310,9 @@ function Commands({ plugin }: { plugin: Plugin }) {
           ? `Open its tab in the Command Palette, or use its shortcuts${anywhere ? ' from any app' : ''}. You can change the shortcuts in Settings › ${plugin.name}.`
           : tab
             ? 'Open its tab in the Command Palette.'
-            : `Its shortcuts work${anywhere ? ' from any app' : ' as noted below'}, and you can change any of them in Settings › ${plugin.name}.`}
+            : plugin.shortcuts.length === 1
+              ? `Its shortcut works${anywhere ? ' from any app' : ' as noted below'}, and you can ${plugin.shortcuts[0].keys ? 'change' : 'set'} it in Settings › ${plugin.name}.`
+              : `Its shortcuts work${anywhere ? ' from any app' : ' as noted below'}, and you can change any of them in Settings › ${plugin.name}.`}
       </p>
       {tab && (
         <ul className="command-list">

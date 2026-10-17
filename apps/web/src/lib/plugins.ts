@@ -6,9 +6,12 @@
  *
  * - `apps/macos/Keybumps/Capabilities/*Module.swift`: each `CapabilityDescriptor`'s title,
  *   Settings page summary, category, `systemImage`, `iconTint`, palette tab, required
- *   permissions, dependencies, search keywords, and `minimumMacOS`; Timer's, Emoji Picker's, and
- *   Translation's preferences; Clipboard History's, Screenshot Tools', Snippets', Emoji Picker's,
- *   and Translation's optional permissions.
+ *   permissions, dependencies, search keywords, and `minimumMacOS`; Timer's, Emoji Picker's,
+ *   Translation's, and Keystrokes' preferences; Clipboard History's, ScreenGrabs', Snippets', Emoji
+ *   Picker's, and Translation's optional permissions. ScreenGrabs is `ScreenshotToolsModule.swift`:
+ *   it took Screenshot Tools' ID, so its slug stays `screenshot-tools` (ADR 0010).
+ * - `apps/macos/Keybumps/Screencast/ScreencastPreferences.swift`: ScreenGrabs' recording settings;
+ *   `PluginCompatibility.recordingMacOS` (`PluginManifest.swift`): the macOS it records on.
  * - `apps/macos/Keybumps/EmojiPicker/*.swift` and `emoji.json` (its `sources`): what the Emoji tab
  *   offers, searches, and keeps (`EmojiRecents.limit`).
  * - `apps/macos/Keybumps/Translation/*.swift`: what the Translate tab does (its header comment in
@@ -59,7 +62,8 @@ export const iconTints = {
   gray: '#98989d',
   green: '#32d74b',
   yellow: '#ffd60a',
-  indigo: '#5e5ce6'
+  indigo: '#5e5ce6',
+  pink: '#ff375f'
 } as const
 export type IconTint = keyof typeof iconTints
 
@@ -75,6 +79,7 @@ export type PluginSystemImage =
   | 'timer'
   | 'face.smiling'
   | 'translate'
+  | 'command.square'
 
 export type PluginShortcut = {
   title: string
@@ -217,7 +222,7 @@ export const plugins: readonly Plugin[] = [
     isDefault: true,
     overview: [
       'Clipboard History keeps the text and images you copy, so you can use them again. Press ⇧⌘ Space to open the Clipboard tab of the Command Palette, search for an item, and press Return to copy it or ⌘P to paste it into the app you were using.',
-      'Each item shows the app it was copied from, and for a web page the site’s domain, whenever macOS can tell. Screenshots you take with Screenshot Tools land here too, ready to paste.'
+      'Each item shows the app it was copied from, and for a web page the site’s domain, whenever macOS can tell. Screenshots you take with ScreenGrabs land here too, ready to paste.'
     ],
     features: [
       'Keeps your 50 most recent copied text and image items',
@@ -236,7 +241,7 @@ export const plugins: readonly Plugin[] = [
       { q: 'How much does it keep?', a: 'Your 50 most recent copied text and image items.' },
       {
         q: 'Can I paste a screenshot from it?',
-        a: 'Yes. Screenshots you take with Screenshot Tools land in Clipboard History, ready to paste.'
+        a: 'Yes. Screenshots you take with ScreenGrabs land in Clipboard History, ready to paste.'
       },
       {
         q: 'Does dictated text end up in it?',
@@ -255,22 +260,48 @@ export const plugins: readonly Plugin[] = [
   {
     slug: 'screenshot-tools',
     capability: 'screenshotTools',
-    name: 'Screenshot Tools',
-    summary: 'Take screenshots, keep them in Clipboard History, and mark them up.',
+    name: 'ScreenGrabs',
+    summary:
+      'Take screenshots and mark them up, and record your screen with your voice and the Mac’s sound.',
     category: 'Media',
     systemImage: 'camera.viewfinder',
     tint: 'purple',
-    keywords: ['screenshots', 'screenshot', 'screen', 'capture', 'annotate'],
-    paletteTab: { name: 'Screenshots', commandKey: 3 },
+    keywords: [
+      'screengrabs',
+      'screengrab',
+      'screen grabs',
+      'screenshots',
+      'screenshot',
+      'screen',
+      'capture',
+      'annotate',
+      'screen recording',
+      'recordings',
+      'record',
+      'recorder',
+      'video',
+      'screencast'
+    ],
+    paletteTab: { name: 'ScreenGrabs', commandKey: 3 },
     shortcuts: [
       { title: 'Screenshot Screen', keys: '⇧⌘2' },
       { title: 'Screenshot Screen and Edit', keys: '⇧⌘3' },
-      { title: 'Screenshot Area', keys: '⇧⌘4' }
+      { title: 'Screenshot Area', keys: '⇧⌘4' },
+      { title: 'Record Screen', keys: '⇧⌘5' },
+      { title: 'Pause & Resume Recording', keys: null, note: 'Only while recording' },
+      { title: 'Stop Recording', keys: null, note: 'Only while recording' },
+      {
+        title: 'Discard Recording',
+        keys: null,
+        note: 'Only while recording. Asks first; press it again to discard.'
+      },
+      { title: 'Draw While Recording', keys: null, note: 'Only while recording' }
     ],
     permissions: [
       {
         permission: 'Screen Recording',
-        reason: 'Lets Screenshot Tools take screenshots with its hotkeys.'
+        reason:
+          'Lets ScreenGrabs take screenshots with its hotkeys, and record the screen and the Mac’s sound.'
       }
     ],
     optionalPermissions: [
@@ -278,48 +309,80 @@ export const plugins: readonly Plugin[] = [
         permission: 'Accessibility',
         reason:
           'Lets ⌘P paste a screenshot into the app you were using. Without it, ⌘P copies the screenshot instead.'
+      },
+      {
+        permission: 'Microphone',
+        reason:
+          'Records your voice with a recording. Without it, recordings have only the screen and the Mac’s sound.'
+      },
+      {
+        permission: 'Input Monitoring',
+        reason:
+          'Shows the shortcuts you press in a recording, with Show shortcuts on screen on. Without it, recordings show none.'
       }
     ],
     requires: ['clipboard-history'],
     isDefault: true,
     overview: [
-      'Screenshot Tools takes screenshots with its own hotkeys and puts them in Clipboard History, ready to paste. ⇧⌘2 captures every screen, ⇧⌘3 captures every screen and opens the editor, and ⇧⌘4 captures an area you select.',
-      'Mark up a screenshot, or any image you copied, with blur, redact, arrow, draw, and text. Save copies the result and keeps an edited copy beside the original.'
+      'ScreenGrabs takes screenshots with its own hotkeys and puts them in Clipboard History, ready to paste. ⇧⌘2 captures every screen, ⇧⌘3 captures every screen and opens the editor, and ⇧⌘4 captures an area you select. Mark up a screenshot, or any image you copied, with blur, redact, arrow, draw, and text.',
+      'On macOS 15 or later, ⇧⌘5 records an area, a window, a screen, or all your screens, with your voice and the Mac’s sound. When you stop, the recording opens in a window where you can trim, crop, and blur it before you save it.'
     ],
     features: [
       'Hotkeys for every screen, every screen then edit, and a selected area; each can be changed',
-      'Screenshots from these hotkeys and from macOS’s own ⇧⌘5 appear in Clipboard History and the Screenshots tab, a grid of large thumbnails',
+      'Screenshots from these hotkeys and from macOS’s own tools appear in Clipboard History and the ScreenGrabs tab, a grid of large thumbnails',
       'New screenshots also go on the clipboard, unless you turn that off or copied something since',
       'An editor with blur, redact, arrow, draw, and text; Save (Return) copies the result and saves “<name> (edited).png” beside the original',
       'Screenshot Screen and Edit copies only when you Save, so an unredacted shot never lands on the clipboard',
-      'In the Screenshots tab, Return or ⌘C copies a screenshot, ⌘P pastes it into the app you were using, and ⌘Return opens it in the editor; ⌘E edits any image in Clipboard History',
-      'While it’s on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS’s own, and gives them back when you turn it off'
+      'In the ScreenGrabs tab, Return or ⌘C copies a screenshot, ⌘P pastes it into the app you were using, and ⌘Return opens it in the editor; ⌘E edits any image in Clipboard History',
+      'On macOS 15 or later, Record Screen (⇧⌘5, or “record” in Quick Search) records an area, a window, a screen, or all your screens',
+      'Records your voice and the Mac’s sound, each with its own switch, after a countdown you can change',
+      'A small bar, never in the video, shows the time and lets you pause, draw, mute, restart, discard, or stop',
+      'Draw on the screen while you record with a pen, an arrow, a highlighter, or a rectangle',
+      'Shows the shortcuts you press in the video, never what you type, and can highlight each click',
+      'After you stop, trim the ends, cut out a section, crop, and blur, then Save (Return) or Copy (⌘C)',
+      'While it’s on, Keybumps uses ⇧⌘3, ⇧⌘4, and ⇧⌘5 in place of macOS’s own, and gives them back when you turn it off'
     ],
     howTo: [
       { text: 'Press ⇧⌘4 and select an area, or ⇧⌘2 for every screen.', keys: '⇧⌘4' },
       {
-        text: 'Open the Command Palette and press ⌘3 for the Screenshots tab.',
+        text: 'Open the Command Palette and press ⌘3 for the ScreenGrabs tab, where ⌘Return marks a screenshot up.',
         keys: '⌘3'
       },
-      { text: 'Press ⌘Return to mark it up, then Return to save and copy it.', keys: '⌘↩' }
+      {
+        text: 'On macOS 15 or later, press ⇧⌘5 to record an area, a window, or a screen. Stop from the bar, then trim, crop, or blur it and save.',
+        keys: '⇧⌘5'
+      }
     ],
     faq: [
       {
+        q: 'What happened to Screenshot Tools?',
+        a: 'It’s now ScreenGrabs, and it records your screen too. Your screenshot shortcuts and settings are as you left them.'
+      },
+      {
         q: 'Does it replace the macOS screenshot shortcuts?',
-        a: 'While it’s on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS’s own, and gives them back when you turn it off.'
+        a: 'While it’s on, Keybumps uses ⇧⌘3, ⇧⌘4, and ⇧⌘5 in place of macOS’s own, and gives them back when you turn it off. To keep macOS’s ⇧⌘5, give Record Screen another shortcut in Settings › ScreenGrabs.'
+      },
+      {
+        q: 'Which Macs can record?',
+        a: 'Recording needs macOS 15 or later. On macOS 14, ScreenGrabs takes screenshots as before and leaves ⇧⌘5 to macOS.'
       },
       { q: 'What can I add to a screenshot?', a: 'Blur, redact, arrows, drawing, and text.' },
+      {
+        q: 'Can I edit a recording?',
+        a: 'Yes. When you stop, it opens in a window where you can trim the ends, cut out a section, crop it, and blur what shouldn’t show, then save or copy it.'
+      },
       {
         q: 'Can an unredacted screenshot reach my clipboard?',
         a: 'Not with Screenshot Screen and Edit (⇧⌘3): it copies only when you Save.'
       },
       {
-        q: 'Where are screenshots saved?',
-        a: 'Where macOS saves screenshots. An edited copy is saved beside the original.'
+        q: 'Where are screenshots and recordings saved?',
+        a: 'Screenshots go where macOS saves screenshots, with an edited copy beside the original. Recordings go in ~/Documents/Keybumps/captures, which Show in Finder in Settings › ScreenGrabs opens.'
       }
     ],
     keeps: [
-      'Screenshots are saved where macOS saves screenshots, and edited copies beside the original. Clipboard History keeps them on this Mac.'
+      'Screenshots are saved where macOS saves screenshots, and edited copies beside the original. Clipboard History keeps them on this Mac.',
+      'Recordings are kept in ~/Documents/Keybumps/captures on this Mac until you delete them.'
     ]
   },
   {
@@ -742,7 +805,6 @@ export const plugins: readonly Plugin[] = [
     ],
     requires: [],
     isDefault: false,
-    isNew: true,
     minimumMacOS: '15',
     overview: [
       'Understand text in another language and answer in it, without switching apps. Open the Translate tab of the Command Palette with ⌘8, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
@@ -796,6 +858,74 @@ export const plugins: readonly Plugin[] = [
     keeps: [
       'For the last 50 translations you save with Return or ⌘P, the text you translated and its translation are kept on this Mac. Clear Recent Translations in Settings › Translation removes them; turning Translation off keeps them.',
       'Text is translated on this Mac, with the languages you download in System Settings.'
+    ]
+  },
+  {
+    slug: 'keystrokes',
+    capability: 'keystrokes',
+    name: 'Keystrokes',
+    summary: 'Show the shortcuts you press on screen, for demos, recordings, and screen sharing.',
+    category: 'Media',
+    systemImage: 'command.square',
+    tint: 'pink',
+    keywords: ['keys', 'keycastr', 'demo'],
+    paletteTab: null,
+    shortcuts: [{ title: 'Show & Hide Keystrokes', keys: null }],
+    permissions: [
+      {
+        permission: 'Input Monitoring',
+        reason: 'Lets Keystrokes show the shortcuts you press.'
+      }
+    ],
+    requires: [],
+    isDefault: false,
+    isNew: true,
+    overview: [
+      'Let people see the shortcuts you press. Keystrokes shows each one on screen as you press it, such as ⌘C, for demos, recordings, and screen sharing. It shows only shortcuts unless you choose All keys, and nothing shows while you type a password.',
+      'Choose Keycaps or the classic Bezel style, where the keys show, their size, and how long they stay. Hide the keys and bring them back without turning the plugin off. Keystrokes ships turned off: turn it on in Settings › Plugins.'
+    ],
+    features: [
+      'Shows the shortcuts you press, such as ⌘C, on the screen with the pointer',
+      'Shortcuts only by default; choose All keys to show what you type too',
+      'Nothing shows while you type a password',
+      'Keycaps, or the classic Bezel style',
+      'Bottom left, center, or right; small, medium, or large; and on screen for 1 to 5 seconds after the last key',
+      'Name the action adds “Copy” beside ⌘C, for Keybumps’s own shortcuts and the standard macOS ones',
+      'Show clicks too puts a ring where you click',
+      'Show Keystrokes in the Keybumps menu, Show or Hide Keystrokes in Quick Search, or the Show & Hide Keystrokes shortcut hides the keys or brings them back',
+      'Optional Show & Hide Keystrokes shortcut, unassigned until you set one'
+    ],
+    howTo: [
+      { text: 'Turn it on in Settings › Plugins, and allow Input Monitoring.' },
+      {
+        text: 'Press a shortcut, such as ⌘C, in any app. It shows at the bottom of the screen.',
+        keys: '⌘C'
+      },
+      {
+        text: 'To hide the keys, choose Show Keystrokes in the Keybumps menu, or Hide Keystrokes in Quick Search.'
+      }
+    ],
+    faq: [
+      { q: 'Why can’t I find it?', a: 'It ships turned off. Turn it on in Settings › Plugins.' },
+      {
+        q: 'Does it show what I type?',
+        a: 'Only if you choose All keys in Settings › Keystrokes. Otherwise it shows only shortcuts, such as ⌘C, and nothing shows while you type a password.'
+      },
+      {
+        q: 'Can I hide the keys without turning it off?',
+        a: 'Yes. Show Keystrokes in the Keybumps menu, Hide Keystrokes in Quick Search, or a Show & Hide Keystrokes shortcut you set hides them, and the same brings them back.'
+      },
+      {
+        q: 'Do I need it to show shortcuts in a recording?',
+        a: 'No. ScreenGrabs shows the shortcuts you press in its recordings with Show shortcuts on screen, whether Keystrokes is on or off.'
+      },
+      {
+        q: 'Why does it need Input Monitoring?',
+        a: 'To hear the keys you press. It only listens, and a key stays in memory only while it’s on screen.'
+      }
+    ],
+    keeps: [
+      'Keystrokes keeps only its settings, in Keybumps’s settings on this Mac. A key you press stays in memory only while it’s on screen, and is never logged or stored.'
     ]
   }
 ]

@@ -67,7 +67,7 @@ describe('cardShortcut', () => {
       'Window Manager: Left, from any app'
     )
     expect(cardShortcut(pluginFor('screenshot-tools'))?.label).toBe(
-      'Screenshot Screen, from any app'
+      'ScreenGrabs: Screenshot Screen, from any app'
     )
   })
 
@@ -135,7 +135,7 @@ describe('plugins', () => {
     expect(plugins.filter(plugin => plugin.isDefault).map(plugin => plugin.name)).toEqual([
       'Quick Search',
       'Clipboard History',
-      'Screenshot Tools',
+      'ScreenGrabs',
       'Dictation',
       'Window Manager',
       'Shortcut Coach',
@@ -144,6 +144,13 @@ describe('plugins', () => {
     for (const plugin of plugins) {
       if (plugin.isNew) expect(plugin.isDefault, plugin.slug).toBe(false)
     }
+  })
+
+  it('marks only the newest added plugin, Keystrokes, new', () => {
+    expect(plugins.filter(plugin => plugin.isNew).map(plugin => plugin.slug)).toEqual([
+      'keystrokes'
+    ])
+    expect(plugins.at(-1)?.slug).toBe('keystrokes')
   })
 
   it('gives every plugin an overview, key features, and what it keeps', () => {
@@ -169,7 +176,7 @@ describe('plugins', () => {
   })
 
   it('counts a plugin’s palette tab and shortcuts as its commands', () => {
-    expect(commandCount(pluginFor('screenshot-tools'))).toBe(4)
+    expect(commandCount(pluginFor('screenshot-tools'))).toBe(9)
     expect(commandCount(pluginFor('shortcut-coach'))).toBe(1)
     expect(commandCount(pluginFor('timer'))).toBe(2)
   })
@@ -380,6 +387,16 @@ describe('plugin page at a glance', () => {
     expect(glance('window-manager')).toContain('29 by default, such as')
     expect(glance('clipboard-history')).not.toContain('by default, such as')
     expect(glance('snippets')).toContain('Optional: Accessibility, Input Monitoring')
+  })
+
+  it('writes a single shortcut in the singular, to set when it starts unassigned', () => {
+    expect(glance('keystrokes')).toContain('<dd>Not set by default</dd>')
+    expect(renderPage(pluginFor('keystrokes'))).toContain(
+      'Its shortcut works from any app, and you can set it in Settings › Keystrokes.'
+    )
+    expect(renderPage(pluginFor('window-manager'))).toContain(
+      'Its shortcuts work from any app, and you can change any of them in Settings › Window Manager.'
+    )
   })
 
   it('says when a Command Palette tab is hidden until turned on', () => {

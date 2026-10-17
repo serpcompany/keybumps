@@ -2,6 +2,7 @@ import {
   AudioWaveform,
   Clipboard,
   Columns2,
+  Command,
   Focus,
   Keyboard,
   Languages,
@@ -25,7 +26,8 @@ const icons: Record<PluginSystemImage, LucideIcon> = {
   'text.quote': TextQuote,
   timer: Timer,
   'face.smiling': Smile,
-  translate: Languages
+  translate: Languages,
+  'command.square': Command
 }
 
 /**

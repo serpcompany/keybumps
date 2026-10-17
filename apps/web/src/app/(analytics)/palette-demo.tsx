@@ -37,7 +37,7 @@ const TABS: Tab[] = [
   },
   {
     key: '⌘3',
-    label: 'Screenshots',
+    label: 'ScreenGrabs',
     query: '',
     rows: [
       { icon: '▣', title: 'Screenshot 9:41:02', meta: 'Area · ⌘Return to edit' },

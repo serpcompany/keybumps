@@ -199,6 +199,22 @@ describe('released versions', () => {
     expect(searchReleases(releases, 'oct').terms).toEqual(['oct'])
   })
 
+  it('tags beta.26 with ScreenGrabs and Keystrokes, and keeps ScreenGrabs on the releases that called it Screenshot Tools', () => {
+    const releases = realReleases()
+    const tags = (version: string) =>
+      releases.find(r => r.version === version)?.plugins.map(plugin => plugin.name)
+    expect(tags('0.0.3-beta.26')).toEqual(expect.arrayContaining(['ScreenGrabs', 'Keystrokes']))
+    for (const version of ['0.0.3-beta.4', '0.0.3-beta.22']) {
+      expect(tags(version), version).toContain('ScreenGrabs')
+    }
+    expect(searchReleases(releases, 'ScreenGrabs').terms).toEqual([
+      'screengrabs',
+      'screenshot tools',
+      'screenshots tab',
+      'screenshot editor'
+    ])
+  })
+
   it("reads a plugin's name as that plugin, highlighting every word that tagged it", () => {
     const releases = realReleases()
     for (const r of releases) {
