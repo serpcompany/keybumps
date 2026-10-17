@@ -66,8 +66,9 @@ struct ProcessScreenshotCaptureRunner: ScreenshotCaptureRunning {
     }
 }
 
-/// Takes screenshots into the macOS screenshot folder and marks them as screen captures, so the
-/// Screengrabs' watcher adds them to Clipboard History like screenshots macOS takes.
+/// Takes screenshots into the macOS screenshot folder and marks them as screen captures, like
+/// screenshots macOS takes. The hotkey that took them adds them to Clipboard History itself
+/// (`ScreenshotClipboardDelivery.capture`), since the mark lands only after `screencapture` exits.
 @MainActor
 final class ScreenshotCapturer {
     private let runner: any ScreenshotCaptureRunning
@@ -90,9 +91,15 @@ final class ScreenshotCapturer {
         self.fileManager = fileManager
     }
 
-    /// Calls `completion` with the files actually written (none when an area capture is cancelled).
-    func capture(_ mode: ScreenshotCaptureMode, completion: @escaping @MainActor ([URL]) -> Void) {
+    /// Calls `willWrite` with the files it's about to write, main display's first, then
+    /// `completion` with the files actually written (none when an area capture is cancelled).
+    func capture(
+        _ mode: ScreenshotCaptureMode,
+        willWrite: ([URL]) -> Void = { _ in },
+        completion: @escaping @MainActor ([URL]) -> Void
+    ) {
         let files = ScreenshotCapturePlan.files(in: folder(), at: now(), displayCount: displayCount(), mode: mode)
+        willWrite(files)
         runner.run(arguments: ScreenshotCapturePlan.arguments(for: mode, files: files)) { [fileManager] in
             let written = files.filter { fileManager.fileExists(atPath: $0.path) }
             written.forEach(Self.markAsScreenCapture)

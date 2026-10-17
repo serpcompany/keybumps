@@ -14,8 +14,8 @@ import Testing
 @Suite("Screengrabs: the QA smoke test's screenshots")
 struct ScreenshotSmokeTests {
     /// The main display, 320 × 200 points at 2 pixels a point, and one on its right at 1.
-    static let main = ScreenshotSmokeDisplay(frame: CGRect(x: 0, y: 0, width: 320, height: 200), scale: 2)
-    static let side = ScreenshotSmokeDisplay(frame: CGRect(x: 320, y: 0, width: 200, height: 100), scale: 1)
+    nonisolated static let main = ScreenshotSmokeDisplay(frame: CGRect(x: 0, y: 0, width: 320, height: 200), scale: 2)
+    nonisolated static let side = ScreenshotSmokeDisplay(frame: CGRect(x: 320, y: 0, width: 200, height: 100), scale: 1)
 
     let folder = TemporaryCapturesFolder()
     var screenshotsFolder: URL { folder.url.appendingPathComponent("screenshots", isDirectory: true) }

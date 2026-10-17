@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Run Screengrabs' QA smoke test (-KBScreengrabsSmokeTest, #470, #491) on the installed QA
 # candidate: it takes a screenshot of each display and one of an area through Screengrabs' own
-# screencapture path, checks each and that its watcher would list it in ⌘3, then records 2 s each
+# screencapture path, checks each and that ⌘3 would list it, then records 2 s each
 # of the main display, a blank window, and an area. It checks and deletes every file, and writes a
 # structural result (no titles, app names, file names, or paths). On screen: a blank window titled
 # "Keybumps smoke test" and the macOS recording indicator, for about ten seconds, and the

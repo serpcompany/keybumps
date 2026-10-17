@@ -307,65 +307,19 @@ private final class FakeScreenshotReader: ScreenshotDirectoryReading {
     }
 }
 
-@Suite("Screengrabs: the watcher looks again at a screenshot marked after it lands")
+@Suite("Screengrabs: the watcher leaves a hotkey's screenshots to the hotkey")
 @MainActor
-struct ScreenshotWatcherMarkWaitTests {
-    @Test("A file that gets its mark a moment after it appears is listed, once")
-    func markedAMomentLater() {
+struct ScreenshotWatcherSkipTests {
+    @Test("Files a hotkey is writing are never added by the watcher; macOS's own still are")
+    func skipsAHotkeysFiles() {
         let watcher = WatcherHarness()
         defer { watcher.service.stop() }
-        watcher.reader.entries = [watcher.file("display-2.png", marked: false)]
-        #expect(watcher.service.scanForTesting(), "an unmarked new image is looked at again")
-        #expect(watcher.ingested.isEmpty)
-
-        watcher.now += 1
-        watcher.reader.entries = [watcher.file("display-2.png", marked: true)]
-        #expect(watcher.service.scanForTesting(), "the first sighting with the mark records its size")
-        watcher.service.scanForTesting()
-        #expect(watcher.ingested == ["display-2.png"])
-        #expect(!watcher.service.scanForTesting())
-        #expect(watcher.ingested == ["display-2.png"])
-    }
-
-    @Test("A file that never gets the mark isn't listed, and the watcher stops looking after the wait")
-    func neverMarked() {
-        let watcher = WatcherHarness()
-        defer { watcher.service.stop() }
-        let old = watcher.file("before.png", marked: false, created: 500)
-        watcher.reader.entries = [old, watcher.file("photo.png", marked: false)]
-        #expect(watcher.service.scanForTesting())
-
-        watcher.now += ScreenshotToolsService.markWait - 1
-        #expect(watcher.service.scanForTesting())
-        watcher.now += 1
-        #expect(!watcher.service.scanForTesting(), "gives up once the wait is over")
-        watcher.now += 60
-        #expect(!watcher.service.scanForTesting())
-        #expect(watcher.ingested.isEmpty)
-    }
-
-    @Test("Every display's file from one Screen capture is listed, though only the first is marked when seen")
-    func everyDisplayOfOneCapture() {
-        let watcher = WatcherHarness()
-        defer { watcher.service.stop() }
-        let names = ["display-1.png", "display-2.png", "display-3.png"]
-        watcher.reader.entries = [
-            watcher.file(names[0], marked: true),
-            watcher.file(names[1], marked: false),
-            watcher.file(names[2], marked: false)
-        ]
-        #expect(watcher.service.scanForTesting())
-        watcher.now += 0.5
-        #expect(watcher.service.scanForTesting(), "displays 2 and 3 are still waiting for their mark")
-        #expect(watcher.ingested == [names[0]])
-
-        // The capturer marks the files once `screencapture` exits; that isn't a folder change.
-        watcher.now += 0.5
+        let names = ["display-1.png", "display-2.png", "macOS.png"]
+        watcher.service.skip(names.prefix(2).map { watcher.folder.appendingPathComponent($0) })
         watcher.reader.entries = names.map { watcher.file($0, marked: true) }
-        #expect(watcher.service.scanForTesting())
-        watcher.service.scanForTesting()
-        #expect(watcher.ingested == names)
-        #expect(!watcher.service.scanForTesting())
+
+        for _ in 1...3 { watcher.service.scanForTesting() }
+        #expect(watcher.ingested == ["macOS.png"])
     }
 }
 

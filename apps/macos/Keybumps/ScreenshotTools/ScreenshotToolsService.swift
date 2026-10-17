@@ -110,12 +110,6 @@ enum ScreenshotFileFilter {
     static func accepts(_ entry: ScreenshotDirectoryEntry, since start: Date) -> Bool {
         entry.isScreenCapture && hasImageExtension(entry.url) && entry.createdAt >= start
     }
-
-    /// A new image without the mark yet. Keybumps' own capturer marks its files only once
-    /// `screencapture` exits, which isn't a folder change, so the watcher looks again for a while.
-    static func mayStillBeMarked(_ entry: ScreenshotDirectoryEntry, since start: Date) -> Bool {
-        !entry.isScreenCapture && hasImageExtension(entry.url) && entry.createdAt >= start
-    }
 }
 
 /// Adds new screenshot files to Clipboard History and, while "Copy new screenshots to the
@@ -126,9 +120,9 @@ struct ScreenshotClipboardDelivery {
     let clipboard: ClipboardHistoryService
     let copiesToClipboard: () -> Bool
 
-    /// True when the file became a new Clipboard History item. The Screen and Edit hotkey adds
-    /// its files before the watcher sees them, so a file already in Clipboard History (or matching
-    /// the newest item) is neither added nor copied again. `copying: false` never copies.
+    /// True when the file became a new Clipboard History item. A file already in Clipboard History
+    /// (or matching the newest item) is neither added nor copied again, so the watcher never adds
+    /// a hotkey's file a second time. `copying: false` never copies.
     @discardableResult
     func add(_ url: URL, copying: Bool = true) -> Bool {
         guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }) else { return false }
@@ -141,6 +135,34 @@ struct ScreenshotClipboardDelivery {
             clipboard.restore(entry, countsAsCopy: false)
         }
         return true
+    }
+
+    /// Takes a hotkey's screenshots and adds them here once `screencapture` has exited and they're
+    /// marked; the watcher leaves them alone meanwhile, as it can't see the mark land. Screenshot
+    /// Screen and Screenshot Area add only while the watcher runs, as it would have; Screen and
+    /// Edit (`forEditing`) always does, since the editor opens the item. The QA smoke test takes
+    /// its screenshots through this too. Calls `completion` with the files written, main first.
+    func capture(
+        _ mode: ScreenshotCaptureMode,
+        with capturer: ScreenshotCapturer,
+        watcher: ScreenshotToolsService,
+        forEditing: Bool = false,
+        completion: @escaping @MainActor ([URL]) -> Void = { _ in }
+    ) {
+        capturer.capture(mode, willWrite: watcher.skip) { files in
+            if forEditing {
+                _ = addForEditing(files)
+            } else if case .watching = watcher.status {
+                addCapture(files)
+            }
+            completion(files)
+        }
+    }
+
+    /// Adds a Screenshot Screen or Screenshot Area capture: every display's file, the main
+    /// display's last so it's the newest item, and only the main display's is copied.
+    func addCapture(_ files: [URL]) {
+        for file in files.reversed() { add(file, copying: file == files.first) }
     }
 
     /// Adds a Screen and Edit capture without copying (Save copies the edited image, so an
@@ -165,9 +187,6 @@ enum ScreenshotToolsStatus: Equatable {
 @MainActor
 @Observable
 class ScreenshotToolsService {
-    /// How long an unmarked new image is looked at again before the watcher gives up on it.
-    static let markWait: TimeInterval = 5
-
     private(set) var status: ScreenshotToolsStatus = .stopped
 
     @ObservationIgnored private let resolver: ScreenshotLocationResolver
@@ -178,7 +197,8 @@ class ScreenshotToolsService {
     @ObservationIgnored private var startedAt = Date.distantPast
     @ObservationIgnored private var handled: Set<URL> = []
     @ObservationIgnored private var lastSeenSize: [URL: Int] = [:]
-    @ObservationIgnored private var firstSeenUnmarked: [URL: Date] = [:]
+    /// Paths of files a Screengrabs hotkey adds itself (`skip`).
+    @ObservationIgnored private var skipped: Set<String> = []
     @ObservationIgnored private var source: DispatchSourceFileSystemObject?
     @ObservationIgnored private var locationTimer: Timer?
     @ObservationIgnored private var pendingScan: DispatchWorkItem?
@@ -212,9 +232,14 @@ class ScreenshotToolsService {
         status = .stopped
     }
 
-    /// True when the scan scheduled another look.
-    @discardableResult
-    func scanForTesting() -> Bool { scan() }
+    func scanForTesting() { scan() }
+
+    /// Leaves alone the files a Screengrabs hotkey is about to write; the hotkey adds them itself
+    /// once `screencapture` exits (`ScreenshotClipboardDelivery.capture`). Otherwise the watcher
+    /// could add the main display's file before the others are written, and copy it.
+    func skip(_ files: [URL]) {
+        skipped.formUnion(files.map(\.standardizedFileURL.path))
+    }
 
     private func start() {
         let resolved = resolver.resolve()
@@ -224,7 +249,6 @@ class ScreenshotToolsService {
         startedAt = now()
         handled = []
         lastSeenSize = [:]
-        firstSeenUnmarked = [:]
         guard refreshStatusByReading(resolved) else {
             scheduleLocationCheck()
             return
@@ -286,26 +310,19 @@ class ScreenshotToolsService {
     private func scheduleScan(after delay: TimeInterval) {
         pendingScan?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { _ = self?.scan() }
+            MainActor.assumeIsolated { self?.scan() }
         }
         pendingScan = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    @discardableResult
-    private func scan() -> Bool {
+    private func scan() {
         guard case .watching(let folder) = status,
-              let entries = try? reader.entries(in: folder) else { return false }
-        let scannedAt = now()
+              let entries = try? reader.entries(in: folder) else { return }
         var needsRescan = false
-        for entry in entries where !handled.contains(entry.url) {
-            guard ScreenshotFileFilter.accepts(entry, since: startedAt) else {
-                // Look again until it's marked, for `markWait` from first seeing it, then give up.
-                if ScreenshotFileFilter.mayStillBeMarked(entry, since: startedAt) {
-                    let firstSeen = firstSeenUnmarked[entry.url] ?? scannedAt
-                    firstSeenUnmarked[entry.url] = firstSeen
-                    if scannedAt.timeIntervalSince(firstSeen) < Self.markWait { needsRescan = true }
-                }
+        for entry in entries where !handled.contains(entry.url) && ScreenshotFileFilter.accepts(entry, since: startedAt) {
+            guard skipped.remove(entry.url.standardizedFileURL.path) == nil else {
+                handled.insert(entry.url)
                 continue
             }
             // macOS may still be writing; ingest only once the size is stable across two scans.
@@ -316,10 +333,8 @@ class ScreenshotToolsService {
             }
             handled.insert(entry.url)
             lastSeenSize[entry.url] = nil
-            firstSeenUnmarked[entry.url] = nil
             _ = ingest(entry.url)
         }
         if needsRescan { scheduleScan(after: 0.5) }
-        return needsRescan
     }
 }

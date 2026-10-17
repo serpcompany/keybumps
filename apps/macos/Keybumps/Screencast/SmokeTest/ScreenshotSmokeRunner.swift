@@ -115,9 +115,10 @@ enum ScreenshotSmokeChecks {
 /// Takes the smoke test's screenshots through Screengrabs' own path (#491), with no mouse or
 /// keyboard input: `ScreenshotCapturer` with `screencapture`, as Screenshot Screen takes one file of
 /// each display, then an area in the middle of the main display (`-R`, since a selection needs a
-/// person). Each file is checked (a PNG of the expected size, marked as a screen capture), then
-/// handed to a watcher (`ScreenshotToolsService`) and a Clipboard History of the smoke test's own,
-/// and has to be one ⌘3 would list. Then everything is deleted.
+/// person). The hotkey's own path adds the files to a Clipboard History of the smoke test's own
+/// (`ScreenshotClipboardDelivery.capture`, with a watcher, `ScreenshotToolsService`, that leaves
+/// them alone). Each file is checked (a PNG of the expected size, marked as a screen capture) and
+/// has to be one ⌘3 would list. Then everything is deleted.
 ///
 /// Files go only in `environment.screenshotsFolder`, the smoke test's own, never the screenshot
 /// folder or the Desktop. The Clipboard History keeps its items in `environment.clipboardFolder`,
@@ -185,7 +186,7 @@ final class ScreenshotSmokeRunner {
             ingest: { delivery.add($0, copying: false) }
         )
         for kind in ScreenshotSmokeKind.allCases {
-            await capture(kind, watcher: watcher, clipboard: clipboard)
+            await capture(kind, watcher: watcher, delivery: delivery)
         }
         watcher.stop()
         pasteboard.releaseGlobally()
@@ -210,7 +211,8 @@ final class ScreenshotSmokeRunner {
 
     // MARK: One capture
 
-    private func capture(_ kind: ScreenshotSmokeKind, watcher: ScreenshotToolsService, clipboard: ClipboardHistoryService) async {
+    private func capture(_ kind: ScreenshotSmokeKind, watcher: ScreenshotToolsService, delivery: ScreenshotClipboardDelivery) async {
+        let clipboard = delivery.clipboard
         let lines = screenshots.indices.filter { screenshots[$0].kind == kind }
         guard !lines.isEmpty else { return }
         let folder = environment.screenshotsFolder
@@ -247,7 +249,9 @@ final class ScreenshotSmokeRunner {
         )
         let written: [URL]
         do {
-            written = try await ScreencastSmokeRunner.within(configuration.captureTimeout) { await Self.take(mode, with: capturer) }
+            written = try await ScreencastSmokeRunner.within(configuration.captureTimeout) {
+                await Self.take(mode, with: capturer, delivery: delivery, watcher: watcher)
+            }
         } catch {
             fail(lines, error)
             return
@@ -271,10 +275,16 @@ final class ScreenshotSmokeRunner {
         }
     }
 
-    /// The capturer's files, once `screencapture` has finished and they're marked.
-    private static func take(_ mode: ScreenshotCaptureMode, with capturer: ScreenshotCapturer) async -> [URL] {
+    /// The capturer's files, once `screencapture` has finished, they're marked, and the hotkey's
+    /// own path has added them to the Clipboard History.
+    private static func take(
+        _ mode: ScreenshotCaptureMode,
+        with capturer: ScreenshotCapturer,
+        delivery: ScreenshotClipboardDelivery,
+        watcher: ScreenshotToolsService
+    ) async -> [URL] {
         await withCheckedContinuation { continuation in
-            capturer.capture(mode) { continuation.resume(returning: $0) }
+            delivery.capture(mode, with: capturer, watcher: watcher) { continuation.resume(returning: $0) }
         }
     }
 
@@ -328,8 +338,8 @@ final class ScreenshotSmokeRunner {
         }
     }
 
-    /// Waits until the watcher has added every checked file to the Clipboard History, as ⌘3 would
-    /// list it, noting how long each took; one it hasn't in time fails as `notListed`.
+    /// Waits until every checked file is in the Clipboard History, as ⌘3 would list it, noting
+    /// how long each took; one that isn't in time fails as `notListed`.
     private func waitUntilListed(_ lines: [Int], files: [URL], clipboard: ClipboardHistoryService, since captured: ContinuousClock.Instant) async {
         let waiting = lines.indices.filter { screenshots[lines[$0]].stage == .checked }
         let deadline = captured + .seconds(configuration.listTimeout)
