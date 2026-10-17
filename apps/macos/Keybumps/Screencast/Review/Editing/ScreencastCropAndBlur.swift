@@ -3,7 +3,7 @@ import Foundation
 
 /// Crop's shapes in the bar (#517, decision 3), after Shotnix's `VideoCropAspect` (MIT, see
 /// LICENSE.shotnix): free, or a width-to-height ratio in the video's pixels.
-enum ScreencastCropAspect: String, CaseIterable, Identifiable {
+enum ScreencastCropAspect: String, CaseIterable, Identifiable, Sendable {
     case free
     case widescreen
     case square
@@ -182,13 +182,16 @@ extension ScreencastRecordingEdits {
     /// An id no blur on any display has.
     var nextBlurID: Int { (displays.flatMap(\.blurs).map(\.id).max() ?? 0) + 1 }
 
-    /// `display`'s crop: nil, or the whole frame, keeps all of it. Returns whether it's a display's.
+    /// `display`'s crop: nil, or the whole frame, keeps all of it. Its shape stays as it was unless
+    /// `aspect` is given, and is Free again once the crop is reset (nil). Returns whether it's a
+    /// display's.
     @discardableResult
-    mutating func setCrop(_ rect: CGRect?, display: Int) -> Bool {
+    mutating func setCrop(_ rect: CGRect?, aspect: ScreencastCropAspect? = nil, display: Int) -> Bool {
         guard displays.indices.contains(display) else { return false }
         let inside = rect.flatMap(ScreencastFrameRect.inside)
         let isWhole = inside.map { $0.insetBy(dx: -0.0001, dy: -0.0001).contains(ScreencastFrameRect.whole) } ?? true
         displays[display].crop = isWhole ? nil : inside
+        if let aspect = aspect ?? (rect == nil ? .free : nil) { displays[display].cropAspect = aspect }
         return true
     }
 

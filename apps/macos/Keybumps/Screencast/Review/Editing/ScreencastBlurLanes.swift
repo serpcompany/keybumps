@@ -105,6 +105,9 @@ private struct ScreencastBlurBar: View {
         .accessibilityValue("\(ScreencastEditTime.format(blur.time.start)) to \(ScreencastEditTime.format(blur.time.end))")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction { model.selectBlur(blur.id) }
+        // A drag cut short by Trim, or by the bar going, never says it ended.
+        .onChange(of: isEditable) { origin = nil }
+        .onDisappear { model.endDrag() }
     }
 
     /// An end of the bar: a grip while picked, and a drag there moves that end.
@@ -122,10 +125,12 @@ private struct ScreencastBlurBar: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
+                    guard isEditable else { return }
                     let origin = origin ?? blur.time
                     if self.origin == nil {
                         self.origin = origin
                         model.selectBlur(blur.id)
+                        model.beginDrag()
                     }
                     let from = edge == .start ? origin.start : origin.end
                     let moved = Double(value.translation.width / geometry.trackWidth) * geometry.duration

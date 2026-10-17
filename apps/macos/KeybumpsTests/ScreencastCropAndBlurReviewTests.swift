@@ -90,11 +90,43 @@ struct ScreencastCropAndBlurReviewTests {
         #expect(cropped)
     }
 
+    @Test("The player loads again only when Crop changes what plays: not for Crop picked or put down without a crop")
+    func cropToolKeepsThePlayer() async throws {
+        defer { fixture.tearDown() }
+        let file = fixture.folder.url.appendingPathComponent(ScreencastCaptureFolder.videoName(index: 0))
+        try await EditTestMovie.write(to: file, seconds: 1, picture: .movingBar, sounds: false)
+        let video = ScreencastVideo(
+            file: file, mixdown: nil, pixelWidth: EditTestMovie.width, pixelHeight: EditTestMovie.height, audioTracks: [], duration: 1
+        )
+        var edits = ScreencastRecordingEdits(duration: 1, displayCount: 2)
+        let playback = ScreencastReviewPlayback()
+        defer { playback.stop() }
+        playback.show(video, display: 0, edits: edits)
+        let item = try #require(playback.view.player?.currentItem)
+        playback.show(video, display: 0, edits: edits, crops: false)
+        #expect(playback.view.player?.currentItem === item, "no edits")
+
+        // With blurs, or a crop elsewhere, or only Crop's shape changed, the same plays.
+        edits.addBlur(CGRect(x: 0, y: 0, width: 0.5, height: 0.5), strength: .high, display: 0)
+        edits.setCrop(CGRect(x: 0.5, y: 0, width: 0.5, height: 1), display: 1)
+        let playing = ScreencastReviewPlayback.played(display: 0, of: edits)
+        let placing = ScreencastReviewPlayback.played(display: 0, of: edits, crops: false)
+        #expect(playing != nil && playing == placing)
+
+        edits.setCrop(CGRect(x: 0.5, y: 0, width: 0.5, height: 1), display: 0)
+        let cropped = ScreencastReviewPlayback.played(display: 0, of: edits)
+        #expect(cropped != playing, "a crop plays")
+        #expect(ScreencastReviewPlayback.played(display: 0, of: edits, crops: false) == placing)
+        edits.setCrop(CGRect(x: 0.5, y: 0, width: 0.5, height: 1), aspect: .square, display: 0)
+        #expect(ScreencastReviewPlayback.played(display: 0, of: edits) == cropped, "only the shape")
+    }
+
     @Test("A crop dragged by its handles is one edit, made when the drag ends")
     func cropDrag() throws {
         defer { fixture.tearDown() }
         let model = fixture.model(try fixture.video())
         model.pick(.crop)
+        model.beginDrag()
         model.dragCrop(to: CGRect(x: 0.25, y: 0, width: 0.75, height: 1))
         model.dragCrop(to: CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
         #expect(!model.canUndo, "not until the drag ends")
@@ -102,6 +134,70 @@ struct ScreencastCropAndBlurReviewTests {
         #expect(model.crop == CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
         model.undo()
         #expect(!model.hasCrop)
+    }
+
+    @Test("Aspect is each display's, kept with its crop: undo, redo, and Reset Crop take it along")
+    func cropAspectGoesWithTheCrop() throws {
+        defer { fixture.tearDown() }
+        let model = fixture.model(try fixture.video(displays: 2))
+        model.pick(.crop)
+        model.setCropAspect(.square)
+        model.selectedDisplay = 1
+        #expect(model.cropAspect == .free, "the second display's")
+        model.selectedDisplay = 0
+        #expect(model.cropAspect == .square)
+
+        model.undo()
+        #expect(model.cropAspect == .free, "undo")
+        model.redo()
+        #expect(model.cropAspect == .square, "redo")
+        model.resetCrop()
+        #expect(model.cropAspect == .free, "Reset Crop")
+        model.undo()
+        #expect(model.cropAspect == .square)
+
+        // A handle pressed without moving finds the crop in the shape picked.
+        let ratio = try #require(ScreencastFrameRect.ratio(of: model.crop, pixelSize: model.pixelSize))
+        #expect(abs(ratio - 1) < 0.01)
+        model.beginDrag()
+        model.dragCrop(to: CGRect(x: 0.3, y: 0, width: 0.5625, height: 1))
+        model.endDrag()
+        #expect(model.cropAspect == .square, "a drag keeps it")
+        model.setCropAspect(.free)
+        #expect(model.cropAspect == .free && model.hasCrop)
+        model.undo()
+        #expect(model.cropAspect == .square)
+    }
+
+    @Test("A crop drag cut short by Escape is one edit; the rest of the press changes nothing; undo goes back in order")
+    func cropDragCutShort() throws {
+        defer { fixture.tearDown() }
+        let model = fixture.model(try fixture.video())
+        let half = CGRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        model.pick(.crop)
+        model.beginDrag()
+        model.dragCrop(to: half)
+        model.putToolDown()
+        model.dragCrop(to: CGRect(x: 0.25, y: 0, width: 0.75, height: 1))
+        #expect(model.crop == half, "the press goes on, but the drag ended")
+        model.endDrag()
+
+        model.pick(.blur)
+        draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 320, y: 180))
+        let id = try #require(model.selectedBlurID)
+        let drawn = model.selectedBlur?.rect
+        model.beginDrag()
+        model.dragBlur(id, to: CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5))
+        model.endDrag()
+
+        model.undo()
+        #expect(model.selectedBlur?.rect == drawn, "the blur's drag")
+        model.undo()
+        #expect(model.blurs.isEmpty, "the blur drawn")
+        #expect(model.crop == half)
+        model.undo()
+        #expect(!model.hasCrop, "the crop's drag")
+        #expect(!model.canUndo)
     }
 
     // MARK: Blur
@@ -155,8 +251,10 @@ struct ScreencastCropAndBlurReviewTests {
         draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 320, y: 180))
         let id = try #require(model.selectedBlurID)
 
+        model.beginDrag()
         model.dragBlur(id, to: CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5))
         model.endDrag()
+        model.beginDrag()
         model.dragBlurTime(id, edge: .start, to: 1)
         model.dragBlurTime(id, edge: .end, to: 9)
         model.endDrag()
@@ -170,6 +268,62 @@ struct ScreencastCropAndBlurReviewTests {
         #expect(model.selectedBlur?.rect == CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
     }
 
+    @Test("A blur drag cut short by Trim's key, or by Tab picking another blur, is one edit, and the rest of it changes nothing")
+    func blurDragCutShort() throws {
+        defer { fixture.tearDown() }
+        let model = fixture.model(try fixture.video())
+        model.pick(.blur)
+        draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 100))
+        draw(model, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 300, y: 300))
+        let id = try #require(model.selectedBlurID)
+
+        model.beginDrag()
+        model.dragBlurTime(id, edge: .start, to: 1)
+        model.pick(.trim)
+        model.dragBlurTime(id, edge: .start, to: 2)
+        model.endDrag()
+        #expect(model.selectedBlur?.time.start == 1)
+
+        model.pick(.blur)
+        let rect = model.selectedBlur?.rect
+        model.beginDrag()
+        model.dragBlur(id, to: CGRect(x: 0.5, y: 0.5, width: 0.2, height: 0.2))
+        model.selectNextBlur()
+        let other = try #require(model.selectedBlurID)
+        model.dragBlur(other, to: CGRect(x: 0.5, y: 0.5, width: 0.2, height: 0.2))
+        model.endDrag()
+        let first = model.blurs.first { $0.id == other }
+        #expect(first?.rect != CGRect(x: 0.5, y: 0.5, width: 0.2, height: 0.2), "the other blur stays")
+
+        model.undo()
+        let undone = model.blurs.first { $0.id == id }
+        #expect(undone?.rect == rect, "the move")
+        model.undo()
+        let timeUndone = model.blurs.first { $0.id == id }
+        #expect(timeUndone?.time.start == 0, "the bar's drag")
+    }
+
+    @Test("Strength shows the picked blur's strength after undo, redo, and a display switch")
+    func strengthFollowsThePickedBlur() throws {
+        defer { fixture.tearDown() }
+        let model = fixture.model(try fixture.video(displays: 2))
+        model.pick(.blur)
+        draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 100))
+        model.setBlurStrength(.low)
+        model.undo()
+        #expect(model.selectedBlur?.strength == .high)
+        #expect(model.blurStrength == .high, "undo")
+        model.redo()
+        #expect(model.blurStrength == .low, "redo")
+
+        model.selectedDisplay = 1
+        #expect(model.selectedBlur == nil)
+        model.setBlurStrength(.high)
+        #expect(model.blurStrength == .high, "the next one drawn's")
+        model.selectedDisplay = 0
+        #expect(model.blurStrength == .low, "Blur 1 is still picked")
+    }
+
     @Test("Each display has its own crop and blurs, picked with the display picker")
     func severalDisplays() throws {
         defer { fixture.tearDown() }
@@ -178,6 +332,7 @@ struct ScreencastCropAndBlurReviewTests {
         model.setCropAspect(.square)
         model.selectedDisplay = 1
         #expect(!model.hasCrop, "the second display isn't cropped")
+        #expect(model.cropAspect == .free)
         model.pick(.blur)
         draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 100))
         #expect(model.blurs.count == 1)
@@ -319,6 +474,7 @@ struct ScreencastCropAndBlurReviewTests {
         model.setBlurStrength(.medium)
         draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 160, y: 360))
         let id = try #require(model.selectedBlurID)
+        model.beginDrag()
         model.dragBlurTime(id, edge: .start, to: 1.5)
         model.endDrag()
         let made = model.edits

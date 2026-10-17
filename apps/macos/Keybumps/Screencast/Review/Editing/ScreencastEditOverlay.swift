@@ -95,6 +95,8 @@ struct ScreencastCropOverlay: View {
         .accessibilityLabel("Crop")
         .accessibilityValue(sizeText)
         .accessibilityIdentifier(ScreencastReviewID.cropOverlay)
+        // Escape or a tool's key mid-drag takes the overlay away, and the drag never says it ended.
+        .onDisappear { end() }
     }
 
     /// "2688 × 1512 px": the crop's size in the video's pixels.
@@ -128,6 +130,8 @@ struct ScreencastCropOverlay: View {
         DragGesture(minimumDistance: 0, coordinateSpace: .named(ScreencastEditOverlay.space))
             .onChanged { value in
                 let origin = start()
+                // A press alone changes nothing.
+                guard value.translation != .zero else { return }
                 let keepsShape = NSEvent.modifierFlags.contains(.shift)
                 let ratio = model.cropAspect.ratio ?? (keepsShape ? ScreencastFrameRect.ratio(of: origin, pixelSize: model.pixelSize) : nil)
                 model.dragCrop(to: ScreencastFrameRect.resized(
@@ -138,10 +142,12 @@ struct ScreencastCropOverlay: View {
             .onEnded { _ in end() }
     }
 
+    /// The drag's start, once: its changes are one edit, and none once it's cut short.
     private func start() -> CGRect {
         if let origin { return origin }
         playback?.pause()
         origin = model.crop
+        model.beginDrag()
         return model.crop
     }
 
@@ -258,6 +264,8 @@ struct ScreencastBlurOverlay: View {
         .accessibilityLabel("Blurs")
         .accessibilityValue(model.blurs.isEmpty ? "None; drag over the video to add one" : "\(model.blurs.count)")
         .accessibilityIdentifier(ScreencastReviewID.blurOverlay)
+        // Escape or a tool's key mid-drag takes the overlay away, and the drag never says it ended.
+        .onDisappear { model.endDrag() }
     }
 
     private var pressGesture: some Gesture {
@@ -299,6 +307,7 @@ struct ScreencastBlurOverlay: View {
         playback?.pause()
         if let blur = blur(at: point) {
             model.selectBlur(blur.id)
+            model.beginDrag()
             press = .move(id: blur.id, from: blur.rect)
         } else {
             press = .draw(from: geometry.framePoint(point))
@@ -322,6 +331,7 @@ struct ScreencastBlurOverlay: View {
                 if resizeOrigin == nil {
                     playback?.pause()
                     resizeOrigin = blur.rect
+                    model.beginDrag()
                 }
                 guard let origin = resizeOrigin else { return }
                 model.dragBlur(blur.id, to: ScreencastFrameRect.resized(

@@ -571,10 +571,9 @@ final class ScreencastReviewPlayback {
 
     @ObservationIgnored private let player = AVPlayer()
     @ObservationIgnored private var shown: URL?
-    /// The edits the shown item plays, and the parts of the recording it plays.
+    /// What the shown item plays of the edits (`played`), and the parts of the recording it plays.
     @ObservationIgnored private var shownEdits: ScreencastRecordingEdits?
     @ObservationIgnored private var shownDisplay = 0
-    @ObservationIgnored private var shownCrops = true
     @ObservationIgnored private var kept: [ScreencastTimeRange] = []
     /// Counts each `show`, so an edited item made too late for the latest is dropped.
     @ObservationIgnored private var generation = 0
@@ -600,16 +599,16 @@ final class ScreencastReviewPlayback {
 
     /// Shows `display`'s `video` with `edits`, keeping the place in the recording; the recording as
     /// it was when they change nothing. `crops` false shows the whole frame, for placing the crop.
+    /// It loads again only when what plays changes: not for Crop picked or put down without a crop.
     func show(_ video: ScreencastVideo, display: Int, edits: ScreencastRecordingEdits?, crops: Bool = true) {
         let url = video.forSharing
-        let edits = edits.flatMap { Self.changes(display: display, of: $0, crops: crops) ? $0 : nil }
-        guard shown != url || player.currentItem == nil || shownEdits != edits || shownDisplay != display || shownCrops != crops else { return }
+        let edits = edits.flatMap { Self.played(display: display, of: $0, crops: crops) }
+        guard shown != url || player.currentItem == nil || shownEdits != edits || shownDisplay != display else { return }
         let isNewVideo = shown != url
         let place = recordingTime
         shown = url
         shownEdits = edits
         shownDisplay = display
-        shownCrops = crops
         generation += 1
         previewGenerator = nil
         blank = nil
@@ -639,6 +638,21 @@ final class ScreencastReviewPlayback {
         kept = []
         player.replaceCurrentItem(with: nil)
         blank = reason
+    }
+
+    /// What `display`'s video plays of `edits`: the trim and cuts, and its blurs, and its crop if
+    /// `crops`, without what plays the same (the other displays' edits, Crop's shape); nil when
+    /// that's the recording as it was.
+    static func played(display: Int, of edits: ScreencastRecordingEdits, crops: Bool = true) -> ScreencastRecordingEdits? {
+        guard changes(display: display, of: edits, crops: crops) else { return nil }
+        var played = edits
+        for index in played.displays.indices {
+            let shown = played.displays[index]
+            played.displays[index] = index == display
+                ? ScreencastDisplayEdits(crop: crops ? shown.crop : nil, blurs: shown.blurs)
+                : ScreencastDisplayEdits()
+        }
+        return played
     }
 
     /// Whether `edits` change what `display`'s video plays; its crop only if `crops`.
