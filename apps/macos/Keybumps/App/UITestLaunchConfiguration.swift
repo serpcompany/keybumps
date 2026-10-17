@@ -64,7 +64,7 @@ struct UITestLaunchConfiguration: Equatable {
     /// that aren't a `Capability`, such as the retired `screencast`, are ignored.
     private(set) var enabledCapabilities: Set<Capability> = []
     /// Opens ScreenGrabs' recording picker once, at launch, as Record Screen does (ScreenGrabs, which
-    /// ships on, must be on).
+    /// ships on, must be on). Record counts down 10 seconds.
     private(set) var opensScreencastPicker = false
     /// Starts a recording of the first made-up screen at launch, with no countdown, so
     /// the control bar shows (ScreenGrabs must be on). It captures nothing.

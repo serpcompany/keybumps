@@ -381,8 +381,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
         XCTAssertEqual(countdown.frame.midX, frame.minX + 260, accuracy: 2)
         XCTAssertEqual(countdown.frame.midY, frame.minY + 150, accuracy: 2)
-        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+        escapeThenCancel(countdown)
     }
 
     func testScreencastPickerRecordsAWindowDoubleClicked() throws {
@@ -403,8 +402,18 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
         XCTAssertEqual(countdown.frame.midX, frame.minX + 380, accuracy: 2)
         XCTAssertEqual(countdown.frame.midY, frame.minY + 210, accuracy: 2)
+        escapeThenCancel(countdown)
+    }
+
+    /// In the picker's 10-second countdown, Escape does nothing (#518); its Cancel closes it, and
+    /// nothing records, even once the countdown would have run out.
+    private func escapeThenCancel(_ countdown: XCUIElement) {
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertFalse(countdown.waitForNonExistence(timeout: 1), "Escape leaves the countdown")
+        element("screencast.countdown.cancel").click()
         XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+        let bar = app.dialogs.matching(identifier: "screencastControlBar").firstMatch
+        XCTAssertFalse(bar.waitForExistence(timeout: 10), "Nothing records")
     }
 
     func testEscapeClosesTheScreencastPicker() {
@@ -498,6 +507,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.general").exists, "Settings kept its window")
 
         let stop = element("screencast.bar.stop")
+        XCTAssertTrue(stop.exists, "and the recording runs on (#518)")
         stop.click()
         XCTAssertTrue(stop.waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.dialogs.matching(identifier: "screencastDrawing").firstMatch.waitForNonExistence(timeout: 5), "The drawing goes with the recording")
@@ -923,7 +933,7 @@ final class SmokeUITests: XCTestCase {
     /// Starts a recording of a made-up screen, as Record would.
     private func launchScreencastRecording() {
         launch(permissions: "granted", ["-KBUITestScreencastRecording", "YES"])
-        // The bar shows as the recording starts, its buttons waiting until it records.
+        // The bar shows as the recording starts, its buttons waiting until it records, except Discard.
         let pause = element("screencast.bar.pause")
         XCTAssertTrue(pause.waitForExistence(timeout: 20))
         let enabled = expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: pause)

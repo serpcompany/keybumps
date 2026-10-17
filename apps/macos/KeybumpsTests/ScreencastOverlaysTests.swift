@@ -521,6 +521,29 @@ struct ScreencastOverlaysTests {
         #expect(!bar.isDrawing)
     }
 
+    @available(macOS 15, *)
+    @Test("Escape while drawing stops drawing, and the recording runs on")
+    func escapeWhileDrawing() async throws {
+        let flow = ScreencastFlow()
+        defer { flow.captures.remove() }
+        try await flow.record()
+        let overlays = makeOverlays()
+        let placement = ScreencastControlBarPlacement(defaults: InMemoryDefaults())
+        let bar = ScreencastControlBar(recording: flow.controller, placement: placement, displays: { [] }, ordersPanelIn: false)
+        overlays.show(on: [1])
+        overlays.connect(to: bar)
+        bar.model.toggleDrawing()
+        #expect(overlays.isDrawing)
+        keys.press(.end)
+        flow.overlays.pressEscape()
+        flow.overlays.pressLateEscape()
+        #expect(!overlays.isDrawing && !bar.isDrawing)
+        #expect(flow.controller.phase == .recording)
+        #expect(flow.controller.recorder.state == .recording)
+        overlays.hide()
+        await flow.controller.discard()
+    }
+
     @Test("While drawing, the tools sit just above the control bar")
     func toolsAboveTheBar() {
         let overlays = makeOverlays()

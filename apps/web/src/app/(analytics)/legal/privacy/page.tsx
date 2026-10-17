@@ -1,13 +1,13 @@
 import { PageShell } from '@/components/page-shell'
 import { pageMetadata } from '@/lib/metadata'
-import { SUPPORT_EMAIL } from '@/lib/site'
+import { PRIVACY_UPDATED, SUPPORT_EMAIL } from '@/lib/site'
 
 export const metadata = pageMetadata('/legal/privacy/')
 
 export default function PrivacyPage() {
   const email = <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
   return (
-    <PageShell title="Privacy Policy" showUpdated>
+    <PageShell title="Privacy Policy" showUpdated updated={PRIVACY_UPDATED}>
       <p>
         This policy explains how SERP (“we”) handles information in the Keybumps macOS app and on
         keybumps.app.
@@ -29,8 +29,9 @@ export default function PrivacyPage() {
           You can delete items at any time.
         </li>
         <li>
-          <strong>Screenshots</strong> are saved where macOS or Keybumps saves them, and edited
-          copies are saved beside the original.
+          <strong>ScreenGrabs</strong> saves screenshots and screen recordings where macOS or
+          Keybumps saves them, and edited copies of screenshots beside the original. A recording can
+          include sound from your microphone and your Mac.
         </li>
         <li>
           <strong>Dictation</strong> records audio and transcribes it on your Mac. Recordings and

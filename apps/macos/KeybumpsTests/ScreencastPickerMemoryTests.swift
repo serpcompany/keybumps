@@ -77,9 +77,9 @@ struct ScreencastPickerMemoryTests {
         return picker
     }
 
-    /// Record, then Escape during the countdown, so nothing records. What Record saved stays: that
-    /// Escape cancels the recording, not the choices Record took (`escapeSavesNothing` covers
-    /// Escape in the picker).
+    /// Record, then the countdown's Cancel, so nothing records. What Record saved stays: Cancel
+    /// ends the recording, not the choices Record took (`escapeSavesNothing` covers Escape in the
+    /// picker; since #518 Escape does nothing during the countdown).
     @available(macOS 15, *)
     private func record(_ launch: Launch) throws {
         let controller = try #require(launch.module.controller)
