@@ -60,7 +60,8 @@ protocol ScreencastOverlayPresenting: AnyObject {
     /// leave it out because it's never registered as an overlay.
     func showAreaHighlight(_ area: ScreencastPickedArea)
     func closeAreaHighlight()
-    /// Runs `handler` on Escape, in Keybumps or another app, until `stopWatchingEscape()`.
+    /// Runs `handler` on Escape, in Keybumps or another app, until `stopWatchingEscape()`. The
+    /// controller watches only while the picker is open.
     func watchEscape(_ handler: @escaping () -> Void)
     func stopWatchingEscape()
     /// A short message, such as why a capture couldn't start.
@@ -104,8 +105,9 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 /// - **#450, the review panel,** is `onCaptureFinished`, which gets every saved recording.
 ///
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
-/// whatever order they're added in; `onPhaseChange` reports it too. Escape cancels while picking,
-/// counting down, or starting; once recording, only `discard()` throws it away.
+/// whatever order they're added in; `onPhaseChange` reports it too. Escape closes the picker, and
+/// does nothing once Record is pressed (#518): not in the countdown, while starting, recording, or
+/// paused. Only `discard()`, the control bar's Discard, which asks first, throws a recording away.
 ///
 /// A recording that ends on its own (macOS stopped it, its display went away, the disk filled)
 /// leaves `.recording` for `.finishing` as soon as the recorder starts saving what it has, and its
@@ -332,7 +334,7 @@ final class ScreencastController {
         choice = nil
         opensFinishedCaptures = true
         phase = .picking
-        presenter.watchEscape { [weak self] in self?.cancel() }
+        presenter.watchEscape { [weak self] in self?.escapePressed() }
         watchScreens()
 
         // The screen is read before the picker covers it, so an alert macOS shows for the read
@@ -417,18 +419,28 @@ final class ScreencastController {
         windowsLoad?.cancel()
         stopWatchingScreens()
         presenter.closePicker()
+        // Escape does nothing from here on; the countdown stops only from its Cancel.
+        presenter.stopWatchingEscape()
         picker = nil
         self.choice = choice
         logger.info("screencast picker confirmed target=\(choice.target.kind, privacy: .public)")
         let generation = generation
         if let area = choice.area { presenter.showAreaHighlight(area) }
-        // Entered now, so Escape before the countdown's first second still cancels it.
+        // Entered now, so a cancel before the countdown's first second still stops it.
         phase = settings.countdownSeconds > 0 ? .countingDown(remaining: settings.countdownSeconds) : .starting
         flow = Task { [weak self] in await self?.countDownAndRecord(choice, settings: settings, generation: generation) }
     }
 
-    /// Escape: closes the picker, stops the countdown, or cancels a start, and leaves nothing
-    /// behind. Does nothing once recording; `discard()` throws a recording away.
+    /// Escape, heard only while the picker is open: closes it. Never a countdown, a start, or a
+    /// recording, even if a key the presenter heard arrives late.
+    private func escapePressed() {
+        guard phase == .picking else { return }
+        cancel()
+    }
+
+    /// The picker's close button or Escape, the countdown's Cancel, or `shutDown()`: closes the
+    /// picker, stops the countdown, or cancels a start, and leaves nothing behind. Does nothing
+    /// once recording; `discard()` throws a recording away.
     func cancel() {
         switch phase {
         case .picking:
@@ -489,7 +501,6 @@ final class ScreencastController {
             return
         }
         guard generation == self.generation else { return }
-        presenter.stopWatchingEscape()
         phase = .recording
     }
 

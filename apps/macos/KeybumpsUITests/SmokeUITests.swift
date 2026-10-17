@@ -498,6 +498,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.general").exists, "Settings kept its window")
 
         let stop = element("screencast.bar.stop")
+        XCTAssertTrue(stop.exists, "and the recording runs on (#518)")
         stop.click()
         XCTAssertTrue(stop.waitForNonExistence(timeout: 10))
         XCTAssertTrue(app.dialogs.matching(identifier: "screencastDrawing").firstMatch.waitForNonExistence(timeout: 5), "The drawing goes with the recording")

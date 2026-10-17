@@ -287,7 +287,7 @@ struct ScreencastCountdownView: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.85))
-                .help("Cancel (Esc)")
+                .help("Cancel")
                 .accessibilityIdentifier("screencast.countdown.cancel")
         }
         .foregroundStyle(.white)

@@ -10,7 +10,8 @@ import SwiftUI
 /// and `CaptureCountdownPresenter` (CC0-1.0, see LICENSE.screendrop) and BetterCapture's
 /// `AreaSelectionOverlay` (MIT, see LICENSE.bettercapture): one panel per screen at the screen
 /// saver level that can take the keys, dimmed outside the area, with its size in pixels; a
-/// click-through highlight; and a countdown that Escape, here or in any app, cancels.
+/// click-through highlight; and a countdown that its Cancel stops. Escape closes the picker only
+/// (#518).
 @available(macOS 15, *)
 @MainActor
 final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
@@ -117,8 +118,6 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
             panel.orderFrontRegardless()
             countdownPanels.append(panel)
         }
-        // So Escape reaches Keybumps even without the global monitor.
-        countdownPanels.first?.makeKey()
     }
 
     func closeCountdown() {
@@ -169,8 +168,8 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
         }) {
             escapeMonitors.append(local)
         }
-        // Another app has the keys during the countdown and while recording starts. This hears
-        // Escape there while Keybumps has Accessibility; the countdown's Cancel works either way.
+        // Another app may have the keys while the picker is open. This hears Escape there while
+        // Keybumps has Accessibility; the picker's close button works either way.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             guard event.keyCode == 53 else { return }
             Task { @MainActor in self?.escapeHandler?() }
