@@ -61,11 +61,12 @@ extension CapabilityDescriptor {
 
 /// Owns ScreenGrabs: the screenshot watcher and the Screenshot Editor, which run only while Clipboard
 /// History, its dependency, is enabled, and contribute the edit action to Clipboard tab image rows;
-/// and its recording (`recording`), which doesn't need Clipboard History and runs only where
-/// `PluginCompatibility.supportsRecording`.
+/// the ScreenGrabs tab's rows (`ScreengrabsPaletteContent`); and its recording (`recording`), which
+/// doesn't need Clipboard History and runs only where `PluginCompatibility.supportsRecording`.
 @MainActor
 final class ScreenshotToolsModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screenshotTools
+    let paletteContent: (any CapabilityPaletteContent)?
     static let captureShortcuts: [(shortcut: CapabilityShortcut, mode: ScreenshotCaptureMode)] = [
         (.screenshotScreen, .screens),
         (.screenshotScreenAndEdit, .screens),
@@ -92,6 +93,7 @@ final class ScreenshotToolsModule: CapabilityModule {
         service: ScreenshotToolsService,
         palette: CommandPaletteController,
         clipboard: ClipboardHistoryService,
+        preferences: AppPreferences,
         delivery: ScreenshotClipboardDelivery,
         capturer: ScreenshotCapturer,
         systemShortcuts: SystemScreenshotShortcutTakeover,
@@ -108,6 +110,11 @@ final class ScreenshotToolsModule: CapabilityModule {
         self.systemShortcuts = systemShortcuts
         self.permissions = permissions
         self.recording = recording
+        paletteContent = ScreengrabsPaletteContent(
+            clipboard: clipboard,
+            preferences: preferences,
+            filter: { [weak palette] in palette?.state.filter }
+        )
         editor = ScreenshotEditorPresenter(
             fallbackFolder: editorFallbackFolder,
             editingChanged: { isEditing in

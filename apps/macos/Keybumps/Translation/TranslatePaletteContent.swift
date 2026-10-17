@@ -429,7 +429,7 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
     /// search field.
     var commandKeys: Set<String> { ["t"] }
 
-    func handleCommandKey(_ characters: String, query: String) {
+    func handleCommandKey(_ characters: String, row: Int, query: String, palette: PaletteContentActions) {
         if characters == "t" { swapLanguages(query: query) }
     }
 
