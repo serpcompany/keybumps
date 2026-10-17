@@ -240,14 +240,49 @@ struct ScreencastTests {
         let defaults = Self.knownWithoutRecordScreen([:])
         let preferences = AppPreferences(defaults: defaults)
         #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
-        #expect(defaults.bool(forKey: "didOfferRecordScreenShortcut"))
+        #expect(defaults.bool(forKey: "didGiveRecordScreenShortcut"))
         #expect(AppPreferences(defaults: defaults).capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Saved")
 
         preferences.setCapabilityShortcut(nil, for: .screencast)
         #expect(AppPreferences(defaults: defaults).capabilityShortcut(for: .screencast) == nil, "It never runs twice")
+
+        let new = InMemoryDefaults()
+        #expect(AppPreferences(defaults: new).capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
+        #expect(new.data(forKey: "capabilityShortcuts") == nil, "A new install already has it, so nothing is saved")
     }
 
-    @Test("The step leaves Record Screen alone when ⇧⌘5 is another shortcut's, or Record Screen has its own")
+    @Test("Record Screen with another shortcut gets ⇧⌘5 in its place, and a shortcut set later stays (#513)")
+    func oneTimeStepReplaces() {
+        let defaults = Self.knownWithoutRecordScreen(["screencast": Self.recordScreen])
+        let preferences = AppPreferences(defaults: defaults)
+        #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
+        let oldKeysFree = !preferences.capabilityShortcuts.values.contains { $0.usesSameKeys(as: Self.recordScreen) }
+        #expect(oldKeysFree, "Its old shortcut is replaced, not moved")
+        #expect(defaults.bool(forKey: "didGiveRecordScreenShortcut"))
+
+        preferences.setCapabilityShortcut(Self.recordScreen, for: .screencast)
+        let next = AppPreferences(defaults: defaults)
+        #expect(next.capabilityShortcut(for: .screencast) == Self.recordScreen, "It never runs twice")
+    }
+
+    @Test("An install #490's step marked done gets ⇧⌘5 once, taken from macOS where recording works (#513)")
+    func oneTimeStepRunsOnceAfterTheOldOne() {
+        let defaults = Self.knownWithoutRecordScreen(["screencast": Self.recordScreen])
+        defaults.set(true, forKey: "didOfferRecordScreenShortcut")
+        let preferences = AppPreferences(defaults: defaults, compatibility: Self.macOS15)
+        #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
+        let takeover = ScreenshotToolsModule.takeoverBindings(preferences)
+        #expect(takeover.contains(DefaultShortcut.recordScreen), "So macOS's screenshot toolbar (184) is turned off")
+        #expect(defaults.bool(forKey: "didOfferRecordScreenShortcut"), "The old key stays")
+        #expect(defaults.bool(forKey: "didGiveRecordScreenShortcut"))
+
+        preferences.setCapabilityShortcut(nil, for: .screencast)
+        let next = AppPreferences(defaults: defaults, compatibility: Self.macOS15)
+        #expect(next.capabilityShortcut(for: .screencast) == nil, "It never runs twice")
+        #expect(!ScreenshotToolsModule.takeoverBindings(next).contains(DefaultShortcut.recordScreen))
+    }
+
+    @Test("The step leaves Record Screen alone when ⇧⌘5 is another Keybumps shortcut's, a plugin's or a window's")
     func oneTimeStepLeavesAlone() throws {
         let taken = ShortcutBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘5")
         let byAPlugin = Self.knownWithoutRecordScreen(["timer": taken])
@@ -255,15 +290,22 @@ struct ScreencastTests {
         #expect(first.capabilityShortcut(for: .screencast) == nil)
         #expect(first.capabilityShortcut(for: .timer) == taken)
 
-        let byAWindow = Self.knownWithoutRecordScreen([:], window: [WindowAction.allCases[0].rawValue: taken])
-        #expect(AppPreferences(defaults: byAWindow).capabilityShortcut(for: .screencast) == nil)
+        let byAPluginWithOwn = Self.knownWithoutRecordScreen(["timer": taken, "screencast": Self.recordScreen])
+        let second = AppPreferences(defaults: byAPluginWithOwn)
+        #expect(second.capabilityShortcut(for: .screencast) == Self.recordScreen, "It keeps its own")
+        #expect(second.capabilityShortcut(for: .timer) == taken)
 
-        let own = Self.knownWithoutRecordScreen(["screencast": Self.recordScreen])
-        #expect(AppPreferences(defaults: own).capabilityShortcut(for: .screencast) == Self.recordScreen)
+        let window = WindowAction.allCases[0]
+        let byAWindow = Self.knownWithoutRecordScreen([:], window: [window.rawValue: taken])
+        let third = AppPreferences(defaults: byAWindow)
+        #expect(third.capabilityShortcut(for: .screencast) == nil)
+        #expect(third.windowShortcut(for: window) == taken)
 
-        for defaults in [byAPlugin, byAWindow, own] {
-            #expect(defaults.bool(forKey: "didOfferRecordScreenShortcut"), "It ran, and won't run again")
+        for defaults in [byAPlugin, byAPluginWithOwn, byAWindow] {
+            #expect(defaults.bool(forKey: "didGiveRecordScreenShortcut"), "It ran, and won't run again")
         }
+        first.setCapabilityShortcut(nil, for: .timer)
+        #expect(AppPreferences(defaults: byAPlugin).capabilityShortcut(for: .screencast) == nil, "Freed later, ⇧⌘5 isn't taken")
     }
 
     @Test("Record Screen registers only while Screengrabs is on, where it can record")

@@ -28,8 +28,10 @@ final class AppPreferences {
         static let lastLaunchedVersion = "lastLaunchedVersion"
         static let didFillSettingsWindow = "didFillSettingsWindow"
         static let sendsCrashReports = "sendsCrashReports"
-        /// Whether the one-time step that gives Record Screen ⇧⌘5 has run (#490).
-        static let didOfferRecordScreenShortcut = "didOfferRecordScreenShortcut"
+        /// Whether the one-time step that gives Record Screen ⇧⌘5 has run (#513). It replaced #490's
+        /// `didOfferRecordScreenShortcut`, so the step runs once more where that one skipped; the old
+        /// key is left in place, unread.
+        static let didGiveRecordScreenShortcut = "didGiveRecordScreenShortcut"
     }
 
     private let defaults: UserDefaults
@@ -242,20 +244,23 @@ final class AppPreferences {
         }
     }
 
-    /// Gives Record Screen (`CapabilityShortcut.screencast`) its default, ⇧⌘5, once, on an install
-    /// where it has no shortcut and no other Keybumps shortcut uses those keys (ADR 0010, #490). A
-    /// new install, or an update that didn't know the shortcut, already has its default (`init`);
-    /// this catches the development and QA builds since #458, which listed it with no default.
-    /// Recorded once it runs, whatever it did, so a shortcut the person clears later stays clear.
-    private func offerRecordScreenShortcutOnce() {
-        guard !defaults.bool(forKey: Key.didOfferRecordScreenShortcut) else { return }
-        defaults.set(true, forKey: Key.didOfferRecordScreenShortcut)
+    /// Gives Record Screen (`CapabilityShortcut.screencast`) its default, ⇧⌘5, once, unless another
+    /// Keybumps shortcut, a plugin's or a window's, uses those keys (ADR 0010, #490, #513). A
+    /// shortcut Record Screen already had is replaced: the owner wants ⇧⌘5 to be Record Screen's.
+    /// A new install, or an update that didn't know the shortcut, already has its default (`init`);
+    /// this catches the development and QA builds since #458, which listed it with no default or
+    /// a shortcut set while testing. Recorded once it runs, whatever it did, so a shortcut the
+    /// person changes or clears later stays as they left it.
+    private func giveRecordScreenShortcutOnce() {
+        guard !defaults.bool(forKey: Key.didGiveRecordScreenShortcut) else { return }
+        defaults.set(true, forKey: Key.didGiveRecordScreenShortcut)
+        let recordScreen = CapabilityShortcut.screencast.rawValue
         guard let binding = CapabilityShortcut.screencast.defaultBinding,
-              capabilityShortcuts[CapabilityShortcut.screencast.rawValue] == nil,
-              !capabilityShortcuts.values.contains(where: { $0.usesSameKeys(as: binding) }),
+              capabilityShortcuts[recordScreen]?.usesSameKeys(as: binding) != true,
+              !capabilityShortcuts.contains(where: { $0.key != recordScreen && $0.value.usesSameKeys(as: binding) }),
               !windowShortcuts.values.contains(where: { $0.usesSameKeys(as: binding) })
         else { return }
-        capabilityShortcuts[CapabilityShortcut.screencast.rawValue] = binding
+        capabilityShortcuts[recordScreen] = binding
         persistCapabilityShortcuts()
     }
 
@@ -340,7 +345,7 @@ final class AppPreferences {
         if introducedShortcuts {
             persistCapabilityShortcuts()
         }
-        offerRecordScreenShortcutOnce()
+        giveRecordScreenShortcutOnce()
         if defaults.object(forKey: Key.showInDockAndSwitcher) == nil,
            legacyDefaults.contains(where: { $0.object(forKey: Key.showInDockAndSwitcher) != nil }) {
             defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher)
