@@ -225,7 +225,7 @@ export const plugins: readonly Plugin[] = [
       'Each item shows the app it was copied from, and for a web page the site’s domain, whenever macOS can tell. Screenshots you take with ScreenGrabs land here too, ready to paste.'
     ],
     features: [
-      'Keeps your 50 most recent copied text and image items',
+      'Keeps your 50 most recent copied text and image items, plus your 50 most recent screenshots, so neither pushes the other out',
       'Search everything you copied; Return or ⌘C copies an item again, and ⌘P pastes it into the app you were using',
       'Shows the app each item came from, and the website’s domain when a browser says which page it was',
       'Copying an image file in Finder keeps the image, not its icon',
@@ -238,7 +238,10 @@ export const plugins: readonly Plugin[] = [
       { text: 'Type to search, then press Return to copy it again, or ⌘P to paste it.', keys: '↩' }
     ],
     faq: [
-      { q: 'How much does it keep?', a: 'Your 50 most recent copied text and image items.' },
+      {
+        q: 'How much does it keep?',
+        a: 'Your 50 most recent copied text and image items, plus your 50 most recent screenshots. Each has its own limit, so copying never pushes out a screenshot, and a screenshot never pushes out a copy.'
+      },
       {
         q: 'Can I paste a screenshot from it?',
         a: 'Yes. Screenshots you take with ScreenGrabs land in Clipboard History, ready to paste.'
