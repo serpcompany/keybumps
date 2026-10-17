@@ -160,6 +160,26 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("capability.offBanner.clipboardHistory").waitForNonExistence(timeout: 5))
     }
 
+    /// #490: Screenshot Tools' page, drawn by the plugin template, still says it needs Clipboard
+    /// History and offers to turn it on.
+    func testScreenshotToolsPageAsksForClipboardHistory() {
+        launch(permissions: "granted", ["-KBOpenSettings", "screenshotTools"])
+        XCTAssertTrue(element("settings.detail.screenshotTools").waitForExistence(timeout: 20))
+        element("settings.sidebar.clipboard").click()
+        let toggle = element("capability.toggle.clipboardHistory")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.click()
+        XCTAssertTrue(waitForValue(of: toggle, 0))
+
+        element("settings.sidebar.screenshotTools").click()
+        XCTAssertTrue(element("settings.detail.screenshotTools").waitForExistence(timeout: 5))
+        let requires = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR value == %@", "Requires Clipboard History", "Requires Clipboard History"))
+            .firstMatch
+        XCTAssertTrue(requires.waitForExistence(timeout: 5), "Requires Clipboard History")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label == %@", "Enable Clipboard History")).firstMatch.exists)
+    }
+
     func testPaletteCommandNumberSwitchesTabs() {
         launch(permissions: "granted", ["-KBOpenPalette", "search"])
         XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 20))

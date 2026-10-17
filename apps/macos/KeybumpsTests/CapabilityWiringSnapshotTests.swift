@@ -283,7 +283,8 @@ final class WiringHarness {
     /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder. The
     /// Mac runs macOS 15 unless `compatibility` says otherwise, so the snapshot doesn't depend on the
     /// Mac recording it; `defaults` holds what was saved before launch. It's licensed unless
-    /// `licensing` says otherwise.
+    /// `licensing` says otherwise. The screenshot folder can be read unless `screenshotReader` says
+    /// otherwise.
     init(
         enabled: Set<Capability>,
         missing: MacPermission?,
@@ -293,7 +294,8 @@ final class WiringHarness {
         compatibility: PluginCompatibility = PluginCompatibility(macOSMajorVersion: 15),
         defaults: UserDefaults = InMemoryDefaults(),
         screenshotCapturer: ScreenshotCapturer? = nil,
-        licensing: (any LicenseControlling)? = nil
+        licensing: (any LicenseControlling)? = nil,
+        screenshotReader: any ScreenshotDirectoryReading = FakeScreenshotDirectoryReader(granted: true)
     ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
@@ -326,7 +328,7 @@ final class WiringHarness {
                 homeDirectory: screenshotHome,
                 isDirectory: { _ in true }
             ),
-            reader: FakeScreenshotDirectoryReader(granted: true),
+            reader: screenshotReader,
             ingest: { _ in false }
         )
         model = AppModel(

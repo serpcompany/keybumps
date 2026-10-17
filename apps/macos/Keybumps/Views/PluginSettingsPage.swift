@@ -2,15 +2,28 @@ import SwiftUI
 
 /// A plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
 /// extension's settings: its header with who makes it, any preference placed at the top, its
-/// Commands, the permissions it needs and then the ones it can use (marked Optional), its other
-/// declared preferences by group, and last a slot for parts no declaration covers (such as a
-/// library to edit). Timer uses it so far; the other plugins move over one at a time.
-struct PluginSettingsPage<Custom: View>: View {
+/// Commands, the permissions it needs and then the ones it can use (marked Optional), a slot for
+/// parts of its own that come before its declared preferences (such as Screenshot Tools'
+/// Screenshots group), its other declared preferences by group, and last a slot for parts no
+/// declaration covers (such as a library to edit). Both slots are empty unless the page fills
+/// them. The other plugins move over one at a time.
+struct PluginSettingsPage<AbovePreferences: View, Custom: View>: View {
     let capability: Capability
+    /// False for a page whose own rows explain the permissions it needs, as Screenshot Tools' does
+    /// Screen Recording, with Restart Keybumps. The ones it can use are listed either way.
+    let includesRequiredPermissions: Bool
+    let abovePreferences: AbovePreferences
     let custom: Custom
 
-    init(capability: Capability, @ViewBuilder custom: () -> Custom) {
+    init(
+        capability: Capability,
+        includesRequiredPermissions: Bool = true,
+        @ViewBuilder abovePreferences: () -> AbovePreferences,
+        @ViewBuilder custom: () -> Custom
+    ) {
         self.capability = capability
+        self.includesRequiredPermissions = includesRequiredPermissions
+        self.abovePreferences = abovePreferences()
         self.custom = custom()
     }
 
@@ -18,7 +31,8 @@ struct PluginSettingsPage<Custom: View>: View {
         let descriptor = capability.descriptor
         SettingsPage {
             CapabilityControl(capability: capability, shortcuts: descriptor.shortcuts, byline: Self.byline(descriptor))
-            PluginPermissionsGroup(capability: capability)
+            PluginPermissionsGroup(capability: capability, includesRequired: includesRequiredPermissions)
+            abovePreferences
             PluginPreferenceGroups(capability: capability)
             custom
         }
@@ -31,18 +45,24 @@ struct PluginSettingsPage<Custom: View>: View {
     }
 }
 
-extension PluginSettingsPage where Custom == EmptyView {
+extension PluginSettingsPage where AbovePreferences == EmptyView {
+    init(capability: Capability, @ViewBuilder custom: () -> Custom) {
+        self.init(capability: capability, abovePreferences: { EmptyView() }, custom: custom)
+    }
+}
+
+extension PluginSettingsPage where AbovePreferences == EmptyView, Custom == EmptyView {
     init(capability: Capability) {
-        self.init(capability: capability) { EmptyView() }
+        self.init(capability: capability, abovePreferences: { EmptyView() }, custom: { EmptyView() })
     }
 }
 
 /// A plugin page's Permissions group: a `PermissionRow` for each permission its manifest declares,
 /// the ones it needs and then the ones it can use, marked Optional with why. Every plugin page shows
-/// its optional permissions here (#379). A page drawn by hand that already explains its required
-/// permissions in rows of its own, as Screenshot Tools does Screen Recording, passes
-/// `includesRequired: false`, so they aren't shown twice. The rows follow System Settings while the
-/// page is open, as the Permissions page's do.
+/// its optional permissions here (#379). A page that already explains its required permissions in
+/// rows of its own, as Screenshot Tools' does Screen Recording, passes `includesRequired: false`
+/// (through `PluginSettingsPage`'s `includesRequiredPermissions`), so they aren't shown twice. The
+/// rows follow System Settings while the page is open, as the Permissions page's do.
 struct PluginPermissionsGroup: View {
     @Environment(AppModel.self) private var model
     let capability: Capability

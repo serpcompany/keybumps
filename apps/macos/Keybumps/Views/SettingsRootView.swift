@@ -471,64 +471,6 @@ struct ClipboardSettingsView: View {
     }
 }
 
-struct ScreenshotToolsSettingsView: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        SettingsPage {
-            CapabilityControl(
-                capability: .screenshotTools,
-                shortcuts: [.screenshotScreen, .screenshotScreenAndEdit, .screenshotArea]
-            )
-            // Screen Recording, which it needs, has its own row below, with Restart Keybumps.
-            PluginPermissionsGroup(capability: .screenshotTools, includesRequired: false)
-            SettingsGroup("Screenshots") {
-                if !model.permissions.screenRecordingGranted {
-                    LabeledContent {
-                        HStack {
-                            Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
-                            Button("Allow…") { Task { await model.recoverPermission(.screenRecording) } }
-                        }
-                    } label: {
-                        SettingsRowLabel(
-                            title: "Screen Recording required",
-                            subtitle: "The screenshot hotkeys need Screen Recording access. Allow Keybumps in System Settings, then restart Keybumps so macOS applies it."
-                        )
-                    }
-                }
-                status
-                Toggle("Copy new screenshots to the clipboard", isOn: Binding(
-                    get: { model.preferences.copiesScreenshotsToClipboard },
-                    set: { model.preferences.copiesScreenshotsToClipboard = $0 }
-                ))
-                SettingsNote("Screenshots from these hotkeys, and ones you take with macOS's own ⇧⌘5, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While Screenshot Tools is on, Keybumps uses ⇧⌘3 and ⇧⌘4 in place of macOS's own; turning it off gives them back.")
-            }
-        }.navigationTitle("Screenshot Tools")
-    }
-
-    @ViewBuilder private var status: some View {
-        switch model.screenshotTools.status {
-        case .stopped:
-            Label("Off", systemImage: "pause.circle").foregroundStyle(.secondary)
-        case .watching(let folder):
-            Label("Watching \(FileManager.default.displayName(atPath: folder.path))", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .requiresClipboardHistory:
-            Label("Requires Clipboard History", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            Button("Enable Clipboard History") { model.setCapability(.clipboardHistory, enabled: true) }
-        case .folderAccessDenied(let folder):
-            Label("Keybumps can’t read \(FileManager.default.displayName(atPath: folder.path))", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            SettingsNote("Allow access in System Settings › Privacy & Security › Files & Folders, then return to Keybumps.")
-            Button("Open Privacy & Security") { model.permissions.openSystemSettings(.filesAndFolders) }
-        case .folderUnavailable(let folder):
-            Label("\(FileManager.default.displayName(atPath: folder.path)) is unavailable", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            SettingsNote("Keybumps keeps checking and resumes when the screenshot folder is available.")
-        }
-    }
-}
-
 struct DictationSettingsView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
