@@ -2,7 +2,7 @@
 
 Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329. Amended 2026-10-12 (#485): Screencast records video only, and screenshots stay with Screenshot Tools.
 
-Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17, #488): Screencast is part of Screengrabs, one plugin that ships on, and recordings save to the Mac's screenshot folder by default, with Choose… in Settings › Screengrabs, instead of `~/Documents/Keybumps/captures` or the folder Settings › Screencast shows. Decision 2 and decisions 5–8 stand; 0010's "Superseded" lists what doesn't.
+Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17, #488). It replaces decision 1 (Screencast is part of Screengrabs, one plugin that ships on), decision 3's screenshot parts, decision 4's review panel and folder, and the Open question about a palette tab. Recordings save to their own folder, which defaults to the Mac's screenshot folder and has its own Choose… in Settings › Screengrabs, instead of `~/Documents/Keybumps/captures` or the folder Settings › Screencast shows. The rest of decisions 3 and 4 stands (video, the audio switches, the control bar, keys, drawing, and a recording staying on the Mac until it's sent), as do decisions 2 and 5–8.
 
 ## Context
 

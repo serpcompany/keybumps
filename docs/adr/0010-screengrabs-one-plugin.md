@@ -22,10 +22,11 @@ On 2026-10-12 the owner asked for one plugin: "the way i wanna merge screenshot 
 4. **Record Screen gets ⇧⌘5 by default,** taking over macOS's screenshot toolbar as ⇧⌘3 and ⇧⌘4 already are: the owner wants Keybumps's shortcuts to take precedence over ones already in use.
    - macOS's hotkey 184 joins `SystemScreenshotShortcutTakeover.managed`, beside 28 and 30 (#490).
    - Every stored binding keeps its raw value: Record Screen is still the shortcut `screencast`, and Quick Search's action `startScreencast`.
-   - A shortcut an install doesn't know yet gets its default once (`knownCapabilityShortcuts`), so updates from beta.25 or earlier get ⇧⌘5 too, not just new installs, unless another Keybumps shortcut already uses those keys.
-   - Where recording isn't supported, the shortcut doesn't run, and macOS keeps ⇧⌘5.
-5. **Screenshots and recordings save to the Mac's screenshot folder by default:** `com.apple.screencapture` `location`, else the Desktop (`ScreenshotLocationResolver`). Keybumps takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5, so people look for the files where macOS puts them, and current users' screenshots don't move.
-   - Settings › Screengrabs has Choose… to save recordings somewhere else (#504).
+   - A shortcut an install doesn't know yet gets its default once (`knownCapabilityShortcuts`), unless another Keybumps shortcut already uses those keys. No public release has the shortcut `screencast` (#458 came after beta.25), and beta.26 waits for Screengrabs (decision 9), so new installs and every public update get ⇧⌘5 that way. Development and QA builds since #458 already know `screencast`, unassigned, so they don't get it and set it by hand. If a release ships `screencast` before #490, #490 adds a one-time migration.
+   - Where recording isn't supported, the shortcut doesn't run, and macOS keeps ⇧⌘5 (#490).
+5. **Screenshots and recordings each have their own save folder, and both default to the Mac's screenshot folder:** `com.apple.screencapture` `location`, else the Desktop (`ScreenshotLocationResolver`). Keybumps takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5, so people look for the files where macOS puts them, and current users' screenshots don't move.
+   - Settings › Screengrabs shows two folders, Screenshots and Recordings, each with its own Choose… (#504). The owner: "let them select each one individually".
+   - The Screenshots folder keeps following macOS's setting until the person chooses one in Keybumps.
    - Recordings already in `~/Documents/Keybumps/captures` stay there and are indexed once, so ⌘3 lists them (#492).
    - Dictation's audio stays in Keybumps's own folder, `~/Documents/Keybumps/recordings` (`ProductPaths.recordings`).
 6. **The ⌘3 tab, Screengrabs, lists both, newest first** (#494): screenshot items from Clipboard History and recordings from Screengrabs' recordings index (#492). Clipboard History keeps the newest 50 screenshots apart from its newest 50 other items (#493), where today they share one limit of 50 (`ClipboardHistoryService.capacity`).
@@ -44,7 +45,7 @@ From [0009](0009-screencast-records-and-sends-captures.md):
 - Decision 4's review panel and its fixed folder. After a recording comes the recording window (#479). Recordings save where decision 5 above says, not under `~/Documents/Keybumps/captures/<timestamp>/` or in "the captures folder set in Settings › Screencast" (#479's amendment).
 - The Open question whether it gets a palette tab: recordings are in the ⌘3 tab.
 
-Still in force from 0009: decision 2 (recording needs macOS 15, now through `supportsRecording` rather than `minimumMacOS`); decision 4's rule that a recording stays on the Mac until the person sends it; and decisions 5–8 (destinations, Clipy, donors, and the webhook receiver), now for recordings.
+Still in force from 0009: decision 2 (recording needs macOS 15, now through `supportsRecording` rather than `minimumMacOS`); decision 3 for recordings (video of an area, a window, or every screen; the microphone and system-audio switches; the control bar; keys shown through Keystrokes; drawing); decision 4's rule that a recording stays on the Mac until the person sends it; and decisions 5–8 (destinations, Clipy, donors, and the webhook receiver), now for recordings.
 
 ## Consequences
 
@@ -55,4 +56,4 @@ Still in force from 0009: decision 2 (recording needs macOS 15, now through `sup
 
 ## Open
 
-- Whether one card follows each capture, for both kinds (#496), parked until the owner decides after trying wave 3 (#482).
+- Whether one card follows each screengrab, for both kinds (#496), parked until the owner decides after trying wave 3 (#482).
