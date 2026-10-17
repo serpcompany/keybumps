@@ -29,8 +29,9 @@ final class AppPreferences {
         static let didFillSettingsWindow = "didFillSettingsWindow"
         static let sendsCrashReports = "sendsCrashReports"
         /// Whether the one-time step that gives Record Screen ⇧⌘5 has run (#513). It replaced #490's
-        /// `didOfferRecordScreenShortcut`, so the step runs once more where that one skipped; the old
-        /// key is left in place, unread.
+        /// `didOfferRecordScreenShortcut`, so it runs once more on every install that step marked
+        /// done, replacing a Record Screen shortcut cleared or changed after it, unless another
+        /// Keybumps shortcut (a plugin's or a window's) holds ⇧⌘5; the old key is left in place, unread.
         static let didGiveRecordScreenShortcut = "didGiveRecordScreenShortcut"
     }
 
@@ -249,8 +250,10 @@ final class AppPreferences {
     /// shortcut Record Screen already had is replaced: the owner wants ⇧⌘5 to be Record Screen's.
     /// A new install, or an update that didn't know the shortcut, already has its default (`init`);
     /// this catches the development and QA builds since #458, which listed it with no default or
-    /// a shortcut set while testing. Recorded once it runs, whatever it did, so a shortcut the
-    /// person changes or clears later stays as they left it.
+    /// a shortcut set while testing. It also runs once on every install #490's step marked done,
+    /// so a Record Screen shortcut cleared or changed after that step is replaced. Recorded once it
+    /// runs, whatever it did, so a shortcut the person changes or clears after this step stays as
+    /// they left it.
     private func giveRecordScreenShortcutOnce() {
         guard !defaults.bool(forKey: Key.didGiveRecordScreenShortcut) else { return }
         defaults.set(true, forKey: Key.didGiveRecordScreenShortcut)

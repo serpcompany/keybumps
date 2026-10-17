@@ -595,8 +595,8 @@ struct ScreencastPickerViewTests {
 
 /// The bar laid out on a screen as Record Screen lays it out, in a panel that's never shown, and
 /// drawn at 2x through AppKit, as the app draws it: Record's label is never cut short, whichever of
-/// the bar's rows is its widest (owner QA of 4030.475.5 saw "Rec…" whenever it was the controls).
-/// Made-up screen names.
+/// the bar's rows is its widest (owner QA of 4030.475.5 saw "Rec…" whenever it was the controls), nor
+/// is a screen choice when theirs is. Made-up screen names.
 @MainActor
 @Suite("Screencast: the picker's bar")
 struct ScreencastPickerBarTests {
@@ -623,6 +623,56 @@ struct ScreencastPickerBarTests {
         let model = Self.model(layout)
         #expect(model.canConfirm, "Record is red: something to record")
         let screen = try #require(model.layout.screen(1))
+        let (bar, image) = try Self.drawnOnItsScreen(model)
+        #expect(bar.width <= screen.frame.width - 16, "inside its screen")
+
+        let label = NSHostingView(rootView: ScreencastPickerRecordLabel(canConfirm: true)).fittingSize.width
+        #expect(NSHostingView(rootView: ScreencastPickerRecordLabel(canConfirm: false)).fittingSize.width == label, "gray until there's something to record, at the same width")
+        let red = try Self.widestRedRun(in: image)
+        // Its capsule's antialiased ends lose a pixel or so; "Rec…" was 10 points short.
+        #expect(red >= (label - 2) * 2, "Record's capsule is \(red / 2) points wide, its label \(label)")
+    }
+
+    /// It checks what the screen row shows, not how: on macOS 27 these names also fit without the
+    /// row's `fixedSize`. A row proposed less than its own width cuts its longest name, and fails
+    /// here. Each step is small and typed: CI's compiler couldn't type-check a longer form (#507).
+    @available(macOS 15, *)
+    @Test("With screen names longer than the controls, every screen choice, All Screens too, shows at its own width")
+    func screenChoicesAreNeverCutShort() throws {
+        let model = Self.model(.longNames)
+        let controlsOnly: CGFloat = Self.fittingWidth(Self.model(.window))
+        let withScreens: CGFloat = Self.fittingWidth(model)
+        #expect(withScreens > controlsOnly, "the screen row is the bar's widest")
+
+        // Each choice drawn chosen, then with the next one chosen: its highlight is where it's
+        // brighter. With room to spare, every choice is at its own width.
+        let choices: [CGDirectDisplayID?] = model.layout.orderedScreens.map(\.id) + [nil]
+        #expect(choices.count == 4, "three screens and All Screens")
+        var onItsScreen: [NSBitmapImageRep] = []
+        var withRoom: [NSBitmapImageRep] = []
+        for choice in choices {
+            Self.choose(choice, in: model)
+            let drawn: NSBitmapImageRep = try Self.drawnOnItsScreen(model).image
+            onItsScreen.append(drawn)
+            let roomy: NSBitmapImageRep = try Self.drawnWithRoom(model)
+            withRoom.append(roomy)
+        }
+        for index in choices.indices {
+            let next: Int = (index + 1) % choices.count
+            let name: String = Self.name(of: choices[index], in: model)
+            let width: Int = try Self.highlightWidth(chosen: onItsScreen[index], otherChosen: onItsScreen[next])
+            let ownWidth: Int = try Self.highlightWidth(chosen: withRoom[index], otherChosen: withRoom[next])
+            let shortfall: Int = ownWidth - width
+            // Antialiasing moves an edge by a pixel at most; a cut name loses a letter or more.
+            #expect(shortfall <= 2, "\(name) is \(width) pixels wide, \(ownWidth) with room")
+        }
+    }
+
+    /// The bar laid out on `model`'s pointer screen as Record Screen lays it out, in a panel that's
+    /// never shown: its frame, and the bar drawn.
+    @available(macOS 15, *)
+    static func drawnOnItsScreen(_ model: ScreencastPickerModel) throws -> (bar: NSRect, image: NSBitmapImageRep) {
+        let screen = try #require(model.layout.screen(1))
         let view = ScreencastPickerView(model: model, screen: screen, confirm: {})
         let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
         panel.appearance = NSAppearance(named: .darkAqua)
@@ -631,13 +681,108 @@ struct ScreencastPickerBarTests {
         view.showBar(ScreencastPickerBar(model: model, confirm: {}, cancel: {}), bottomInset: 28)
         view.layoutSubtreeIfNeeded()
         let bar = try #require(view.subviews.first)
-        #expect(bar.frame.width <= screen.frame.width - 16, "inside its screen")
+        let image: NSBitmapImageRep = try render(bar)
+        return (bar.frame, image)
+    }
 
-        let label = NSHostingView(rootView: ScreencastPickerRecordLabel(canConfirm: true)).fittingSize.width
-        #expect(NSHostingView(rootView: ScreencastPickerRecordLabel(canConfirm: false)).fittingSize.width == label, "gray until there's something to record, at the same width")
-        let red = try Self.widestRedRun(in: Self.render(bar))
-        // Its capsule's antialiased ends lose a pixel or so; "Rec…" was 10 points short.
-        #expect(red >= (label - 2) * 2, "Record's capsule is \(red / 2) points wide, its label \(label)")
+    /// The bar with room to spare, 400 points wider than its widest row, in a borderless window
+    /// that's never shown: every row's words at their own widths.
+    static func drawnWithRoom(_ model: ScreencastPickerModel) throws -> NSBitmapImageRep {
+        let bar = ScreencastPickerBar(model: model, confirm: {}, cancel: {})
+        let size: CGSize = NSHostingView(rootView: bar).fittingSize
+        let width: CGFloat = size.width + 400
+        let host = NSHostingView(rootView: bar.frame(width: width))
+        let frame = NSRect(x: 0, y: 0, width: width, height: size.height)
+        let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        defer { window.contentView = nil }
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        return try render(host)
+    }
+
+    /// The bar's own width for `model`, as it lays itself out.
+    static func fittingWidth(_ model: ScreencastPickerModel) -> CGFloat {
+        let bar = ScreencastPickerBar(model: model, confirm: {}, cancel: {})
+        return NSHostingView(rootView: bar).fittingSize.width
+    }
+
+    /// Chooses a screen by its ID, or All Screens for `nil`.
+    static func choose(_ choice: CGDirectDisplayID?, in model: ScreencastPickerModel) {
+        if let choice {
+            model.chooseScreen(choice)
+        } else {
+            model.chooseEveryScreen()
+        }
+    }
+
+    /// The choice as a failure names it: the screen's number, or All Screens.
+    static func name(of choice: CGDirectDisplayID?, in model: ScreencastPickerModel) -> String {
+        guard let choice, let screen = model.layout.screen(choice) else { return "All Screens" }
+        let number: Int = model.layout.number(of: screen)
+        return "screen \(number)"
+    }
+
+    /// How wide the chosen screen choice's highlight is, in pixels: the widest row of the lowest
+    /// band of rows where `chosen` is brighter than `otherChosen` (above it, the hint names what's
+    /// chosen), from its first such pixel to its last. Where the other choice is highlighted,
+    /// `chosen` is darker.
+    static func highlightWidth(chosen: NSBitmapImageRep, otherChosen: NSBitmapImageRep) throws -> Int {
+        let sameWidth: Bool = chosen.pixelsWide == otherChosen.pixelsWide
+        let sameHeight: Bool = chosen.pixelsHigh == otherChosen.pixelsHigh
+        try #require(sameWidth, "laid out alike")
+        try #require(sameHeight, "laid out alike")
+        let brighter = try Brightness(chosen)
+        let darker = try Brightness(otherChosen)
+        var runs: [Int] = []
+        for y in 0..<chosen.pixelsHigh {
+            let run: Int = brighterRun(brighter, than: darker, row: y, pixelsWide: chosen.pixelsWide)
+            runs.append(run)
+        }
+        // AppKit's bitmaps count rows from the top, so the lowest band is the last.
+        let lowest: Int = try #require(runs.lastIndex { $0 > 0 }, "no highlight: the choices drew alike")
+        var widest = 0
+        var y: Int = lowest
+        while y >= 0, runs[y] > 0 {
+            widest = max(widest, runs[y])
+            y -= 1
+        }
+        return widest
+    }
+
+    /// In row `y`, from the first pixel where `chosen` is brighter than `other` to the last, in
+    /// pixels; 0 where none is.
+    static func brighterRun(_ chosen: Brightness, than other: Brightness, row y: Int, pixelsWide: Int) -> Int {
+        var first: Int?
+        var last = 0
+        for x in 0..<pixelsWide {
+            let difference: Int = chosen.at(x, y) - other.at(x, y)
+            guard difference > 12 else { continue }
+            if first == nil { first = x }
+            last = x
+        }
+        guard let first else { return 0 }
+        return last - first + 1
+    }
+
+    /// A bitmap's brightness, each pixel's brightest channel, read from its bytes as `render`
+    /// makes them (RGBA, premultiplied), for speed.
+    struct Brightness {
+        let bytes: UnsafeMutablePointer<UInt8>
+        let bytesPerRow: Int
+
+        init(_ image: NSBitmapImageRep) throws {
+            bytes = try #require(image.bitmapData)
+            bytesPerRow = image.bytesPerRow
+        }
+
+        func at(_ x: Int, _ y: Int) -> Int {
+            let offset: Int = y * bytesPerRow + x * 4
+            let red = Int(bytes[offset])
+            let green = Int(bytes[offset + 1])
+            let blue = Int(bytes[offset + 2])
+            return max(red, green, blue)
+        }
     }
 
     /// The picker in `layout`, on a Retina screen at AppKit's origin, the one with the pointer.

@@ -393,6 +393,79 @@ struct ScreencastEditExportTests {
         #expect(leftovers.isEmpty, "\(leftovers)")
     }
 
+    @Test("A cancel seen at the first sample, while the other pairs are still being set up, stops every one and ends once, every time")
+    func cancelAtTheFirstSample() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar])
+        // The first input holds up the setup once it's asked, as a thread descheduled there would
+        // be, so its queue sees the cancel and stops before the other inputs are asked. Before the
+        // fix, that stop released inputs that hadn't entered the group yet, and libdispatch trapped.
+        for attempt in 0..<20 {
+            let destination = original.folder.appendingPathComponent("copy-\(attempt).mov")
+            var made = 0
+            let job = try await CopyJob(from: original.videos[0].file, to: destination, copies: 2) { mediaType, hint in
+                made += 1
+                return made == 1
+                    ? SlowlyAskedInput(mediaType: mediaType, outputSettings: nil, sourceFormatHint: hint)
+                    : AVAssetWriterInput(mediaType: mediaType, outputSettings: nil, sourceFormatHint: hint)
+            }
+            #expect(job.pairs.count == 6, "the picture and both sounds, each twice")
+            let copier = ScreencastSampleCopier(
+                reader: job.reader, writer: job.writer, pairs: job.pairs, label: "test.copy", qos: .userInitiated
+            ) { true }
+            #expect(CopyJob.runToEnd(copier), "attempt \(attempt) ended")
+            #expect(copier.didStop)
+            #expect(job.writer.status == .cancelled)
+            #expect(job.reader.status == .cancelled)
+            #expect(!FileManager.default.fileExists(atPath: destination.path), "a cancelled writer deletes its file")
+        }
+    }
+
+    @Test("A writer that fails on its own after the last sample, as a full disk makes one, stops the copy, isn't asked to finish, and says the disk is full")
+    func writerFailsAfterTheLastSample() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar], sounds: false)
+        let destination = original.folder.appendingPathComponent("copy.mov")
+        let writer = try DiskFullWriter(outputURL: destination, fileType: .mov)
+        let job = try await CopyJob(from: original.videos[0].file, to: destination, writer: writer) { track in
+            let output = DrainingOutput(track: track, outputSettings: nil)
+            output.onDrained = { writer.fill() }
+            return output
+        }
+        let copier = ScreencastSampleCopier(
+            reader: job.reader, writer: writer, pairs: job.pairs, label: "test.copy", qos: .userInitiated
+        ) { false }
+        #expect(CopyJob.runToEnd(copier))
+        #expect(copier.didStop, "a stop, not the end")
+        #expect(CopyJob.finish(writer) == false)
+        let error = try #require(writer.error)
+        #expect(ScreencastExportFailure.from(error) == .diskFull)
+        writer.empty()
+        writer.cancelWriting()
+    }
+
+    @Test("A writer that failed, or was cancelled, isn't asked to finish, which raises an exception: its own error says why")
+    func finishingAWriterThatIsNotWriting() throws {
+        defer { folder.remove() }
+        let locked = folder.url.appendingPathComponent("locked", isDirectory: true)
+        try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: true)
+        // A folder nothing can be written in: the writer fails as it starts.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+        let failed = try AVAssetWriter(outputURL: locked.appendingPathComponent("copy.mov"), fileType: .mov)
+        failed.add(AVAssetWriterInput(mediaType: .video, outputSettings: nil))
+        #expect(!failed.startWriting())
+        #expect(failed.status == .failed)
+        #expect(CopyJob.finish(failed) == false)
+        #expect(failed.error != nil)
+
+        let cancelled = try AVAssetWriter(outputURL: folder.url.appendingPathComponent("copy.mov"), fileType: .mov)
+        cancelled.add(AVAssetWriterInput(mediaType: .video, outputSettings: nil))
+        #expect(cancelled.startWriting())
+        cancelled.cancelWriting()
+        #expect(CopyJob.finish(cancelled) == false)
+    }
+
     @Test("A full disk, or an AVFoundation error, says which")
     func failureCategories() {
         let full = ScreencastExportFailure.from(NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC)))
@@ -528,7 +601,115 @@ private final class ProgressLog: @unchecked Sendable {
     func add(_ value: Double) { lock.withLock { stored.append(value) } }
 }
 
-/// Short movies made for a test through the recorder's writer, and what's read back from them.
+/// A started reader and writer over a made-up movie, for `ScreencastSampleCopier`: each of its
+/// tracks read `copies` times, passed through into a QuickTime movie.
+private struct CopyJob {
+    let reader: AVAssetReader
+    let writer: AVAssetWriter
+    let pairs: [(output: AVAssetReaderOutput, input: AVAssetWriterInput)]
+
+    init(
+        from source: URL,
+        to destination: URL,
+        copies: Int = 1,
+        writer: AVAssetWriter? = nil,
+        output: (AVAssetTrack) -> AVAssetReaderTrackOutput = { AVAssetReaderTrackOutput(track: $0, outputSettings: nil) },
+        input: (AVMediaType, CMFormatDescription?) -> AVAssetWriterInput = {
+            AVAssetWriterInput(mediaType: $0, outputSettings: nil, sourceFormatHint: $1)
+        }
+    ) async throws {
+        let asset = AVURLAsset(url: source)
+        let tracks = try await asset.load(.tracks)
+        let duration = try await asset.load(.duration)
+        reader = try AVAssetReader(asset: asset)
+        reader.timeRange = CMTimeRange(start: .zero, duration: duration)
+        self.writer = try writer ?? AVAssetWriter(outputURL: destination, fileType: .mov)
+        var pairs: [(output: AVAssetReaderOutput, input: AVAssetWriterInput)] = []
+        for _ in 0..<copies {
+            for track in tracks {
+                let trackOutput = output(track)
+                trackOutput.alwaysCopiesSampleData = false
+                guard reader.canAdd(trackOutput) else { throw ScreencastExportFailure.failed }
+                reader.add(trackOutput)
+                let hint = try await track.load(.formatDescriptions).first
+                let trackInput = input(track.mediaType, hint)
+                trackInput.expectsMediaDataInRealTime = false
+                guard self.writer.canAdd(trackInput) else { throw ScreencastExportFailure.failed }
+                self.writer.add(trackInput)
+                pairs.append((trackOutput, trackInput))
+            }
+        }
+        self.pairs = pairs
+        guard self.writer.startWriting(), reader.startReading() else { throw ScreencastExportFailure.failed }
+        self.writer.startSession(atSourceTime: .zero)
+    }
+
+    /// Runs `copier` and waits up to ten seconds for it to end: whether it did.
+    static func runToEnd(_ copier: ScreencastSampleCopier) -> Bool {
+        let done = DispatchSemaphore(value: 0)
+        copier.run { done.signal() }
+        return done.wait(timeout: .now() + 10) == .success
+    }
+
+    /// Finishes `writer` as the export and the mixdown do, waiting up to ten seconds: whether its
+    /// file is complete, or nil if it never said.
+    static func finish(_ writer: AVAssetWriter) -> Bool? {
+        let done = DispatchSemaphore(value: 0)
+        let answer = FinishAnswer()
+        ScreencastSampleCopier.finishWriting(writer) { completed in
+            answer.set(completed)
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + 10) == .success else { return nil }
+        return answer.value
+    }
+}
+
+/// What `ScreencastSampleCopier.finishWriting` said, from its queue.
+private final class FinishAnswer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Bool?
+    var value: Bool? { lock.withLock { stored } }
+    func set(_ completed: Bool) { lock.withLock { stored = completed } }
+}
+
+/// A writer that says it failed with a full disk once `fill()` is called, as a full disk makes one
+/// fail on its own after its inputs took their last sample. Underneath it's still writing, so the
+/// test calls `empty()` and cancels it.
+private final class DiskFullWriter: AVAssetWriter {
+    private let lock = NSLock()
+    private var full = false
+    private var isFull: Bool { lock.withLock { full } }
+
+    func fill() { lock.withLock { full = true } }
+    func empty() { lock.withLock { full = false } }
+
+    override var status: AVAssetWriter.Status { isFull ? .failed : super.status }
+    override var error: Error? {
+        isFull ? NSError(domain: AVFoundationErrorDomain, code: AVError.diskFull.rawValue) : super.error
+    }
+}
+
+/// A writer input that holds up whoever asks it for media, for longer than a stop takes to cancel
+/// the reader and writer, as a thread descheduled right after asking would be.
+private final class SlowlyAskedInput: AVAssetWriterInput {
+    override func requestMediaDataWhenReady(on queue: DispatchQueue, using block: @escaping @Sendable () -> Void) {
+        super.requestMediaDataWhenReady(on: queue, using: block)
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+}
+
+/// A reader output that calls `onDrained` when it has no more samples.
+private final class DrainingOutput: AVAssetReaderTrackOutput {
+    var onDrained: () -> Void = {}
+
+    override func copyNextSampleBuffer() -> CMSampleBuffer? {
+        let sample = super.copyNextSampleBuffer()
+        if sample == nil { onDrained() }
+        return sample
+    }
+}
+
 /// Says cancelled from its `cancelFrom`th ask on, and counts the asks.
 private final class CancelAsks: @unchecked Sendable {
     private let lock = NSLock()
@@ -549,6 +730,7 @@ private final class CancelAsks: @unchecked Sendable {
     }
 }
 
+/// Short movies made for a test through the recorder's writer, and what's read back from them.
 enum EditTestMovie {
     static let width = 192
     static let height = 108
