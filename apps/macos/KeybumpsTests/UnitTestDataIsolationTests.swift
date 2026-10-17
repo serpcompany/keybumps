@@ -46,6 +46,7 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(paths.captures, "\(what) Screencast captures", sourceLocation: sourceLocation)
         expectInRunFolder(paths.dictationModels, "\(what) Dictation models", sourceLocation: sourceLocation)
         expectInRunFolder(paths.translatedSpeechTemporary, "\(what) translated audio", sourceLocation: sourceLocation)
+        expectInRunFolder(paths.caches, "\(what) caches", sourceLocation: sourceLocation)
     }
 
     /// Stops the test unless every default location resolves inside this run's folder. Call it
@@ -56,7 +57,7 @@ struct UnitTestDataIsolationTests {
         let paths = ProductPaths.keybumps()
         let locations = [
             paths.applicationSupport, paths.recordings, paths.captures, paths.dictationModels, paths.translatedSpeechTemporary,
-            ScreenshotLocationResolver.system.homeDirectory,
+            paths.caches, ScreenshotLocationResolver.system.homeDirectory,
         ]
         for url in locations {
             try #require(
@@ -107,6 +108,10 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(DictationService(language: "en-US", allowsSystemAccess: false).recoveryURL, "The Dictation recovery file")
         expectInRunFolder(ScreenshotLocationResolver.system.resolve(), "The screenshot folder")
         expectInRunFolder(ScreencastRepositoryMemory.defaultStorageURL, "Screencast's repository memory")
+        let recordings = RecordingLibrary.makeDefault(importMemory: RecordingImportMemory(defaults: InMemoryDefaults()), screenshots: nil)
+        expectInRunFolder(recordings.storageURL, "The recordings index")
+        expectInRunFolder(recordings.capturesFolder, "The recordings index's import")
+        expectInRunFolder(recordings.posterFrames.folder, "Recordings' poster frames")
     }
 
     @Test("An AppModel built without its stores keeps every one in this run's folder")
@@ -120,6 +125,9 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(model.dictation.recoveryURL, "AppModel's Dictation recovery file")
         expectInRunFolder(model.dictationModels.modelsRoot, "AppModel's Dictation models")
         expectInRunFolder(model.preferences.screencast.capturesFolder, "AppModel's Screencast captures")
+        let recordings = try #require(model.recording?.recordings)
+        expectInRunFolder(recordings.storageURL, "AppModel's recordings index")
+        expectInRunFolder(recordings.posterFrames.folder, "AppModel's poster frames")
     }
 
     /// Checked by type only: nothing reads or writes symbolic hotkeys here.
@@ -151,6 +159,8 @@ struct UnitTestDataIsolationTests {
         #expect(paths.translatedSpeechTemporary == FileManager.default.temporaryDirectory
             .appendingPathComponent("Keybumps", isDirectory: true)
             .appendingPathComponent("TranslatedAudio", isDirectory: true))
+        #expect(paths.caches == FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Keybumps", isDirectory: true))
     }
 
     @Test("The UI-test sandbox comes first, and a test's own rooted file manager is kept")
@@ -160,7 +170,10 @@ struct UnitTestDataIsolationTests {
         let rootedRoot = URL(fileURLWithPath: "/private/tmp/KeybumpsRooted-\(UUID().uuidString)", isDirectory: true)
 
         let sandboxed = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: sandbox, unitTestRoot: run)
-        for url in [sandboxed.applicationSupport, sandboxed.recordings, sandboxed.captures, sandboxed.dictationModels, sandboxed.translatedSpeechTemporary] {
+        for url in [
+            sandboxed.applicationSupport, sandboxed.recordings, sandboxed.captures, sandboxed.dictationModels,
+            sandboxed.translatedSpeechTemporary, sandboxed.caches,
+        ] {
             #expect(Self.isInside(url, sandbox))
         }
 
@@ -174,6 +187,7 @@ struct UnitTestDataIsolationTests {
         #expect(Self.isInside(rooted.recordings, rootedRoot))
         #expect(Self.isInside(rooted.captures, rootedRoot))
         #expect(Self.isInside(rooted.dictationModels, rootedRoot))
+        #expect(Self.isInside(rooted.caches, rootedRoot))
         // That file manager keeps the real temporary folder, so it moves to the run's folder.
         #expect(Self.isInside(rooted.translatedSpeechTemporary, run))
     }
@@ -208,7 +222,8 @@ struct UnitTestDataIsolationTests {
                 captures: documents.appendingPathComponent("captures", isDirectory: true),
                 dictationModels: support.appendingPathComponent("DictationModels", isDirectory: true),
                 translatedSpeechTemporary: root("tmp").appendingPathComponent("Keybumps", isDirectory: true)
-                    .appendingPathComponent("TranslatedAudio", isDirectory: true)
+                    .appendingPathComponent("TranslatedAudio", isDirectory: true),
+                caches: root("Caches").appendingPathComponent("Keybumps", isDirectory: true)
             )
         }
 
@@ -230,10 +245,11 @@ struct UnitTestDataIsolationTests {
     }
 }
 
-/// Answers Application Support, Documents, and the temporary folder with folders under `root`.
+/// Answers Application Support, Documents, Caches, and the temporary folder with folders under `root`.
 private final class FixedFoldersFileManager: FileManager {
     private let support: URL
     private let documents: URL
+    private let caches: URL
     private let temporary: URL
 
     init(in root: URL, subfolder: String? = nil, suffix: String = "", trailingSlash: Bool = true) {
@@ -244,6 +260,7 @@ private final class FixedFoldersFileManager: FileManager {
         }
         support = folder("support")
         documents = folder("documents")
+        caches = folder("caches")
         temporary = folder("tmp")
         super.init()
     }
@@ -252,6 +269,7 @@ private final class FixedFoldersFileManager: FileManager {
         switch directory {
         case .applicationSupportDirectory: [support]
         case .documentDirectory: [documents]
+        case .cachesDirectory: [caches]
         default: []
         }
     }

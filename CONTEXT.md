@@ -219,6 +219,10 @@ _Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, 
 Where recordings are saved, each in a folder of its own: `~/Documents/Keybumps/captures` (`ProductPaths.captures`). Settings › ScreenGrabs shows it.
 _Avoid_: Captures folder; Dictation's recordings folder (`ProductPaths.recordings`)
 
+**Recordings index**:
+ScreenGrabs' list of every recording it keeps, wherever it's saved, for the ScreenGrabs tab (`RecordingLibrary`): each recording's folder, start, length, and displays, never what the person wrote about it. A recording moved or deleted outside Keybumps stays listed, marked as moved or deleted.
+_Avoid_: Captures index
+
 **Recording picker**:
 What Record Screen opens over every screen to choose a recording: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), with switches for the microphone, the Mac's sound, shortcuts, and clicks that are Settings › ScreenGrabs' own. Record counts down, then records. Escape closes the picker, and does nothing once Record is pressed: the countdown's Cancel stops a countdown, and only the control bar's Discard throws a recording away. It opens as Record last left it: area, window, or screen, the same screen or All Screens while connected, the last area drawn, and the switches, which Record saves to Settings (the microphone's only with Microphone access). A window is never remembered, so Window mode opens with none chosen.
 _Avoid_: Screencast picker (its former name), selection overlay, capture HUD, crosshair, the screenshot hotkeys' area selection (macOS's own)

@@ -40,7 +40,7 @@ enum ScreencastReviewOutcome: Equatable {
     /// Copy: saved as above, and on the clipboard.
     case copied(ScreencastReviewInput)
     /// Discard: the capture's folder is deleted.
-    case discarded
+    case discarded(ScreencastReviewInput)
     /// Escape, closing, the next capture, or quitting, after the review couldn't be written: the
     /// recording is wherever it was, without its review, and the notch says why (#479).
     case saveFailed(ScreencastReviewInput, ScreencastReviewFailure)

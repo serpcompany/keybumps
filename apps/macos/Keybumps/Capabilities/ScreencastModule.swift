@@ -93,6 +93,9 @@ final class ScreencastModule {
     private var isOn = false
     /// The recording window after each recording (#450, #479).
     let review: ScreencastReviewFlow
+    /// Every recording kept, wherever it's saved, for the ⌘3 tab (#492, #494): the review
+    /// services' index, loaded once ScreenGrabs is on.
+    let recordings: RecordingLibrary?
     /// The `ScreencastController`, made the first time Record Screen opens the picker. Stored
     /// untyped because the controller needs macOS 15.
     private var controllerStorage: AnyObject?
@@ -125,12 +128,15 @@ final class ScreencastModule {
             displays: { ScreencastOverlaysWiring.displays(in: screens(), connected: ScreencastOverlayDisplay.connected) }
         )
         review = ScreencastReviewFlow(services: services, contextReader: seams.contextReader ?? .current)
+        recordings = services?.recordings
     }
 
     /// Run from `ScreenshotToolsModule.apply`. Record Screen's shortcut is registered while
     /// ScreenGrabs is on, and only where it can record, so macOS 14 keeps ⇧⌘5.
     func apply(_ context: CapabilityContext) {
         isOn = context.recordsScreen
+        // Reads the index, and runs its one-time import, once.
+        if context.isEnabled(.screenshotTools) { recordings?.load() }
         context.configureShortcut(
             owner: CapabilityShortcut.screencast.ownerID,
             for: .screenshotTools,

@@ -187,7 +187,7 @@ final class ScreencastReviewModel {
             fail(.deleteFailed)
             return
         }
-        finish(.discarded)
+        finish(.discarded(input))
     }
 
     /// Writes the review, copies if asked, and finishes. `strictly` stops at the first

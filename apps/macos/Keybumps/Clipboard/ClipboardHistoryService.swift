@@ -250,6 +250,44 @@ class ClipboardHistoryService {
         )
     }
 
+    /// Adds a screenshot an earlier build kept elsewhere, for the recordings index's one-time import
+    /// of a QA build's Screencast screenshots (#492). Unlike `ingestImageFile(at:)`, it skips content
+    /// already kept anywhere in the history, keeps `capturedAt` and places the item by it rather than
+    /// first, keeps it out of the Clipboard tab, records no source app, and counts only toward
+    /// `screenshotCapacity`, so it never pushes out a clipboard item. False when it adds nothing.
+    @discardableResult
+    func importScreenshot(at url: URL, capturedAt: Date) -> Bool {
+        guard let payload = ClipboardImagePayload.read(fileAt: url) else { return false }
+        let fingerprint = Self.fingerprint(of: payload.data)
+        guard !entries.contains(where: { $0.contentKey == fingerprint }) else { return false }
+        let id = UUID()
+        let mediaURL = mediaDirectoryURL.appendingPathComponent("\(id.uuidString).\(payload.fileExtension)")
+        do {
+            try payload.data.write(to: mediaURL, options: .atomic)
+        } catch {
+            try? fileManager.removeItem(at: mediaURL)
+            return false
+        }
+        let entry = ClipboardEntry(
+            id: id,
+            text: "",
+            capturedAt: capturedAt,
+            kind: .image,
+            mediaPath: mediaURL.path,
+            mediaPasteboardType: payload.type.rawValue,
+            fingerprint: fingerprint,
+            sourcePath: url.path,
+            isScreenCapture: true,
+            isHiddenFromClipboardTab: true
+        )
+        entries.insert(entry, at: entries.firstIndex { $0.capturedAt < capturedAt } ?? entries.endIndex)
+        let (kept, dropped) = Self.splitAtCapacity(entries)
+        dropped.forEach(removeMedia)
+        entries = kept
+        persist()
+        return kept.contains { $0.id == id }
+    }
+
     /// Whether the pasteboard changed at or after `date`, counting a copy the next poll would
     /// have caught (which this records first, so it isn't lost). While Clipboard History is
     /// stopped it never reads the pasteboard and reports only changes it saw while running.
@@ -314,9 +352,7 @@ class ClipboardHistoryService {
         sourceDomain: String? = nil
     ) -> Bool {
         guard payload.data.count <= Self.maximumImageBytes else { return false }
-        let fingerprint = "image:" + SHA256.hash(data: payload.data)
-            .map { String(format: "%02x", $0) }
-            .joined()
+        let fingerprint = Self.fingerprint(of: payload.data)
         guard !repeatsNewest(fingerprint) else { return false }
 
         let id = UUID()
@@ -341,6 +377,10 @@ class ClipboardHistoryService {
             try? fileManager.removeItem(at: mediaURL)
             return false
         }
+    }
+
+    private static func fingerprint(of imageData: Data) -> String {
+        "image:" + SHA256.hash(data: imageData).map { String(format: "%02x", $0) }.joined()
     }
 
     private func insert(_ entry: ClipboardEntry) {

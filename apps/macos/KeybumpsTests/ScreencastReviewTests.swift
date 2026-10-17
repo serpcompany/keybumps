@@ -195,7 +195,7 @@ struct ScreencastReviewTests {
         model.askToDiscard()
         model.confirmDiscard()
         #expect(!FileManager.default.fileExists(atPath: input.folder.path))
-        #expect(fixture.outcomes == [.discarded])
+        #expect(fixture.outcomes == [.discarded(input)])
         #expect(fixture.folder.captureFolders().isEmpty)
     }
 
