@@ -107,7 +107,8 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
 /// Each piece watches the phase with its own `addPhaseObserver(_:)`, so none replaces another's,
 /// whatever order they're added in; `onPhaseChange` reports it too. Escape closes the picker, and
 /// does nothing once Record is pressed (#518): not in the countdown, while starting, recording, or
-/// paused. Only `discard()`, the control bar's Discard, which asks first, throws a recording away.
+/// paused. Only `discard()`, the control bar's Discard, which asks first, throws a recording away;
+/// it also cancels a start, so one that hangs has a way out.
 ///
 /// A recording that ends on its own (macOS stopped it, its display went away, the disk filled)
 /// leaves `.recording` for `.finishing` as soon as the recorder starts saving what it has, and its
@@ -439,8 +440,8 @@ final class ScreencastController {
     }
 
     /// The picker's close button or Escape, the countdown's Cancel, or `shutDown()`: closes the
-    /// picker, stops the countdown, or cancels a start, and leaves nothing behind. Does nothing
-    /// once recording; `discard()` throws a recording away.
+    /// picker, stops the countdown, or cancels a start (as `discard()` does), and leaves nothing
+    /// behind. Does nothing once recording; `discard()` throws a recording away.
     func cancel() {
         switch phase {
         case .picking:
@@ -580,11 +581,16 @@ final class ScreencastController {
     }
 
     /// Stops and deletes the recording. While a recording that ended on its own is saving, it
-    /// deletes that capture once it's saved, and nothing opens for it.
+    /// deletes that capture once it's saved, and nothing opens for it. While the recording starts,
+    /// it cancels the start, without waiting for one that hangs, so the bar's Discard always ends it.
     func discard() async {
         if noticeEarlyEnd() {
             discardsEarlyEnd = true
             await earlyEndSaved()
+            return
+        }
+        if phase == .starting {
+            cancel()
             return
         }
         guard phase.isRecording else { return }

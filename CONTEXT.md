@@ -224,7 +224,7 @@ What Record Screen opens over every screen to choose a recording: an area to dra
 _Avoid_: Screencast picker (its former name), selection overlay, capture HUD, crosshair, the screenshot hotkeys' area selection (macOS's own)
 
 **Control bar**:
-The floating bar on the recorded screen while recording, never in the video: the time recorded, Pause and Resume, Draw, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
+The floating bar on the recorded screen while recording, never in the video: the time recorded, Pause and Resume, Draw, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). While the recording starts, only Discard works, cancelling the start. It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
 _Avoid_: HUD, toolbar, recording panel, status bar (macOS's menu bar)
 
 **Drawing**:

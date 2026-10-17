@@ -5,7 +5,8 @@ import Foundation
 /// the area's highlight, and the finished capture stay right. Tests drive the bar with a fake.
 @MainActor
 protocol ScreencastBarRecording: AnyObject {
-    /// Where the capture is: the bar acts only while it's recording or paused.
+    /// Where the capture is: the bar acts only while it's recording or paused, and Discard also
+    /// while it starts.
     var phase: ScreencastPhase { get }
     /// Recorded seconds, paused time excluded.
     var elapsed: TimeInterval { get }
@@ -22,7 +23,7 @@ protocol ScreencastBarRecording: AnyObject {
     func restart() async
     /// Keeps the recording, for the review panel.
     func stop() async
-    /// Deletes everything recorded.
+    /// Deletes everything recorded, or cancels a start in progress.
     func discard() async
 }
 

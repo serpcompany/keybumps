@@ -52,9 +52,9 @@ struct ScreencastControlBarView: View {
                     .accessibilityHidden(model.question != nil)
                 if let question = model.question {
                     ScreencastBarConfirmation(model: model, question: question)
+                        .disabled(!model.accepts(question))
                 }
             }
-            .disabled(!model.acceptsActions)
         }
         .padding(.leading, 6)
         .padding(.trailing, 7)
@@ -136,6 +136,7 @@ private struct ScreencastBarControls: View {
             .help(model.pauseHelp)
             .accessibilityLabel(model.pauseTitle)
             .accessibilityIdentifier(ScreencastControlBarID.pause)
+            .disabled(!model.acceptsActions)
 
             if model.showsDrawButton {
                 Button(action: model.toggleDrawing) {
@@ -146,6 +147,7 @@ private struct ScreencastBarControls: View {
                 .accessibilityLabel("Draw")
                 .accessibilityValue(model.isDrawing ? "On" : "Off")
                 .accessibilityIdentifier(ScreencastControlBarID.draw)
+                .disabled(!model.acceptsActions)
             }
 
             audioButton(.microphone)
@@ -160,6 +162,7 @@ private struct ScreencastBarControls: View {
             .help("Start over: what’s recorded so far is thrown away")
             .accessibilityLabel("Restart")
             .accessibilityIdentifier(ScreencastControlBarID.restart)
+            .disabled(!model.acceptsActions)
 
             Button(action: model.askToDiscard) {
                 Image(systemName: "trash")
@@ -168,6 +171,8 @@ private struct ScreencastBarControls: View {
             .help("Discard this recording")
             .accessibilityLabel("Discard")
             .accessibilityIdentifier(ScreencastControlBarID.discard)
+            // Discard alone works while the recording starts, to cancel a start that hangs.
+            .disabled(!model.acceptsDiscard)
 
             ScreencastBarDivider()
 
@@ -179,6 +184,7 @@ private struct ScreencastBarControls: View {
             .buttonStyle(ScreencastBarTextButtonStyle(tint: .red, isFilled: true))
             .help("Stop and keep the recording")
             .accessibilityIdentifier(ScreencastControlBarID.stop)
+            .disabled(!model.acceptsActions)
         }
     }
 
@@ -190,7 +196,7 @@ private struct ScreencastBarControls: View {
             Image(systemName: button.systemImage)
         }
         .buttonStyle(ScreencastBarIconButtonStyle(isWarning: button.isWarning))
-        .disabled(!button.isEnabled)
+        .disabled(!button.isEnabled || !model.acceptsActions)
         .help(button.help)
         .accessibilityLabel(button.label)
         .accessibilityValue(button.value)

@@ -85,6 +85,9 @@ extension AppModel {
         }
         if configuration.startsScreencastRecording {
             preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
+        } else if configuration.opensScreencastPicker {
+            // Long enough for a test to act on the countdown before it runs out.
+            preferences.set(.choice("10"), of: .screencastCountdown, for: .screenshotTools)
         }
 
         let clipboard = ClipboardHistoryService(pasteboard: .uiTestPasteboard, sourceApps: .inert)

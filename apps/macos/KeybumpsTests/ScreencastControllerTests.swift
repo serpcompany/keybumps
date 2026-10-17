@@ -447,18 +447,29 @@ struct ScreencastControllerTests {
         await controller.discard()
     }
 
+    /// What ends a start: turning ScreenGrabs off, or the control bar's Discard (#518).
+    enum StartCancel: String, CaseIterable, Sendable {
+        case shutDown, discard
+    }
+
     @available(macOS 15, *)
-    @Test("Turned off while recording starts, the start is cancelled and its folder deleted")
-    func cancelStarting() async throws {
+    @Test("Turned off, or Discard, while recording starts: a start that hasn't returned is cancelled, and nothing is kept", arguments: StartCancel.allCases)
+    func cancelStarting(_ how: StartCancel) async throws {
         defer { captures.remove() }
         captureSystem.holdsVideoStart = true
         remember(rightArea)
         let controller = makeController(countdown: 0)
+        var finished: [ScreencastCaptureResult] = []
+        controller.onCaptureFinished = { finished.append($0) }
         try await record(controller)
         #expect(await ScreencastWait.until { captureSystem.videoStreams.first?.isHoldingStart == true })
         #expect(controller.phase == .starting)
         #expect(captures.captureFolders().count == 1)
-        await controller.shutDown()
+        // Returns without waiting for the start, which never finishes until released below.
+        switch how {
+        case .shutDown: await controller.shutDown()
+        case .discard: await controller.discard()
+        }
         #expect(controller.phase == .idle)
         #expect(overlays.events.contains(.closeHighlight))
         // The recorder winds the start down once it returns, and only then is free again.
@@ -469,7 +480,7 @@ struct ScreencastControllerTests {
         #expect(await ScreencastWait.until { controller.recorder.state == .idle })
         #expect(await ScreencastWait.until { captureSystem.videoStreams[0].stopCount == 1 })
         #expect(await ScreencastWait.until { captures.captureFolders().isEmpty })
-        #expect(controller.phase == .idle)
+        #expect(controller.phase == .idle && finished.isEmpty)
     }
 
     @available(macOS 15, *)

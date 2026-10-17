@@ -381,8 +381,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
         XCTAssertEqual(countdown.frame.midX, frame.minX + 260, accuracy: 2)
         XCTAssertEqual(countdown.frame.midY, frame.minY + 150, accuracy: 2)
-        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+        escapeThenCancel(countdown)
     }
 
     func testScreencastPickerRecordsAWindowDoubleClicked() throws {
@@ -403,8 +402,18 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(countdown.waitForExistence(timeout: 5))
         XCTAssertEqual(countdown.frame.midX, frame.minX + 380, accuracy: 2)
         XCTAssertEqual(countdown.frame.midY, frame.minY + 210, accuracy: 2)
+        escapeThenCancel(countdown)
+    }
+
+    /// In the picker's 10-second countdown, Escape does nothing (#518); its Cancel closes it, and
+    /// nothing records, even once the countdown would have run out.
+    private func escapeThenCancel(_ countdown: XCUIElement) {
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertFalse(countdown.waitForNonExistence(timeout: 1), "Escape leaves the countdown")
+        element("screencast.countdown.cancel").click()
         XCTAssertTrue(countdown.waitForNonExistence(timeout: 5))
+        let bar = app.dialogs.matching(identifier: "screencastControlBar").firstMatch
+        XCTAssertFalse(bar.waitForExistence(timeout: 10), "Nothing records")
     }
 
     func testEscapeClosesTheScreencastPicker() {
