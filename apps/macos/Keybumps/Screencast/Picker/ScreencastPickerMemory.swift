@@ -9,7 +9,8 @@ struct ScreencastPickerChoices: Equatable, Sendable {
         case all
     }
 
-    var target: ScreencastPickerTarget = .area
+    /// Screen until Record is pressed (#501).
+    var target: ScreencastPickerTarget = .screen
     /// Nil until Record is pressed in Screen mode, and Screen mode starts on the pointer's screen.
     var screen: Screen?
 }
@@ -28,7 +29,7 @@ struct ScreencastPickerMemory {
         self.defaults = defaults
     }
 
-    /// The choices last saved, or the defaults (an area) where none is, or one isn't understood.
+    /// The choices last saved, or the defaults (Screen) where none is, or one isn't understood.
     var choices: ScreencastPickerChoices {
         let stored = defaults.dictionary(forKey: Self.key) ?? [:]
         func value(_ key: String) -> String? { stored[key] as? String }

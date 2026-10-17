@@ -259,12 +259,19 @@ final class SmokeUITests: XCTestCase {
         let confirm = element("screencast.picker.confirm")
         let hint = element("screencast.picker.hint")
         XCTAssertTrue(waitForLabel(of: confirm, "Record"))
-        XCTAssertTrue(waitForText(of: hint, "Drag to choose an area."))
+        // It opens on Screen (#501), on the screen with the pointer, whichever that is on CI.
+        let onAScreen = NSPredicate(format: "label BEGINSWITH %@ OR value BEGINSWITH %@", "Records all of Made-up ", "Records all of Made-up ")
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: onAScreen, evaluatedWith: hint)], timeout: 5), .completed)
+        XCTAssertTrue(element("screencast.picker.screen.1").exists && element("screencast.picker.everyScreen").exists)
+        XCTAssertTrue(confirm.isEnabled)
         for key in ["microphone", "systemAudio", "shortcuts", "clicks"] {
             XCTAssertTrue(element("screencast.picker.\(key)").exists, key)
         }
         XCTAssertFalse(element("screencast.picker.kind.screenshot").exists, "Screencast records video only (#485)")
 
+        element("screencast.picker.target.area").click()
+        XCTAssertTrue(waitForText(of: hint, "Drag to choose an area."))
+        XCTAssertTrue(element("screencast.picker.screen.1").waitForNonExistence(timeout: 5), "No screen choices in Area")
         element("screencast.picker.target.window").click()
         XCTAssertTrue(waitForText(of: hint, "Click a window to choose it."))
         XCTAssertTrue(waitForLabel(of: confirm, "Record"))
