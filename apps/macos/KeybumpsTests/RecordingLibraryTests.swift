@@ -73,6 +73,27 @@ struct RecordingLibraryTests {
         #expect(fixture.savedRecordings()?.count == 1)
     }
 
+    @Test("ScreenGrabs loads the index, and runs the import, once it's on")
+    func loadsWhenScreenGrabsIsOn() async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        let library = fixture.library()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        let module = ScreencastModule(
+            preferences: preferences,
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { _ in },
+            review: fixture.reviewServices(recordings: library)
+        )
+        #expect(module.recordings === library)
+
+        module.apply(fixture.context([], preferences: preferences))
+        #expect(library.state == .notLoaded)
+        module.apply(fixture.context([.screenshotTools], preferences: preferences))
+        #expect(library.recordings.count == 1)
+        #expect(fixture.importMemory.isDone)
+    }
+
     @Test("A recording moved or deleted outside Keybumps is marked missing, and unmarked when it's back")
     func missingFolder() async throws {
         defer { fixture.tearDown() }
@@ -284,18 +305,33 @@ final class RecordingLibraryFixture {
         )
     }
 
+    /// What the recording window takes from the app, indexing into `recordings`.
+    func reviewServices(recordings: RecordingLibrary) -> ScreencastReviewServices {
+        let repositories = ScreencastRepositoryMemory(storageURL: root.url.appendingPathComponent("repositories.json"))
+        return ScreencastReviewServices(
+            clipboard: clipboard,
+            pasteboard: pasteboard,
+            notices: nil,
+            repositories: { repositories },
+            recordings: recordings
+        )
+    }
+
     /// The flow the app hangs the recording window on, indexing into `recordings`.
     func reviewFlow(recordings: RecordingLibrary) -> ScreencastReviewFlow {
-        let repositories = ScreencastRepositoryMemory(storageURL: root.url.appendingPathComponent("repositories.json"))
-        return ScreencastReviewFlow(
-            services: ScreencastReviewServices(
-                clipboard: clipboard,
-                pasteboard: pasteboard,
-                notices: nil,
-                repositories: { repositories },
-                recordings: recordings
-            ),
-            contextReader: .inert
+        ScreencastReviewFlow(services: reviewServices(recordings: recordings), contextReader: .inert)
+    }
+
+    /// What `ScreencastModule.apply` is given with `enabled` on.
+    func context(_ enabled: Set<Capability>, preferences: AppPreferences) -> CapabilityContext {
+        CapabilityContext(
+            enabledCapabilities: enabled,
+            preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            permissionReadiness: { capabilities in
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
+            }
         )
     }
 
