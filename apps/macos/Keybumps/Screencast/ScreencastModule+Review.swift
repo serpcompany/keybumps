@@ -8,8 +8,8 @@ struct ScreencastReviewServices {
     /// Where Copy writes: the app's `.keybumps`, or a test's named pasteboard. There's no default,
     /// so a test never reaches the real clipboard by leaving it out.
     var pasteboard: NSPasteboard
-    /// The notch, where "Recording saved" and "Recording copied" show; nil shows nothing, as under
-    /// the unit-test host.
+    /// The notch, where "Recording saved to captures" and "Recording copied" show; nil shows
+    /// nothing, as under the unit-test host.
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
@@ -126,11 +126,17 @@ final class ScreencastReviewFlow {
     }
 
     /// What the notch says as a review ends. The window closes on Save, Return, Escape, or Copy, so
-    /// the notice is what says the recording was kept, or, as a warning, why it couldn't be.
+    /// the notice is what says where the recording was kept, or, as a warning, why it couldn't be.
     /// Discard says nothing.
-    static func notice(for outcome: ScreencastReviewOutcome) -> (message: String, isWarning: Bool)? {
+    ///
+    /// Where is the folder the capture's own folder is in, the captures folder (owner QA of
+    /// 4030.475.4): "Recording saved to captures", by the name Finder shows (`folderName`).
+    static func notice(
+        for outcome: ScreencastReviewOutcome,
+        folderName: (URL) -> String = { FileManager.default.displayName(atPath: $0.path) }
+    ) -> (message: String, isWarning: Bool)? {
         switch outcome {
-        case .saved: ("Recording saved", false)
+        case .saved(let input): ("Recording saved to \(folderName(input.folder.deletingLastPathComponent()))", false)
         case .copied: ("Recording copied", false)
         case .saveFailed(_, let failure): (failure.message, true)
         case .discarded: nil

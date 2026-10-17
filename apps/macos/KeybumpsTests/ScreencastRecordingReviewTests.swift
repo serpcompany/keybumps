@@ -48,6 +48,10 @@ struct ScreencastRecordingReviewTests {
         return flow
     }
 
+    /// What the notch says after Save: the folder the capture's folder is in, the test's captures
+    /// folder, by the name Finder shows.
+    private var savedNotice: String { "Recording saved to \(fixture.folder.url.lastPathComponent)" }
+
     /// The window's SwiftUI view.
     private func windowView(of panel: ScreencastReviewPanel) -> ScreencastRecordingReviewView? {
         (panel.window.contentView as? NSHostingView<ScreencastRecordingReviewView>)?.rootView
@@ -107,7 +111,7 @@ struct ScreencastRecordingReviewTests {
         #expect(!window.canBecomeKey && !window.canBecomeMain && !window.isReleasedWhenClosed)
     }
 
-    @Test("Discard is on the toolbar's left, the title and display picker in its middle, and Copy and Save on its right; nothing else is around the player")
+    @Test("Discard is on the toolbar's left, the title and display picker in its middle, and Copy and Save on its right, each button an item of its own; nothing else is around the player")
     func toolbarHoldsTheActions() async throws {
         defer { fixture.tearDown() }
         let panel = panel(outcomes: ReviewOutcomeLog())
@@ -115,12 +119,13 @@ struct ScreencastRecordingReviewTests {
         let window = panel.window
         let toolbar = try #require(window.toolbar)
         #expect(toolbar.items.map(\.itemIdentifier.rawValue) == [
-            "screencast.review.toolbar.leading", "NSToolbarFlexibleSpaceItem",
-            "screencast.review.toolbar.middle", "NSToolbarFlexibleSpaceItem",
-            "screencast.review.toolbar.trailing",
+            "screencast.review.toolbar.discard", "screencast.review.toolbar.question",
+            "screencast.review.toolbar.keep", "screencast.review.toolbar.confirmDiscard",
+            "NSToolbarFlexibleSpaceItem", "screencast.review.toolbar.title", "NSToolbarFlexibleSpaceItem",
+            "screencast.review.toolbar.copy", "screencast.review.toolbar.save",
         ])
         let parts = toolbar.items.compactMap { $0.view as? NSHostingView<ScreencastRecordingReviewToolbar> }.map(\.rootView)
-        #expect(parts.map(\.part) == [.leading, .middle, .trailing])
+        #expect(parts.map(\.part) == [.discard, .question, .keep, .confirmDiscard, .title, .copy, .save])
         #expect(parts.allSatisfy { $0.model === panel.model }, "they act on the review's model")
         #expect(window.contentView is NSHostingView<ScreencastRecordingReviewView>, "the content is the player alone")
 
@@ -131,13 +136,69 @@ struct ScreencastRecordingReviewTests {
             window.contentView?.superview?.layoutSubtreeIfNeeded()
             try await Task.sleep(for: .milliseconds(50))
         }
-        let frames = toolbar.items.filter { $0.view is NSHostingView<ScreencastRecordingReviewToolbar> }
-            .compactMap { item in item.view.map { $0.convert($0.bounds, to: nil) } }
-        try #require(frames.count == 3)
+        func frame(_ part: ScreencastRecordingReviewToolbar.Part) throws -> CGRect {
+            let item = try #require(toolbar.items.first { $0.itemIdentifier == ScreencastRecordingReviewWindow.identifier(for: part) })
+            let view = try #require(item.view)
+            return view.convert(view.bounds, to: nil)
+        }
         let middle = window.frame.width / 2
-        #expect(frames[0].width > 0 && frames[0].maxX < middle / 2, "Discard on the left")
-        #expect(frames[1].minX < middle && frames[1].maxX > middle, "the title and picker in the middle")
-        #expect(frames[2].width > 0 && frames[2].minX > middle * 1.5, "Copy and Save on the right")
+        let discard = try frame(.discard), title = try frame(.title), copy = try frame(.copy), save = try frame(.save)
+        #expect(discard.width > 0 && discard.maxX < middle / 2, "Discard on the left")
+        #expect(title.minX < middle && title.maxX > middle, "the title and picker in the middle")
+        #expect(copy.width > 0 && copy.minX > middle * 1.5, "Copy on the right")
+        #expect(save.width > 0 && save.minX >= copy.maxX, "then Save, last")
+        await panel.close()
+    }
+
+    @Test("Save is the window's prominent default button; the title is words, not a button")
+    func saveIsTheDefaultButton() {
+        let window = ScreencastRecordingReviewWindow()
+        func item(_ part: ScreencastRecordingReviewToolbar.Part) -> NSToolbarItem? {
+            window.toolbar?.items.first { $0.itemIdentifier == ScreencastRecordingReviewWindow.identifier(for: part) }
+        }
+        #expect(item(.title)?.isBordered == false && item(.question)?.isBordered == false, "no button shape around words")
+        if #available(macOS 26, *) {
+            #expect(item(.save)?.style == .prominent, "tinted with the accent color, as a toolbar's Done is")
+            #expect(item(.confirmDiscard)?.style == .prominent && item(.confirmDiscard)?.backgroundTintColor == .systemRed)
+            for plain: ScreencastRecordingReviewToolbar.Part in [.discard, .keep, .copy] {
+                #expect(item(plain)?.style == .plain, "\(plain) is an ordinary button")
+            }
+        }
+    }
+
+    @Test("While Discard is asked, Discard, Copy, and Save make way for the question, Keep, and Discard; Keep brings them back")
+    func discardQuestionTakesTheToolbar() async throws {
+        defer { fixture.tearDown() }
+        let panel = panel(outcomes: ReviewOutcomeLog())
+        await panel.show(try fixture.video())
+        let model = try #require(panel.model)
+        let toolbar = try #require(panel.window.toolbar)
+        func shown() -> [ScreencastRecordingReviewToolbar.Part] {
+            ScreencastRecordingReviewToolbar.Part.allCases.filter { $0.isShown(confirmingDiscard: model.isConfirmingDiscard) }
+        }
+        func hiddenItems() -> Set<String> {
+            guard #available(macOS 15, *) else { return [] }
+            return Set(toolbar.items.filter(\.isHidden).map(\.itemIdentifier.rawValue))
+        }
+        func items(_ parts: [ScreencastRecordingReviewToolbar.Part]) -> Set<String> {
+            Set(parts.map { ScreencastRecordingReviewWindow.identifier(for: $0).rawValue })
+        }
+        #expect(shown() == [.discard, .title, .copy, .save])
+        if #available(macOS 15, *) {
+            #expect(hiddenItems() == items([.question, .keep, .confirmDiscard]), "no empty item in the toolbar")
+        }
+
+        model.askToDiscard()
+        #expect(shown() == [.question, .keep, .confirmDiscard, .title])
+        if #available(macOS 15, *) {
+            try await eventually { hiddenItems() == items([.discard, .copy, .save]) }
+        }
+
+        model.keep()
+        #expect(shown() == [.discard, .title, .copy, .save])
+        if #available(macOS 15, *) {
+            try await eventually { hiddenItems() == items([.question, .keep, .confirmDiscard]) }
+        }
         await panel.close()
     }
 
@@ -171,7 +232,7 @@ struct ScreencastRecordingReviewTests {
 
     // MARK: Save, Copy, and Discard
 
-    @Test("Save keeps the recording in the captures folder, closes the window, and the notch says \"Recording saved\"")
+    @Test("Save keeps the recording in the captures folder, closes the window, and the notch says it was saved there")
     func saveClosesWithANotice() async throws {
         defer { fixture.tearDown() }
         let outcomes = ReviewOutcomeLog()
@@ -185,7 +246,7 @@ struct ScreencastRecordingReviewTests {
         await panel.model?.save()
         #expect(outcomes.outcomes == [.saved(recording)])
         #expect(!panel.isShown && !panel.window.isVisible && panel.playback == nil, "the window closes")
-        #expect(notices.messages == ["Recording saved"] && notices.warnings == [false])
+        #expect(notices.messages == [savedNotice] && notices.warnings == [false], "where it went: the captures folder")
         #expect(FileManager.default.fileExists(atPath: recording.folder.path), "kept in the captures folder it was recorded into")
         #expect(try ScreencastMetadata.read(from: recording.metadataURL).duration == 4, "the recording as it was")
         #expect(ScreencastReview.read(from: recording.metadataURL) != nil, "with its review in meta.json")
@@ -224,7 +285,7 @@ struct ScreencastRecordingReviewTests {
         try await eventually { !panel.isShown }
 
         #expect(outcomes.outcomes == [.saved(returned), .saved(escaped), .saved(closed)])
-        #expect(notices.messages == ["Recording saved", "Recording saved", "Recording saved"])
+        #expect(notices.messages == [savedNotice, savedNotice, savedNotice])
     }
 
     @Test("Copy puts the recording on the services' pasteboard and closes the window; the notch then says \"Recording copied\"")
@@ -269,7 +330,7 @@ struct ScreencastRecordingReviewTests {
         flow.close()
         try await eventually { !panel.isShown }
         #expect(outcomes.outcomes == [.discarded, .saved(kept)])
-        #expect(notices.messages == ["Recording saved"])
+        #expect(notices.messages == [savedNotice])
     }
 
     @Test("Nothing is left on screen for the next capture: a saved recording's window is already gone; one not yet saved closes as the capture starts, which saves it, with no notice")
@@ -292,13 +353,13 @@ struct ScreencastRecordingReviewTests {
         try await eventually { panel.model == nil }
         #expect(outcomes.outcomes == [.saved(saved), .saved(unsaved)], "which saves it")
         #expect(ScreencastReview.read(from: unsaved.metadataURL) != nil, "with its review in meta.json")
-        #expect(notices.messages == ["Recording saved"], "the next capture needs no notice for it")
+        #expect(notices.messages == [savedNotice], "the next capture needs no notice for it")
 
         let next = try fixture.video(name: "1791000200")
         await flow.show(next, context: .none)
         #expect(panel.isShown && panel.model?.input == next, "the next recording opens as usual")
         await panel.close()
-        #expect(notices.messages == ["Recording saved", "Recording saved"])
+        #expect(notices.messages == [savedNotice, savedNotice])
     }
 
     @Test("From the moment a capture starts, the window before is off screen, never key, deaf to its keys, and its player stopped, while its save is still to come")
@@ -328,12 +389,19 @@ struct ScreencastRecordingReviewTests {
         #expect(!panel.isShown && !window.isVisible && !window.isKeyWindow, "and it never comes back")
     }
 
-    @Test("What the notch says: Save and Copy, the reason as a warning when the recording couldn't be saved, and nothing for Discard")
+    @Test("What the notch says: where Save put the recording, Copy, the reason as a warning when the recording couldn't be saved, and nothing for Discard")
     func notices() throws {
         defer { fixture.tearDown() }
         let recording = try fixture.video(name: "1791000000")
-        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.message == "Recording saved")
-        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.isWarning == false)
+        // The folder named is the one the capture's own folder is in, by its name in Finder.
+        var asked: [URL] = []
+        let saved = ScreencastReviewFlow.notice(for: .saved(recording)) { folder in
+            asked.append(folder)
+            return "Movies"
+        }
+        #expect(saved?.message == "Recording saved to Movies" && saved?.isWarning == false)
+        #expect(asked.map(\.standardizedFileURL) == [fixture.folder.url.standardizedFileURL], "the captures folder, not the capture's own")
+        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.message == savedNotice, "Finder's name for it")
         #expect(ScreencastReviewFlow.notice(for: .copied(recording))?.message == "Recording copied")
         let failed = ScreencastReviewFlow.notice(for: .saveFailed(recording, .diskFull))
         #expect(failed?.message == "Couldn’t save the recording: the disk is full." && failed?.isWarning == true)
@@ -366,7 +434,7 @@ struct ScreencastRecordingReviewTests {
         await panel.close()
         #expect(outcomes.outcomes == [.saveFailed(recording, .metadataFailed)], "never saved")
         #expect(notices.messages == [message] && notices.warnings == [true], "the notch warns, with the reason")
-        #expect(!notices.messages.contains("Recording saved"))
+        #expect(!notices.messages.contains { $0.hasPrefix("Recording saved") })
     }
 
     @Test("A recording moved or deleted during its review: Save says so, nothing makes its folder again, and the next capture closing it warns")

@@ -22,7 +22,8 @@ enum ScreencastReviewID {
 /// LICENSE.snapzy): the player edge to edge, `AVPlayerView` with its own controls along its bottom
 /// for play, pause, and scrubbing, the video fitted to it. Discard, Copy, and Save are in the
 /// window's toolbar (`ScreencastRecordingReviewToolbar`). Save and Copy close the window, and the
-/// notch says it's done. No editing, and no note, type, or repository.
+/// notch says where it was saved, or that it was copied. No editing, and no note, type, or
+/// repository.
 struct ScreencastRecordingReviewView: View {
     let model: ScreencastReviewModel
     /// The player, for a window on screen; nil under the unit-test host.
@@ -55,39 +56,60 @@ struct ScreencastRecordingReviewView: View {
     }
 }
 
-/// A part of a recording's window's toolbar: Discard on the left, or "Discard this capture?" with
-/// Keep and Discard in its place; the window's title in the middle, with the display picker for a
-/// recording of every display; and Copy and Save on the right, Save the primary one. Nothing until a
-/// review shows.
+/// One control of a recording's window's toolbar, each its own toolbar item: Discard on the left, or
+/// "Discard this capture?" with Keep and Discard in its place; the window's title in the middle, with
+/// the display picker for a recording of every display; and Copy and Save on the right, Save the
+/// window's default button. Nothing until a review shows, nor while the part makes way
+/// (`Part.isShown`).
+///
+/// Each button is an item of its own because macOS 26 and later draw a toolbar item's own button
+/// shape around its view, not the view's button style: one item for Copy and Save drew both as
+/// words in one shape, beside a title in a shape just like it (owner QA of 4030.475.4).
 struct ScreencastRecordingReviewToolbar: View {
-    enum Part {
-        case leading
-        case middle
-        case trailing
+    enum Part: CaseIterable {
+        /// Discard, until it's asked.
+        case discard
+        /// "Discard this capture?", then Keep and Discard, while it's asked.
+        case question
+        case keep
+        case confirmDiscard
+        /// The window's title, with the display picker, and a spinner while it saves.
+        case title
+        case copy
+        case save
+
+        /// Discard, Copy, and Save make way for the discard question while it's asked.
+        func isShown(confirmingDiscard: Bool) -> Bool {
+            switch self {
+            case .title: true
+            case .question, .keep, .confirmDiscard: confirmingDiscard
+            case .discard, .copy, .save: !confirmingDiscard
+            }
+        }
     }
 
     let model: ScreencastReviewModel?
     let part: Part
 
     var body: some View {
-        if let model {
+        if let model, part.isShown(confirmingDiscard: model.isConfirmingDiscard) {
             switch part {
-            case .leading: discard(model)
-            case .middle: title(model)
-            case .trailing: actions(model)
-            }
-        }
-    }
-
-    @ViewBuilder private func discard(_ model: ScreencastReviewModel) -> some View {
-        if model.isConfirmingDiscard {
-            HStack(spacing: 8) {
+            case .discard:
+                Button("Discard", role: .destructive, action: model.askToDiscard)
+                    .buttonStyle(.bordered)
+                    .disabled(!model.acceptsActions)
+                    .help("Delete this capture")
+                    .accessibilityIdentifier(ScreencastReviewID.discard)
+            case .question:
                 Text("Discard this capture?")
                     .font(.system(size: 13, weight: .semibold))
                     .fixedSize()
+            case .keep:
                 Button("Keep", action: model.keep)
+                    .buttonStyle(.bordered)
                     .help("Keep the capture")
                     .accessibilityIdentifier(ScreencastReviewID.keep)
+            case .confirmDiscard:
                 Button("Discard", role: .destructive) {
                     Task { model.confirmDiscard() }
                 }
@@ -95,14 +117,27 @@ struct ScreencastRecordingReviewToolbar: View {
                 .tint(.red)
                 .help("Delete the capture and its folder")
                 .accessibilityIdentifier(ScreencastReviewID.confirmDiscard)
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Discard this capture?")
-        } else {
-            Button("Discard", role: .destructive, action: model.askToDiscard)
+            case .title:
+                title(model)
+            case .copy:
+                Button("Copy") {
+                    Task { await model.copy() }
+                }
+                .buttonStyle(.bordered)
                 .disabled(!model.acceptsActions)
-                .help("Delete this capture")
-                .accessibilityIdentifier(ScreencastReviewID.discard)
+                .help("Save, and copy the recording’s file")
+                .accessibilityIdentifier(ScreencastReviewID.copy)
+            case .save:
+                Button("Save") {
+                    Task { await model.save() }
+                }
+                .buttonStyle(.borderedProminent)
+                // The window's default button. Return is the review's key monitor's, which saves.
+                .keyboardShortcut(.defaultAction)
+                .disabled(!model.acceptsActions)
+                .help("Keep the recording in the captures folder (Return)")
+                .accessibilityIdentifier(ScreencastReviewID.save)
+            }
         }
     }
 
@@ -115,32 +150,12 @@ struct ScreencastRecordingReviewToolbar: View {
                 .foregroundStyle(.secondary)
                 .fixedSize()
                 .accessibilityAddTraits(.isHeader)
-            ScreencastReviewDisplayPicker(model: model)
-        }
-    }
-
-    /// Hidden while the discard question is up.
-    @ViewBuilder private func actions(_ model: ScreencastReviewModel) -> some View {
-        if !model.isConfirmingDiscard {
-            HStack(spacing: 8) {
-                if model.isWorking {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Saving")
-                }
-                Button("Copy") {
-                    Task { await model.copy() }
-                }
-                .help("Save, and copy the recording’s file")
-                .accessibilityIdentifier(ScreencastReviewID.copy)
-                Button("Save") {
-                    Task { await model.save() }
-                }
-                .buttonStyle(.borderedProminent)
-                .help("Keep the recording in the captures folder (Return)")
-                .accessibilityIdentifier(ScreencastReviewID.save)
+            if model.isWorking {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Saving")
             }
-            .disabled(!model.acceptsActions)
+            ScreencastReviewDisplayPicker(model: model)
         }
     }
 }

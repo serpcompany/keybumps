@@ -55,6 +55,8 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
 - After Save, the window closes, a notice in the notch says it was saved, and the file goes to the captures folder set in Settings › Screencast.
 - Screencast is video only (#485).
 
+**2026-10-17, after candidate 4030.475.4** (#479). The owner asked for the notice to say where the recording went ("a notch notification saying it was like saved to {somewhere}"), so it names the folder, and for Save to be "more apparent as a BUTTON", so it's the window's prominent default button. A "Choose…" folder in Settings › Screencast, starting at the Mac's own screenshot location, is to follow in #504.
+
 Not an owner decision: #479 removed the corner panel, which grew from Snapzy's quick-access card, because nothing opened it any more once Screencast was video only (#485) and recordings opened in the window. Whether a card comes back after each capture is open, in #496 (parked; see #482).
 
 ## Consequences
