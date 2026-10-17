@@ -239,7 +239,7 @@ struct ScreencastControlBarTests {
     }
 
     @available(macOS 15, *)
-    @Test("While the recording starts, the sounds show as the picker chose them, the buttons wait, and the dot holds still")
+    @Test("While the recording starts, the sounds show as the picker chose them, the buttons but Discard wait, and the dot holds still")
     func whileStarting() async throws {
         let flow = ScreencastFlow(systemAudio: false)
         defer { flow.captures.remove() }
@@ -257,7 +257,7 @@ struct ScreencastControlBarTests {
         #expect(bar.audioButton(for: .microphone).value == "On", "As chosen, not \"Not recorded\"")
         #expect(bar.audioButton(for: .microphone).systemImage == "mic.fill")
         #expect(bar.audioButton(for: .systemAudio).value == "Not recorded", "Switched off in the picker")
-        #expect(!bar.isLive && !bar.acceptsActions)
+        #expect(!bar.isLive && !bar.acceptsActions && bar.acceptsDiscard)
 
         flow.captureSystem.videoStreams.first?.releaseStart()
         #expect(await ScreencastWait.until { flow.controller.phase == .recording })
@@ -466,9 +466,9 @@ struct ScreencastControlBarTests {
         let bar = makeBar()
         var drew = false
         bar.onToggleDrawing = { drew = true }
-        for phase in [ScreencastPhase.idle, .picking, .countingDown(remaining: 3), .starting, .finishing] {
+        for phase in [ScreencastPhase.idle, .picking, .countingDown(remaining: 3), .finishing] {
             recording.phase = phase
-            #expect(!bar.acceptsActions)
+            #expect(!bar.acceptsActions && !bar.acceptsDiscard)
             bar.togglePause()
             bar.toggleAudio(.microphone)
             bar.toggleDrawing()
@@ -479,6 +479,25 @@ struct ScreencastControlBarTests {
         }
         #expect(recording.calls.isEmpty)
         #expect(!drew && bar.question == nil)
+    }
+
+    @Test("While the recording starts, only Discard acts: it asks, then cancels the start")
+    func discardWhileStarting() async {
+        let bar = makeBar()
+        var drew = false
+        bar.onToggleDrawing = { drew = true }
+        recording.phase = .starting
+        bar.togglePause()
+        bar.toggleAudio(.microphone)
+        bar.toggleDrawing()
+        bar.askToRestart()
+        await bar.stop()
+        #expect(recording.calls.isEmpty && !drew && bar.question == nil)
+
+        bar.askToDiscard()
+        #expect(bar.question == .discard)
+        await bar.confirm()
+        #expect(recording.calls == [.discard])
     }
 
     // MARK: Discard and Restart ask first
@@ -738,7 +757,7 @@ struct ScreencastRecordingControlsTests {
             #expect(!bar.isShown, "\(phase)")
         }
         // Up as the recording starts, before the recorder reads what to leave out, with its
-        // buttons waiting.
+        // buttons waiting, except Discard (#518).
         recording.phase = .starting
         controls.phaseChanged(.starting)
         #expect(bar.isShown && !bar.model.acceptsActions)
