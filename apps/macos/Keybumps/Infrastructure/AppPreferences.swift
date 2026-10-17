@@ -28,8 +28,6 @@ final class AppPreferences {
         static let lastLaunchedVersion = "lastLaunchedVersion"
         static let didFillSettingsWindow = "didFillSettingsWindow"
         static let sendsCrashReports = "sendsCrashReports"
-        /// Set once Screencast's saved state was folded into Screenshot Tools (#489).
-        static let didFoldScreencastIntoScreengrabs = "didFoldScreencastIntoScreengrabs"
     }
 
     private let defaults: UserDefaults
@@ -197,10 +195,13 @@ final class AppPreferences {
     }
 
     /// Folds what an install saved for Screencast into Screenshot Tools, which becomes Screengrabs
-    /// and keeps its ID (ADR 0010, #489). It runs once, on an install whose saved `knownCapabilities`
-    /// holds `screencast`, and rewrites saved values before `init` reads them, since `init` drops an
-    /// ID `Capability` no longer has. Nothing calls it yet: #490 calls it first in `init`, in the PR
-    /// that retires `Capability.screencast`.
+    /// and keeps its ID (ADR 0010, #489). It runs on an install whose saved `knownCapabilities` holds
+    /// `screencast`, and rewrites saved values before `init` reads them, since `init` drops an ID
+    /// `Capability` no longer has. That makes it run once: `init` then saves `knownCapabilities`
+    /// without `screencast`. A build rolled back to puts `screencast` back, so after a return it runs
+    /// again, from what the person last saved; doing so is safe, since a row already done changes
+    /// nothing and the moved usage is gone from its old key. Nothing calls it yet: #490 calls it
+    /// first in `init`, in the PR that retires `Capability.screencast`.
     /// - Screenshot Tools on: left on, whatever Screencast was.
     /// - Screenshot Tools off and Screencast on: Screenshot Tools turns on. Each screenshot shortcut
     ///   still on its default key (⇧⌘2, ⇧⌘3, ⇧⌘4) is unassigned and a custom one is kept, so nothing
@@ -217,9 +218,7 @@ final class AppPreferences {
     ) {
         let screencast = "screencast"
         let screenshotTools = Capability.screenshotTools.rawValue
-        guard !defaults.bool(forKey: Key.didFoldScreencastIntoScreengrabs),
-              (defaults.array(forKey: Key.knownCapabilities) as? [String])?.contains(screencast) == true
-        else { return }
+        guard (defaults.array(forKey: Key.knownCapabilities) as? [String])?.contains(screencast) == true else { return }
         ApplicationUsageStore.moveUsage(from: "command:\(screencast)", to: "command:\(screenshotTools)", at: applicationUsage)
         // A saved list that's missing means every plugin is as it ships: Screenshot Tools on.
         if var enabled = defaults.array(forKey: Key.enabledCapabilities) as? [String],
@@ -240,7 +239,6 @@ final class AppPreferences {
             enabled.append(screenshotTools)
             defaults.set(enabled.sorted(), forKey: Key.enabledCapabilities)
         }
-        defaults.set(true, forKey: Key.didFoldScreencastIntoScreengrabs)
     }
 
     init(

@@ -9,12 +9,13 @@ import Testing
 @MainActor
 @Suite("Screengrabs migration")
 struct ScreengrabsMigrationTests {
-    static let flag = "didFoldScreencastIntoScreengrabs"
     /// `knownCapabilities` on an install that ran a build with Screencast.
     nonisolated static let knownWithScreencast = [
         "clipboardHistory", "dictation", "emojiPicker", "keyboardShortcutter", "keystrokes", "quickSearch", "screencast",
         "screenshotTools", "snippets", "timer", "translation", "windowManagement",
     ]
+    /// `knownCapabilities` as launch saves it once `Capability.screencast` is retired (#490).
+    nonisolated static let knownWithoutScreencast = knownWithScreencast.filter { $0 != "screencast" }
     static let screenshotShortcuts = ["screenshotScreen", "screenshotScreenAndEdit", "screenshotArea"]
     static let custom = ShortcutBinding(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(cmdKey | optionKey), displayName: "⌥⌘S")
 
@@ -103,7 +104,7 @@ struct ScreengrabsMigrationTests {
     // MARK: On or off
 
     @Test(
-        "Screenshot Tools on stays on whatever Screencast was, both off stay off, and only the flag is written",
+        "Screenshot Tools on stays on whatever Screencast was, both off stay off, and nothing is written",
         arguments: [["clipboardHistory", "screenshotTools", "screencast"], ["clipboardHistory", "screenshotTools"], ["clipboardHistory"], nil]
     )
     func onOrOffCarriesOver(enabled: [String]?) {
@@ -113,8 +114,7 @@ struct ScreengrabsMigrationTests {
 
         Self.fold(defaults)
 
-        #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()) == [Self.flag])
-        #expect(defaults.bool(forKey: Self.flag))
+        #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty)
     }
 
     @Test("Screencast on and Screenshot Tools off: Screengrabs turns on, its screenshot keys go back to macOS, and screenshots stop being copied")
@@ -127,7 +127,7 @@ struct ScreengrabsMigrationTests {
         Self.fold(defaults)
 
         #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()) == [
-            "enabledCapabilities", "capabilityShortcuts", "copiesScreenshotsToClipboard", Self.flag,
+            "enabledCapabilities", "capabilityShortcuts", "copiesScreenshotsToClipboard",
         ])
         #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screencast", "screenshotTools"])
         var expected = Self.savedShortcuts
@@ -198,18 +198,20 @@ struct ScreengrabsMigrationTests {
         }
     }
 
-    @Test("It runs once: the next launch changes nothing, even after the person undoes what it did")
-    func runsOnce() throws {
+    @Test("Once launch saves knownCapabilities without screencast (#490), it doesn't run again, whatever else is saved")
+    func stopsOnceLaunchDropsScreencast() throws {
         try Self.withFolder { folder in
             let usageURL = folder.appendingPathComponent("application-usage.json")
             let day = Date(timeIntervalSinceReferenceDate: 800_000_000)
             try Self.writeUsage(["command:screencast": ApplicationUsageRecord(launchCount: 2, lastOpenedAt: day)], to: usageURL)
             let defaults = Self.install(enabled: ["screencast"])
             AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
-            #expect(defaults.bool(forKey: Self.flag))
+            #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["screencast", "screenshotTools"])
+            // What launch saves right after the step, once `Capability.screencast` is retired.
+            defaults.set(Self.knownWithoutScreencast, forKey: "knownCapabilities")
 
-            // Screenshot Tools off again, ⇧⌘2–⇧⌘4 back, copying back on, and Screencast's command
-            // learned again (as in a build rolled back to, which still lists it).
+            // Screenshot Tools off again, ⇧⌘2–⇧⌘4 back, copying back on, and picks under Screencast's
+            // command: only `knownCapabilities` decides.
             defaults.set(["screencast"], forKey: "enabledCapabilities")
             Self.setShortcuts(Self.savedShortcuts, in: defaults)
             defaults.set(true, forKey: "copiesScreenshotsToClipboard")
@@ -227,9 +229,73 @@ struct ScreengrabsMigrationTests {
         }
     }
 
+    @Test("Run again before launch saves knownCapabilities (a launch cut short), it changes nothing and adds no pick twice")
+    func runAgainChangesNothing() throws {
+        try Self.withFolder { folder in
+            let usageURL = folder.appendingPathComponent("application-usage.json")
+            let day = Date(timeIntervalSinceReferenceDate: 800_000_000)
+            try Self.writeUsage([
+                "command:screencast": ApplicationUsageRecord(launchCount: 3, lastOpenedAt: day),
+                "command:screenshotTools": ApplicationUsageRecord(launchCount: 4, lastOpenedAt: day),
+            ], to: usageURL)
+            let defaults = Self.install(enabled: ["screencast"])
+            defaults.set(true, forKey: "copiesScreenshotsToClipboard")
+            AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
+            #expect(try Self.usage(at: usageURL) == ["command:screenshotTools": ApplicationUsageRecord(launchCount: 7, lastOpenedAt: day)])
+            let before = defaults.dictionaryRepresentation()
+            let usageBefore = try Data(contentsOf: usageURL)
+
+            AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
+
+            #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty)
+            #expect(try Data(contentsOf: usageURL) == usageBefore)
+        }
+    }
+
+    @Test("A build rolled back to puts screencast back in knownCapabilities, so after a return it runs again, from what the person last saved")
+    func runsAgainAfterRollback() throws {
+        try Self.withFolder { folder in
+            let usageURL = folder.appendingPathComponent("application-usage.json")
+            let day = Date(timeIntervalSinceReferenceDate: 800_000_000)
+            let later = Date(timeIntervalSinceReferenceDate: 810_000_000)
+            try Self.writeUsage([
+                "command:screencast": ApplicationUsageRecord(launchCount: 3, lastOpenedAt: day),
+                "command:screenshotTools": ApplicationUsageRecord(launchCount: 4, lastOpenedAt: day),
+            ], to: usageURL)
+            // The first update, with Screenshot Tools on: only the picks move.
+            let defaults = Self.install(enabled: ["clipboardHistory", "screenshotTools"])
+            defaults.set(true, forKey: "copiesScreenshotsToClipboard")
+            AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
+            #expect(try Self.usage(at: usageURL) == ["command:screenshotTools": ApplicationUsageRecord(launchCount: 7, lastOpenedAt: day)])
+            defaults.set(Self.knownWithoutScreencast, forKey: "knownCapabilities")
+
+            // Rolled back: the older build lists Screencast again, and there the person turns it on,
+            // turns Screenshot Tools off, and picks Screencast's command once more.
+            defaults.set(Self.knownWithScreencast, forKey: "knownCapabilities")
+            defaults.set(["clipboardHistory", "screencast"], forKey: "enabledCapabilities")
+            try Self.writeUsage([
+                "command:screencast": ApplicationUsageRecord(launchCount: 1, lastOpenedAt: later),
+                "command:screenshotTools": ApplicationUsageRecord(launchCount: 7, lastOpenedAt: day),
+            ], to: usageURL)
+
+            // Updated again.
+            AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
+
+            #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screencast", "screenshotTools"])
+            var expected = Self.savedShortcuts
+            for id in Self.screenshotShortcuts { expected[id] = nil }
+            #expect(Self.shortcuts(in: defaults) == expected)
+            #expect(defaults.object(forKey: "copiesScreenshotsToClipboard") as? Bool == false)
+            #expect(
+                try Self.usage(at: usageURL) == ["command:screenshotTools": ApplicationUsageRecord(launchCount: 8, lastOpenedAt: later)],
+                "Only the pick made since the first update is added"
+            )
+        }
+    }
+
     @Test(
         "An install that never knew Screencast (beta.25 or earlier) is left as it is, even with a saved list naming it",
-        arguments: [knownWithScreencast.filter { $0 != "screencast" }, nil]
+        arguments: [knownWithoutScreencast, nil]
     )
     func neverKnewScreencast(known: [String]?) throws {
         try Self.withFolder { folder in
@@ -242,7 +308,7 @@ struct ScreengrabsMigrationTests {
 
             AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
 
-            #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty, "Not even the flag")
+            #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty)
             #expect(try Data(contentsOf: usageURL) == usageBefore)
         }
     }
@@ -258,7 +324,7 @@ struct ScreengrabsMigrationTests {
 
         Self.fold(defaults)
 
-        #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()) == [Self.flag])
+        #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty)
         #expect(defaults.stringArray(forKey: "enabledCapabilities")?.contains("screenshotTools") == screenshotToolsOn)
     }
 
