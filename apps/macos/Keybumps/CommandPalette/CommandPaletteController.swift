@@ -938,7 +938,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func moveSelection(_ delta: Int) {
         let count = itemCount
         guard count > 0 else { return }
-        // Up and Down with a modifier in a grid move within it, so Left and Right do too from here.
+        // Every Up and Down a grid doesn't take steps here: in a list, and in a grid while a modifier
+        // is held or an input method composes. Either way a key has moved the highlight, so once
+        // Left and Right reach a grid they move within it, not switch tabs, even after the pointer.
         state.gridEnteredByPointer = false
         state.selection = (state.selection + delta + count) % count
     }

@@ -233,7 +233,7 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.tab == .search)
     }
 
-    @Test("A grid takes only the plain arrow keys, as Emoji's does: with a modifier, Up and Down step one item and wrap, as in a list, and Left and Right stay with the search field; spaces alone in the field leave the grid its arrow keys; and Down at the last row after a hover leaves Left switching tabs")
+    @Test("A grid takes only the plain arrow keys, as Emoji's does: with a modifier, Up and Down step one item and wrap, as in a list, and Left and Right stay with the search field; spaces alone in the field leave the grid its arrow keys; Down at the last row after a hover leaves Left switching tabs, but Shift-Down gives Left to the grid")
     func gridArrowsWithModifiers() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
@@ -278,6 +278,21 @@ struct CapabilityPaletteContentTests {
         #expect(palette.state.selection == 4)
         _ = palette.handleKeyDown(Self.key(kVK_LeftArrow))
         #expect(palette.state.tab != .keyboardShortcutter)
+
+        // Shift-Down after the pointer came in is a key moving the highlight, so Left moves within
+        // the grid from then on instead of switching tabs.
+        palette.selectOnOpening(.keyboardShortcutter)
+        pointer = NSPoint(x: 30, y: 40)
+        palette.hover(row: 1)
+        #expect(palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .shift)) == nil)
+        #expect(palette.state.selection == 2)
+        #expect(!palette.state.gridEnteredByPointer)
+        let moves = fixture.content.moves.count
+        #expect(palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(palette.state.tab == .keyboardShortcutter, "Left stays in the grid")
+        #expect(fixture.content.moves.count == moves + 1)
+        #expect(palette.state.selection == 1)
     }
 
     @Test("While an input method composes, a grid's Up and Down step one item and wrap, as in a list, and Left and Right stay with the input method")
