@@ -274,6 +274,24 @@ struct PluginSettingsPageTests {
         #expect(rows.screenshots.filter { $0 == .screenRecordingRequired }.count == 1)
     }
 
+    @Test("The other pages on the template still show the permissions they need, such as Keystrokes' Input Monitoring and Screencast's Screen Recording (#490)")
+    func templatePagesShowRequiredPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsTemplateRequiredPermissions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root).model
+        func required(_ descriptor: CapabilityDescriptor) throws -> [PermissionRow.Shown] {
+            let page = try #require(descriptor.settingsPage, "\(descriptor.title) has a Settings page")
+            return RowsOnPage.read(page.content(), model: model).permissions.filter { !$0.isOptional }
+        }
+        #expect(try required(.keystrokes) == [PermissionRow.Shown(permission: .inputMonitoring, isOptional: false)])
+        #expect(try required(.screencast) == [PermissionRow.Shown(permission: .screenRecording, isOptional: false)])
+        for descriptor in [CapabilityDescriptor.timer, .emojiPicker, .translation, .keystrokes, .screencast] {
+            let declared = MacPermission.allCases.filter(descriptor.requiredPermissions.contains)
+            #expect(try required(descriptor).map(\.permission) == declared, "\(descriptor.title) shows each permission it needs")
+        }
+    }
+
     @Test("Screenshot Tools' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots (#490)")
     func screenshotToolsRows() throws {
         let root = FileManager.default.temporaryDirectory
