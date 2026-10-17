@@ -352,6 +352,7 @@ struct ScreencastControllerTests {
         model?.pressArea(at: CGPoint(x: 1612, y: 300), on: PickerScreens.right)
         model?.dragArea(to: CGPoint(x: 2012, y: 0))
         model?.releaseArea()
+        #expect(model?.area != nil, "An area is drawn for Escape to drop")
         overlays.pressEscape()
         #expect(controller.phase == .idle && controller.picker == nil)
         #expect(overlays.events.suffix(2) == [.closePicker, .stopWatchingEscape])

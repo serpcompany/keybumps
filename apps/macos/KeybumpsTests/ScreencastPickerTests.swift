@@ -372,7 +372,11 @@ struct ScreencastPickerTests {
 
     @Test("Record records the sounds, shortcuts, and clicks the switches chose")
     func switchesChoose() {
-        let model = PickerScreens.model(rememberedArea: ScreencastPickedArea(display: 1, rect: CGRect(x: 100, y: 282, width: 800, height: 600)))
+        let area = ScreencastPickedArea(display: 1, rect: CGRect(x: 100, y: 282, width: 800, height: 600))
+        let model = PickerScreens.model(rememberedArea: area)
+        // On the remembered area: the picker opens on Screen (#501).
+        model.target = .area
+        #expect(model.choice()?.area == area)
         #expect(model.choice()?.audio == ScreencastAudio(microphone: true, systemAudio: true))
         #expect(model.choice()?.showsShortcuts == true)
         model.recordsSystemAudio = false
