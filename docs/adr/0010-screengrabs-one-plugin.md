@@ -22,7 +22,7 @@ On 2026-10-12 the owner asked for one plugin: "the way i wanna merge screenshot 
 4. **Record Screen gets ⇧⌘5 by default,** taking over macOS's screenshot toolbar as ⇧⌘3 and ⇧⌘4 already are: the owner wants Keybumps's shortcuts to take precedence over ones already in use.
    - macOS's hotkey 184 joins `SystemScreenshotShortcutTakeover.managed`, beside 28 and 30 (#490).
    - Every stored binding keeps its raw value: Record Screen is still the shortcut `screencast`, and Quick Search's action `startScreencast`.
-   - Every install gets ⇧⌘5 for Record Screen once, through a one-time step in #490, unless Record Screen already has a shortcut or another Keybumps shortcut uses those keys.
+   - Every install gets ⇧⌘5 for Record Screen once, through a one-time step in #490, even if Record Screen already has another shortcut, unless another Keybumps shortcut uses those keys (#513; the owner: "lets overwrite this by default and use our thing now").
    - Where recording isn't supported, the shortcut doesn't run, and macOS keeps ⇧⌘5 (#490).
 5. **Screenshots and recordings each have their own save folder, and both default to the Mac's screenshot folder:** `com.apple.screencapture` `location`, else the Desktop (`ScreenshotLocationResolver`). Keybumps takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5, so people look for the files where macOS puts them, and current users' screenshots don't move.
    - Settings › ScreenGrabs shows two folders, Screenshots and Recordings, each with its own Choose… (#504). The owner: "let them select each one individually".
