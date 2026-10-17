@@ -15,11 +15,12 @@ export default function PrivacyPage() {
 
       <h2>The short version</h2>
       <p>
-        What you do in Keybumps stays on your Mac. The app has no advertising, no analytics, no
-        account, and no cloud sync. We never receive your searches, clipboard contents, screenshots,
-        recordings, or transcripts. If Keybumps crashes or freezes, it sends us a crash report
-        without any of those, and you can turn crash reports off. If you report a problem, it sends
-        what you write.
+        What you do in Keybumps stays on your Mac, except a recording you choose to send to a
+        destination you connect, such as your own Clipy account. The app has no advertising, no
+        analytics, no account, and no cloud sync. We never receive your searches, clipboard
+        contents, screenshots, recordings, or transcripts. If Keybumps crashes or freezes, it sends
+        us a crash report without any of those, and you can turn crash reports off. If you report a
+        problem, it sends what you write.
       </p>
 
       <h2>Information stored on your Mac</h2>
@@ -29,8 +30,9 @@ export default function PrivacyPage() {
           You can delete items at any time.
         </li>
         <li>
-          <strong>Screenshots</strong> are saved where macOS or Keybumps saves them, and edited
-          copies are saved beside the original.
+          <strong>ScreenGrabs</strong> saves screenshots and screen recordings where macOS or
+          Keybumps saves them, and edited copies of screenshots beside the original. A recording can
+          include sound from your microphone and your Mac.
         </li>
         <li>
           <strong>Dictation</strong> records audio and transcribes it on your Mac. Recordings and
@@ -80,6 +82,12 @@ export default function PrivacyPage() {
           the app sends your license key and a one-way hash of your Mac’s hardware identifier (the
           identifier itself never leaves your Mac) to Polar, which issues and manages Keybumps
           license keys. This enforces the license’s Mac limit and lets refunded licenses be revoked.
+        </li>
+        <li>
+          <strong>Sending a recording.</strong> When you send a recording to a destination you
+          connect, such as your own Clipy account, Keybumps sends the recording there with details
+          about it, such as the app or website domain it was made in, and your Mac, macOS, and
+          Keybumps versions. That service handles it under its own privacy policy.
         </li>
         <li>
           <strong>Crash and problem reports</strong>, described next.
