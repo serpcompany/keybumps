@@ -119,6 +119,16 @@ final class SmokeUITests: XCTestCase {
         return topLeft(CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3]), primaryHeight: numbers[4])
     }
 
+    /// The visible frame, in XCUITest's coordinates, of the runner's screen with the middle of
+    /// `frame` on it.
+    private static func visibleFrameOfScreen(containing frame: CGRect) -> CGRect? {
+        guard let primaryHeight = NSScreen.screens.first?.frame.maxY else { return nil }
+        let middle = CGPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens
+            .first { topLeft($0.frame, primaryHeight: primaryHeight).contains(middle) }
+            .map { topLeft($0.visibleFrame, primaryHeight: primaryHeight) }
+    }
+
     /// AppKit's screen coordinates start at the primary screen's bottom-left corner; XCUITest's at
     /// its top-left.
     private static func topLeft(_ rect: CGRect, primaryHeight: CGFloat) -> CGRect {
@@ -491,40 +501,11 @@ final class SmokeUITests: XCTestCase {
 
     // MARK: Screencast's review panel (#450)
 
-    func testScreencastReviewSavesARecordingWithItsNote() {
-        launchScreencastReview("video")
-        XCTAssertTrue(element("screencast.review.type").exists)
-        XCTAssertTrue(element("screencast.review.repository").exists)
-        XCTAssertTrue(element("screencast.review.destination").exists)
-        XCTAssertFalse(element("screencast.review.saveAndSend").isEnabled, "Sending comes with destinations")
-        XCTAssertFalse(element("screencast.review.sendAndDelete").isEnabled)
-
-        let note = element("screencast.review.note")
-        note.click()
-        note.typeText("Header typo")
-        element("screencast.review.save").click()
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Save closes the panel")
-        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Header typo"))
-    }
-
-    func testScreencastReviewReturnSaves() {
-        launchScreencastReview("video")
-        let note = element("screencast.review.note")
-        note.click()
-        note.typeText("Saved by Return")
-        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10))
-        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Saved by Return"))
-    }
-
     func testScreencastReviewEscapeClosesAndSaves() {
         launchScreencastReview("video")
-        let note = element("screencast.review.note")
-        note.click()
-        note.typeText("Closed by Escape")
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes the panel")
-        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note Closed by Escape"), "Closing saves")
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Escape closes the window")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"), "Closing saves")
     }
 
     func testScreencastReviewCopies() {
@@ -550,11 +531,57 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForReviewOutcome("discarded; folder deleted"))
     }
 
-    func testScreencastReviewOfARecordingHasTrim() {
+    /// #475: a recording's review is a standard window that all but fills the screen: the player edge
+    /// to edge, and Discard, Copy, and Save in its toolbar. Nothing to type, no Trim, and Save closes it.
+    func testScreencastReviewOfAVideoFillsTheScreenWithItsActionsInTheToolbar() throws {
         launchScreencastReview("video")
-        XCTAssertTrue(element("screencast.review.trim").exists)
-        XCTAssertFalse(element("screencast.review.addToScreenshots").exists, "Screenshots stay with Screenshot Tools (#485)")
-        XCTAssertFalse(element("screencast.review.edit").exists)
+        let window = reviewPanel
+        // The screen's visible frame, but 16 pt on each side. Up and down the check is looser: the
+        // runner's visible frame can end a few points from the app's (#294).
+        let visible = try XCTUnwrap(Self.visibleFrameOfScreen(containing: window.frame), "the window's screen")
+        XCTAssertEqual(window.frame.minX, visible.minX + 16, accuracy: 2, "it fills the screen but a margin: left \(window.frame) in \(visible)")
+        XCTAssertEqual(window.frame.maxX, visible.maxX - 16, accuracy: 2, "right")
+        XCTAssertEqual(window.frame.minY, visible.minY + 16, accuracy: 5, "top")
+        XCTAssertEqual(window.frame.maxY, visible.maxY - 16, accuracy: 5, "bottom")
+        let player = window.descendants(matching: .any).matching(identifier: "screencast.review.playerArea").firstMatch
+        XCTAssertTrue(player.exists, "the player")
+        XCTAssertEqual(player.frame.minX, window.frame.minX, accuracy: 1, "edge to edge")
+        XCTAssertEqual(player.frame.maxX, window.frame.maxX, accuracy: 1)
+        XCTAssertEqual(player.frame.maxY, window.frame.maxY, accuracy: 1, "down to the bottom: no bar under it")
+        var actions: [String: XCUIElement] = [:]
+        for action in ["discard", "copy", "save"] {
+            let button = window.descendants(matching: .any).matching(identifier: "screencast.review.\(action)").firstMatch
+            XCTAssertTrue(button.exists, action)
+            XCTAssertLessThanOrEqual(button.frame.maxY, player.frame.minY + 1, "\(action) is in the toolbar, above the player")
+            actions[action] = button
+        }
+        if let discard = actions["discard"], let copy = actions["copy"], let save = actions["save"] {
+            XCTAssertLessThan(discard.frame.maxX, window.frame.midX, "Discard on the left")
+            XCTAssertGreaterThan(copy.frame.minX, window.frame.midX, "Copy and Save on the right")
+            XCTAssertLessThan(copy.frame.maxX, save.frame.minX, "Save last")
+            XCTAssertEqual(save.label, "Save", "VoiceOver reads Save, not the Return sign in it")
+        }
+        for gone in ["note", "type", "repository", "destination", "saveAndSend", "sendAndDelete", "trim", "addToScreenshots", "edit"] {
+            XCTAssertFalse(element("screencast.review.\(gone)").exists, gone)
+        }
+
+        element("screencast.review.save").click()
+        XCTAssertTrue(window.waitForNonExistence(timeout: 10), "Save closes the window")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
+    }
+
+    /// #475: the window opens with nothing taking the keyboard, so Space is the player's and neither
+    /// saves nor closes; Return saves and closes it.
+    func testScreencastReviewOfAVideoSpacePlaysAndReturnSaves() {
+        launchScreencastReview("video")
+        app.typeKey(" ", modifierFlags: [])
+        app.typeKey(" ", modifierFlags: [])
+        XCTAssertTrue(reviewPanel.exists, "Space plays and pauses, and the window stays")
+        XCTAssertFalse(element("screencast.review.uitest.outcome").exists, "nothing saved yet")
+
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Return saves and closes the window")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
     }
 
     func testHotkeysTabShowsShortcutCoachHistory() {
@@ -868,17 +895,17 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
     }
 
-    /// Turns Screencast on and opens its review panel on a made-up `video`.
+    /// Turns Screencast on and opens its review on a made-up `video`.
     private func launchScreencastReview(_ capture: String) {
         launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
-        XCTAssertTrue(element("screencast.review.note").waitForExistence(timeout: 20))
-        // So a later check that it closed is about the panel, not a query that finds nothing.
-        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the panel itself is found")
+        XCTAssertTrue(element("screencast.review.save").waitForExistence(timeout: 20))
+        // So a later check that it closed is about the review, not a query that finds nothing.
+        XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the window itself is found")
     }
 
-    /// The review panel. macOS reports a floating panel like it as a dialog, not a window.
+    /// The review: a standard window (#475), which macOS reports as a window.
     private var reviewPanel: XCUIElement {
-        app.dialogs.matching(identifier: "screencast.review.panel").firstMatch
+        app.windows.matching(identifier: "screencast.review.window").firstMatch
     }
 
     /// The UI-test-only line that says what the panel did with the capture.

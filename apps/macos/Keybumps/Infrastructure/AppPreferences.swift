@@ -187,6 +187,60 @@ final class AppPreferences {
         return Set(stored.compactMap(Capability.init(rawValue:))).union(introduced)
     }
 
+    /// Every plugin shortcut's default, by ID, as a new install starts.
+    private static var defaultCapabilityShortcuts: [String: ShortcutBinding] {
+        Dictionary(uniqueKeysWithValues: CapabilityShortcut.allCases.compactMap { shortcut in
+            shortcut.defaultBinding.map { (shortcut.rawValue, $0) }
+        })
+    }
+
+    /// Folds what an install saved for Screencast into Screenshot Tools, which becomes Screengrabs
+    /// and keeps its ID (ADR 0010, #489). It runs on an install whose saved `knownCapabilities` holds
+    /// `screencast`, and rewrites saved values before `init` reads them, since `init` drops an ID
+    /// `Capability` no longer has. That makes it run once: `init` then saves `knownCapabilities`
+    /// without `screencast`. A build rolled back to puts `screencast` back, so after a return it runs
+    /// again, from what the person last saved; doing so is safe, since a row already done changes
+    /// nothing and the moved usage is gone from its old key. Nothing calls it yet: #490 calls it
+    /// first in `init`, in the PR that retires `Capability.screencast`.
+    /// - Screenshot Tools on: left on, whatever Screencast was.
+    /// - Screenshot Tools off and Screencast on: Screenshot Tools turns on. Each screenshot shortcut
+    ///   still on its default key (⇧⌘2, ⇧⌘3, ⇧⌘4) is unassigned and a custom one is kept, so nothing
+    ///   new answers ⇧⌘2 and macOS keeps ⇧⌘3 and ⇧⌘4; and new screenshots stop going on the clipboard.
+    /// - Both off: left off.
+    ///
+    /// Quick Search's learned usage of the Screencast command is added to Screenshot Tools'. All else
+    /// Screencast saved keeps its key: its declared preferences (`plugin.screencast.*`, which #490
+    /// reads there), its shortcuts, and the picker's, control bar's, and drawing's memories. `init`
+    /// removes the retired `plugin.screencast.addsToScreenshots`.
+    static func foldScreencastIntoScreengrabs(
+        in defaults: UserDefaults,
+        applicationUsage: URL = ApplicationUsageStore.defaultStorageURL()
+    ) {
+        let screencast = "screencast"
+        let screenshotTools = Capability.screenshotTools.rawValue
+        guard (defaults.array(forKey: Key.knownCapabilities) as? [String])?.contains(screencast) == true else { return }
+        ApplicationUsageStore.moveUsage(from: "command:\(screencast)", to: "command:\(screenshotTools)", at: applicationUsage)
+        // A saved list that's missing means every plugin is as it ships: Screenshot Tools on.
+        if var enabled = defaults.array(forKey: Key.enabledCapabilities) as? [String],
+           enabled.contains(screencast), !enabled.contains(screenshotTools) {
+            var shortcuts = defaults.data(forKey: Key.capabilityShortcuts)
+                .flatMap { try? JSONDecoder().decode([String: ShortcutBinding].self, from: $0) }
+                ?? defaultCapabilityShortcuts
+            for shortcut in [CapabilityShortcut.screenshotScreen, .screenshotScreenAndEdit, .screenshotArea] {
+                guard let binding = shortcut.defaultBinding,
+                      shortcuts[shortcut.rawValue]?.usesSameKeys(as: binding) == true else { continue }
+                shortcuts[shortcut.rawValue] = nil
+            }
+            if let data = try? JSONEncoder().encode(shortcuts) {
+                defaults.set(data, forKey: Key.capabilityShortcuts)
+            }
+            defaults.set(false, forKey: Key.copiesScreenshotsToClipboard)
+            // Written last, so a launch cut short before this line does the whole row again.
+            enabled.append(screenshotTools)
+            defaults.set(enabled.sorted(), forKey: Key.enabledCapabilities)
+        }
+    }
+
     init(
         defaults: UserDefaults = .standard,
         legacyDefaults: [UserDefaults] = [],
@@ -240,9 +294,7 @@ final class AppPreferences {
             }
             capabilityShortcuts = decoded
         } else {
-            capabilityShortcuts = Dictionary(uniqueKeysWithValues: CapabilityShortcut.allCases.compactMap { shortcut in
-                shortcut.defaultBinding.map { (shortcut.rawValue, $0) }
-            })
+            capabilityShortcuts = Self.defaultCapabilityShortcuts
         }
         defaults.set(CapabilityShortcut.allCases.map(\.rawValue).sorted(), forKey: Key.knownCapabilityShortcuts)
         if let data = defaults.data(forKey: Key.windowShortcuts),
