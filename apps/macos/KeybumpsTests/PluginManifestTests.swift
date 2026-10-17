@@ -16,7 +16,7 @@ struct PluginManifestTests {
         }
         #expect(CapabilityDescriptor.timer.category == .productivity)
         #expect(CapabilityDescriptor.dictation.category == .writing)
-        #expect(PluginSettingsPage<EmptyView>.byline(.timer) == "Official plugin by Keybumps · Productivity")
+        #expect(PluginSettingsPage<EmptyView, EmptyView>.byline(.timer) == "Official plugin by Keybumps · Productivity")
         #expect(CapabilityOffBanner.title(.emojiPicker) == "Emoji Picker is turned off")
     }
 
@@ -237,18 +237,123 @@ struct PluginManifestTests {
     }
 }
 
+@MainActor
+@Suite("Plugin Settings pages")
+struct PluginSettingsPageTests {
+    @Test("The slot above the declared preferences is drawn after those placed at the top and before the groups, and is empty unless a page fills it (#490)")
+    func slotAboveThePreferences() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsPluginPageSlots-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root).model
+        let top = CapabilityDescriptor.keystrokes.topPreferences.map(\.key)
+        let groups = CapabilityDescriptor.keystrokes.preferenceGroups.flatMap { $0.preferences.map(\.key) }
+        try #require(!top.isEmpty && !groups.isEmpty, "Keystrokes has preferences at the top and in groups")
+
+        let filled = PluginSettingsPage(capability: .keystrokes) { Marker(name: "above") } custom: { Marker(name: "custom") }
+        #expect(RowsOnPage.read(AnyView(filled), model: model).preferences == top + ["above"] + groups + ["custom"])
+
+        // The pages already on the template: Translation's and Screencast's fill only the last slot,
+        // and the others neither.
+        let last = PluginSettingsPage(capability: .keystrokes) { Marker(name: "custom") }
+        #expect(RowsOnPage.read(AnyView(last), model: model).preferences == top + groups + ["custom"])
+        #expect(RowsOnPage.read(AnyView(PluginSettingsPage(capability: .keystrokes)), model: model).preferences == top + groups)
+    }
+
+    @Test("Screenshot Tools' page shows Screen Recording once, in its own row with Restart Keybumps, and Accessibility as optional (#490)")
+    func screenshotToolsPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsScreenshotToolsPermissions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: .screenRecording, root: root)
+        harness.model.start()
+        try #require(!harness.model.permissions.screenRecordingGranted)
+        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
+        let rows = RowsOnPage.read(page.content(), model: harness.model)
+        #expect(rows.permissions == [PermissionRow.Shown(permission: .accessibility, isOptional: true)])
+        #expect(rows.screenshots.filter { $0 == .screenRecordingRequired }.count == 1)
+    }
+
+    @Test("Screenshot Tools' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots (#490)")
+    func screenshotToolsRows() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsScreenshotToolsRows-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let everything = Set(Capability.allCases)
+        let copy: [ScreenshotsSettings.Row] = [.copiesScreenshotsToClipboard, .about]
+        let readable = FakeScreenshotDirectoryReader(granted: true)
+        let states: [(status: String, enabled: Set<Capability>, missing: MacPermission?, reader: any ScreenshotDirectoryReading, rows: [ScreenshotsSettings.Row])] = [
+            ("watching", everything, nil, readable, [.watching] + copy),
+            ("watching", everything, .screenRecording, readable, [.screenRecordingRequired, .watching] + copy),
+            ("off", everything.subtracting([.screenshotTools]), nil, readable, [.off] + copy),
+            ("requiresClipboardHistory", everything.subtracting([.clipboardHistory]), nil, readable, [.requiresClipboardHistory, .enableClipboardHistory] + copy),
+            (
+                "folderAccessDenied", everything, nil, FakeScreenshotDirectoryReader(granted: false),
+                [.folderAccessDenied, .folderAccessHelp, .openPrivacyAndSecurity] + copy
+            ),
+            ("folderUnavailable", everything, nil, UnavailableScreenshotFolder(), [.folderUnavailable, .folderUnavailableHelp] + copy),
+        ]
+        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
+        for state in states {
+            let harness = WiringHarness(enabled: state.enabled, missing: state.missing, root: root, screenshotReader: state.reader)
+            harness.model.start()
+            let label = "\(state.status), \(state.missing?.rawValue ?? "nothing") missing"
+            #expect(Self.describe(harness.model.screenshotTools.status) == state.status, "\(label)")
+            #expect(RowsOnPage.read(page.content(), model: harness.model).screenshots == state.rows, "\(label)")
+        }
+    }
+
+    @Test("Copy new screenshots to the clipboard keeps its own key, not a declared preference's (#490)")
+    func copyKeepsItsKey() {
+        #expect(CapabilityDescriptor.screenshotTools.preferences.isEmpty)
+        let defaults = InMemoryDefaults()
+        let preferences = AppPreferences(defaults: defaults)
+        preferences.copiesScreenshotsToClipboard = false
+        #expect(defaults.object(forKey: "copiesScreenshotsToClipboard") as? Bool == false)
+    }
+
+    private static func describe(_ status: ScreenshotToolsStatus) -> String {
+        switch status {
+        case .stopped: "off"
+        case .requiresClipboardHistory: "requiresClipboardHistory"
+        case .watching: "watching"
+        case .folderAccessDenied: "folderAccessDenied"
+        case .folderUnavailable: "folderUnavailable"
+        }
+    }
+
+    /// Stands in for a row in a page's slot, in the order the declared preferences report theirs.
+    private struct Marker: View {
+        let name: String
+        var body: some View {
+            Text(name).preference(key: PluginPreferenceRow.Shown.self, value: [name])
+        }
+    }
+
+    /// A screenshot folder that can't be read for a reason other than access, such as a disk
+    /// that isn't connected.
+    private struct UnavailableScreenshotFolder: ScreenshotDirectoryReading {
+        func entries(in folder: URL) throws -> [ScreenshotDirectoryEntry] {
+            throw ScreenshotFolderReadError.unavailable
+        }
+    }
+}
+
 /// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
-/// returns the permission rows and the preference rows it draws, and those it draws disabled, in
-/// order.
+/// returns the permission rows and the preference rows it draws, those it draws disabled, and the
+/// rows of Screenshot Tools' Screenshots group, in order.
 @MainActor
 private enum RowsOnPage {
     private final class Rows: @unchecked Sendable {
         var permissions: [PermissionRow.Shown] = []
         var preferences: [String] = []
         var disabled: [String] = []
+        var screenshots: [ScreenshotsSettings.Row] = []
     }
 
-    static func read(_ page: AnyView, model: AppModel) -> (permissions: [PermissionRow.Shown], preferences: [String], disabled: [String]) {
+    static func read(_ page: AnyView, model: AppModel) -> (
+        permissions: [PermissionRow.Shown], preferences: [String], disabled: [String], screenshots: [ScreenshotsSettings.Row]
+    ) {
         let rows = Rows()
         let size = CGSize(width: 720, height: 4000)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -257,7 +362,8 @@ private enum RowsOnPage {
             .environment(model)
             .onPreferenceChange(PermissionRow.Shown.Key.self) { rows.permissions = $0 }
             .onPreferenceChange(PluginPreferenceRow.Shown.self) { rows.preferences = $0 }
-            .onPreferenceChange(PluginPreferenceRow.Disabled.self) { rows.disabled = $0 })
+            .onPreferenceChange(PluginPreferenceRow.Disabled.self) { rows.disabled = $0 }
+            .onPreferenceChange(ScreenshotsSettings.Shown.self) { rows.screenshots = $0 })
         host.frame = NSRect(origin: .zero, size: size)
         window.contentView = host
         defer {
@@ -265,6 +371,6 @@ private enum RowsOnPage {
             window.close()
         }
         host.layoutSubtreeIfNeeded()
-        return (rows.permissions, rows.preferences, rows.disabled)
+        return (rows.permissions, rows.preferences, rows.disabled, rows.screenshots)
     }
 }

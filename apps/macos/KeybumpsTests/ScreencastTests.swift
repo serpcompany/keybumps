@@ -33,7 +33,7 @@ struct ScreencastTests {
         #expect(descriptor.settingsPage?.section == .screencast)
         #expect(!CapabilityCatalog.defaultCapabilities.contains(.screencast), "An added capability")
         #expect(descriptor.shortcuts == [.screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw])
-        #expect(PluginSettingsPage<EmptyView>.byline(descriptor) == "Official plugin by Keybumps · Media")
+        #expect(PluginSettingsPage<EmptyView, EmptyView>.byline(descriptor) == "Official plugin by Keybumps · Media")
     }
 
     @Test("Its icon is a real symbol no other plugin uses")
