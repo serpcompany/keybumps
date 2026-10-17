@@ -19,150 +19,66 @@ enum ScreencastReviewID {
 }
 
 /// A recording's review window's content (#475), after Snapzy's Video Editor (BSD-3-Clause, see
-/// LICENSE.snapzy): the player edge to edge, `AVPlayerView` with its own controls along its bottom
-/// for play, pause, and scrubbing, the video fitted to it. Discard, Copy, and Save are in the
-/// window's toolbar (`ScreencastRecordingReviewToolbar`). Save and Copy close the window, and the
-/// notch says where it was saved, or that it was copied. No editing, and no note, type, or
-/// repository.
+/// LICENSE.snapzy): the bar the Screenshot Editor has too (`ScreencastRecordingReviewBar`, #511),
+/// then the player edge to edge, `AVPlayerView` with its own controls along its bottom for play,
+/// pause, and scrubbing, the video fitted to it. Save and Copy close the window, and the notch says
+/// where it was saved, or that it was copied. No editing yet, and no note, type, or repository.
 struct ScreencastRecordingReviewView: View {
     let model: ScreencastReviewModel
     /// The player, for a window on screen; nil under the unit-test host.
     let playback: ScreencastReviewPlayback?
 
     var body: some View {
-        ScreencastReviewPlayer(model: model, playback: playback)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
-            .overlay(alignment: .top) {
-                // Over the player, so it takes no row of its own.
-                if let failure = model.failure {
-                    Text(failure.message)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(12)
-                        .accessibilityIdentifier(ScreencastReviewID.failure)
+        // One SwiftUI root, as the Screenshot Editor's, so the bar always draws.
+        VStack(spacing: 0) {
+            ScreencastRecordingReviewBar(model: model)
+            ScreencastReviewPlayer(model: model, playback: playback)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+                .overlay(alignment: .top) {
+                    // Over the player, so it takes no row of its own.
+                    if let failure = model.failure {
+                        Text(failure.message)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(12)
+                            .accessibilityIdentifier(ScreencastReviewID.failure)
+                    }
                 }
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Recording")
-            .accessibilityIdentifier(ScreencastReviewID.playerArea)
-            .uiTestAnimationsDisabled()
-            .onChange(of: model.isWorking) { _, isWorking in
-                if isWorking { playback?.pause() }
-            }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Recording")
+                .accessibilityIdentifier(ScreencastReviewID.playerArea)
+        }
+        .uiTestAnimationsDisabled()
+        .onChange(of: model.isWorking) { _, isWorking in
+            if isWorking { playback?.pause() }
+        }
     }
 }
 
-/// One control of a recording's window's toolbar, each its own toolbar item: Discard on the left, or
-/// "Discard this recording?" with Keep and Discard in its place; the window's title in the middle, with
-/// the display picker for a recording of every display; and Copy and Save on the right, Save the
-/// window's default button, with Return's sign in it. Nothing until a review shows, nor while the
-/// part makes way (`Part.isShown`).
-///
-/// Each button is an item of its own because macOS 26 and later draw a toolbar item's own button
-/// shape around its view, not the view's button style: one item for Copy and Save drew both as
-/// words in one shape, beside a title in a shape just like it (owner QA of 4030.475.4).
-struct ScreencastRecordingReviewToolbar: View {
-    enum Part: CaseIterable {
-        /// Discard, until it's asked.
-        case discard
-        /// "Discard this recording?", then Keep and Discard, while it's asked.
-        case question
-        case keep
-        case confirmDiscard
-        /// The window's title, with the display picker, and a spinner while it saves.
-        case title
-        case copy
-        case save
-
-        /// Discard, Copy, and Save make way for the discard question while it's asked.
-        func isShown(confirmingDiscard: Bool) -> Bool {
-            switch self {
-            case .title: true
-            case .question, .keep, .confirmDiscard: confirmingDiscard
-            case .discard, .copy, .save: !confirmingDiscard
-            }
-        }
-    }
-
+/// The recording window's bar, the Screenshot Editor's (`ScreengrabsEditorBar`, #511): no tools yet
+/// (#517 adds Trim, Crop, and Blur), then a spinner while it saves, the display picker for a
+/// recording of every display, and Discard, Copy, and Save, Save the window's default button. While
+/// Discard is asked, "Discard this recording?" with Keep and Discard takes their place.
+struct ScreencastRecordingReviewBar: View {
     /// Return, as macOS shows it beside a menu item: Save's key.
     static let returnSign = "↩"
+    /// Copy's key.
+    static let copyKey = "⌘C"
+    static let discardQuestion = "Discard this recording?"
 
-    let model: ScreencastReviewModel?
-    let part: Part
+    let model: ScreencastReviewModel
 
     var body: some View {
-        if let model, part.isShown(confirmingDiscard: model.isConfirmingDiscard) {
-            switch part {
-            case .discard:
-                Button("Discard", role: .destructive, action: model.askToDiscard)
-                    .buttonStyle(.bordered)
-                    .disabled(!model.acceptsActions)
-                    .help("Delete this recording")
-                    .accessibilityIdentifier(ScreencastReviewID.discard)
-            case .question:
-                Text("Discard this recording?")
-                    .font(.system(size: 13, weight: .semibold))
-                    .fixedSize()
-            case .keep:
-                Button("Keep", action: model.keep)
-                    .buttonStyle(.bordered)
-                    .help("Keep the recording")
-                    .accessibilityIdentifier(ScreencastReviewID.keep)
-            case .confirmDiscard:
-                Button("Discard", role: .destructive) {
-                    Task { model.confirmDiscard() }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .help("Delete the recording and its folder")
-                .accessibilityIdentifier(ScreencastReviewID.confirmDiscard)
-            case .title:
-                title(model)
-            case .copy:
-                Button("Copy") {
-                    Task { await model.copy() }
-                }
-                .buttonStyle(.bordered)
-                .disabled(!model.acceptsActions)
-                .help("Save, and copy the recording’s file")
-                .accessibilityIdentifier(ScreencastReviewID.copy)
-            case .save:
-                Button {
-                    Task { await model.save() }
-                } label: {
-                    // Return's sign, as a menu shows a key equivalent: Return saves (owner QA of
-                    // 4030.475.5). VoiceOver reads just "Save".
-                    HStack(spacing: 5) {
-                        Text("Save")
-                        Text(Self.returnSign)
-                            .opacity(0.7)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                // The window's default button. Return is the review's key monitor's, which saves.
-                .keyboardShortcut(.defaultAction)
-                .disabled(!model.acceptsActions)
-                .help("Keep the recording in the recordings folder (Return)")
-                .accessibilityLabel("Save")
-                .accessibilityIdentifier(ScreencastReviewID.save)
-            }
-        }
-    }
-
-    /// The window hides its own title, which would push the actions together (macOS lets a shown
-    /// title take the flexible spaces' room), so it's here.
-    private func title(_ model: ScreencastReviewModel) -> some View {
-        HStack(spacing: 10) {
-            Text("Recording")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .fixedSize()
-                .accessibilityAddTraits(.isHeader)
+        ScreengrabsEditorBar(
+            question: model.isConfirmingDiscard ? Self.discardQuestion : nil,
+            actions: Self.actions(for: model)
+        ) {
+            // The tools' place, empty until the recording has tools of its own.
+        } accessories: {
             if model.isWorking {
                 ProgressView()
                     .controlSize(.small)
@@ -170,6 +86,43 @@ struct ScreencastRecordingReviewToolbar: View {
             }
             ScreencastReviewDisplayPicker(model: model)
         }
+    }
+
+    /// Discard, Copy, and Save, or, while Discard is asked, Keep and Discard, which no key answers.
+    /// Return saves and ⌘C copies through the review's key monitor (`ScreencastReviewKey`).
+    static func actions(for model: ScreencastReviewModel) -> [ScreengrabsEditorAction] {
+        if model.isConfirmingDiscard {
+            return [
+                ScreengrabsEditorAction(
+                    title: "Keep", help: "Keep the recording", identifier: ScreencastReviewID.keep, perform: model.keep
+                ),
+                ScreengrabsEditorAction(
+                    title: "Discard", style: .prominentDestructive, help: "Delete the recording and its folder",
+                    identifier: ScreencastReviewID.confirmDiscard
+                ) {
+                    Task { model.confirmDiscard() }
+                },
+            ]
+        }
+        return [
+            ScreengrabsEditorAction(
+                title: "Discard", style: .destructive, help: "Delete this recording",
+                identifier: ScreencastReviewID.discard, isEnabled: model.acceptsActions, perform: model.askToDiscard
+            ),
+            ScreengrabsEditorAction(
+                title: "Copy", key: copyKey, help: "Save, and copy the recording’s file (⌘C)",
+                identifier: ScreencastReviewID.copy, isEnabled: model.acceptsActions
+            ) {
+                Task { await model.copy() }
+            },
+            ScreengrabsEditorAction(
+                title: "Save", key: returnSign, style: .prominent, isDefault: true,
+                help: "Keep the recording in the recordings folder (Return)",
+                identifier: ScreencastReviewID.save, isEnabled: model.acceptsActions
+            ) {
+                Task { await model.save() }
+            },
+        ]
     }
 }
 

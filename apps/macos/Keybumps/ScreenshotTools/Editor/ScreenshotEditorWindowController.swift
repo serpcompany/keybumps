@@ -162,9 +162,21 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         keyMonitor = nil
     }
 
-    /// Fits the whole toolbar, including the Cancel and Save key hints, without truncating.
+    /// The bar's actions: Cancel (Esc), then Save (Return), filled with the accent color. Return is
+    /// the key monitor's (`isSaveKey`), so Save isn't the window's default button.
+    static func barActions(cancel: @escaping () -> Void, save: @escaping () -> Void) -> [ScreengrabsEditorAction] {
+        [
+            ScreengrabsEditorAction(title: "Cancel", key: "esc", help: "Discard changes (Esc)", perform: cancel),
+            ScreengrabsEditorAction(
+                title: "Save", key: "↵", style: .prominent,
+                help: "Copy to clipboard and save an edited copy (Return)", perform: save
+            ),
+        ]
+    }
+
+    /// Fits the whole bar, including the Cancel and Save key hints, without truncating.
     static let minimumWidth: CGFloat = 840
-    static let toolbarHeight: CGFloat = 64
+    static let toolbarHeight: CGFloat = ScreengrabsEditorBarMetrics.height
 
     private static func initialFrame(for imageSize: CGSize) -> NSRect {
         let visible = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
@@ -196,20 +208,34 @@ private struct CanvasHost: NSViewRepresentable {
     func updateNSView(_ nsView: ScreenshotEditorCanvasView, context: Context) {}
 }
 
-private struct ScreenshotEditorToolbar: View {
+/// The editor's bar (`ScreengrabsEditorBar`, shared with the recording window): the tools and the
+/// colors, then undo and redo, Cancel, and Save.
+struct ScreenshotEditorToolbar: View {
     @Bindable var model: ScreenshotEditorModel
     let cancel: () -> Void
     let save: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 2) {
+        ScreengrabsEditorBar(
+            history: ScreengrabsEditorHistory(
+                canUndo: model.history.canUndo,
+                canRedo: model.history.canRedo,
+                undo: { model.undo() },
+                redo: { model.redo() }
+            ),
+            actions: ScreenshotEditorWindowController.barActions(cancel: cancel, save: save)
+        ) {
+            ScreengrabsEditorTools {
                 ForEach(ScreenshotEditorTool.allCases) { tool in
-                    ToolButton(tool: tool, isSelected: model.tool == tool) { model.tool = tool }
+                    ScreengrabsEditorToolButton(
+                        title: tool.title,
+                        systemImage: tool.systemImage,
+                        number: tool.number,
+                        key: tool.key,
+                        isSelected: model.tool == tool
+                    ) { model.tool = tool }
                 }
             }
-            .padding(3)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 9))
 
             HStack(spacing: 4) {
                 ForEach(ScreenshotAnnotationColor.allCases) { color in
@@ -228,89 +254,7 @@ private struct ScreenshotEditorToolbar: View {
             }
             .opacity(model.tool.usesColor ? 1 : 0.35)
             .disabled(!model.tool.usesColor)
-
-            Spacer(minLength: 8)
-
-            Button { model.undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(!model.history.canUndo)
-                .help("Undo (⌘Z)")
-                .accessibilityLabel("Undo")
-            Button { model.redo() } label: { Image(systemName: "arrow.uturn.forward") }
-                .disabled(!model.history.canRedo)
-                .help("Redo (⇧⌘Z)")
-                .accessibilityLabel("Redo")
-            Button(action: cancel) { ActionLabel(title: "Cancel", key: "esc") }
-                .help("Discard changes (Esc)")
-                .accessibilityLabel("Cancel")
-            Button(action: save) { ActionLabel(title: "Save", key: "↵") }
-                .buttonStyle(.borderedProminent)
-                .help("Copy to clipboard and save an edited copy (Return)")
-                .accessibilityLabel("Save")
         }
-        .controlSize(.large)
-        .padding(.horizontal, 12)
-        .frame(height: ScreenshotEditorWindowController.toolbarHeight)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .bottom) { Divider() }
-    }
-}
-
-/// A toolbar action with the key that also triggers it. The keycap takes the button's own
-/// text color, so it stays readable on the prominent Save button and in inactive windows.
-private struct ActionLabel: View {
-    let title: String
-    let key: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-            Text(key)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 18, minHeight: 18)
-                .padding(.horizontal, 3)
-                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(.tertiary, lineWidth: 0.75))
-                .accessibilityHidden(true)
-        }
-        .fixedSize()
-    }
-}
-
-private struct ToolButton: View {
-    let tool: ScreenshotEditorTool
-    let isSelected: Bool
-    let select: () -> Void
-
-    var body: some View {
-        Button(action: select) {
-            VStack(spacing: 2) {
-                Image(systemName: tool.systemImage)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(height: 18)
-                Text(tool.title)
-                    .font(.caption2)
-            }
-            .frame(width: 58, height: 44)
-            .overlay(alignment: .topTrailing) {
-                Text(tool.number)
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
-                    .frame(width: 13, height: 13)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3)
-                            .strokeBorder(isSelected ? Color.white.opacity(0.5) : Color.secondary.opacity(0.5), lineWidth: 0.75)
-                    )
-                    .padding(3)
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 7))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("\(tool.title) (\(tool.number) or \(tool.key.uppercased()))")
-        .accessibilityLabel(tool.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

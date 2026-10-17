@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import AVKit
 import Foundation
 import SwiftUI
 import Testing
@@ -85,7 +86,7 @@ struct ScreencastRecordingReviewTests {
         let recording = try fixture.video()
         await panel.show(recording)
         let view = try #require(windowView(of: panel), "the window shows the recording")
-        #expect(view.model === panel.model, "its toolbar acts on the review's model")
+        #expect(view.model === panel.model, "its bar acts on the review's model")
         #expect(panel.isShown && !panel.window.isVisible, "never on screen under the unit-test host")
 
         let next = try fixture.video(name: "1791000100")
@@ -95,75 +96,61 @@ struct ScreencastRecordingReviewTests {
         await panel.close()
     }
 
-    @Test("The window is a standard, resizable window titled Recording, with a compact toolbar and a minimum size, that can open over a full-screen app, never restored, and never key under the unit-test host")
+    @Test("The window is a standard, resizable window titled Edit Recording, as the Screenshot Editor's is Edit Screenshot, with no toolbar and a minimum size, that can open over a full-screen app, never restored, and never key under the unit-test host")
     func windowShell() {
         let window = ScreencastRecordingReviewWindow()
         #expect(window.styleMask.isSuperset(of: [.titled, .closable, .miniaturizable, .resizable]))
         #expect(!window.styleMask.contains(.nonactivatingPanel) && !window.styleMask.contains(.fullScreen))
-        #expect(window.title == "Recording" && window.titleVisibility == .hidden, "the toolbar shows it, in its middle")
-        #expect(window.toolbar != nil && window.toolbarStyle == .unifiedCompact)
+        #expect(window.title == "Edit Recording" && window.titleVisibility == .visible)
+        #expect(window.toolbar == nil, "the bar is in the window's content, as the Screenshot Editor's is")
         #expect(window.level == .normal && window.collectionBehavior.isSuperset(of: [.managed, .participatesInCycle]))
         #expect(window.collectionBehavior.contains(.fullScreenAuxiliary), "it opens over a full-screen app")
         #expect(!window.isRestorable, "nothing to put back at launch")
-        // AppKit adds a few points to the height for the toolbar.
-        #expect(window.minSize.width == 640 && (400...420).contains(window.minSize.height))
+        #expect(window.minSize == CGSize(width: 640, height: 400))
         #expect(window.identifier?.rawValue == "screencast.review.window")
         #expect(!window.canBecomeKey && !window.canBecomeMain && !window.isReleasedWhenClosed)
     }
 
-    @Test("Discard is on the toolbar's left, the title and display picker in its middle, and Copy and Save on its right, each button an item of its own; nothing else is around the player")
-    func toolbarHoldsTheActions() async throws {
+    @Test("The bar is above the player, on the review's model: Discard, Copy, and Save, in that order; the player fills the rest")
+    func barHoldsTheActions() async throws {
         defer { fixture.tearDown() }
         let panel = panel(outcomes: ReviewOutcomeLog())
         await panel.show(try fixture.video(displays: 2))
-        let window = panel.window
-        let toolbar = try #require(window.toolbar)
-        #expect(toolbar.items.map(\.itemIdentifier.rawValue) == [
-            "screencast.review.toolbar.discard", "screencast.review.toolbar.question",
-            "screencast.review.toolbar.keep", "screencast.review.toolbar.confirmDiscard",
-            "NSToolbarFlexibleSpaceItem", "screencast.review.toolbar.title", "NSToolbarFlexibleSpaceItem",
-            "screencast.review.toolbar.copy", "screencast.review.toolbar.save",
-        ])
-        let parts = toolbar.items.compactMap { $0.view as? NSHostingView<ScreencastRecordingReviewToolbar> }.map(\.rootView)
-        #expect(parts.map(\.part) == [.discard, .question, .keep, .confirmDiscard, .title, .copy, .save])
-        #expect(parts.allSatisfy { $0.model === panel.model }, "they act on the review's model")
-        #expect(window.contentView is NSHostingView<ScreencastRecordingReviewView>, "the content is the player alone")
+        let model = try #require(panel.model)
+        let view = try #require(windowView(of: panel), "one SwiftUI root, as the Screenshot Editor's")
+        #expect(view.model === model, "the bar acts on the review's model")
+        #expect(panel.window.toolbar == nil)
 
-        // Laid out off screen at a CI screen's size: the parts sit where the owner put them, not
-        // pushed together by a shown title.
-        window.setFrame(CGRect(x: 16, y: 16, width: 992, height: 700), display: false)
-        for _ in 0..<3 {
-            window.contentView?.superview?.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        func frame(_ part: ScreencastRecordingReviewToolbar.Part) throws -> CGRect {
-            let item = try #require(toolbar.items.first { $0.itemIdentifier == ScreencastRecordingReviewWindow.identifier(for: part) })
-            let view = try #require(item.view)
-            return view.convert(view.bounds, to: nil)
-        }
-        let middle = window.frame.width / 2
-        let discard = try frame(.discard), title = try frame(.title), copy = try frame(.copy), save = try frame(.save)
-        #expect(discard.width > 0 && discard.maxX < middle / 2, "Discard on the left")
-        #expect(title.minX < middle && title.maxX > middle, "the title and picker in the middle")
-        #expect(copy.width > 0 && copy.minX > middle * 1.5, "Copy on the right")
-        #expect(save.width > 0 && save.minX >= copy.maxX, "then Save, last")
+        let actions = ScreencastRecordingReviewBar.actions(for: model)
+        let identifiers = actions.map(\.identifier)
+        #expect(identifiers == [ScreencastReviewID.discard, ScreencastReviewID.copy, ScreencastReviewID.save])
+        let titles = actions.map(\.title)
+        #expect(titles == ["Discard", "Copy", "Save"])
+        let enabled = actions.filter(\.isEnabled).count
+        #expect(enabled == 3, "all of them, until one is chosen")
         await panel.close()
     }
 
-    @Test("Save is the window's prominent default button; the title is words, not a button")
-    func saveIsTheDefaultButton() {
-        let window = ScreencastRecordingReviewWindow()
-        func item(_ part: ScreencastRecordingReviewToolbar.Part) -> NSToolbarItem? {
-            window.toolbar?.items.first { $0.itemIdentifier == ScreencastRecordingReviewWindow.identifier(for: part) }
-        }
-        #expect(item(.title)?.isBordered == false && item(.question)?.isBordered == false, "no button shape around words")
-        if #available(macOS 26, *) {
-            #expect(item(.save)?.style == .prominent, "tinted with the accent color, as a toolbar's Done is")
-            #expect(item(.confirmDiscard)?.style == .prominent && item(.confirmDiscard)?.backgroundTintColor == .systemRed)
-            for plain: ScreencastRecordingReviewToolbar.Part in [.discard, .keep, .copy] {
-                #expect(item(plain)?.style == .plain, "\(plain) is an ordinary button")
-            }
-        }
+    @Test("Save is the window's prominent default button, last; Discard is red; Copy shows ⌘C and Save Return's sign as keycaps, which VoiceOver doesn't read")
+    func saveIsTheDefaultButton() async throws {
+        defer { fixture.tearDown() }
+        let panel = panel(outcomes: ReviewOutcomeLog())
+        await panel.show(try fixture.video())
+        let model = try #require(panel.model)
+        let actions = ScreencastRecordingReviewBar.actions(for: model)
+        let save = try #require(actions.last)
+        #expect(save.title == "Save")
+        #expect(save.style == .prominent && save.isDefault)
+        let defaults = actions.filter(\.isDefault).map(\.title)
+        #expect(defaults == ["Save"], "one default button")
+
+        let styles = actions.map(\.style)
+        #expect(styles == [.destructive, .standard, .prominent])
+        let keys = actions.map(\.key)
+        #expect(keys == [nil, "⌘C", "↩"])
+        #expect(ScreencastRecordingReviewBar.returnSign == "↩")
+        #expect(ScreencastRecordingReviewBar.copyKey == "⌘C")
+        await panel.close()
     }
 
     @Test("Save shows Return's sign beside its title, as a menu shows a key equivalent")
@@ -172,48 +159,52 @@ struct ScreencastRecordingReviewTests {
         let panel = panel(outcomes: ReviewOutcomeLog())
         await panel.show(try fixture.video())
         let model = try #require(panel.model)
-        #expect(ScreencastRecordingReviewToolbar.returnSign == "↩")
-        let save = NSHostingView(rootView: ScreencastRecordingReviewToolbar(model: model, part: .save)).fittingSize.width
+        let action = try #require(ScreencastRecordingReviewBar.actions(for: model).last)
+        let save = NSHostingView(rootView: ScreengrabsEditorActionButton(action: action)).fittingSize.width
         let plain = NSHostingView(rootView: Button("Save") {}.buttonStyle(.borderedProminent)).fittingSize.width
-        let sign = NSHostingView(rootView: Text(ScreencastRecordingReviewToolbar.returnSign)).fittingSize.width
+        let sign = NSHostingView(rootView: Text(ScreencastRecordingReviewBar.returnSign)).fittingSize.width
         #expect(save >= plain + sign, "Save is \(save) points wide; a plain Save button \(plain), and the sign \(sign)")
         await panel.close()
     }
 
     @Test("While Discard is asked, Discard, Copy, and Save make way for the question, Keep, and Discard; Keep brings them back")
-    func discardQuestionTakesTheToolbar() async throws {
+    func discardQuestionTakesTheBar() async throws {
         defer { fixture.tearDown() }
         let panel = panel(outcomes: ReviewOutcomeLog())
         await panel.show(try fixture.video())
         let model = try #require(panel.model)
-        let toolbar = try #require(panel.window.toolbar)
-        func shown() -> [ScreencastRecordingReviewToolbar.Part] {
-            ScreencastRecordingReviewToolbar.Part.allCases.filter { $0.isShown(confirmingDiscard: model.isConfirmingDiscard) }
+        func shown() -> [String?] {
+            ScreencastRecordingReviewBar.actions(for: model).map(\.identifier)
         }
-        func hiddenItems() -> Set<String> {
-            guard #available(macOS 15, *) else { return [] }
-            return Set(toolbar.items.filter(\.isHidden).map(\.itemIdentifier.rawValue))
-        }
-        func items(_ parts: [ScreencastRecordingReviewToolbar.Part]) -> Set<String> {
-            Set(parts.map { ScreencastRecordingReviewWindow.identifier(for: $0).rawValue })
-        }
-        #expect(shown() == [.discard, .title, .copy, .save])
-        if #available(macOS 15, *) {
-            #expect(hiddenItems() == items([.question, .keep, .confirmDiscard]), "no empty item in the toolbar")
-        }
+        let actions = [ScreencastReviewID.discard, ScreencastReviewID.copy, ScreencastReviewID.save]
+        #expect(shown() == actions)
 
         model.askToDiscard()
-        #expect(shown() == [.question, .keep, .confirmDiscard, .title])
-        if #available(macOS 15, *) {
-            try await eventually { hiddenItems() == items([.discard, .copy, .save]) }
-        }
+        #expect(shown() == [ScreencastReviewID.keep, ScreencastReviewID.confirmDiscard])
+        let answers = ScreencastRecordingReviewBar.actions(for: model)
+        let confirm = try #require(answers.last)
+        #expect(confirm.title == "Discard")
+        #expect(confirm.style == .prominentDestructive && !confirm.isDefault)
+        #expect(answers.allSatisfy { $0.key == nil }, "no key answers it")
+        #expect(ScreencastRecordingReviewBar.discardQuestion == "Discard this recording?")
 
         model.keep()
-        #expect(shown() == [.discard, .title, .copy, .save])
-        if #available(macOS 15, *) {
-            try await eventually { hiddenItems() == items([.question, .keep, .confirmDiscard]) }
-        }
+        #expect(shown() == actions)
         await panel.close()
+    }
+
+    @Test("The bar's buttons act on the review: Save saves and closes the window")
+    func barSaves() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let panel = panel(outcomes: outcomes)
+        let recording = try fixture.video()
+        await panel.show(recording)
+        let model = try #require(panel.model)
+        let save = try #require(ScreencastRecordingReviewBar.actions(for: model).last)
+        save.perform()
+        try await eventually { panel.model == nil }
+        #expect(outcomes.outcomes == [.saved(recording)])
     }
 
     @Test("The window fills the visible frame of the screen it opens on, but a margin, and not below its minimum unless the screen is")
@@ -317,6 +308,34 @@ struct ScreencastRecordingReviewTests {
         #expect(outcomes.outcomes == [.copied(recording)] && !panel.isShown && !panel.window.isVisible)
         #expect(fixture.pasteboard.pasteboardItems?.isEmpty == false, "on the test's pasteboard")
         #expect(notices.messages == ["Recording copied"] && notices.warnings == [false])
+    }
+
+    @Test("⌘C copies once, however long it's held, with Copy's notice; while Discard is asked it does nothing")
+    func commandCCopies() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let notices = ReviewNotices()
+        let flow = flow(outcomes: outcomes, notices: notices)
+        let recording = try fixture.video()
+        await flow.show(recording, context: .none)
+        let panel = try #require(flow.panel)
+        let model = try #require(panel.model)
+
+        model.askToDiscard()
+        let asking = panel.action(forKey: 8, modifiers: .command, characters: "c", in: panel.window)
+        #expect(asking == .ignore, "never while Discard is asked")
+        model.keep()
+
+        let key = panel.action(forKey: 8, modifiers: .command, characters: "c", in: panel.window)
+        #expect(key == .copy)
+        #expect(panel.perform(.copy, isRepeat: true), "a repeat is swallowed")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(panel.isShown && outcomes.outcomes.isEmpty, "and doesn't copy")
+        #expect(panel.perform(.copy))
+        try await eventually { !panel.isShown }
+        #expect(outcomes.outcomes == [.copied(recording)])
+        #expect(fixture.pasteboard.pasteboardItems?.isEmpty == false, "on the test's pasteboard")
+        #expect(notices.messages == ["Recording copied"])
     }
 
     @Test("Discard asks first, then deletes and closes, with no notice; turning Screencast off saves")
@@ -621,7 +640,22 @@ struct ScreencastRecordingReviewTests {
         #expect(action(36) == .save && action(76) == .save && action(53) == .close)
         #expect(action(53, confirming: true) == .keep && action(36, confirming: true) == .ignore)
 
-        // A toolbar button with the keyboard (Full Keyboard Access) keeps Space; Return still saves.
+        // ⌘C copies, as Copy's keycap says; never while Discard is asked, and not with other modifiers.
+        func copyKey(_ modifiers: NSEvent.ModifierFlags, _ characters: String = "c", confirming: Bool = false) -> ScreencastReviewKey {
+            ScreencastReviewKey.action(
+                keyCode: 8, modifiers: modifiers, characters: characters, isComposing: false, isConfirmingDiscard: confirming
+            )
+        }
+        #expect(copyKey(.command) == .copy)
+        #expect(copyKey([.command, .capsLock]) == .copy, "Caps Lock doesn't count")
+        #expect(copyKey(.command, "C") == .copy)
+        #expect(copyKey(.command, confirming: true) == .ignore, "never while Discard is asked")
+        #expect(copyKey([.command, .shift]) == .pass)
+        #expect(copyKey([.command, .option]) == .pass)
+        #expect(copyKey([]) == .pass, "C alone does nothing")
+        #expect(copyKey(.command, "v") == .pass)
+
+        // A button in the bar with the keyboard (Full Keyboard Access) keeps Space; Return still saves.
         func focused(_ key: UInt16, confirming: Bool = false) -> ScreencastReviewKey {
             ScreencastReviewKey.action(
                 keyCode: key, modifiers: [], isComposing: false, isConfirmingDiscard: confirming, controlHasKeyboard: true
@@ -633,7 +667,7 @@ struct ScreencastRecordingReviewTests {
         #expect(focused(53) == .close && focused(53, confirming: true) == .keep, "Escape is the window's")
     }
 
-    @Test("With Full Keyboard Access, Space goes to the toolbar button that has the keyboard, and Return still saves; with nothing focused, Space plays")
+    @Test("With Full Keyboard Access, Space goes to the bar's button that has the keyboard, and Return still saves; in the player, or with nothing focused, Space plays")
     func focusedButtonKeepsItsKeys() async throws {
         defer { fixture.tearDown() }
         let fullKeyboardAccess = KeyboardNavigation()
@@ -644,12 +678,12 @@ struct ScreencastRecordingReviewTests {
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay, "nothing has the keyboard as it opens")
         #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save)
 
-        // Where Tab puts the keyboard: a control in the toolbar's Discard part.
-        let part = try #require(window.toolbar?.items.first?.view)
+        // Where Tab puts the keyboard: a control in the bar, in the window's content.
+        let content = try #require(window.contentView)
         let button = FocusableStandIn()
-        part.addSubview(button)
+        content.addSubview(button)
         #expect(window.makeFirstResponder(button))
-        #expect(window.toolbarHas(window.firstResponder))
+        #expect(window.barHas(window.firstResponder))
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .pass, "Space presses the button")
         #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save, "Return still saves")
         #expect(panel.action(forKey: 76, modifiers: [], in: window) == .save, "the keypad's Enter too")
@@ -658,15 +692,18 @@ struct ScreencastRecordingReviewTests {
         fullKeyboardAccess.isOn = false
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay, "without it, no button takes keys")
 
-        // The keyboard in the player's area, not the toolbar: the review's keys again.
+        // The keyboard in the player, such as its controls, not the bar: the review's keys again.
         fullKeyboardAccess.isOn = true
+        let player = AVPlayerView()
+        content.addSubview(player)
         let inPlayer = FocusableStandIn()
-        window.contentView?.addSubview(inPlayer)
-        #expect(window.makeFirstResponder(inPlayer) && !window.toolbarHas(window.firstResponder))
+        player.addSubview(inPlayer)
+        #expect(window.makeFirstResponder(inPlayer) && !window.barHas(window.firstResponder))
         #expect(panel.action(forKey: 49, modifiers: [], in: window) == .togglePlay)
         #expect(panel.action(forKey: 36, modifiers: [], in: window) == .save)
+        #expect(!window.barHas(NSView()), "a view outside the window")
         button.removeFromSuperview()
-        inPlayer.removeFromSuperview()
+        player.removeFromSuperview()
         await panel.close()
     }
 
@@ -768,7 +805,7 @@ final class FrontStandIn {
     }
 }
 
-/// A control that takes the keyboard, as a toolbar button does under Full Keyboard Access.
+/// A control that takes the keyboard, as a button in the bar does under Full Keyboard Access.
 private final class FocusableStandIn: NSView {
     override var acceptsFirstResponder: Bool { true }
 }

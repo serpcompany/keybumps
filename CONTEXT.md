@@ -232,8 +232,12 @@ Marking up the screen while recording, in the video: a pen, an arrow, a highligh
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Recording window**:
-What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar, with nothing to type or trim. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape, closing it, or starting the next recording saves too. The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
+What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its editor bar, with nothing to type or trim yet. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves and ⌘C copies; Escape, closing it, or starting the next recording saves too. The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
 _Avoid_: Review panel (its former name), quick access card, post-capture window, editor
+
+**Editor bar**:
+The bar along the top of the Screenshot Editor and the recording window: the window's tools on the left, then undo and redo and the window's actions, each with the key that also does it as a keycap, the main one filled with the accent color.
+_Avoid_: Toolbar (macOS's, in a window's title bar)
 
 **Repository guess**:
 The GitHub repository (`owner/name`) the recording window fills in, from the app in front when the recording started and, for a browser, the website's domain or a local development site such as `localhost:3000`. Once the person corrects it, the correction is remembered for that website, or the app, on this Mac only.
