@@ -89,7 +89,7 @@ How often and how recently the user picked each app or Quick Search command from
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
-The recent text and image items the user copied, kept locally.
+The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50, leaving out screenshots cleared or deleted there.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Source app**:
@@ -132,7 +132,7 @@ A PNG of the screens or an area, taken with ScreenGrabs' hotkeys or macOS's own,
 _Avoid_: Snap
 
 **ScreenGrabs tab**:
-The Command Palette tab (⌘3) showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
+The Command Palette tab (⌘3) showing Clipboard History's newest 50 screenshot items. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:

@@ -343,7 +343,7 @@ struct ScreenshotClipboardTests {
 @MainActor
 @Suite("Clearing the Clipboard tab keeps screenshots in the Screenshots tab")
 struct ClipboardTabClearTests {
-    private typealias Fixture = ScreenshotClipboardTests.Fixture
+    fileprivate typealias Fixture = ScreenshotClipboardTests.Fixture
 
     /// One item of each kind, newest first, and the original files two of them came from.
     private struct History {
@@ -485,17 +485,21 @@ struct ClipboardTabClearTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.clipboard.mediaDirectoryURL.path).isEmpty)
     }
 
-    @Test("Hidden screenshots still count toward the 50 items and age out like any other")
-    func hiddenScreenshotsCountTowardCapacity() throws {
+    @Test("Hidden screenshots count toward the screenshot limit: copies never push them out, newer screenshots do")
+    func hiddenScreenshotsCountTowardTheScreenshotLimit() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
         let history = try Self.seed(fixture)
         fixture.clipboard.clearClipboardTab()
 
         for index in 1...ClipboardHistoryService.capacity { fixture.clipboard.ingestForTesting("item \(index)") }
+        #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [history.screenshot.id])
+        #expect(Self.exists(history.screenshot.imageURL))
 
-        #expect(fixture.clipboard.entries.count == ClipboardHistoryService.capacity)
-        #expect(Self.screenshotsTab(fixture.clipboard).isEmpty)
+        for index in 1...ClipboardHistoryService.screenshotCapacity {
+            #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot("Screenshot \(index).png")))
+        }
+        #expect(!fixture.clipboard.entries.contains { $0.id == history.screenshot.id })
         #expect(!Self.exists(history.screenshot.imageURL))
     }
 
@@ -524,11 +528,11 @@ struct ClipboardTabClearTests {
         )
     }
 
-    private static func screenshotsTab(_ clipboard: ClipboardHistoryService) -> [ClipboardEntry] {
+    fileprivate static func screenshotsTab(_ clipboard: ClipboardHistoryService) -> [ClipboardEntry] {
         ScreenshotPaletteContent.resolve(entries: clipboard.entries, query: "", isEnabled: true).entries
     }
 
-    private static func reload(_ fixture: Fixture) -> ClipboardHistoryService {
+    fileprivate static func reload(_ fixture: Fixture) -> ClipboardHistoryService {
         ClipboardHistoryService(
             storageURL: fixture.clipboard.storageURL,
             pasteboard: fixture.pasteboard,
@@ -537,8 +541,107 @@ struct ClipboardTabClearTests {
         )
     }
 
-    private static func exists(_ url: URL?) -> Bool {
+    fileprivate static func exists(_ url: URL?) -> Bool {
         url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+    }
+}
+
+@MainActor
+@Suite("Screenshots and other Clipboard History items each keep their own newest 50")
+struct ClipboardHistoryLimitTests {
+    private typealias Fixture = ScreenshotClipboardTests.Fixture
+    private typealias Tabs = ClipboardTabClearTests
+
+    @Test("120 screenshots and 60 copies keep the newest 50 of each, and pruned items' media files go")
+    func eachKindKeepsItsOwnNewest() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        for index in 0..<120 {
+            #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot("Screenshot \(index).png")))
+            if index.isMultiple(of: 2) { fixture.clipboard.ingestForTesting("copy \(index / 2)") }
+        }
+
+        let entries = fixture.clipboard.entries
+        let screenshots = entries.filter(\.isScreenshot).map(\.displayText)
+        let copies = entries.filter { !$0.isScreenshot }.map(\.text)
+        #expect(screenshots == (70..<120).reversed().map { "Screenshot \($0)" })
+        #expect(copies == (10..<60).reversed().map { "copy \($0)" })
+        #expect(try Self.mediaFiles(fixture) == Set(entries.compactMap(\.imageURL?.lastPathComponent)))
+        #expect(Tabs.reload(fixture).entries.map(\.id) == entries.map(\.id))
+    }
+
+    @Test("History saved at the old shared limit loads unchanged, and new items push none of it out")
+    func historyAtTheOldLimitLoadsUnchanged() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let saved = (0..<50).map { Self.savedItem($0, isScreenshot: $0.isMultiple(of: 5), fixture) }
+        try JSONEncoder().encode(saved).write(to: fixture.clipboard.storageURL)
+
+        let upgraded = Tabs.reload(fixture)
+        #expect(upgraded.entries == saved)
+        #expect(upgraded.clipboardTabEntries == saved)
+
+        #expect(upgraded.ingestImageFile(at: try fixture.screenshot()))
+        upgraded.ingestForTesting("new copy")
+        #expect(Array(upgraded.entries.dropFirst(2)) == saved)
+        #expect(upgraded.clipboardTabEntries == Array(upgraded.entries.prefix(50)))
+    }
+
+    @Test("History past either limit loads only the newest 50 of each")
+    func historyPastTheLimitsLoadsTheNewest() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let screenshots = (0..<60).map { Self.savedItem($0, isScreenshot: true, fixture) }
+        let copies = (60..<120).map { Self.savedItem($0, isScreenshot: false, fixture) }
+        try JSONEncoder().encode(screenshots + copies).write(to: fixture.clipboard.storageURL)
+
+        let loaded = Tabs.reload(fixture).entries
+        #expect(loaded == Array(screenshots.prefix(50) + copies.prefix(50)))
+    }
+
+    @Test("The Clipboard tab lists the newest 50, and its Delete only hides a screenshot")
+    func clipboardTabListsTheNewestFifty() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        for index in 0..<50 { fixture.clipboard.ingestForTesting("copy \(index)") }
+        for index in 0..<50 {
+            #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot("Screenshot \(index).png")))
+        }
+        let newest = try #require(fixture.clipboard.entries.first)
+        #expect(fixture.clipboard.clipboardTabEntries.allSatisfy { $0.isScreenshot })
+
+        fixture.clipboard.removeFromClipboardTab(newest)
+
+        let tab = fixture.clipboard.clipboardTabEntries
+        #expect(tab.count == 50)
+        #expect(!tab.contains { $0.id == newest.id })
+        #expect(tab.last?.text == "copy 49")
+        #expect(fixture.clipboard.entries.count == 100)
+        #expect(Tabs.screenshotsTab(fixture.clipboard).first?.id == newest.id)
+        #expect(Tabs.exists(newest.imageURL))
+    }
+
+    /// An item as a build with one shared limit saved it, newest first by `index`.
+    private static func savedItem(_ index: Int, isScreenshot: Bool, _ fixture: Fixture) -> ClipboardEntry {
+        let capturedAt = Date(timeIntervalSince1970: 1_700_000_000 - Double(index))
+        guard isScreenshot else {
+            return ClipboardEntry(id: UUID(), text: "saved \(index)", capturedAt: capturedAt, fingerprint: "text:saved \(index)")
+        }
+        return ClipboardEntry(
+            id: UUID(),
+            text: "",
+            capturedAt: capturedAt,
+            kind: .image,
+            mediaPath: fixture.clipboard.mediaDirectoryURL.appendingPathComponent("\(index).png").path,
+            mediaPasteboardType: "public.png",
+            fingerprint: "image:\(index)",
+            sourcePath: fixture.root.appendingPathComponent("Screenshot \(index).png").path,
+            isScreenCapture: true
+        )
+    }
+
+    private static func mediaFiles(_ fixture: Fixture) throws -> Set<String> {
+        Set(try FileManager.default.contentsOfDirectory(atPath: fixture.clipboard.mediaDirectoryURL.path))
     }
 }
 
