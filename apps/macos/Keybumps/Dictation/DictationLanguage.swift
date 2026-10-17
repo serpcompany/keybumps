@@ -40,9 +40,10 @@ enum DictationLanguage {
     }
 
     /// The Mac's language where Apple's on-device speech supports it, otherwise English: what
-    /// Automatic uses with Apple Speech, which needs one language. The Mac's own region comes
-    /// first, so a British Mac gets `en-GB` rather than `en-US`; then the language's likely
-    /// region, so English on a German Mac gets `en-US` rather than `en-ID`; then the rest.
+    /// Automatic uses with Apple Speech, which needs one language. The Mac's script comes first,
+    /// so a Simplified Chinese Mac in Hong Kong gets `zh-CN` rather than Cantonese `zh-HK`; then
+    /// the Mac's own region, so a British Mac gets `en-GB` rather than `en-US`; then the
+    /// language's likely region, so English on a German Mac gets `en-US` rather than `en-ID`.
     static func macLanguage(
         preferred: String? = Locale.preferredLanguages.first,
         region: Locale.Region? = Locale.current.region,
@@ -58,14 +59,16 @@ enum DictationLanguage {
         let likelyRegion = Locale.Language(
             identifier: Locale.Language(languageCode: mac.languageCode, script: mac.script).maximalIdentifier
         ).region
-        let regionOf = { (identifier: String) in Locale.Language(identifier: identifier).region }
-        let sameLanguage = supported.sorted().filter {
-            Locale.Language(identifier: $0).languageCode == mac.languageCode
+        // Script, then region (the Mac's, the likely one, the rest), then the identifier.
+        let order = { (identifier: String) -> (Int, Int, String) in
+            let language = Locale.Language(identifier: identifier)
+            let region = language.region == macRegion ? 0 : language.region == likelyRegion ? 1 : 2
+            return (language.script == mac.script ? 0 : 1, region, identifier)
         }
-        let sameRegion = sameLanguage.filter { regionOf($0) == macRegion }
-        let likely = sameLanguage.filter { regionOf($0) == likelyRegion && regionOf($0) != macRegion }
-        let otherRegions = sameLanguage.filter { regionOf($0) != macRegion && regionOf($0) != likelyRegion }
-        return (sameRegion + likely + otherRegions).first(where: supportsOnDevice) ?? english
+        return supported
+            .filter { Locale.Language(identifier: $0).languageCode == mac.languageCode }
+            .sorted { order($0) < order($1) }
+            .first(where: supportsOnDevice) ?? english
     }
 
     /// What Settings › Dictation says under its menu while Automatic is chosen with a model that

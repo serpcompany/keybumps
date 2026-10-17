@@ -8,7 +8,8 @@ final class WhisperKitCompletedAudioTranscriber: UnloadableCompletedAudioTranscr
 
     private(set) var partialTranscript = ""
 
-    private init(whisper: WhisperKit) {
+    /// Internal so tests can pass a WhisperKit that loads no model; the app uses `load`.
+    init(whisper: WhisperKit) {
         self.whisper = whisper
     }
 

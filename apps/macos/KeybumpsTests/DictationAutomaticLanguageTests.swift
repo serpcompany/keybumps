@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WhisperKit
 @testable import Keybumps
 
 /// The models that detect the language.
@@ -117,6 +118,16 @@ struct DictationAutomaticLanguageTests {
         #expect(language == expected)
     }
 
+    @Test("The Mac's script comes before its region", arguments: [
+        ("zh-Hans-HK", "zh-CN"), ("zh-Hant-US", "zh-TW"), ("zh-HK", "zh-HK"),
+    ])
+    func theMacScriptFirst(_ preferred: String, _ expected: String) {
+        let language = DictationLanguage.macLanguage(
+            preferred: preferred, region: nil, supported: ["yue-CN", "zh-CN", "zh-HK", "zh-TW"]
+        ) { _ in true }
+        #expect(language == expected)
+    }
+
     @Test("The Mac's region without on-device speech falls to the likely region")
     func theMacRegionUnavailable() {
         let language = DictationLanguage.macLanguage(
@@ -210,6 +221,36 @@ struct DictationAutomaticLanguageTests {
         let options = WhisperKitCompletedAudioTranscriber.decodingOptions(language: "ja-JP")
         #expect(!options.detectLanguage)
         #expect(options.language == "ja")
+    }
+
+    @Test("Automatic detects once, then WhisperKit transcribes in that language without detecting")
+    func whisperKitTranscribesInTheLanguageDetectedOnce() async throws {
+        let whisper = try await LanguageWhisperKit(detects: "ja")
+        let result = try await Self.whisperKit(whisper, language: Self.automatic)
+        #expect(whisper.detections == 1)
+        #expect(whisper.decodeOptions.map(\.language) == ["ja"])
+        #expect(whisper.decodeOptions.map(\.detectLanguage) == [false])
+        #expect(result.language == "ja")
+    }
+
+    @Test("When the one detection fails, each window detects, and the transcript's language is reported")
+    func whisperKitDetectionFailsOver() async throws {
+        let whisper = try await LanguageWhisperKit(detects: nil, windowsIn: "de")
+        let result = try await Self.whisperKit(whisper, language: Self.automatic)
+        #expect(whisper.detections == 1)
+        #expect(whisper.decodeOptions.map(\.language) == [nil])
+        #expect(whisper.decodeOptions.map(\.detectLanguage) == [true])
+        #expect(result.language == "de")
+    }
+
+    @Test("A chosen language never asks WhisperKit to detect")
+    func whisperKitNeverDetectsAChosenLanguage() async throws {
+        let whisper = try await LanguageWhisperKit(detects: "de")
+        let result = try await Self.whisperKit(whisper, language: "ja-JP")
+        #expect(whisper.detections == 0)
+        #expect(whisper.decodeOptions.map(\.language) == ["ja"])
+        #expect(whisper.decodeOptions.map(\.detectLanguage) == [false])
+        #expect(result.language == "ja-JP")
     }
 
     @Test("WhisperKit's language is the one most of the transcript is in")
@@ -369,6 +410,56 @@ struct DictationAutomaticLanguageTests {
 
     private static func whisperCpp(_ runtime: LanguageWhisperCppRuntime) -> WhisperCppCompletedAudioTranscriber {
         WhisperCppCompletedAudioTranscriber(runtime: runtime) { _ in [Float](repeating: 0.1, count: 16_000) }
+    }
+
+    private static func whisperKit(_ whisper: LanguageWhisperKit, language: String) async throws -> DictationTranscription {
+        try await WhisperKitCompletedAudioTranscriber(whisper: whisper).transcription(
+            audioURL: URL(fileURLWithPath: "/dev/null"), language: language, recordedDuration: 1
+        )
+    }
+}
+
+/// A WhisperKit that loads no model: `load: false` only keeps the model folder, which needn't
+/// exist. It detects `detects`, or fails when that's nil, and keeps the options each
+/// transcription gets; its one window reports the language it was set to, else `windowsIn`.
+private final class LanguageWhisperKit: WhisperKit {
+    private struct DetectionFailed: Error {}
+
+    private let lock = NSLock()
+    private let detects: String?
+    private let windowsIn: String
+    private var detected = 0
+    private var options: [DecodingOptions] = []
+
+    init(detects: String?, windowsIn: String = "en") async throws {
+        self.detects = detects
+        self.windowsIn = windowsIn
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try await super.init(WhisperKitConfig(modelFolder: folder.path, verbose: false, load: false, download: false))
+    }
+
+    var detections: Int { lock.withLock { detected } }
+    var decodeOptions: [DecodingOptions] { lock.withLock { options } }
+
+    override func detectLanguage(audioPath: String) async throws -> (language: String, langProbs: [String: Float]) {
+        lock.withLock { detected += 1 }
+        guard let detects else { throw DetectionFailed() }
+        return (detects, [detects: 0])
+    }
+
+    override func transcribe(
+        audioPath: String,
+        audioInputOptions: AudioInputOptions? = nil,
+        decodeOptions: DecodingOptions? = nil,
+        callback: TranscriptionCallback? = nil
+    ) async throws -> [TranscriptionResult] {
+        lock.withLock { options.append(decodeOptions ?? DecodingOptions()) }
+        return [TranscriptionResult(
+            text: "made-up words",
+            segments: [],
+            language: decodeOptions?.language ?? windowsIn,
+            timings: TranscriptionTimings()
+        )]
     }
 }
 
