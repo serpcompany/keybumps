@@ -757,7 +757,7 @@ struct ScreencastRecordingControlsTests {
             #expect(!bar.isShown, "\(phase)")
         }
         // Up as the recording starts, before the recorder reads what to leave out, with its
-        // buttons waiting.
+        // buttons waiting, except Discard (#518).
         recording.phase = .starting
         controls.phaseChanged(.starting)
         #expect(bar.isShown && !bar.model.acceptsActions)
