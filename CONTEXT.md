@@ -89,7 +89,7 @@ How often and how recently the user picked each app or Quick Search command from
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
-The recent text and image items the user copied, kept locally.
+The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50 that match its filter and search, leaving out screenshots cleared or deleted there.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Source app**:
@@ -136,7 +136,7 @@ A PNG of the screens or an area, taken with ScreenGrabs' hotkeys or macOS's own,
 _Avoid_: Snap
 
 **ScreenGrabs tab**:
-The Command Palette tab (⌘3) showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
+The Command Palette tab (⌘3) showing Clipboard History's newest 50 screenshot items. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
@@ -236,7 +236,7 @@ Marking up the screen while recording, in the video: a pen, an arrow, a highligh
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Recording window**:
-What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its editor bar, with nothing to type or trim yet. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves and ⌘C copies; Escape, closing it, or starting the next recording saves too. The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
+What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Trim, Discard, Copy, and Save in its editor bar, with nothing to type. Trim opens a timeline under the player: its handles trim the ends, and a part selected on it is cut out with Cut Section; trimmed and cut parts stay on it, dimmed, to bring back. With edits, Save and Copy first export the edited recording, keeping the original until that's complete, and closing asks "Save your edits?" (Keep Original or Save Edited); the next recording starting, or quitting, keeps the original. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves and ⌘C copies; Escape, closing it, or starting the next recording saves too. The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
 _Avoid_: Review panel (its former name), quick access card, post-capture window, editor
 
 **Editor bar**:

@@ -106,17 +106,24 @@ struct ScreengrabsEditorBarTests {
         #expect(model.history.annotations.count == 1)
     }
 
-    @Test("The recording window's bar has no undo or redo until it has tools (#517)")
-    func recordingBarHasNoHistory() throws {
+    @Test("The recording window's bar has undo and redo, each on only once there's an edit to take back or put back (#517)")
+    func recordingBarHistory() throws {
         defer { fixture.tearDown() }
-        let bar = ScreencastRecordingReviewBar(model: fixture.model(try fixture.video()))
-        #expect(bar.history == nil)
+        let model = fixture.model(try fixture.video())
+        let history = try #require(ScreencastRecordingReviewBar(model: model).history)
+        #expect(!history.canUndo && !history.canRedo)
+        model.edit { $0.setTrim(start: 1, end: 3) }
+        let edited = try #require(ScreencastRecordingReviewBar(model: model).history)
+        #expect(edited.canUndo && !edited.canRedo)
+        edited.undo()
+        let undone = try #require(ScreencastRecordingReviewBar(model: model).history)
+        #expect(!undone.canUndo && undone.canRedo)
     }
 
     @Test("Both windows' bars match the fixture: whether each has undo and redo, and each action's title, key, style, default button, identifier, and help, in order")
-    func barsMatchTheFixture() throws {
+    func barsMatchTheFixture() async throws {
         defer { fixture.tearDown() }
-        let actual = try Self.encode(try snapshot())
+        let actual = try Self.encode(try await snapshot())
         if ProcessInfo.processInfo.environment["KEYBUMPS_RECORD_SNAPSHOTS"] == "1" {
             try actual.write(to: Self.fixtureURL, atomically: true, encoding: .utf8)
             return
@@ -148,6 +155,13 @@ struct ScreengrabsEditorBarTests {
         model.askToDiscard()
         let asking = NSHostingView(rootView: ScreencastRecordingReviewBar(model: model)).fittingSize
         #expect(asking.width <= narrowest, "asking, \(asking.width) points wide")
+
+        // With Trim's options in full, it fits the window on the narrowest Mac screen, 1280 points
+        // wide; a narrower window shows them without their titles.
+        model.keep()
+        model.pick(.trim)
+        let trimming = NSHostingView(rootView: ScreencastRecordingReviewBar(model: model)).fittingSize
+        #expect(trimming.width <= 1_280 - 2 * ScreencastRecordingReviewWindow.screenMargin, "trimming, \(trimming.width) points wide")
     }
 
     @Test("An action's keycap follows its title, in full")
@@ -183,15 +197,31 @@ struct ScreengrabsEditorBarTests {
     // MARK: Helpers
 
     /// What the fixture records: each window's bar, in each of its states.
-    private func snapshot() throws -> [EditorBarSnapshot] {
+    private func snapshot() async throws -> [EditorBarSnapshot] {
         let editor = ScreenshotEditorBar(model: ScreenshotEditorModel(), cancel: {}, save: {})
         let editorActions = ScreenshotEditorWindowController.barActions(cancel: {}, save: {})
-        let model = fixture.model(try fixture.video())
+        let export = FakeEditExport(.waitForCancel)
+        let model = fixture.model(try fixture.video(), export: export.export)
         let recording = ScreencastRecordingReviewBar(model: model)
         let reviewing = ScreencastRecordingReviewBar.actions(for: model)
         model.askToDiscard()
         let asking = ScreencastRecordingReviewBar.actions(for: model)
-        let question = model.isConfirmingDiscard ? ScreencastRecordingReviewBar.discardQuestion : nil
+        let question = ScreencastRecordingReviewBar.question(for: model)
+        model.keep()
+
+        model.pick(.trim)
+        model.edit { $0.setTrim(start: 1, end: 3) }
+        let trimming = ScreencastRecordingReviewBar.actions(for: model)
+        let trimTools = Self.tools(of: model)
+        model.askToSaveEdits()
+        let askingToSave = ScreencastRecordingReviewBar.actions(for: model)
+        let saveQuestion = ScreencastRecordingReviewBar.question(for: model)
+        model.dismissSaveQuestion()
+        let saving = Task { await model.save() }
+        for _ in 0..<200 where !model.isExporting { try await Task.sleep(for: .milliseconds(10)) }
+        let exporting = ScreencastRecordingReviewBar.actions(for: model)
+        model.cancelExport()
+        await saving.value
         return [
             EditorBarSnapshot(
                 window: "screenshotEditor", state: "editing", hasHistory: editor.history != nil, question: nil,
@@ -205,7 +235,26 @@ struct ScreengrabsEditorBarTests {
                 window: "recording", state: "askingToDiscard", hasHistory: recording.history != nil, question: question,
                 actions: asking
             ),
+            EditorBarSnapshot(
+                window: "recording", state: "trimming", hasHistory: true, question: nil, actions: trimming, tools: trimTools
+            ),
+            EditorBarSnapshot(
+                window: "recording", state: "askingToSaveEdits", hasHistory: true, question: saveQuestion, actions: askingToSave
+            ),
+            EditorBarSnapshot(
+                window: "recording", state: "exporting", hasHistory: true, question: nil, actions: exporting
+            ),
         ]
+    }
+
+    /// The recording window's tools as the bar shows them.
+    private static func tools(of model: ScreencastReviewModel) -> [EditorBarSnapshot.Tool] {
+        ScreencastEditTool.allCases.map { tool in
+            EditorBarSnapshot.Tool(
+                title: tool.title, number: tool.number, key: tool.key, isSelected: model.tool == tool,
+                identifier: ScreencastReviewID.tool(tool)
+            )
+        }
     }
 
     private static func encode(_ snapshot: [EditorBarSnapshot]) throws -> String {
@@ -241,18 +290,32 @@ private struct EditorBarSnapshot: Encodable {
         let help: String
     }
 
+    struct Tool: Encodable {
+        let title: String
+        let number: String
+        let key: String
+        let isSelected: Bool
+        let identifier: String
+    }
+
     let window: String
     let state: String
     /// Undo and redo show.
     let hasHistory: Bool
     let question: String?
     let actions: [Action]
+    /// The recording window's tools, where recorded.
+    let tools: [Tool]?
 
-    init(window: String, state: String, hasHistory: Bool, question: String?, actions: [ScreengrabsEditorAction]) {
+    init(
+        window: String, state: String, hasHistory: Bool, question: String?, actions: [ScreengrabsEditorAction],
+        tools: [Tool]? = nil
+    ) {
         self.window = window
         self.state = state
         self.hasHistory = hasHistory
         self.question = question
+        self.tools = tools
         self.actions = actions.map { action in
             Action(
                 title: action.title, key: action.key, style: action.style.rawValue,
