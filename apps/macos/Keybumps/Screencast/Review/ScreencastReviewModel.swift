@@ -415,7 +415,7 @@ final class ScreencastReviewModel {
     /// Save keeps their videos as they were recorded.
     var displaysWithNothingKept: [Int] {
         guard edits.isTrimmed else { return [] }
-        return videos.indices.filter { !edits.keepsSomething(ofVideoLasting: videos[$0].duration) }
+        return videos.indices.filter { !edits.keepsSomething(of: videos[$0]) }
     }
 
     /// What the window says about them, or nil.

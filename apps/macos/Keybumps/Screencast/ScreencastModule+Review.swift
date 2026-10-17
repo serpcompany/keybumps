@@ -46,8 +46,8 @@ final class ScreencastReviewFlow {
     var onFinish: ((ScreencastReviewOutcome) -> Void)?
     private var isOn = true
     private var terminationObserver: NSObjectProtocol?
-    /// Whether this launch has cleaned up after exports a quit or a crash cut short.
-    private var hasRecovered = false
+    /// This launch's clean-up after exports a quit or a crash cut short, once it has started.
+    private(set) var recovery: Task<ScreencastEditExporter.Recovery, Never>?
 
     init(services: ScreencastReviewServices?, contextReader: ScreencastCaptureContextReader) {
         self.services = services
@@ -111,14 +111,15 @@ final class ScreencastReviewFlow {
     /// a crash left in the recordings' folders is cleaned up, off the main thread
     /// (`ScreencastEditExporter.recoverInterruptedExports(in:)`). Counts are logged, never a name.
     func recoverInterruptedExports(in capturesFolder: URL) {
-        guard services != nil, !hasRecovered else { return }
-        hasRecovered = true
-        Task.detached(priority: .utility) {
+        guard services != nil, recovery == nil else { return }
+        recovery = Task.detached(priority: .utility) {
             let recovery = ScreencastEditExporter.recoverInterruptedExports(in: capturesFolder)
-            guard recovery != ScreencastEditExporter.Recovery() else { return }
-            Logger(subsystem: "com.serp.keybumps", category: "screencast").info(
-                "screencast export recovery removed=\(recovery.removed, privacy: .public) restored=\(recovery.restored, privacy: .public)"
-            )
+            if recovery != ScreencastEditExporter.Recovery() {
+                Logger(subsystem: "com.serp.keybumps", category: "screencast").info(
+                    "screencast export recovery removed=\(recovery.removed, privacy: .public) restored=\(recovery.restored, privacy: .public)"
+                )
+            }
+            return recovery
         }
     }
 

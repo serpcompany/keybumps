@@ -115,6 +115,13 @@ struct ScreencastRecordingEdits: Equatable, Sendable {
         keptRanges(within: videoDuration).reduce(0) { $0 + $1.duration } >= Self.shortestDisplayPart
     }
 
+    /// Whether anything of `video` is kept, from its recorded length (`ScreencastVideo.duration`, its
+    /// last frame's time), never its file's, which runs a frame past it. The window's notice, the
+    /// player, and Save all ask this, so they never disagree about a display on that edge.
+    func keepsSomething(of video: ScreencastVideo) -> Bool {
+        keepsSomething(ofVideoLasting: video.duration)
+    }
+
     /// How long the edited recording plays.
     var length: Double { keptRanges.reduce(0) { $0 + $1.duration } }
 
