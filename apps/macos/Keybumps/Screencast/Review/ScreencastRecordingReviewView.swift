@@ -16,13 +16,29 @@ enum ScreencastReviewID {
     static let confirmDiscard = "screencast.review.confirmDiscard"
     static let keep = "screencast.review.keep"
     static let failure = "screencast.review.failure"
+    /// The tools and Trim's options and timeline (#517).
+    static func tool(_ tool: ScreencastEditTool) -> String { "screencast.review.tool.\(tool.rawValue)" }
+    static let cutSection = "screencast.review.cutSection"
+    static let length = "screencast.review.length"
+    static let resetTrim = "screencast.review.resetTrim"
+    static let timeline = "screencast.review.timeline"
+    /// Saving the edits (#517): the export's progress and Cancel, "Save your edits?" with Keep
+    /// Original and Save Edited, and a failure's Save Original and Try Again.
+    static let exportProgress = "screencast.review.exportProgress"
+    static let cancelExport = "screencast.review.cancelExport"
+    static let keepOriginal = "screencast.review.keepOriginal"
+    static let saveEdited = "screencast.review.saveEdited"
+    static let exportFailure = "screencast.review.exportFailure"
+    static let saveOriginal = "screencast.review.saveOriginal"
+    static let tryAgain = "screencast.review.tryAgain"
 }
 
 /// A recording's review window's content (#475), after Snapzy's Video Editor (BSD-3-Clause, see
 /// LICENSE.snapzy): the bar the Screenshot Editor has too (`ScreencastRecordingReviewBar`, #511),
 /// then the player edge to edge, `AVPlayerView` with its own controls along its bottom for play,
-/// pause, and scrubbing, the video fitted to it. Save and Copy close the window, and the notch says
-/// where it was saved, or that it was copied. No editing yet, and no note, type, or repository.
+/// pause, and scrubbing, the video fitted to it, playing the edits (#517). Picking Trim opens the
+/// timeline under it. Save and Copy close the window, and the notch says where it was saved, or that
+/// it was copied. No note, type, or repository.
 struct ScreencastRecordingReviewView: View {
     let model: ScreencastReviewModel
     /// The player, for a window on screen; nil under the unit-test host.
@@ -35,9 +51,27 @@ struct ScreencastRecordingReviewView: View {
             ScreencastReviewPlayer(model: model, playback: playback)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
+                .overlay {
+                    // The frame under a dragged trim handle (#517).
+                    if let frame = playback?.previewFrame {
+                        Image(decorative: frame, scale: 1)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.black)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .overlay(alignment: .top) {
                     // Over the player, so it takes no row of its own.
-                    if let failure = model.failure {
+                    if let exportFailure = model.exportFailure {
+                        ScreencastExportFailureBanner(
+                            failure: exportFailure,
+                            saveOriginal: { Task { await model.saveOriginal() } },
+                            tryAgain: { Task { await model.tryAgain() } }
+                        )
+                        .padding(18)
+                    } else if let failure = model.failure {
                         Text(failure.message)
                             .font(.system(size: 12))
                             .foregroundStyle(.red)
@@ -51,6 +85,9 @@ struct ScreencastRecordingReviewView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Recording")
                 .accessibilityIdentifier(ScreencastReviewID.playerArea)
+            if model.showsTimeline {
+                ScreencastTrimTimeline(model: model, playback: playback)
+            }
         }
         .uiTestAnimationsDisabled()
         .onChange(of: model.isWorking) { _, isWorking in
@@ -59,26 +96,32 @@ struct ScreencastRecordingReviewView: View {
     }
 }
 
-/// The recording window's bar, the Screenshot Editor's (`ScreengrabsEditorBar`, #511): no tools yet
-/// (#517 adds Trim, Crop, and Blur), then a spinner while it saves, the display picker for a
-/// recording of every display, and Discard, Copy, and Save, Save the window's default button. While
-/// Discard is asked, "Discard this recording?" with Keep and Discard takes their place.
+/// The recording window's bar, the Screenshot Editor's (`ScreengrabsEditorBar`, #511): the tools
+/// and the picked one's options (#517), then the export's progress or a spinner while it saves, the
+/// display picker for a recording of every display, undo and redo, and Discard, Copy, and Save, Save
+/// the window's default button. While Discard is asked, "Discard this recording?" with Keep and
+/// Discard takes their place; while closing with edits asks, "Save your edits?" with Keep Original and
+/// Save Edited; and while the edited recording is written, Cancel.
 struct ScreencastRecordingReviewBar: View {
     /// Copy's key.
     static let copyKey = "⌘C"
     static let discardQuestion = "Discard this recording?"
+    static let saveEditsQuestion = "Save your edits?"
+    static let cancelKey = "esc"
 
     let model: ScreencastReviewModel
 
     var body: some View {
         ScreengrabsEditorBar(
             history: history,
-            question: model.isConfirmingDiscard ? Self.discardQuestion : nil,
+            question: Self.question(for: model),
             actions: Self.actions(for: model)
         ) {
-            // The tools' place, empty until the recording has tools of its own.
+            ScreencastEditToolsBar(model: model)
         } accessories: {
-            if model.isWorking {
+            if let progress = model.exportProgress {
+                ScreencastExportProgress(progress: progress)
+            } else if model.isWorking {
                 ProgressView()
                     .controlSize(.small)
                     .accessibilityLabel("Saving")
@@ -87,12 +130,31 @@ struct ScreencastRecordingReviewBar: View {
         }
     }
 
-    /// No undo or redo: there's nothing to take back until the recording has tools (#517).
-    var history: ScreengrabsEditorHistory? { nil }
+    /// Undo and redo, each only when there's an edit to take back or put back.
+    var history: ScreengrabsEditorHistory? {
+        ScreengrabsEditorHistory(canUndo: model.canUndo, canRedo: model.canRedo, undo: model.undo, redo: model.redo)
+    }
 
-    /// Discard, Copy, and Save, or, while Discard is asked, Keep and Discard, which no key answers.
-    /// Return saves and ⌘C copies through the review's key monitor (`ScreencastReviewKey`).
+    /// The question the actions answer, if one is asked.
+    static func question(for model: ScreencastReviewModel) -> String? {
+        if model.isConfirmingDiscard { return discardQuestion }
+        if model.isAskingToSaveEdits { return saveEditsQuestion }
+        return nil
+    }
+
+    /// Discard, Copy, and Save; while Discard is asked, Keep and Discard, which no key answers; while
+    /// closing with edits asks, Keep Original and Save Edited, which Return answers; and while the
+    /// edited recording is written, Cancel, which Escape also does. Return saves and ⌘C copies
+    /// through the review's key monitor (`ScreencastReviewKey`).
     static func actions(for model: ScreencastReviewModel) -> [ScreengrabsEditorAction] {
+        if model.isExporting {
+            return [
+                ScreengrabsEditorAction(
+                    title: "Cancel", key: cancelKey, help: "Stop exporting; the original stays as it was (Esc)",
+                    identifier: ScreencastReviewID.cancelExport, perform: model.cancelExport
+                ),
+            ]
+        }
         if model.isConfirmingDiscard {
             return [
                 ScreengrabsEditorAction(
@@ -103,6 +165,22 @@ struct ScreencastRecordingReviewBar: View {
                     identifier: ScreencastReviewID.confirmDiscard
                 ) {
                     Task { model.confirmDiscard() }
+                },
+            ]
+        }
+        if model.isAskingToSaveEdits {
+            return [
+                ScreengrabsEditorAction(
+                    title: "Keep Original", help: "Save the recording without the edits",
+                    identifier: ScreencastReviewID.keepOriginal
+                ) {
+                    Task { await model.keepOriginal() }
+                },
+                ScreengrabsEditorAction(
+                    title: "Save Edited", key: ScreengrabsEditorAction.returnSign, style: .prominent, isDefault: true,
+                    help: "Save the recording with the edits (Return)", identifier: ScreencastReviewID.saveEdited
+                ) {
+                    Task { await model.saveEdited() }
                 },
             ]
         }
@@ -160,14 +238,16 @@ private struct ScreencastReviewPlayer: View {
             ScreencastReviewAVPlayerView(playback: playback)
                 .onAppear { showCurrentVideo() }
                 .onChange(of: model.selectedDisplay) { showCurrentVideo() }
+                .onChange(of: model.editRevision) { showCurrentVideo() }
         } else {
             Color.black
         }
     }
 
+    /// The selected display's video, with the edits.
     private func showCurrentVideo() {
         guard let playback, let video = model.currentVideo else { return }
-        playback.show(video)
+        playback.show(video, display: model.selectedDisplay, edits: model.edits)
     }
 }
 

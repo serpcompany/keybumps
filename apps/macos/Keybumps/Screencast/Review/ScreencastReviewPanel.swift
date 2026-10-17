@@ -27,6 +27,7 @@ final class ScreencastReviewPanel {
     private let makePlayback: @MainActor () -> ScreencastReviewPlayback?
     private let fullKeyboardAccess: @MainActor () -> Bool
     private let front: ScreencastReviewFront
+    private let export: ScreencastEditExport
     /// The recording's player, while the window is up.
     private(set) var playback: ScreencastReviewPlayback?
     /// The app in front before the window took it, which gets it back after. It's kept while the
@@ -55,6 +56,7 @@ final class ScreencastReviewPanel {
     ///   - fullKeyboardAccess: Whether Tab reaches buttons (Keyboard Navigation in System Settings),
     ///     so a button in the bar can have the keyboard.
     ///   - front: Who has the front and the keyboard, which the window takes and gives back.
+    ///   - export: How Save and Copy write a recording's edits (#517).
     init(
         repositories: ScreencastRepositoryMemory,
         fileManager: FileManager = .default,
@@ -66,9 +68,11 @@ final class ScreencastReviewPanel {
             UnitTestHost.isActive ? nil : ScreencastReviewPlayback()
         },
         fullKeyboardAccess: @escaping @MainActor () -> Bool = { NSApp.isFullKeyboardAccessEnabled },
-        front: ScreencastReviewFront = .app
+        front: ScreencastReviewFront = .app,
+        export: ScreencastEditExport = .movies
     ) {
         self.repositories = repositories
+        self.export = export
         self.fileManager = fileManager
         self.pasteboard = pasteboard
         self.keepOutOfClipboardHistory = keepOutOfClipboardHistory
@@ -78,7 +82,7 @@ final class ScreencastReviewPanel {
         self.fullKeyboardAccess = fullKeyboardAccess
         self.front = front
         window.onClose = { [weak self] in
-            Task { await self?.close() }
+            Task { await self?.requestClose() }
         }
     }
 
@@ -176,7 +180,8 @@ final class ScreencastReviewPanel {
             repositories: repositories,
             fileManager: fileManager,
             pasteboard: pasteboard,
-            keepOutOfClipboardHistory: keepOutOfClipboardHistory
+            keepOutOfClipboardHistory: keepOutOfClipboardHistory,
+            export: export
         )
     }
 
@@ -219,7 +224,16 @@ final class ScreencastReviewPanel {
         window.makeFirstResponder(nil)
     }
 
-    /// Closes the window without a choice, which saves the capture.
+    /// The close button, or Escape with no tool picked: with edits not yet saved, the bar asks first
+    /// ("Save your edits?"); while they're being written, that stops. Otherwise it closes, which saves.
+    func requestClose() async {
+        guard let model, !isMakingWay else { return }
+        if model.isExporting { return model.cancelExport() }
+        if model.asksBeforeClosing { return model.askToSaveEdits() }
+        await close()
+    }
+
+    /// Closes the window without a choice, which saves the capture as it was recorded.
     func close() async {
         guard let model else { return }
         await model.close()
@@ -294,12 +308,19 @@ final class ScreencastReviewPanel {
             isComposing: (keyWindow.firstResponder as? NSTextView)?.hasMarkedText() == true,
             isConfirmingDiscard: model.isConfirmingDiscard,
             isClaimed: OwnWindowKeyClaims.shared.isClaimed(keyCode: keyCode, modifiers: modifiers),
-            controlHasKeyboard: fullKeyboardAccess() && window.barHas(keyWindow.firstResponder)
+            controlHasKeyboard: fullKeyboardAccess() && window.barHas(keyWindow.firstResponder),
+            editing: ScreencastReviewKey.Editing(
+                tool: model.tool,
+                isExporting: model.isExporting,
+                isAskingToSaveEdits: model.isAskingToSaveEdits,
+                hasExportFailure: model.exportFailure != nil
+            )
         )
     }
 
     /// Does what a key asks, and says whether it took the key. A held key acts once: Space plays or
-    /// pauses once, a held Return or Escape saves once, and a held ⌘C copies once.
+    /// pauses once, a held Return or Escape saves once, and a held ⌘C copies once. Undo and redo
+    /// repeat while held, as in any Mac app.
     @discardableResult
     func perform(_ key: ScreencastReviewKey, isRepeat: Bool = false) -> Bool {
         guard let model, !isMakingWay else { return false }
@@ -308,12 +329,23 @@ final class ScreencastReviewPanel {
         case .ignore: break
         case .save: if !isRepeat { Task { await model.save() } }
         case .copy: if !isRepeat { Task { await model.copy() } }
-        case .close: if !isRepeat { Task { await self.close() } }
+        case .close: if !isRepeat { Task { await self.requestClose() } }
         case .keep: model.keep()
         case .togglePlay: if !isRepeat { playback?.togglePlay() }
         case .tab:
             window.barTakesKeyboard = true
             return false
+        case .tool(let tool): if !isRepeat { model.pick(tool) }
+        case .putToolDown: model.putToolDown()
+        case .undo: model.undo()
+        case .redo: model.redo()
+        case .cutSelection: if !isRepeat { model.cutSelection() }
+        case .markIn: model.markSelectionStart(at: playback?.recordingTime ?? 0)
+        case .markOut: model.markSelectionEnd(at: playback?.recordingTime ?? 0)
+        case .cancelExport: model.cancelExport()
+        case .dismissQuestion: model.dismissSaveQuestion()
+        case .saveEdited: if !isRepeat { Task { await model.saveEdited() } }
+        case .tryAgain: if !isRepeat { Task { await model.tryAgain() } }
         }
         return true
     }
@@ -328,6 +360,12 @@ final class ScreencastReviewPanel {
 /// composing (an input method's marked text) keeps its keys, and a key claimed in Keybumps's own
 /// windows (`OwnWindowKeyClaims`), such as Escape while the next recording draws, is left to what
 /// claims it.
+///
+/// Editing (#517): a tool's number or letter picks it, ⌘Z and ⇧⌘Z undo and redo, and with Trim
+/// picked, ⌫ cuts the selection and I and O start and end it at the playhead. Escape puts the picked
+/// tool down before it closes anything. While "Save your edits?" is asked, Return saves the edits and
+/// Escape goes back; while the edited recording is written, Escape stops it and only Space still
+/// works; after it failed, Return tries again.
 enum ScreencastReviewKey: Equatable {
     case save
     /// ⌘C, Copy's key.
@@ -343,15 +381,49 @@ enum ScreencastReviewKey: Equatable {
     case ignore
     /// Left to the window's controls.
     case pass
+    /// A tool's number or letter: picks it, or puts it down.
+    case tool(ScreencastEditTool)
+    /// Escape with a tool picked.
+    case putToolDown
+    case undo
+    case redo
+    /// ⌫ with Trim picked: Cut Section.
+    case cutSelection
+    /// I and O with Trim picked: the selection starts, or ends, at the playhead.
+    case markIn
+    case markOut
+    /// Escape while the edited recording is written.
+    case cancelExport
+    /// Escape while "Save your edits?" is asked: back to editing.
+    case dismissQuestion
+    /// Return while "Save your edits?" is asked.
+    case saveEdited
+    /// Return after the edited recording couldn't be written.
+    case tryAgain
+
+    /// What the window is doing with its edits, which decides some keys.
+    struct Editing: Equatable {
+        var tool: ScreencastEditTool?
+        var isExporting = false
+        var isAskingToSaveEdits = false
+        var hasExportFailure = false
+
+        static let none = Editing()
+    }
 
     static let escapeKeyCode: UInt16 = 53
     static let returnKeyCodes: Set<UInt16> = [36, 76]
     static let spaceKeyCode: UInt16 = 49
     static let tabKeyCode: UInt16 = 48
+    /// Delete (⌫) and Forward Delete.
+    static let deleteKeyCodes: Set<UInt16> = [51, 117]
     /// ⌘C's character, read from the key ignoring modifiers, so it follows the keyboard layout.
     static let copyCharacter = "c"
     /// The C key (kVK_ANSI_C), ⌘C on a layout with no Latin letters, such as Russian, as for menus.
     static let copyKeyCode: UInt16 = 8
+    /// ⌘Z's character, and the Z key (kVK_ANSI_Z) on a layout with no Latin letters.
+    static let undoCharacter = "z"
+    static let undoKeyCode: UInt16 = 6
 
     static func action(
         keyCode: UInt16,
@@ -360,26 +432,61 @@ enum ScreencastReviewKey: Equatable {
         isComposing: Bool,
         isConfirmingDiscard: Bool,
         isClaimed: Bool = false,
-        controlHasKeyboard: Bool = false
+        controlHasKeyboard: Bool = false,
+        editing: Editing = .none
     ) -> ScreencastReviewKey {
         guard !isClaimed, !isComposing else { return .pass }
-        if modifiers.intersection([.command, .control, .option, .shift]) == .command,
-           isCopyKey(keyCode: keyCode, characters: characters) {
-            return isConfirmingDiscard ? .ignore : .copy
+        let held = modifiers.intersection([.command, .control, .option, .shift])
+        let isAsking = isConfirmingDiscard || editing.isAskingToSaveEdits
+        if editing.isExporting {
+            if held.isEmpty, keyCode == escapeKeyCode { return .cancelExport }
+            if held.isEmpty, keyCode == spaceKeyCode, !controlHasKeyboard { return .togglePlay }
+            return keyCode == tabKeyCode ? .pass : .ignore
+        }
+        if held == .command, isCopyKey(keyCode: keyCode, characters: characters) {
+            return isAsking ? .ignore : .copy
+        }
+        if held == .command || held == [.command, .shift], isLatinKey(undoCharacter, keyCode: keyCode, letterKeyCode: undoKeyCode, characters: characters) {
+            guard !isAsking else { return .ignore }
+            return held.contains(.shift) ? .redo : .undo
         }
         guard modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
         if keyCode == tabKeyCode { return .tab }
         if keyCode == spaceKeyCode { return modifiers.contains(.shift) || controlHasKeyboard ? .pass : .togglePlay }
-        if keyCode == escapeKeyCode { return isConfirmingDiscard ? .keep : .close }
-        if returnKeyCodes.contains(keyCode) { return isConfirmingDiscard ? .ignore : .save }
+        if keyCode == escapeKeyCode {
+            if isConfirmingDiscard { return .keep }
+            if editing.isAskingToSaveEdits { return .dismissQuestion }
+            return editing.tool == nil ? .close : .putToolDown
+        }
+        if returnKeyCodes.contains(keyCode) {
+            if isConfirmingDiscard { return .ignore }
+            if editing.isAskingToSaveEdits { return .saveEdited }
+            return editing.hasExportFailure ? .tryAgain : .save
+        }
+        guard !isAsking, !modifiers.contains(.shift) else { return .pass }
+        if editing.tool == .trim {
+            if deleteKeyCodes.contains(keyCode) { return .cutSelection }
+            switch characters?.lowercased() {
+            case "i": return .markIn
+            case "o": return .markOut
+            default: break
+            }
+        }
+        if let characters, let tool = ScreencastEditTool.matching(key: characters) { return .tool(tool) }
         return .pass
     }
 
     /// The layout's C, wherever it is, or, on a layout with no Latin letters, the C key.
     static func isCopyKey(keyCode: UInt16, characters: String?) -> Bool {
+        isLatinKey(copyCharacter, keyCode: keyCode, letterKeyCode: copyKeyCode, characters: characters)
+    }
+
+    /// The layout's `letter`, wherever it is, or, on a layout with no Latin letters, the key at
+    /// `letterKeyCode`, as menus read it.
+    static func isLatinKey(_ letter: String, keyCode: UInt16, letterKeyCode: UInt16, characters: String?) -> Bool {
         let characters = characters?.lowercased() ?? ""
-        guard characters.unicodeScalars.contains(where: \.isASCII) else { return keyCode == copyKeyCode }
-        return characters == copyCharacter
+        guard characters.unicodeScalars.contains(where: \.isASCII) else { return keyCode == letterKeyCode }
+        return characters == letter
     }
 }
 
@@ -414,12 +521,35 @@ struct ScreencastReviewFront {
     }
 }
 
-/// The recording's player, `AVPlayerView` with its own controls for play, pause, and scrubbing.
+/// The recording's player, `AVPlayerView` with its own controls for play, pause, and scrubbing. With
+/// edits (#517), it plays the edited recording (`ScreencastEditComposition`) and says where it is in
+/// the recording's own time, for the timeline; while a trim handle is dragged, it shows the frame
+/// under it (`previewFrame`), and it makes the timeline's strip of frames (`filmstrip`).
 @MainActor
+@Observable
 final class ScreencastReviewPlayback {
-    let view = AVPlayerView()
-    private let player = AVPlayer()
-    private var shown: URL?
+    /// Frames in the timeline's strip.
+    static let filmstripCount = 24
+
+    @ObservationIgnored let view = AVPlayerView()
+    /// Where the player is, in the recording's time.
+    private(set) var recordingTime: Double = 0
+    /// The frame under a dragged trim handle, shown over the player until the drag ends.
+    private(set) var previewFrame: CGImage?
+    /// Frames across the shown video, evenly spaced, for the timeline's strip.
+    private(set) var filmstrip: [CGImage] = []
+
+    @ObservationIgnored private let player = AVPlayer()
+    @ObservationIgnored private var shown: URL?
+    /// The edits the shown item plays, and the parts of the recording it plays.
+    @ObservationIgnored private var shownEdits: ScreencastRecordingEdits?
+    @ObservationIgnored private var shownDisplay = 0
+    @ObservationIgnored private var kept: [ScreencastTimeRange] = []
+    /// Counts each `show`, so an edited item made too late for the latest is dropped.
+    @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var timeObserver: Any?
+    @ObservationIgnored private var previewGenerator: AVAssetImageGenerator?
+    @ObservationIgnored private var filmstripTask: Task<Void, Never>?
 
     init() {
         view.player = player
@@ -427,19 +557,62 @@ final class ScreencastReviewPlayback {
         view.showsFullScreenToggleButton = false
         view.videoGravity = .resizeAspect
         view.setAccessibilityIdentifier(ScreencastReviewID.player)
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
+            MainActor.assumeIsolated { self?.playerMoved(to: time) }
+        }
     }
 
     /// Shows `video`, unless it already shows.
     func show(_ video: ScreencastVideo) {
+        show(video, display: 0, edits: nil)
+    }
+
+    /// Shows `display`'s `video` with `edits`, keeping the place in the recording; the recording as
+    /// it was when they change nothing.
+    func show(_ video: ScreencastVideo, display: Int, edits: ScreencastRecordingEdits?) {
         let url = video.forSharing
-        guard shown != url || player.currentItem == nil else { return }
+        let edits = edits.flatMap { Self.changes(display: display, of: $0) ? $0 : nil }
+        guard shown != url || player.currentItem == nil || shownEdits != edits || shownDisplay != display else { return }
+        let isNewVideo = shown != url
+        let place = recordingTime
         shown = url
-        player.replaceCurrentItem(with: AVPlayerItem(url: url))
+        shownEdits = edits
+        shownDisplay = display
+        generation += 1
+        previewGenerator = nil
+        if isNewVideo { makeFilmstrip(of: url, duration: video.duration) }
+        guard let edits else {
+            kept = [ScreencastTimeRange(start: 0, end: video.duration)]
+            player.replaceCurrentItem(with: AVPlayerItem(url: url))
+            if !isNewVideo { seek(toRecordingTime: place) }
+            return
+        }
+        let generation = generation
+        Task { [weak self] in
+            guard let edit = try? await ScreencastEditComposition.make(source: url, edits: edits, display: display) else { return }
+            guard let self, self.generation == generation else { return }
+            let item = AVPlayerItem(asset: edit.composition)
+            if edit.editor.changesFrames { item.videoComposition = edit.videoComposition }
+            self.kept = edits.keptRanges(within: video.duration)
+            self.player.replaceCurrentItem(with: item)
+            self.seek(toRecordingTime: place)
+        }
+    }
+
+    /// Whether `edits` change what `display`'s video plays.
+    private static func changes(display: Int, of edits: ScreencastRecordingEdits) -> Bool {
+        edits.isTrimmed || (edits.displays.indices.contains(display) && !edits.displays[display].isEmpty)
     }
 
     func pause() { player.pause() }
 
     var isPlaying: Bool { player.rate != 0 }
+
+    /// How long what the player plays is, once it knows: the edited recording's length with edits.
+    var playingLength: Double? {
+        guard let duration = player.currentItem?.duration, duration.isNumeric else { return nil }
+        return duration.seconds
+    }
 
     /// Space: plays or pauses. At the end of the recording, it plays from the start again.
     func togglePlay() {
@@ -452,9 +625,75 @@ final class ScreencastReviewPlayback {
         player.play()
     }
 
+    /// Goes to `time` in the recording, or, if it's trimmed or cut off, to where the edited
+    /// recording goes on.
+    func seek(toRecordingTime time: Double) {
+        let edited = kept.editedTime(forRecordingTime: time)
+        recordingTime = kept.recordingTime(forEditedTime: edited) ?? 0
+        player.seek(to: ScreencastEditComposition.time(edited), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    /// Shows the frame at `time` in the recording over the player, as a trim handle is dragged.
+    func preview(atRecordingTime time: Double) {
+        guard let shown else { return }
+        let generator = previewGenerator ?? {
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: shown))
+            generator.appliesPreferredTrackTransform = true
+            generator.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 10)
+            generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 10)
+            previewGenerator = generator
+            return generator
+        }()
+        generator.cancelAllCGImageGeneration()
+        Task { [weak self] in
+            guard let frame = try? await generator.image(at: ScreencastEditComposition.time(time)).image else { return }
+            guard let self, self.previewGenerator === generator else { return }
+            self.previewFrame = frame
+        }
+    }
+
+    /// The drag ended: the player shows again.
+    func endPreview() {
+        previewGenerator?.cancelAllCGImageGeneration()
+        previewFrame = nil
+    }
+
     func stop() {
         player.pause()
         player.replaceCurrentItem(with: nil)
         shown = nil
+        shownEdits = nil
+        kept = []
+        generation += 1
+        filmstripTask?.cancel()
+        filmstrip = []
+        endPreview()
+    }
+
+    private func playerMoved(to time: CMTime) {
+        guard time.isNumeric else { return }
+        recordingTime = kept.recordingTime(forEditedTime: time.seconds) ?? 0
+    }
+
+    private func makeFilmstrip(of url: URL, duration: Double) {
+        filmstripTask?.cancel()
+        filmstrip = []
+        guard duration > 0 else { return }
+        filmstripTask = Task { [weak self] in
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 240, height: 150)
+            generator.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 2)
+            generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 2)
+            let count = Self.filmstripCount
+            let times = (0..<count).map { ScreencastEditComposition.time(duration * (Double($0) + 0.5) / Double(count)) }
+            var frames: [CGImage] = []
+            for await result in generator.images(for: times) {
+                guard !Task.isCancelled else { return }
+                if let image = try? result.image { frames.append(image) }
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.filmstrip = frames
+        }
     }
 }
