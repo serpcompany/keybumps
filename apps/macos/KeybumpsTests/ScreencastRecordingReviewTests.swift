@@ -166,6 +166,20 @@ struct ScreencastRecordingReviewTests {
         }
     }
 
+    @Test("Save shows Return's sign beside its title, as a menu shows a key equivalent")
+    func saveShowsReturn() async throws {
+        defer { fixture.tearDown() }
+        let panel = panel(outcomes: ReviewOutcomeLog())
+        await panel.show(try fixture.video())
+        let model = try #require(panel.model)
+        #expect(ScreencastRecordingReviewToolbar.returnSign == "↩")
+        let save = NSHostingView(rootView: ScreencastRecordingReviewToolbar(model: model, part: .save)).fittingSize.width
+        let plain = NSHostingView(rootView: Button("Save") {}.buttonStyle(.borderedProminent)).fittingSize.width
+        let sign = NSHostingView(rootView: Text(ScreencastRecordingReviewToolbar.returnSign)).fittingSize.width
+        #expect(save >= plain + sign, "Save is \(save) points wide; a plain Save button \(plain), and the sign \(sign)")
+        await panel.close()
+    }
+
     @Test("While Discard is asked, Discard, Copy, and Save make way for the question, Keep, and Discard; Keep brings them back")
     func discardQuestionTakesTheToolbar() async throws {
         defer { fixture.tearDown() }

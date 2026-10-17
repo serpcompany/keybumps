@@ -59,8 +59,8 @@ struct ScreencastRecordingReviewView: View {
 /// One control of a recording's window's toolbar, each its own toolbar item: Discard on the left, or
 /// "Discard this capture?" with Keep and Discard in its place; the window's title in the middle, with
 /// the display picker for a recording of every display; and Copy and Save on the right, Save the
-/// window's default button. Nothing until a review shows, nor while the part makes way
-/// (`Part.isShown`).
+/// window's default button, with Return's sign in it. Nothing until a review shows, nor while the
+/// part makes way (`Part.isShown`).
 ///
 /// Each button is an item of its own because macOS 26 and later draw a toolbar item's own button
 /// shape around its view, not the view's button style: one item for Copy and Save drew both as
@@ -87,6 +87,9 @@ struct ScreencastRecordingReviewToolbar: View {
             }
         }
     }
+
+    /// Return, as macOS shows it beside a menu item: Save's key.
+    static let returnSign = "↩"
 
     let model: ScreencastReviewModel?
     let part: Part
@@ -128,14 +131,24 @@ struct ScreencastRecordingReviewToolbar: View {
                 .help("Save, and copy the recording’s file")
                 .accessibilityIdentifier(ScreencastReviewID.copy)
             case .save:
-                Button("Save") {
+                Button {
                     Task { await model.save() }
+                } label: {
+                    // Return's sign, as a menu shows a key equivalent: Return saves (owner QA of
+                    // 4030.475.5). VoiceOver reads just "Save".
+                    HStack(spacing: 5) {
+                        Text("Save")
+                        Text(Self.returnSign)
+                            .opacity(0.7)
+                            .accessibilityHidden(true)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 // The window's default button. Return is the review's key monitor's, which saves.
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.acceptsActions)
                 .help("Keep the recording in the captures folder (Return)")
+                .accessibilityLabel("Save")
                 .accessibilityIdentifier(ScreencastReviewID.save)
             }
         }

@@ -539,6 +539,7 @@ final class SmokeUITests: XCTestCase {
             XCTAssertLessThan(discard.frame.maxX, window.frame.midX, "Discard on the left")
             XCTAssertGreaterThan(copy.frame.minX, window.frame.midX, "Copy and Save on the right")
             XCTAssertLessThan(copy.frame.maxX, save.frame.minX, "Save last")
+            XCTAssertEqual(save.label, "Save", "VoiceOver reads Save, not the Return sign in it")
         }
         for gone in ["note", "type", "repository", "destination", "saveAndSend", "sendAndDelete", "trim", "addToScreenshots", "edit"] {
             XCTAssertFalse(element("screencast.review.\(gone)").exists, gone)
