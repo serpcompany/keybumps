@@ -16,18 +16,21 @@ struct ScreencastEditExportTests {
         ScreencastTimeRange(start: start, end: end)
     }
 
-    /// A recording's folder with a movie per display, three seconds each.
+    /// A recording's folder with a movie per display, three seconds each unless `seconds` says.
     private func capture(
         _ pictures: [EditTestMovie.Picture],
         sounds: Bool = true,
-        mixdowns: Bool = false
+        mixdowns: Bool = false,
+        seconds: [Double] = [],
+        toneFrom: Double? = nil
     ) async throws -> ScreencastCapture {
         let captureFolder = folder.url.appendingPathComponent("1791000000", isDirectory: true)
         try FileManager.default.createDirectory(at: captureFolder, withIntermediateDirectories: true)
         var videos: [ScreencastVideo] = []
         for (index, picture) in pictures.enumerated() {
             let file = captureFolder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: index))
-            try await EditTestMovie.write(to: file, seconds: 3, picture: picture, sounds: sounds)
+            let length = seconds.indices.contains(index) ? seconds[index] : 3
+            try await EditTestMovie.write(to: file, seconds: length, picture: picture, sounds: sounds, toneFrom: toneFrom)
             var mixdown: URL?
             if mixdowns, sounds {
                 let url = captureFolder.appendingPathComponent(ScreencastCaptureFolder.mixdownName(index: index))
@@ -36,10 +39,11 @@ struct ScreencastEditExportTests {
             }
             videos.append(ScreencastVideo(
                 file: file, mixdown: mixdown, pixelWidth: EditTestMovie.width, pixelHeight: EditTestMovie.height,
-                audioTracks: sounds ? [.microphone, .systemAudio] : [], duration: 3
+                audioTracks: sounds ? [.microphone, .systemAudio] : [], duration: length
             ))
         }
-        let capture = ScreencastCapture(folder: captureFolder, videos: videos, duration: 3, endedEarly: nil)
+        let duration = videos.map(\.duration).max() ?? 3
+        let capture = ScreencastCapture(folder: captureFolder, videos: videos, duration: duration, endedEarly: nil)
         try ScreencastMetadata(capture: capture, target: .display(1), startedAt: Date(timeIntervalSince1970: 1_791_000_000))
             .write(to: capture.metadataURL)
         return capture
@@ -90,6 +94,33 @@ struct ScreencastEditExportTests {
         #expect(abs(before - 15) <= 1, "before the cut: frame \(before)")
         let after = try await EditTestMovie.barFrame(of: file, at: 1.2)
         #expect(abs(after - 66) <= 1, "0.2 s after the cut's end: frame \(after)")
+    }
+
+    @Test("A cut with both sounds keeps them in step with the picture: a tone after the cut starts where its frame shows")
+    func cutWithSound() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar], toneFrom: 2.25)
+        var edits = ScreencastRecordingEdits(duration: 3, displayCount: 1)
+        edits.cut(range(1, 2))
+        _ = try await export(original, edits)
+
+        let file = original.videos[0].file
+        let duration = try await EditTestMovie.duration(of: file)
+        #expect(abs(duration - 2) < 0.05, "\(duration) seconds")
+        let sounds = try await EditTestMovie.audioDurations(of: file)
+        #expect(sounds.count == 2)
+        for sound in sounds {
+            #expect(abs(sound - 2) < 0.1, "each sound runs as long as the picture: \(sound) seconds")
+        }
+        // Recorded at 2.25 s, 0.25 s after the cut: 1.25 s into the edited recording.
+        let onsets = try await EditTestMovie.soundOnsets(of: file)
+        #expect(onsets.count == 2)
+        for onset in onsets {
+            let time = try #require(onset, "the tone is there")
+            #expect(abs(time - 1.25) < 0.05, "the tone starts at \(time) s")
+        }
+        let frame = try await EditTestMovie.barFrame(of: file, at: 1.27)
+        #expect(abs(frame - 68) <= 1, "the picture there is from 2.27 s: frame \(frame)")
     }
 
     // MARK: Crop and blur
@@ -172,6 +203,35 @@ struct ScreencastEditExportTests {
         #expect(placing.videoComposition.renderSize == CGSize(width: 192, height: 108))
     }
 
+    @Test("A mostly still recording is drawn and encoded at the rate it was made at, not its average")
+    func mostlyStillKeepsItsRate() async throws {
+        defer { folder.remove() }
+        try FileManager.default.createDirectory(at: folder.url, withIntermediateDirectories: true)
+        let file = folder.url.appendingPathComponent("still.mov")
+        // Ten frames at 60 a second, then one a second: the screen went still.
+        let times = (0..<10).map { Double($0) / 60 } + [1, 2]
+        try await EditTestMovie.write(to: file, seconds: 3, picture: .movingBar, sounds: false, framesPerSecond: 60, frameTimes: times)
+        let track = try #require(try await AVURLAsset(url: file).loadTracks(withMediaType: .video).first)
+        let average = try await track.load(.nominalFrameRate)
+        #expect(average < 10, "the average reads low: \(average)")
+
+        var edits = ScreencastRecordingEdits(duration: 3, displayCount: 1)
+        edits.setTrim(start: 0, end: 2.5)
+        let edit = try await ScreencastEditComposition.make(source: file, edits: edits, display: 0)
+        #expect(edit.framesPerSecond == 60)
+        #expect(edit.videoComposition.frameDuration == CMTime(value: 1, timescale: 60))
+    }
+
+    @Test("The rate: the higher of the average and the shortest gap's, 1 to 120, or 30 when neither is known")
+    func framesPerSecond() {
+        let sixtieth = CMTime(value: 1, timescale: 60)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: 5, minFrameDuration: sixtieth) == 60)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: 30, minFrameDuration: .invalid) == 30)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: .nan, minFrameDuration: .zero) == 30)
+        let tiny = CMTime(value: 1, timescale: 1_000_000)
+        #expect(ScreencastEditComposition.framesPerSecond(nominal: .infinity, minFrameDuration: tiny) == 120)
+    }
+
     // MARK: Several displays
 
     @Test("Several displays: the trim cuts every display's video and mixdown, a crop only its own display's, and meta.json says their new sizes")
@@ -208,6 +268,38 @@ struct ScreencastEditExportTests {
         let duration = try #require(metadata["duration"] as? Double)
         #expect(abs(duration - 2) < 0.05)
         #expect(metadata["startedAt"] != nil && metadata["target"] != nil, "everything else is kept")
+    }
+
+    @Test("A display that stopped before the kept part keeps its video as recorded; the others are trimmed")
+    func shorterDisplayTrimmedPastItsEnd() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar, .halves], seconds: [3, 1])
+        let second = original.videos[1]
+        let before = try Data(contentsOf: second.file)
+        var edits = ScreencastRecordingEdits(duration: 3, displayCount: 2)
+        edits.setTrim(start: 1.5, end: 3)
+        let edited = try await export(original, edits)
+
+        let first = try await EditTestMovie.duration(of: edited.videos[0].file)
+        #expect(abs(first - 1.5) < 0.05, "the first is trimmed: \(first) seconds")
+        #expect(edited.videos[1] == second, "the second is as it was")
+        let after = try Data(contentsOf: second.file)
+        #expect(after == before, "its file untouched")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: original.folder.path).filter { $0.hasPrefix(".") }
+        #expect(leftovers.isEmpty, "\(leftovers)")
+    }
+
+    @Test("Less than a frame of a display is nothing of it, for the composition too")
+    func slivers() async throws {
+        defer { folder.remove() }
+        let original = try await capture([.movingBar], sounds: false, seconds: [1])
+        var edits = ScreencastRecordingEdits(duration: 3, displayCount: 1)
+        edits.setTrim(start: 0.95, end: 3)
+        #expect(!edits.keepsSomething(ofVideoLasting: 1))
+        #expect(edits.keepsSomething(ofVideoLasting: 3))
+        await #expect(throws: ScreencastEditComposition.CompositionError.nothingKept) {
+            _ = try await ScreencastEditComposition.make(source: original.videos[0].file, edits: edits, display: 0)
+        }
     }
 
     // MARK: When it doesn't finish
@@ -267,6 +359,105 @@ struct ScreencastEditExportTests {
         #expect(ScreencastExportFailure.diskFull.message == "Couldn’t export the edited recording: the disk is full.")
     }
 
+    @Test("A full disk during the mixdown says so: it carries the writer's own error")
+    func mixdownDiskFull() {
+        let full = NSError(domain: AVFoundationErrorDomain, code: AVError.diskFull.rawValue)
+        let failure = ScreencastExportFailure.from(ScreencastAudioMixdown.writerFailure(full))
+        #expect(failure == .diskFull)
+        let unknown = ScreencastExportFailure.from(ScreencastAudioMixdown.writerFailure(nil))
+        #expect(unknown == .failed)
+    }
+
+    @Test("Cancel waits for a swap under way to finish, and none starts after it")
+    func cancelWaitsForTheSwap() throws {
+        let cancellation = ScreencastExportCancellation()
+        let log = ProgressLog()
+        let started = DispatchSemaphore(value: 0)
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            try? cancellation.swap {
+                started.signal()
+                Thread.sleep(forTimeInterval: 0.1)
+                log.add(1)
+            }
+            done.signal()
+        }
+        started.wait()
+        cancellation.cancel()
+        #expect(log.values == [1], "the swap finished first")
+        done.wait()
+        #expect(throws: ScreencastExportFailure.cancelled) {
+            try cancellation.swap { log.add(2) }
+        }
+        #expect(log.values == [1])
+    }
+
+    // MARK: After a quit or a crash
+
+    /// Makes `files` (name: contents) in a recording's folder named `name`, with a `meta.json`.
+    private func recording(_ name: String, _ files: [String: String], metadata: Bool = true) throws -> URL {
+        let url = folder.url.appendingPathComponent(name, isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        var all = files
+        if metadata { all[ScreencastMetadata.fileName] = "{}" }
+        for (file, contents) in all {
+            try Data(contents.utf8).write(to: url.appendingPathComponent(file))
+        }
+        return url
+    }
+
+    /// Each file's name and contents.
+    private func contents(of url: URL) throws -> [String: String] {
+        var result: [String: String] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: url.path) {
+            result[name] = try String(contentsOf: url.appendingPathComponent(name), encoding: .utf8)
+        }
+        return result
+    }
+
+    @Test("At launch, an export's partial copies are deleted, only in recordings' folders")
+    func recoveryDeletesPartialCopies() throws {
+        defer { folder.remove() }
+        let quit = try recording("1791000000", [
+            "video-1.mov": "original", "video-1-mixdown.mp4": "original mix",
+            ".video-1.editing.mov": "partial", ".video-1-mixdown.editing.mp4": "partial mix",
+        ])
+        let other = try recording("other", [".video-1.editing.mov": "not ours", ".notes.editing.txt": "x"], metadata: false)
+        let recovery = ScreencastEditExporter.recoverInterruptedExports(in: folder.url)
+
+        #expect(recovery == .init(removed: 2, restored: 0))
+        let left = try contents(of: quit)
+        #expect(left == ["video-1.mov": "original", "video-1-mixdown.mp4": "original mix", "meta.json": "{}"])
+        #expect(try contents(of: other).count == 2, "a folder without meta.json is left alone")
+    }
+
+    @Test("At launch, a swap cut short before every edited copy was placed puts every original back")
+    func recoveryRestoresAnInterruptedSwap() throws {
+        defer { folder.remove() }
+        // Both originals set aside; the first display's edited copy placed, the second's not yet.
+        let url = try recording("1791000000", [
+            ".video-1.original.mov": "original 1", "video-1.mov": "edited 1",
+            ".video-2.original.mov": "original 2", ".video-2.editing.mov": "edited 2",
+        ])
+        let recovery = ScreencastEditExporter.recoverInterruptedExports(in: folder.url)
+
+        #expect(recovery == .init(removed: 1, restored: 2))
+        let left = try contents(of: url)
+        #expect(left == ["video-1.mov": "original 1", "video-2.mov": "original 2", "meta.json": "{}"])
+    }
+
+    @Test("At launch, an original with nothing in its place goes back; once every edited copy was placed, the swap is finished")
+    func recoveryFinishesACompletedSwap() throws {
+        defer { folder.remove() }
+        let alone = try recording("1791000000", [".video-1.original.mov": "original"])
+        let placed = try recording("1791000001", [".video-1.original.mov": "original", "video-1.mov": "edited"])
+        let recovery = ScreencastEditExporter.recoverInterruptedExports(in: folder.url)
+
+        #expect(recovery == .init(removed: 1, restored: 1))
+        #expect(try contents(of: alone) == ["video-1.mov": "original", "meta.json": "{}"])
+        #expect(try contents(of: placed) == ["video-1.mov": "edited", "meta.json": "{}"])
+    }
+
     @Test("Progress rises to the end")
     func progress() async throws {
         defer { folder.remove() }
@@ -303,21 +494,29 @@ enum EditTestMovie {
         case checkerboard
     }
 
-    /// `seconds` at 30 frames a second, with the microphone in mono and the Mac's sound in stereo
-    /// when `sounds`.
-    static func write(to url: URL, seconds: Double, picture: Picture, sounds: Bool) async throws {
+    /// `seconds` at 30 frames a second, or a frame at each of `frameTimes`, with the microphone in
+    /// mono and the Mac's sound in stereo when `sounds`: steady, or silent until `toneFrom` seconds
+    /// and then a 1 kHz tone.
+    static func write(
+        to url: URL, seconds: Double, picture: Picture, sounds: Bool, toneFrom: Double? = nil,
+        framesPerSecond: Int = 30, frameTimes: [Double]? = nil
+    ) async throws {
         let writer = try ScreencastMovieWriter(
             url: url, pixelWidth: width, pixelHeight: height,
-            audio: sounds ? [.microphone, .systemAudio] : [], options: ScreencastOptions(),
+            audio: sounds ? [.microphone, .systemAudio] : [], options: ScreencastOptions(framesPerSecond: framesPerSecond),
             fragmentInterval: ScreencastMovieWriter.fragmentInterval, onFailure: {}
         )
+        let tone: ((Double) -> Float)? = toneFrom.map { start in
+            { host in host >= 100 + start ? Float(0.5 * sin(2 * .pi * 1_000 * host)) : 0 }
+        }
         var nextAudio = 100.0
-        for frame in 0..<Int(seconds * 30) {
-            let host = 100 + Double(frame) / 30
+        let times = frameTimes ?? (0..<Int(seconds * 30)).map { Double($0) / 30 }
+        for (frame, time) in times.enumerated() {
+            let host = 100 + time
             writer.appendVideo(sample(frame: frame, picture: picture, at: host))
             while sounds, nextAudio < host + 1.0 / 30 {
-                writer.appendAudio(ScreencastSamples.audio(at: nextAudio, channels: 1, value: 0.4), from: .microphone)
-                writer.appendAudio(ScreencastSamples.audio(at: nextAudio, channels: 2, value: 0.2), from: .systemAudio)
+                writer.appendAudio(ScreencastSamples.audio(at: nextAudio, channels: 1, value: 0.4, wave: tone), from: .microphone)
+                writer.appendAudio(ScreencastSamples.audio(at: nextAudio, channels: 2, value: 0.2, wave: tone), from: .systemAudio)
                 nextAudio += ScreencastSamples.audioBufferSeconds
             }
         }
@@ -386,6 +585,40 @@ enum EditTestMovie {
             durations.append(try await track.load(.timeRange).duration.seconds)
         }
         return durations
+    }
+
+    /// When each sound track first gets loud, in seconds: where a tone starts, or nil.
+    static func soundOnsets(of url: URL) async throws -> [Double?] {
+        let asset = AVURLAsset(url: url)
+        var onsets: [Double?] = []
+        for track in try await asset.loadTracks(withMediaType: .audio) {
+            let reader = try AVAssetReader(asset: asset)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true,
+                AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false, AVSampleRateKey: 48_000,
+            ])
+            reader.add(output)
+            reader.startReading()
+            var onset: Double?
+            while onset == nil, let sample = output.copyNextSampleBuffer() {
+                onset = loudStart(of: sample)
+            }
+            reader.cancelReading()
+            onsets.append(onset)
+        }
+        return onsets
+    }
+
+    /// Where in `sample` a sound first passes 0.2, in seconds.
+    private static func loudStart(of sample: CMSampleBuffer) -> Double? {
+        let frames = CMSampleBufferGetNumSamples(sample)
+        guard frames > 0, let block = CMSampleBufferGetDataBuffer(sample) else { return nil }
+        let length = CMBlockBufferGetDataLength(block)
+        var data = [Float](repeating: 0, count: length / MemoryLayout<Float>.size)
+        CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: data.count * MemoryLayout<Float>.size, destination: &data)
+        guard let index = data.firstIndex(where: { abs($0) > 0.2 }) else { return nil }
+        let channels = max(data.count / frames, 1)
+        return CMSampleBufferGetPresentationTimeStamp(sample).seconds + Double(index / channels) / 48_000
     }
 
     /// The frame at `seconds`, exactly.

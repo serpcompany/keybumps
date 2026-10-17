@@ -94,6 +94,41 @@ struct ScreencastReviewEditingTests {
         #expect(!model.edits.isEmpty)
     }
 
+    @Test("A drag cut short by Escape, a tool, or undo is one edit then, and the next drag is its own")
+    func dragCutShort() throws {
+        defer { fixture.tearDown() }
+        let model = fixture.model(try fixture.video())
+        model.pick(.trim)
+        model.beginDrag()
+        model.dragEdit { $0.setTrim(start: 1, end: 4) }
+        model.putToolDown()
+        #expect(model.editRevision == 1, "the player plays it")
+        #expect(model.canUndo)
+
+        model.pick(.trim)
+        model.beginDrag()
+        model.dragEdit { $0.setTrim(start: 2, end: 4) }
+        model.pick(.trim)
+        model.undo()
+        #expect(model.edits.trim.start == 1, "the second drag was its own edit")
+        model.undo()
+        #expect(model.edits.isEmpty && !model.canUndo)
+
+        // ⌘Z mid-drag takes the drag back; the drag going on is a new one.
+        model.redo()
+        model.beginDrag()
+        model.dragEdit { $0.setTrim(start: 3, end: 4) }
+        model.undo()
+        #expect(model.edits.trim.start == 1, "the drag is undone")
+        model.dragEdit { $0.setTrim(start: 2.5, end: 4) }
+        #expect(model.edits.trim.start == 1, "until it begins again")
+        model.beginDrag()
+        model.dragEdit { $0.setTrim(start: 2.5, end: 4) }
+        model.endDrag()
+        model.undo()
+        #expect(model.edits.trim.start == 1, "one edit")
+    }
+
     @Test("I and O start and end the selection at the playhead")
     func markInAndOut() throws {
         defer { fixture.tearDown() }
@@ -112,6 +147,51 @@ struct ScreencastReviewEditingTests {
         trimmed(model)
         model.selectedDisplay = 1
         #expect(model.edits.trim == ScreencastTimeRange(start: 1, end: 3), "the same trim on the second display")
+    }
+
+    @Test("A display whose stream stopped before the kept part: the window says Save keeps it as recorded")
+    func displayWithNothingKept() throws {
+        defer { fixture.tearDown() }
+        guard case .video(let recorded) = try fixture.video(displays: 3) else { return }
+        let videos = recorded.videos.enumerated().map { index, video in
+            ScreencastVideo(
+                file: video.file, mixdown: video.mixdown, pixelWidth: 64, pixelHeight: 36,
+                audioTracks: video.audioTracks, duration: index == 0 ? 4 : 1
+            )
+        }
+        let capture = ScreencastCapture(folder: recorded.folder, videos: videos, duration: 4, endedEarly: nil)
+        let model = fixture.model(.video(capture))
+        #expect(model.nothingKeptNotice == nil)
+        model.edit { $0.setTrim(start: 0.5, end: 4) }
+        #expect(model.displaysWithNothingKept.isEmpty)
+        model.edit { $0.setTrim(start: 2, end: 4) }
+        #expect(model.displaysWithNothingKept == [1, 2])
+        let notice = model.nothingKeptNotice
+        #expect(notice == "Displays 2 and 3 have nothing in the kept part. Save keeps them as they were recorded.")
+    }
+
+    @Test("The player shows a display with nothing in the kept part as such, not the picture it had")
+    func playerShowsNothingKept() async throws {
+        defer { fixture.tearDown() }
+        let file = fixture.folder.url.appendingPathComponent(ScreencastCaptureFolder.videoName(index: 1))
+        try await EditTestMovie.write(to: file, seconds: 1, picture: .movingBar, sounds: false)
+        let video = ScreencastVideo(
+            file: file, mixdown: nil, pixelWidth: EditTestMovie.width, pixelHeight: EditTestMovie.height, audioTracks: [], duration: 1
+        )
+        var edits = ScreencastRecordingEdits(duration: 3, displayCount: 2)
+        edits.setTrim(start: 0.5, end: 3)
+        let playback = ScreencastReviewPlayback()
+        defer { playback.stop() }
+        playback.show(video, display: 1, edits: edits)
+        try await eventually { abs((playback.playingLength ?? 0) - 0.5) < 0.05 }
+        #expect(playback.blank == nil)
+
+        edits.setTrim(start: 1.5, end: 3)
+        playback.show(video, display: 1, edits: edits)
+        #expect(playback.blank == .nothingKept)
+        #expect(playback.playingLength == nil, "the picture it had is gone")
+        playback.seek(toRecordingTime: 2)
+        #expect(playback.recordingTime == 2, "the place is kept")
     }
 
     @Test("The player plays the edits and says where it is in the recording's own time; a trimmed-off time goes to where it plays on")
@@ -242,6 +322,85 @@ struct ScreencastReviewEditingTests {
         #expect(fixture.outcomes.isEmpty && !model.edits.isEmpty)
     }
 
+    /// The stand-in edited copies `FakeEditExport` leaves beside `capture`'s files.
+    private func partialFiles(of input: ScreencastReviewInput) -> [String] {
+        guard case .video(let capture) = input else { return [] }
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: capture.folder.path)) ?? []
+        return names.filter { $0.contains(".editing.") }
+    }
+
+    /// The fixture's stand-in originals, as written.
+    private func originalsUntouched(_ input: ScreencastReviewInput) -> Bool {
+        guard case .video(let capture) = input else { return false }
+        return capture.videos.allSatisfy { video in
+            (try? Data(contentsOf: video.file)) == Data("original \(video.file.lastPathComponent)".utf8)
+        }
+    }
+
+    @Test("Closing while the edits are exported cancels it, keeps the original, and deletes the edited copies")
+    func closeCancelsAnExport() async throws {
+        defer { fixture.tearDown() }
+        let export = FakeEditExport(.waitForCancel)
+        export.writesPartialFiles = true
+        let recording = try fixture.video()
+        let model = fixture.model(recording, export: export.export)
+        trimmed(model)
+        let saving = Task { await model.save() }
+        try await eventually { model.isExporting }
+        #expect(partialFiles(of: recording).count == 2, "the stand-in's copies are there")
+
+        await model.close()
+        await saving.value
+        #expect(export.sawCancel)
+        #expect(fixture.outcomes == [.saved(recording)], "saved as recorded")
+        #expect(partialFiles(of: recording).isEmpty)
+        #expect(originalsUntouched(recording))
+        #expect(export.runs.count == 1, "not exported again")
+    }
+
+    @Test("Quitting while the edits are exported saves the original at once, and the edited copies go before it returns")
+    func saveNowCancelsAnExport() async throws {
+        defer { fixture.tearDown() }
+        let export = FakeEditExport(.waitForCancel)
+        export.writesPartialFiles = true
+        let recording = try fixture.video()
+        let model = fixture.model(recording, export: export.export)
+        trimmed(model)
+        let saving = Task { await model.save() }
+        try await eventually { model.isExporting }
+
+        model.saveNow()
+        #expect(fixture.outcomes == [.saved(recording)], "at once")
+        #expect(partialFiles(of: recording).isEmpty, "already")
+        await saving.value
+        #expect(export.sawCancel)
+        #expect(fixture.outcomes.count == 1)
+        #expect(originalsUntouched(recording))
+    }
+
+    @Test("The next capture, while the edits are exported, cancels it and keeps the original")
+    func nextCaptureCancelsAnExport() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let export = FakeEditExport(.waitForCancel)
+        export.writesPartialFiles = true
+        let panel = panel(outcomes: outcomes, export: export)
+        let recording = try fixture.video()
+        await panel.show(recording)
+        let model = try #require(panel.model)
+        trimmed(model)
+        let saving = Task { await model.save() }
+        try await eventually { model.isExporting }
+
+        panel.makeWayForNextCapture()
+        try await eventually { !outcomes.outcomes.isEmpty }
+        await saving.value
+        #expect(export.sawCancel)
+        #expect(outcomes.outcomes == [.saved(recording)])
+        #expect(partialFiles(of: recording).isEmpty)
+        #expect(originalsUntouched(recording))
+    }
+
     // MARK: Closing with edits
 
     @Test("Closing with edits asks \"Save your edits?\": Keep Original saves it as recorded, without exporting")
@@ -345,8 +504,9 @@ struct ScreencastReviewEditingTests {
     }
 }
 
-/// An export that writes nothing: it records the edits it was given, reports half its progress, then
-/// does what the test says, in turn, the last again.
+/// An export that writes nothing, unless `writesPartialFiles` says to leave stand-in edited copies
+/// where the real one writes them, as a quit would: it records the edits it was given, reports half
+/// its progress, then does what the test says, in turn, the last again.
 final class FakeEditExport: @unchecked Sendable {
     enum Behavior {
         case succeed
@@ -361,6 +521,9 @@ final class FakeEditExport: @unchecked Sendable {
     private var behaviors: [Behavior]
     private var storedRuns: [ScreencastRecordingEdits] = []
     private var released = false
+    private var storedSawCancel = false
+    /// Leaves an edited copy beside each file, and doesn't delete it.
+    var writesPartialFiles = false
 
     init(_ behaviors: Behavior...) {
         self.behaviors = behaviors.isEmpty ? [.succeed] : behaviors
@@ -370,11 +533,19 @@ final class FakeEditExport: @unchecked Sendable {
 
     func release() { lock.withLock { released = true } }
 
+    /// Whether a run waiting to be cancelled was.
+    var sawCancel: Bool { lock.withLock { storedSawCancel } }
+
     var export: ScreencastEditExport {
         ScreencastEditExport { [self] capture, edits, cancellation, progress in
             let behavior = lock.withLock {
                 storedRuns.append(edits)
                 return behaviors.count > 1 ? behaviors.removeFirst() : behaviors[0]
+            }
+            if writesPartialFiles {
+                for file in capture.videos.flatMap({ [$0.file, $0.mixdown].compactMap { $0 } }) {
+                    FileManager.default.createFile(atPath: ScreencastEditExporter.editingURL(for: file).path, contents: Data("partial".utf8))
+                }
             }
             progress(0.5)
             switch behavior {
@@ -386,6 +557,7 @@ final class FakeEditExport: @unchecked Sendable {
                 while !lock.withLock({ released }) { try await Task.sleep(for: .milliseconds(5)) }
             case .waitForCancel:
                 while !cancellation.isCancelled { try await Task.sleep(for: .milliseconds(5)) }
+                lock.withLock { storedSawCancel = true }
                 throw ScreencastExportFailure.cancelled
             }
             return ScreencastCapture(

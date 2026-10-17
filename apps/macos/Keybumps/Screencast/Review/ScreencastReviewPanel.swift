@@ -552,6 +552,22 @@ final class ScreencastReviewPlayback {
     private(set) var previewFrame: CGImage?
     /// Frames across the shown video, evenly spaced, for the timeline's strip.
     private(set) var filmstrip: [CGImage] = []
+    /// Why the player shows no picture, rather than the one it had: nil while it plays.
+    private(set) var blank: Blank?
+
+    enum Blank: Equatable {
+        /// The shown display has nothing in the kept part: its stream stopped before it.
+        case nothingKept
+        /// The edited recording couldn't be made from the file.
+        case cannotPlay
+
+        var message: String {
+            switch self {
+            case .nothingKept: "Nothing of this display is in the kept part."
+            case .cannotPlay: "Couldn’t play the edited recording."
+            }
+        }
+    }
 
     @ObservationIgnored private let player = AVPlayer()
     @ObservationIgnored private var shown: URL?
@@ -596,6 +612,7 @@ final class ScreencastReviewPlayback {
         shownCrops = crops
         generation += 1
         previewGenerator = nil
+        blank = nil
         if isNewVideo { makeFilmstrip(of: url, duration: video.duration) }
         guard let edits else {
             kept = [ScreencastTimeRange(start: 0, end: video.duration)]
@@ -603,16 +620,25 @@ final class ScreencastReviewPlayback {
             if !isNewVideo { seek(toRecordingTime: place) }
             return
         }
+        guard edits.keepsSomething(ofVideoLasting: video.duration) else { return showBlank(.nothingKept) }
         let generation = generation
         Task { [weak self] in
-            guard let edit = try? await ScreencastEditComposition.make(source: url, edits: edits, display: display, crops: crops) else { return }
+            let edit = try? await ScreencastEditComposition.make(source: url, edits: edits, display: display, crops: crops)
             guard let self, self.generation == generation else { return }
+            guard let edit else { return self.showBlank(.cannotPlay) }
             let item = AVPlayerItem(asset: edit.composition)
             if edit.editor.changesFrames { item.videoComposition = edit.videoComposition }
             self.kept = edits.keptRanges(within: video.duration)
             self.player.replaceCurrentItem(with: item)
             self.seek(toRecordingTime: place)
         }
+    }
+
+    /// No picture, and why, keeping the place in the recording for the next one.
+    private func showBlank(_ reason: Blank) {
+        kept = []
+        player.replaceCurrentItem(with: nil)
+        blank = reason
     }
 
     /// Whether `edits` change what `display`'s video plays; its crop only if `crops`.
@@ -647,6 +673,8 @@ final class ScreencastReviewPlayback {
     /// Goes to `time` in the recording, or, if it's trimmed or cut off, to where the edited
     /// recording goes on.
     func seek(toRecordingTime time: Double) {
+        // Nothing plays: the place is kept for what plays next.
+        guard !kept.isEmpty else { return recordingTime = max(time, 0) }
         let edited = kept.editedTime(forRecordingTime: time)
         recordingTime = kept.recordingTime(forEditedTime: edited) ?? 0
         player.seek(to: ScreencastEditComposition.time(edited), toleranceBefore: .zero, toleranceAfter: .zero)
@@ -683,6 +711,7 @@ final class ScreencastReviewPlayback {
         shown = nil
         shownEdits = nil
         kept = []
+        blank = nil
         generation += 1
         filmstripTask?.cancel()
         filmstrip = []
@@ -690,7 +719,7 @@ final class ScreencastReviewPlayback {
     }
 
     private func playerMoved(to time: CMTime) {
-        guard time.isNumeric else { return }
+        guard time.isNumeric, !kept.isEmpty else { return }
         recordingTime = kept.recordingTime(forEditedTime: time.seconds) ?? 0
     }
 

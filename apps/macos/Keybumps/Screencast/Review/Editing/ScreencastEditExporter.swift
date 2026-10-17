@@ -48,19 +48,36 @@ enum ScreencastExportFailure: String, Error, Equatable {
 
 /// A one-way flag the export checks between samples: set, it stops and deletes what it wrote. After
 /// Shotnix's `CancellationFlag` (MIT, see LICENSE.shotnix).
+///
+/// The edited files take the originals' places (`swap`) only while it isn't set, and setting it
+/// waits for a swap under way, which takes a few renames: once `cancel()` returns, the recording's
+/// files are either all original or all edited, even if the app quits right after.
 final class ScreencastExportCancellation: @unchecked Sendable {
     private let lock = NSLock()
+    private let swapLock = NSLock()
     private var value = false
 
     var isCancelled: Bool { lock.withLock { value } }
 
-    func cancel() { lock.withLock { value = true } }
+    func cancel() {
+        swapLock.withLock { lock.withLock { value = true } }
+    }
+
+    /// Runs `body` unless it's cancelled, and holds off `cancel()` until it's done.
+    func swap(_ body: () throws -> Void) throws {
+        try swapLock.withLock {
+            guard !isCancelled else { throw ScreencastExportFailure.cancelled }
+            try body()
+        }
+    }
 }
 
 /// Save and Copy with edits (#517): each display's edited video is written beside its original, and
 /// its stereo mixdown after it, and only once every one is complete do they take the originals'
 /// places, all together. A failure, or Cancel, deletes what was written and leaves the originals as
-/// they were. `meta.json` then says each video's new size and length.
+/// they were. `meta.json` then says each video's new size and length. A display with nothing in the
+/// kept part (its stream stopped before it) keeps its video as it was recorded. What a quit or a
+/// crash cuts short is cleaned up at the next launch (`recoverInterruptedExports(in:)`).
 ///
 /// The writing is after Shotnix's `VideoDemoExporter.writeMovie` and `MovieJob` (`Video/VideoExporter.swift`,
 /// MIT, see LICENSE.shotnix): a reader's video composition into a fresh encoder, and every sound
@@ -88,12 +105,22 @@ enum ScreencastEditExporter {
             var videos: [ScreencastVideo] = []
             let count = Double(max(capture.videos.count, 1))
             for (index, video) in capture.videos.enumerated() {
+                if cancellation.isCancelled { throw ScreencastExportFailure.cancelled }
                 let report: @Sendable (Double) -> Void = { fraction in progress((Double(index) + fraction) / count) }
                 let editedFile = editingURL(for: video.file)
                 written.append((video.file, editedFile))
-                let facts = try await writeMovie(
-                    from: video.file, to: editedFile, edits: edits, display: index, cancellation: cancellation
-                ) { report($0 * movieShare) }
+                let facts: MovieFacts
+                do {
+                    facts = try await writeMovie(
+                        from: video.file, to: editedFile, edits: edits, display: index, cancellation: cancellation
+                    ) { report($0 * movieShare) }
+                } catch ScreencastEditComposition.CompositionError.nothingKept {
+                    // Nothing was written: its video stays as it was recorded, as the window says.
+                    written.removeLast()
+                    report(1)
+                    videos.append(video)
+                    continue
+                }
                 var editedMixdown: URL?
                 if let mixdown = video.mixdown {
                     let url = editingURL(for: mixdown)
@@ -108,13 +135,15 @@ enum ScreencastEditExporter {
                     audioTracks: video.audioTracks, duration: facts.duration
                 ))
             }
-            try replace(written, fileManager: fileManager)
             let edited = ScreencastCapture(
                 folder: capture.folder, videos: videos, duration: videos.map(\.duration).max() ?? 0,
                 endedEarly: capture.endedEarly, displaysEndedEarly: capture.displaysEndedEarly
             )
-            // The files are already edited: a `meta.json` that can't be updated still has the rest.
-            try? updateMetadata(of: edited, fileManager: fileManager)
+            try cancellation.swap {
+                try replace(written, fileManager: fileManager)
+                // The files are already edited: a `meta.json` that can't be updated still has the rest.
+                try? updateMetadata(of: edited, fileManager: fileManager)
+            }
             return edited
         } catch {
             for file in written { try? fileManager.removeItem(at: file.edited) }
@@ -136,6 +165,16 @@ enum ScreencastEditExporter {
     private static func sibling(of file: URL, marked mark: String) -> URL {
         let name = file.deletingPathExtension().lastPathComponent
         return file.deletingLastPathComponent().appendingPathComponent(".\(name).\(mark).\(file.pathExtension)")
+    }
+
+    /// Deletes the edited copies an export of `capture` was writing, at once: the app may be about to
+    /// quit, before the export's own clean-up runs. A writer with one open can still finish with it.
+    static func removePartialFiles(of capture: ScreencastCapture, fileManager: FileManager = .default) {
+        for video in capture.videos {
+            for file in [video.file, video.mixdown].compactMap({ $0 }) {
+                try? fileManager.removeItem(at: editingURL(for: file))
+            }
+        }
     }
 
     // MARK: One display's movie
@@ -165,7 +204,12 @@ enum ScreencastEditExporter {
             job.run { result in continuation.resume(with: result) }
         }
         let size = edit.editor.renderSize
-        return MovieFacts(pixelWidth: Int(size.width), pixelHeight: Int(size.height), duration: duration.seconds)
+        return MovieFacts(pixelWidth: pixels(size.width), pixelHeight: pixels(size.height), duration: duration.seconds)
+    }
+
+    /// A rendered size's whole pixels, which can't trap.
+    static func pixels(_ value: CGFloat) -> Int {
+        ScreencastNumbers.int(Double(value), in: 0...ScreencastCaptureGeometry.pixelLimit, fallback: 2)
     }
 
     /// One movie's reader and writer, confined to their queues once started.
@@ -204,7 +248,8 @@ enum ScreencastEditExporter {
             reader.add(videoOutput)
             let size = edit.editor.renderSize
             let videoSettings = ScreencastMovieWriter.videoSettings(
-                pixelWidth: Int(size.width), pixelHeight: Int(size.height), framesPerSecond: edit.framesPerSecond
+                pixelWidth: ScreencastEditExporter.pixels(size.width), pixelHeight: ScreencastEditExporter.pixels(size.height),
+                framesPerSecond: edit.framesPerSecond
             )
             guard writer.canApply(outputSettings: videoSettings, forMediaType: .video) else { throw ScreencastExportFailure.failed }
             let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
@@ -354,6 +399,69 @@ enum ScreencastEditExporter {
             throw error
         }
         for original in setAside { try? fileManager.removeItem(at: backupURL(for: original)) }
+    }
+
+    // MARK: After a quit or a crash
+
+    /// What `recoverInterruptedExports(in:)` did, in counts only.
+    struct Recovery: Equatable, Sendable {
+        /// Edited copies deleted, and originals no longer needed.
+        var removed = 0
+        /// Originals put back in their places.
+        var restored = 0
+    }
+
+    /// At launch: what an export cut short left in each recording's folder in `capturesFolder`. Its
+    /// edited copies (`.video-1.editing.mov`) are deleted. If it was swapping files, while any edited
+    /// copy was still to be placed, the originals set aside (`.video-1.original.mov`) go back, over any
+    /// edited one already placed; once every edited copy was placed, only the originals' deleting was
+    /// left, so that's finished. An original with nothing in its place always goes back. Only
+    /// recordings' folders (with a `meta.json`), and only the names an export makes, are touched.
+    @discardableResult
+    static func recoverInterruptedExports(in capturesFolder: URL, fileManager: FileManager = .default) -> Recovery {
+        var recovery = Recovery()
+        let folders = (try? fileManager.contentsOfDirectory(
+            at: capturesFolder, includingPropertiesForKeys: [.isDirectoryKey], options: []
+        )) ?? []
+        for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            guard let names = try? fileManager.contentsOfDirectory(atPath: folder.path),
+                  names.contains(ScreencastMetadata.fileName) else { continue }
+            let marked = names.compactMap(MarkedFile.init)
+            let editing = marked.filter { $0.mark == "editing" }
+            let placingWasCutShort = !editing.isEmpty
+            for backup in marked where backup.mark == "original" {
+                let backupURL = folder.appendingPathComponent(backup.name)
+                let original = folder.appendingPathComponent(backup.original)
+                if placingWasCutShort || !fileManager.fileExists(atPath: original.path) {
+                    try? fileManager.removeItem(at: original)
+                    if (try? fileManager.moveItem(at: backupURL, to: original)) != nil { recovery.restored += 1 }
+                } else if (try? fileManager.removeItem(at: backupURL)) != nil {
+                    recovery.removed += 1
+                }
+            }
+            for file in editing where (try? fileManager.removeItem(at: folder.appendingPathComponent(file.name))) != nil {
+                recovery.removed += 1
+            }
+        }
+        return recovery
+    }
+
+    /// A name `sibling(of:marked:)` makes for a recording's file: `.video-1.editing.mov`, or
+    /// `.video-1-mixdown.original.mp4`.
+    private struct MarkedFile {
+        let name: String
+        let mark: String
+        /// The recording's file it stands beside: `video-1.mov`.
+        let original: String
+
+        init?(_ name: String) {
+            let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+            guard parts.count == 4, parts[0].isEmpty, ["editing", "original"].contains(parts[2]),
+                  parts[1].hasPrefix("video-"), !parts[3].isEmpty else { return nil }
+            self.name = name
+            mark = String(parts[2])
+            original = "\(parts[1]).\(parts[3])"
+        }
     }
 
     /// Puts each video's new size and length, and the recording's, in its `meta.json`, keeping

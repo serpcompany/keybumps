@@ -39,6 +39,9 @@ enum ScreencastReviewID {
     static let exportFailure = "screencast.review.exportFailure"
     static let saveOriginal = "screencast.review.saveOriginal"
     static let tryAgain = "screencast.review.tryAgain"
+    /// A display with nothing in the kept part: the window's notice, and the player's blank state.
+    static let nothingKept = "screencast.review.nothingKept"
+    static let playerBlank = "screencast.review.playerBlank"
 }
 
 /// A recording's review window's content (#475), after Snapzy's Video Editor (BSD-3-Clause, see
@@ -95,6 +98,14 @@ struct ScreencastRecordingReviewView: View {
                             .background(.regularMaterial, in: Capsule())
                             .padding(12)
                             .accessibilityIdentifier(ScreencastReviewID.failure)
+                    } else if let notice = model.nothingKeptNotice {
+                        Text(notice)
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(12)
+                            .accessibilityIdentifier(ScreencastReviewID.nothingKept)
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -109,6 +120,9 @@ struct ScreencastRecordingReviewView: View {
             if isWorking { playback?.pause() }
         }
         .onChange(of: model.tool) { _, tool in
+            // A trim handle's drag cut short by the tool changing never says it ended. By the
+            // tool, not the timeline, since the timeline stays from Trim to Blur.
+            playback?.endPreview()
             // Crop places the crop on a still frame (#517).
             if tool == .crop { playback?.pause() }
         }
@@ -255,6 +269,17 @@ private struct ScreencastReviewPlayer: View {
     var body: some View {
         if let playback {
             ScreencastReviewAVPlayerView(playback: playback)
+                .overlay {
+                    // Not the picture it had before (#517).
+                    if let blank = playback.blank {
+                        Text(blank.message)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.black)
+                            .accessibilityIdentifier(ScreencastReviewID.playerBlank)
+                    }
+                }
                 .onAppear { showCurrentVideo() }
                 .onChange(of: model.selectedDisplay) { showCurrentVideo() }
                 .onChange(of: model.editRevision) { showCurrentVideo() }

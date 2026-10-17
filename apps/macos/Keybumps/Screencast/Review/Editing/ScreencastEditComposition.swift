@@ -108,17 +108,19 @@ struct ScreencastEditComposition {
         let videoRange = try await sourceVideo.load(.timeRange)
         let naturalSize = try await sourceVideo.load(.naturalSize)
         let nominalRate = try await sourceVideo.load(.nominalFrameRate)
+        let minFrameDuration = try await sourceVideo.load(.minFrameDuration)
         var audioRanges: [CMTimeRange] = []
         var audioChannels: [Int] = []
         for track in sourceAudio {
             audioRanges.append(try await track.load(.timeRange))
             let format = try await track.load(.formatDescriptions).first
             let channels = format.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame }
-            audioChannels.append(Int(channels ?? 2))
+            audioChannels.append(max(Int(channels ?? 2), 1))
         }
 
-        let kept = edits.keptRanges(within: assetDuration.isNumeric ? assetDuration.seconds : 0)
-        guard !kept.isEmpty else { throw CompositionError.nothingKept }
+        let videoSeconds = assetDuration.isNumeric ? assetDuration.seconds : 0
+        guard edits.keepsSomething(ofVideoLasting: videoSeconds) else { throw CompositionError.nothingKept }
+        let kept = edits.keptRanges(within: videoSeconds)
         let composition = AVMutableComposition()
         guard let videoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw CompositionError.cannotAddTrack
@@ -141,10 +143,11 @@ struct ScreencastEditComposition {
             cursor = CMTimeAdd(cursor, length)
         }
 
-        let framesPerSecond = ScreencastNumbers.framesPerSecond(nominalRate > 1 ? Int(nominalRate.rounded()) : 30)
+        let framesPerSecond = Self.framesPerSecond(nominal: Double(nominalRate), minFrameDuration: minFrameDuration)
         let editor = ScreencastFrameEditor(
             edits: edits, display: display,
-            pixelWidth: Int(naturalSize.width.rounded()), pixelHeight: Int(naturalSize.height.rounded()),
+            pixelWidth: ScreencastNumbers.int(Double(naturalSize.width.rounded()), in: 0...ScreencastCaptureGeometry.pixelLimit, fallback: 2),
+            pixelHeight: ScreencastNumbers.int(Double(naturalSize.height.rounded()), in: 0...ScreencastCaptureGeometry.pixelLimit, fallback: 2),
             crops: crops
         )
         let videoComposition = try await AVMutableVideoComposition.videoComposition(with: composition) { request in
@@ -166,6 +169,17 @@ struct ScreencastEditComposition {
             editor: editor,
             framesPerSecond: framesPerSecond
         )
+    }
+
+    /// The rate the recording was made at, which the edited one is drawn and encoded at. The
+    /// recorder writes only the frames ScreenCaptureKit delivers, which is fewer while the screen is
+    /// still, so the average (`nominalFrameRate`) can read 5 for a 60 fps recording; the shortest
+    /// gap between two frames says 60. The higher of the two, 1 to 120, or 30 when neither is known.
+    static func framesPerSecond(nominal: Double, minFrameDuration: CMTime) -> Int {
+        let shortest = minFrameDuration.isNumeric && minFrameDuration > .zero ? 1 / minFrameDuration.seconds : 0
+        let rate = max(nominal.isFinite ? nominal : 0, shortest.isFinite ? shortest : 0)
+        guard rate >= 1 else { return 30 }
+        return ScreencastNumbers.framesPerSecond(ScreencastNumbers.int(rate.rounded(), in: 1...120, fallback: 30))
     }
 
     static func time(_ seconds: Double) -> CMTime {
