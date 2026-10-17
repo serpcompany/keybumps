@@ -8,6 +8,9 @@ enum ScreenshotCaptureMode: Equatable {
     case screens
     /// An area the user selects; Escape cancels.
     case area
+    /// An area given in points from the top left of the main display, taken with no selection
+    /// (`-R`). Only the QA smoke test takes one, since `area`'s selection needs a person.
+    case fixedArea(CGRect)
 }
 
 /// How `/usr/sbin/screencapture` is called and where the files go, named like macOS's own
@@ -18,15 +21,29 @@ enum ScreenshotCapturePlan {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let base = "Screenshot \(formatter.string(from: date))"
-        let count = mode == .area ? 1 : max(displayCount, 1)
+        let count = mode == .screens ? max(displayCount, 1) : 1
         return (1...count).map { index in
             folder.appendingPathComponent(index == 1 ? "\(base).png" : "\(base) (\(index)).png")
         }
     }
 
     static func arguments(for mode: ScreenshotCaptureMode, files: [URL]) -> [String] {
-        let modeArguments = mode == .area ? ["-i"] : []
+        let modeArguments: [String]
+        switch mode {
+        case .screens: modeArguments = []
+        case .area: modeArguments = ["-i"]
+        case .fixedArea(let rect): modeArguments = ["-R", rectangle(rect)]
+        }
         return modeArguments + ["-t", "png"] + files.map(\.path)
+    }
+
+    /// `x,y,width,height` in whole points, as `-R` takes it; 0 for a value that isn't a finite
+    /// number, rather than a trap.
+    static func rectangle(_ rect: CGRect) -> String {
+        let integral = rect.integral
+        return [integral.minX, integral.minY, integral.width, integral.height]
+            .map { String(Int(exactly: $0) ?? 0) }
+            .joined(separator: ",")
     }
 }
 
@@ -49,8 +66,9 @@ struct ProcessScreenshotCaptureRunner: ScreenshotCaptureRunning {
     }
 }
 
-/// Takes screenshots into the macOS screenshot folder and marks them as screen captures, so the
-/// ScreenGrabs' watcher adds them to Clipboard History like screenshots macOS takes.
+/// Takes screenshots into the macOS screenshot folder and marks them as screen captures, like
+/// screenshots macOS takes. The hotkey that took them adds them to Clipboard History itself
+/// (`ScreenshotClipboardDelivery.capture`), since the mark lands only after `screencapture` exits.
 @MainActor
 final class ScreenshotCapturer {
     private let runner: any ScreenshotCaptureRunning
@@ -73,9 +91,15 @@ final class ScreenshotCapturer {
         self.fileManager = fileManager
     }
 
-    /// Calls `completion` with the files actually written (none when an area capture is cancelled).
-    func capture(_ mode: ScreenshotCaptureMode, completion: @escaping @MainActor ([URL]) -> Void) {
+    /// Calls `willWrite` with the files it's about to write, main display's first, then
+    /// `completion` with the files actually written (none when an area capture is cancelled).
+    func capture(
+        _ mode: ScreenshotCaptureMode,
+        willWrite: ([URL]) -> Void = { _ in },
+        completion: @escaping @MainActor ([URL]) -> Void
+    ) {
         let files = ScreenshotCapturePlan.files(in: folder(), at: now(), displayCount: displayCount(), mode: mode)
+        willWrite(files)
         runner.run(arguments: ScreenshotCapturePlan.arguments(for: mode, files: files)) { [fileManager] in
             let written = files.filter { fileManager.fileExists(atPath: $0.path) }
             written.forEach(Self.markAsScreenCapture)

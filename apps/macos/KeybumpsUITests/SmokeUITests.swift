@@ -529,6 +529,14 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForReviewOutcome("copied; folder kept; note empty; clipboard 1"))
     }
 
+    /// #511: Copy's keycap says ⌘C, and ⌘C copies.
+    func testScreencastReviewCommandCCopies() {
+        launchScreencastReview("video")
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "⌘C copies, which closes the window")
+        XCTAssertTrue(waitForReviewOutcome("copied; folder kept; note empty; clipboard 1"))
+    }
+
     func testScreencastReviewDiscardAsksFirst() {
         launchScreencastReview("video")
         element("screencast.review.discard").click()
@@ -546,10 +554,12 @@ final class SmokeUITests: XCTestCase {
     }
 
     /// #475: a recording's review is a standard window that all but fills the screen: the player edge
-    /// to edge, and Discard, Copy, and Save in its toolbar. Nothing to type, no Trim, and Save closes it.
-    func testScreencastReviewOfAVideoFillsTheScreenWithItsActionsInTheToolbar() throws {
+    /// to edge, under the bar the Screenshot Editor has too (#511), with Discard, Copy, and Save on its
+    /// right. Nothing to type, no Trim yet, and Save closes it.
+    func testScreencastReviewOfAVideoFillsTheScreenWithItsActionsInTheEditorBar() throws {
         launchScreencastReview("video")
         let window = reviewPanel
+        XCTAssertEqual(window.title, "Edit Recording", "titled as the Screenshot Editor's Edit Screenshot is")
         // The screen's visible frame, but 16 pt on each side. Up and down the check is looser: the
         // runner's visible frame can end a few points from the app's (#294).
         let visible = try XCTUnwrap(Self.visibleFrameOfScreen(containing: window.frame), "the window's screen")
@@ -566,12 +576,12 @@ final class SmokeUITests: XCTestCase {
         for action in ["discard", "copy", "save"] {
             let button = window.descendants(matching: .any).matching(identifier: "screencast.review.\(action)").firstMatch
             XCTAssertTrue(button.exists, action)
-            XCTAssertLessThanOrEqual(button.frame.maxY, player.frame.minY + 1, "\(action) is in the toolbar, above the player")
+            XCTAssertLessThanOrEqual(button.frame.maxY, player.frame.minY + 1, "\(action) is in the bar, above the player")
             actions[action] = button
         }
         if let discard = actions["discard"], let copy = actions["copy"], let save = actions["save"] {
-            XCTAssertLessThan(discard.frame.maxX, window.frame.midX, "Discard on the left")
-            XCTAssertGreaterThan(copy.frame.minX, window.frame.midX, "Copy and Save on the right")
+            XCTAssertGreaterThan(discard.frame.minX, window.frame.midX, "Discard, Copy, and Save on the right, as the editor's actions are")
+            XCTAssertLessThan(discard.frame.maxX, copy.frame.minX, "then Copy")
             XCTAssertLessThan(copy.frame.maxX, save.frame.minX, "Save last")
             XCTAssertEqual(save.label, "Save", "VoiceOver reads Save, not the Return sign in it")
         }

@@ -1,0 +1,75 @@
+[
+  {
+    "actions" : [
+      {
+        "help" : "Discard changes (Esc)",
+        "isDefault" : false,
+        "key" : "esc",
+        "style" : "standard",
+        "title" : "Cancel"
+      },
+      {
+        "help" : "Copy to clipboard and save an edited copy (Return)",
+        "isDefault" : false,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save"
+      }
+    ],
+    "hasHistory" : true,
+    "state" : "editing",
+    "window" : "screenshotEditor"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Delete this recording",
+        "identifier" : "screencast.review.discard",
+        "isDefault" : false,
+        "style" : "destructive",
+        "title" : "Discard"
+      },
+      {
+        "help" : "Save, and copy the recording’s file (⌘C)",
+        "identifier" : "screencast.review.copy",
+        "isDefault" : false,
+        "key" : "⌘C",
+        "style" : "standard",
+        "title" : "Copy"
+      },
+      {
+        "help" : "Keep the recording in the recordings folder (Return)",
+        "identifier" : "screencast.review.save",
+        "isDefault" : true,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save"
+      }
+    ],
+    "hasHistory" : false,
+    "state" : "reviewing",
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Keep the recording",
+        "identifier" : "screencast.review.keep",
+        "isDefault" : false,
+        "style" : "standard",
+        "title" : "Keep"
+      },
+      {
+        "help" : "Delete the recording and its folder",
+        "identifier" : "screencast.review.confirmDiscard",
+        "isDefault" : false,
+        "style" : "prominentDestructive",
+        "title" : "Discard"
+      }
+    ],
+    "hasHistory" : false,
+    "question" : "Discard this recording?",
+    "state" : "askingToDiscard",
+    "window" : "recording"
+  }
+]

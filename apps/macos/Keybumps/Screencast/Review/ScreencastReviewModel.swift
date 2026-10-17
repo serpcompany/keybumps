@@ -6,7 +6,7 @@ import os
 /// and Discard, and the review they write. The window has no fields (#475), so a review keeps the
 /// type and the guessed repository as they start, for a later Send (#451).
 ///
-/// Every way out keeps the capture except Discard. Save, Return, and Copy write the review into
+/// Every way out keeps the capture except Discard. Save, Return, Copy, and ⌘C write the review into
 /// `meta.json` and stay open if that fails, saying why. Escape and closing the window save too, as
 /// far as they can, so nothing is lost: a repository that isn't `owner/name` is left out, and a
 /// review that can't be written ends as `saveFailed`, never `saved`. Quitting saves at once

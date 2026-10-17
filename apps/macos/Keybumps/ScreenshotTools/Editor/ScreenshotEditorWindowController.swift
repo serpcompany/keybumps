@@ -16,7 +16,7 @@ final class ScreenshotEditorModel {
     func redo() { history.redo() }
 }
 
-/// Hosts the canvas and toolbar for one image. Save flattens, copies, and saves an
+/// Hosts the canvas and editor bar for one image. Save flattens, copies, and saves an
 /// `(edited)` copy; Cancel discards. Never logs image content, text, or filenames.
 @MainActor
 final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelegate {
@@ -57,7 +57,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         super.init(window: window)
         window.delegate = self
 
-        // One SwiftUI root (toolbar above the AppKit canvas) so the toolbar always renders.
+        // One SwiftUI root (the editor bar above the AppKit canvas) so the bar always renders.
         let root = NSHostingView(rootView: ScreenshotEditorRootView(
             model: model,
             canvas: canvas,
@@ -162,16 +162,28 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         keyMonitor = nil
     }
 
-    /// Fits the whole toolbar, including the Cancel and Save key hints, without truncating.
+    /// The bar's actions: Cancel (Esc), then Save (Return), filled with the accent color. Return is
+    /// the key monitor's (`isSaveKey`), so Save isn't the window's default button.
+    static func barActions(cancel: @escaping () -> Void, save: @escaping () -> Void) -> [ScreengrabsEditorAction] {
+        [
+            ScreengrabsEditorAction(title: "Cancel", key: "esc", help: "Discard changes (Esc)", perform: cancel),
+            ScreengrabsEditorAction(
+                title: "Save", key: ScreengrabsEditorAction.returnSign, style: .prominent,
+                help: "Copy to clipboard and save an edited copy (Return)", perform: save
+            ),
+        ]
+    }
+
+    /// Fits the whole bar, including the Cancel and Save key hints, without truncating.
     static let minimumWidth: CGFloat = 840
-    static let toolbarHeight: CGFloat = 64
+    static let barHeight: CGFloat = ScreengrabsEditorBarMetrics.height
 
     private static func initialFrame(for imageSize: CGSize) -> NSRect {
         let visible = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
-        let maxSize = CGSize(width: visible.width * 0.8, height: visible.height * 0.8 - toolbarHeight)
+        let maxSize = CGSize(width: visible.width * 0.8, height: visible.height * 0.8 - barHeight)
         let scale = min(1, maxSize.width / max(imageSize.width, 1), maxSize.height / max(imageSize.height, 1))
         let width = max(minimumWidth, imageSize.width * scale + 32)
-        let height = max(420, imageSize.height * scale + 32 + toolbarHeight)
+        let height = max(420, imageSize.height * scale + 32 + barHeight)
         return NSRect(x: 0, y: 0, width: width, height: height)
     }
 }
@@ -184,7 +196,7 @@ private struct ScreenshotEditorRootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenshotEditorToolbar(model: model, cancel: cancel, save: save)
+            ScreenshotEditorBar(model: model, cancel: cancel, save: save)
             CanvasHost(canvas: canvas)
         }
     }
@@ -196,121 +208,82 @@ private struct CanvasHost: NSViewRepresentable {
     func updateNSView(_ nsView: ScreenshotEditorCanvasView, context: Context) {}
 }
 
-private struct ScreenshotEditorToolbar: View {
+/// The editor's bar (`ScreengrabsEditorBar`, shared with the recording window): the tools and the
+/// colors, then undo and redo, Cancel, and Save.
+struct ScreenshotEditorBar: View {
     @Bindable var model: ScreenshotEditorModel
     let cancel: () -> Void
     let save: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 2) {
-                ForEach(ScreenshotEditorTool.allCases) { tool in
-                    ToolButton(tool: tool, isSelected: model.tool == tool) { model.tool = tool }
-                }
+        ScreengrabsEditorBar(
+            history: history,
+            actions: ScreenshotEditorWindowController.barActions(cancel: cancel, save: save)
+        ) {
+            ScreengrabsEditorTools {
+                ForEach(tools, id: \.title) { $0 }
             }
-            .padding(3)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 9))
 
             HStack(spacing: 4) {
-                ForEach(ScreenshotAnnotationColor.allCases) { color in
-                    Button { model.color = color } label: {
-                        Circle()
-                            .fill(Color(nsColor: color.nsColor))
-                            .frame(width: 16, height: 16)
-                            .overlay(Circle().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
-                            .padding(2)
-                            .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: model.color == color ? 2 : 0))
-                    }
-                    .buttonStyle(.plain)
-                    .help(color.rawValue.capitalized)
-                    .accessibilityLabel(color.rawValue.capitalized)
-                }
+                ForEach(swatches, id: \.color) { $0 }
             }
-            .opacity(model.tool.usesColor ? 1 : 0.35)
-            .disabled(!model.tool.usesColor)
-
-            Spacer(minLength: 8)
-
-            Button { model.undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                .disabled(!model.history.canUndo)
-                .help("Undo (⌘Z)")
-                .accessibilityLabel("Undo")
-            Button { model.redo() } label: { Image(systemName: "arrow.uturn.forward") }
-                .disabled(!model.history.canRedo)
-                .help("Redo (⇧⌘Z)")
-                .accessibilityLabel("Redo")
-            Button(action: cancel) { ActionLabel(title: "Cancel", key: "esc") }
-                .help("Discard changes (Esc)")
-                .accessibilityLabel("Cancel")
-            Button(action: save) { ActionLabel(title: "Save", key: "↵") }
-                .buttonStyle(.borderedProminent)
-                .help("Copy to clipboard and save an edited copy (Return)")
-                .accessibilityLabel("Save")
+            .opacity(swatchesAreEnabled ? 1 : 0.35)
+            .disabled(!swatchesAreEnabled)
         }
-        .controlSize(.large)
-        .padding(.horizontal, 12)
-        .frame(height: ScreenshotEditorWindowController.toolbarHeight)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .overlay(alignment: .bottom) { Divider() }
     }
+
+    /// Undo and redo, from the model's history.
+    var history: ScreengrabsEditorHistory? {
+        ScreengrabsEditorHistory(
+            canUndo: model.history.canUndo,
+            canRedo: model.history.canRedo,
+            undo: { model.undo() },
+            redo: { model.redo() }
+        )
+    }
+
+    /// A button for each tool, in order, the model's tool picked.
+    var tools: [ScreengrabsEditorToolButton] {
+        ScreenshotEditorTool.allCases.map { tool in
+            ScreengrabsEditorToolButton(
+                title: tool.title,
+                systemImage: tool.systemImage,
+                number: tool.number,
+                key: tool.key,
+                isSelected: model.tool == tool
+            ) { model.tool = tool }
+        }
+    }
+
+    /// A swatch for each color, the model's color picked.
+    var swatches: [ScreenshotEditorSwatch] {
+        ScreenshotAnnotationColor.allCases.map { color in
+            ScreenshotEditorSwatch(color: color, isSelected: model.color == color) { model.color = color }
+        }
+    }
+
+    /// The colors are for the tools that draw in one: dimmed and off for the others.
+    var swatchesAreEnabled: Bool { model.tool.usesColor }
 }
 
-/// A toolbar action with the key that also triggers it. The keycap takes the button's own
-/// text color, so it stays readable on the prominent Save button and in inactive windows.
-private struct ActionLabel: View {
-    let title: String
-    let key: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-            Text(key)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 18, minHeight: 18)
-                .padding(.horizontal, 3)
-                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(.tertiary, lineWidth: 0.75))
-                .accessibilityHidden(true)
-        }
-        .fixedSize()
-    }
-}
-
-private struct ToolButton: View {
-    let tool: ScreenshotEditorTool
+/// One color in the editor's bar, ringed with the accent color while it's picked.
+struct ScreenshotEditorSwatch: View {
+    let color: ScreenshotAnnotationColor
     let isSelected: Bool
-    let select: () -> Void
+    let pick: () -> Void
 
     var body: some View {
-        Button(action: select) {
-            VStack(spacing: 2) {
-                Image(systemName: tool.systemImage)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(height: 18)
-                Text(tool.title)
-                    .font(.caption2)
-            }
-            .frame(width: 58, height: 44)
-            .overlay(alignment: .topTrailing) {
-                Text(tool.number)
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
-                    .frame(width: 13, height: 13)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3)
-                            .strokeBorder(isSelected ? Color.white.opacity(0.5) : Color.secondary.opacity(0.5), lineWidth: 0.75)
-                    )
-                    .padding(3)
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .background(isSelected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 7))
-            .contentShape(Rectangle())
+        Button(action: pick) {
+            Circle()
+                .fill(Color(nsColor: color.nsColor))
+                .frame(width: 16, height: 16)
+                .overlay(Circle().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
+                .padding(2)
+                .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: isSelected ? 2 : 0))
         }
         .buttonStyle(.plain)
-        .help("\(tool.title) (\(tool.number) or \(tool.key.uppercased()))")
-        .accessibilityLabel(tool.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(color.rawValue.capitalized)
+        .accessibilityLabel(color.rawValue.capitalized)
     }
 }
 
@@ -331,7 +304,7 @@ final class ScreenshotEditorCanvasView: NSView, NSTextFieldDelegate {
         self.renderer = renderer
         super.init(frame: .zero)
         // macOS 14 no longer clips views by default, and dirty rects can extend past
-        // bounds; without this the canvas background painted over the toolbar.
+        // bounds; without this the canvas background painted over the editor bar.
         clipsToBounds = true
     }
 
