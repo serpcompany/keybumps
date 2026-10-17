@@ -185,6 +185,93 @@ struct ScreengrabsPaletteContentTests {
         #expect(palette.state.selection == 1)
     }
 
+    @Test("Up and Down always reach the grid, with a modifier too, and one at its edge counts as moving in it; any text in the search field, even spaces, keeps Left and Right")
+    func arrowsTheGridOwns() throws {
+        let fixture = ScreengrabsTabFixture()
+        defer { fixture.tearDown() }
+        try fixture.addScreenshots(["1", "2", "3", "4", "5"])
+        #expect(fixture.content.gridOwnsUpAndDown)
+        let palette = fixture.palette
+        var pointer = NSPoint(x: -1000, y: -1000)
+        palette.state.mouseLocation = { pointer }
+        palette.selectOnOpening(.screenshots)
+
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .option)) == nil)
+        #expect(palette.state.isBrowsingGrid, "Option-Down goes into the grid")
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .control)) == nil)
+        #expect(palette.state.selection == 3, "Control-Down moves a row")
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow, modifiers: .shift)) != nil)
+        #expect(palette.state.selection == 3)
+
+        palette.state.historyQuery = "  "
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil, "Spaces are text, so Right moves the caret")
+        #expect(palette.state.tab == .screenshots)
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(palette.state.isBrowsingGrid)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil)
+        #expect(palette.state.selection == 0)
+
+        // The pointer brings the highlight to the last row. Down has nowhere to go, but it counts
+        // as moving within the grid, so Right moves on to the next screenshot.
+        palette.state.historyQuery = ""
+        palette.selectOnOpening(.screenshots)
+        pointer = NSPoint(x: 10, y: 20)
+        palette.hover(row: 3)
+        #expect(palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(palette.state.selection == 3)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.tab == .screenshots)
+        #expect(palette.state.selection == 4)
+    }
+
+    @Test("While an input method composes, Up and Down still go into the grid and move a row, and Left and Right stay with the input method")
+    func arrowsWhileComposing() async throws {
+        let fixture = ScreengrabsTabFixture()
+        defer { fixture.tearDown() }
+        try fixture.addScreenshots(["1", "2", "3", "4", "5"])
+        let palette = fixture.palette
+        let panel = try #require(palette.layOutForTesting(.screenshots))
+        defer { panel.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(100))
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let field = try #require(PaletteCopyPasteKeyTests.searchField(in: panel.contentView))
+        #expect(panel.makeFirstResponder(field))
+        let editor = try #require(panel.firstResponder as? NSTextView)
+        editor.setMarkedText("きょう", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.hasMarkedText())
+        #expect(palette.state.historyQuery.isEmpty, "The search waits for the input method to commit")
+
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(palette.state.isBrowsingGrid, "Down goes into the grid")
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(palette.state.selection == 3, "Down moves a row")
+        #expect(palette.handleKeyDown(Self.key(kVK_UpArrow)) == nil)
+        #expect(palette.state.selection == 0)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil, "Right goes to the input method")
+        #expect(palette.state.selection == 0)
+        editor.unmarkText()
+    }
+
+    @Test("Delete on a highlighted screenshot removes it from the tab, leaves its file, and keeps the highlight on one that's still there")
+    func deleteThroughThePalette() throws {
+        let fixture = ScreengrabsTabFixture()
+        defer { fixture.tearDown() }
+        let ids = try fixture.addScreenshots(["First", "Second"])
+        let file = try #require(fixture.clipboard.entries.first { $0.id == ids[1] }?.sourceURL)
+        let palette = fixture.palette
+        palette.selectOnOpening(.screenshots)
+
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.selection == 1)
+        #expect(palette.handleKeyDown(Self.key(kVK_Delete, "\u{7f}")) == nil)
+        #expect(fixture.clipboard.entries.count == 1)
+        #expect(fixture.clipboard.entries.map(\.id) == [ids[0]])
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(palette.state.selection == 0)
+    }
+
     static func key(_ keyCode: Int, _ characters: String = "", modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
         let isArrow = [kVK_LeftArrow, kVK_RightArrow, kVK_DownArrow, kVK_UpArrow].contains(keyCode)
         return NSEvent.keyEvent(

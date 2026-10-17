@@ -14,6 +14,12 @@ protocol CapabilityPaletteContent: AnyObject {
     /// all four arrow keys go to `selection(after:from:query:)`, and the footer shows them. A list's
     /// Up and Down step one row and wrap.
     func isGrid(query: String) -> Bool
+    /// Whether the grid takes Up and Down whatever else is going on, as a list's rows do: with
+    /// Shift, Option, Command, or Control held, while an input method composes, and at the grid's
+    /// edge, where they still count as moving within it. Left and Right then go to the grid only
+    /// while the search field is empty. False, as for Emoji: the grid takes only the plain arrow
+    /// keys, while no input method composes, and the others step one item and wrap, as in a list.
+    var gridOwnsUpAndDown: Bool { get }
     /// Where an arrow key moves a grid's selection from `row`, or nil to stay put. `PaletteGrid`
     /// works it out for rows laid out in sections.
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int?
@@ -62,6 +68,7 @@ protocol CapabilityPaletteContent: AnyObject {
 extension CapabilityPaletteContent {
     var resetsSelectionWhileTyping: Bool { false }
     func isGrid(query: String) -> Bool { false }
+    var gridOwnsUpAndDown: Bool { false }
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int? { nil }
     func activate(row: Int, query: String, palette: PaletteContentActions) {}
     func commandActivate(row: Int, query: String, palette: PaletteContentActions) {

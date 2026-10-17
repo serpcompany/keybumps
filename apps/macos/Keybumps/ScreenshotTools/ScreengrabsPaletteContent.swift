@@ -53,6 +53,10 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     /// A grid with or without a search.
     func isGrid(query: String) -> Bool { true }
 
+    /// Up and Down always move through the screenshots, even with text in the search field, which
+    /// then keeps Left and Right for its caret.
+    var gridOwnsUpAndDown: Bool { true }
+
     /// Up and Down move a row and Left and Right one screenshot. Each stays put where there's
     /// nothing to move to, so Down above a shorter last row stays put, and Up from the top row
     /// leaves the grid.

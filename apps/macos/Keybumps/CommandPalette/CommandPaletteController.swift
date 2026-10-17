@@ -802,13 +802,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
         }
 
-        // A grid tab's rows take Up and Down, as a list's do, and the plain Left and Right; with
-        // text in the search field, Shift, Option, Command, or Control, or while an input method is
-        // composing, Left and Right stay with the search field. Down goes into the grid and Up from
-        // its top row comes back out; outside it, Left and Right switch tabs. `/`'s list is a list.
+        // A grid tab's rows take the plain arrow keys (`gridTakes`). Down goes into the grid and Up
+        // from its top row comes back out; outside it, Left and Right switch tabs. `/`'s list is a list.
         if isGridTab, let tabContent, let move = PaletteMove(keyCode: event.keyCode),
-           move == .up || move == .down
-               || activeQuery.isEmpty && !isComposingText && event.modifierFlags.isDisjoint(with: [.shift, .option, .command, .control]) {
+           gridTakes(move, modifiers: event.modifierFlags, ownsUpAndDown: tabContent.gridOwnsUpAndDown) {
             // Until an arrow key moves within the grid, Left and Right switch tabs, even after the
             // pointer highlighted a tile on its way across.
             guard state.isBrowsingGrid, !(state.gridEnteredByPointer && (move == .left || move == .right)) else {
@@ -817,14 +814,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             }
             if !(0..<itemCount).contains(state.selection) {
                 state.selection = 0
+                state.gridEnteredByPointer = false
             } else if let target = tabContent.selection(after: move, from: state.selection, query: state.historyQuery) {
                 state.selection = target
+                state.gridEnteredByPointer = false
             } else if move == .up {
                 leaveGrid()
-                return nil
+            } else if tabContent.gridOwnsUpAndDown {
+                // In a grid that owns Up and Down, a key at its edge still counts as moving within it.
+                state.gridEnteredByPointer = false
             }
-            // A key has moved within the grid, even at its edge, so Left and Right do too from here.
-            state.gridEnteredByPointer = false
             return nil
         }
 
@@ -939,6 +938,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private func moveSelection(_ delta: Int) {
         let count = itemCount
         guard count > 0 else { return }
+        // Up and Down with a modifier in a grid move within it, so Left and Right do too from here.
+        state.gridEnteredByPointer = false
         state.selection = (state.selection + delta + count) % count
     }
 
@@ -1055,6 +1056,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .up:
             break
         }
+    }
+
+    /// Whether a grid tab's rows take an arrow key: a plain one, while no input method composes;
+    /// in a grid that owns Up and Down (`gridOwnsUpAndDown`), Up and Down always, and Left and
+    /// Right only while the search field is empty too. Otherwise the key goes on to the search
+    /// field, or to the list keys, which step one item and wrap.
+    private func gridTakes(_ move: PaletteMove, modifiers: NSEvent.ModifierFlags, ownsUpAndDown: Bool) -> Bool {
+        if ownsUpAndDown, move == .up || move == .down { return true }
+        if ownsUpAndDown, !activeQuery.isEmpty { return false }
+        return !isComposingText && modifiers.isDisjoint(with: [.shift, .option, .command, .control])
     }
 
     /// Up from a grid's top row hands the arrow keys back to the tabs.
