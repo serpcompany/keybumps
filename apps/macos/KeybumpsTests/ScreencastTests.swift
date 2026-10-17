@@ -145,6 +145,37 @@ struct ScreencastTests {
         #expect(defaults.object(forKey: "plugin.screenshotTools.highlightsClicks") == nil)
     }
 
+    @available(macOS 15, *)
+    @Test("Record Screen counts down from the Countdown saved at plugin.screencast.countdown, read again at each open (#520)")
+    func countdownFromSettings() async throws {
+        let defaults = InMemoryDefaults()
+        defaults.set("5", forKey: "plugin.screencast.countdown")
+        let preferences = AppPreferences(defaults: defaults)
+        let overlays = FakeOverlays()
+        let sleeper = ManualSleeper()
+        let module = Self.moduleOnFakes(preferences: preferences, presenter: overlays, sleep: { try await sleeper.sleep($0) })
+
+        module.start()
+        let controller = try #require(module.controller)
+        try await Self.waitUntil { overlays.picker != nil }
+        overlays.record()
+        #expect(controller.phase == .countingDown(remaining: 5))
+        try await Self.waitUntil { sleeper.pending == 1 }
+        #expect(overlays.countdowns == [5])
+        overlays.cancelTheCountdown()
+        #expect(controller.phase == .idle)
+
+        // Settings › Screengrabs' menu, as its row sets it.
+        preferences.set(.choice("10"), of: .screencastCountdown, for: .screenshotTools)
+        module.start()
+        try await Self.waitUntil { overlays.picker != nil }
+        overlays.record()
+        #expect(controller.phase == .countingDown(remaining: 10))
+        try await Self.waitUntil { sleeper.pending == 1 }
+        #expect(overlays.countdowns == [5, 10])
+        overlays.cancelTheCountdown()
+    }
+
     @Test("The review panel's retired \"Also add to Screenshots\" switch is removed on load, and the rest kept")
     func retiredAddsToScreenshots() {
         let defaults = InMemoryDefaults()
@@ -456,6 +487,19 @@ struct ScreencastTests {
     ) -> ScreencastModule {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
+        return moduleOnFakes(preferences: preferences, writers: writers, review: review)
+    }
+
+    /// The module on fakes with `preferences`, turned on: made-up screens, an inert recorder,
+    /// `presenter` for the picker and the countdown, and `sleep` for the countdown's clock.
+    @available(macOS 15, *)
+    private static func moduleOnFakes(
+        preferences: AppPreferences,
+        presenter: FakeOverlays? = nil,
+        writers: FakeWriterFactory = FakeWriterFactory(),
+        review: ScreencastReviewServices? = nil,
+        sleep: @escaping (TimeInterval) async throws -> Void = { _ in }
+    ) -> ScreencastModule {
         let module = ScreencastModule(
             preferences: preferences,
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -464,9 +508,9 @@ struct ScreencastTests {
                 captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
                 writers: writers,
                 pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
-                presenter: FakeOverlays(),
+                presenter: presenter ?? FakeOverlays(),
                 screens: { PickerScreens.both },
-                sleep: { _ in },
+                sleep: sleep,
                 contextReader: .inert
             ),
             review: review

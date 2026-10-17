@@ -211,7 +211,8 @@ struct ScreencastControllerTests {
         #expect(await ScreencastWait.until { controller.phase == .recording })
 
         #expect(overlays.countdowns == [3, 2, 1])
-        #expect(overlays.events.contains(.countdown(3, frames: [rightArea.rect])))
+        // On the area, and on the bar's screen, the left one, which isn't recorded.
+        #expect(overlays.events.contains(.countdown(3, frames: [rightArea.rect, PickerScreens.left.frame])))
         #expect(overlays.events.contains(.closeCountdown))
         #expect(sleeper.requested == [1, 1, 1])
         #expect(controller.recorder.target == .area(display: 2, rect: CGRect(x: 100, y: 682, width: 400, height: 300)))
@@ -336,6 +337,57 @@ struct ScreencastControllerTests {
         try await record(controller, .screen) { $0.chooseEveryScreen() }
         #expect(await ScreencastWait.until { sleeper.pending == 1 })
         #expect(overlays.events.contains(.countdown(3, frames: [PickerScreens.left.frame, PickerScreens.right.frame])))
+    }
+
+    @available(macOS 15, *)
+    @Test("A screen recorded away from the bar counts down on it and on the bar's screen (#520)")
+    func countdownOnTheBarsScreen() async throws {
+        defer { captures.remove() }
+        let controller = makeController()
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.right) }
+        #expect(await ScreencastWait.until { sleeper.pending == 1 })
+        let frames = [PickerScreens.right.frame, PickerScreens.left.frame]
+        #expect(overlays.events.contains(.countdown(3, frames: frames)))
+        #expect(controller.choice?.regions.map(\.display) == [2])
+    }
+
+    @available(macOS 15, *)
+    @Test("With one display, the countdown shows on it once")
+    func countdownOnOneDisplay() async throws {
+        defer { captures.remove() }
+        let controller = makeController(screens: { PickerScreens.leftOnly })
+        try await record(controller, .screen)
+        #expect(await ScreencastWait.until { sleeper.pending == 1 })
+        #expect(overlays.events.contains(.countdown(3, frames: [PickerScreens.left.frame])))
+    }
+
+    @available(macOS 15, *)
+    @Test("The countdown shows each second, closes before recording starts, and the video leaves it out")
+    func countdownShowsThenCloses() async throws {
+        defer { captures.remove() }
+        let controller = makeController()
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        for remaining in [3, 2, 1] {
+            #expect(await ScreencastWait.until { sleeper.pending == 1 })
+            #expect(overlays.countdowns.last == remaining)
+            #expect(captureSystem.videoStreams.isEmpty)
+            sleeper.advance()
+        }
+        #expect(await ScreencastWait.until { controller.phase == .recording })
+
+        let left = [PickerScreens.left.frame]
+        let shown = overlays.events.filter { event in
+            switch event {
+            case .countdown, .closeCountdown: true
+            default: false
+            }
+        }
+        let expected: [FakeOverlays.Event] = [
+            .countdown(3, frames: left), .countdown(2, frames: left), .countdown(1, frames: left), .closeCountdown,
+        ]
+        #expect(shown == expected)
+        let plan = try #require(videoStream()).0
+        #expect(plan == .display(1, excludingProcess: Screens.ownProcess, exceptingWindows: []))
     }
 
     // MARK: Cancelling
