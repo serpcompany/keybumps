@@ -4,7 +4,7 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screengrabs", dictation = "Dictation"
+    case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "ScreenGrabs", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
     case emojiPicker = "Emoji Picker", translation = "Translation", keystrokes = "Keystrokes"
     case plugins = "Plugins", permissions = "Permissions", general = "General", changelog = "Changelog", account = "Account"
@@ -1211,7 +1211,7 @@ private struct CapabilityShortcutEditor: View {
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
         let compatibility = model.preferences.compatibility
-        // A recording shortcut does nothing where Screengrabs can't record, as its note says, so
+        // A recording shortcut does nothing where ScreenGrabs can't record, as its note says, so
         // neither its field nor Restore default can change it there.
         let runsHere = shortcut.runs(on: compatibility)
         Group {

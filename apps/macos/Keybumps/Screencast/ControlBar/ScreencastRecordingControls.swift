@@ -1,10 +1,10 @@
 import AppKit
 import Observation
 
-/// What Screengrabs offers while it records: the control bar on the recorded screen, the time beside
+/// What ScreenGrabs offers while it records: the control bar on the recorded screen, the time beside
 /// the menu bar icon with Stop and Pause at the top of its menu, and the recording shortcuts (Pause
 /// & Resume, Stop, Discard, and Draw), which are registered only while it records, so their keys
-/// work normally the rest of the time. The menu bar and the shortcuts follow only while Screengrabs
+/// work normally the rest of the time. The menu bar and the shortcuts follow only while ScreenGrabs
 /// is on where it can record (`CapabilityContext.recordsScreen`). `ScreencastModule` holds one and attaches it to its
 /// `ScreencastController` once it makes it; everything here acts through the controller.
 ///
@@ -127,7 +127,7 @@ final class ScreencastRecordingControls {
 
     // MARK: Shortcuts
 
-    /// Takes the recording shortcuts' bindings and whether Screengrabs records, from `apply`.
+    /// Takes the recording shortcuts' bindings and whether ScreenGrabs records, from `apply`.
     func apply(_ context: CapabilityContext) {
         registrar = context.shortcuts
         isEnabled = context.recordsScreen
@@ -139,7 +139,7 @@ final class ScreencastRecordingControls {
         if bar != nil { refreshMenuBar() }
     }
 
-    /// Screengrabs is turning off: its recording shortcuts and the menu bar's time go now.
+    /// ScreenGrabs is turning off: its recording shortcuts and the menu bar's time go now.
     func deactivate() {
         isEnabled = false
         updateShortcuts()
@@ -195,7 +195,7 @@ final class ScreencastRecordingControls {
     }
 
     private func updateMenuBar(_ menuBar: CapabilityMenuBarStatus) {
-        // The recording is read first, so the menu bar keeps watching it while Screengrabs is off.
+        // The recording is read first, so the menu bar keeps watching it while ScreenGrabs is off.
         guard let model = bar?.model, model.recording.phase.isRecording, isEnabled else {
             menuBar.clear()
             return

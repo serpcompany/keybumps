@@ -160,7 +160,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("capability.offBanner.clipboardHistory").waitForNonExistence(timeout: 5))
     }
 
-    /// #490: Screengrabs' page, on the plugin template, has its Screenshots group and then its
+    /// #490: ScreenGrabs' page, on the plugin template, has its Screenshots group and then its
     /// Recordings group, still says screenshots need Clipboard History, and offers to turn it on.
     func testScreengrabsPageAsksForClipboardHistory() {
         launch(permissions: "granted", ["-KBOpenSettings", "screenshotTools"])
@@ -191,7 +191,7 @@ final class SmokeUITests: XCTestCase {
 
         let prompts: [(key: String, prompt: String)] = [
             ("2", "Search clipboard history"),
-            ("3", "Search screengrabs"),
+            ("3", "Search ScreenGrabs"),
             ("4", "Search dictation history"),
             ("5", "Search snippets"),
             ("6", "Start a timer: 5m, 1h30m, tea 25"),
@@ -265,14 +265,14 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testScreengrabsPageShowsRecording() {
-        // Recording is part of Screengrabs, which ships on (#490). Its page is drawn by the plugin
+        // Recording is part of ScreenGrabs, which ships on (#490). Its page is drawn by the plugin
         // template: Screen Recording, the Microphone and Input Monitoring as optional permissions,
         // the Recordings group's preferences at Screencast's keys, and the recordings folder. CI's
         // Mac runs macOS 15 or later, so it can record.
         launch(permissions: "denied", ["-KBOpenSettings", "screenshotTools"])
         let toggle = element("capability.toggle.screenshotTools")
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
-        XCTAssertTrue(waitForValue(of: toggle, 1), "Screengrabs ships on")
+        XCTAssertTrue(waitForValue(of: toggle, 1), "ScreenGrabs ships on")
         XCTAssertTrue(app.staticTexts["Screen Recording"].exists)
         XCTAssertTrue(app.staticTexts["Microphone (Optional)"].exists)
         XCTAssertTrue(app.staticTexts["Input Monitoring (Optional)"].exists)
@@ -747,7 +747,7 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testQuickSearchListsAndRunsRecordScreen() {
-        // An action command is listed only while its plugin is on; Screengrabs ships on (#490).
+        // An action command is listed only while its plugin is on; ScreenGrabs ships on (#490).
         launch(permissions: "granted", ["-KBOpenPalette", "search", "-KBCloseSettings", "YES"])
         let field = paletteField("Search apps, files, and folders")
         XCTAssertTrue(field.waitForExistence(timeout: 20))
@@ -755,7 +755,7 @@ final class SmokeUITests: XCTestCase {
         app.typeText("screencast")
         XCTAssertTrue(element("quickSearch.command.screenshotTools").waitForExistence(timeout: 5))
         let action = element("quickSearch.action.startScreencast")
-        XCTAssertTrue(action.waitForExistence(timeout: 5), "Record Screen is listed beside Screengrabs' command")
+        XCTAssertTrue(action.waitForExistence(timeout: 5), "Record Screen is listed beside ScreenGrabs' command")
         action.click()
         XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
         XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 10), "It opens the picker, as the shortcut does")
@@ -881,7 +881,7 @@ final class SmokeUITests: XCTestCase {
         app.launch()
     }
 
-    /// Opens the recording picker, as Record Screen does. Screengrabs ships on, so no plugin needs
+    /// Opens the recording picker, as Record Screen does. ScreenGrabs ships on, so no plugin needs
     /// turning on (#490).
     private func launchScreencastPicker() {
         launch(permissions: "granted", ["-KBOpenScreencastPicker", "YES"])
