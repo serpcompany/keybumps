@@ -1,11 +1,11 @@
 import SwiftUI
 
 extension CapabilityDescriptor {
-    /// Screengrabs (ADR 0010): screenshots and recordings, in one plugin that took Screenshot Tools'
+    /// ScreenGrabs (ADR 0010): screenshots and recordings, in one plugin that took Screenshot Tools'
     /// ID. Its screenshot code is under `ScreenshotTools/` and its recording code under `Screencast/`.
     static let screenshotTools = CapabilityDescriptor(
         capability: .screenshotTools,
-        title: "Screengrabs",
+        title: "ScreenGrabs",
         systemImage: "camera.viewfinder",
         iconTint: .purple,
         requiredPermissions: [.screenRecording],
@@ -13,10 +13,10 @@ extension CapabilityDescriptor {
         dependencies: [.clipboardHistory],
         paletteTab: CapabilityPaletteTab(
             tab: .screenshots,
-            name: "Screengrabs",
+            name: "ScreenGrabs",
             commandKey: 3,
             systemImage: "camera.viewfinder",
-            prompt: "Search screengrabs",
+            prompt: "Search ScreenGrabs",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste(), .edit],
             dataSource: .clipboardHistory
@@ -30,7 +30,9 @@ extension CapabilityDescriptor {
             content: { AnyView(ScreengrabsSettingsPage()) }
         ),
         criticalOperations: [.unsavedWork],
+        // Its name as people type it (#512): Quick Search reads the title "ScreenGrabs" as one word.
         searchKeywords: [
+            "screengrabs", "screengrab", "screen grabs",
             "screenshots", "screenshot", "screen", "capture", "annotate",
             "screen recording", "recordings", "record", "recorder", "video", "screencast",
         ],
@@ -57,7 +59,7 @@ extension CapabilityDescriptor {
     )
 }
 
-/// Owns Screengrabs: the screenshot watcher and the Screenshot Editor, which run only while Clipboard
+/// Owns ScreenGrabs: the screenshot watcher and the Screenshot Editor, which run only while Clipboard
 /// History, its dependency, is enabled, and contribute the edit action to Clipboard tab image rows;
 /// and its recording (`recording`), which doesn't need Clipboard History and runs only where
 /// `PluginCompatibility.supportsRecording`.
@@ -133,7 +135,7 @@ final class ScreenshotToolsModule: CapabilityModule {
         recording.apply(context)
     }
 
-    /// The keys that take macOS's own screenshot shortcuts while Screengrabs is on: the screenshot
+    /// The keys that take macOS's own screenshot shortcuts while ScreenGrabs is on: the screenshot
     /// hotkeys', and Record Screen's (⇧⌘5 by default) only where it can record, so macOS 14 keeps
     /// its own ⇧⌘5.
     static func takeoverBindings(_ preferences: AppPreferences) -> [ShortcutBinding] {
@@ -178,19 +180,18 @@ final class ScreenshotToolsModule: CapabilityModule {
             return
         }
         willCapture?()
-        capturer.capture(mode) { [weak self] files in
-            guard opensEditor, let self, let file = delivery.addForEditing(files) else { return }
-            if let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) {
-                _ = editor.edit(entry)
-            }
+        delivery.capture(mode, with: capturer, watcher: service, forEditing: opensEditor) { [weak self] files in
+            guard opensEditor, let self, let file = files.first,
+                  let entry = clipboard.entries.first(where: { $0.sourcePath == file.path }) else { return }
+            _ = editor.edit(entry)
         }
     }
 }
 
-/// Settings › Screengrabs, on the plugin template: Commands, then Permissions (Screen Recording,
+/// Settings › ScreenGrabs, on the plugin template: Commands, then Permissions (Screen Recording,
 /// which both kinds need, and the optional ones), then the Screenshots group in the slot above the
 /// declared preferences, then Recordings, its declared preferences, ending with the recordings
-/// folder. Where Screengrabs can't record, Recordings says so and its preferences can't change.
+/// folder. Where ScreenGrabs can't record, Recordings says so and its preferences can't change.
 struct ScreengrabsSettingsPage: View {
     @Environment(AppModel.self) private var model
 
@@ -213,7 +214,7 @@ struct ScreengrabsSettingsPage: View {
     }
 }
 
-/// Screengrabs' Screenshots group, in its page's slot above the declared preferences: the watcher's
+/// ScreenGrabs' Screenshots group, in its page's slot above the declared preferences: the watcher's
 /// status, which names the screenshot folder macOS saves to, with what fixes it, and Copy new
 /// screenshots to the clipboard, which keeps its own key (`AppPreferences.copiesScreenshotsToClipboard`).
 /// Each row reports itself through `Shown`, so a test can lay out the page in each of the watcher's
@@ -235,11 +236,11 @@ struct ScreenshotsSettings: View {
         }
     }
 
-    /// The group's note on this Mac. Keybumps takes macOS's ⇧⌘5 only where Screengrabs can record
+    /// The group's note on this Mac. Keybumps takes macOS's ⇧⌘5 only where ScreenGrabs can record
     /// (`ScreenshotToolsModule.takeoverBindings`), so on macOS 14 the note names only ⇧⌘3 and ⇧⌘4.
     static func about(on compatibility: PluginCompatibility) -> String {
         let keys = compatibility.supportsRecording ? "⇧⌘3, ⇧⌘4, and ⇧⌘5" : "⇧⌘3 and ⇧⌘4"
-        return "Screenshots from these hotkeys, and ones you take with macOS's own tools, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While Screengrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
+        return "Screenshots from these hotkeys, and ones you take with macOS's own tools, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While ScreenGrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
     }
 
     @ViewBuilder private var status: some View {
@@ -291,7 +292,7 @@ struct ScreenshotsSettings: View {
 }
 
 extension View {
-    /// Reports a row of Settings › Screengrabs' own to `ScreenshotsSettings.Shown`.
+    /// Reports a row of Settings › ScreenGrabs' own to `ScreenshotsSettings.Shown`.
     func shown(_ row: ScreenshotsSettings.Row) -> some View {
         preference(key: ScreenshotsSettings.Shown.self, value: [row])
     }

@@ -4,11 +4,11 @@ import Testing
 @testable import Keybumps
 
 /// The one-time step that folds what an install saved for Screencast into Screenshot Tools, which
-/// became Screengrabs (#489), and that `AppPreferences.init` runs first now that
+/// became ScreenGrabs (#489), and that `AppPreferences.init` runs first now that
 /// `Capability.screencast` is retired (#490). Fixtures are saved values written as raw strings, as
 /// an install holds them.
 @MainActor
-@Suite("Screengrabs migration")
+@Suite("ScreenGrabs migration")
 struct ScreengrabsMigrationTests {
     /// `knownCapabilities` on an install that ran a build with Screencast.
     nonisolated static let knownWithScreencast = [
@@ -118,7 +118,7 @@ struct ScreengrabsMigrationTests {
         #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty)
     }
 
-    @Test("Screencast on and Screenshot Tools off: Screengrabs turns on, its screenshot keys go back to macOS, and screenshots stop being copied")
+    @Test("Screencast on and Screenshot Tools off: ScreenGrabs turns on, its screenshot keys go back to macOS, and screenshots stop being copied")
     func screencastOnlyTurnsScreengrabsOn() {
         let defaults = Self.install(enabled: ["clipboardHistory", "screencast"])
         defaults.set(true, forKey: "copiesScreenshotsToClipboard")
@@ -143,7 +143,7 @@ struct ScreengrabsMigrationTests {
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
         #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == nil)
         #expect(preferences.capabilityShortcut(for: .screenshotArea) == nil)
-        #expect(preferences.capabilityShortcut(for: .screencast) == Self.savedShortcuts["screencast"])
+        #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
         #expect(!preferences.copiesScreenshotsToClipboard)
     }
 
@@ -343,7 +343,7 @@ struct ScreengrabsMigrationTests {
         #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screenshotTools"])
         #expect(defaults.stringArray(forKey: "knownCapabilities")?.contains("screencast") == false)
         #expect(first.capabilityShortcut(for: .screenshotArea) == nil)
-        #expect(first.capabilityShortcut(for: .screencast) == Self.savedShortcuts["screencast"])
+        #expect(first.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
         #expect(!first.copiesScreenshotsToClipboard)
 
         // The person takes back ⇧⌘4 and the clipboard copy; the next launch leaves them.

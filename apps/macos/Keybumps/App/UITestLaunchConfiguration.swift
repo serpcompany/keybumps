@@ -63,14 +63,14 @@ struct UITestLaunchConfiguration: Equatable {
     /// Plugins turned on at launch, such as those that ship off (`translation,keystrokes`). Names
     /// that aren't a `Capability`, such as the retired `screencast`, are ignored.
     private(set) var enabledCapabilities: Set<Capability> = []
-    /// Opens Screengrabs' recording picker once, at launch, as Record Screen does (Screengrabs, which
+    /// Opens ScreenGrabs' recording picker once, at launch, as Record Screen does (ScreenGrabs, which
     /// ships on, must be on).
     private(set) var opensScreencastPicker = false
     /// Starts a recording of the first made-up screen at launch, with no countdown, so
-    /// the control bar shows (Screengrabs must be on). It captures nothing.
+    /// the control bar shows (ScreenGrabs must be on). It captures nothing.
     private(set) var startsScreencastRecording = false
     /// Opens the recording window once, at launch, on a recording made up in the sandbox's
-    /// captures folder (Screengrabs must be on).
+    /// captures folder (ScreenGrabs must be on).
     private(set) var screencastReview: ScreencastReviewCapture?
 
     var isUITesting: Bool { permissions != nil }

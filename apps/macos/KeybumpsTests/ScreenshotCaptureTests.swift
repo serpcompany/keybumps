@@ -9,7 +9,7 @@ import Testing
 struct ScreenshotCaptureTests {
     private static let date = Date(timeIntervalSince1970: 1_790_000_000)
 
-    @Test("Screens capture one macOS-named file per display; an area captures one, interactively")
+    @Test("Screens capture one macOS-named file per display; an area captures one, interactively, or with no selection for the smoke test")
     func planNamesAndArguments() {
         let folder = URL(fileURLWithPath: "/tmp/shots", isDirectory: true)
         let screens = ScreenshotCapturePlan.files(in: folder, at: Self.date, displayCount: 2, mode: .screens)
@@ -22,6 +22,13 @@ struct ScreenshotCaptureTests {
         let area = ScreenshotCapturePlan.files(in: folder, at: Self.date, displayCount: 3, mode: .area)
         #expect(area.count == 1)
         #expect(ScreenshotCapturePlan.arguments(for: .area, files: area) == ["-i", "-t", "png", area[0].path])
+
+        // The QA smoke test's area: no selection, in whole points from the main display's top left.
+        let fixed = ScreenshotCaptureMode.fixedArea(CGRect(x: 436, y: 311.4, width: 640, height: 360))
+        let fixedFiles = ScreenshotCapturePlan.files(in: folder, at: Self.date, displayCount: 3, mode: fixed)
+        #expect(fixedFiles == area)
+        #expect(ScreenshotCapturePlan.arguments(for: fixed, files: fixedFiles) == ["-R", "436,311,640,361", "-t", "png", area[0].path])
+        #expect(ScreenshotCapturePlan.rectangle(.null) == "0,0,0,0", "no trap on a rect that isn't finite")
     }
 
     @Test("Only written files are reported, and they are marked as screen captures")
@@ -48,6 +55,24 @@ struct ScreenshotCaptureTests {
             capturer.capture(.area) { continuation.resume(returning: $0) }
         }
         #expect(cancelled.isEmpty, "Escape during an area capture writes nothing")
+    }
+
+    @Test("The Screen hotkey lists every display's screenshot in ⌘3, the main display's on top and on the clipboard")
+    func screenHotkeyListsEveryDisplay() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreenHotkey-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let capturer = ScreenshotCapturer(runner: PNGCaptureRunner(), folder: { root }, now: { Self.date }, displayCount: { 3 })
+        let harness = WiringHarness(
+            enabled: [.screenshotTools, .clipboardHistory], missing: nil, root: root, screenshotCapturer: capturer
+        )
+        harness.model.start()
+
+        harness.pressHotKey(DefaultShortcut.screenshotScreen)
+        let files = ScreenshotCapturePlan.files(in: root, at: Self.date, displayCount: 3, mode: .screens)
+        let listed = ScreenshotPaletteContent.resolve(entries: harness.model.clipboard.entries, query: "", isEnabled: true)
+        #expect(listed.entries.compactMap(\.sourceURL) == files)
+        #expect(harness.pasteboard.data(forType: .png) == (try Data(contentsOf: files[0])), "⌘V pastes the main display's")
     }
 
     // MARK: macOS shortcut takeover
@@ -95,7 +120,7 @@ struct ScreenshotCaptureTests {
         #expect(owned.isEmpty)
     }
 
-    @Test("Screengrabs takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5 with its keys on macOS 15, and leaves ⇧⌘5 to macOS 14 (#490)")
+    @Test("ScreenGrabs takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5 with its keys on macOS 15, and leaves ⇧⌘5 to macOS 14 (#490)")
     func takeoverBindingsFollowSupportsRecording() {
         let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
         #expect(ScreenshotToolsModule.takeoverBindings(current) == [
@@ -175,6 +200,18 @@ private final class FakeCaptureRunner: ScreenshotCaptureRunning {
             }
         }
         Task { @MainActor in completion() }
+    }
+}
+
+/// Writes a PNG of its own for each file and exits at once, as `screencapture` would.
+private final class PNGCaptureRunner: ScreenshotCaptureRunning {
+    private static let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!
+
+    func run(arguments: [String], completion: @escaping @MainActor () -> Void) {
+        for file in arguments.filter({ $0.hasSuffix(".png") }) {
+            FileManager.default.createFile(atPath: file, contents: Self.png + Data(file.utf8))
+        }
+        MainActor.assumeIsolated { completion() }
     }
 }
 

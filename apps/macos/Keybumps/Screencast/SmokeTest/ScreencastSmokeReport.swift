@@ -1,8 +1,8 @@
 import AVFoundation
 import Foundation
 
-/// What the Screencast smoke test records, in the order it runs them (#470): a video of a screen, a
-/// window, and an area.
+/// What the ScreenGrabs smoke test records, in the order it runs them (#470): a video of a screen, a
+/// window, and an area. Its screenshots come first (`ScreenshotSmokeKind`, #491).
 enum ScreencastSmokeMode: String, CaseIterable, Codable, Sendable {
     case videoScreen = "video-screen"
     case videoWindow = "video-window"
@@ -35,6 +35,28 @@ enum ScreencastSmokeStage: String, Codable, Sendable {
     case cleanedUp
 }
 
+/// What the smoke test takes screenshots of, in order, through ScreenGrabs' own path (#491): every
+/// display, one file each, as Screenshot Screen does, then an area in the middle of the main display.
+enum ScreenshotSmokeKind: String, CaseIterable, Codable, Sendable {
+    case screen
+    case area
+}
+
+/// How far one screenshot got: the last stage it entered. A screenshot that passed reached
+/// `cleanedUp`.
+enum ScreenshotSmokeStage: String, Codable, Sendable {
+    case notStarted
+    /// `screencapture` running, through `ScreenshotCapturer`.
+    case capturing
+    /// The file was written.
+    case saved
+    /// It's a PNG of the expected size, marked as a screen capture.
+    case checked
+    /// The watcher added it to the smoke test's own Clipboard History, and ⌘3 would list it.
+    case listed
+    case cleanedUp
+}
+
 /// Why a capture, or the whole run, failed, besides the engine's own `ScreencastFailure`s, which
 /// the result names by their raw values.
 enum ScreencastSmokeFailure: String, Error, Sendable {
@@ -50,7 +72,7 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
     /// The picker had nothing to record after choosing.
     case noChoice
     /// The blank window the script shows from a helper process wasn't on screen in time, or the
-    /// script couldn't show it (no `-KBScreencastSmokeWindowPID`). No other window is ever taken
+    /// script couldn't show it (no `-KBScreengrabsSmokeWindowPID`). No other window is ever taken
     /// instead.
     case noSmokeWindow
     /// The capture ended with no file and no reason.
@@ -66,12 +88,23 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
     case cleanupFailed
     /// An earlier capture didn't wind down, so this one didn't run.
     case skipped
+    /// A screenshot that isn't a PNG ImageIO can read.
+    case notPNG
+    /// A screenshot whose pixel size isn't its display's, or the area's at the main display's scale.
+    case wrongSize
+    /// A screenshot without macOS's screen-capture attribute, which the watcher needs to take it.
+    case notMarkedAsScreenCapture
+    /// The watcher couldn't watch the smoke test's screenshot folder.
+    case watcherUnavailable
+    /// A screenshot the watcher didn't add to Clipboard History in time, so ⌘3 wouldn't list it.
+    case notListed
 }
 
 /// The smoke test's result, written as JSON to `ScreencastSmokeTest.resultURL()` after every stage,
-/// so a crash or a hang leaves the last stage reached. Structure only: modes, stages, timings,
-/// error categories, sizes, the macOS version, and the number of displays; never a window title,
-/// app name, file name, path, or URL.
+/// so a crash or a hang leaves the last stage reached. Structure only: modes and kinds, stages,
+/// timings, error categories, sizes, the macOS version, and the number of displays; never a window
+/// title, app name, file name, path, or URL. `captures` are the recordings; `screenshots` has one
+/// line for each screenshot.
 struct ScreencastSmokeReport: Codable, Equatable, Sendable {
     /// Milliseconds each part of a capture took.
     struct Timings: Codable, Equatable, Sendable {
@@ -109,7 +142,45 @@ struct ScreencastSmokeReport: Codable, Equatable, Sendable {
         }
     }
 
-    static let currentVersion = 1
+    /// One screenshot's line.
+    struct Screenshot: Codable, Equatable, Sendable {
+        var kind: ScreenshotSmokeKind
+        /// The display it shows, from 1, in the order `screencapture` writes them: the main
+        /// display's first. An area is on the main display, 1.
+        var display: Int
+        /// How many displays its capture covered: every display for Screen, one for an area.
+        var displayCount: Int
+        var passed = false
+        var stage = ScreenshotSmokeStage.notStarted
+        var errorCategory: String?
+        /// The pixel size read from the file, and the size it should be.
+        var pixelWidth: Int?
+        var pixelHeight: Int?
+        var expectedPixelWidth: Int?
+        var expectedPixelHeight: Int?
+        var bytes: Int?
+        /// Milliseconds from the capture's start until `screencapture` finished, and from then
+        /// until ⌘3 would list it.
+        var captureMs: Int?
+        var listMs: Int?
+
+        init(kind: ScreenshotSmokeKind, display: Int, displayCount: Int) {
+            self.kind = kind
+            self.display = display
+            self.displayCount = displayCount
+        }
+
+        /// The screenshots a run takes with `displayCount` displays: one of each display, then
+        /// one of an area.
+        static func planned(displayCount: Int) -> [Screenshot] {
+            let displays = max(displayCount, 1)
+            let screens = (1...displays).map { Screenshot(kind: .screen, display: $0, displayCount: displays) }
+            return screens + [Screenshot(kind: .area, display: 1, displayCount: 1)]
+        }
+    }
+
+    /// 2 added `screenshots` (#491).
+    static let currentVersion = 2
 
     var version = currentVersion
     /// False until the run ends.
@@ -122,16 +193,18 @@ struct ScreencastSmokeReport: Codable, Equatable, Sendable {
     /// Whether the folder the captures were saved in was deleted at the end.
     var cleanedUp = false
     var captures: [Capture]
+    var screenshots: [Screenshot]
 
-    init(macOS: String, displayCount: Int, modes: [ScreencastSmokeMode]) {
+    init(macOS: String, displayCount: Int, modes: [ScreencastSmokeMode], screenshots: [Screenshot] = []) {
         self.macOS = macOS
         self.displayCount = displayCount
         captures = modes.map(Capture.init(mode:))
+        self.screenshots = screenshots
     }
 
-    /// 0 when everything passed, 1 when a capture failed, 2 when nothing could be captured: the
-    /// run couldn't start, or Screen Recording was refused. `smoke-screencast.sh` reads the same
-    /// from the result, since `open` doesn't pass the app's exit code on.
+    /// 0 when everything passed, 1 when a recording or a screenshot failed, 2 when nothing could be
+    /// captured: the run couldn't start, or Screen Recording was refused. `smoke-screengrabs.sh`
+    /// reads the same from the result, since `open` doesn't pass the app's exit code on.
     var exitCode: Int32 {
         if passed { return 0 }
         let refused = captures.contains { $0.errorCategory == ScreencastFailure.screenRecordingDenied.rawValue }

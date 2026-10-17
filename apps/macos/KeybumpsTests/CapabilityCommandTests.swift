@@ -40,7 +40,7 @@ struct CapabilityCommandTests {
     @Test("Each command carries its capability's name, not its tab label, and the Command kind")
     func names() {
         #expect(QuickSearchCommand.allCases.map(\.title) == [
-            "Keybumps Settings", "Plugins", "Clipboard History", "Screengrabs", "Dictation", "Window Manager", "Shortcut Coach",
+            "Keybumps Settings", "Plugins", "Clipboard History", "ScreenGrabs", "Dictation", "Window Manager", "Shortcut Coach",
             "Snippets", "Timer", "Emoji Picker", "Translation", "Keystrokes",
         ])
         #expect(QuickSearchCommand.allCases.allSatisfy { $0.kindLabel == "Command" })
@@ -70,7 +70,7 @@ struct CapabilityCommandTests {
             ("Clipboard History", .capability(.clipboardHistory)),
             ("history", .capability(.clipboardHistory)),
             ("screengrabs", .capability(.screenshotTools)),
-            ("Screengrabs", .capability(.screenshotTools)),
+            ("ScreenGrabs", .capability(.screenshotTools)),
             ("DICTATION", .capability(.dictation)),
             ("window manager", .capability(.windowManagement)),
             ("window", .capability(.windowManagement)),
@@ -234,7 +234,7 @@ struct CapabilityCommandTests {
         #expect(rows(query).first == .command(command))
     }
 
-    @Test("With no history, a name word shared with an app lists the command first: shortcut. Screenshot, now Screengrabs' keyword, lists the app first")
+    @Test("With no history, a name word shared with an app lists the command first: shortcut. Screenshot, now ScreenGrabs' keyword, lists the app first")
     func nameWordSharedWithAnApp() {
         #expect(rows("shortcut") == [.command(coach), .result(shortcutsApp)])
         #expect(rows("screenshot") == [.result(screenshotApp), .command(screenshots)])
@@ -242,7 +242,7 @@ struct CapabilityCommandTests {
 
     // MARK: Learned usage (owner decision on #186: history decides)
 
-    @Test("Screenshot.app, whose exact name is the query, stays above Screengrabs, which screenshot finds by keyword, until six picks of the command")
+    @Test("Screenshot.app, whose exact name is the query, stays above ScreenGrabs, which screenshot finds by keyword, until six picks of the command")
     func historyDecidesScreenshot() {
         let url = Self.temporaryUsageURL()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -523,7 +523,7 @@ struct CapabilityCommandTests {
             return search.items.first
         }
 
-        #expect(firstRow() == .result(screenshotApp), "Screenshot is Screengrabs' keyword, so the app it names comes first")
+        #expect(firstRow() == .result(screenshotApp), "Screenshot is ScreenGrabs' keyword, so the app it names comes first")
         for _ in 0..<6 { palette.choose(screenshots) }
         #expect(firstRow() == .command(screenshots))
         search.recordOpenResult(screenshotApp, succeeded: true)

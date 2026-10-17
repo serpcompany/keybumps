@@ -17,7 +17,7 @@ struct QuickSearchActionTests {
         displayName: "⌃⌥⇧R"
     )
 
-    /// Screengrabs' Record Screen. A model starts with its ⇧⌘5.
+    /// ScreenGrabs' Record Screen. A model starts with its ⇧⌘5.
     private static func start(_ shortcut: String? = nil) -> QuickSearchAction {
         QuickSearchAction(capability: .screenshotTools, action: .startScreencast, title: "Record Screen", shortcut: shortcut)
     }
@@ -57,7 +57,7 @@ struct QuickSearchActionTests {
 
     // MARK: Manifests
 
-    @Test("Screengrabs declares Record Screen and Keystrokes its show and hide, each with its plugin's shortcut")
+    @Test("ScreenGrabs declares Record Screen and Keystrokes its show and hide, each with its plugin's shortcut")
     func declared() {
         #expect(CapabilityDescriptor.screenshotTools.actions == [.startScreencast])
         #expect(CapabilityDescriptor.keystrokes.actions == [.toggleKeystrokes])
@@ -104,7 +104,7 @@ struct QuickSearchActionTests {
         #expect(on.model.quickSearchActions == [Self.keystrokes()])
     }
 
-    @Test("Before macOS 15, Record Screen is never listed, with Screengrabs on; Keystrokes' is")
+    @Test("Before macOS 15, Record Screen is never listed, with ScreenGrabs on; Keystrokes' is")
     func screencastNeedsMacOS15() {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsGate")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -138,7 +138,7 @@ struct QuickSearchActionTests {
         #expect(harness.model.quickSearchActions == [Self.start(Self.recordScreenKeys), Self.keystrokes()])
     }
 
-    @Test("Quick Search finds Record Screen for screencast through the real model, beside Screengrabs' command")
+    @Test("Quick Search finds Record Screen for screencast through the real model, beside ScreenGrabs' command")
     func modelListsTheAction() {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsModel")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -151,7 +151,7 @@ struct QuickSearchActionTests {
 
         harness.model.setCapability(.screenshotTools, enabled: false)
         search.query = "record screen"
-        #expect(search.items == [.command(.capability(.screenshotTools))], "Off: no action, and Screengrabs' command opens its page")
+        #expect(search.items == [.command(.capability(.screenshotTools))], "Off: no action, and ScreenGrabs' command opens its page")
     }
 
     // MARK: Ranking
@@ -248,7 +248,7 @@ struct QuickSearchActionTests {
         #expect(harness.model.quickSearchActions == [action], "Listed again once the capture is over")
     }
 
-    @Test("Without Screen Recording, Record Screen from Quick Search opens Screengrabs' page, as the shortcut does")
+    @Test("Without Screen Recording, Record Screen from Quick Search opens ScreenGrabs' page, as the shortcut does")
     func startWithoutScreenRecordingOpensItsPage() {
         var opened: [SettingsSection] = []
         let preferences = AppPreferences(defaults: InMemoryDefaults())

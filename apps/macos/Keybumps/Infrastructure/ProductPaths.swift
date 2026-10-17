@@ -3,7 +3,7 @@ import Foundation
 struct ProductPaths: Equatable {
     let applicationSupport: URL
     let recordings: URL
-    /// Screengrabs' recordings folder: each recording in its own `<timestamp>/` folder (ADR 0009,
+    /// ScreenGrabs' recordings folder: each recording in its own `<timestamp>/` folder (ADR 0009,
     /// ADR 0010). Dictation's audio is in `recordings`.
     let captures: URL
     let dictationModels: URL
