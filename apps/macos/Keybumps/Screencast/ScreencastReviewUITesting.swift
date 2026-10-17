@@ -118,6 +118,7 @@ enum ScreencastReviewUITestOutcome {
         case .saved: "saved"
         case .copied: "copied"
         case .discarded: "discarded"
+        case .saveFailed: "save failed"
         }
         let folder = FileManager.default.fileExists(atPath: result.folder.path) ? "kept" : "deleted"
         let note = ScreencastReview.read(from: result.folder.appendingPathComponent(ScreencastMetadata.fileName))?.note

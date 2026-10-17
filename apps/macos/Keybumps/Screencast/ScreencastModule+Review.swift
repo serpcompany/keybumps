@@ -5,16 +5,24 @@ import AppKit
 struct ScreencastReviewServices {
     /// Clipboard History: Copy marks its write so Clipboard History skips it.
     var clipboard: ClipboardHistoryService
-    /// Where "Copied to Clipboard" shows; nil shows nothing, as under the unit-test host.
+    /// Where Copy writes: the app's `.keybumps`, or a test's named pasteboard. There's no default,
+    /// so a test never reaches the real clipboard by leaving it out.
+    var pasteboard: NSPasteboard
+    /// The notch, where "Recording saved to captures" and "Recording copied" show; nil shows
+    /// nothing, as under the unit-test host.
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
+    /// Who has the front, which the review window takes and gives back: macOS's, or a test's
+    /// stand-in.
+    var front: ScreencastReviewFront = .app
 
     /// The app's: its Clipboard History.
     @MainActor
     static func app(clipboard: ClipboardHistoryService) -> ScreencastReviewServices {
         ScreencastReviewServices(
             clipboard: clipboard,
+            pasteboard: .keybumps,
             notices: UnitTestHost.isActive ? nil : PaletteHUD.shared
         )
     }
@@ -35,7 +43,6 @@ final class ScreencastReviewFlow {
     /// Called when the panel is done with a capture, after its own notice.
     var onFinish: ((ScreencastReviewOutcome) -> Void)?
     private var isOn = true
-    private var didRecoverTrims = false
     private var terminationObserver: NSObjectProtocol?
 
     init(services: ScreencastReviewServices?, contextReader: ScreencastCaptureContextReader) {
@@ -52,13 +59,23 @@ final class ScreencastReviewFlow {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
     }
 
-    /// Start Screencast, from idle: reads the app in front, and a browser's site, before the picker
-    /// covers the screen.
+    /// Start Screencast, from idle: the review window still up goes, and its capture is saved,
+    /// before the picker covers the screen; then the app in front, and a browser's site, are read.
     func captureStarting() {
         isOn = true
         panel?.startAccepting()
+        panel?.makeWayForNextCapture()
         let reader = contextReader
         contextRead = Task { await reader.read() }
+    }
+
+    /// The controller's phase: once the picker and the countdown are done, recording or cancelled,
+    /// the app the review window took the front from gets it back.
+    func capturePhaseChanged(_ phase: ScreencastPhase) {
+        switch phase {
+        case .recording, .idle: panel?.captureUnderWay()
+        default: break
+        }
     }
 
     /// The flow controller saved a capture: the panel opens on it at once, with the context read at
@@ -86,31 +103,43 @@ final class ScreencastReviewFlow {
         panel?.saveNow()
     }
 
-    /// Once a launch, when Screencast is on: puts back what a trim interrupted by a quit or a crash
-    /// left aside (`ScreencastReviewFiles.recoverInterruptedTrims`), off the main actor.
-    func recoverInterruptedTrims(in capturesFolder: URL) {
-        guard !didRecoverTrims else { return }
-        didRecoverTrims = true
-        Task.detached(priority: .utility) {
-            await ScreencastReviewFiles.recoverInterruptedTrims(in: capturesFolder, fileManager: .default)
-        }
-    }
-
     private func panelForReview() -> ScreencastReviewPanel? {
         if let panel { return panel }
         guard let services else { return nil }
         let clipboard = services.clipboard
         let panel = ScreencastReviewPanel(
             repositories: services.repositories(),
-            keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() }
+            pasteboard: services.pasteboard,
+            keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() },
+            front: services.front
         )
-        panel.onFinish = { [weak self] outcome in
-            // As the palette confirms its copies.
-            if case .copied = outcome { services.notices?.showNotice("Copied to Clipboard", isWarning: false) }
+        panel.onFinish = { [weak self, weak panel] outcome in
+            // The next capture closed it: only a failure needs saying.
+            if let notice = Self.notice(for: outcome), notice.isWarning || panel?.isMakingWay != true {
+                services.notices?.showNotice(notice.message, isWarning: notice.isWarning)
+            }
             self?.onFinish?(outcome)
         }
         if !isOn { panel.shutDown() }
         self.panel = panel
         return panel
+    }
+
+    /// What the notch says as a review ends. The window closes on Save, Return, Escape, or Copy, so
+    /// the notice is what says where the recording was kept, or, as a warning, why it couldn't be.
+    /// Discard says nothing.
+    ///
+    /// Where is the folder the capture's own folder is in, the captures folder (owner QA of
+    /// 4030.475.4): "Recording saved to captures", by the name Finder shows (`folderName`).
+    static func notice(
+        for outcome: ScreencastReviewOutcome,
+        folderName: (URL) -> String = { FileManager.default.displayName(atPath: $0.path) }
+    ) -> (message: String, isWarning: Bool)? {
+        switch outcome {
+        case .saved(let input): ("Recording saved to \(folderName(input.folder.deletingLastPathComponent()))", false)
+        case .copied: ("Recording copied", false)
+        case .saveFailed(_, let failure): (failure.message, true)
+        case .discarded: nil
+        }
     }
 }

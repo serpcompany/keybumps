@@ -69,6 +69,11 @@ struct ScreencastPickerBar: View {
                 }
             }
         }
+        // Each choice at its own width. The bar is as wide as its widest row, so that row is
+        // proposed only about its own width; shared among its words, the last can come up a
+        // fraction of a point short and be cut. `ViewThatFits` still drops to numbers on a narrow
+        // screen.
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, 6)
         .padding(.vertical, 4)
         .paletteFloatingSurface()
@@ -131,12 +136,7 @@ struct ScreencastPickerBar: View {
             toggle("Clicks", on: "cursorarrow.click.2", off: "cursorarrow", isOn: $model.highlightsClicks, identifier: "screencast.picker.clicks", help: "Highlight where you click")
             divider
             Button(action: confirm) {
-                Label("Record", systemImage: "record.circle")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .frame(height: 28)
-                    .background(Capsule().fill(model.canConfirm ? Color.red : Color.gray.opacity(0.5)))
+                ScreencastPickerRecordLabel(canConfirm: model.canConfirm)
             }
             .buttonStyle(.plain)
             .disabled(!model.canConfirm)
@@ -153,6 +153,10 @@ struct ScreencastPickerBar: View {
             .accessibilityLabel("Cancel")
             .accessibilityIdentifier("screencast.picker.cancel")
         }
+        // Each control at its own width, as in `screenChoices`. When this row was the bar's
+        // widest, sharing about its own width cut Record, its last word, to "Rec…" (owner QA of
+        // 4030.475.5). `ViewThatFits` still drops the titles on a narrow screen.
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .paletteFloatingSurface()
@@ -205,6 +209,21 @@ struct ScreencastPickerBar: View {
         .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
         .accessibilityAddTraits(.isToggle)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Record's label: red while there's something to record, gray until then, the same width either
+/// way.
+struct ScreencastPickerRecordLabel: View {
+    let canConfirm: Bool
+
+    var body: some View {
+        Label("Record", systemImage: "record.circle")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(Capsule().fill(canConfirm ? Color.red : Color.gray.opacity(0.5)))
     }
 }
 

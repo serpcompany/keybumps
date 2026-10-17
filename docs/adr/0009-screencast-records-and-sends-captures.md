@@ -1,6 +1,6 @@
 # 0009: Screencast records the screen and sound in Keybumps, and sends a capture where the person chooses, starting with their own Clipy account
 
-Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329. Amended 2026-10-12 (#485): Screencast records video only, and screenshots stay with Screenshot Tools.
+Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329. Amended 2026-10-12 (#485): Screencast records video only, and screenshots stay with Screenshot Tools. Amended 2026-10-12 (#475): the review is a window with a player, and no note, type, repository, or Trim; see Amendments.
 
 Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17, #488). It replaces decision 1 (Screencast is part of Screengrabs, one plugin that ships on), decision 3's screenshot parts, decision 4's review panel and folder, and the Open question about a palette tab. Recordings save to their own folder, which defaults to the Mac's screenshot folder and has its own Choose… in Settings › Screengrabs, instead of `~/Documents/Keybumps/captures` or the folder Settings › Screencast shows. The rest of decisions 3 and 4 stands (video, the audio switches, the control bar, keys, drawing, and a recording staying on the Mac until it's sent), as do decisions 2 and 5–8.
 
@@ -27,7 +27,7 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
    - a floating control bar with the elapsed time, pause and resume, stop, discard, restart, the audio switches, and drawing. The bar is left out of the recording;
    - the keys pressed, shown on screen, but only combinations with ⌘, ⌃, or ⌥, never plain typing. The display is its own plugin (#443), which Screencast uses;
    - drawing on screen while recording, and optionally a ring where the pointer clicks.
-4. **Captures stay on the Mac until the person sends one.** Each is saved under `~/Documents/Keybumps/captures/<timestamp>/`, as Dictation keeps recordings. A review panel after each capture takes a one-line note, the type (bug, feature, or feedback), and the target repository, guessed from the frontmost app's bundle ID or the browser's domain and remembered once corrected. It then offers what to do with it, and shows what will be sent before anything is:
+4. **Captures stay on the Mac until the person sends one.** Each is saved under `~/Documents/Keybumps/captures/<timestamp>/`, as Dictation keeps recordings. A review after each capture offers what to do with it: since 2026-10-12 (#475), a window that fills the screen with the recording's player, and Discard, Copy, and Save, with nothing to type or trim. It writes the type and the target repository, guessed from the frontmost app's bundle ID or the browser's domain, into `meta.json` for a later Send. (It first took a one-line note, the type, and the repository, remembered once corrected; the owner removed those fields for now.) Once sending exists, it shows what will be sent before anything is:
    - **Save**: keep it on the Mac only;
    - **Save and Send**: keep it and send it to a destination;
    - **Send and Delete**: send it, then delete the local copy once the destination confirms the upload. If the upload fails, the capture stays;
@@ -38,15 +38,28 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
    Sending to Clipy uses a Clipy API key the person creates and pastes, kept in the Keychain. It sends the media, the note and type, the target repository, the app's name and bundle ID and the browser's domain at capture time, and the Mac, macOS, and Keybumps versions. Keybumps then makes the recording **private** through the API, so the link isn't left unlisted.
 6. **Keybumps uploads to Clipy only through an endpoint Clipy documents.** Until Clipy publishes one, Send to Clipy hands the file to the installed `clipy` CLI, and the button explains how to install it when it's missing.
 7. **Open-source donors** (research on #329, approved by the owner on 2026-10-10). Each gets a `LICENSE.*` file and a row in `docs/provenance/donor-ledger.md`, pinned to a commit:
-   - **Snapzy** (BSD-3-Clause), the main model for features and UI: the control bar, click rings, live drawing, and the quick-access card the review panel starts from;
+   - **Snapzy** (BSD-3-Clause), the main model for features and UI: the control bar, click rings, live drawing, and the review window's shell (its video editor's window). The quick-access card the review panel first grew from went with the panel in #475;
    - **Shotnix** (MIT, already a donor): the pause timeline, audio placement, own-window filter, and inline discard confirm;
    - **Screendrop** (CC0-1.0): the `AVAssetWriter` writer with separate system and microphone tracks. Never its `Engine/` folder, which is ported from tldraw;
    - **BetterCapture** (MIT): ScreenCaptureKit setup on macOS 15, and the second stream that keeps system audio in window mode;
    - **KeyCastr** (BSD-3-Clause), through #443: the key display;
-   - Apple's `showMouseClicks` first for click highlights, then **ClickLight** (MIT) for rings on screen; **vestige** (MIT) if the rolling buffer is built; `AVPlayerView`'s trimming for trimming.
+   - Apple's `showMouseClicks` first for click highlights, then **ClickLight** (MIT) for rings on screen; **vestige** (MIT) if the rolling buffer is built; `AVPlayerView`'s trimming for trimming, until the owner removed Trim in #475.
 
    Recording writes through `AVAssetWriter`, not `SCRecordingOutput`, which can't pause. QuickRecorder and Cap (AGPL), Azayaka (no license), and Capso (BSL) are references only; their code is never copied.
 8. **Keybumps never files GitHub issues or holds a GitHub token.** A small webhook receiver run by SERP, a Cloudflare Worker, takes Clipy's `summary.ready` and `key_moments.ready` events and files the issue in the repository the capture named. It dedupes on the webhook ID and the recording ID. The issue holds the summary, the action items, a thumbnail, the link, the label `clipy`, and a marker an agent can find: `Clipy: <link>` and `<!-- clipy:<id> -->`. An agent picking up the issue runs `clipy context <id>` or the MCP tool `get_agent_context`.
+
+## Amendments
+
+**2026-10-12, the review window** (#475, PR #479; with #485). The owner's decisions on #479, after trying candidate 4030.475.2:
+- The review is a window with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar. The owner asked for it much bigger ("or maybe just like fill screen"): by default it fills the screen's visible frame with a small margin.
+- No note, type, or repository: the owner called the sidebar that held them "kind of worthless" and removed it for now, to be rethought later. What the review keeps stays in `meta.json`.
+- No Trim, the only editing tool. Combining Screenshot Tools and Screencast into one plugin, Screengrabs, is a new epic (#482).
+- After Save, the window closes, a notice in the notch says it was saved, and the file goes to the captures folder set in Settings › Screencast.
+- Screencast is video only (#485).
+
+**2026-10-17, after candidate 4030.475.4** (#479). The owner asked for the notice to say where the recording went ("a notch notification saying it was like saved to {somewhere}"), so it names the folder, and for Save to be "more apparent as a BUTTON", so it's the window's prominent default button. A "Choose…" folder in Settings › Screencast, starting at the Mac's own screenshot location, is to follow in #504.
+
+Not an owner decision: #479 removed the corner panel, which grew from Snapzy's quick-access card, because nothing opened it any more once Screencast was video only (#485) and recordings opened in the window. Whether a card comes back after each capture is open, in #496 (parked; see #482).
 
 ## Consequences
 
@@ -65,3 +78,4 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
 - Does it get a Command Palette tab? ⌘1–⌘9 are taken (`docs/adding-a-plugin.md`).
 - Where does the repository mapping live: in Keybumps, sent with each capture (as above), or in the webhook receiver?
 - A rolling buffer that keeps the last 30 seconds (vestige), opt-in, after the first release.
+- A quick-access card after each capture (#496), parked until the owner decides.
