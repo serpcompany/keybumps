@@ -31,6 +31,8 @@ final class FakeOverlays: ScreencastOverlayPresenting {
     private var cancelPicker: (() -> Void)?
     private var cancelCountdown: (() -> Void)?
     private var escape: (() -> Void)?
+    /// The last Escape handler given, kept after `stopWatchingEscape()`.
+    private var lastEscape: (() -> Void)?
 
     var isWatchingEscape: Bool { escape != nil }
     var messages: [String] { events.compactMap { if case .message(let text) = $0 { text } else { nil } } }
@@ -66,6 +68,7 @@ final class FakeOverlays: ScreencastOverlayPresenting {
     func watchEscape(_ handler: @escaping () -> Void) {
         events.append(.watchEscape)
         escape = handler
+        lastEscape = handler
     }
 
     func stopWatchingEscape() {
@@ -84,6 +87,8 @@ final class FakeOverlays: ScreencastOverlayPresenting {
     /// The countdown's Cancel.
     func cancelTheCountdown() { cancelCountdown?() }
     func pressEscape() { escape?() }
+    /// An Escape heard while watching that arrives after `stopWatchingEscape()`.
+    func pressLateEscape() { lastEscape?() }
 }
 
 /// A screen that's made up: `content()` returns `screen`.

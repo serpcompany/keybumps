@@ -76,6 +76,15 @@ final class ScreencastControlBarModel {
     /// The buttons act only while recording or paused, and one at a time.
     var acceptsActions: Bool { recording.phase.isRecording && !isWorking }
 
+    /// Discard acts while the recording starts too, so a start that hangs can still be thrown
+    /// away: Escape no longer cancels one (#518).
+    var acceptsDiscard: Bool { (recording.phase == .starting || recording.phase.isRecording) && !isWorking }
+
+    /// Whether `question` can be asked and answered now.
+    func accepts(_ question: ScreencastBarQuestion) -> Bool {
+        question == .discard ? acceptsDiscard : acceptsActions
+    }
+
     var timerText: String { Self.timerText(recording.elapsed) }
 
     /// Minutes and seconds, `mm:ss`. Minutes go on past 59 rather than adding hours.
@@ -222,7 +231,8 @@ final class ScreencastControlBarModel {
     }
 
     /// Discard asks first, in the bar rather than in an alert, so the recorded app keeps its focus:
-    /// "Discard?" with Discard and Keep in place of the controls. After Shotnix's
+    /// "Discard?" with Discard and Keep in place of the controls. While the recording starts,
+    /// Discard cancels the start. After Shotnix's
     /// `RecordingHUDWindow` (MIT, see LICENSE.shotnix).
     func askToDiscard() {
         ask(.discard)
@@ -249,7 +259,7 @@ final class ScreencastControlBarModel {
     func confirm() async {
         guard let question else { return }
         keep()
-        guard acceptsActions else { return }
+        guard accepts(question) else { return }
         switch question {
         case .discard: await work { await recording.discard() }
         case .restart: await work { await recording.restart() }
@@ -259,7 +269,7 @@ final class ScreencastControlBarModel {
     /// Asks `question` in place of the controls, and goes back to them as Keep after a few seconds
     /// without an answer. A question already asked gives way to the new one.
     private func ask(_ question: ScreencastBarQuestion) {
-        guard acceptsActions, self.question != question else { return }
+        guard accepts(question), self.question != question else { return }
         keep()
         self.question = question
         let timeout = confirmationTimeout

@@ -10,7 +10,8 @@ import Observation
 ///
 /// The bar goes up as the recording starts (`.starting`), before the recorder reads what's on
 /// screen, so it's already there when the recorder decides what to leave out. Its buttons wait until
-/// it's recording. It stays hidden during the countdown.
+/// it's recording, except Discard, which can cancel a start that hangs (#518). It stays hidden during
+/// the countdown.
 @MainActor
 final class ScreencastRecordingControls {
     /// The shortcuts that act on a recording, in the order Settings lists them.
