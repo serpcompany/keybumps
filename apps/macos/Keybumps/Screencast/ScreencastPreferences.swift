@@ -1,7 +1,7 @@
 import Foundation
 
-/// Settings › Screengrabs' Recordings group, as one value for what starts and records a recording:
-/// read it as each recording starts, so a change applies to the next one. Its parts are Screengrabs'
+/// Settings › ScreenGrabs' Recordings group, as one value for what starts and records a recording:
+/// read it as each recording starts, so a change applies to the next one. Its parts are ScreenGrabs'
 /// recording preferences, still stored as Screencast's were (`plugin.screencast.<key>`, ADR 0010),
 /// and the folder recordings are saved in.
 struct ScreencastPreferences: Equatable {
@@ -32,7 +32,7 @@ struct ScreencastPreferences: Equatable {
     }
 }
 
-/// The picker's switches. Each is one of Settings › Screengrabs' recording settings, with one stored value, so the
+/// The picker's switches. Each is one of Settings › ScreenGrabs' recording settings, with one stored value, so the
 /// two never disagree: the picker starts with them, and Record saves what it recorded with (#483).
 struct ScreencastSwitches: Equatable, Sendable {
     var recordsMicrophone: Bool
@@ -42,7 +42,7 @@ struct ScreencastSwitches: Equatable, Sendable {
 }
 
 extension AppPreferences {
-    /// Screengrabs' recording settings as they are now.
+    /// ScreenGrabs' recording settings as they are now.
     var screencast: ScreencastPreferences {
         ScreencastPreferences(
             recordsMicrophone: bool(.screencastRecordsMicrophone, for: .screenshotTools),
@@ -54,7 +54,7 @@ extension AppPreferences {
         )
     }
 
-    /// Saves the picker's switches as Settings › Screengrabs' recording settings. One left as it was
+    /// Saves the picker's switches as Settings › ScreenGrabs' recording settings. One left as it was
     /// isn't stored, so one never changed keeps following its default.
     func setScreencastSwitches(_ switches: ScreencastSwitches) {
         let values: [(PluginPreference, Bool)] = [
@@ -69,8 +69,8 @@ extension AppPreferences {
     }
 }
 
-/// Screengrabs' recording settings, in its Recordings group. They came from Screencast, which
-/// Screengrabs replaced, and keep its stored name (`storageName`), so each is still
+/// ScreenGrabs' recording settings, in its Recordings group. They came from Screencast, which
+/// ScreenGrabs replaced, and keep its stored name (`storageName`), so each is still
 /// `plugin.screencast.<key>` (ADR 0010).
 extension PluginPreference {
     static let recordingsGroup = "Recordings"

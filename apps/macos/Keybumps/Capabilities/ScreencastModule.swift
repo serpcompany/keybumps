@@ -18,14 +18,14 @@ extension PluginAction {
 }
 
 extension CapabilityContext {
-    /// Whether Screengrabs records now: it's on, and this Mac's macOS can record
+    /// Whether ScreenGrabs records now: it's on, and this Mac's macOS can record
     /// (`PluginCompatibility.supportsRecording`).
     var recordsScreen: Bool {
         isEnabled(.screenshotTools) && preferences.compatibility.supportsRecording
     }
 }
 
-/// What a composition gives Screengrabs' recording in place of the screen, its windows, the files a recording
+/// What a composition gives ScreenGrabs' recording in place of the screen, its windows, the files a recording
 /// writes, the countdown's clock, and the app in front: the UI-test composition's made-up screens
 /// and inert recorder, or unit tests' fakes. Anything left nil is the app's own, which is inert
 /// under the unit-test host.
@@ -64,7 +64,7 @@ struct ScreencastSeams {
     }
 }
 
-/// Screengrabs' recording (ADR 0009, ADR 0010): a part `ScreenshotToolsModule` owns, which keeps
+/// ScreenGrabs' recording (ADR 0009, ADR 0010): a part `ScreenshotToolsModule` owns, which keeps
 /// Screencast's name from when it was a plugin of its own, and Record Screen (the `screencast`
 /// shortcut, ⇧⌘5 by default, and Quick Search's action). It records only where
 /// `PluginCompatibility.supportsRecording` (macOS 15), where ScreenCaptureKit records the screen,
@@ -72,7 +72,7 @@ struct ScreencastSeams {
 /// code is under `Screencast/`, and its settings are read through `AppPreferences.screencast`.
 ///
 /// Record Screen opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
-/// until then it opens Screengrabs' page, so the picker never makes macOS ask. Turning Screengrabs
+/// until then it opens ScreenGrabs' page, so the picker never makes macOS ask. Turning ScreenGrabs
 /// off, or Keybumps becoming Locked, cancels a recording that hasn't started and keeps one under
 /// way in the recordings folder. While it records, `ScreencastRecordingControls` shows the control
 /// bar and the time in the menu bar, and registers the recording shortcuts, and
@@ -128,7 +128,7 @@ final class ScreencastModule {
     }
 
     /// Run from `ScreenshotToolsModule.apply`. Record Screen's shortcut is registered while
-    /// Screengrabs is on, and only where it can record, so macOS 14 keeps ⇧⌘5.
+    /// ScreenGrabs is on, and only where it can record, so macOS 14 keeps ⇧⌘5.
     func apply(_ context: CapabilityContext) {
         isOn = context.recordsScreen
         context.configureShortcut(
@@ -144,7 +144,7 @@ final class ScreencastModule {
         overlays.apply(context)
     }
 
-    /// Screengrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
+    /// ScreenGrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
     /// but a recording stops and is kept. It opens nothing; it stays in the recordings folder
     /// (`ScreencastController.shutDown`).
     func deactivate(_ context: CapabilityContext) {
@@ -161,7 +161,7 @@ final class ScreencastModule {
         if action == .startScreencast { start() }
     }
 
-    /// Record Screen isn't listed where Screengrabs can't record, or while a recording is under
+    /// Record Screen isn't listed where ScreenGrabs can't record, or while a recording is under
     /// way, when it would do nothing.
     func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool {
         action != .startScreencast || (context.preferences.compatibility.supportsRecording && !isCapturing)
@@ -173,8 +173,8 @@ final class ScreencastModule {
         return controller.phase != .idle
     }
 
-    /// Record Screen: the picker, while Screengrabs is on, where it can record, with Screen
-    /// Recording. Otherwise Screengrabs' page, which says what's missing; the picker never makes
+    /// Record Screen: the picker, while ScreenGrabs is on, where it can record, with Screen
+    /// Recording. Otherwise ScreenGrabs' page, which says what's missing; the picker never makes
     /// macOS ask.
     func start() {
         permissions.refresh()

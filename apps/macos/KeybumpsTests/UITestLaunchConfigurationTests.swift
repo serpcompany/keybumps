@@ -37,7 +37,7 @@ struct UITestLaunchConfigurationTests {
                 "ignored outside UI test mode")
     }
 
-    /// The retired `screencast` is ignored like any other unknown name: Screengrabs, which records,
+    /// The retired `screencast` is ignored like any other unknown name: ScreenGrabs, which records,
     /// ships on, so the picker needs no plugin turned on (#490).
     @Test func turnsOnNamedPluginsAndOpensScreencastsPicker() {
         let configuration = UITestLaunchConfiguration(arguments: [
