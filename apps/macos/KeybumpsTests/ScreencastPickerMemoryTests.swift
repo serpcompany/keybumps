@@ -22,7 +22,7 @@ struct ScreencastPickerMemoryTests {
     let switchKeys = [
         PluginPreference.screencastRecordsMicrophone, .screencastRecordsSystemAudio,
         .screencastShowsShortcuts, .screencastHighlightsClicks,
-    ].map { $0.storageKey(for: .screencast) }
+    ].map { $0.storageKey(for: .screenshotTools) }
 
     struct Launch {
         let preferences: AppPreferences
@@ -57,7 +57,7 @@ struct ScreencastPickerMemoryTests {
             )
         )
         module.apply(CapabilityContext(
-            enabledCapabilities: [.screencast],
+            enabledCapabilities: [.screenshotTools],
             preferences: preferences,
             shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
             permissions: permissions,

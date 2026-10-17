@@ -1,8 +1,9 @@
 import Foundation
 
-/// Settings › Screencast, as one value for what starts and records a capture: read it as each
-/// capture starts, so a change applies to the next one. Its parts are the plugin's declared
-/// preferences (`plugin.screencast.<key>`), and the folder captures are saved in.
+/// Settings › Screengrabs' Recordings group, as one value for what starts and records a recording:
+/// read it as each recording starts, so a change applies to the next one. Its parts are Screengrabs'
+/// recording preferences, still stored as Screencast's were (`plugin.screencast.<key>`, ADR 0010),
+/// and the folder recordings are saved in.
 struct ScreencastPreferences: Equatable {
     /// Whether a video records the microphone, while Keybumps has Microphone access. On by default.
     var recordsMicrophone: Bool
@@ -31,7 +32,7 @@ struct ScreencastPreferences: Equatable {
     }
 }
 
-/// The picker's switches. Each is one of Settings › Screencast's, with one stored value, so the
+/// The picker's switches. Each is one of Settings › Screengrabs' recording settings, with one stored value, so the
 /// two never disagree: the picker starts with them, and Record saves what it recorded with (#483).
 struct ScreencastSwitches: Equatable, Sendable {
     var recordsMicrophone: Bool
@@ -41,20 +42,20 @@ struct ScreencastSwitches: Equatable, Sendable {
 }
 
 extension AppPreferences {
-    /// Screencast's settings as they are now.
+    /// Screengrabs' recording settings as they are now.
     var screencast: ScreencastPreferences {
         ScreencastPreferences(
-            recordsMicrophone: bool(.screencastRecordsMicrophone, for: .screencast),
-            recordsSystemAudio: bool(.screencastRecordsSystemAudio, for: .screencast),
-            countdownSeconds: Int(choice(.screencastCountdown, for: .screencast)) ?? 0,
-            showsShortcuts: bool(.screencastShowsShortcuts, for: .screencast),
-            highlightsClicks: bool(.screencastHighlightsClicks, for: .screencast),
+            recordsMicrophone: bool(.screencastRecordsMicrophone, for: .screenshotTools),
+            recordsSystemAudio: bool(.screencastRecordsSystemAudio, for: .screenshotTools),
+            countdownSeconds: Int(choice(.screencastCountdown, for: .screenshotTools)) ?? 0,
+            showsShortcuts: bool(.screencastShowsShortcuts, for: .screenshotTools),
+            highlightsClicks: bool(.screencastHighlightsClicks, for: .screenshotTools),
             capturesFolder: ProductPaths.keybumps().captures
         )
     }
 
-    /// Saves the picker's switches as Settings › Screencast's. One left as it was isn't stored, so
-    /// one never changed keeps following its default.
+    /// Saves the picker's switches as Settings › Screengrabs' recording settings. One left as it was
+    /// isn't stored, so one never changed keeps following its default.
     func setScreencastSwitches(_ switches: ScreencastSwitches) {
         let values: [(PluginPreference, Bool)] = [
             (.screencastRecordsMicrophone, switches.recordsMicrophone),
@@ -62,33 +63,41 @@ extension AppPreferences {
             (.screencastShowsShortcuts, switches.showsShortcuts),
             (.screencastHighlightsClicks, switches.highlightsClicks),
         ]
-        for (preference, value) in values where bool(preference, for: .screencast) != value {
-            set(.bool(value), of: preference, for: .screencast)
+        for (preference, value) in values where bool(preference, for: .screenshotTools) != value {
+            set(.bool(value), of: preference, for: .screenshotTools)
         }
     }
 }
 
+/// Screengrabs' recording settings, in its Recordings group. They came from Screencast, which
+/// Screengrabs replaced, and keep its stored name (`storageName`), so each is still
+/// `plugin.screencast.<key>` (ADR 0010).
 extension PluginPreference {
+    static let recordingsGroup = "Recordings"
+    static let screencastStorageName = "screencast"
+
     static let screencastRecordsMicrophone = PluginPreference(
         key: "recordsMicrophone",
         title: "Record the microphone",
         subtitle: "Your voice, while Keybumps has Microphone access.",
-        group: "Sound",
-        kind: .toggle(default: true)
+        group: recordingsGroup,
+        kind: .toggle(default: true),
+        storageName: screencastStorageName
     )
     static let screencastRecordsSystemAudio = PluginPreference(
         key: "recordsSystemAudio",
         title: "Record the Mac’s sound",
         subtitle: "What your apps play, such as alerts and videos.",
-        group: "Sound",
-        kind: .toggle(default: true)
+        group: recordingsGroup,
+        kind: .toggle(default: true),
+        storageName: screencastStorageName
     )
     /// Its values are whole seconds, "0" for none.
     static let screencastCountdown = PluginPreference(
         key: "countdown",
         title: "Countdown",
         subtitle: "Time to get ready after you choose what to record.",
-        group: "Recording",
+        group: recordingsGroup,
         kind: .choice(
             options: [
                 Choice(value: "0", title: "None"),
@@ -97,20 +106,23 @@ extension PluginPreference {
                 Choice(value: "10", title: "10 seconds"),
             ],
             default: "3"
-        )
+        ),
+        storageName: screencastStorageName
     )
     static let screencastShowsShortcuts = PluginPreference(
         key: "showsShortcuts",
         title: "Show shortcuts on screen",
         subtitle: "Shortcuts you press with ⌘, ⌃, or ⌥ show in the recording. What you type never does.",
-        group: "Recording",
-        kind: .toggle(default: true)
+        group: recordingsGroup,
+        kind: .toggle(default: true),
+        storageName: screencastStorageName
     )
     static let screencastHighlightsClicks = PluginPreference(
         key: "highlightsClicks",
         title: "Highlight clicks",
         subtitle: "A ring shows where you click.",
-        group: "Recording",
-        kind: .toggle(default: false)
+        group: recordingsGroup,
+        kind: .toggle(default: false),
+        storageName: screencastStorageName
     )
 }

@@ -1,53 +1,31 @@
 import AVFoundation
 import SwiftUI
 
-extension CapabilityDescriptor {
-    static let screencast = CapabilityDescriptor(
-        capability: .screencast,
-        title: "Screencast",
-        systemImage: "record.circle",
-        iconTint: .red,
-        requiredPermissions: [.screenRecording],
-        dependencies: [],
-        // ⌘1–⌘9 are taken; whether it gets a tab is open (ADR 0009).
-        paletteTab: nil,
-        settingsPage: CapabilitySettingsPage(
-            section: .screencast,
-            summary: "Record your screen with your voice and the Mac’s sound, and keep each capture on this Mac.",
-            disableExplanation: "Turning this off releases its global shortcut. Captures already saved stay on this Mac.",
-            content: { AnyView(PluginSettingsPage(capability: .screencast) { ScreencastCapturesSettings() }) }
-        ),
-        criticalOperations: [],
-        searchKeywords: ["screen recording", "record", "recorder", "video", "capture"],
-        actions: [.startScreencast],
-        category: .media,
-        preferences: [
-            .screencastRecordsMicrophone, .screencastRecordsSystemAudio,
-            .screencastCountdown, .screencastShowsShortcuts, .screencastHighlightsClicks,
-        ],
-        optionalPermissions: [
-            PluginOptionalPermission(
-                permission: .microphone,
-                reason: "Records your voice with a video. Without it, videos have only the screen and the Mac’s sound."
-            ),
-        ],
-        isOnByDefault: false,
-        minimumMacOS: 15
-    )
-}
-
 extension PluginAction {
-    /// Quick Search's Start Screencast, which does what the shortcut does (`ScreencastModule.start`).
+    /// Record Screen's name, for Quick Search's action and the shortcut's row alike, so a new name
+    /// is one change.
+    static let recordScreenTitle = "Record Screen"
+
+    /// Quick Search's Record Screen, which does what the shortcut does (`ScreencastModule.start`).
+    /// Its ID keeps Screencast's name, since it keys the action's learned usage.
     static let startScreencast = PluginAction(
         id: "startScreencast",
-        title: "Start Screencast",
-        keywords: ["record", "recording", "screen recording", "capture", "video"],
+        title: recordScreenTitle,
+        keywords: ["record", "recording", "screen recording", "screencast", "capture", "video"],
         systemImage: "record.circle",
         shortcut: .screencast
     )
 }
 
-/// What a composition gives Screencast in place of the screen, its windows, the files a recording
+extension CapabilityContext {
+    /// Whether Screengrabs records now: it's on, and this Mac's macOS can record
+    /// (`PluginCompatibility.supportsRecording`).
+    var recordsScreen: Bool {
+        isEnabled(.screenshotTools) && preferences.compatibility.supportsRecording
+    }
+}
+
+/// What a composition gives Screengrabs' recording in place of the screen, its windows, the files a recording
 /// writes, the countdown's clock, and the app in front: the UI-test composition's made-up screens
 /// and inert recorder, or unit tests' fakes. Anything left nil is the app's own, which is inert
 /// under the unit-test host.
@@ -86,22 +64,23 @@ struct ScreencastSeams {
     }
 }
 
-/// Owns Screencast (ADR 0009) and its optional Start Screencast shortcut. It ships off, and needs
-/// macOS 15 (`minimumMacOS`), where ScreenCaptureKit records the screen, the microphone, and the
-/// Mac's sound in one stream. Its own code is under `Screencast/`, and its settings are read
-/// through `AppPreferences.screencast`.
+/// Screengrabs' recording (ADR 0009, ADR 0010): a part `ScreenshotToolsModule` owns, which keeps
+/// Screencast's name from when it was a plugin of its own, and Record Screen (the `screencast`
+/// shortcut, ⇧⌘5 by default, and Quick Search's action). It records only where
+/// `PluginCompatibility.supportsRecording` (macOS 15), where ScreenCaptureKit records the screen,
+/// the microphone, and the Mac's sound in one stream; `#available` wraps only those calls. Its own
+/// code is under `Screencast/`, and its settings are read through `AppPreferences.screencast`.
 ///
-/// Start Screencast opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
-/// until then it opens Screencast's page, so the picker never makes macOS ask. Turning Screencast
-/// off, or Keybumps becoming Locked, cancels a capture that hasn't started and keeps a recording
-/// in the captures folder. While it records, `ScreencastRecordingControls` shows the control bar
-/// and the time in the menu bar, and registers the recording shortcuts, and
+/// Record Screen opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
+/// until then it opens Screengrabs' page, so the picker never makes macOS ask. Turning Screengrabs
+/// off, or Keybumps becoming Locked, cancels a recording that hasn't started and keeps one under
+/// way in the recordings folder. While it records, `ScreencastRecordingControls` shows the control
+/// bar and the time in the menu bar, and registers the recording shortcuts, and
 /// `ScreencastOverlaysWiring` puts the drawing and, with Show shortcuts on, the key display on the
-/// recorded screens and into the video. Each saved capture opens the review panel (`review`, in
-/// `ScreencastModule+Review.swift`).
+/// recorded screens and into the video. Each saved recording opens the recording window (`review`,
+/// in `ScreencastModule+Review.swift`).
 @MainActor
-final class ScreencastModule: CapabilityModule {
-    let descriptor = CapabilityDescriptor.screencast
+final class ScreencastModule {
     /// Opens Settings on a page; tests replace it.
     private let openSettings: @MainActor (SettingsSection) -> Void
     private let preferences: AppPreferences
@@ -112,9 +91,9 @@ final class ScreencastModule: CapabilityModule {
     /// The drawing and the shortcuts on screen while recording.
     let overlays: ScreencastOverlaysWiring
     private var isOn = false
-    /// The review panel after each capture (#450).
+    /// The recording window after each recording (#450, #479).
     let review: ScreencastReviewFlow
-    /// The `ScreencastController`, made the first time Start Screencast opens the picker. Stored
+    /// The `ScreencastController`, made the first time Record Screen opens the picker. Stored
     /// untyped because the controller needs macOS 15.
     private var controllerStorage: AnyObject?
 
@@ -148,12 +127,16 @@ final class ScreencastModule: CapabilityModule {
         review = ScreencastReviewFlow(services: services, contextReader: seams.contextReader ?? .current)
     }
 
+    /// Run from `ScreenshotToolsModule.apply`. Record Screen's shortcut is registered while
+    /// Screengrabs is on, and only where it can record, so macOS 14 keeps ⇧⌘5.
     func apply(_ context: CapabilityContext) {
-        isOn = context.isEnabled(capability)
+        isOn = context.recordsScreen
         context.configureShortcut(
             owner: CapabilityShortcut.screencast.ownerID,
-            for: capability,
-            binding: context.preferences.capabilityShortcut(for: .screencast)
+            for: .screenshotTools,
+            binding: context.preferences.compatibility.supportsRecording
+                ? context.preferences.capabilityShortcut(for: .screencast)
+                : nil
         ) { [weak self] in
             self?.start()
         }
@@ -161,46 +144,42 @@ final class ScreencastModule: CapabilityModule {
         overlays.apply(context)
     }
 
-    /// Turned off, or Keybumps Locked: the picker closes and a countdown is cancelled, but a
-    /// recording stops and is kept. It opens nothing; it stays in the captures folder
+    /// Screengrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
+    /// but a recording stops and is kept. It opens nothing; it stays in the recordings folder
     /// (`ScreencastController.shutDown`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
-        // The capture under review is saved.
+        // The recording in the recording window is saved.
         review.close()
         guard #available(macOS 15, *), let controller else { return }
         Task { await controller.shutDown() }
     }
 
-    /// Settings attention while it's on and Screen Recording isn't granted.
-    func attentionCount(_ context: CapabilityContext) -> Int {
-        guard context.isEnabled(capability) else { return 0 }
-        return context.permissionReadiness([capability]).missingCount
-    }
-
-    /// Quick Search's Start Screencast takes the shortcut's path.
+    /// Quick Search's Record Screen takes the shortcut's path.
     func perform(_ action: PluginAction, _ context: CapabilityContext) {
         if action == .startScreencast { start() }
     }
 
-    /// Start Screencast isn't listed while a capture is under way, when it would do nothing.
+    /// Record Screen isn't listed where Screengrabs can't record, or while a recording is under
+    /// way, when it would do nothing.
     func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool {
-        action != .startScreencast || !isCapturing
+        action != .startScreencast || (context.preferences.compatibility.supportsRecording && !isCapturing)
     }
 
-    /// Whether a capture is under way: the picker open, counting down, recording, or saving.
+    /// Whether a recording is under way: the picker open, counting down, recording, or saving.
     var isCapturing: Bool {
         guard #available(macOS 15, *), let controller else { return false }
         return controller.phase != .idle
     }
 
-    /// Start Screencast: the picker, while Screencast is on, on macOS 15, with Screen Recording.
-    /// Otherwise Screencast's page, which says what's missing; the picker never makes macOS ask.
+    /// Record Screen: the picker, while Screengrabs is on, where it can record, with Screen
+    /// Recording. Otherwise Screengrabs' page, which says what's missing; the picker never makes
+    /// macOS ask.
     func start() {
         permissions.refresh()
         guard #available(macOS 15, *), isOn, permissions.screenRecordingGranted else {
-            openSettings(.screencast)
+            openSettings(.screenshotTools)
             return
         }
         let controller = controllerForCapture()
@@ -208,7 +187,7 @@ final class ScreencastModule: CapabilityModule {
         controller.open()
     }
 
-    /// The flow controller, once Start Screencast has made it.
+    /// The flow controller, once Record Screen has made it.
     @available(macOS 15, *)
     var controller: ScreencastController? {
         controllerStorage as? ScreencastController
@@ -252,7 +231,7 @@ final class ScreencastModule: CapabilityModule {
 }
 
 extension ScreencastModule {
-    /// Start Screencast's controller for `recorder`, with the control bar and the overlays attached.
+    /// Record Screen's controller for `recorder`, with the control bar and the overlays attached.
     /// The QA smoke test (`ScreencastSmokeRig`) makes its controller here too, so it runs this
     /// wiring rather than a copy of it.
     @available(macOS 15, *)

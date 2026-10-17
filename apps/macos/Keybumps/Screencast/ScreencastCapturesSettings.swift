@@ -1,20 +1,27 @@
 import AppKit
 import SwiftUI
 
-/// Screencast's page's own part, below its preferences: the folder captures are saved in, and a
-/// button that opens it in Finder. It works whether Screencast is on or off.
+/// The rows Settings › Screengrabs adds at the end of its Recordings group: where recording isn't
+/// supported, a note saying so (`PluginCompatibility.recordingRequirement`); otherwise the folder
+/// recordings are saved in, and a button that opens it in Finder, whether Screengrabs is on or off.
+/// Each reports itself through `ScreenshotsSettings.Shown`.
 struct ScreencastCapturesSettings: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let folder = model.preferences.screencast.capturesFolder
-        SettingsGroup("Captures", subtitle: "Each capture is kept on this Mac, in a folder of its own.") {
+        if model.preferences.compatibility.supportsRecording {
+            let folder = model.preferences.screencast.capturesFolder
             LabeledContent {
                 Button("Show in Finder") { Self.show(folder) }
                     .accessibilityIdentifier("plugin.screencast.showCaptures")
             } label: {
-                SettingsRowLabel(title: "Captures folder", subtitle: Self.displayPath(folder))
+                SettingsRowLabel(title: "Recordings folder", subtitle: Self.displayPath(folder))
             }
+            .shown(.recordingsFolder)
+        } else {
+            SettingsNote(PluginCompatibility.recordingRequirement)
+                .accessibilityIdentifier("plugin.screenshotTools.recordingRequirement")
+                .shown(.recordingRequirement)
         }
     }
 
@@ -23,7 +30,7 @@ struct ScreencastCapturesSettings: View {
         (folder.path as NSString).abbreviatingWithTildeInPath
     }
 
-    /// Opens the folder in Finder, making it first while nothing has been captured. Inert under the
+    /// Opens the folder in Finder, making it first while nothing has been recorded. Inert under the
     /// unit-test host.
     private static func show(_ folder: URL) {
         guard !UnitTestHost.isActive else { return }

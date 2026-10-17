@@ -44,7 +44,7 @@ extension AppModel {
     /// Record would.
     func startScreencastRecordingForUITesting() {
         guard isLicensed else { return }
-        (capabilities.module(for: .screencast) as? ScreencastModule)?.recordForUITesting()
+        recording?.recordForUITesting()
     }
 }
 

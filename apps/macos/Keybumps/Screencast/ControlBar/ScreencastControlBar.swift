@@ -173,7 +173,7 @@ final class ScreencastControlBarPanel: NSPanel {
         // Keybumps is rarely the active app while recording, and the buttons explain themselves.
         allowsToolTipsWhenApplicationIsInactive = true
         identifier = Self.identifier
-        setAccessibilityLabel("Screencast controls")
+        setAccessibilityLabel("Recording controls")
     }
 
     override var canBecomeKey: Bool { false }

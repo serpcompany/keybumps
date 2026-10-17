@@ -1,10 +1,11 @@
 import AppKit
 import Observation
 
-/// What Screencast offers while it records: the control bar on the recorded screen, the time beside
+/// What Screengrabs offers while it records: the control bar on the recorded screen, the time beside
 /// the menu bar icon with Stop and Pause at the top of its menu, and the recording shortcuts (Pause
 /// & Resume, Stop, Discard, and Draw), which are registered only while it records, so their keys
-/// work normally the rest of the time. `ScreencastModule` holds one and attaches it to its
+/// work normally the rest of the time. The menu bar and the shortcuts follow only while Screengrabs
+/// is on where it can record (`CapabilityContext.recordsScreen`). `ScreencastModule` holds one and attaches it to its
 /// `ScreencastController` once it makes it; everything here acts through the controller.
 ///
 /// The bar goes up as the recording starts (`.starting`), before the recorder reads what's on
@@ -33,7 +34,7 @@ final class ScreencastRecordingControls {
     private var watchesMenuBar = false
 
     /// - Parameters:
-    ///   - menuBar: Screencast's part of the menu bar item; nil leaves it alone.
+    ///   - menuBar: The recording's part of the menu bar item; nil leaves it alone.
     ///   - placement: Where the bar's positions are kept.
     ///   - barDisplay: The display to show the bar on for a recorded screen; tests pass their own.
     ///   - ordersPanelIn: False keeps the bar's panel off screen, as under the unit-test host.
@@ -126,21 +127,23 @@ final class ScreencastRecordingControls {
 
     // MARK: Shortcuts
 
-    /// Takes the recording shortcuts' bindings and whether Screencast is on, from `apply`.
+    /// Takes the recording shortcuts' bindings and whether Screengrabs records, from `apply`.
     func apply(_ context: CapabilityContext) {
         registrar = context.shortcuts
-        isEnabled = context.isEnabled(.screencast)
+        isEnabled = context.recordsScreen
         bindings = [:]
         for shortcut in Self.shortcuts {
             bindings[shortcut] = context.preferences.capabilityShortcut(for: shortcut)
         }
         updateShortcuts()
+        if bar != nil { refreshMenuBar() }
     }
 
-    /// Screencast is turning off: its recording shortcuts go now.
+    /// Screengrabs is turning off: its recording shortcuts and the menu bar's time go now.
     func deactivate() {
         isEnabled = false
         updateShortcuts()
+        if bar != nil { refreshMenuBar() }
     }
 
     private func updateShortcuts() {
@@ -192,7 +195,8 @@ final class ScreencastRecordingControls {
     }
 
     private func updateMenuBar(_ menuBar: CapabilityMenuBarStatus) {
-        guard let model = bar?.model, model.recording.phase.isRecording else {
+        // The recording is read first, so the menu bar keeps watching it while Screengrabs is off.
+        guard let model = bar?.model, model.recording.phase.isRecording, isEnabled else {
             menuBar.clear()
             return
         }

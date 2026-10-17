@@ -128,7 +128,7 @@ struct ScreencastPickerBar: View {
                 "Microphone", on: "mic.fill", off: "mic.slash", isOn: $model.recordsMicrophone, identifier: "screencast.picker.microphone",
                 help: model.microphoneAvailable
                     ? "Record your voice"
-                    : "To record your voice, give Keybumps Microphone access in Settings › Screencast"
+                    : "To record your voice, give Keybumps Microphone access in Settings › \(Capability.screenshotTools.title)"
             )
             .disabled(!model.microphoneAvailable)
             toggle("Mac’s sound", on: "speaker.wave.2.fill", off: "speaker.slash", isOn: $model.recordsSystemAudio, identifier: "screencast.picker.systemAudio", help: "Record what your apps play")

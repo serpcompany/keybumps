@@ -258,6 +258,7 @@ enum DefaultShortcut {
     static let screenshotScreen = ShortcutBinding(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘2")
     static let screenshotScreenAndEdit = ShortcutBinding(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘3")
     static let screenshotArea = ShortcutBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘4")
+    static let recordScreen = ShortcutBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘5")
 }
 
 enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
@@ -275,8 +276,10 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case emojiPicker
     case translation
     case keystrokes
+    /// Screengrabs' Record Screen (ADR 0010). The raw value keeps Screencast's name, as stored
+    /// bindings do.
     case screencast
-    /// Screencast's recording shortcuts: registered only while it records
+    /// Screengrabs' recording shortcuts: registered only while it records
     /// (`ScreencastRecordingControls`), so their keys work normally everywhere else.
     case screencastPause
     case screencastStop
@@ -295,13 +298,13 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .quickSearch: .quickSearch
         case .clipboardHistory: .clipboardHistory
         case .dictation, .cancelDictation: .dictation
-        case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea: .screenshotTools
+        case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea,
+             .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: .screenshotTools
         case .snippets: .snippets
         case .timer: .timer
         case .emojiPicker: .emojiPicker
         case .translation: .translation
         case .keystrokes: .keystrokes
-        case .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: .screencast
         }
     }
 
@@ -319,7 +322,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .emojiPicker: "Open Emoji Picker"
         case .translation: "Open Translate"
         case .keystrokes: "Show & Hide Keystrokes"
-        case .screencast: "Start Screencast"
+        case .screencast: PluginAction.recordScreenTitle
         case .screencastPause: "Pause & Resume Recording"
         case .screencastStop: "Stop Recording"
         case .screencastDiscard: "Discard Recording"
@@ -328,22 +331,37 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     }
 
     /// Whether the shortcut works from anywhere. Cancel Dictation works only while Dictation is
-    /// recording or transcribing, and Screencast's recording shortcuts only while it records, which
-    /// `detail` says in Settings.
+    /// recording or transcribing, and the recording shortcuts only while recording, which `detail`
+    /// says in Settings.
     var worksEverywhere: Bool { detail == nil }
 
     /// A note under the title, for a shortcut that works only at certain times.
     var detail: String? {
         switch self {
         case .cancelDictation: "Only while Dictation is recording or transcribing"
-        case .screencastPause, .screencastStop: "Only while Screencast is recording"
-        case .screencastDiscard: "Only while Screencast is recording. Asks first; press it again to discard."
-        case .screencastDraw: "Only while Screencast is recording"
+        case .screencastPause, .screencastStop: "Only while recording"
+        case .screencastDiscard: "Only while recording. Asks first; press it again to discard."
+        case .screencastDraw: "Only while recording"
         default: nil
         }
     }
 
-    /// The binding a new install starts with; nil for a shortcut that starts unassigned.
+    /// Whether it records, so it does nothing, and Settings says so, where Screengrabs can't
+    /// record (`PluginCompatibility.supportsRecording`).
+    var needsRecording: Bool {
+        self == .screencast || ScreencastRecordingControls.shortcuts.contains(self)
+    }
+
+    /// The note under its title on this Mac: `detail`, or for a recording shortcut where Screengrabs
+    /// can't record, "Recording needs macOS 15".
+    func detail(on compatibility: PluginCompatibility) -> String? {
+        needsRecording && !compatibility.supportsRecording ? PluginCompatibility.recordingRequirement : detail
+    }
+
+    /// The binding a new install starts with; nil for a shortcut that starts unassigned. Record
+    /// Screen's ⇧⌘5 takes over macOS's screenshot toolbar, as ⇧⌘3 and ⇧⌘4 are taken over (ADR 0010);
+    /// it's the same on every macOS, since where recording isn't supported it's never registered
+    /// and macOS keeps ⇧⌘5.
     var defaultBinding: ShortcutBinding? {
         switch self {
         case .quickSearch: DefaultShortcut.quickSearch
@@ -353,7 +371,8 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
         case .screenshotArea: DefaultShortcut.screenshotArea
-        case .snippets, .timer, .emojiPicker, .translation, .keystrokes, .screencast,
+        case .screencast: DefaultShortcut.recordScreen
+        case .snippets, .timer, .emojiPicker, .translation, .keystrokes,
              .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: nil
         }
     }

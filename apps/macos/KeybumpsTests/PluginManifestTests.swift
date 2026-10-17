@@ -16,14 +16,17 @@ struct PluginManifestTests {
         }
         #expect(CapabilityDescriptor.timer.category == .productivity)
         #expect(CapabilityDescriptor.dictation.category == .writing)
-        #expect(PluginSettingsPage<EmptyView, EmptyView>.byline(.timer) == "Official plugin by Keybumps · Productivity")
+        #expect(PluginSettingsPage<EmptyView, EmptyView, EmptyView>.byline(.timer) == "Official plugin by Keybumps · Productivity")
         #expect(CapabilityOffBanner.title(.emojiPicker) == "Emoji Picker is turned off")
     }
 
     @Test("A plugin's shortcuts and preference groups come from its manifest, in order")
     func derived() {
         #expect(CapabilityDescriptor.timer.shortcuts == [.timer])
-        #expect(CapabilityDescriptor.screenshotTools.shortcuts == [.screenshotScreen, .screenshotScreenAndEdit, .screenshotArea])
+        #expect(CapabilityDescriptor.screenshotTools.shortcuts == [
+            .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea,
+            .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw,
+        ])
         #expect(CapabilityDescriptor.timer.preferenceGroups.map(\.title) == ["When a timer ends", "Menu bar"])
         #expect(CapabilityDescriptor.timer.preferenceGroups.map { $0.preferences.map(\.key) } == [
             ["ringsUntilStopped"], ["showsMenuBarCountdown", "listsTimersInMenu"],
@@ -121,7 +124,7 @@ struct PluginManifestTests {
             #expect(declared.contains(.accessibility), "\(descriptor.title)")
         }
         #expect(CapabilityDescriptor.clipboardHistory.optionalPermissions.map(\.permission) == [.accessibility])
-        #expect(CapabilityDescriptor.screenshotTools.optionalPermissions.map(\.permission) == [.accessibility])
+        #expect(CapabilityDescriptor.screenshotTools.optionalPermissions.map(\.permission) == [.accessibility, .microphone, .inputMonitoring])
         #expect(CapabilityDescriptor.dictation.requiredPermissions.contains(.accessibility), "Dictation needs it anyway")
     }
 
@@ -160,9 +163,9 @@ struct PluginManifestTests {
         #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
     }
 
-    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), Translation (#322), Keystrokes (#443), and Screencast (#445)")
-    func onlyTheEmojiPickerTranslationKeystrokesAndScreencastShipOff() {
-        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker, .translation, .keystrokes, .screencast])
+    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), Translation (#322), and Keystrokes (#443); Screengrabs, which took in Screencast (#445), ships on (#490)")
+    func onlyTheEmojiPickerTranslationAndKeystrokesShipOff() {
+        #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker, .translation, .keystrokes])
         #expect(CapabilityDescriptor.emojiPicker.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(CapabilityDescriptor.translation.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(CapabilityDescriptor.translation.requiredPermissions.isEmpty)
@@ -170,11 +173,13 @@ struct PluginManifestTests {
         #expect(CapabilityDescriptor.keystrokes.optionalPermissions.isEmpty)
     }
 
-    @Test("Only Translation (#322) and Screencast (#445) need a newer macOS than Keybumps does")
+    @Test("Only Translation (#322) needs a newer macOS than Keybumps does; Screengrabs' recording needs it inside the plugin (#490)")
     func minimumMacOS() {
-        #expect(CapabilityCatalog.descriptors.filter { $0.minimumMacOS != nil }.map(\.capability) == [.translation, .screencast])
+        #expect(CapabilityCatalog.descriptors.filter { $0.minimumMacOS != nil }.map(\.capability) == [.translation])
         #expect(CapabilityDescriptor.translation.minimumMacOS == 15)
-        #expect(CapabilityDescriptor.screencast.minimumMacOS == 15)
+        #expect(CapabilityDescriptor.screenshotTools.minimumMacOS == nil)
+        #expect(!PluginCompatibility(macOSMajorVersion: 14).supportsRecording)
+        #expect(PluginCompatibility(macOSMajorVersion: 15).supportsRecording)
     }
 
     @Test(
@@ -191,7 +196,6 @@ struct PluginManifestTests {
             let shown = RowsOnPage.read(page.content(), model: harness.model).permissions
             let optional = descriptor.optionalPermissions.map { PermissionRow.Shown(permission: $0.permission, isOptional: true) }
             #expect(shown.filter(\.isOptional) == optional, "\(descriptor.title) shows \(shown)")
-            // Only `PermissionRow`s count: Screenshot Tools' own Screen Recording row isn't one.
             let required = shown.filter { !$0.isOptional }.map(\.permission)
             #expect(Set(required).isSubset(of: descriptor.requiredPermissions), "\(descriptor.title) shows \(shown)")
             #expect(Set(shown).count == shown.count, "\(descriptor.title) shows a permission twice: \(shown)")
@@ -253,28 +257,58 @@ struct PluginSettingsPageTests {
         let filled = PluginSettingsPage(capability: .keystrokes) { Marker(name: "above") } custom: { Marker(name: "custom") }
         #expect(RowsOnPage.read(AnyView(filled), model: model).preferences == top + ["above"] + groups + ["custom"])
 
-        // The pages already on the template: Translation's and Screencast's fill only the last slot,
-        // and the others neither.
+        // The pages already on the template: Translation's fills only the last slot, and the
+        // others but Screengrabs' neither.
         let last = PluginSettingsPage(capability: .keystrokes) { Marker(name: "custom") }
         #expect(RowsOnPage.read(AnyView(last), model: model).preferences == top + groups + ["custom"])
         #expect(RowsOnPage.read(AnyView(PluginSettingsPage(capability: .keystrokes)), model: model).preferences == top + groups)
     }
 
-    @Test("Screenshot Tools' page shows Screen Recording once, in its own row with Restart Keybumps, and Accessibility as optional (#490)")
-    func screenshotToolsPermissions() throws {
+    @Test("The rows a page adds to one of its declared groups end that group, and a group that can't change draws its preferences disabled (#490)")
+    func groupRowsAndUnavailableGroups() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("KeybumpsScreenshotToolsPermissions-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("KeybumpsPluginPageGroupRows-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: .screenRecording, root: root)
-        harness.model.start()
-        try #require(!harness.model.permissions.screenRecordingGranted)
-        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
-        let rows = RowsOnPage.read(page.content(), model: harness.model)
-        #expect(rows.permissions == [PermissionRow.Shown(permission: .accessibility, isOptional: true)])
-        #expect(rows.screenshots.filter { $0 == .screenRecordingRequired }.count == 1)
+        let model = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root).model
+        let top = CapabilityDescriptor.keystrokes.topPreferences.map(\.key)
+        let groups = CapabilityDescriptor.keystrokes.preferenceGroups
+        let first = try #require(groups.first)
+
+        let page = PluginSettingsPage(capability: .keystrokes, unavailableGroups: [first.title]) {
+            EmptyView()
+        } groupRows: { group in
+            Marker(name: "end of \(group)")
+        } custom: {
+            Marker(name: "custom")
+        }
+        let rows = RowsOnPage.read(AnyView(page), model: model)
+        let expected = groups.flatMap { $0.preferences.map(\.key) + ["end of \($0.title)"] }
+        #expect(rows.preferences == top + expected + ["custom"])
+        #expect(rows.disabled == first.preferences.map(\.key), "only the unavailable group's preferences")
     }
 
-    @Test("The other pages on the template still show the permissions they need, such as Keystrokes' Input Monitoring and Screencast's Screen Recording (#490)")
+    @Test(
+        "Screengrabs' page shows Screen Recording once, as the template's required row, missing or granted, and Accessibility, the Microphone, and Input Monitoring as optional (#490)",
+        arguments: [MacPermission.screenRecording, nil]
+    )
+    func screengrabsPermissions(missing: MacPermission?) throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsScreengrabsPermissions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: Set(Capability.allCases), missing: missing, root: root)
+        harness.model.start()
+        #expect(harness.model.permissions.screenRecordingGranted == (missing == nil))
+        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
+        let rows = RowsOnPage.read(page.content(), model: harness.model)
+        #expect(rows.permissions == [
+            PermissionRow.Shown(permission: .screenRecording, isOptional: false),
+            PermissionRow.Shown(permission: .accessibility, isOptional: true),
+            PermissionRow.Shown(permission: .microphone, isOptional: true),
+            PermissionRow.Shown(permission: .inputMonitoring, isOptional: true),
+        ])
+    }
+
+    @Test("The pages on the template show the permissions they need, such as Keystrokes' Input Monitoring and Screengrabs' Screen Recording (#490)")
     func templatePagesShowRequiredPermissions() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsTemplateRequiredPermissions-\(UUID().uuidString)", isDirectory: true)
@@ -285,24 +319,24 @@ struct PluginSettingsPageTests {
             return RowsOnPage.read(page.content(), model: model).permissions.filter { !$0.isOptional }
         }
         #expect(try required(.keystrokes) == [PermissionRow.Shown(permission: .inputMonitoring, isOptional: false)])
-        #expect(try required(.screencast) == [PermissionRow.Shown(permission: .screenRecording, isOptional: false)])
-        for descriptor in [CapabilityDescriptor.timer, .emojiPicker, .translation, .keystrokes, .screencast] {
+        #expect(try required(.screenshotTools) == [PermissionRow.Shown(permission: .screenRecording, isOptional: false)])
+        for descriptor in [CapabilityDescriptor.timer, .emojiPicker, .translation, .keystrokes, .screenshotTools] {
             let declared = MacPermission.allCases.filter(descriptor.requiredPermissions.contains)
             #expect(try required(descriptor).map(\.permission) == declared, "\(descriptor.title) shows each permission it needs")
         }
     }
 
-    @Test("Screenshot Tools' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots (#490)")
+    @Test("Screengrabs' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots, then the recordings folder at the end of Recordings (#490)")
     func screenshotToolsRows() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsScreenshotToolsRows-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let everything = Set(Capability.allCases)
-        let copy: [ScreenshotsSettings.Row] = [.copiesScreenshotsToClipboard, .about]
+        let copy: [ScreenshotsSettings.Row] = [.copiesScreenshotsToClipboard, .about, .recordingsFolder]
         let readable = FakeScreenshotDirectoryReader(granted: true)
         let states: [(status: String, enabled: Set<Capability>, missing: MacPermission?, reader: any ScreenshotDirectoryReading, rows: [ScreenshotsSettings.Row])] = [
             ("watching", everything, nil, readable, [.watching] + copy),
-            ("watching", everything, .screenRecording, readable, [.screenRecordingRequired, .watching] + copy),
+            ("watching", everything, .screenRecording, readable, [.watching] + copy),
             ("off", everything.subtracting([.screenshotTools]), nil, readable, [.off] + copy),
             ("requiresClipboardHistory", everything.subtracting([.clipboardHistory]), nil, readable, [.requiresClipboardHistory, .enableClipboardHistory] + copy),
             (
@@ -321,9 +355,31 @@ struct PluginSettingsPageTests {
         }
     }
 
+    @Test("On macOS 14, Screengrabs' Recordings group says recording needs macOS 15, in place of the folder, and its preferences can't change; screenshots are as on macOS 15 (#490)")
+    func recordingsOnMacOS14() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsScreengrabs14-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
+        let recording = CapabilityDescriptor.screenshotTools.preferences.map(\.key)
+
+        let old = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root, compatibility: PluginCompatibility(macOSMajorVersion: 14))
+        old.model.start()
+        let oldRows = RowsOnPage.read(page.content(), model: old.model)
+        #expect(oldRows.screenshots == [.watching, .copiesScreenshotsToClipboard, .about, .recordingRequirement])
+        #expect(oldRows.preferences == recording)
+        #expect(oldRows.disabled == recording)
+
+        let current = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root, compatibility: PluginCompatibility(macOSMajorVersion: 15))
+        current.model.start()
+        let currentRows = RowsOnPage.read(page.content(), model: current.model)
+        #expect(currentRows.screenshots == [.watching, .copiesScreenshotsToClipboard, .about, .recordingsFolder])
+        #expect(currentRows.disabled.isEmpty)
+    }
+
     @Test("Copy new screenshots to the clipboard keeps its own key, not a declared preference's (#490)")
     func copyKeepsItsKey() {
-        #expect(CapabilityDescriptor.screenshotTools.preferences.isEmpty)
+        #expect(!CapabilityDescriptor.screenshotTools.preferences.map(\.key).contains("copiesScreenshotsToClipboard"))
         let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
         preferences.copiesScreenshotsToClipboard = false
@@ -359,7 +415,7 @@ struct PluginSettingsPageTests {
 
 /// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
 /// returns the permission rows and the preference rows it draws, those it draws disabled, and the
-/// rows of Screenshot Tools' Screenshots group, in order.
+/// rows of Screengrabs' own (its Screenshots group, and the end of its Recordings group), in order.
 @MainActor
 private enum RowsOnPage {
     private final class Rows: @unchecked Sendable {

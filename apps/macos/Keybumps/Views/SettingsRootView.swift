@@ -4,10 +4,9 @@ import Observation
 import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screenshot Tools", dictation = "Dictation"
+    case search = "Quick Search", clipboard = "Clipboard History", screenshotTools = "Screengrabs", dictation = "Dictation"
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
     case emojiPicker = "Emoji Picker", translation = "Translation", keystrokes = "Keystrokes"
-    case screencast = "Screencast"
     case plugins = "Plugins", permissions = "Permissions", general = "General", changelog = "Changelog", account = "Account"
     var id: String { rawValue }
 
@@ -1207,10 +1206,11 @@ private struct CapabilityShortcutEditor: View {
 
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
+        let compatibility = model.preferences.compatibility
         Group {
             HStack(spacing: 8) {
                 SettingsIconTile(systemImage: shortcut.capability.systemImage, tint: shortcut.capability.descriptor.iconTint, size: 16)
-                SettingsRowLabel(title: shortcut.title, subtitle: shortcut.detail)
+                SettingsRowLabel(title: shortcut.title, subtitle: shortcut.detail(on: compatibility))
                 Spacer(minLength: 12)
                 SettingsHotkeyField(
                     shortcut: binding,
@@ -1220,6 +1220,8 @@ private struct CapabilityShortcutEditor: View {
                     record: ShortcutRowActions.record(owner, identifier: shortcut.rawValue, in: recorder, model: model),
                     clear: ShortcutRowActions.clear(owner, model: model)
                 )
+                // A recording shortcut does nothing where Screengrabs can't record, as its note says.
+                .disabled(shortcut.needsRecording && !compatibility.supportsRecording)
                 // A shortcut that starts unassigned has no default to restore; its field clears it.
                 if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
                     SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
@@ -1744,7 +1746,7 @@ struct SettingsWindowFiller: NSViewRepresentable {
 /// a hotkey field that is recording, a sheet or alert, or a text field with text in it. While a
 /// field asks whether to take another action's shortcut, Escape means Cancel instead, even in a
 /// text field with text in it, unless a field is recording (#334). While something claims Escape in
-/// Keybumps's own windows, such as Screencast's drawing, Settings leaves it to that.
+/// Keybumps's own windows, such as drawing while recording, Settings leaves it to that.
 struct SettingsEscapeCloser: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { EscapeView() }
     func updateNSView(_ nsView: NSView, context: Context) {}

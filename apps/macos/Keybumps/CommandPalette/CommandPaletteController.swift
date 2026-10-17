@@ -1835,7 +1835,7 @@ private struct CommandPaletteView: View {
             switch screenshotContent {
             case .disabled:
                 PaletteResultsContainer {
-                    PaletteEmptyState(title: "Screenshot Tools is turned off", systemImage: "camera.viewfinder")
+                    PaletteEmptyState(title: "\(Capability.screenshotTools.title) is turned off", systemImage: "camera.viewfinder")
                 }
             case .empty:
                 PaletteResultsContainer {

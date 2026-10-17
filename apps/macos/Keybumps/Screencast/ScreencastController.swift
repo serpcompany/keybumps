@@ -291,7 +291,7 @@ final class ScreencastController {
         var rounds = 0
         while !unannouncedPhases.isEmpty {
             rounds += 1
-            assert(rounds < 100, "Screencast's phase observers keep changing the phase")
+            assert(rounds < 100, "The recording's phase observers keep changing the phase")
             let next = unannouncedPhases.removeFirst()
             onPhaseChange?(next)
             for observation in phaseObservers.map(\.0) {
@@ -337,7 +337,7 @@ final class ScreencastController {
 
         // The screen is read before the picker covers it, so an alert macOS shows for the read
         // (such as its monthly question about apps that record the screen) is never under it. If
-        // the read takes a moment, "Getting ready…" says Start Screencast was heard, and stays
+        // the read takes a moment, "Getting ready…" says Record Screen was heard, and stays
         // until the read ends. A read that fails, or takes too long, says why instead.
         let generation = generation
         let delay = gettingReadyDelay
@@ -734,7 +734,7 @@ enum ScreencastMessages {
     }
 
     /// The displays changed while the picker was open.
-    static let screensChanged = "The screens changed. Start Screencast again."
+    static let screensChanged = "The screens changed. Choose \(PluginAction.recordScreenTitle) again."
 
     /// A recording that stopped on its own: why, and whether what it recorded is saved.
     static func endedEarly(_ failure: ScreencastFailure, kept: Bool) -> String {

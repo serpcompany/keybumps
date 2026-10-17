@@ -16,7 +16,7 @@ struct CapabilityModuleTests {
 
         let order: [Capability] = [
             .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer,
-            .emojiPicker, .translation, .keystrokes, .screencast,
+            .emojiPicker, .translation, .keystrokes,
         ]
         #expect(CapabilityCatalog.descriptors.map(\.capability) == order)
         #expect(harness.model.capabilities.modules.map(\.capability) == order)
@@ -210,8 +210,7 @@ struct CapabilityModuleTests {
             .timer: [],
             .emojiPicker: [],
             .translation: [],
-            .keystrokes: [],
-            .screencast: []
+            .keystrokes: []
         ])
     }
 
@@ -268,7 +267,7 @@ struct CapabilityModuleTests {
     func preferenceKeysAndKnownCapabilitiesMigration() {
         #expect(Capability.allCases.map(\.rawValue) == [
             "quickSearch", "clipboardHistory", "dictation", "windowManagement", "keyboardShortcutter", "screenshotTools", "snippets",
-            "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+            "timer", "emojiPicker", "translation", "keystrokes",
         ])
         #expect(Capability.originalCapabilities == [
             .quickSearch, .clipboardHistory, .dictation, .windowManagement, .keyboardShortcutter
@@ -378,7 +377,7 @@ private final class ModuleHarness {
         displayName: "⌃⌥⇧K"
     )
 
-    /// A binding for the Start Screencast shortcut, which also starts unassigned.
+    /// A binding for Screengrabs' Record Screen, in place of its ⇧⌘5.
     static let screencastBinding = ShortcutBinding(
         keyCode: UInt32(kVK_ANSI_R),
         modifiers: UInt32(controlKey | optionKey | shiftKey),
@@ -478,14 +477,14 @@ private final class ModuleHarness {
         case .clipboardHistory: [CapabilityShortcut.clipboardHistory.ownerID]
         case .dictation: [CapabilityShortcut.dictation.ownerID]
         case .windowManagement: Set(WindowAction.allCases.filter { $0.defaultShortcut != nil }.map { "window.\($0.rawValue)" })
-        case .screenshotTools: Set(CapabilityShortcut.allCases.filter { $0.capability == .screenshotTools }.map(\.ownerID))
+        // Its recording shortcuts are registered only while it records.
+        case .screenshotTools: Set(CapabilityShortcut.allCases.filter { $0.capability == .screenshotTools && $0.worksEverywhere }.map(\.ownerID))
         case .keyboardShortcutter: []
         case .snippets: [CapabilityShortcut.snippets.ownerID]
         case .timer: [CapabilityShortcut.timer.ownerID]
         case .emojiPicker: [CapabilityShortcut.emojiPicker.ownerID]
         case .translation: [CapabilityShortcut.translation.ownerID]
         case .keystrokes: [CapabilityShortcut.keystrokes.ownerID]
-        case .screencast: [CapabilityShortcut.screencast.ownerID]
         }
     }
 
@@ -498,7 +497,7 @@ private final class ModuleHarness {
     /// resource are judged by their shortcut alone.
     func resourcesRunning(for capability: Capability) -> Bool {
         switch capability {
-        case .quickSearch, .dictation, .snippets, .emojiPicker, .translation, .screencast:
+        case .quickSearch, .dictation, .snippets, .emojiPicker, .translation:
             model.shortcuts.activeOwners.isSuperset(of: Self.ownedShortcuts(for: capability))
         case .clipboardHistory: clipboard.isMonitoring
         case .windowManagement: windows.isDragSnapping

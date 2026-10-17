@@ -28,6 +28,8 @@ final class AppPreferences {
         static let lastLaunchedVersion = "lastLaunchedVersion"
         static let didFillSettingsWindow = "didFillSettingsWindow"
         static let sendsCrashReports = "sendsCrashReports"
+        /// Whether the one-time step that gives Record Screen ⇧⌘5 has run (#490).
+        static let didOfferRecordScreenShortcut = "didOfferRecordScreenShortcut"
     }
 
     private let defaults: UserDefaults
@@ -83,7 +85,7 @@ final class AppPreferences {
     /// row can say where they went (#334). Not saved: after a restart the row is just empty.
     private(set) var movedShortcuts: [ShortcutOwner: ShortcutMove] = [:]
 
-    /// macOS symbolic hotkey IDs Keybumps turned off for its screenshot hotkeys, to restore later.
+    /// macOS symbolic hotkey IDs Keybumps turned off for Screengrabs' shortcuts, to restore later.
     var takenOverSystemShortcuts: Set<String> {
         didSet { defaults.set(takenOverSystemShortcuts.sorted(), forKey: Key.takenOverSystemShortcuts) }
     }
@@ -200,8 +202,7 @@ final class AppPreferences {
     /// `Capability` no longer has. That makes it run once: `init` then saves `knownCapabilities`
     /// without `screencast`. A build rolled back to puts `screencast` back, so after a return it runs
     /// again, from what the person last saved; doing so is safe, since a row already done changes
-    /// nothing and the moved usage is gone from its old key. Nothing calls it yet: #490 calls it
-    /// first in `init`, in the PR that retires `Capability.screencast`.
+    /// nothing and the moved usage is gone from its old key. `init` calls it first.
     /// - Screenshot Tools on: left on, whatever Screencast was.
     /// - Screenshot Tools off and Screencast on: Screenshot Tools turns on. Each screenshot shortcut
     ///   still on its default key (⇧⌘2, ⇧⌘3, ⇧⌘4) is unassigned and a custom one is kept, so nothing
@@ -241,6 +242,23 @@ final class AppPreferences {
         }
     }
 
+    /// Gives Record Screen (`CapabilityShortcut.screencast`) its default, ⇧⌘5, once, on an install
+    /// where it has no shortcut and no other Keybumps shortcut uses those keys (ADR 0010, #490). A
+    /// new install, or an update that didn't know the shortcut, already has its default (`init`);
+    /// this catches the development and QA builds since #458, which listed it with no default.
+    /// Recorded once it runs, whatever it did, so a shortcut the person clears later stays clear.
+    private func offerRecordScreenShortcutOnce() {
+        guard !defaults.bool(forKey: Key.didOfferRecordScreenShortcut) else { return }
+        defaults.set(true, forKey: Key.didOfferRecordScreenShortcut)
+        guard let binding = CapabilityShortcut.screencast.defaultBinding,
+              capabilityShortcuts[CapabilityShortcut.screencast.rawValue] == nil,
+              !capabilityShortcuts.values.contains(where: { $0.usesSameKeys(as: binding) }),
+              !windowShortcuts.values.contains(where: { $0.usesSameKeys(as: binding) })
+        else { return }
+        capabilityShortcuts[CapabilityShortcut.screencast.rawValue] = binding
+        persistCapabilityShortcuts()
+    }
+
     init(
         defaults: UserDefaults = .standard,
         legacyDefaults: [UserDefaults] = [],
@@ -248,6 +266,8 @@ final class AppPreferences {
     ) {
         self.defaults = defaults
         self.compatibility = compatibility
+        // Before anything is read: it rewrites what Screencast saved, whose ID `Capability` no longer has.
+        Self.foldScreencastIntoScreengrabs(in: defaults)
         let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
         let initial = Self.initialCapabilities(
             stored: stored,
@@ -320,6 +340,7 @@ final class AppPreferences {
         if introducedShortcuts {
             persistCapabilityShortcuts()
         }
+        offerRecordScreenShortcutOnce()
         if defaults.object(forKey: Key.showInDockAndSwitcher) == nil,
            legacyDefaults.contains(where: { $0.object(forKey: Key.showInDockAndSwitcher) != nil }) {
             defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher)

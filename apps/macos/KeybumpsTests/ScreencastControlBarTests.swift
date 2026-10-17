@@ -195,7 +195,7 @@ struct ScreencastControlBarTests {
         let bar = makeBar()
         recording.elapsed = 65.7
         #expect(bar.timerAccessibilityValue == "1 minute, 5 seconds")
-        #expect(bar.spokenTime == "Screencast recording, 1 minute, 5 seconds")
+        #expect(bar.spokenTime == "Recording, 1 minute, 5 seconds")
         recording.phase = .paused
         #expect(bar.timerAccessibilityValue == "1 minute, 5 seconds, paused")
     }
@@ -675,7 +675,7 @@ struct ScreencastRecordingControlsTests {
 
     func makeControls() -> ScreencastRecordingControls {
         ScreencastRecordingControls(
-            menuBar: CapabilityMenuBarStatus(status: status, capability: .screencast),
+            menuBar: CapabilityMenuBarStatus(status: status, capability: .screenshotTools),
             placement: ScreencastControlBarPlacement(defaults: defaults),
             barDisplay: { _ in Self.laptop },
             ordersPanelIn: false
@@ -690,9 +690,14 @@ struct ScreencastRecordingControlsTests {
         )
     }
 
-    /// Binds every recording shortcut, and gives the controls Screencast's context.
-    func apply(_ controls: ScreencastRecordingControls, enabled: Bool = true) -> [CapabilityShortcut: ShortcutBinding] {
-        let preferences = AppPreferences(defaults: defaults)
+    /// Binds every recording shortcut, and gives the controls Screengrabs' context, on macOS 15
+    /// unless `compatibility` says otherwise.
+    @discardableResult
+    func apply(
+        _ controls: ScreencastRecordingControls, enabled: Bool = true,
+        compatibility: PluginCompatibility = PluginCompatibility(macOSMajorVersion: 15)
+    ) -> [CapabilityShortcut: ShortcutBinding] {
+        let preferences = AppPreferences(defaults: defaults, compatibility: compatibility)
         var bindings: [CapabilityShortcut: ShortcutBinding] = [:]
         for (index, shortcut) in ScreencastRecordingControls.shortcuts.enumerated() {
             let binding = ShortcutBinding(keyCode: UInt32(index), modifiers: UInt32(256 | 512), displayName: "⇧⌘\(index)")
@@ -700,7 +705,7 @@ struct ScreencastRecordingControlsTests {
             bindings[shortcut] = binding
         }
         controls.apply(CapabilityContext(
-            enabledCapabilities: enabled ? [.screencast] : [],
+            enabledCapabilities: enabled ? [.screenshotTools] : [],
             preferences: preferences,
             shortcuts: GlobalShortcutCoordinator(backend: hotKeys),
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -756,9 +761,10 @@ struct ScreencastRecordingControlsTests {
     func menuBar() async throws {
         recording.elapsed = 65
         let controls = makeControls()
+        apply(controls)
         attach(controls)
         #expect(status.title == "01:05")
-        #expect(status.spokenTitle == "Screencast recording, 1 minute, 5 seconds")
+        #expect(status.spokenTitle == "Recording, 1 minute, 5 seconds")
         #expect(status.sections.map { $0.map(\.title) } == [["Stop Recording", "Pause Recording"]])
 
         recording.elapsed = 66
@@ -775,6 +781,28 @@ struct ScreencastRecordingControlsTests {
         #expect(await eventually { recording.calls.last == .stop })
         controls.phaseChanged(recording.phase)
         #expect(await eventually { status.title == nil && status.sections.isEmpty })
+    }
+
+    @Test("The menu bar shows nothing for a recording, and no recording shortcut registers, where Screengrabs can't record (#490)")
+    func menuBarOnMacOS14() {
+        recording.elapsed = 65
+        let controls = makeControls()
+        apply(controls, compatibility: PluginCompatibility(macOSMajorVersion: 14))
+        attach(controls)
+        controls.phaseChanged(.recording)
+        #expect(status.title == nil && status.sections.isEmpty)
+        #expect(hotKeys.registered.isEmpty)
+    }
+
+    @Test("Screengrabs turning off clears the menu bar's time at once (#490)")
+    func menuBarClearsWhenTurnedOff() {
+        recording.elapsed = 65
+        let controls = makeControls()
+        apply(controls)
+        attach(controls)
+        #expect(status.title == "01:05")
+        controls.deactivate()
+        #expect(status.title == nil && status.sections.isEmpty)
     }
 
     @Test("The recording shortcuts work only while recording, and act as the bar's buttons do")
@@ -825,18 +853,18 @@ struct ScreencastRecordingControlsTests {
         #expect(hotKeys.registered.isEmpty)
     }
 
-    @Test("The recording shortcuts are Screencast's, unassigned, say when they work, and Settings lists each")
+    @Test("The recording shortcuts are Screengrabs', unassigned, say when they work, and Settings lists each after Record Screen")
     func shortcutCases() {
         for shortcut in ScreencastRecordingControls.shortcuts {
-            #expect(shortcut.capability == .screencast)
+            #expect(shortcut.capability == .screenshotTools)
             #expect(shortcut.defaultBinding == nil)
             #expect(!shortcut.worksEverywhere)
-            #expect(shortcut.detail?.hasPrefix("Only while Screencast is recording") == true)
+            #expect(shortcut.detail?.hasPrefix("Only while recording") == true)
         }
         #expect(ScreencastRecordingControls.shortcuts.map(\.title) == [
             "Pause & Resume Recording", "Stop Recording", "Discard Recording", "Draw While Recording",
         ])
-        #expect(CapabilityDescriptor.screencast.shortcuts == [.screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw])
+        #expect(Array(CapabilityDescriptor.screenshotTools.shortcuts.suffix(5)) == [.screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw])
     }
 
     @available(macOS 15, *)
@@ -849,6 +877,7 @@ struct ScreencastRecordingControlsTests {
         var finished = 0
         flow.controller.onCaptureFinished = { _ in finished += 1 }
         let controls = makeControls()
+        apply(controls)
         controls.attach(to: flow.controller)
         // Added after the controls, as the overlays and the review panel may be.
         var after: [ScreencastPhase] = []
@@ -869,17 +898,17 @@ struct ScreencastRecordingControlsTests {
     }
 
     @available(macOS 15, *)
-    @Test("Through Screencast's module, the bar, the menu bar, and the shortcuts follow a recording, with another phase observer added after them")
+    @Test("Through the recording part, the bar, the menu bar, and the shortcuts follow a recording, with another phase observer added after them")
     func throughTheModule() async throws {
         let preferences = AppPreferences(defaults: defaults)
-        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
         let pause = ShortcutBinding(keyCode: 35, modifiers: UInt32(256 | 512), displayName: "⇧⌘P")
         _ = preferences.setCapabilityShortcut(pause, for: .screencastPause)
         let module = ScreencastModule(
             preferences: preferences,
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
             openSettings: { _ in },
-            menuBar: CapabilityMenuBarStatus(status: status, capability: .screencast),
+            menuBar: CapabilityMenuBarStatus(status: status, capability: .screenshotTools),
             seams: ScreencastSeams(
                 captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
                 pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
@@ -889,7 +918,7 @@ struct ScreencastRecordingControlsTests {
             )
         )
         module.apply(CapabilityContext(
-            enabledCapabilities: [.screencast],
+            enabledCapabilities: [.screenshotTools],
             preferences: preferences,
             shortcuts: GlobalShortcutCoordinator(backend: hotKeys),
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -920,7 +949,8 @@ struct ScreencastRecordingControlsTests {
         #expect(await ScreencastWait.until { status.sections.first?.last?.title == "Resume Recording" })
 
         await controller.discard()
-        #expect(!bar.isShown && hotKeys.registered.isEmpty)
+        // Record Screen's ⇧⌘5 stays: only the recording shortcuts go.
+        #expect(!bar.isShown && !hotKeys.registered.values.contains(pause))
         #expect(await ScreencastWait.until { status.title == nil })
     }
 
@@ -1002,9 +1032,10 @@ struct ScreencastRecordingControlsTests {
 
         recording.elapsed = 7
         let controls = makeControls()
+        apply(controls)
         attach(controls)
         #expect(status.title == "00:07", "The recording's time, not the timer's")
-        #expect(status.spokenTitle == "Screencast recording, 7 seconds")
+        #expect(status.spokenTitle == "Recording, 7 seconds")
         #expect(status.sections.map { $0.map(\.title) } == [["Stop Recording", "Pause Recording"], ["Tea — 4:00"]])
 
         recording.phase = .finishing

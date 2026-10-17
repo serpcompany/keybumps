@@ -749,7 +749,7 @@ struct ScreencastOverlaysWiringTests {
         defer { flows.flow.captures.remove() }
         let backend = DrawingHotKeyBackend()
         flows.wiring.apply(CapabilityContext(
-            enabledCapabilities: [.screencast],
+            enabledCapabilities: [.screenshotTools],
             preferences: AppPreferences(defaults: flows.defaults),
             shortcuts: GlobalShortcutCoordinator(backend: backend),
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),

@@ -4,8 +4,9 @@ import Testing
 @testable import Keybumps
 
 /// The one-time step that folds what an install saved for Screencast into Screenshot Tools, which
-/// becomes Screengrabs (#489). Fixtures are saved values written as raw strings, as an install holds
-/// them, so they still describe real installs once `Capability.screencast` is retired (#490).
+/// became Screengrabs (#489), and that `AppPreferences.init` runs first now that
+/// `Capability.screencast` is retired (#490). Fixtures are saved values written as raw strings, as
+/// an install holds them.
 @MainActor
 @Suite("Screengrabs migration")
 struct ScreengrabsMigrationTests {
@@ -14,7 +15,7 @@ struct ScreengrabsMigrationTests {
         "clipboardHistory", "dictation", "emojiPicker", "keyboardShortcutter", "keystrokes", "quickSearch", "screencast",
         "screenshotTools", "snippets", "timer", "translation", "windowManagement",
     ]
-    /// `knownCapabilities` as launch saves it once `Capability.screencast` is retired (#490).
+    /// `knownCapabilities` as launch saves it now that `Capability.screencast` is retired (#490).
     nonisolated static let knownWithoutScreencast = knownWithScreencast.filter { $0 != "screencast" }
     static let screenshotShortcuts = ["screenshotScreen", "screenshotScreenAndEdit", "screenshotArea"]
     static let custom = ShortcutBinding(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(cmdKey | optionKey), displayName: "⌥⌘S")
@@ -207,7 +208,7 @@ struct ScreengrabsMigrationTests {
             let defaults = Self.install(enabled: ["screencast"])
             AppPreferences.foldScreencastIntoScreengrabs(in: defaults, applicationUsage: usageURL)
             #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["screencast", "screenshotTools"])
-            // What launch saves right after the step, once `Capability.screencast` is retired.
+            // What launch saves right after the step, now that `Capability.screencast` is retired.
             defaults.set(Self.knownWithoutScreencast, forKey: "knownCapabilities")
 
             // Screenshot Tools off again, ⇧⌘2–⇧⌘4 back, copying back on, and picks under Screencast's
@@ -313,19 +314,45 @@ struct ScreengrabsMigrationTests {
         }
     }
 
-    @Test("On macOS 14, where Screencast could never be on, Screenshot Tools stays as it was", arguments: [true, false])
+    @Test("On macOS 14, where Screencast could never be on, Screenshot Tools stays as it was through launch", arguments: [true, false])
     func macOS14(screenshotToolsOn: Bool) {
-        let defaults = Self.install(enabled: ["clipboardHistory", "screencast"] + (screenshotToolsOn ? ["screenshotTools"] : []))
-        // macOS 14 never saves Screencast on, even when its saved list names it (`PluginCompatibility`).
-        _ = AppPreferences(defaults: defaults, compatibility: PluginCompatibility(macOSMajorVersion: 14))
-        #expect(defaults.stringArray(forKey: "enabledCapabilities")?.contains("screencast") == false)
-        #expect(defaults.stringArray(forKey: "knownCapabilities")?.contains("screencast") == true)
-        let before = defaults.dictionaryRepresentation()
+        // What a build with Screencast saved on macOS 14: never Screencast on (`PluginCompatibility`),
+        // though it knew it.
+        let defaults = Self.install(enabled: ["clipboardHistory"] + (screenshotToolsOn ? ["screenshotTools"] : []))
+        defaults.set(true, forKey: "copiesScreenshotsToClipboard")
+        let shortcuts = Self.shortcuts(in: defaults) ?? [:]
 
-        Self.fold(defaults)
+        let preferences = AppPreferences(defaults: defaults, compatibility: PluginCompatibility(macOSMajorVersion: 14))
 
-        #expect(Self.changedKeys(before, defaults.dictionaryRepresentation()).isEmpty)
-        #expect(defaults.stringArray(forKey: "enabledCapabilities")?.contains("screenshotTools") == screenshotToolsOn)
+        #expect(preferences.enabledCapabilities.contains(.screenshotTools) == screenshotToolsOn)
+        #expect(preferences.copiesScreenshotsToClipboard)
+        for id in Self.screenshotShortcuts {
+            #expect(preferences.capabilityShortcut(for: CapabilityShortcut(rawValue: id)!) == shortcuts[id], "\(id)")
+        }
+    }
+
+    // MARK: From launch
+
+    @Test("Launch runs the step first, then saves knownCapabilities without screencast, so the step runs once")
+    func launchRunsTheStepOnce() throws {
+        let defaults = Self.install(enabled: ["clipboardHistory", "screencast"])
+        defaults.set(true, forKey: "copiesScreenshotsToClipboard")
+
+        let first = AppPreferences(defaults: defaults)
+        #expect(first.enabledCapabilities == [.clipboardHistory, .screenshotTools])
+        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screenshotTools"])
+        #expect(defaults.stringArray(forKey: "knownCapabilities")?.contains("screencast") == false)
+        #expect(first.capabilityShortcut(for: .screenshotArea) == nil)
+        #expect(first.capabilityShortcut(for: .screencast) == Self.savedShortcuts["screencast"])
+        #expect(!first.copiesScreenshotsToClipboard)
+
+        // The person takes back ⇧⌘4 and the clipboard copy; the next launch leaves them.
+        first.setCapabilityShortcut(DefaultShortcut.screenshotArea, for: .screenshotArea)
+        first.copiesScreenshotsToClipboard = true
+        let second = AppPreferences(defaults: defaults)
+        #expect(second.capabilityShortcut(for: .screenshotArea) == DefaultShortcut.screenshotArea)
+        #expect(second.copiesScreenshotsToClipboard)
+        #expect(second.enabledCapabilities == [.clipboardHistory, .screenshotTools])
     }
 
     // MARK: What it leaves
