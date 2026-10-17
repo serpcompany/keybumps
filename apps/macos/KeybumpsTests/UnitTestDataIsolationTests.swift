@@ -132,7 +132,7 @@ struct UnitTestDataIsolationTests {
         let spotlight = try #require(model.spotlightShortcutResolver as? SpotlightShortcutConflictResolver)
         #expect(spotlight.preferences is InertSymbolicHotKeyPreferences, "The Spotlight shortcut check")
         let screenshots = try #require(model.capabilities.module(for: .screenshotTools) as? ScreenshotToolsModule)
-        #expect(screenshots.systemShortcuts.preferences is InertSymbolicHotKeyPreferences, "The Screengrabs takeover")
+        #expect(screenshots.systemShortcuts.preferences is InertSymbolicHotKeyPreferences, "The ScreenGrabs takeover")
     }
 
     @Test("Outside the unit-test host, Keybumps's folders are the user's own, as before")

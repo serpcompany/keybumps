@@ -161,7 +161,7 @@ struct PaletteCopyPasteKeyTests {
         #expect(fixture.paster.clipboardPastes == 1)
     }
 
-    @Test("Screenshots: without Accessibility, ⌘P offers setup for Screengrabs")
+    @Test("Screenshots: without Accessibility, ⌘P offers setup for ScreenGrabs")
     func screenshotsPasteSetup() throws {
         let fixture = CopyPasteFixture()
         defer { fixture.tearDown() }

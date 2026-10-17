@@ -276,10 +276,10 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case emojiPicker
     case translation
     case keystrokes
-    /// Screengrabs' Record Screen (ADR 0010). The raw value keeps Screencast's name, as stored
+    /// ScreenGrabs' Record Screen (ADR 0010). The raw value keeps Screencast's name, as stored
     /// bindings do.
     case screencast
-    /// Screengrabs' recording shortcuts: registered only while it records
+    /// ScreenGrabs' recording shortcuts: registered only while it records
     /// (`ScreencastRecordingControls`), so their keys work normally everywhere else.
     case screencastPause
     case screencastStop
@@ -346,7 +346,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Whether it records, so it does nothing, and Settings says so, where Screengrabs can't
+    /// Whether it records, so it does nothing, and Settings says so, where ScreenGrabs can't
     /// record (`PluginCompatibility.supportsRecording`).
     var needsRecording: Bool {
         switch self {
@@ -355,13 +355,13 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Whether it can run on this Mac: a recording shortcut can't where Screengrabs can't record.
+    /// Whether it can run on this Mac: a recording shortcut can't where ScreenGrabs can't record.
     /// One that can't is left out of conflicts, and its row can't change (#490).
     func runs(on compatibility: PluginCompatibility) -> Bool {
         !needsRecording || compatibility.supportsRecording
     }
 
-    /// The note under its title on this Mac: `detail`, or for a recording shortcut where Screengrabs
+    /// The note under its title on this Mac: `detail`, or for a recording shortcut where ScreenGrabs
     /// can't record, "Recording needs macOS 15".
     func detail(on compatibility: PluginCompatibility) -> String? {
         runs(on: compatibility) ? detail : PluginCompatibility.recordingRequirement

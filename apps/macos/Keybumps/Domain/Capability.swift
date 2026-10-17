@@ -12,7 +12,7 @@ enum Capability: String, CaseIterable, Codable, Identifiable {
     case emojiPicker
     case translation
     case keystrokes
-    // `screencast` was retired when Screengrabs, Screenshot Tools under its ID, took in recording (ADR 0010);
+    // `screencast` was retired when ScreenGrabs, Screenshot Tools under its ID, took in recording (ADR 0010);
     // `AppPreferences.foldScreencastIntoScreengrabs` folds in what it saved.
 
     var id: String { rawValue }

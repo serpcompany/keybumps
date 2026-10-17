@@ -2,7 +2,7 @@
 
 Status: Accepted (2026-10-10) when the owner merges it. Tracked by #329. Amended 2026-10-12 (#485): Screencast records video only, and screenshots stay with Screenshot Tools. Amended 2026-10-12 (#475): the review is a window with a player, and no note, type, repository, or Trim; see Amendments.
 
-Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17, #488). It replaces decision 1 (Screencast is part of Screengrabs, one plugin that ships on), decision 3's screenshot parts, decision 4's review panel and folder, and the Open question about a palette tab. Recordings save to their own folder, which defaults to the Mac's screenshot folder and has its own Choose… in Settings › Screengrabs, instead of `~/Documents/Keybumps/captures` or the folder Settings › Screencast shows. The rest of decisions 3 and 4 stands (video, the audio switches, the control bar, keys, drawing, and a recording staying on the Mac until it's sent), as do decisions 2 and 5–8.
+Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17, #488). It replaces decision 1 (Screencast is part of ScreenGrabs, one plugin that ships on), decision 3's screenshot parts, decision 4's review panel and folder, and the Open question about a palette tab. Recordings save to their own folder, which defaults to the Mac's screenshot folder and has its own Choose… in Settings › ScreenGrabs, instead of `~/Documents/Keybumps/captures` or the folder Settings › Screencast shows. The rest of decisions 3 and 4 stands (video, the audio switches, the control bar, keys, drawing, and a recording staying on the Mac until it's sent), as do decisions 2 and 5–8.
 
 ## Context
 
@@ -53,7 +53,7 @@ Clipy (clipy.online) is a third-party screen recorder built for coding agents. I
 **2026-10-12, the review window** (#475, PR #479; with #485). The owner's decisions on #479, after trying candidate 4030.475.2:
 - The review is a window with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar. The owner asked for it much bigger ("or maybe just like fill screen"): by default it fills the screen's visible frame with a small margin.
 - No note, type, or repository: the owner called the sidebar that held them "kind of worthless" and removed it for now, to be rethought later. What the review keeps stays in `meta.json`.
-- No Trim, the only editing tool. Combining Screenshot Tools and Screencast into one plugin, Screengrabs, is a new epic (#482).
+- No Trim, the only editing tool. Combining Screenshot Tools and Screencast into one plugin, ScreenGrabs, is a new epic (#482).
 - After Save, the window closes, a notice in the notch says it was saved, and the file goes to the captures folder set in Settings › Screencast.
 - Screencast is video only (#485).
 

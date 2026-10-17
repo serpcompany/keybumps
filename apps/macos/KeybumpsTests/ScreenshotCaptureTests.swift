@@ -95,7 +95,7 @@ struct ScreenshotCaptureTests {
         #expect(owned.isEmpty)
     }
 
-    @Test("Screengrabs takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5 with its keys on macOS 15, and leaves ⇧⌘5 to macOS 14 (#490)")
+    @Test("ScreenGrabs takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5 with its keys on macOS 15, and leaves ⇧⌘5 to macOS 14 (#490)")
     func takeoverBindingsFollowSupportsRecording() {
         let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
         #expect(ScreenshotToolsModule.takeoverBindings(current) == [

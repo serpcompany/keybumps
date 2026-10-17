@@ -2291,7 +2291,7 @@ final class KeybumpsFeatureTests: XCTestCase {
             [
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
-                CommandPaletteTabLabel(shortcut: "⌘3", name: "Screengrabs"),
+                CommandPaletteTabLabel(shortcut: "⌘3", name: "ScreenGrabs"),
                 CommandPaletteTabLabel(shortcut: "⌘4", name: "Dictation"),
                 CommandPaletteTabLabel(shortcut: "⌘5", name: "Snippets"),
                 CommandPaletteTabLabel(shortcut: "⌘6", name: "Timers"),
@@ -2328,7 +2328,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActions, [.paste(), .edit])
         XCTAssertEqual(CommandPaletteTab.clipboard.secondaryActions, [.paste()])
-        XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search screengrabs")
+        XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search ScreenGrabs")
         XCTAssertNil(CommandPaletteTab.keyboardShortcutter.primaryActionTitle)
         XCTAssertEqual(CommandPaletteTab.clipboard.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")

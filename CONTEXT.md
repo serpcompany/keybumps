@@ -35,7 +35,7 @@ A brief, self-dismissing message that grows out of the notch, or the top of the 
 _Avoid_: Toast, HUD, banner
 
 **Default capability**:
-One of the seven capabilities Keybumps's feature set was locked at: Quick Search, Clipboard History, Screengrabs (then Screenshot Tools), Dictation, Window Manager, Shortcut Coach, and Snippets.
+One of the seven capabilities Keybumps's feature set was locked at: Quick Search, Clipboard History, ScreenGrabs (then Screenshot Tools), Dictation, Window Manager, Shortcut Coach, and Snippets.
 _Avoid_: Core plugin, built-in plugin
 
 **Added capability**:
@@ -73,7 +73,7 @@ A Keybumps action that Quick Search offers beside applications, files, and folde
 _Avoid_: Workflow, extension command
 
 **Action command**:
-A Quick Search command that does something a plugin does, rather than going somewhere, such as Record Screen or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Record Screen during a recording, or where Screengrabs can't record. Picking it closes the palette and does it, as the plugin's shortcut would, and opens the plugin's page when a permission it needs is missing.
+A Quick Search command that does something a plugin does, rather than going somewhere, such as Record Screen or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Record Screen during a recording, or where ScreenGrabs can't record. Picking it closes the palette and does it, as the plugin's shortcut would, and opens the plugin's page when a permission it needs is missing.
 _Avoid_: Quick action, workflow, shortcut (a key combination), command (alone)
 
 **Capability command**:
@@ -119,24 +119,24 @@ _Avoid_: Keyboard Shortcutter (former name; code types still use it), Shortcut C
 **Hotkeys**:
 The Command Palette tab label for Shortcut Coach history; everywhere else, including its capability command, it is called Shortcut Coach.
 
-**Screengrabs**:
-Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, Screengrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.
-_Avoid_: Screenshot Tools and Screencast (former names), screen grabs, screen capture, CleanShot clone
+**ScreenGrabs**:
+Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, ScreenGrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.
+_Avoid_: Screenshot Tools and Screencast (former names), Screengrabs (lowercase g), screen grabs, screen capture, CleanShot clone
 
 **Screengrab**:
-One screenshot or one recording that Screengrabs took.
+One screenshot or one recording that ScreenGrabs took.
 _Avoid_: Capture, clip, grab
 
 **Screenshot**:
-A PNG of the screens or an area, taken with Screengrabs' hotkeys or macOS's own, in the folder macOS saves screenshots to.
+A PNG of the screens or an area, taken with ScreenGrabs' hotkeys or macOS's own, in the folder macOS saves screenshots to.
 _Avoid_: Snap
 
-**Screengrabs tab**:
+**ScreenGrabs tab**:
 The Command Palette tab (⌘3) showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
-The Screengrabs window for marking up a screenshot.
+The ScreenGrabs window for marking up a screenshot.
 _Avoid_: Image editor, annotation app, Markup
 
 **Snippets**:
@@ -212,15 +212,15 @@ The keys on screen that the Keystrokes plugin and a recording share. Only one sh
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Recording**:
-A video Screengrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in the recordings folder until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
+A video ScreenGrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in the recordings folder until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
 _Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission), Dictation's audio
 
 **Recordings folder**:
-Where recordings are saved, each in a folder of its own: `~/Documents/Keybumps/captures` (`ProductPaths.captures`). Settings › Screengrabs shows it.
+Where recordings are saved, each in a folder of its own: `~/Documents/Keybumps/captures` (`ProductPaths.captures`). Settings › ScreenGrabs shows it.
 _Avoid_: Captures folder; Dictation's recordings folder (`ProductPaths.recordings`)
 
 **Recording picker**:
-What Record Screen opens over every screen to choose a recording: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), with switches for the microphone, the Mac's sound, shortcuts, and clicks that are Settings › Screengrabs' own. Record counts down, then records. Escape closes the picker, and does nothing once Record is pressed: the countdown's Cancel stops a countdown, and only the control bar's Discard throws a recording away. It opens as Record last left it: area, window, or screen, the same screen or All Screens while connected, the last area drawn, and the switches, which Record saves to Settings (the microphone's only with Microphone access). A window is never remembered, so Window mode opens with none chosen.
+What Record Screen opens over every screen to choose a recording: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), with switches for the microphone, the Mac's sound, shortcuts, and clicks that are Settings › ScreenGrabs' own. Record counts down, then records. Escape closes the picker, and does nothing once Record is pressed: the countdown's Cancel stops a countdown, and only the control bar's Discard throws a recording away. It opens as Record last left it: area, window, or screen, the same screen or All Screens while connected, the last area drawn, and the switches, which Record saves to Settings (the microphone's only with Microphone access). A window is never remembered, so Window mode opens with none chosen.
 _Avoid_: Screencast picker (its former name), selection overlay, capture HUD, crosshair, the screenshot hotkeys' area selection (macOS's own)
 
 **Control bar**:
@@ -240,7 +240,7 @@ The GitHub repository (`owner/name`) the recording window fills in, from the app
 _Avoid_: Repo mapping, project, target
 
 **Destination**:
-An account of the person's own, connected in Settings › Screengrabs, that a recording goes to only when the person sends it. Each is built into Keybumps, Clipy first.
+An account of the person's own, connected in Settings › ScreenGrabs, that a recording goes to only when the person sends it. Each is built into Keybumps, Clipy first.
 _Avoid_: Integration, upload target, share service
 
 ### Licensing

@@ -310,7 +310,7 @@ struct ClipboardSourceAppTests {
         return try PropertyListSerialization.data(fromPropertyList: archive, format: .binary, options: 0)
     }
 
-    @Test("Screenshots from Screengrabs have no source app")
+    @Test("Screenshots from ScreenGrabs have no source app")
     func screenshotsHaveNone() throws {
         let harness = Harness()
         defer { harness.cleanUp() }

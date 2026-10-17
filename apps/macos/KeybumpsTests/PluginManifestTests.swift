@@ -163,7 +163,7 @@ struct PluginManifestTests {
         #expect(PermissionRow.status(missing, requiresRelaunch: true, isOptional: true) == "Restart Required")
     }
 
-    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), Translation (#322), and Keystrokes (#443); Screengrabs, which took in Screencast (#445), ships on (#490)")
+    @Test("Every plugin ships on except the Emoji Picker, the first that ships off (#243), Translation (#322), and Keystrokes (#443); ScreenGrabs, which took in Screencast (#445), ships on (#490)")
     func onlyTheEmojiPickerTranslationAndKeystrokesShipOff() {
         #expect(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability) == [.emojiPicker, .translation, .keystrokes])
         #expect(CapabilityDescriptor.emojiPicker.optionalPermissions.map(\.permission) == [.accessibility])
@@ -173,7 +173,7 @@ struct PluginManifestTests {
         #expect(CapabilityDescriptor.keystrokes.optionalPermissions.isEmpty)
     }
 
-    @Test("Only Translation (#322) needs a newer macOS than Keybumps does; Screengrabs' recording needs it inside the plugin (#490)")
+    @Test("Only Translation (#322) needs a newer macOS than Keybumps does; ScreenGrabs' recording needs it inside the plugin (#490)")
     func minimumMacOS() {
         #expect(CapabilityCatalog.descriptors.filter { $0.minimumMacOS != nil }.map(\.capability) == [.translation])
         #expect(CapabilityDescriptor.translation.minimumMacOS == 15)
@@ -258,7 +258,7 @@ struct PluginSettingsPageTests {
         #expect(RowsOnPage.read(AnyView(filled), model: model).preferences == top + ["above"] + groups + ["custom"])
 
         // The pages already on the template: Translation's fills only the last slot, and the
-        // others but Screengrabs' neither.
+        // others but ScreenGrabs' neither.
         let last = PluginSettingsPage(capability: .keystrokes) { Marker(name: "custom") }
         #expect(RowsOnPage.read(AnyView(last), model: model).preferences == top + groups + ["custom"])
         #expect(RowsOnPage.read(AnyView(PluginSettingsPage(capability: .keystrokes)), model: model).preferences == top + groups)
@@ -288,7 +288,7 @@ struct PluginSettingsPageTests {
     }
 
     @Test(
-        "Screengrabs' page shows Screen Recording once, as the template's required row, missing or granted, and Accessibility, the Microphone, and Input Monitoring as optional (#490)",
+        "ScreenGrabs' page shows Screen Recording once, as the template's required row, missing or granted, and Accessibility, the Microphone, and Input Monitoring as optional (#490)",
         arguments: [MacPermission.screenRecording, nil]
     )
     func screengrabsPermissions(missing: MacPermission?) throws {
@@ -308,7 +308,7 @@ struct PluginSettingsPageTests {
         ])
     }
 
-    @Test("The pages on the template show the permissions they need, such as Keystrokes' Input Monitoring and Screengrabs' Screen Recording (#490)")
+    @Test("The pages on the template show the permissions they need, such as Keystrokes' Input Monitoring and ScreenGrabs' Screen Recording (#490)")
     func templatePagesShowRequiredPermissions() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsTemplateRequiredPermissions-\(UUID().uuidString)", isDirectory: true)
@@ -326,7 +326,7 @@ struct PluginSettingsPageTests {
         }
     }
 
-    @Test("Screengrabs' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots, then the recordings folder at the end of Recordings (#490)")
+    @Test("ScreenGrabs' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots, then the recordings folder at the end of Recordings (#490)")
     func screenshotToolsRows() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsScreenshotToolsRows-\(UUID().uuidString)", isDirectory: true)
@@ -355,7 +355,7 @@ struct PluginSettingsPageTests {
         }
     }
 
-    @Test("On macOS 14, Screengrabs' Recordings group says recording needs macOS 15, in place of the folder, and its preferences can't change; screenshots are as on macOS 15 (#490)")
+    @Test("On macOS 14, ScreenGrabs' Recordings group says recording needs macOS 15, in place of the folder, and its preferences can't change; screenshots are as on macOS 15 (#490)")
     func recordingsOnMacOS14() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsScreengrabs14-\(UUID().uuidString)", isDirectory: true)
@@ -377,7 +377,7 @@ struct PluginSettingsPageTests {
         #expect(currentRows.disabled.isEmpty)
     }
 
-    @Test("On macOS 14, Screengrabs' note and its switch's tooltip don't say Keybumps takes ⇧⌘5 or runs Record Screen, as it does neither there (#490)")
+    @Test("On macOS 14, ScreenGrabs' note and its switch's tooltip don't say Keybumps takes ⇧⌘5 or runs Record Screen, as it does neither there (#490)")
     func macOS14KeepsItsShiftCommand5InWords() throws {
         let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
         let old = PluginCompatibility(macOSMajorVersion: 14)
@@ -467,7 +467,7 @@ struct PluginSettingsPageTests {
 
 /// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
 /// returns the permission rows and the preference rows it draws, those it draws disabled, the
-/// rows of Screengrabs' own (its Screenshots group, and the end of its Recordings group), and its
+/// rows of ScreenGrabs' own (its Screenshots group, and the end of its Recordings group), and its
 /// shortcut rows' controls, in order.
 @MainActor
 private enum RowsOnPage {
