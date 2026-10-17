@@ -163,6 +163,120 @@ struct ScreencastTests {
         #expect(defaults.object(forKey: "plugin.screenshotTools.highlightsClicks") == nil)
     }
 
+    @available(macOS 15, *)
+    @Test("Record Screen counts down from the Countdown saved at plugin.screencast.countdown, read again at each open (#520)")
+    func countdownFromSettings() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsCountdownReread-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = InMemoryDefaults()
+        defaults.set("5", forKey: "plugin.screencast.countdown")
+        let harness = WiringHarness(enabled: [.clipboardHistory, .screenshotTools], missing: nil, root: root, defaults: defaults)
+        let overlays = FakeOverlays()
+        let sleeper = ManualSleeper()
+        let preferences = harness.model.preferences
+        let module = Self.moduleOnFakes(preferences: preferences, presenter: overlays, sleep: { try await sleeper.sleep($0) })
+
+        module.start()
+        let controller = try #require(module.controller)
+        try await Self.waitUntil { overlays.picker != nil }
+        overlays.record()
+        #expect(controller.phase == .countingDown(remaining: 5))
+        try await Self.waitUntil { sleeper.pending == 1 }
+        #expect(overlays.countdowns == [5])
+        overlays.cancelTheCountdown()
+        #expect(controller.phase == .idle)
+
+        // Settings › ScreenGrabs' menu, through its row's own selection.
+        PluginPreferenceRow.selection(of: .screencastCountdown, for: .screenshotTools, in: harness.model).wrappedValue = "10"
+        module.start()
+        try await Self.waitUntil { overlays.picker != nil }
+        overlays.record()
+        #expect(controller.phase == .countingDown(remaining: 10))
+        try await Self.waitUntil { sleeper.pending == 1 }
+        #expect(overlays.countdowns == [5, 10])
+        overlays.cancelTheCountdown()
+    }
+
+    @available(macOS 15, *)
+    @Test("Settings › ScreenGrabs' Countdown menu, through its own selection, saves 3 seconds where the next recording reads it, from None as the candidate had it (#520)")
+    func countdownFromTheSettingsMenu() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsCountdownMenu-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = InMemoryDefaults()
+        defaults.set("0", forKey: "plugin.screencast.countdown")
+        let harness = WiringHarness(enabled: [.clipboardHistory, .screenshotTools], missing: nil, root: root, defaults: defaults)
+        let menu = PluginPreferenceRow.selection(of: .screencastCountdown, for: .screenshotTools, in: harness.model)
+        #expect(menu.wrappedValue == "0", "None")
+
+        menu.wrappedValue = "3"
+
+        #expect(menu.wrappedValue == "3")
+        #expect(defaults.object(forKey: "plugin.screencast.countdown") as? String == "3")
+        #expect(defaults.object(forKey: "plugin.screenshotTools.countdown") == nil)
+        #expect(harness.model.preferences.screencast.countdownSeconds == 3)
+
+        // What the recorder gets: the module reads the same preferences as Record Screen opens.
+        let overlays = FakeOverlays()
+        let sleeper = ManualSleeper()
+        let module = Self.moduleOnFakes(preferences: harness.model.preferences, presenter: overlays, sleep: { try await sleeper.sleep($0) })
+        module.start()
+        let controller = try #require(module.controller)
+        try await Self.waitUntil { overlays.picker != nil }
+        overlays.record()
+        #expect(controller.phase == .countingDown(remaining: 3))
+        try await Self.waitUntil { sleeper.pending == 1 }
+        #expect(overlays.countdowns == [3])
+        overlays.cancelTheCountdown()
+    }
+
+    @available(macOS 15, *)
+    @Test("A countdown chosen in Settings stays through a recording whose picker changed a switch, the picker's memory, and a relaunch (#520)")
+    func countdownStaysAfterRecordingAndRelaunch() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsCountdownStays-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = InMemoryDefaults()
+        let harness = WiringHarness(enabled: [.clipboardHistory, .screenshotTools], missing: nil, root: root, defaults: defaults)
+        PluginPreferenceRow.selection(of: .screencastCountdown, for: .screenshotTools, in: harness.model).wrappedValue = "5"
+        let preferences = harness.model.preferences
+
+        // A recording: Highlight clicks turned on in the picker, Record, the whole countdown, then Discard.
+        let overlays = FakeOverlays()
+        let sleeper = ManualSleeper()
+        let module = Self.moduleOnFakes(preferences: preferences, presenter: overlays, sleep: { try await sleeper.sleep($0) })
+        module.start()
+        let controller = try #require(module.controller)
+        try await Self.waitUntil { overlays.picker != nil }
+        let picker = try #require(overlays.picker)
+        picker.highlightsClicks = true
+        overlays.record()
+        for _ in 0..<5 {
+            try await Self.waitUntil { sleeper.pending == 1 }
+            sleeper.advance()
+        }
+        try await Self.waitUntil { controller.phase == .recording }
+        #expect(overlays.countdowns == [5, 4, 3, 2, 1])
+        await controller.discard()
+        try await Self.waitUntil { controller.phase == .idle }
+
+        // Record saved the switch and the picker's choices, and left the countdown alone.
+        #expect(defaults.object(forKey: "plugin.screencast.highlightsClicks") as? Bool == true)
+        #expect(defaults.object(forKey: ScreencastPickerMemory.key) != nil)
+        #expect(defaults.object(forKey: "plugin.screencast.countdown") as? String == "5")
+        #expect(preferences.screencast.countdownSeconds == 5)
+
+        // The next Record Screen, which opens on the remembered choices, counts down from 5 again.
+        module.start()
+        try await Self.waitUntil { overlays.picker != nil && controller.phase == .picking }
+        overlays.record()
+        #expect(controller.phase == .countingDown(remaining: 5))
+        overlays.cancelTheCountdown()
+
+        // A relaunch reads it back, and Settings' menu shows it.
+        let relaunched = WiringHarness(enabled: [.clipboardHistory, .screenshotTools], missing: nil, root: root, defaults: defaults)
+        #expect(relaunched.model.preferences.screencast.countdownSeconds == 5)
+        #expect(PluginPreferenceRow.selection(of: .screencastCountdown, for: .screenshotTools, in: relaunched.model).wrappedValue == "5")
+    }
+
     @Test("The review panel's retired \"Also add to Screenshots\" switch is removed on load, and the rest kept")
     func retiredAddsToScreenshots() {
         let defaults = InMemoryDefaults()
@@ -516,6 +630,19 @@ struct ScreencastTests {
     ) -> ScreencastModule {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
+        return moduleOnFakes(preferences: preferences, writers: writers, review: review)
+    }
+
+    /// The module on fakes with `preferences`, turned on: made-up screens, an inert recorder,
+    /// `presenter` for the picker and the countdown, and `sleep` for the countdown's clock.
+    @available(macOS 15, *)
+    private static func moduleOnFakes(
+        preferences: AppPreferences,
+        presenter: FakeOverlays? = nil,
+        writers: FakeWriterFactory = FakeWriterFactory(),
+        review: ScreencastReviewServices? = nil,
+        sleep: @escaping (TimeInterval) async throws -> Void = { _ in }
+    ) -> ScreencastModule {
         let module = ScreencastModule(
             preferences: preferences,
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -524,9 +651,9 @@ struct ScreencastTests {
                 captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
                 writers: writers,
                 pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
-                presenter: FakeOverlays(),
+                presenter: presenter ?? FakeOverlays(),
                 screens: { PickerScreens.both },
-                sleep: { _ in },
+                sleep: sleep,
                 contextReader: .inert
             ),
             review: review

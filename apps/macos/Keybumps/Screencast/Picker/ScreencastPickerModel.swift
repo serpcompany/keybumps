@@ -29,8 +29,8 @@ struct ScreencastChoice: Equatable, Sendable {
     }
 
     var target: ScreencastTarget
-    /// One per display it shows on, in display order. The countdown shows on these, and the
-    /// shortcuts only on these displays.
+    /// One per display it shows on, in display order. The countdown shows on these (and on the
+    /// bar's screen, `countdownFrames`), and the shortcuts only on these displays.
     var regions: [Region]
     /// The area and its screen, for the highlight while it records; nil for a window or every screen.
     var area: ScreencastPickedArea?
@@ -40,6 +40,16 @@ struct ScreencastChoice: Equatable, Sendable {
     var showsShortcuts: Bool
     /// Whether clicks are highlighted while it records.
     var highlightsClicks: Bool
+    /// The screen the picker's bar was on, where Record was pressed.
+    var barScreen: Region? = nil
+
+    /// Where the countdown shows, in AppKit's global space: centered on each region, and on the
+    /// bar's screen too when that isn't recorded, so it's in front of whoever pressed Record (#520).
+    var countdownFrames: [CGRect] {
+        let frames = regions.map(\.frame)
+        guard let barScreen, !regions.contains(where: { $0.display == barScreen.display }) else { return frames }
+        return frames + [barScreen.frame]
+    }
 }
 
 /// The picker's state, shared by its windows (one per screen) and its bar: area, window, or every
@@ -199,7 +209,8 @@ final class ScreencastPickerModel {
         func make(_ target: ScreencastTarget, regions: [ScreencastChoice.Region], area: ScreencastPickedArea? = nil) -> ScreencastChoice {
             ScreencastChoice(
                 target: target, regions: regions, area: area, audio: audio,
-                showsShortcuts: showsShortcuts, highlightsClicks: highlightsClicks
+                showsShortcuts: showsShortcuts, highlightsClicks: highlightsClicks,
+                barScreen: pointerScreen.map { .init(display: $0.id, frame: $0.frame) }
             )
         }
         switch target {

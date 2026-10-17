@@ -476,7 +476,7 @@ final class ScreencastController {
         while remaining > 0 {
             guard generation == self.generation else { return }
             phase = .countingDown(remaining: remaining)
-            presenter.showCountdown(remaining, in: choice.regions.map(\.frame), cancel: { [weak self] in self?.cancel() })
+            presenter.showCountdown(remaining, in: choice.countdownFrames, cancel: { [weak self] in self?.cancel() })
             do {
                 try await sleep(1)
             } catch {
