@@ -41,15 +41,18 @@ struct RecordingPosterFrames: Sendable {
     }
 
     /// Deletes each file in the cache that `kept` doesn't name and that was last written before
-    /// `cutoff`, so a frame made while this runs is never taken. It reads the folder, so it runs off
-    /// the main actor. Returns how many it deleted.
+    /// `cutoff`, so a frame made while this runs is never taken. A hidden file, such as the
+    /// temporary file `PrivateFile` writes a frame to before renaming it, is deleted only once it's
+    /// a day older than that, as a crash's leftover. It reads the folder, so it runs off the main
+    /// actor. Returns how many it deleted.
     func removeAll(except kept: Set<String>, writtenBefore cutoff: Date) -> Int {
         let keys: Set<URLResourceKey> = [.isRegularFileKey, .contentModificationDateKey]
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys))) ?? []
         var removed = 0
         for file in files where !kept.contains(file.lastPathComponent) {
+            let before = file.lastPathComponent.hasPrefix(".") ? cutoff.addingTimeInterval(-24 * 60 * 60) : cutoff
             guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true,
-                  let written = values.contentModificationDate, written < cutoff else { continue }
+                  let written = values.contentModificationDate, written < before else { continue }
             if (try? FileManager.default.removeItem(at: file)) != nil { removed += 1 }
         }
         return removed

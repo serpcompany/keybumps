@@ -40,8 +40,8 @@ struct RecordingImportMemory {
 ///   moved or changed.
 /// - **Each launch,** once the index has loaded, the recordings folder is read again off the main
 ///   actor (`launchCheck`): a recording there that the index lacks, such as one an older build
-///   saved after a rollback, is added, matched by resolved path so none is listed twice. Then
-///   poster frames no entry names are deleted.
+///   saved after a rollback, is added, matched by resolved path so none is listed twice. Then, if
+///   the file was read and is this build's, poster frames no entry names are deleted.
 /// - **A missing or corrupt file** after the import is rebuilt from the recordings folder's
 ///   recordings, without importing screenshots again; entries that can't be decoded are skipped
 ///   and the rest kept. A corrupt or partly read file is replaced only once its replacement is
@@ -121,6 +121,11 @@ final class RecordingLibrary {
         storageURL.deletingLastPathComponent().appendingPathComponent("recordings.unreadable.json")
     }
 
+    /// Where a replacement for a corrupt or partly read index is written before it takes its place.
+    var stagedURL: URL {
+        storageURL.deletingLastPathComponent().appendingPathComponent(".recordings.rebuilt.json")
+    }
+
     // MARK: Reading
 
     /// For the ⌘3 tab (#494): every indexed recording, newest first, after looking at each folder
@@ -190,8 +195,9 @@ final class RecordingLibrary {
         refresh()
         let missing = recordings.filter(\.isMissing).count
         logger.info("recordings index loaded source=\(source, privacy: .public) count=\(self.recordings.count, privacy: .public) missing=\(missing, privacy: .public)")
-        // A later build's poster frames may be named its own way, so they're left alone.
-        startLaunchCheck(readingRecordingsFolder: rereadsFolder, sweepingPosterFrames: source != "newer")
+        // Only a file that was read says which poster frames are kept: a later build's may name
+        // them its own way, and one that can't be read names none this launch knows.
+        startLaunchCheck(readingRecordingsFolder: rereadsFolder, sweepingPosterFrames: source != "newer" && source != "unreadable")
     }
 
     /// Looks again at each recording's folder: one moved or deleted outside Keybumps is marked
@@ -235,14 +241,13 @@ final class RecordingLibrary {
     /// caller's: Discard deleted them, or they're gone.
     func remove(folder: URL) {
         load()
-        let path = folder.standardizedFileURL.path
-        let removed = recordings.filter { $0.folder.path == path }
-        guard !removed.isEmpty else { return }
-        for recording in removed {
+        let matched = Set(entries(for: folder))
+        guard !matched.isEmpty else { return }
+        for recording in recordings where matched.contains(recording.id) {
             posterTasks[recording.id]?.cancel()
             posterFrames.remove(for: recording)
         }
-        recordings.removeAll { $0.folder.path == path }
+        recordings.removeAll { matched.contains($0.id) }
         save()
     }
 
@@ -318,20 +323,23 @@ final class RecordingLibrary {
     }
 
     /// Replaces a corrupt or partly read index, keeping it as `recordings.unreadable.json` (in place
-    /// of an older copy). The replacement is written in full first, and only then is the old file
-    /// moved aside, so if writing fails the old file stays where it is.
+    /// of an older copy). The replacement is written in full first, the old file is linked (or
+    /// copied) aside, and then the replacement is renamed over it, so `recordings.json` is there
+    /// throughout, and if any step fails the old file stays where it is.
     private func replaceSettingAside(with data: Data) throws {
-        let staged = storageURL.deletingLastPathComponent().appendingPathComponent(".recordings.rebuilt.json")
-        try PrivateFile.write(data, to: staged, fileManager: fileManager)
-        guard rename(storageURL.path, unreadableCopyURL.path) == 0 else {
-            let code = errno
-            try? fileManager.removeItem(at: staged)
-            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+        try PrivateFile.write(data, to: stagedURL, fileManager: fileManager)
+        do {
+            try? fileManager.removeItem(at: unreadableCopyURL)
+            if link(storageURL.path, unreadableCopyURL.path) != 0 {
+                try fileManager.copyItem(at: storageURL, to: unreadableCopyURL)
+            }
+        } catch {
+            try? fileManager.removeItem(at: stagedURL)
+            throw error
         }
-        guard rename(staged.path, storageURL.path) == 0 else {
+        guard rename(stagedURL.path, storageURL.path) == 0 else {
             let code = errno
-            _ = rename(unreadableCopyURL.path, storageURL.path)
-            try? fileManager.removeItem(at: staged)
+            try? fileManager.removeItem(at: stagedURL)
             throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
         }
     }
@@ -424,9 +432,18 @@ final class RecordingLibrary {
         sort()
     }
 
-    private func upsert(_ folder: URL, _ structure: RecordingStructure) {
+    /// The IDs of the entries for `folder`: those with its path as spelled, or else those with its
+    /// resolved path (`ProductPaths.canonicalPath`), so most lookups stat nothing on the main actor.
+    private func entries(for folder: URL) -> [UUID] {
         let path = folder.standardizedFileURL.path
-        if let index = recordings.firstIndex(where: { $0.folder.path == path }) {
+        let spelled = recordings.filter { $0.folder.path == path }
+        if !spelled.isEmpty { return spelled.map(\.id) }
+        let resolved = ProductPaths.canonicalPath(folder)
+        return recordings.filter { ProductPaths.canonicalPath($0.folder) == resolved }.map(\.id)
+    }
+
+    private func upsert(_ folder: URL, _ structure: RecordingStructure) {
+        if let id = entries(for: folder).first, let index = recordings.firstIndex(where: { $0.id == id }) {
             recordings[index] = recordings[index].updated(with: structure)
         } else {
             recordings.append(IndexedRecording(folder: folder, metadata: structure))

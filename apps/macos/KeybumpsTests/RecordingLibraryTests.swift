@@ -296,8 +296,28 @@ struct RecordingLibraryTests {
         #expect(!FileManager.default.fileExists(atPath: library.unreadableCopyURL.path))
     }
 
+    @Test("A partly readable index is replaced in place: recordings.json is the new index, and recordings.unreadable.json the old bytes, over any older copy")
+    func partialIndexReplacedInPlace() async throws {
+        defer { fixture.tearDown() }
+        try await fixture.recording(at: 100)
+        fixture.library().load()
+        try await fixture.recording(at: 200)
+        let partial = try fixture.addUnreadableEntry()
+        let library = fixture.library()
+        // An older copy aside, and a replacement a crash left staged.
+        try Data("an older unreadable index".utf8).write(to: library.unreadableCopyURL)
+        try Data("a staged replacement".utf8).write(to: library.stagedURL)
+
+        library.load()
+        #expect(library.state == .ready)
+        #expect(library.recordings.map(\.startedAt) == [Self.date(200), Self.date(100)])
+        #expect(fixture.savedRecordings() == library.recordings)
+        #expect(try Data(contentsOf: library.unreadableCopyURL) == partial)
+        #expect(!FileManager.default.fileExists(atPath: library.stagedURL.path))
+    }
+
     @Test(
-        "An index that's there but can't be read lists the recordings folder, and is never written",
+        "An index that's there but can't be read lists the recordings folder, keeps its poster frames, and is never written",
         arguments: ["no permission", "a folder in its place"]
     )
     func unreadableIndex(cause: String) async throws {
@@ -305,6 +325,9 @@ struct RecordingLibraryTests {
         try await fixture.recording(at: 100)
         fixture.library().load()
         let original = try Data(contentsOf: fixture.indexURL)
+        let frame = fixture.posters.appendingPathComponent(try #require(fixture.savedRecordings()?.first?.posterFrame))
+        try FileManager.default.createDirectory(at: fixture.posters, withIntermediateDirectories: true)
+        try Data("a cached frame".utf8).write(to: frame)
         if cause == "no permission" {
             try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: fixture.indexURL.path)
         } else {
@@ -320,6 +343,7 @@ struct RecordingLibraryTests {
         #expect(library.recordings.count == 2)
         await library.launchCheck?.value
         #expect(!FileManager.default.fileExists(atPath: library.unreadableCopyURL.path))
+        #expect(FileManager.default.fileExists(atPath: frame.path), "the poster frame the file names")
         if cause == "no permission" {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fixture.indexURL.path)
             #expect(try Data(contentsOf: fixture.indexURL) == original)
@@ -369,6 +393,32 @@ struct RecordingLibraryTests {
         }
     }
 
+    @Test("A recording is read again and removed through any spelling of its folder, such as a link")
+    func changesMatchResolvedPaths() async throws {
+        defer { fixture.tearDown() }
+        let capture = try await fixture.recording(at: 100)
+        let library = fixture.library()
+        library.load()
+        await library.launchCheck?.value
+        let entry = try #require(library.recordings.first)
+        let frame = fixture.posters.appendingPathComponent(entry.posterFrame)
+        try FileManager.default.createDirectory(at: fixture.posters, withIntermediateDirectories: true)
+        try Data("a cached frame".utf8).write(to: frame)
+        let alias = fixture.root.url.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: fixture.captures)
+        let linked = alias.appendingPathComponent("100", isDirectory: true)
+
+        try fixture.setDuration(5, of: capture)
+        library.update(linked)
+        #expect(library.recordings.map(\.id) == [entry.id], "never listed twice")
+        #expect(library.recordings.first?.duration == 5)
+
+        library.remove(folder: linked)
+        #expect(library.recordings.isEmpty)
+        #expect(fixture.savedRecordings() == [])
+        #expect(!FileManager.default.fileExists(atPath: frame.path))
+    }
+
     @Test("A name in recordings.json or meta.json that leaves its folder, such as `..`, is treated as missing")
     func fileNamesStayInTheirFolders() async throws {
         defer { fixture.tearDown() }
@@ -411,7 +461,7 @@ struct RecordingLibraryTests {
         #expect(FileManager.default.fileExists(atPath: victim.path))
     }
 
-    @Test("Poster frames no entry names are deleted when the index loads, and named ones kept")
+    @Test("Poster frames no entry names are deleted when the index loads, and named ones and ones being written kept")
     func orphanPosterFrames() async throws {
         defer { fixture.tearDown() }
         let library = fixture.library()
@@ -421,12 +471,20 @@ struct RecordingLibraryTests {
         let kept = try #require(await library.posterFrame(for: entry))
         let orphan = fixture.posters.appendingPathComponent("\(UUID().uuidString).jpg")
         try Data("an old frame".utf8).write(to: orphan)
+        // `PrivateFile`'s temporary files: one being written, and one a crash left two days ago.
+        let writing = fixture.posters.appendingPathComponent(".\(UUID().uuidString).jpg.\(UUID().uuidString).tmp")
+        let leftover = fixture.posters.appendingPathComponent(".\(UUID().uuidString).jpg.\(UUID().uuidString).tmp")
+        try Data("a frame being written".utf8).write(to: writing)
+        try Data("a crash's leftover".utf8).write(to: leftover)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-2 * 24 * 60 * 60)], ofItemAtPath: leftover.path)
 
         let reloaded = fixture.library()
         reloaded.load()
         await reloaded.launchCheck?.value
         #expect(!FileManager.default.fileExists(atPath: orphan.path))
         #expect(FileManager.default.fileExists(atPath: kept.path))
+        #expect(FileManager.default.fileExists(atPath: writing.path))
+        #expect(!FileManager.default.fileExists(atPath: leftover.path))
     }
 
     @Test("The index holds structure only: never the review, its note, or the app in front")
