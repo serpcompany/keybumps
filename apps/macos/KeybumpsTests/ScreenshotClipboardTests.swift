@@ -126,6 +126,88 @@ struct ScreenshotClipboardTests {
         #expect(fixture.clipboard.entries.map(\.sourceURL) == [main, second])
     }
 
+    @Test("A Screen capture adds every display's shot, the main display's newest, and copies only it")
+    func addsScreenCaptureCopyingTheMainDisplay() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        let start = fixture.pasteboard.changeCount
+        #expect(delivery.add(try fixture.screenshot("Earlier.png")))
+        let oneCopy = fixture.pasteboard.changeCount - start
+        let files = try ["1", "1 (2)", "1 (3)"].map { try fixture.screenshot("Screenshot \($0).png") }
+        let before = fixture.pasteboard.changeCount
+
+        delivery.addCapture(files)
+        let sources = fixture.clipboard.entries.prefix(3).compactMap(\.sourceURL)
+        #expect(sources == files)
+        #expect(fixture.pasteboard.changeCount - before == oneCopy, "copied once")
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: files[0])))
+    }
+
+    @Test("The Screen hotkey's files are added when screencapture exits, never by the watcher first")
+    func screenHotkeyAddsItsOwnFiles() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let capture = HotkeyCapture(fixture)
+        defer { capture.watcher.stop() }
+        var written: [URL] = []
+        capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { written = $0 }
+
+        // screencapture marks display 1 before it exits; the watcher would add and copy it now.
+        capture.scan()
+        #expect(fixture.clipboard.entries.isEmpty)
+        capture.runner.finish?()
+        #expect(written.count == 3)
+        let listed = ScreenshotPaletteContent.resolve(entries: fixture.clipboard.entries, query: "", isEnabled: true)
+        #expect(listed.entries.compactMap(\.sourceURL) == written, "⌘3, the main display's on top")
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: written[0])), "⌘V")
+
+        capture.scan()
+        #expect(fixture.clipboard.entries.count == 3, "the watcher doesn't add them again")
+    }
+
+    @Test("Screen and Edit adds its files the same way, copying none; Screen adds none while Clipboard History is off")
+    func editAndOffCaptures() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let capture = HotkeyCapture(fixture)
+        defer { capture.watcher.stop() }
+        let changeCount = fixture.pasteboard.changeCount
+        var written: [URL] = []
+        capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher, forEditing: true) { written = $0 }
+        capture.scan()
+        capture.runner.finish?()
+        #expect(fixture.clipboard.entries.compactMap(\.sourceURL) == written && written.count == 3)
+        #expect(fixture.pasteboard.changeCount == changeCount)
+
+        let off = try Fixture()
+        defer { off.tearDown() }
+        let offCapture = HotkeyCapture(off)
+        defer { offCapture.watcher.stop() }
+        offCapture.watcher.apply(enabled: true, clipboardHistoryEnabled: false)
+        offCapture.delivery.capture(.screens, with: offCapture.capturer, watcher: offCapture.watcher) { written = $0 }
+        offCapture.runner.finish?()
+        #expect(written.count == 3 && off.clipboard.entries.isEmpty)
+    }
+
+    @Test("A cancelled Area capture leaves its path to the watcher, so a macOS screenshot there still reaches ⌘3")
+    func cancelledAreaFreesItsPath() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let capture = HotkeyCapture(fixture)
+        defer { capture.watcher.stop() }
+        capture.runner.writes = false
+        capture.delivery.capture(.area, with: capture.capturer, watcher: capture.watcher)
+        capture.runner.finish?()
+
+        let path = try #require(capture.runner.files.first)
+        FileManager.default.createFile(atPath: path, contents: ScreenshotClipboardTests.png)
+        HeldRunner.mark(path)
+        capture.scan()
+        let listed = ScreenshotPaletteContent.resolve(entries: fixture.clipboard.entries, query: "", isEnabled: true)
+        #expect(listed.entries.compactMap(\.sourceURL?.standardizedFileURL.path) == [path], "⌘3")
+    }
+
     @Test("With the setting off, or for the Screen and Edit hotkey, screenshots reach Clipboard History but leave the clipboard alone")
     func leavesClipboardAloneWhenNotCopying() throws {
         let fixture = try Fixture()
@@ -165,6 +247,64 @@ struct ScreenshotClipboardTests {
 
         preferences.copiesScreenshotsToClipboard = false
         #expect(!AppPreferences(defaults: defaults).copiesScreenshotsToClipboard)
+    }
+
+    /// A Screen capture through the hotkey's path: the real capturer, with a stand-in for
+    /// `screencapture` that writes three displays' PNGs, marks display 1 as it does, and exits only
+    /// when the test says (`finish`); and a watcher on the fixture's folder.
+    @MainActor
+    fileprivate struct HotkeyCapture {
+        let runner = HeldRunner(png: ScreenshotClipboardTests.png)
+        let capturer: ScreenshotCapturer
+        let watcher: ScreenshotToolsService
+        let delivery: ScreenshotClipboardDelivery
+
+        init(_ fixture: Fixture) {
+            let root = fixture.root
+            let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+            self.delivery = delivery
+            capturer = ScreenshotCapturer(runner: runner, folder: { root }, displayCount: { 3 })
+            watcher = ScreenshotToolsService(
+                resolver: ScreenshotLocationResolver(preferredLocation: { root.path }, homeDirectory: root, isDirectory: { _ in true }),
+                now: { .distantPast },
+                ingest: { delivery.add($0) }
+            )
+            watcher.apply(enabled: true, clipboardHistoryEnabled: true)
+        }
+
+        /// Scans as often as the watcher needs to add a settled file.
+        func scan() {
+            for _ in 1...3 { watcher.scanForTesting() }
+        }
+    }
+
+    /// `writes: false` stands in for an Area capture cancelled with Escape: no file.
+    fileprivate final class HeldRunner: ScreenshotCaptureRunning {
+        let png: Data
+        var writes = true
+        private(set) var files: [String] = []
+        private(set) var finish: (@MainActor () -> Void)?
+
+        init(png: Data) { self.png = png }
+
+        func run(arguments: [String], completion: @escaping @MainActor () -> Void) {
+            files = arguments.filter { $0.hasSuffix(".png") }
+            if writes {
+                for file in files {
+                    FileManager.default.createFile(atPath: file, contents: png + Data(file.utf8))
+                }
+                files.first.map(Self.mark)
+            }
+            finish = completion
+        }
+
+        /// Gives a file macOS's screen-capture metadata.
+        static func mark(_ path: String) {
+            guard let mark = try? PropertyListSerialization.data(fromPropertyList: true, format: .binary, options: 0) else { return }
+            _ = mark.withUnsafeBytes {
+                setxattr(path, FileSystemScreenshotDirectoryReader.screenCaptureAttribute, $0.baseAddress, mark.count, 0, 0)
+            }
+        }
     }
 
     @MainActor

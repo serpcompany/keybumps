@@ -277,7 +277,7 @@ final class WiringHarness {
     let model: AppModel
     private let coordinator: GlobalShortcutCoordinator
     private let hotKeys: LoggingHotKeyBackend
-    private let pasteboard: NSPasteboard
+    let pasteboard: NSPasteboard
     private var lastShortcuts: [String: String] = [:]
 
     /// `quickSearch` defaults to one with no apps and its stores in the harness's own folder. The

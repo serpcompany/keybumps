@@ -143,7 +143,7 @@ struct ScreengrabsMigrationTests {
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
         #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == nil)
         #expect(preferences.capabilityShortcut(for: .screenshotArea) == nil)
-        #expect(preferences.capabilityShortcut(for: .screencast) == Self.savedShortcuts["screencast"])
+        #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
         #expect(!preferences.copiesScreenshotsToClipboard)
     }
 
@@ -343,7 +343,7 @@ struct ScreengrabsMigrationTests {
         #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screenshotTools"])
         #expect(defaults.stringArray(forKey: "knownCapabilities")?.contains("screencast") == false)
         #expect(first.capabilityShortcut(for: .screenshotArea) == nil)
-        #expect(first.capabilityShortcut(for: .screencast) == Self.savedShortcuts["screencast"])
+        #expect(first.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
         #expect(!first.copiesScreenshotsToClipboard)
 
         // The person takes back ⇧⌘4 and the clipboard copy; the next launch leaves them.

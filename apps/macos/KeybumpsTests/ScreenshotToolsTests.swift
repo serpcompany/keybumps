@@ -1,4 +1,5 @@
 import AppKit
+import Testing
 import XCTest
 @testable import Keybumps
 
@@ -303,5 +304,54 @@ private final class FakeScreenshotReader: ScreenshotDirectoryReading {
     func entries(in folder: URL) throws -> [ScreenshotDirectoryEntry] {
         if let error { throw error }
         return entries
+    }
+}
+
+@Suite("Screengrabs: the watcher leaves a hotkey's screenshots to the hotkey")
+@MainActor
+struct ScreenshotWatcherSkipTests {
+    @Test("Files a hotkey is writing are never added by the watcher; macOS's own still are")
+    func skipsAHotkeysFiles() {
+        let watcher = WatcherHarness()
+        defer { watcher.service.stop() }
+        let names = ["display-1.png", "display-2.png", "macOS.png"]
+        watcher.service.skip(names.prefix(2).map { watcher.folder.appendingPathComponent($0) })
+        watcher.reader.entries = names.map { watcher.file($0, marked: true) }
+
+        for _ in 1...3 { watcher.service.scanForTesting() }
+        #expect(watcher.ingested == ["macOS.png"])
+    }
+}
+
+@MainActor
+private final class WatcherHarness {
+    let folder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("screenshot-watcher-\(UUID().uuidString)", isDirectory: true)
+    let reader = FakeScreenshotReader()
+    var now = Date(timeIntervalSince1970: 1_000)
+    var ingested: [String] = []
+    private(set) var service: ScreenshotToolsService!
+
+    init() {
+        let folder = folder
+        service = ScreenshotToolsService(
+            resolver: ScreenshotLocationResolver(preferredLocation: { folder.path }, homeDirectory: folder, isDirectory: { _ in true }),
+            reader: reader,
+            now: { [weak self] in self?.now ?? .distantPast },
+            ingest: { [weak self] url in
+                self?.ingested.append(url.lastPathComponent)
+                return true
+            }
+        )
+        service.apply(enabled: true, clipboardHistoryEnabled: true)
+    }
+
+    func file(_ name: String, marked: Bool, created: TimeInterval = 1_001) -> ScreenshotDirectoryEntry {
+        ScreenshotDirectoryEntry(
+            url: folder.appendingPathComponent(name),
+            createdAt: Date(timeIntervalSince1970: created),
+            size: 10,
+            isScreenCapture: marked
+        )
     }
 }
