@@ -69,7 +69,7 @@ struct CapabilitySettingsPage {
     let summary: String
     /// What turning the module off releases; the tooltip on its toolbar enable switch.
     let disableExplanation: String?
-    /// The tooltip in its place where Screengrabs can't record (`PluginCompatibility.supportsRecording`),
+    /// The tooltip in its place where ScreenGrabs can't record (`PluginCompatibility.supportsRecording`),
     /// for a page whose explanation names recording; nil keeps `disableExplanation` everywhere.
     var disableExplanationWithoutRecording: String? = nil
     let content: @MainActor () -> AnyView
@@ -147,7 +147,7 @@ protocol CapabilityModule: AnyObject {
     /// Resumes resources that were waiting on a permission after `PermissionCoordinator` re-reads macOS.
     func permissionsDidRefresh(_ context: CapabilityContext)
     /// Settings attention the module reports for its own page, including setup that isn't a
-    /// TCC permission (for example Screengrabs' Requires Clipboard History).
+    /// TCC permission (for example ScreenGrabs' Requires Clipboard History).
     func attentionCount(_ context: CapabilityContext) -> Int
     /// The rows of the module's palette tab, when the module supplies them itself rather than
     /// through a case in `CommandPaletteController`.

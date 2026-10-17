@@ -690,7 +690,7 @@ struct ScreencastRecordingControlsTests {
         )
     }
 
-    /// Binds every recording shortcut, and gives the controls Screengrabs' context, on macOS 15
+    /// Binds every recording shortcut, and gives the controls ScreenGrabs' context, on macOS 15
     /// unless `compatibility` says otherwise.
     @discardableResult
     func apply(
@@ -783,7 +783,7 @@ struct ScreencastRecordingControlsTests {
         #expect(await eventually { status.title == nil && status.sections.isEmpty })
     }
 
-    @Test("The menu bar shows nothing for a recording, and no recording shortcut registers, where Screengrabs can't record (#490)")
+    @Test("The menu bar shows nothing for a recording, and no recording shortcut registers, where ScreenGrabs can't record (#490)")
     func menuBarOnMacOS14() {
         recording.elapsed = 65
         let controls = makeControls()
@@ -794,7 +794,7 @@ struct ScreencastRecordingControlsTests {
         #expect(hotKeys.registered.isEmpty)
     }
 
-    @Test("Screengrabs turning off clears the menu bar's time at once (#490)")
+    @Test("ScreenGrabs turning off clears the menu bar's time at once (#490)")
     func menuBarClearsWhenTurnedOff() {
         recording.elapsed = 65
         let controls = makeControls()
@@ -853,7 +853,7 @@ struct ScreencastRecordingControlsTests {
         #expect(hotKeys.registered.isEmpty)
     }
 
-    @Test("The recording shortcuts are Screengrabs', unassigned, say when they work, and Settings lists each after Record Screen")
+    @Test("The recording shortcuts are ScreenGrabs', unassigned, say when they work, and Settings lists each after Record Screen")
     func shortcutCases() {
         for shortcut in ScreencastRecordingControls.shortcuts {
             #expect(shortcut.capability == .screenshotTools)

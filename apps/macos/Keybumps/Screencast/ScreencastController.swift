@@ -190,8 +190,8 @@ final class ScreencastController {
     ///   - areaMemory: The last area recorded, which the picker opens with.
     ///   - pickerMemory: The rest of what was last recorded, which the picker opens with, but the
     ///     switches.
-    ///   - preferences: Settings › Screengrabs, read each time the picker opens.
-    ///   - saveSwitches: Saves the picker's switches as Settings › Screengrabs', at Record.
+    ///   - preferences: Settings › ScreenGrabs, read each time the picker opens.
+    ///   - saveSwitches: Saves the picker's switches as Settings › ScreenGrabs', at Record.
     ///   - screens: The displays, read each time the picker opens.
     ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
     ///     its screen.
@@ -712,7 +712,7 @@ final class ScreencastController {
     }
 }
 
-/// What Screengrabs says when a recording can't start or save.
+/// What ScreenGrabs says when a recording can't start or save.
 enum ScreencastMessages {
     static func text(for failure: ScreencastFailure) -> String {
         switch failure {

@@ -43,7 +43,7 @@ final class AppModel {
     /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
     let keywordExpansion: KeywordExpansionController
     /// The on-screen key display (#443). The Keystrokes plugin holds it while it's on, and a
-    /// Screengrabs recording holds it for the recording, with Keystrokes on or off.
+    /// ScreenGrabs recording holds it for the recording, with Keystrokes on or off.
     let keyDisplay: KeyDisplay
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
@@ -312,7 +312,7 @@ final class AppModel {
         dictation.restoresClipboard = { preferences.bool(.dictationRestoresClipboard, for: .dictation) }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
-        // Screengrabs' recording, which its module owns. Settings never opens under unit tests.
+        // ScreenGrabs' recording, which its module owns. Settings never opens under unit tests.
         let recording = ScreencastModule(
             preferences: preferences,
             permissions: permissions,
@@ -398,9 +398,9 @@ final class AppModel {
             commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
         }
         // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
-        // only), and Screengrabs' screenshot hotkeys while they're registered, which also clear it
+        // only), and ScreenGrabs' screenshot hotkeys while they're registered, which also clear it
         // just before they capture. Record Screen counts too: it has macOS's ⇧⌘5, which cleared
-        // the display before Screengrabs took it over.
+        // the display before ScreenGrabs took it over.
         keyDisplay.keybumpsScreenshotBindings = { [shortcuts] in
             let registered = shortcuts.registeredBindings
             let owners = ScreenshotToolsModule.captureShortcuts.map(\.shortcut) + [.screencast]
@@ -428,7 +428,7 @@ final class AppModel {
         }
     }
 
-    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screengrabs
+    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the ScreenGrabs
     /// takeover use unless a composition injects its own: the owner's `com.apple.symbolichotkeys`,
     /// or inert ones under the unit-test host, so unit tests never rewrite the owner's macOS shortcuts.
     static var defaultSymbolicHotKeyPreferences: any SymbolicHotKeyPreferences {
@@ -815,7 +815,7 @@ final class AppModel {
     }
 
     /// A screenshot hotkey without Screen Recording asks macOS once (which may open System
-    /// Settings); afterwards a brief notice points to Settings › Screengrabs, whose Screen Recording
+    /// Settings); afterwards a brief notice points to Settings › ScreenGrabs, whose Screen Recording
     /// row opens System Settings and then offers Restart Keybumps (macOS reports a new grant only
     /// after Keybumps reopens).
     private func screenshotHotkeyNeedsScreenRecording() {
@@ -1020,11 +1020,11 @@ final class AppModel {
     var quickSearchActions: [QuickSearchAction] { capabilities.quickSearchActions(capabilityContext) }
     /// Runs an action command picked in Quick Search, through its plugin's module.
     func runQuickSearchAction(_ action: QuickSearchAction) { capabilities.perform(action, capabilityContext) }
-    /// Screengrabs' recording part, which its module owns.
+    /// ScreenGrabs' recording part, which its module owns.
     var recording: ScreencastModule? {
         (capabilities.module(for: .screenshotTools) as? ScreenshotToolsModule)?.recording
     }
-    /// What Record Screen does: the picker, or Screengrabs' page when something's missing.
+    /// What Record Screen does: the picker, or ScreenGrabs' page when something's missing.
     func startScreencast() {
         guard isLicensed else { return }
         recording?.start()

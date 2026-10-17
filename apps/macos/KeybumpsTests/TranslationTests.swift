@@ -29,7 +29,7 @@ struct TranslationGateTests {
         preferences.enabledCapabilities = Set(Capability.allCases)
         #expect(preferences.enabledCapabilities == Set(Capability.allCases).subtracting([.translation]))
 
-        // Every plugin that runs on macOS 14 is unaffected, Screengrabs too (its recording needs 15).
+        // Every plugin that runs on macOS 14 is unaffected, ScreenGrabs too (its recording needs 15).
         for capability in Capability.allCases where capability.descriptor.minimumMacOS == nil {
             #expect(preferences.compatibility.supports(capability))
             #expect(preferences.compatibility.requirement(for: capability) == nil)

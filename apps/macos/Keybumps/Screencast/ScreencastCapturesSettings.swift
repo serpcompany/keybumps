@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The rows Settings › Screengrabs adds at the end of its Recordings group: where recording isn't
+/// The rows Settings › ScreenGrabs adds at the end of its Recordings group: where recording isn't
 /// supported, a note saying so (`PluginCompatibility.recordingRequirement`); otherwise the folder
-/// recordings are saved in, and a button that opens it in Finder, whether Screengrabs is on or off.
+/// recordings are saved in, and a button that opens it in Finder, whether ScreenGrabs is on or off.
 /// Each reports itself through `ScreenshotsSettings.Shown`.
 struct ScreencastCapturesSettings: View {
     @Environment(AppModel.self) private var model

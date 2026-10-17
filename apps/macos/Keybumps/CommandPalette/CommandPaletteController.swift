@@ -409,7 +409,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var openHolds: Set<UUID> = []
     var isHeldOpen: Bool { !openHolds.isEmpty }
     private let notices: any PaletteNoticePresenting
-    /// Set while Screengrabs is enabled; opens the markup editor for an image item.
+    /// Set while ScreenGrabs is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
     /// Opens Settings on a page, or where it was left when nil. The app shell sets it to the status
     /// menu's route.
@@ -2332,7 +2332,7 @@ private struct ClipboardResultsView: View {
     let selection: Int
     let choose: (ClipboardEntry) -> Void
     let copy: (ClipboardEntry) -> Void
-    /// Opens an image in the Screenshot Editor; nil while Screengrabs is off.
+    /// Opens an image in the Screenshot Editor; nil while ScreenGrabs is off.
     let edit: ((ClipboardEntry) -> Void)?
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void

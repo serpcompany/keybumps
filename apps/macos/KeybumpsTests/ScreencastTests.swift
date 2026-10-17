@@ -5,13 +5,13 @@ import SwiftUI
 import Testing
 @testable import Keybumps
 
-/// Screengrabs' recording (ADR 0009, ADR 0010), which was the Screencast plugin (#445): its part of
-/// Screengrabs' manifest, its preferences and where they're stored, the macOS 15 gate
+/// ScreenGrabs' recording (ADR 0009, ADR 0010), which was the Screencast plugin (#445): its part of
+/// ScreenGrabs' manifest, its preferences and where they're stored, the macOS 15 gate
 /// (`PluginCompatibility.supportsRecording`), and Record Screen, which opens the picker (#447) and
 /// has ⇧⌘5. Nothing here records, reads the screen, asks for a permission, or opens Settings or
 /// Finder.
 @MainActor
-@Suite("Screengrabs: recording")
+@Suite("ScreenGrabs: recording")
 struct ScreencastTests {
     static let macOS14 = PluginCompatibility(macOSMajorVersion: 14)
     static let macOS15 = PluginCompatibility(macOSMajorVersion: 15)
@@ -22,10 +22,10 @@ struct ScreencastTests {
         displayName: "⌃⌥⇧R"
     )
 
-    @Test("Recording is part of Screengrabs, which ships on with no minimum macOS: its shortcuts, its action, and its page")
+    @Test("Recording is part of ScreenGrabs, which ships on with no minimum macOS: its shortcuts, its action, and its page")
     func manifest() throws {
         let descriptor = CapabilityDescriptor.screenshotTools
-        #expect(descriptor.title == "Screengrabs")
+        #expect(descriptor.title == "ScreenGrabs")
         #expect(descriptor.category == .media)
         #expect(descriptor.isOnByDefault)
         #expect(descriptor.minimumMacOS == nil, "Recording needs macOS 15 inside the plugin (supportsRecording)")
@@ -45,16 +45,16 @@ struct ScreencastTests {
     func permissions() throws {
         let descriptor = CapabilityDescriptor.screenshotTools
         #expect(descriptor.requiredPermissions == [.screenRecording])
-        #expect(MacPermission.screenRecording.explanation.contains("Screengrabs"))
+        #expect(MacPermission.screenRecording.explanation.contains("ScreenGrabs"))
         #expect(descriptor.optionalPermissions.map(\.permission) == [.accessibility, .microphone, .inputMonitoring])
         let reasons = descriptor.optionalPermissions.map(\.reason)
         #expect(reasons[1].contains("voice") && reasons[2].contains("shortcuts"))
-        #expect(MacPermission.microphone.explanation.contains("Screengrabs"), "Settings › Permissions names it (#490)")
-        #expect(!MacPermission.inputMonitoring.explanation.contains("Screengrabs"), "Optional: its reason is its own")
+        #expect(MacPermission.microphone.explanation.contains("ScreenGrabs"), "Settings › Permissions names it (#490)")
+        #expect(!MacPermission.inputMonitoring.explanation.contains("ScreenGrabs"), "Optional: its reason is its own")
         #expect(PermissionSetupPlan.requiredPermissions(for: [.screenshotTools]) == [.screenRecording])
     }
 
-    @Test("Quick Search finds Screengrabs by both plugins' words, and Record Screen by Screencast's")
+    @Test("Quick Search finds ScreenGrabs by both plugins' words, and Record Screen by Screencast's")
     func command() {
         let command = QuickSearchCommand.capability(.screenshotTools)
         #expect(command.match("screengrabs") == .name)
@@ -64,6 +64,24 @@ struct ScreencastTests {
         #expect(PluginAction.startScreencast.id == "startScreencast", "It keys learned usage")
         #expect(PluginAction.startScreencast.title == "Record Screen")
         #expect(PluginAction.startScreencast.keywords.contains("screencast"))
+    }
+
+    @Test(
+        "Quick Search, Settings' sidebar, and the Plugins page find ScreenGrabs however its name is typed (#512)",
+        arguments: [
+            ("ScreenGrabs", QuickSearchCommand.Match.name),
+            ("screengrabs", .name),
+            ("screengrab", .keyword),
+            ("screen grabs", .keyword),
+        ]
+    )
+    func findsItByName(query: String, match: QuickSearchCommand.Match) {
+        #expect(CapabilityDescriptor.screenshotTools.title == "ScreenGrabs")
+        #expect(QuickSearchCommand.capability(.screenshotTools).match(query) == match)
+        let sidebar = SettingsSidebar.groups(matching: query)
+        #expect(sidebar == [[.screenshotTools]])
+        let plugins = PluginsTable.sections(matching: query).map(\.plugins)
+        #expect(plugins == [[.screenshotTools]])
     }
 
     // MARK: Preferences
@@ -81,7 +99,7 @@ struct ScreencastTests {
         ))
     }
 
-    @Test("Screengrabs' page lists them in one Recordings group")
+    @Test("ScreenGrabs' page lists them in one Recordings group")
     func groups() {
         let descriptor = CapabilityDescriptor.screenshotTools
         #expect(descriptor.preferenceGroups.map(\.title) == ["Recordings"])
@@ -96,7 +114,7 @@ struct ScreencastTests {
         #expect(options.map(\.title) == ["None", "3 seconds", "5 seconds", "10 seconds"])
     }
 
-    @Test("Screengrabs reads and writes them at Screencast's keys, plugin.screencast.<key>, read back after a relaunch, and in the typed value")
+    @Test("ScreenGrabs reads and writes them at Screencast's keys, plugin.screencast.<key>, read back after a relaunch, and in the typed value")
     func storage() {
         let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
@@ -129,7 +147,7 @@ struct ScreencastTests {
         #expect(preferences.screencast.countdownSeconds == 10, "Only one of its options")
     }
 
-    @Test("What Screencast saved before the merge is read by Screengrabs, and the picker's switches land on the same keys")
+    @Test("What Screencast saved before the merge is read by ScreenGrabs, and the picker's switches land on the same keys")
     func readsWhatScreencastSaved() {
         let defaults = InMemoryDefaults()
         defaults.set(false, forKey: "plugin.screencast.recordsSystemAudio")
@@ -170,7 +188,7 @@ struct ScreencastTests {
 
     // MARK: The macOS 15 gate
 
-    @Test("Recording needs macOS 15; Screengrabs itself turns on everywhere", arguments: [14, 15, 26])
+    @Test("Recording needs macOS 15; ScreenGrabs itself turns on everywhere", arguments: [14, 15, 26])
     func supportsRecording(_ version: Int) {
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: version))
         #expect(preferences.compatibility.supportsRecording == (version >= 15))
@@ -202,7 +220,7 @@ struct ScreencastTests {
 
     // MARK: Record Screen
 
-    @Test("Record Screen is Screengrabs', with ⇧⌘5 on new installs and on updates that didn't know it")
+    @Test("Record Screen is ScreenGrabs', with ⇧⌘5 on new installs and on updates that didn't know it")
     func recordScreenShortcut() {
         #expect(CapabilityShortcut.screencast.rawValue == "screencast", "Stored bindings keep the raw value")
         #expect(CapabilityShortcut.screencast.title == "Record Screen")
@@ -266,7 +284,7 @@ struct ScreencastTests {
         }
     }
 
-    @Test("Record Screen registers only while Screengrabs is on, where it can record")
+    @Test("Record Screen registers only while ScreenGrabs is on, where it can record")
     func shortcutRegistersWhileOn() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencast-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -292,7 +310,7 @@ struct ScreencastTests {
         #expect(old.shortcuts()[CapabilityShortcut.screenshotArea.ownerID] != nil, "Screenshots work as today")
     }
 
-    @Test("Record Screen opens Screengrabs' page while it's off")
+    @Test("Record Screen opens ScreenGrabs' page while it's off")
     func startWhileOffOpensItsPage() {
         var opened: [SettingsSection] = []
         let module = ScreencastModule(
@@ -331,7 +349,7 @@ struct ScreencastTests {
     }
 
     @available(macOS 15, *)
-    @Test("Turning Screengrabs off closes the picker")
+    @Test("Turning ScreenGrabs off closes the picker")
     func turningOffCancels() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastOff-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -348,7 +366,7 @@ struct ScreencastTests {
     }
 
     @available(macOS 15, *)
-    @Test("A saved recording opens the recording window, off screen here; turning Screengrabs off closes it, which saves")
+    @Test("A saved recording opens the recording window, off screen here; turning ScreenGrabs off closes it, which saves")
     func savedCaptureOpensTheReviewPanel() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastReview-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -508,7 +526,7 @@ struct ScreencastTests {
 
     // MARK: Settings attention
 
-    @Test("Screengrabs' page needs attention while it's on without Screen Recording; the Microphone is optional")
+    @Test("ScreenGrabs' page needs attention while it's on without Screen Recording; the Microphone is optional")
     func attention() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastAttention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }

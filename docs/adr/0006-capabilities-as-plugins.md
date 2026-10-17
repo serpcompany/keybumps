@@ -1,6 +1,6 @@
 # 0006: Capabilities are Keybumps's plugins: a default set, added ones, and an official-only plugin list
 
-Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands. Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17): decision 2's Screenshot Tools is now Screengrabs, with the same ID (`screenshotTools`).
+Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands. Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17): decision 2's Screenshot Tools is now ScreenGrabs, with the same ID (`screenshotTools`).
 
 ## Context
 
