@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 @testable import Keybumps
 
@@ -589,6 +590,123 @@ struct ScreencastPickerViewTests {
         #expect(model.area == area && recorded == 2, "On the bar over the area: kept, nothing recorded")
         try doubleClick(at: CGPoint(x: area.rect.midX, y: 400))
         #expect(recorded == 3, "In the area, off the bar: recorded")
+    }
+}
+
+/// The bar laid out on a screen as Start Screencast lays it out, in a panel that's never shown, and
+/// drawn at 2x through AppKit, as the app draws it: Record's label is never cut short, whichever of
+/// the bar's rows is its widest (owner QA of 4030.475.5 saw "Rec…" whenever it was the controls).
+/// Made-up screen names.
+@MainActor
+@Suite("Screencast: the picker's bar")
+struct ScreencastPickerBarTests {
+    enum Layout: String, CaseIterable, CustomTestStringConvertible {
+        /// Area, with one drawn: no screen row, so the controls are the widest row.
+        case area
+        /// Window, with one chosen.
+        case window
+        /// Screen, on a Mac with one screen.
+        case oneScreen
+        /// Screen, with names longer than the controls: the screen row is the widest.
+        case longNames
+        /// All Screens chosen, with short names.
+        case everyScreen
+        /// A screen too narrow for the titles: the options drop theirs and the screens are numbered.
+        case narrowScreen
+
+        var testDescription: String { rawValue }
+    }
+
+    @available(macOS 15, *)
+    @Test("Record's label shows in full, red, at its own width, with every target, the screen row open, long names, and on a narrow screen", arguments: Layout.allCases)
+    func recordIsNeverCutShort(_ layout: Layout) throws {
+        let model = Self.model(layout)
+        #expect(model.canConfirm, "Record is red: something to record")
+        let screen = try #require(model.layout.screen(1))
+        let view = ScreencastPickerView(model: model, screen: screen, confirm: {})
+        let panel = ScreencastKeyPanel(frame: screen.frame, level: .screenSaver, identifier: "screencastPicker")
+        panel.appearance = NSAppearance(named: .darkAqua)
+        defer { panel.contentView = nil }
+        panel.contentView = view
+        view.showBar(ScreencastPickerBar(model: model, confirm: {}, cancel: {}), bottomInset: 28)
+        view.layoutSubtreeIfNeeded()
+        let bar = try #require(view.subviews.first)
+        #expect(bar.frame.width <= screen.frame.width - 16, "inside its screen")
+
+        let label = NSHostingView(rootView: ScreencastPickerRecordLabel(canConfirm: true)).fittingSize.width
+        #expect(NSHostingView(rootView: ScreencastPickerRecordLabel(canConfirm: false)).fittingSize.width == label, "gray until there's something to record, at the same width")
+        let red = try Self.widestRedRun(in: Self.render(bar))
+        // Its capsule's antialiased ends lose a pixel or so; "Rec…" was 10 points short.
+        #expect(red >= (label - 2) * 2, "Record's capsule is \(red / 2) points wide, its label \(label)")
+    }
+
+    /// The picker in `layout`, on a Retina screen at AppKit's origin, the one with the pointer.
+    static func model(_ layout: Layout) -> ScreencastPickerModel {
+        let width: CGFloat = layout == .narrowScreen ? 560 : 1512
+        func screen(_ id: CGDirectDisplayID, x: CGFloat, name: String) -> ScreencastScreen {
+            ScreencastScreen(
+                id: id, frame: CGRect(x: x, y: 0, width: id == 1 ? width : 1920, height: id == 1 ? 982 : 1080),
+                scale: id == 1 ? 2 : 1, name: name, uuid: "MADE-UP-DISPLAY-\(id)"
+            )
+        }
+        let screens: [ScreencastScreen] = switch layout {
+        case .oneScreen: [screen(1, x: 0, name: "Made-Up Built-in Display")]
+        case .everyScreen: [screen(1, x: 0, name: "A"), screen(2, x: width, name: "B")]
+        case .area, .window, .longNames, .narrowScreen: [
+            screen(2, x: -1920, name: "Made-Up External Display With A Long Name"),
+            screen(1, x: 0, name: "Made-Up Built-in Display"),
+            screen(3, x: width, name: "Made-Up Wide Display"),
+        ]
+        }
+        let model = PickerScreens.model(
+            layout: ScreencastScreenLayout(screens: screens),
+            rememberedArea: ScreencastPickedArea(display: 1, rect: CGRect(x: 100, y: 300, width: 300, height: 200)),
+            pointerScreen: 1
+        )
+        switch layout {
+        case .area:
+            model.target = .area
+        case .window:
+            model.target = .window
+            model.windows = [ScreencastContent.Window(
+                id: 30, frame: CGRect(x: 100, y: 100, width: 800, height: 500), layer: 0,
+                processID: ScreencastScreens.otherApp, isUntitled: false, isOnScreen: true
+            )]
+            _ = model.clickWindow(at: CGPoint(x: 500, y: 682))
+        case .everyScreen:
+            model.target = .screen
+            model.chooseEveryScreen()
+        case .oneScreen, .longNames, .narrowScreen:
+            model.target = .screen
+        }
+        return model
+    }
+
+    /// `view` as it draws, at 2x, dark.
+    static func render(_ view: NSView) throws -> NSBitmapImageRep {
+        let size = view.bounds.size
+        let rep = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        rep.size = size
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep
+    }
+
+    /// The widest stretch of red across any pixel row, from its first red pixel to its last, in
+    /// pixels: Record's capsule, the bar's only red, across its middle.
+    static func widestRedRun(in image: NSBitmapImageRep) throws -> CGFloat {
+        func isRed(_ x: Int, _ y: Int) -> Bool {
+            guard let color = image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
+            return color.alphaComponent > 0.9 && color.redComponent > 0.75 && color.greenComponent < 0.5 && color.blueComponent < 0.5
+        }
+        let widths = (0..<image.pixelsHigh).map { y in
+            let red = (0..<image.pixelsWide).filter { isRed($0, y) }
+            return CGFloat((red.last ?? 0) - (red.first ?? 0) + (red.isEmpty ? 0 : 1))
+        }
+        return try #require(widths.max().flatMap { $0 > 0 ? $0 : nil }, "no red: Record didn't draw")
     }
 }
 
