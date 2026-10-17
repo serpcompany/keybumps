@@ -303,7 +303,7 @@ struct ScreencastCropAndBlurReviewTests {
         #expect(timeUndone?.time.start == 0, "the bar's drag")
     }
 
-    @Test("Strength shows the picked blur's strength after undo, redo, and a display switch, and a blur drawn next takes what it shows")
+    @Test("Strength shows the picked blur's strength after undo, redo, and a display switch, keeps it once the blur is unpicked, and a blur drawn next takes what it shows")
     func strengthFollowsThePickedBlur() throws {
         defer { fixture.tearDown() }
         let model = fixture.model(try fixture.video(displays: 2))
@@ -313,6 +313,8 @@ struct ScreencastCropAndBlurReviewTests {
         model.undo()
         #expect(model.selectedBlur?.strength == .high)
         #expect(model.blurStrength == .high, "undo")
+        model.selectBlur(nil)
+        #expect(model.blurStrength == .high, "unpicked after the undo, Strength keeps the High it showed")
         draw(model, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 300, y: 300))
         #expect(model.selectedBlur?.strength == .high, "Blur 2 takes the High shown after the undo")
         model.undo()
@@ -332,6 +334,8 @@ struct ScreencastCropAndBlurReviewTests {
         #expect(model.blurStrength == .high, "the next one drawn's")
         model.selectedDisplay = 0
         #expect(model.blurStrength == .low, "Blur 2 is still picked")
+        model.selectBlur(nil)
+        #expect(model.blurStrength == .low, "unpicked after the switch back, Strength keeps the Low it showed")
         draw(model, from: CGPoint(x: 400, y: 200), to: CGPoint(x: 500, y: 300))
         #expect(model.selectedBlur?.strength == .low, "a blur drawn after the switch back takes the Low shown")
 
