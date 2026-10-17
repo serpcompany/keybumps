@@ -8,6 +8,8 @@ import Foundation
 /// A failure or a cancel stops every queue at its next sample, and only once none is inside the
 /// reader or the writer are both cancelled: cancelling a writer while another queue appends to it
 /// crashes. A cancelled writer never asks a waiting input for more, so the copy ends without it.
+/// A writer that failed on its own (a full disk) is a failure too, even after the last sample, and
+/// `finishWriting(_:completion:)` never asks one to finish.
 final class ScreencastSampleCopier: @unchecked Sendable {
     private let reader: AVAssetReader
     private let writer: AVAssetWriter
@@ -23,7 +25,7 @@ final class ScreencastSampleCopier: @unchecked Sendable {
     private var stopping = false
     /// The reader and writer are cancelled.
     private var stopped = false
-    /// Queues inside a copy, which the stop waits for.
+    /// Queues inside a copy, which the stop waits for, and `run` while it asks the inputs.
     private var copying = 0
 
     private enum Outcome {
@@ -31,7 +33,7 @@ final class ScreencastSampleCopier: @unchecked Sendable {
         case waiting
         /// The output had no more.
         case finished
-        /// An append failed, or the cancel was seen.
+        /// An append failed, the writer failed on its own, or the cancel was seen.
         case stop
     }
 
@@ -61,14 +63,29 @@ final class ScreencastSampleCopier: @unchecked Sendable {
         onSample: @escaping @Sendable (Int, CMSampleBuffer) -> Void = { _, _ in },
         completion: @escaping @Sendable () -> Void
     ) {
+        // Every input enters the group, and the asking counts as a copy, before any queue starts:
+        // a queue that stops at once (the cancel already seen, or a first append that fails) then
+        // can't release an input that hasn't entered (an unbalanced leave, which traps), or cancel
+        // the writer while an input is still being asked.
+        lock.withLock { copying += 1 }
+        for _ in pairs { group.enter() }
+        group.notify(queue: .global(qos: qos.qosClass), execute: completion)
         for (index, pair) in pairs.enumerated() {
-            group.enter()
             let queue = DispatchQueue(label: "\(label).\(index)", qos: qos)
             pair.input.requestMediaDataWhenReady(on: queue) { [self] in
                 copy(index, onSample: onSample)
             }
         }
-        group.notify(queue: .global(qos: qos.qosClass), execute: completion)
+        leave(nil, .waiting)
+    }
+
+    /// Finishes `writer`'s file once the copy is done, and calls `completion` with whether it's
+    /// complete; when it isn't, the writer's `error` says why. A writer that isn't writing any more,
+    /// failed on its own (a full disk) or cancelled, isn't asked: AVFoundation raises an exception
+    /// when it is.
+    static func finishWriting(_ writer: AVAssetWriter, completion: @escaping @Sendable (Bool) -> Void) {
+        guard writer.status == .writing else { return completion(false) }
+        writer.finishWriting { [writer] in completion(writer.status == .completed) }
     }
 
     /// Appends what the input will take, in an autorelease pool per sample, as Shotnix's
@@ -97,7 +114,13 @@ final class ScreencastSampleCopier: @unchecked Sendable {
             }
             switch appended {
             case nil:
-                if writer.status == .writing { input.markAsFinished() }
+                // A writer that failed on its own after the last append (a full disk) is a stop,
+                // not the end, so it's never asked to finish.
+                guard writer.status == .writing else {
+                    outcome = .stop
+                    return
+                }
+                input.markAsFinished()
                 outcome = .finished
                 return
             case false?:
@@ -109,13 +132,13 @@ final class ScreencastSampleCopier: @unchecked Sendable {
         }
     }
 
-    /// A queue is out of its copy. The last one out after a stop cancels the reader and writer,
-    /// and releases every input still waiting.
-    private func leave(_ index: Int, _ outcome: Outcome) {
+    /// A queue is out of its copy, or `run` is done asking (no `index`). The last one out after a
+    /// stop cancels the reader and writer, and releases every input still waiting.
+    private func leave(_ index: Int?, _ outcome: Outcome) {
         var leaves = 0
         let halts = lock.withLock {
             copying -= 1
-            if outcome == .finished, !finished[index] {
+            if outcome == .finished, let index, !finished[index] {
                 finished[index] = true
                 leaves += 1
             }

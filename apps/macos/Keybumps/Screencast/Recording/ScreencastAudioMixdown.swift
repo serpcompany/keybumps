@@ -167,8 +167,9 @@ enum ScreencastAudioMixdown {
             throw CancellationError()
         }
 
+        // A writer that failed on its own once the copy was done (a full disk) isn't asked to finish.
         let finished = DispatchSemaphore(value: 0)
-        writer.finishWriting { finished.signal() }
+        ScreencastSampleCopier.finishWriting(writer) { _ in finished.signal() }
         finished.wait()
         guard writer.status == .completed else { throw writerFailure(writer.error) }
     }

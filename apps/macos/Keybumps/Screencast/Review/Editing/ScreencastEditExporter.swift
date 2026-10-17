@@ -318,8 +318,9 @@ enum ScreencastEditExporter {
                 if writer.status == .writing { writer.cancelWriting() }
                 return completion(.failure(writer.error ?? reader.error ?? ScreencastExportFailure.failed))
             }
-            writer.finishWriting { [writer] in
-                completion(writer.status == .completed ? .success(()) : .failure(writer.error ?? ScreencastExportFailure.failed))
+            // A writer that failed on its own once the copy was done (a full disk) says so here.
+            ScreencastSampleCopier.finishWriting(writer) { [writer] completed in
+                completion(completed ? .success(()) : .failure(writer.error ?? ScreencastExportFailure.failed))
             }
         }
 
