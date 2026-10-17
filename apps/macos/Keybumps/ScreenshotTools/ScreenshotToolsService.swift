@@ -110,6 +110,12 @@ enum ScreenshotFileFilter {
     static func accepts(_ entry: ScreenshotDirectoryEntry, since start: Date) -> Bool {
         entry.isScreenCapture && hasImageExtension(entry.url) && entry.createdAt >= start
     }
+
+    /// A new image without the mark yet. Keybumps' own capturer marks its files only once
+    /// `screencapture` exits, which isn't a folder change, so the watcher looks again for a while.
+    static func mayStillBeMarked(_ entry: ScreenshotDirectoryEntry, since start: Date) -> Bool {
+        !entry.isScreenCapture && hasImageExtension(entry.url) && entry.createdAt >= start
+    }
 }
 
 /// Adds new screenshot files to Clipboard History and, while "Copy new screenshots to the
@@ -159,6 +165,9 @@ enum ScreenshotToolsStatus: Equatable {
 @MainActor
 @Observable
 class ScreenshotToolsService {
+    /// How long an unmarked new image is looked at again before the watcher gives up on it.
+    static let markWait: TimeInterval = 5
+
     private(set) var status: ScreenshotToolsStatus = .stopped
 
     @ObservationIgnored private let resolver: ScreenshotLocationResolver
@@ -169,6 +178,7 @@ class ScreenshotToolsService {
     @ObservationIgnored private var startedAt = Date.distantPast
     @ObservationIgnored private var handled: Set<URL> = []
     @ObservationIgnored private var lastSeenSize: [URL: Int] = [:]
+    @ObservationIgnored private var firstSeenUnmarked: [URL: Date] = [:]
     @ObservationIgnored private var source: DispatchSourceFileSystemObject?
     @ObservationIgnored private var locationTimer: Timer?
     @ObservationIgnored private var pendingScan: DispatchWorkItem?
@@ -202,7 +212,9 @@ class ScreenshotToolsService {
         status = .stopped
     }
 
-    func scanForTesting() { scan() }
+    /// True when the scan scheduled another look.
+    @discardableResult
+    func scanForTesting() -> Bool { scan() }
 
     private func start() {
         let resolved = resolver.resolve()
@@ -212,6 +224,7 @@ class ScreenshotToolsService {
         startedAt = now()
         handled = []
         lastSeenSize = [:]
+        firstSeenUnmarked = [:]
         guard refreshStatusByReading(resolved) else {
             scheduleLocationCheck()
             return
@@ -273,17 +286,28 @@ class ScreenshotToolsService {
     private func scheduleScan(after delay: TimeInterval) {
         pendingScan?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.scan() }
+            MainActor.assumeIsolated { _ = self?.scan() }
         }
         pendingScan = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func scan() {
+    @discardableResult
+    private func scan() -> Bool {
         guard case .watching(let folder) = status,
-              let entries = try? reader.entries(in: folder) else { return }
+              let entries = try? reader.entries(in: folder) else { return false }
+        let scannedAt = now()
         var needsRescan = false
-        for entry in entries where !handled.contains(entry.url) && ScreenshotFileFilter.accepts(entry, since: startedAt) {
+        for entry in entries where !handled.contains(entry.url) {
+            guard ScreenshotFileFilter.accepts(entry, since: startedAt) else {
+                // Look again until it's marked, for `markWait` from first seeing it, then give up.
+                if ScreenshotFileFilter.mayStillBeMarked(entry, since: startedAt) {
+                    let firstSeen = firstSeenUnmarked[entry.url] ?? scannedAt
+                    firstSeenUnmarked[entry.url] = firstSeen
+                    if scannedAt.timeIntervalSince(firstSeen) < Self.markWait { needsRescan = true }
+                }
+                continue
+            }
             // macOS may still be writing; ingest only once the size is stable across two scans.
             guard entry.size > 0, lastSeenSize[entry.url] == entry.size else {
                 lastSeenSize[entry.url] = entry.size
@@ -292,8 +316,10 @@ class ScreenshotToolsService {
             }
             handled.insert(entry.url)
             lastSeenSize[entry.url] = nil
+            firstSeenUnmarked[entry.url] = nil
             _ = ingest(entry.url)
         }
         if needsRescan { scheduleScan(after: 0.5) }
+        return needsRescan
     }
 }

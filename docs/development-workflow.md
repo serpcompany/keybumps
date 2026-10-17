@@ -61,7 +61,7 @@ Before handing a candidate to the owner, the agent verifies what it can without 
   - It deletes every file and prints a structural result, with a line for each screenshot and recording. Nothing goes in the screenshot folder, the Desktop, the recordings folder, or the person's Clipboard History.
   - The window is a blank one titled "Keybumps smoke test" that the script shows from a helper process and closes afterwards; the smoke test takes only that process's window. If the window capture fails with `noSmokeWindow`, leave full screen and run it again.
   - Screen Recording must already be granted. On screen: that window and the recording indicator for about ten seconds, the screenshot sound twice, and no prompts.
-  - Exit 0 passed, 1 a screenshot or recording failed, 2 permission-denied or the captures couldn't run, 3 no complete result (crash, hang, timeout), 64–69 the script couldn't start it, 130 stopped (Ctrl-C or a closed terminal).
+  - Exit 0 passed, 1 a screenshot or recording failed, 2 permission-denied or the captures couldn't run, 3 no complete result (crash, hang, timeout, or a candidate built before this smoke test, told before anything is quit), 64–69 the script couldn't start it, 130 stopped (Ctrl-C or a closed terminal).
 
 Computer-use or other screen control drives the owner's real mouse, keyboard, and focus. Use it only after the owner explicitly hands over the screen, announce when it starts and ends, and keep it to checks that require real focus (global shortcuts, cross-app paste, permissions, Dictation insertion). Report the first pass as its own evidence; it never substitutes for owner acceptance.
 

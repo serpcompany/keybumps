@@ -243,6 +243,19 @@ struct ScreencastSmokeScriptTests {
         #expect(bench.calls.isEmpty)
     }
 
+    @Test("A candidate built before this smoke test exits 3 at once, saying so, and nothing is quit or opened")
+    func refusesAnOlderCandidate() throws {
+        let bench = try SmokeScriptBench(readsOption: false)
+        defer { bench.remove() }
+        let running = try bench.startRunningKeybumps()
+        let run = try bench.run([], result: nil, runFor: 1)
+
+        #expect(run.status == 3, "\(run.output)")
+        #expect(run.output.contains("predates this smoke test"), "\(run.output)")
+        #expect(bench.calls.isEmpty)
+        #expect(kill(running, 0) == 0, "the running Keybumps is left alone")
+    }
+
     @Test("The script names the options and folders the app uses, sends no Apple event but Keybumps's quit, and never kills by name")
     func matchesApp() throws {
         let text = try String(contentsOf: SmokeScriptBench.script, encoding: .utf8)
@@ -303,7 +316,9 @@ private final class SmokeScriptBench {
     private var helperParentFile: URL { root.appendingPathComponent("helper-parent") }
     private var leftoversFile: URL { root.appendingPathComponent("leftovers") }
 
-    init(version: String = "0.0.3-dev.issue470") throws {
+    /// `readsOption: false` stands in for a candidate built before this smoke test, whose
+    /// executable has only Screencast's old option.
+    init(version: String = "0.0.3-dev.issue470", readsOption: Bool = true) throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("smoke-script-\(UUID().uuidString)", isDirectory: true)
         let fileManager = FileManager.default
@@ -313,6 +328,8 @@ private final class SmokeScriptBench {
         let info: [String: Any] = ["CFBundleShortVersionString": version, "CFBundleIdentifier": Self.bundleID]
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
             .write(to: app.appendingPathComponent("Contents/Info.plist"))
+        let option = readsOption ? ScreencastSmokeTest.launchOption : "KBScreencastSmokeTest"
+        try Data("stand-in executable \(option)\n".utf8).write(to: executable)
 
         // `open -n <app> --args …` starts the smoke run (after `FAKE_START_DELAY` seconds): a
         // process named as the app's executable that saves a capture, waits, then writes the

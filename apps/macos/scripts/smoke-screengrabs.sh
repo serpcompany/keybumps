@@ -23,7 +23,8 @@
 # usage: apps/macos/scripts/smoke-screengrabs.sh [--timeout <seconds>]
 #        apps/macos/scripts/smoke-screengrabs.sh --evaluate <result.json>   (that result's exit code)
 # exit:  0 passed; 1 a screenshot or a recording failed; 2 permission-denied, or the app couldn't
-#        run the captures; 3 no complete result (it crashed, hung, timed out, or didn't start).
+#        run the captures; 3 no complete result (it crashed, hung, timed out, or didn't start, or
+#        the candidate predates this smoke test, which is told before anything is quit).
 #        The script couldn't run it: 64 usage; 66 no installed app; 67 not a QA candidate;
 #        68 Keybumps didn't quit; 69 couldn't prepare or open it; 130 stopped (Ctrl-C, or the
 #        terminal closed).
@@ -106,6 +107,12 @@ require_candidate() {
   }
 }
 require_candidate
+# A candidate built before this smoke test ignores its option and would just open Keybumps for the
+# whole timeout. Its executable holds the option's name only if it reads it.
+grep -a -q -- "$option" "$executable" 2>/dev/null || {
+  print -u2 "the installed candidate ($(plist_value CFBundleShortVersionString)) predates this smoke test (no $option); build a new one with build-qa-candidate.sh"
+  exit 3
+}
 [[ "$temporary" == /* ]] || { print -u2 "couldn't find the temporary folder"; exit 69 }
 
 # The blank window the window capture takes, shown by a helper of the script's own so the smoke
