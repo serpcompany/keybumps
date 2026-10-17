@@ -885,16 +885,9 @@ kbd {
   margin-bottom: 36px;
 }
 
+/* A row of five over a row of six, each centered, so they stagger by half a tile. */
 .hero-icons-row {
   display: flex;
-}
-
-.hero-icons-row:first-child {
-  transform: translateX(-23px);
-}
-
-.hero-icons-row:last-child {
-  transform: translateX(23px);
 }
 
 .hero-icon {
@@ -1663,6 +1656,26 @@ body:has(#questions:target) .plugin-tabs a:first-child {
   }
   .command-list.two-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * The hero's six-tile row is 552px, and its outer icons sit 20px inside it, so the icons span 512px.
+ * Each scale keeps them 16px from the edge at the narrowest width it covers (512 × 0.72 + 32 ≈ 401,
+ * × 0.64 + 32 ≈ 360, × 0.56 + 32 ≈ 319). The margins keep the space above and below the 178px-tall
+ * icons as it is at 0.72.
+ */
+@media (max-width: 400px) {
+  .hero-icons {
+    margin: -21px 0 13px;
+    transform: scale(0.64);
+  }
+}
+
+@media (max-width: 359px) {
+  .hero-icons {
+    margin: -28px 0 6px;
+    transform: scale(0.56);
   }
 }
 

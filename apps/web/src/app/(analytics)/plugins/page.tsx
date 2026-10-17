@@ -25,9 +25,9 @@ const filters = [
 ]
 
 /**
- * The floating icons above the title: two staggered rows, the middle tiles largest and brightest.
- * Every plugin appears once; `plugins.test.ts` doesn't check this, so add a new plugin here too.
- * Each is [slug, size in pixels, opacity].
+ * The floating icons above the title: two rows, five over six, so they stagger by half a tile,
+ * the middle tiles largest and brightest. Every plugin appears once; `plugins.test.ts` doesn't
+ * check this, so add a new plugin here too. Each is [slug, size in pixels, opacity].
  */
 const heroIcons: readonly (readonly [string, number, number])[][] = [
   [
@@ -40,6 +40,7 @@ const heroIcons: readonly (readonly [string, number, number])[][] = [
   [
     ['clipboard-history', 52, 0.35],
     ['dictation', 68, 0.75],
+    ['keystrokes', 80, 1],
     ['translation', 80, 1],
     ['screenshot-tools', 68, 0.75],
     ['shortcut-coach', 52, 0.35]

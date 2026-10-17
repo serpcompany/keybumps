@@ -280,7 +280,7 @@ export default async function Home() {
             <li>
               <h3>Jump to a tab</h3>
               <p>
-                Clipboard, Screenshots, Dictation, Snippets, and Timers, plus Emoji and Translate
+                Clipboard, ScreenGrabs, Dictation, Snippets, and Timers, plus Emoji and Translate
                 once you turn on their plugins.
               </p>
               <span className="keycaps">
