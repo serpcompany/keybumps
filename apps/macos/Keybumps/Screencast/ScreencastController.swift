@@ -86,7 +86,7 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
     func hideGettingReady() {}
 }
 
-/// Runs one capture at a time, from Start Screencast to the saved file: it opens the picker, counts
+/// Runs one capture at a time, from Record Screen to the saved file: it opens the picker, counts
 /// down, starts `recorder`, keeps an area highlighted while it records, and hands each saved
 /// capture to `onCaptureFinished`.
 ///
@@ -190,8 +190,8 @@ final class ScreencastController {
     ///   - areaMemory: The last area recorded, which the picker opens with.
     ///   - pickerMemory: The rest of what was last recorded, which the picker opens with, but the
     ///     switches.
-    ///   - preferences: Settings › Screencast, read each time the picker opens.
-    ///   - saveSwitches: Saves the picker's switches as Settings › Screencast's, at Record.
+    ///   - preferences: Settings › Screengrabs, read each time the picker opens.
+    ///   - saveSwitches: Saves the picker's switches as Settings › Screengrabs', at Record.
     ///   - screens: The displays, read each time the picker opens.
     ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
     ///     its screen.
@@ -311,7 +311,7 @@ final class ScreencastController {
 
     // MARK: Picking
 
-    /// Start Screencast: opens the picker as it was last used to record, with the switches as
+    /// Record Screen: opens the picker as it was last used to record, with the switches as
     /// Settings has them and the last area drawn. Does nothing while a capture is under way.
     func open() {
         guard phase == .idle, Self.canStart(recorder.state) else { return }

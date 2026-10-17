@@ -14,7 +14,7 @@ import Speech
 /// Only `PermissionCoordinator` calls these, and only from explicit request paths:
 /// - Microphone and Speech Recognition, while macOS hasn't asked yet: Request Access… on the
 ///   Permissions page or in onboarding, and the setup walkthrough.
-/// - Screen Recording: Screenshot Tools' Allow…, Open System Settings… on the Permissions page or
+/// - Screen Recording: Open System Settings… on Screengrabs' page, the Permissions page, or
 ///   in onboarding (`performRecovery` asks once so macOS lists Keybumps), and the first screenshot
 ///   hotkey without access.
 /// - System Settings: permission recovery, Keyboard Shortcuts, and Files & Folders.

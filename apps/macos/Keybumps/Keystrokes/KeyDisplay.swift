@@ -285,7 +285,7 @@ final class KeyDisplay {
     var registeredShortcutName: (KeyPress) -> String? = { _ in nil }
     /// The Command Palette's own key names while it's the key window, or nil. `AppModel` sets it.
     var paletteKeyNames: () -> [String: String]? = { nil }
-    /// Screenshot Tools' hotkeys while they're registered. `AppModel` sets it.
+    /// Screengrabs' hotkeys while they're registered. `AppModel` sets it.
     var keybumpsScreenshotBindings: () -> [ShortcutBinding] = { [] }
     /// macOS's symbolic hotkeys, read through `SymbolicHotKeyPreferences` (never written), or nil
     /// when they can't be read. `AppModel` sets it; it's inert under the unit-test host.
@@ -315,9 +315,9 @@ final class KeyDisplay {
     private var lastPointerDisplay: CGDirectDisplayID?
     /// Until when lines that expired may still be fading off the screen.
     private var fadesUntil: Date?
-    /// macOS's screenshot shortcuts, when they were read, and Screenshot Tools' hotkeys then. They're
+    /// macOS's screenshot shortcuts, when they were read, and Screengrabs' hotkeys then. They're
     /// read again when the display starts or changes; on a key once they're older than
-    /// `screenshotKeysLifetime`, or once Screenshot Tools' hotkeys differ, since Keybumps turns
+    /// `screenshotKeysLifetime`, or once Screengrabs' hotkeys differ, since Keybumps turns
     /// macOS's ⇧⌘3 and ⇧⌘4 off and on with them; and on the next key after Keybumps writes macOS's
     /// shortcuts (`systemScreenshotShortcutsDidChange`).
     private var systemScreenshotKeys = KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: nil)
@@ -426,7 +426,7 @@ final class KeyDisplay {
 
     /// Clears the screen at once, with no fade, and keeps it clear, rings included, until a key
     /// that isn't part of taking a screenshot: a screenshot shouldn't show the keys that took it.
-    /// A screenshot shortcut heard by the tap calls it, and so does Screenshot Tools before it
+    /// A screenshot shortcut heard by the tap calls it, and so does Screengrabs before it
     /// captures, in case the tap never hears a hotkey Keybumps registered.
     func pauseForScreenshot() {
         guard holds.isShowing else { return }
@@ -456,7 +456,7 @@ final class KeyDisplay {
         return KeystrokeFilter.isScreenshotShortcut(press, system: systemScreenshotKeys, keybumps: keybumps)
     }
 
-    /// Reads macOS's screenshot shortcuts again at the next key. Screenshot Tools' takeover calls it
+    /// Reads macOS's screenshot shortcuts again at the next key. Screengrabs' takeover calls it
     /// after it turns macOS's ⇧⌘3 or ⇧⌘4 off or on, also when its own hotkeys didn't register.
     func systemScreenshotShortcutsDidChange() {
         systemScreenshotKeysRead = nil

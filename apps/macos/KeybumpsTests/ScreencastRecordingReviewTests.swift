@@ -358,7 +358,7 @@ struct ScreencastRecordingReviewTests {
         await flow.show(saved, context: .none)
         let panel = try #require(flow.panel)
         await panel.model?.save()
-        #expect(!panel.isShown && !panel.window.isVisible, "gone before Start Screencast")
+        #expect(!panel.isShown && !panel.window.isVisible, "gone before Record Screen")
 
         let unsaved = try fixture.video(name: "1791000100")
         await flow.show(unsaved, context: .none)

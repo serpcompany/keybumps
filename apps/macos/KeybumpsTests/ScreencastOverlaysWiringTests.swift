@@ -123,7 +123,7 @@ struct OverlaysFlow {
         keyDisplay.acquire(.keystrokes, configuration: configuration)
     }
 
-    /// Start Screencast, the left screen (or what `pick` picks), Record: `beforeStart` runs once the
+    /// Record Screen, the left screen (or what `pick` picks), Record: `beforeStart` runs once the
     /// picker has closed and before the recorder starts.
     func record(
         showsShortcuts: Bool = true,

@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 
-/// What a Screenshot Tools hotkey captures.
+/// What a Screengrabs hotkey captures.
 enum ScreenshotCaptureMode: Equatable {
     /// Every display, one file each.
     case screens
@@ -50,7 +50,7 @@ struct ProcessScreenshotCaptureRunner: ScreenshotCaptureRunning {
 }
 
 /// Takes screenshots into the macOS screenshot folder and marks them as screen captures, so the
-/// Screenshot Tools watcher adds them to Clipboard History like screenshots macOS takes.
+/// Screengrabs' watcher adds them to Clipboard History like screenshots macOS takes.
 @MainActor
 final class ScreenshotCapturer {
     private let runner: any ScreenshotCaptureRunning

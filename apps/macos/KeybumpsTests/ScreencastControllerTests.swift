@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import Keybumps
 
-/// `ScreencastController`, the flow from Start Screencast to a saved capture, driven through fakes:
+/// `ScreencastController`, the flow from Record Screen to a saved capture, driven through fakes:
 /// the recorder's capture system and writers, a made-up screen for the picker,
 /// overlays that draw nothing, and a countdown clock the test moves. Nothing here captures, opens
 /// the microphone, asks for a permission, or shows a window.
@@ -254,7 +254,7 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
-    @Test("The bar and Screen mode both use the screen the pointer was on at Start Screencast, even if it moves while the screen is read")
+    @Test("The bar and Screen mode both use the screen the pointer was on at Record Screen, even if it moves while the screen is read")
     func pointerReadOnce() async throws {
         defer { captures.remove() }
         var pointer = CGPoint(x: 2000, y: 500)
@@ -695,7 +695,7 @@ struct ScreencastControllerTests {
         #expect(controller.phase == .recording)
 
         // A restart that can't make its files ends the recording with its own message, never as an
-        // early end, and Start Screencast works again.
+        // early end, and Record Screen works again.
         await controller.restart()
         #expect(controller.phase == .idle)
         #expect(controller.recorder.state == .failed(.writerFailed))

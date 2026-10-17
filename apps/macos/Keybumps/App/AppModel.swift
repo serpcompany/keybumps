@@ -399,10 +399,12 @@ final class AppModel {
         }
         // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
         // only), and Screengrabs' screenshot hotkeys while they're registered, which also clear it
-        // just before they capture.
+        // just before they capture. Record Screen counts too: it has macOS's ⇧⌘5, which cleared
+        // the display before Screengrabs took it over.
         keyDisplay.keybumpsScreenshotBindings = { [shortcuts] in
             let registered = shortcuts.registeredBindings
-            return ScreenshotToolsModule.captureShortcuts.compactMap { registered[$0.shortcut.ownerID] }
+            let owners = ScreenshotToolsModule.captureShortcuts.map(\.shortcut) + [.screencast]
+            return owners.compactMap { registered[$0.ownerID] }
         }
         keyDisplay.symbolicHotKeys = { [symbolicHotKeys] in try? symbolicHotKeys.readSymbolicHotKeys() }
         screenshotModule.systemShortcuts.didChange = { [keyDisplay] in keyDisplay.systemScreenshotShortcutsDidChange() }
@@ -426,7 +428,7 @@ final class AppModel {
         }
     }
 
-    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screenshot Tools
+    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screengrabs
     /// takeover use unless a composition injects its own: the owner's `com.apple.symbolichotkeys`,
     /// or inert ones under the unit-test host, so unit tests never rewrite the owner's macOS shortcuts.
     static var defaultSymbolicHotKeyPreferences: any SymbolicHotKeyPreferences {

@@ -11,7 +11,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
     case capability(Capability)
     /// Opens Settings › Plugins, the list of every plugin with its switch.
     case plugins
-    /// An action command (#468): runs something a plugin that's on does, such as Start Screencast,
+    /// An action command (#468): runs something a plugin that's on does, such as Record Screen,
     /// after the palette closes. Listed only while its plugin is on (`CapabilityRegistry.quickSearchActions`).
     case action(QuickSearchAction)
 

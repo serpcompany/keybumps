@@ -20,7 +20,7 @@ enum ScreencastSmokeMode: String, CaseIterable, Codable, Sendable {
 /// How far one capture got: the last stage it entered. A capture that passed reached `cleanedUp`.
 enum ScreencastSmokeStage: String, Codable, Sendable {
     case notStarted
-    /// Start Screencast: the controller reading the screen for the picker.
+    /// Record Screen: the controller reading the screen for the picker.
     case opening
     /// The picker's choice being made through its model.
     case picking
@@ -45,7 +45,7 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
     case setupFailed
     /// A step took longer than its limit; the stage says which.
     case timeout
-    /// Start Screencast didn't open the picker.
+    /// Record Screen didn't open the picker.
     case openRefused
     /// The picker had nothing to record after choosing.
     case noChoice
@@ -75,7 +75,7 @@ enum ScreencastSmokeFailure: String, Error, Sendable {
 struct ScreencastSmokeReport: Codable, Equatable, Sendable {
     /// Milliseconds each part of a capture took.
     struct Timings: Codable, Equatable, Sendable {
-        /// From Start Screencast until the picker's windows were read.
+        /// From Record Screen until the picker's windows were read.
         var pickerMs: Int?
         /// From Record until recording.
         var startMs: Int?

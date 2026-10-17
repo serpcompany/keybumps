@@ -741,6 +741,29 @@ struct KeystrokesTests {
         #expect(on.model.keyDisplay.timeline.entries.isEmpty)
     }
 
+    @Test("Record Screen's ⇧⌘5 clears the display while it's registered, as macOS's ⇧⌘5 did before Screengrabs took it over (#490)")
+    func recordScreenClears() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsKeystrokesRecordScreen-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let press = KeyPress(keyCode: UInt16(kVK_ANSI_5), modifiers: [.shift, .command])
+        // macOS's ⇧⌘5 as the takeover leaves it: turned off.
+        let takenOver: [String: Any] = ["184": ["enabled": false] as [String: Any]]
+
+        let off = WiringHarness(enabled: [.keystrokes], missing: nil, root: root)
+        off.model.start()
+        off.model.keyDisplay.symbolicHotKeys = { takenOver }
+        off.model.keyDisplay.receive(press)
+        #expect(!off.model.keyDisplay.isPausedForScreenshot, "Neither macOS's nor Record Screen's")
+
+        let on = WiringHarness(enabled: [.keystrokes, .screenshotTools], missing: nil, root: root)
+        on.model.start()
+        on.model.keyDisplay.symbolicHotKeys = { takenOver }
+        on.model.keyDisplay.receive(press)
+        #expect(on.model.keyDisplay.isPausedForScreenshot)
+        #expect(on.model.keyDisplay.timeline.entries.isEmpty)
+    }
+
     @Test("Screengrabs' hotkey clears the display before it captures, in case the tap never hears the hotkey")
     func screenshotToolsPausesTheDisplay() throws {
         let root = FileManager.default.temporaryDirectory

@@ -196,7 +196,7 @@ final class AppPreferences {
         })
     }
 
-    /// Folds what an install saved for Screencast into Screenshot Tools, which becomes Screengrabs
+    /// Folds what an install saved for Screencast into Screenshot Tools, which became Screengrabs
     /// and keeps its ID (ADR 0010, #489). It runs on an install whose saved `knownCapabilities` holds
     /// `screencast`, and rewrites saved values before `init` reads them, since `init` drops an ID
     /// `Capability` no longer has. That makes it run once: `init` then saves `knownCapabilities`
@@ -221,7 +221,7 @@ final class AppPreferences {
         let screenshotTools = Capability.screenshotTools.rawValue
         guard (defaults.array(forKey: Key.knownCapabilities) as? [String])?.contains(screencast) == true else { return }
         ApplicationUsageStore.moveUsage(from: "command:\(screencast)", to: "command:\(screenshotTools)", at: applicationUsage)
-        // A saved list that's missing means every plugin is as it ships: Screenshot Tools on.
+        // A saved list that's missing means every plugin is as it ships: Screengrabs on.
         if var enabled = defaults.array(forKey: Key.enabledCapabilities) as? [String],
            enabled.contains(screencast), !enabled.contains(screenshotTools) {
             var shortcuts = defaults.data(forKey: Key.capabilityShortcuts)

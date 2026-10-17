@@ -515,7 +515,7 @@ struct ScreencastPickerTests {
     }
 }
 
-/// One screen's picker view with the bar laid out on it, as Start Screencast lays it out, in a panel
+/// One screen's picker view with the bar laid out on it, as Record Screen lays it out, in a panel
 /// that's never shown, and mouse events sent to it as AppKit sends them.
 @MainActor
 @Suite("Screencast: the picker on a screen")
@@ -593,7 +593,7 @@ struct ScreencastPickerViewTests {
     }
 }
 
-/// The bar laid out on a screen as Start Screencast lays it out, in a panel that's never shown, and
+/// The bar laid out on a screen as Record Screen lays it out, in a panel that's never shown, and
 /// drawn at 2x through AppKit, as the app draws it: Record's label is never cut short, whichever of
 /// the bar's rows is its widest (owner QA of 4030.475.5 saw "Rec…" whenever it was the controls).
 /// Made-up screen names.
@@ -711,7 +711,7 @@ struct ScreencastPickerBarTests {
 }
 
 /// The picker on a laptop's screen with a larger screen above it, offset left, both Retina, built
-/// as Start Screencast builds it (`ScreencastOverlayWindows.pickerPanel`) in panels that are never
+/// as Record Screen builds it (`ScreencastOverlayWindows.pickerPanel`) in panels that are never
 /// shown, with the bar on either screen, and mouse events sent to its views as AppKit sends them.
 @MainActor
 @Suite("Screencast: the picker on two screens")

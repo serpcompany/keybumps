@@ -57,7 +57,7 @@ final class ScreencastOverlayWindows: ScreencastOverlayPresenting {
     }
 
     /// One screen's part of the picker, not yet shown, with the bar on the screen the pointer was on
-    /// at Start Screencast, which Screen mode starts with too.
+    /// at Record Screen, which Screen mode starts with too.
     static func pickerPanel(
         on screen: ScreencastScreen,
         model: ScreencastPickerModel,

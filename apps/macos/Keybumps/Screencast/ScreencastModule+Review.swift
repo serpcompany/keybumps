@@ -59,7 +59,7 @@ final class ScreencastReviewFlow {
         if let terminationObserver { NotificationCenter.default.removeObserver(terminationObserver) }
     }
 
-    /// Start Screencast, from idle: the review window still up goes, and its capture is saved,
+    /// Record Screen, from idle: the review window still up goes, and its capture is saved,
     /// before the picker covers the screen; then the app in front, and a browser's site, are read.
     func captureStarting() {
         isOn = true

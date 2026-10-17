@@ -360,10 +360,11 @@ struct ScreencastRecorderTests {
         await recorder.discard()
     }
 
-    @Test("The microphone prompt names Dictation and Screencast, and says a screencast stays on this Mac")
+    @Test("The microphone prompt names Dictation and Screengrabs, and says a recording stays on this Mac")
     func microphoneUsageDescription() throws {
         let text = try #require(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") as? String)
-        #expect(text.contains("dictate") && text.contains("screencast"))
+        #expect(text.contains("dictate") && text.contains("Screengrabs"))
+        #expect(!text.contains("screencast"))
         #expect(text.contains("stays on this Mac unless you choose to send it"))
     }
 

@@ -128,7 +128,7 @@ struct ScreencastFlow {
         self.overlays = overlays
     }
 
-    /// Start Screencast, the left screen, Record: recording once this returns.
+    /// Record Screen, the left screen, Record: recording once this returns.
     func record() async throws {
         controller.open()
         let picker = try #require(controller.picker)

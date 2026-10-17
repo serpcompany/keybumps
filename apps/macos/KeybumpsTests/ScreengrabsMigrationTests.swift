@@ -421,7 +421,7 @@ struct ScreengrabsMigrationTests {
     // MARK: Learned usage
 
     @Test(
-        "Quick Search's learned usage of Screencast is added to Screenshot Tools'; Start Screencast's action keeps its own",
+        "Quick Search's learned usage of Screencast is added to Screenshot Tools'; Record Screen's action keeps its own",
         arguments: [nil, 500_000_000, 900_000_000] as [TimeInterval?]
     )
     func learnedUsageAdded(screenshotToolsLastOpened: TimeInterval?) throws {

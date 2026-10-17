@@ -53,7 +53,7 @@ final class ScreencastSmokePresenter: ScreencastOverlayPresenting {
 }
 
 /// The pieces of Screencast the smoke test drives: the recorder, the controller, the control bar,
-/// and the overlays, wired by Start Screencast's own `ScreencastModule.wiredController`. Nothing
+/// and the overlays, wired by Record Screen's own `ScreencastModule.wiredController`. Nothing
 /// opens the review panel, no shortcut is registered, and the menu bar is left alone. The app's
 /// pieces are real; tests pass fakes.
 @available(macOS 15, *)
@@ -72,7 +72,7 @@ struct ScreencastSmokeRig {
     /// and the bar's position.
     let defaults: UserDefaults
 
-    /// Settings › Screencast for the smoke test: no microphone, no Mac's sound, no countdown, no
+    /// Settings › Screengrabs for the smoke test: no microphone, no Mac's sound, no countdown, no
     /// shortcuts or click highlights, and its own captures folder.
     static func preferences(capturesFolder: URL) -> ScreencastPreferences {
         ScreencastPreferences(
@@ -144,7 +144,7 @@ struct ScreencastSmokeRig {
 }
 
 /// Runs each `ScreencastSmokeMode` through the real capture path with no mouse or keyboard input
-/// (#470): Start Screencast (`ScreencastController.open()`), the choice made through the picker's
+/// (#470): Record Screen (`ScreencastController.open()`), the choice made through the picker's
 /// model as its clicks and drags would, Record, the control bar and overlays as recording starts,
 /// two seconds of recording, Stop, and the saved files checked and deleted. Only the picker's
 /// windows, the countdown (set to none), and the review panel are skipped.

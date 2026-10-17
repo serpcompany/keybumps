@@ -35,7 +35,7 @@ A brief, self-dismissing message that grows out of the notch, or the top of the 
 _Avoid_: Toast, HUD, banner
 
 **Default capability**:
-One of the seven capabilities Keybumps's feature set was locked at: Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, and Snippets.
+One of the seven capabilities Keybumps's feature set was locked at: Quick Search, Clipboard History, Screengrabs (then Screenshot Tools), Dictation, Window Manager, Shortcut Coach, and Snippets.
 _Avoid_: Core plugin, built-in plugin
 
 **Added capability**:
@@ -73,7 +73,7 @@ A Keybumps action that Quick Search offers beside applications, files, and folde
 _Avoid_: Workflow, extension command
 
 **Action command**:
-A Quick Search command that does something a plugin does, rather than going somewhere, such as Start Screencast or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Start Screencast during a capture. Picking it closes the palette and does it, as the plugin's shortcut would, and opens the plugin's page when a permission it needs is missing.
+A Quick Search command that does something a plugin does, rather than going somewhere, such as Record Screen or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Record Screen during a recording, or where Screengrabs can't record. Picking it closes the palette and does it, as the plugin's shortcut would, and opens the plugin's page when a permission it needs is missing.
 _Avoid_: Quick action, workflow, shortcut (a key combination), command (alone)
 
 **Capability command**:
@@ -119,16 +119,24 @@ _Avoid_: Keyboard Shortcutter (former name; code types still use it), Shortcut C
 **Hotkeys**:
 The Command Palette tab label for Shortcut Coach history; everywhere else, including its capability command, it is called Shortcut Coach.
 
-**Screenshot Tools**:
-Taking screenshots and marking them up.
-_Avoid_: Screen capture, screenshot app, CleanShot clone
+**Screengrabs**:
+Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, Screengrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.
+_Avoid_: Screenshot Tools and Screencast (former names), screen grabs, screen capture, CleanShot clone
 
-**Screenshots tab**:
-The Command Palette tab showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
-_Avoid_: Screenshot library, gallery
+**Screengrab**:
+One screenshot or one recording that Screengrabs took.
+_Avoid_: Capture, clip, grab
+
+**Screenshot**:
+A PNG of the screens or an area, taken with Screengrabs' hotkeys or macOS's own, in the folder macOS saves screenshots to.
+_Avoid_: Snap
+
+**Screengrabs tab**:
+The Command Palette tab (⌘3) showing screenshot items from Clipboard History. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it.
+_Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
-The Screenshot Tools window for marking up a screenshot.
+The Screengrabs window for marking up a screenshot.
 _Avoid_: Image editor, annotation app, Markup
 
 **Snippets**:
@@ -200,39 +208,39 @@ Showing the shortcuts you press on screen, for demos, recordings, and screen sha
 _Avoid_: Show Keys (the design canvas's name), KeyCastr, key overlay; showing keystrokes or keys on screen (say shown)
 
 **Key display**:
-The keys on screen that the Keystrokes plugin and a Screencast recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and while a recording holds it, shows on its screens, inside the area or window it records, with its clicks setting. Hiding Keystrokes hides every holder's keys; a recording that starts later shows its own. Pressing a screenshot shortcut macOS or Keybumps knows clears it at once. A keystroke stays in memory only while it's on screen, and is never logged or stored.
+The keys on screen that the Keystrokes plugin and a recording share. Only one shows however many hold it: it takes the most recent holder's look, shows only shortcuts if any holder asks for that, and while a recording holds it, shows on its screens, inside the area or window it records, with its clicks setting. Hiding Keystrokes hides every holder's keys; a recording that starts later shows its own. Pressing a screenshot shortcut macOS or Keybumps knows clears it at once. A keystroke stays in memory only while it's on screen, and is never logged or stored.
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
-**Screencast**:
-Recording what's on screen as a video, with the microphone and the Mac's sound, then keeping each capture on this Mac or sending it to a destination (ADR 0009). It takes no screenshots: those are Screenshot Tools'. It ships off, and needs macOS 15: on an older Mac it's listed with "Requires macOS 15" and can't be turned on.
-_Avoid_: Screen recorder, screen recording (macOS's permission), Clipy (a destination)
+**Recording**:
+A video Screengrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in the recordings folder until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
+_Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission), Dictation's audio
 
-**Capture**:
-One recording Screencast made, kept on this Mac in a folder of its own until the person deletes it, or sends it and has the copy deleted; a recording of every screen holds one video per display. A screenshot taken with Screenshot Tools isn't one.
-_Avoid_: Clip, video (one display's file in a recording), screencast (the plugin)
+**Recordings folder**:
+Where recordings are saved, each in a folder of its own: `~/Documents/Keybumps/captures` (`ProductPaths.captures`). Settings › Screengrabs shows it.
+_Avoid_: Captures folder; Dictation's recordings folder (`ProductPaths.recordings`)
 
-**Screencast picker**:
-What Start Screencast opens over every screen to choose a capture: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), with switches for the microphone, the Mac's sound, shortcuts, and clicks that are Settings › Screencast's own. Record counts down, then records. Escape cancels until recording starts. It opens as Record last left it: area, window, or screen, the same screen or All Screens while connected, the last area drawn, and the switches, which Record saves to Settings (the microphone's only with Microphone access). A window is never remembered, so Window mode opens with none chosen.
-_Avoid_: Selection overlay, capture HUD, crosshair, Screenshot Tools' area selection (macOS's own)
+**Recording picker**:
+What Record Screen opens over every screen to choose a recording: an area to drag, a window to click, or a screen (one chosen by name in the bar or clicked, starting with the one with the pointer, or All Screens), with switches for the microphone, the Mac's sound, shortcuts, and clicks that are Settings › Screengrabs' own. Record counts down, then records. Escape cancels until recording starts. It opens as Record last left it: area, window, or screen, the same screen or All Screens while connected, the last area drawn, and the switches, which Record saves to Settings (the microphone's only with Microphone access). A window is never remembered, so Window mode opens with none chosen.
+_Avoid_: Screencast picker (its former name), selection overlay, capture HUD, crosshair, the screenshot hotkeys' area selection (macOS's own)
 
 **Control bar**:
-The floating bar on the recorded screen while Screencast records, never in the video: the time recorded, Pause and Resume, Draw, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
+The floating bar on the recorded screen while recording, never in the video: the time recorded, Pause and Resume, Draw, the microphone and the Mac's sound, Restart, Discard, and Stop. Restart and Discard ask in the bar first ("Restart?" or "Discard?", with Keep). It stays where it was dragged on each screen. While recording, the time also shows beside the menu bar icon, with Stop and Pause in its menu.
 _Avoid_: HUD, toolbar, recording panel, status bar (macOS's menu bar)
 
 **Drawing**:
-Marking up the screen while Screencast records, in the video: a pen, an arrow, a highlighter, or a rectangle, in a few colors, each mark fading a few seconds after it's drawn or staying until cleared. Draw on the control bar, or its shortcut, turns it on and off; while it's on, the recorded screens take the pointer, with a yellow border that isn't in the video, the drawing tools show above the control bar, and Escape stops, Delete clears, and ⌘Z undoes the last mark. The tools' choices carry over to the next recording; the marks don't, and Restart clears them and the keys on screen before the new take starts.
+Marking up the screen while recording, in the video: a pen, an arrow, a highlighter, or a rectangle, in a few colors, each mark fading a few seconds after it's drawn or staying until cleared. Draw on the control bar, or its shortcut, turns it on and off; while it's on, the recorded screens take the pointer, with a yellow border that isn't in the video, the drawing tools show above the control bar, and Escape stops, Delete clears, and ⌘Z undoes the last mark. The tools' choices carry over to the next recording; the marks don't, and Restart clears them and the keys on screen before the new take starts.
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
-**Review panel**:
-What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar, with nothing to type or trim. Save keeps the capture; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape, closing it, or starting the next capture saves too. The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next capture shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the capture's `meta.json` on this Mac.
-_Avoid_: Quick access card, post-capture window, editor
+**Recording window**:
+What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Discard, Copy, and Save in its toolbar, with nothing to type or trim. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves, and Escape, closing it, or starting the next recording saves too. The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
+_Avoid_: Review panel (its former name), quick access card, post-capture window, editor
 
 **Repository guess**:
-The GitHub repository (`owner/name`) the review panel fills in, from the app in front when the capture started and, for a browser, the website's domain or a local development site such as `localhost:3000`. Once the person corrects it, the correction is remembered for that website, or the app, on this Mac only.
+The GitHub repository (`owner/name`) the recording window fills in, from the app in front when the recording started and, for a browser, the website's domain or a local development site such as `localhost:3000`. Once the person corrects it, the correction is remembered for that website, or the app, on this Mac only.
 _Avoid_: Repo mapping, project, target
 
 **Destination**:
-An account of the person's own, connected in Settings › Screencast, that a capture goes to only when the person sends it. Each is built into Keybumps, Clipy first.
+An account of the person's own, connected in Settings › Screengrabs, that a recording goes to only when the person sends it. Each is built into Keybumps, Clipy first.
 _Avoid_: Integration, upload target, share service
 
 ### Licensing
