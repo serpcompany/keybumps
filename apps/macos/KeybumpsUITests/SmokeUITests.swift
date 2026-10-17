@@ -165,8 +165,9 @@ final class SmokeUITests: XCTestCase {
     func testScreengrabsPageAsksForClipboardHistory() {
         launch(permissions: "granted", ["-KBOpenSettings", "screenshotTools"])
         XCTAssertTrue(element("settings.detail.screenshotTools").waitForExistence(timeout: 20))
-        let screenshots = app.staticTexts["Screenshots"].firstMatch
-        let recordings = app.staticTexts["Recordings"].firstMatch
+        // By identifier: macOS may report a group's heading as a heading rather than static text.
+        let screenshots = element("settings.group.Screenshots")
+        let recordings = element("settings.group.Recordings")
         XCTAssertTrue(screenshots.waitForExistence(timeout: 5) && recordings.exists, "Its two groups")
         XCTAssertLessThan(screenshots.frame.minY, recordings.frame.minY, "Screenshots, then Recordings")
         element("settings.sidebar.clipboard").click()
