@@ -46,7 +46,19 @@ struct DictationHistoryEntry: Identifiable, Equatable {
             ? "Recording interrupted — transcript unavailable"
             : "Transcription unavailable"
     }
-    var language: String { metadata.languageSelected }
+    /// The language the entry is in, for Translation: the one its transcription detected or
+    /// used. One recorded with Automatic that never finished reads as the language Apple Speech
+    /// falls back to, so no reader gets Automatic (#530).
+    var language: String { DictationLanguage.resolved(metadata.languageSelected) }
+    /// The Language row's text: the entry's language by name, or Automatic for one recorded with
+    /// Automatic that never finished, whose language nothing detected.
+    var languageName: String {
+        if state != .completed, metadata.languageSelected == DictationLanguage.automatic { return "Automatic" }
+        return Locale.current.localizedString(forIdentifier: language) ?? language
+    }
+    /// What was recorded: a finished entry's language, or the setting an unfinished one was
+    /// recorded with, Automatic included, which a retry uses.
+    var recordedLanguageSetting: String { metadata.languageSelected }
     var capturedAt: Date { metadata.datetime }
     var duration: TimeInterval { metadata.duration }
     var metadataURL: URL { directoryURL.appendingPathComponent("meta.json") }

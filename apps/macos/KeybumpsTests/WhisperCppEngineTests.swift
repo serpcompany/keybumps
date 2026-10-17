@@ -391,17 +391,24 @@ private final class FakeWhisperCppRuntime: WhisperCppTranscribing, @unchecked Se
     private var _lastLanguage: String?
     private var _lastAbortWasSet: Bool?
 
+    /// The code whisper.cpp reports for the language it transcribed in.
+    let reportedLanguage: String?
+
+    init(reportedLanguage: String? = nil) {
+        self.reportedLanguage = reportedLanguage
+    }
+
     var calls: Int { lock.withLock { _calls } }
     var lastLanguage: String? { lock.withLock { _lastLanguage } }
     var lastAbortWasSet: Bool? { lock.withLock { _lastAbortWasSet } }
 
-    func transcribe(samples: [Float], language: String, abort: WhisperCppAbortFlag) async throws -> String {
+    func transcribe(samples: [Float], language: String, abort: WhisperCppAbortFlag) async throws -> WhisperCppTranscript {
         lock.withLock {
             _calls += 1
             _lastLanguage = language
             _lastAbortWasSet = abort.isSet
         }
-        return "fake transcript"
+        return WhisperCppTranscript(text: "fake transcript", language: reportedLanguage)
     }
 
     func free() async {}
