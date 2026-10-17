@@ -30,8 +30,8 @@ final class AppPreferences {
         static let sendsCrashReports = "sendsCrashReports"
         /// Whether the one-time step that gives Record Screen ⇧⌘5 has run (#513). It replaced #490's
         /// `didOfferRecordScreenShortcut`, so it runs once more on every install that step marked
-        /// done, replacing a Record Screen shortcut cleared or changed after it; the old key is left
-        /// in place, unread.
+        /// done, replacing a Record Screen shortcut cleared or changed after it, unless another
+        /// Keybumps shortcut (a plugin's or a window's) holds ⇧⌘5; the old key is left in place, unread.
         static let didGiveRecordScreenShortcut = "didGiveRecordScreenShortcut"
     }
 
