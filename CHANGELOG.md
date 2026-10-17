@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.0.3-beta.26](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.25...v0.0.3-beta.26) (2026-10-17)
+
+
+### Features
+
+* **dictation:** an Automatic language that detects what you speak ([#532](https://github.com/serpcompany/keybumps/issues/532)) ([e0fb3e2](https://github.com/serpcompany/keybumps/commit/e0fb3e2d0efdad1880f0f380ecd7b09eeb8c2e01))
+* Keystrokes, a plugin that shows the shortcuts you press on screen, and the shared key display ([#457](https://github.com/serpcompany/keybumps/issues/457)) ([955df5e](https://github.com/serpcompany/keybumps/commit/955df5e05d9416963bf7b6c9eff9008bf7fbcce9))
+* Quick Search lists plugin actions: Start Screencast, and Show or Hide Keystrokes ([#469](https://github.com/serpcompany/keybumps/issues/469)) ([9f37b06](https://github.com/serpcompany/keybumps/commit/9f37b061f60a4050aaf76bbd4094bdd1fc11da43))
+* **screencast:** on screen while recording, drawing, click highlights, and the shortcuts you press ([#465](https://github.com/serpcompany/keybumps/issues/465)) ([5ff70b0](https://github.com/serpcompany/keybumps/commit/5ff70b000fabc846a1689d8c5027ed46ea4e1482))
+* **screencast:** recordings open in a big window to play, pause and scrub, with Discard, Copy and Save in its toolbar ([#479](https://github.com/serpcompany/keybumps/issues/479)) ([708efb1](https://github.com/serpcompany/keybumps/commit/708efb1bc444cff6d53267e5795acaf1bc4ff14a))
+* **screencast:** the floating control bar, left out of the recording, with the timer in the menu bar ([#463](https://github.com/serpcompany/keybumps/issues/463)) ([2a4f388](https://github.com/serpcompany/keybumps/commit/2a4f38881d9ad937833edc2b7270a4a8484a81b6))
+* **screencast:** the picker remembers your last choices ([#486](https://github.com/serpcompany/keybumps/issues/486)) ([254d4c3](https://github.com/serpcompany/keybumps/commit/254d4c3c0ffc3e13ee301458d9fd93a37e087d03))
+* **screencast:** the picker starts on Screen ([#502](https://github.com/serpcompany/keybumps/issues/502)) ([e957ce2](https://github.com/serpcompany/keybumps/commit/e957ce290882e854dcc335a44a82fa20747b9206))
+* **screencast:** the picker, area, window, or screen, screenshot or video, with a countdown ([#462](https://github.com/serpcompany/keybumps/issues/462)) ([5d79fe0](https://github.com/serpcompany/keybumps/commit/5d79fe0112b6db2b9ef73f1a4dc27dbf0b4a5d7d))
+* **screencast:** the recording engine, ScreenCaptureKit to AVAssetWriter with pause, mic, and system audio ([#459](https://github.com/serpcompany/keybumps/issues/459)) ([c81a0c1](https://github.com/serpcompany/keybumps/commit/c81a0c110c7ebe9c10189e0a3a6a3ed70e1d8b17))
+* **screencast:** the review panel, with note, type, repo, trim, and Save, Copy, or Discard ([#464](https://github.com/serpcompany/keybumps/issues/464)) ([827c4cf](https://github.com/serpcompany/keybumps/commit/827c4cf7b94891800493062e620506480afa0602))
+* **screencast:** the Screencast plugin shell, off by default, for macOS 15, with its Settings page ([#458](https://github.com/serpcompany/keybumps/issues/458)) ([deb379b](https://github.com/serpcompany/keybumps/commit/deb379b3d7e98f495c2e0cc2f1711fbf83840c90))
+* **screengrabs:** a one-time step that carries Screencast's saved settings into Screengrabs ([#506](https://github.com/serpcompany/keybumps/issues/506)) ([16cb264](https://github.com/serpcompany/keybumps/commit/16cb264c2d11badbfd914dad8cf68c4e19298cee))
+* **screengrabs:** a recordings index lists every recording for the ⌘3 tab ([#531](https://github.com/serpcompany/keybumps/issues/531)) ([265309e](https://github.com/serpcompany/keybumps/commit/265309edfe37d4890c6859d20fef7af7a02eb7c9))
+* **screengrabs:** Clipboard History keeps 50 screenshots apart from 50 other items ([#527](https://github.com/serpcompany/keybumps/issues/527)) ([6b42f2a](https://github.com/serpcompany/keybumps/commit/6b42f2aafdf74e5e22554b0fe34d6d7c77730606))
+* **screengrabs:** crop and blur a recording in its window ([#524](https://github.com/serpcompany/keybumps/issues/524)) ([a9b4e43](https://github.com/serpcompany/keybumps/commit/a9b4e433ab644112ddffbacdd4cf1ba58c8d7948))
+* **screengrabs:** one editor bar for screenshots and recordings ([#519](https://github.com/serpcompany/keybumps/issues/519)) ([b40ecf0](https://github.com/serpcompany/keybumps/commit/b40ecf0af879176c8c8d84f4d90d85bc2c80d705))
+* **screengrabs:** Screenshot Tools and Screencast become one plugin, Screengrabs ([#510](https://github.com/serpcompany/keybumps/issues/510)) ([861bf53](https://github.com/serpcompany/keybumps/commit/861bf53cbc10d4a7b1239555dd8b0bab166a8048))
+* **screengrabs:** trim a recording in its window, and save the edited recording ([#523](https://github.com/serpcompany/keybumps/issues/523)) ([3ed322b](https://github.com/serpcompany/keybumps/commit/3ed322bbc2fbeb256d780747e6da0a3c87b6f03c))
+
+
+### Fixes
+
+* **screengrabs:** Esc never cancels a recording ([#521](https://github.com/serpcompany/keybumps/issues/521)) ([7a4ad65](https://github.com/serpcompany/keybumps/commit/7a4ad65b149390c65afefcfd3fea36079dd47b8c))
+* **screengrabs:** Record Screen takes ⇧⌘5 even if it had another shortcut ([#515](https://github.com/serpcompany/keybumps/issues/515)) ([d31b7cd](https://github.com/serpcompany/keybumps/commit/d31b7cd9623692ee3791247738d14e775158604f))
+* **screengrabs:** the recording countdown also shows on the bar's screen ([#522](https://github.com/serpcompany/keybumps/issues/522)) ([925b446](https://github.com/serpcompany/keybumps/commit/925b44679442da716341e61f243bb7d118bb1208))
+* **screengrabs:** write the plugin's name as ScreenGrabs ([#514](https://github.com/serpcompany/keybumps/issues/514)) ([0e12c2d](https://github.com/serpcompany/keybumps/commit/0e12c2d4f3293691f153dfeff9023f1ab5cc198a))
+
+
+### Improvements
+
+* **screencast:** Screencast records video only; screenshots stay with Screenshot Tools ([#487](https://github.com/serpcompany/keybumps/issues/487)) ([0eee927](https://github.com/serpcompany/keybumps/commit/0eee927c45953c4670065448031f443584a53f65))
+* **screengrabs:** Screenshot Tools' Settings page is drawn by the plugin template ([#508](https://github.com/serpcompany/keybumps/issues/508)) ([b8e2ea0](https://github.com/serpcompany/keybumps/commit/b8e2ea0c92a1c851c70a521dda1e6c58dd64752e))
+* **screengrabs:** the ⌘3 tab's rows come from the ScreenGrabs module ([#529](https://github.com/serpcompany/keybumps/issues/529)) ([09446e1](https://github.com/serpcompany/keybumps/commit/09446e1042d58893954debb5f781e3830eb065e2))
+
 ## [0.0.3-beta.25](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.24...v0.0.3-beta.25) (2026-10-09)
 
 
