@@ -423,6 +423,7 @@ private final class CopyPasteFixture {
         )
         dictationHistory = DictationHistoryService(recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true))
         search = QuickSearchModel.forTests(in: root)
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -432,13 +433,16 @@ private final class CopyPasteFixture {
                 paster: InertTextPaster(),
                 allowsSystemAccess: false
             ),
-            preferences: AppPreferences(defaults: InMemoryDefaults()),
+            preferences: preferences,
             snippets: folder.makeStore(),
             paster: paster,
             pasteboard: pasteboard,
             notices: notices,
             search: search
         )
+        palette.tabContents = [
+            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
+        ]
         palette.canPaste = { true }
         palette.pasteDelay = .zero
         palette.frontmostApp = { PasteTarget(processIdentifier: 4242, isKeybumps: false) }
