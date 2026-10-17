@@ -69,7 +69,15 @@ struct CapabilitySettingsPage {
     let summary: String
     /// What turning the module off releases; the tooltip on its toolbar enable switch.
     let disableExplanation: String?
+    /// The tooltip in its place where Screengrabs can't record (`PluginCompatibility.supportsRecording`),
+    /// for a page whose explanation names recording; nil keeps `disableExplanation` everywhere.
+    var disableExplanationWithoutRecording: String? = nil
     let content: @MainActor () -> AnyView
+
+    /// The switch's tooltip on this Mac.
+    func disableExplanation(on compatibility: PluginCompatibility) -> String? {
+        compatibility.supportsRecording ? disableExplanation : disableExplanationWithoutRecording ?? disableExplanation
+    }
 }
 
 /// Every registered module's descriptor.

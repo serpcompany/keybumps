@@ -80,7 +80,8 @@ extension View {
 
 /// The Settings sidebar: the account row on top (outside these groups); General, Permissions,
 /// Plugins, and Changelog; then a row per plugin, the default ones (Quick Search first, then by name) and the added
-/// ones in their own group below; filtered by search.
+/// ones in their own group below; filtered by search, which finds a page by its title and a plugin's
+/// page also by its search keywords, as Settings › Plugins and Quick Search do.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -93,8 +94,10 @@ enum SettingsSidebar {
 
     static func groups(matching query: String) -> [[SettingsSection]] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches: (SettingsSection) -> Bool = {
-            trimmed.isEmpty || $0.rawValue.localizedCaseInsensitiveContains(trimmed)
+        let matches: (SettingsSection) -> Bool = { section in
+            trimmed.isEmpty || ([section.rawValue] + (section.capability?.descriptor.searchKeywords ?? [])).contains {
+                $0.localizedCaseInsensitiveContains(trimmed)
+            }
         }
         let app = [SettingsSection.general, .permissions, .plugins, .changelog].filter(matches)
         let plugins = PluginsTable.sections.map { $0.plugins.filter(matches) }
@@ -1173,13 +1176,14 @@ struct CapabilityToggle: View {
     let capability: Capability
 
     var body: some View {
-        let requirement = model.preferences.compatibility.requirement(for: capability)
+        let compatibility = model.preferences.compatibility
+        let requirement = compatibility.requirement(for: capability)
         Toggle("Enable \(capability.title)", isOn: CapabilityToggleBinding(model: model, capability: capability).value)
             .settingsCompactSwitch()
             .labelsHidden()
             // A plugin that needs a newer macOS can't be turned on (#322).
             .disabled(requirement != nil)
-            .help(requirement ?? capability.descriptor.settingsPage?.disableExplanation ?? "Turn \(capability.title) on or off.")
+            .help(requirement ?? capability.descriptor.settingsPage?.disableExplanation(on: compatibility) ?? "Turn \(capability.title) on or off.")
             .accessibilityIdentifier("capability.toggle.\(capability.rawValue)")
     }
 }
@@ -1207,6 +1211,9 @@ private struct CapabilityShortcutEditor: View {
     var body: some View {
         let binding = model.preferences.capabilityShortcut(for: shortcut)
         let compatibility = model.preferences.compatibility
+        // A recording shortcut does nothing where Screengrabs can't record, as its note says, so
+        // neither its field nor Restore default can change it there.
+        let runsHere = shortcut.runs(on: compatibility)
         Group {
             HStack(spacing: 8) {
                 SettingsIconTile(systemImage: shortcut.capability.systemImage, tint: shortcut.capability.descriptor.iconTint, size: 16)
@@ -1220,8 +1227,8 @@ private struct CapabilityShortcutEditor: View {
                     record: ShortcutRowActions.record(owner, identifier: shortcut.rawValue, in: recorder, model: model),
                     clear: ShortcutRowActions.clear(owner, model: model)
                 )
-                // A recording shortcut does nothing where Screengrabs can't record, as its note says.
-                .disabled(shortcut.needsRecording && !compatibility.supportsRecording)
+                .modifier(ReportsShortcutRowControl(shortcut: shortcut, control: .field))
+                .disabled(!runsHere)
                 // A shortcut that starts unassigned has no default to restore; its field clears it.
                 if let defaultBinding = shortcut.defaultBinding, binding?.usesSameKeys(as: defaultBinding) != true {
                     SettingsIconButton(systemImage: "arrow.counterclockwise", help: "Restore default shortcut") {
@@ -1232,7 +1239,8 @@ private struct CapabilityShortcutEditor: View {
                             replace: { model.restoreDefaultCapabilityShortcut(shortcut) }
                         )
                     }
-                    .disabled(recorder.identifier != nil)
+                    .modifier(ReportsShortcutRowControl(shortcut: shortcut, control: .restoreDefault))
+                    .disabled(recorder.identifier != nil || !runsHere)
                 }
             }
             // On the row, not the group: a modifier on a `Group` goes to each of its views, and
@@ -1252,6 +1260,39 @@ private struct CapabilityShortcutEditor: View {
                 SettingsNote(failure, tint: .orange)
             }
         }
+    }
+}
+
+/// A control on a plugin's shortcut row and whether it can be used now, which the row reports so a
+/// test can lay out a page and read it, such as Record Screen's on macOS 14 (#490).
+struct ShortcutRowControl: Equatable {
+    enum Control: Equatable {
+        case field, restoreDefault
+    }
+
+    let shortcut: CapabilityShortcut
+    let control: Control
+    let isEnabled: Bool
+
+    /// The controls a page draws, in order.
+    struct Shown: PreferenceKey {
+        static let defaultValue: [ShortcutRowControl] = []
+        static func reduce(value: inout [ShortcutRowControl], nextValue: () -> [ShortcutRowControl]) { value += nextValue() }
+    }
+}
+
+/// Reports a shortcut row's control to `ShortcutRowControl.Shown`, as enabled as the views around it
+/// make it.
+private struct ReportsShortcutRowControl: ViewModifier {
+    @Environment(\.isEnabled) private var isEnabled
+    let shortcut: CapabilityShortcut
+    let control: ShortcutRowControl.Control
+
+    func body(content: Content) -> some View {
+        content.preference(
+            key: ShortcutRowControl.Shown.self,
+            value: [ShortcutRowControl(shortcut: shortcut, control: control, isEnabled: isEnabled)]
+        )
     }
 }
 

@@ -377,6 +377,58 @@ struct PluginSettingsPageTests {
         #expect(currentRows.disabled.isEmpty)
     }
 
+    @Test("On macOS 14, Screengrabs' note and its switch's tooltip don't say Keybumps takes ⇧⌘5 or runs Record Screen, as it does neither there (#490)")
+    func macOS14KeepsItsShiftCommand5InWords() throws {
+        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
+        let old = PluginCompatibility(macOSMajorVersion: 14)
+        let current = PluginCompatibility(macOSMajorVersion: 15)
+
+        let oldNote: String = ScreenshotsSettings.about(on: old)
+        let oldTooltip: String = try #require(page.disableExplanation(on: old))
+        #expect(!oldNote.contains("⇧⌘5"))
+        #expect(oldNote.contains("⇧⌘3 and ⇧⌘4"))
+        #expect(!oldTooltip.contains("⇧⌘5"))
+        #expect(!oldTooltip.contains("Record Screen"))
+        #expect(oldTooltip.contains("⇧⌘3 and ⇧⌘4"))
+
+        let currentNote: String = ScreenshotsSettings.about(on: current)
+        let currentTooltip: String = try #require(page.disableExplanation(on: current))
+        #expect(currentNote.contains("⇧⌘3, ⇧⌘4, and ⇧⌘5"))
+        #expect(currentTooltip.contains("⇧⌘3, ⇧⌘4, and ⇧⌘5"))
+        #expect(currentTooltip.contains("Record Screen"))
+    }
+
+    @Test("On macOS 14, Record Screen's row can't change, neither its field nor Restore default, while the screenshot hotkeys' can; on macOS 15 it can (#490)")
+    func recordScreenRowOnMacOS14() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsRecordScreenRow-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let page = try #require(CapabilityDescriptor.screenshotTools.settingsPage)
+        for version in [14, 15] {
+            let runs = version >= 15
+            let compatibility = PluginCompatibility(macOSMajorVersion: version)
+            let harness = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root, compatibility: compatibility)
+            // Without ⇧⌘5, the row shows Restore default.
+            harness.model.preferences.setCapabilityShortcut(nil, for: .screencast)
+            let controls: [ShortcutRowControl] = RowsOnPage.read(page.content(), model: harness.model).controls
+            let recordScreen = controls.filter { $0.shortcut == .screencast }
+            let expected: [ShortcutRowControl] = [
+                ShortcutRowControl(shortcut: .screencast, control: .field, isEnabled: runs),
+                ShortcutRowControl(shortcut: .screencast, control: .restoreDefault, isEnabled: runs),
+            ]
+            #expect(recordScreen == expected, "macOS \(version)")
+            let area = controls.filter { $0.shortcut == .screenshotArea && $0.control == .field }
+            #expect(area.map(\.isEnabled) == [true], "macOS \(version): a screenshot hotkey's field")
+        }
+    }
+
+    @Test("A page that names no recording has one switch tooltip on every Mac")
+    func tooltipWithoutRecordingVariant() throws {
+        let page = try #require(CapabilityDescriptor.timer.settingsPage)
+        let old: String? = page.disableExplanation(on: PluginCompatibility(macOSMajorVersion: 14))
+        #expect(old == page.disableExplanation)
+    }
+
     @Test("Copy new screenshots to the clipboard keeps its own key, not a declared preference's (#490)")
     func copyKeepsItsKey() {
         #expect(!CapabilityDescriptor.screenshotTools.preferences.map(\.key).contains("copiesScreenshotsToClipboard"))
@@ -414,8 +466,9 @@ struct PluginSettingsPageTests {
 }
 
 /// Lays out a Settings page in a window that's never shown, as `ShortcutConflictTests` does, and
-/// returns the permission rows and the preference rows it draws, those it draws disabled, and the
-/// rows of Screengrabs' own (its Screenshots group, and the end of its Recordings group), in order.
+/// returns the permission rows and the preference rows it draws, those it draws disabled, the
+/// rows of Screengrabs' own (its Screenshots group, and the end of its Recordings group), and its
+/// shortcut rows' controls, in order.
 @MainActor
 private enum RowsOnPage {
     private final class Rows: @unchecked Sendable {
@@ -423,10 +476,12 @@ private enum RowsOnPage {
         var preferences: [String] = []
         var disabled: [String] = []
         var screenshots: [ScreenshotsSettings.Row] = []
+        var controls: [ShortcutRowControl] = []
     }
 
     static func read(_ page: AnyView, model: AppModel) -> (
-        permissions: [PermissionRow.Shown], preferences: [String], disabled: [String], screenshots: [ScreenshotsSettings.Row]
+        permissions: [PermissionRow.Shown], preferences: [String], disabled: [String], screenshots: [ScreenshotsSettings.Row],
+        controls: [ShortcutRowControl]
     ) {
         let rows = Rows()
         let size = CGSize(width: 720, height: 4000)
@@ -437,7 +492,8 @@ private enum RowsOnPage {
             .onPreferenceChange(PermissionRow.Shown.Key.self) { rows.permissions = $0 }
             .onPreferenceChange(PluginPreferenceRow.Shown.self) { rows.preferences = $0 }
             .onPreferenceChange(PluginPreferenceRow.Disabled.self) { rows.disabled = $0 }
-            .onPreferenceChange(ScreenshotsSettings.Shown.self) { rows.screenshots = $0 })
+            .onPreferenceChange(ScreenshotsSettings.Shown.self) { rows.screenshots = $0 }
+            .onPreferenceChange(ShortcutRowControl.Shown.self) { rows.controls = $0 })
         host.frame = NSRect(origin: .zero, size: size)
         window.contentView = host
         defer {
@@ -445,6 +501,6 @@ private enum RowsOnPage {
             window.close()
         }
         host.layoutSubtreeIfNeeded()
-        return (rows.permissions, rows.preferences, rows.disabled, rows.screenshots)
+        return (rows.permissions, rows.preferences, rows.disabled, rows.screenshots, rows.controls)
     }
 }

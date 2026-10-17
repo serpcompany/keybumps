@@ -385,9 +385,11 @@ final class AppPreferences {
     }
 
     /// The other action already using `binding`'s keys, which setting it for `owner` would take
-    /// them from (#334).
+    /// them from (#334). A plugin shortcut that can't run on this Mac, such as Record Screen on
+    /// macOS 14, isn't one: nobody is asked about keys that do nothing here.
     func shortcutConflict(for binding: ShortcutBinding, assigningTo owner: ShortcutOwner) -> ShortcutOwner? {
-        ShortcutConflict.find(binding, for: owner, capabilityShortcuts: capabilityShortcuts, windowShortcuts: windowShortcuts)
+        let running = capabilityShortcuts.filter { CapabilityShortcut(rawValue: $0.key)?.runs(on: compatibility) ?? true }
+        return ShortcutConflict.find(binding, for: owner, capabilityShortcuts: running, windowShortcuts: windowShortcuts)
     }
 
     /// Sets an action's shortcut. Another action using the same keys loses them, and its row says
@@ -399,6 +401,14 @@ final class AppPreferences {
             while let other = shortcutConflict(for: binding, assigningTo: owner) {
                 clear(other, movingTo: owner)
                 moved.append(other)
+            }
+            // One that can't run here gives up the keys without asking, so two actions never share
+            // them once this Mac can run it (on an update to macOS 15).
+            for shortcut in CapabilityShortcut.allCases where !shortcut.runs(on: compatibility)
+                && owner != .capability(shortcut)
+                && capabilityShortcuts[shortcut.rawValue]?.usesSameKeys(as: binding) == true {
+                clear(.capability(shortcut), movingTo: owner)
+                moved.append(.capability(shortcut))
             }
         }
         store(binding, for: owner)

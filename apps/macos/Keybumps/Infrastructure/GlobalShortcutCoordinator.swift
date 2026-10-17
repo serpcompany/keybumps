@@ -355,10 +355,16 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Whether it can run on this Mac: a recording shortcut can't where Screengrabs can't record.
+    /// One that can't is left out of conflicts, and its row can't change (#490).
+    func runs(on compatibility: PluginCompatibility) -> Bool {
+        !needsRecording || compatibility.supportsRecording
+    }
+
     /// The note under its title on this Mac: `detail`, or for a recording shortcut where Screengrabs
     /// can't record, "Recording needs macOS 15".
     func detail(on compatibility: PluginCompatibility) -> String? {
-        needsRecording && !compatibility.supportsRecording ? PluginCompatibility.recordingRequirement : detail
+        runs(on: compatibility) ? detail : PluginCompatibility.recordingRequirement
     }
 
     /// The binding a new install starts with; nil for a shortcut that starts unassigned. Record

@@ -22,6 +22,15 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "change") == [[.changelog]])
     }
 
+    @Test("Search also finds a plugin's page by its search keywords, such as Screengrabs by its former names (#490)")
+    func searchFindsPluginsByKeyword() {
+        #expect(SettingsSidebar.groups(matching: "screenshot") == [[.screenshotTools]])
+        #expect(SettingsSidebar.groups(matching: "Screencast") == [[.screenshotTools]])
+        let record: [[SettingsSection]] = SettingsSidebar.groups(matching: "record")
+        #expect(record.joined().contains(.screenshotTools))
+        #expect(SettingsSidebar.groups(matching: "countdown") == [[.timer]])
+    }
+
     @Test("The Plugins page lists the default plugins, Quick Search first, then added ones, and filters by name or keyword")
     func pluginsTable() {
         #expect(PluginsTable.sections == [

@@ -25,6 +25,8 @@ extension CapabilityDescriptor {
             section: .screenshotTools,
             summary: "Take screenshots and mark them up, and record your screen with your voice and the Mac’s sound.",
             disableExplanation: "Turning this off stops the screenshot hotkeys, Record Screen, and adding new screenshots to Clipboard History, and gives ⇧⌘3, ⇧⌘4, and ⇧⌘5 back to macOS. Screenshots and recordings already saved stay.",
+            // macOS 14: no Record Screen, and macOS keeps its ⇧⌘5 (`takeoverBindings`).
+            disableExplanationWithoutRecording: "Turning this off stops the screenshot hotkeys and adding new screenshots to Clipboard History, and gives ⇧⌘3 and ⇧⌘4 back to macOS. Screenshots already saved stay.",
             content: { AnyView(ScreengrabsSettingsPage()) }
         ),
         criticalOperations: [.unsavedWork],
@@ -228,9 +230,16 @@ struct ScreenshotsSettings: View {
                 set: { model.preferences.copiesScreenshotsToClipboard = $0 }
             ))
             .shown(.copiesScreenshotsToClipboard)
-            SettingsNote("Screenshots from these hotkeys, and ones you take with macOS's own tools, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While Screengrabs is on, Keybumps uses ⇧⌘3, ⇧⌘4, and ⇧⌘5 in place of macOS's own; turning it off gives them back.")
+            SettingsNote(Self.about(on: model.preferences.compatibility))
                 .shown(.about)
         }
+    }
+
+    /// The group's note on this Mac. Keybumps takes macOS's ⇧⌘5 only where Screengrabs can record
+    /// (`ScreenshotToolsModule.takeoverBindings`), so on macOS 14 the note names only ⇧⌘3 and ⇧⌘4.
+    static func about(on compatibility: PluginCompatibility) -> String {
+        let keys = compatibility.supportsRecording ? "⇧⌘3, ⇧⌘4, and ⇧⌘5" : "⇧⌘3 and ⇧⌘4"
+        return "Screenshots from these hotkeys, and ones you take with macOS's own tools, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While Screengrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
     }
 
     @ViewBuilder private var status: some View {
