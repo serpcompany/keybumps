@@ -50,7 +50,7 @@ struct ScreencastChoice: Equatable, Sendable {
 @Observable
 final class ScreencastPickerModel {
     /// Switching keeps the area drawn and the window picked, so switching back finds them.
-    var target: ScreencastPickerTarget = .area {
+    var target: ScreencastPickerTarget = .screen {
         didSet {
             hoveredWindow = nil
             changed()

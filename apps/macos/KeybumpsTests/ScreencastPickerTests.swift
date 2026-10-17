@@ -299,6 +299,7 @@ struct ScreencastPickerTests {
     @Test("A click or a double click on the bar keeps the area drawn, and a drag from elsewhere can end on it")
     func barKeepsTheArea() {
         let model = PickerScreens.model()
+        model.target = .area
         model.barFrame = CGRect(x: 250, y: 190, width: 700, height: 100)
         // Drawn from above the bar down onto it.
         #expect(!model.press(at: CGPoint(x: 400, y: 600), on: left, clickCount: 1))
@@ -371,7 +372,11 @@ struct ScreencastPickerTests {
 
     @Test("Record records the sounds, shortcuts, and clicks the switches chose")
     func switchesChoose() {
-        let model = PickerScreens.model(rememberedArea: ScreencastPickedArea(display: 1, rect: CGRect(x: 100, y: 282, width: 800, height: 600)))
+        let area = ScreencastPickedArea(display: 1, rect: CGRect(x: 100, y: 282, width: 800, height: 600))
+        let model = PickerScreens.model(rememberedArea: area)
+        // On the remembered area: the picker opens on Screen (#501).
+        model.target = .area
+        #expect(model.choice()?.area == area)
         #expect(model.choice()?.audio == ScreencastAudio(microphone: true, systemAudio: true))
         #expect(model.choice()?.showsShortcuts == true)
         model.recordsSystemAudio = false
@@ -386,7 +391,10 @@ struct ScreencastPickerTests {
     func switchingTargets() {
         let area = ScreencastPickedArea(display: 2, rect: CGRect(x: 1612, y: 0, width: 400, height: 300))
         let model = PickerScreens.model(rememberedArea: area)
-        #expect(model.target == .area && model.area == area)
+        // It opens on Screen (#501), with the last area there for Area.
+        #expect(model.target == .screen)
+        model.target = .area
+        #expect(model.area == area)
         #expect(model.choice()?.target == .area(display: 2, rect: CGRect(x: 100, y: 682, width: 400, height: 300)))
         #expect(model.choice()?.area == area)
         model.target = .window
@@ -486,6 +494,7 @@ struct ScreencastPickerTests {
     @Test("Drawing an area in the model needs Area, and Record waits until it's drawn")
     func drawingInTheModel() {
         let model = PickerScreens.model()
+        model.target = .area
         var changes = 0
         model.onChange = { changes += 1 }
         #expect(!model.canConfirm)

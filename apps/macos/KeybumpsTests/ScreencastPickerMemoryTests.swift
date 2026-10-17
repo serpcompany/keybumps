@@ -204,10 +204,9 @@ struct ScreencastPickerMemoryTests {
         #expect(before.isEqual(to: defaults.dictionaryRepresentation()), "Nothing at all was stored")
 
         let again = try await open(launch())
-        #expect(again.target == .area && again.area == nil)
-        #expect(switches(again) == firstUseSwitches)
-        again.target = .screen
+        #expect(again.target == .screen && again.area == nil)
         #expect(again.selectedScreen == again.pointerScreen?.id, "Screen mode starts on the pointer's screen")
+        #expect(switches(again) == firstUseSwitches)
     }
 
     // MARK: Falling back
@@ -273,6 +272,22 @@ struct ScreencastPickerMemoryTests {
         #expect(again.selectedScreen == PickerScreens.left.id, "Not All Screens")
     }
 
+    @Test("A remembered Area whose area no screen shows still opens on Area, with none drawn: what's remembered wins over Screen")
+    func areaThatNoLongerFits() {
+        let defaults = InMemoryDefaults()
+        ScreencastPickerMemory(defaults: defaults).save(ScreencastPickerChoices(target: .area))
+        // On the right screen, which is unplugged.
+        let areaMemory = ScreencastAreaMemory(defaults: defaults)
+        areaMemory.save(CGRect(x: 1612, y: 0, width: 400, height: 300))
+        let picker = ScreencastPickerModel(
+            layout: PickerScreens.leftOnly, preferences: PickerScreens.preferences(), microphoneAvailable: true,
+            remembered: ScreencastPickerMemory(defaults: defaults).choices,
+            rememberedArea: areaMemory.area(in: PickerScreens.leftOnly), pointerScreen: 1
+        )
+        #expect(picker.target == .area && picker.area == nil)
+        #expect(picker.hint == "Drag to choose an area.")
+    }
+
     @Test("Remembered choices that aren't understood are ignored")
     func malformedMemory() {
         let defaults = InMemoryDefaults()
@@ -312,25 +327,27 @@ struct ScreencastPickerMemoryTests {
     // MARK: First use
 
     @available(macOS 15, *)
-    @Test("On first use the picker opens as it always has, and Settings keeps following its defaults until a switch changes")
+    @Test("On first use the picker opens on Screen, on the pointer's screen, and Settings keeps following its defaults until a switch changes")
     func firstUse() async throws {
         #expect(ScreencastPickerMemory(defaults: defaults).choices == ScreencastPickerChoices())
         let first = launch()
         let picker = try await open(first)
-        #expect(picker.target == .area && picker.area == nil)
-        #expect(picker.hint == "Drag to choose an area.")
+        // Screen, not Area (#501), so Record records at once.
+        #expect(picker.target == .screen && picker.area == nil)
+        #expect(picker.selectedScreen == picker.pointerScreen?.id && picker.canConfirm)
         #expect(switches(picker) == firstUseSwitches)
-        // Screen mode starts on the pointer's screen, as before.
+        // The pointer's screen, as before.
         let model = ScreencastPickerModel(
             layout: PickerScreens.both, preferences: PickerScreens.preferences(), microphoneAvailable: true,
             remembered: ScreencastPickerMemory(defaults: defaults).choices, pointerScreen: 2
         )
-        #expect(model.target == .area && model.selectedScreen == 2)
+        #expect(model.target == .screen && model.selectedScreen == 2)
+        #expect(model.choice()?.target == .display(2))
+        #expect(model.hint == "Records all of Screen 2.")
 
-        // Recording with the switches as they were stores none of them.
-        picker.target = .screen
+        // Recording with the switches as they were stores none of them, and Screen is remembered.
         try record(first)
         #expect(switchKeys.allSatisfy { defaults.object(forKey: $0) == nil })
-        #expect(ScreencastPickerMemory(defaults: defaults).choices.target == .screen)
+        #expect(defaults.dictionary(forKey: ScreencastPickerMemory.key)?["target"] as? String == "screen")
     }
 }
