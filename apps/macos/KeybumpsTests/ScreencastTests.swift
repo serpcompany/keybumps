@@ -183,7 +183,7 @@ struct ScreencastTests {
         overlays.cancelTheCountdown()
         #expect(controller.phase == .idle)
 
-        // Settings › Screengrabs' menu, as its row sets it.
+        // Settings › ScreenGrabs' menu, as its row sets it.
         preferences.set(.choice("10"), of: .screencastCountdown, for: .screenshotTools)
         module.start()
         try await Self.waitUntil { overlays.picker != nil }
